@@ -1,0 +1,640 @@
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// ═══ SUPABASE CONNECTION ═══
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAIAAAABc2X6AAABCGlDQ1BJQ0MgUHJvZmlsZQAAeJxjYGA8wQAELAYMDLl5JUVB7k4KEZFRCuwPGBiBEAwSk4sLGHADoKpv1yBqL+viUYcLcKakFicD6Q9ArFIEtBxopAiQLZIOYWuA2EkQtg2IXV5SUAJkB4DYRSFBzkB2CpCtkY7ETkJiJxcUgdT3ANk2uTmlyQh3M/Ck5oUGA2kOIJZhKGYIYnBncAL5H6IkfxEDg8VXBgbmCQixpJkMDNtbGRgkbiHEVBYwMPC3MDBsO48QQ4RJQWJRIliIBYiZ0tIYGD4tZ2DgjWRgEL7AwMAVDQsIHG5TALvNnSEfCNMZchhSgSKeDHkMyQx6QJYRgwGDIYMZAKbWPz9HbOBQAAAGhElEQVR42u2aXUxURxTHz8y9d3dBd9OyQEQqCAjKg4qmhmJqqiboo9ruU9GmxNYHa9WHplYr9qEmNqmpNZoa7YMaTUxEmpoU4wdqYhqp2EBKpYoCbTC2SlQQZD/ufJw+jNxsbVioe1kv9Z7ch4VsZud3/2fOOXNmCAoJL5JReMHMBXaBXWAX2AV2gV1gF9gFdoFdYBfYBXaBXWAX2AV2gceb6ckPgYhCCNtnRgiJ/1PTNHuGtaFNS0kqpJH4/BWWUlJNu3mj/URdnWHouq6jmhUBQDQMQ9cNTaNKKwTQKPV4PGB9BwAQCKVer9fyFolSSiQEvF4vACEAiJienl5ZWUk1CslTo5DP/HCTIeK5M2fHWt1gRjAajiCi5CKZCaOQybq0lJJq9ODBQ2s/WBuLxTwej1rPhBBEnDJlymfbtqWlpYXDESE4AgguTNMklJgxUwgBgNFoDAAZ4+FIuKurq7W1tbOzEwB0XVfjSCnz8/J/a2vzpvlQyKfWdkoVVo/kAhEvXriYk5NjTRQAKKWU0mXLlg0+HsRR2+DjwYZz50Kh0JMlp+sAMG3aNBYzUdqgsA3AKCSLmYj4e1dXeXl5PLNSIzc399KlS4gYGQyzqMliwz5qjSg7+f3JzGBQjVNcXMxN5iBgFJLHTEQMD4ZXVq205CWEGIYBAD6f7/Chw4goGE88ackFN5l6gz9fvRoIBACgpKTEccAopGAcpUTE7Z9vtxySUqppmpJ68yeblXrcZCOOFotEEXH317sBoHRGqROBLX0Qsba21u/3A4BhGIQQSqny8zdXrHjU9wgRWcwccSghxEB/fyAQKJ1RihJtmaHNwPFLurm5uaS42GImhCjm2bNmXb9+fTTMgnFELCsry8zMRHQwsMXc09OzpHKJYqaUWvEsGAyeqq9Xvp3ASyUXUsirTU3nG86jlI4GtsoSwcW6deusMGZVxYSQXV/tUrWEYDzRUMqE44GVT6osvXfPXi2O1oJf8/4a0zQThzHB+GiCnCOAlVsy00TEs2fOZmdnx5dQ6sPCNxb+eefOaJb0+ACOX9K3bt6cO2dOfGWiPhRMnXrlpysqS/9PgC3m/v7+0Fsh5dsqOStmv99/7NgxKeVYM6cOGIUUJkeJiLhl8xar9qRD28OKiooUiJxSYLWkzWgMEetO1Pl8Psu3q6qqenp6BBfJ11KJn1T3tIQQhtczMDDQ1NREKeWc+/3+A98eOHr0aFZWFv1XZ8d+S50/M64qp8bGxrLZs9Wvz6+ouHbt2ogVyHiN0oj4xY4dPp9PpeJNH29SSTg1CSl1eViVXJ0dnUuXLFXCFhQUnKo/hYhSyBSkotQBWxv6I0eOZGdlK9pQKHT37l0l7Gjc+Mn22OHAkgvlxr0Pe6urqxWq3+/fu2fP6LfE46aWtkroC+cvzJg+XdHOmzevpbkZETnjkonRjiPkd3V122pqBONObABY8YlzXlNTYwyl2Y0bNkQikf8an9RQixcvBgBmMlvatDAW8amtrW3B6wsU6qRJk07U1irUaDiSoIP31KPqk4cPHgQCgfz8fNXxcVITbyg+Hdi/P+APAMCECROqq6sj4TA+q0UikXdWrQKAwsJCuxrxth2m6R7j3r176z9cf7z2uNob5Obmzpw585t9+6KRqK6P6igMAQiAlPL+/Qfdt7tbWlo6OjoIIYILp1RaT145Yv0PP+Tl5cVvg+w5+9J1AMjPy3eEwohINGrGzK1bP/1y507Vu+KcWy34ZOARUUqJiPZW13oytEDgdnf38uXLm1ta1D8ZY/HfUfDJHcUSRHQEsJRSM/T29vZfWlszMjIsVM45Dh2GDrdEEx+gCyHU21Q7ZrAVONnTQ8ZYX1+fRAR1dIvAGEsMLKTknJNh4xYyxuJUJeqouaioyBbfTvoGACGQkgsAjrgBMBRb8Om1/c8XgghUI0BovNTIgepxmWIkv1VtXWfc8RhJGErhRm+s4U60KI0s+vGWGaZpoYdGVnvPX4XH6/7w+31Vb6/UDR0wFY4y5sBMoqHT3b/2bqzvKc+hp9/dfx+8ky83p1ecbmyYP7/yMgAMDjxOnzjBhtP91FxbSmwaIYDwaqZn9Wsvz51IPB8teumRruUUAb4yOX/ue6tnBTMmGoaRGnlTofCwV5tk3K04BHtzz/NUeCgsoUCgBKiUgAAaAEEURAhJCLHr0pmTFHbvWrrALrAL7AK7wC6wC+wCu8AusAvsArvATrK/Acnk85kA7kqPAAAAAElFTkSuQmCC";
+// PRINTFLOW v7 — Compact Build
+const MACHINES=[{id:"pp_ctp",name:"CTP",type:"preprensa",status:"active",sub:"Placas"},{id:"pp_proc",name:"Procesadora",type:"preprensa",status:"active",sub:"Limpieza"},{id:"off_pm74",name:"Printmaster 74",type:"offset",status:"active",sub:"Offset"},{id:"off_pm52",name:"Printmaster 52",type:"offset",status:"active",sub:"Offset"},{id:"off_gto",name:"GTO 1 Color",type:"offset",status:"active",sub:"1 torre"},{id:"dig_xerox252",name:"DocuColor 252",type:"digital",status:"active",sub:"Digital"},{id:"dig_xerox700",name:"CP 700",type:"digital",status:"inactive",sub:"No sirve"},{id:"dig_epson",name:"Epson P7570",type:"digital",status:"active",sub:"Pruebas"},{id:"ac_mm",name:"Müller Martini",type:"acabados",status:"active",sub:"Grapado"},{id:"ac_polar78",name:"Polar 78",type:"acabados",status:"active",sub:"Guillotina"},{id:"ac_polar115",name:"Polar 115",type:"acabados",status:"active",sub:"Guillotina"},{id:"ac_baum_lib",name:"Baumfolder",type:"acabados",status:"active",sub:"Dobladora"},{id:"ac_suaj_cil",name:"Cilíndrica",type:"acabados",status:"active",sub:"Suajadora"},{id:"ac_aspa1",name:"Aspa #1",type:"acabados",status:"active",sub:"Suajadora"},{id:"ac_aspa2",name:"Aspa #2",type:"acabados",status:"active",sub:"Suajadora"},{id:"ac_manual1",name:"Manual #1",type:"acabados",status:"active",sub:"Manual"},{id:"ac_manual2",name:"Manual #2",type:"acabados",status:"active",sub:"Manual"},{id:"ac_horizon",name:"Horizon BQ-4GO",type:"acabados",status:"active",sub:"Pegadora"},{id:"ac_duplo",name:"Duplo Trimmer",type:"acabados",status:"active",sub:"Compaginadora"}];
+const PTYPES=["Etiqueta colgante","Etiqueta adherible","Póster","Flyer / Volante","Catálogo","Revista","Libro","Folleto","Tarjeta de presentación","Papelería corporativa","Empaque","Otro"];
+const PRIOS=[{id:"urgente",l:"🔴 Urgente",c:"#ff3b30"},{id:"normal",l:"🟡 Normal",c:"#ff9500"},{id:"baja",l:"🟢 Baja",c:"#34c759"}];
+const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
+const INT_FLOW=[{id:"draft",l:"📝 Validar",c:"#aeaeb2",who:"produccion"},{id:"design",l:"🎨 Diseño",c:"#ec4899",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",c:"#8b5cf6",who:"preprensa"},{id:"proof_client",l:"👤 Aprobación",c:"#f59e0b",who:"preprensa"},{id:"ctp",l:"💿 CTP",c:"#0891b2",who:"preprensa"},{id:"ready",l:"✅ Lista",c:"#34c759",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",c:"#ff9500",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",c:"#e67e22",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",c:"#32ade6",who:"produccion"},{id:"packaging",l:"📦 Empaque",c:"#af52de",who:"produccion"},{id:"delivered",l:"✅ Entregada",c:"#34c759",who:null}];
+const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",c:"#32ade6",who:"secretaria"},{id:"maq_delivered",l:"✅ Entregada",c:"#34c759",who:null}];
+const ALL_S=[...INT_FLOW,...MAQ_FLOW];
+const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
+
+const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
+const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n||0);
+const fD=d=>d?new Date(d).toLocaleDateString("es-MX",{day:"2-digit",month:"short"}):"";
+const fDT=d=>d?new Date(d).toLocaleDateString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+const pct=(c,p)=>p>0?Math.round(((p-c)/p)*100):0;
+const fmtM=m=>{if(!m&&m!==0)return "—";const h=Math.floor(m/60);return h>0?h+"h "+(m%60)+"m":m+"m"};
+const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
+const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+
+// ═══ SUPABASE DATA LAYER ═══
+const db = {
+  async loadOrders() {
+    const { data: orders } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+    if (!orders) return [];
+    // Load related data for each order
+    const ids = orders.map(o => o.id);
+    const [tl, cm, wl, ml] = await Promise.all([
+      supabase.from("order_timeline").select("*").in("order_id", ids).order("created_at"),
+      supabase.from("order_comments").select("*").in("order_id", ids).order("created_at"),
+      supabase.from("order_waste").select("*").in("order_id", ids).order("created_at"),
+      supabase.from("order_machine_log").select("*").in("order_id", ids).order("started_at"),
+    ]);
+    return orders.map(o => ({
+      ...o,
+      timeline: (tl.data || []).filter(t => t.order_id === o.id).map(t => ({ action: t.action, date: t.created_at, by: t.by_user, color: t.color })),
+      comments: (cm.data || []).filter(c => c.order_id === o.id).map(c => ({ text: c.text, by: c.by_user, date: c.created_at })),
+      waste_log: (wl.data || []).filter(w => w.order_id === o.id).map(w => ({ qty: w.qty, pliegos: w.pliegos, note: w.note, date: w.created_at })),
+      machine_log: (ml.data || []).filter(m => m.order_id === o.id).map(m => ({ machine: m.machine_id, started: m.started_at, ended: m.ended_at, minutes: m.minutes, _id: m.id })),
+    }));
+  },
+  async saveOrder(o) {
+    const { timeline, comments, waste_log, machine_log, ...row } = o;
+    // Map field names for DB
+    const dbRow = { ...row, delivered_at: o.deliveredAt || o.delivered_at };
+    delete dbRow.deliveredAt;
+    await supabase.from("orders").upsert(dbRow);
+  },
+  async addTimeline(orderId, action, byUser, color) {
+    await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color });
+  },
+  async addComment(orderId, text, byUser) {
+    await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser });
+  },
+  async addWaste(orderId, pliegos, qty, note) {
+    await supabase.from("order_waste").insert({ order_id: orderId, pliegos, qty, note });
+  },
+  async addMachineLog(orderId, machineId) {
+    await supabase.from("order_machine_log").insert({ order_id: orderId, machine_id: machineId });
+  },
+  async closeMachineLog(orderId) {
+    const { data } = await supabase.from("order_machine_log").select("*").eq("order_id", orderId).is("ended_at", null).limit(1);
+    if (data && data[0]) {
+      const started = new Date(data[0].started_at);
+      const ended = new Date();
+      const minutes = Math.round((ended - started) / 60000);
+      await supabase.from("order_machine_log").update({ ended_at: ended.toISOString(), minutes }).eq("id", data[0].id);
+    }
+  },
+  async login(username, password) {
+    const { data } = await supabase.from("users").select("*").eq("username", username).eq("password_hash", password).eq("active", true).single();
+    return data;
+  },
+};
+const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
+const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
+const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]||1)-(p[b.priority]||1)};
+const getStale=o=>{if(o.stage.includes("delivered"))return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+const getProgress=o=>{const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const idx=flow.findIndex(s=>s.id===o.stage);return{cur:idx+1,tot:flow.length,pct:Math.round(((idx+1)/flow.length)*100)}};
+
+const C={bg:"#ffffff",sf:"#f8f8fa",bd:"#ebebef",tx:"#1c1c1e",t2:"#86868b",t3:"#aeaeb2",ph:"#c7c7cc",ac:"#546e7a",acL:"rgba(84,110,122,0.08)",ok:"#34c759",wn:"#ff9500",dn:"#ff3b30"};
+const FNT="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap";
+const inp={width:"100%",padding:"10px 14px",fontFamily:"'Poppins',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
+const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
+const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
+const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
+
+const GUIDES={produccion:{draft:"Revisa las specs y envía a diseño",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a siguiente máquina o envía a empaque",packaging:"Marca como entregada cuando esté lista"},preprensa:{design:"Noemí: prepara los archivos. Decide si necesita prueba de color",proof_printing:"Imprime prueba en Epson P7570",proof_client:"Esperando que el cliente apruebe",ctp:"Germán: hacer placas en CTP y pasar a procesadora"},secretaria:{maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor"}};
+
+// ─── LOGIN ─────────────────────────────────────────
+function Login({onLogin}) {
+  const [username,setUsername] = useState("");
+  const [password,setPassword] = useState("");
+  const [error,setError] = useState("");
+  const [loading,setLoading] = useState(false);
+  const submit = async () => {
+    if (!username || !password) return setError("Escribe usuario y contraseña");
+    setLoading(true); setError("");
+    try {
+      const user = await db.login(username.toLowerCase().trim(), password);
+      if (user) { onLogin(user.role, user.display_name); }
+      else { setError("Usuario o contraseña incorrectos"); }
+    } catch { setError("Error de conexión"); }
+    setLoading(false);
+  };
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif"}}>
+      <link href={FNT} rel="stylesheet"/>
+      <div style={{textAlign:"center",maxWidth:400,width:"100%",padding:"0 24px"}}>
+        <img src={LOGO} alt="PrintFlow" style={{width:120,height:120,marginBottom:12,borderRadius:20,display:"block",margin:"0 auto 12px"}}/>
+        <h1 style={{fontSize:34,fontWeight:800,color:C.tx,textTransform:"uppercase",margin:"0 0 8px"}}>PrintFlow</h1>
+        <p style={{fontSize:11,color:C.t2,textTransform:"uppercase",margin:"0 0 32px"}}>Sistema de Producción</p>
+        <div style={{textAlign:"left",marginBottom:12}}>
+          <label style={lbl}>Usuario</label>
+          <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo, noemi, admin" onKeyDown={e=>e.key==="Enter"&&submit()}/>
+        </div>
+        <div style={{textAlign:"left",marginBottom:16}}>
+          <label style={lbl}>Contraseña</label>
+          <input style={inp} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" onKeyDown={e=>e.key==="Enter"&&submit()}/>
+        </div>
+        {error && <div style={{color:C.dn,fontSize:12,fontWeight:600,marginBottom:12}}>{error}</div>}
+        <button onClick={submit} disabled={loading} style={{...bt(loading?"#d1d1d6":C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?"⏳ Verificando...":"Entrar"}</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── WELCOME ───────────────────────────────────────
+function WelcomeGuide({role,onClose}) {
+  const g={produccion:["📌 Pendientes — órdenes que necesitan tu atención","📝 Revisa specs y envía a Diseño","🏭 Arrastra órdenes a máquinas en el Tablero","📦 Envía a empaque y marca entregada"],preprensa:["📌 Pendientes — órdenes en diseño, prueba o CTP","🎨 Prepara archivos de diseño","🖨️ Imprime prueba en Epson si es couché","💿 Haz placas en CTP"],secretaria:["➕ Crea órdenes con datos del cliente y precio","🚚 Para maquila: proveedor, costo y precio","📅 Revisa Calendario de Entregas","💰 Producción no ve los precios"],admin:["📊 Dashboard — vista general","📊 Analytics — estadísticas","✏️ Edita cualquier orden","📥 Exporta todo a CSV"]};
+  const titles={produccion:"👋 Producción",preprensa:"👋 Pre-prensa",secretaria:"👋 Secretaría",admin:"👋 Admin"};
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
+      <div style={{background:C.bg,borderRadius:20,padding:32,maxWidth:420,width:"90%",textAlign:"center"}}>
+        <h2 style={{fontSize:20,fontWeight:800,margin:"0 0 16px"}}>{titles[role]}</h2>
+        <div style={{textAlign:"left",marginBottom:20}}>
+          {(g[role]||g.admin).map((s,i) => (
+            <div key={i} style={{display:"flex",gap:10,marginBottom:12,alignItems:"flex-start"}}>
+              <div style={{width:28,height:28,borderRadius:"50%",background:C.ac+"12",color:C.ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{i+1}</div>
+              <div style={{fontSize:13,color:C.tx,lineHeight:1.5,paddingTop:3}}>{s}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose} style={{...bt(C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14}}>¡Entendido! →</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── FLOW DIAGRAM ──────────────────────────────────
+function FlowDiagram({currentStage,orderType,onClose}) {
+  const flow=orderType==="maquila"?MAQ_FLOW:INT_FLOW;
+  const ci=flow.findIndex(s=>s.id===currentStage);
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}>
+      <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:460,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 16px",textAlign:"center"}}>{orderType==="maquila"?"🚚 Flujo Maquila":"🏭 Flujo Producción"}</h3>
+        {flow.map((s,i) => {
+          const done=i<ci, active=i===ci;
+          return (
+            <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<flow.length-1?4:0}}>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:32}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:done?C.ok:active?s.c:C.sf,color:done||active?"#fff":C.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?14:12,fontWeight:700,border:active?"3px solid "+s.c:"none",boxShadow:active?"0 0 0 4px "+s.c+"20":"none"}}>{done?"✓":i+1}</div>
+                {i<flow.length-1 && <div style={{width:2,height:20,background:done?C.ok:C.bd}}/>}
+              </div>
+              <div style={{flex:1,padding:"6px 0"}}>
+                <div style={{fontSize:13,fontWeight:active?700:500,color:active?s.c:done?C.ok:C.tx}}>{s.l}</div>
+                {active && <div style={{fontSize:11,color:C.t2}}>← Estás aquí</div>}
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:16,border:"0.5px solid "+C.bd}}>Cerrar</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SMALL COMPONENTS ──────────────────────────────
+function FC({label:lb,children,req,br}) {
+  return <div style={{padding:"12px 20px",...(br?{borderRight:"0.5px solid "+C.bd}:{})}}><label style={lbl}>{lb}{req && <span style={{color:C.ac}}> *</span>}</label>{children}</div>;
+}
+function GuideBanner({text,color=C.ac}) {
+  return <div style={{background:color+"08",border:"1px solid "+color+"20",borderRadius:12,padding:"10px 14px",marginBottom:10,fontSize:12,color:C.tx,fontWeight:500}}>{text}</div>;
+}
+function ProgressBar({order}) {
+  const {cur,tot,pct:p}=getProgress(order); const s=SM[order.stage];
+  return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.t2}}>Progreso</span><span style={{fontSize:9,color:s?.c,fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:p+"%",height:"100%",background:s?.c||C.ac,borderRadius:4,transition:"width .5s"}}/></div></div>;
+}
+function LiveTimer({started}) {
+  const [el,setEl]=useState(0);
+  useEffect(()=>{if(!started)return;const c=()=>Math.round((Date.now()-new Date(started).getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
+  if(!started) return null;
+  return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6}}>⏱ {fmtM(el)}</span>;
+}
+function Timeline({tl=[]}) {
+  const [op,setOp]=useState(false);
+  if(!tl?.length) return null;
+  const show=op?tl:tl.slice(-3);
+  return <div style={{marginTop:6}}><button onClick={()=>setOp(!op)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>📜 ({tl.length}) {op?"▲":"▼"}</button>{(op||tl.length<=3)&&<div style={{marginTop:6,borderLeft:"2px solid "+C.bd,paddingLeft:12}}>{show.map((e,i)=><div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:C.tx,fontWeight:500}}>{e.action}</div><div style={{fontSize:8,color:C.t3}}>{fDT(e.date)}</div></div>)}</div>}</div>;
+}
+function ClientInput({value,onChange,onSelect,clients}) {
+  const [show,setShow]=useState(false);
+  const m=(value||"").length>=2?clients.filter(c=>c.client?.toLowerCase().includes(value.toLowerCase())).slice(0,5):[];
+  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&m.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:50,border:"0.5px solid "+C.bd,marginTop:4}}><div style={{padding:"5px 12px",fontSize:8,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>Clientes anteriores</div>{m.map((c,i)=><div key={i} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<m.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.client}</div><div style={{fontSize:10,color:C.t2}}>{[c.client_company,c.client_phone].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
+}
+function CommentLog({comments=[],onAdd,role}) {
+  const [text,setText]=useState("");const [show,setShow]=useState(false);
+  const add=()=>{if(!text.trim())return;onAdd({text:text.trim(),by:role,date:new Date().toISOString()});setText("")};
+  const rc={secretaria:"#5856d6",produccion:"#007aff",preprensa:"#ec4899",sistema:C.t3,admin:C.ok};
+  return <div style={{marginTop:6}}>{comments.length>0&&<div style={{maxHeight:80,overflowY:"auto",marginBottom:4}}>{comments.map((c,i)=><div key={i} style={{padding:"2px 0",fontSize:10,borderBottom:i<comments.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontWeight:600,color:rc[c.by]||C.t3}}>{(c.by||"").slice(0,3)}</span> {c.text} <span style={{color:C.t3,fontSize:8}}>{fDT(c.date)}</span></div>)}</div>}{!show?<button onClick={()=>setShow(true)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>💬 Nota</button>:<div style={{display:"flex",gap:4}}><input style={{...inp,flex:1,padding:"6px 10px",fontSize:11}} value={text} onChange={e=>setText(e.target.value)} placeholder="Nota..." onKeyDown={e=>e.key==="Enter"&&add()}/><button onClick={add} style={bs(C.ac)}>↑</button><button onClick={()=>setShow(false)} style={bs(C.sf,C.t2)}>✕</button></div>}</div>;
+}
+
+// ─── MODALS ────────────────────────────────────────
+function PrintOrder({order:o,onClose}) {
+  const printIt=()=>{const w=window.open("","_blank","width=800,height=600");if(!w)return;const rows=[["Cliente",o.client],["Producto",(o.product||"")+" · "+o.product_type],["Cantidad",o.quantity?Number(o.quantity).toLocaleString()+" pzas":"—"],["Papel",o.paper_type||"—"],["Medidas",(o.width_cm||"—")+"×"+(o.height_cm||"—")+"cm"],["Tintas",o.colors||"—"],["Acabados",o.finishes||"—"],["Entrega",o.due_date?fD(o.due_date):"—"],["Prioridad",(PM[o.priority]?.l)||"Normal"],["Notas",o.notes||"—"]];let h='<html><head><title>'+o.id+'</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:24px}.big{font-size:32px;font-weight:800;text-align:center;padding:16px;border:2px solid #1c1c1e;border-radius:12px;margin:8px 0 16px}.row{display:flex;border-bottom:1px solid #ddd;padding:6px 0}.lbl{width:120px;font-size:10px;font-weight:700;color:#888;text-transform:uppercase}.val{flex:1;font-size:12px}.sig{margin-top:30px;display:flex;gap:30px}.sig-box{flex:1;border-top:1px solid #000;padding-top:4px;text-align:center;font-size:9px;color:#888}</style></head><body>';h+='<div style="text-align:center"><img src="'+LOGO+'" style="width:60px;height:60px;border-radius:12px"/></div><h2 style="text-align:center;font-size:16px;margin-top:8px">PrintFlow</h2><div style="text-align:center;font-size:11px;color:#888">'+fDT(o.created_at)+'</div>';h+='<div class="big">'+(o.production_number||o.id)+'</div>';rows.forEach(([l,v])=>{h+='<div class="row"><div class="lbl">'+l+'</div><div class="val">'+v+'</div></div>'});h+='<div class="sig"><div class="sig-box">Producción</div><div class="sig-box">Calidad</div><div class="sig-box">Entrega</div></div></body></html>';w.document.write(h);w.document.close();w.print()};
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",textAlign:"center"}}><div style={{fontSize:28,fontWeight:800,marginBottom:4}}>{o.production_number||o.id}</div><div style={{fontSize:12,color:C.t2,marginBottom:16}}>{o.client} · {o.product_type}</div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button><button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>🖨️ Imprimir</button></div></div></div>;
+}
+function ClientHistory({clientName,orders,onClose,role}) {
+  const co=orders.filter(o=>o.client===clientName).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const total=co.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+  const byType={};co.forEach(o=>{byType[o.product_type]=(byType[o.product_type]||0)+1});
+  const hp=role==="produccion"||role==="preprensa";
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,margin:"0 0 4px"}}>👤 {clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600}}>{SM[o.stage]?.l}</span></div>{!hp&&o.price&&<div style={{fontSize:14,fontWeight:700}}>{fmt(o.price)}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
+}
+function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose}) {
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{fontSize:36,marginBottom:8}}>⚠️</div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, cancelar</button><button onClick={onConfirm} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center"}}>{confirmLabel}</button></div></div></div>;
+}
+function MaqModal({onSend,onClose}) {
+  const [p,setP]=useState("");const [n,setN]=useState("");
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:380,width:"90%"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 14px"}}>🚚 Enviar a Maquila</h3><div style={{marginBottom:10}}><label style={lbl}>¿A qué proveedor?</label><input style={inp} value={p} onChange={e=>setP(e.target.value)} placeholder="Nombre del proveedor"/></div><div style={{marginBottom:16}}><label style={lbl}>Notas (opcional)</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Instrucciones..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(p)onSend(p,n)}} style={{...bt("#e67e22"),flex:1,justifyContent:"center"}}>🚚 Enviar</button></div></div></div>;
+}
+function WasteModal({onSave,onClose}) {
+  const [pl,setPl]=useState("");const [pz,setPz]=useState("");const [n,setN]=useState("");
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>🗑️ Registrar Merma</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>¿Cuánto material se echó a perder?</p><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><div><label style={lbl}>📄 Pliegos (Impresión)</label><input style={inp} type="number" value={pl} onChange={e=>setPl(e.target.value)} placeholder="0"/></div><div><label style={lbl}>📦 Piezas (Acabados)</label><input style={inp} type="number" value={pz} onChange={e=>setPz(e.target.value)} placeholder="0"/></div></div><div style={{marginBottom:16}}><label style={lbl}>¿Qué pasó?</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Motivo..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>onSave(parseInt(pz)||0,parseInt(pl)||0,n)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}>Guardar</button></div></div></div>;
+}
+
+// ─── CALENDAR ──────────────────────────────────────
+function Calendar({orders,onChangeDate}) {
+  const [wo,setWo]=useState(0);const [editOrder,setEditOrder]=useState(null);const [newDate,setNewDate]=useState("");
+  const today=new Date();const sow=new Date(today);sow.setDate(today.getDate()-today.getDay()+1+wo*7);
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(sow);d.setDate(sow.getDate()+i);return d});
+  const dn=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+  const saveDate=()=>{if(editOrder&&newDate){onChangeDate(editOrder.id,newDate);setEditOrder(null);setNewDate("")}};
+  return <div style={{background:C.sf,borderRadius:16,padding:16}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <span style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>📅 Semana del {fD(sow)}</span>
+      <div style={{display:"flex",gap:4}}><button onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}>‹</button><button onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}>›</button></div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+      {days.map((day,i)=>{const ds=day.toISOString().slice(0,10);const isT=day.toDateString()===today.toDateString();
+        const pend=orders.filter(o=>o.due_date===ds&&!o.stage.includes("delivered"));
+        const done=orders.filter(o=>o.due_date===ds&&o.stage.includes("delivered"));
+        return <div key={i} style={{background:isT?C.ac+"08":C.bg,border:"0.5px solid "+(isT?C.ac+"30":C.bd),borderRadius:10,padding:8,minHeight:90}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:9,color:C.t2,fontWeight:600}}>{dn[i]}</span>
+            <span style={{fontSize:12,fontWeight:700,color:isT?"#fff":C.tx,background:isT?C.ac:"transparent",width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center"}}>{day.getDate()}</span>
+          </div>
+          {pend.map(o=><div key={o.id} onClick={()=>{setEditOrder(o);setNewDate(o.due_date)}} style={{background:day<today?C.dn+"10":C.ac+"08",borderRadius:6,padding:"3px 6px",marginBottom:3,borderLeft:"2px solid "+(day<today?C.dn:C.ac),cursor:"pointer"}} title="Click para cambiar fecha">
+            <div style={{fontSize:9,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.client}</div>
+            <div style={{fontSize:8,color:C.t2}}>{o.product_type}</div>
+          </div>)}
+          {done.map(o=><div key={o.id} style={{background:C.ok+"08",borderRadius:6,padding:"3px 6px",marginBottom:3,borderLeft:"2px solid "+C.ok,opacity:.5}}>
+            <div style={{fontSize:9,color:C.ok,textDecoration:"line-through"}}>{o.client}</div>
+          </div>)}
+          {!pend.length&&!done.length&&<div style={{color:C.ph,fontSize:9,textAlign:"center",marginTop:14}}>—</div>}
+        </div>})}
+    </div>
+    {editOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
+      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:380,width:"90%"}}>
+        <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px"}}>📅 Cambiar Fecha de Entrega</h3>
+        <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{editOrder.client} — {editOrder.product||editOrder.product_type}</p>
+        <div style={{marginBottom:6}}><label style={lbl}>Fecha actual</label><div style={{fontSize:13,fontWeight:600,color:C.tx,padding:"8px 0"}}>{fD(editOrder.due_date)}</div></div>
+        <div style={{marginBottom:16}}><label style={lbl}>Nueva fecha de entrega</label><input style={inp} type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}/></div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{setEditOrder(null);setNewDate("")}} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+          <button onClick={saveDate} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>💾 Guardar Nueva Fecha</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ─── WEEKLY REPORT ─────────────────────────────────
+function WeeklyReport({orders}) {
+  const now=new Date();const wa=new Date(now);wa.setDate(now.getDate()-7);
+  const created=orders.filter(o=>new Date(o.created_at)>=wa);const delivered=orders.filter(o=>o.deliveredAt&&new Date(o.deliveredAt)>=wa);
+  const rev=delivered.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+  const late=orders.filter(o=>o.due_date&&new Date(o.due_date)<now&&!o.stage.includes("delivered")).length;
+  const St=({l,v,c=C.tx})=><div style={{background:C.bg,borderRadius:10,padding:10,flex:"1 1 90px",textAlign:"center"}}><div style={{fontSize:8,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div></div>;
+  return <div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:14}}><div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>📊 Resumen Semanal</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}><St l="Creadas" v={created.length} c={C.ac}/><St l="Entregadas" v={delivered.length} c={C.ok}/><St l="Facturado" v={fmt(rev)} c={C.ok}/><St l="Con retraso" v={late} c={late>0?C.dn:C.ok}/></div></div>;
+}
+
+// ─── ORDER FORM ────────────────────────────────────
+function OrderForm({role,onSubmit,editOrder,onCancel,clients}) {
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"Etiqueta colgante",quantity:"",paper_type:"",width_cm:"",height_cm:"",colors:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",image:null};
+  const [f,setF]=useState(editOrder?{...empty,...editOrder}:empty);const [saving,setSaving]=useState(false);
+  const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  useEffect(()=>{if(editOrder)setF({...empty,...editOrder})},[editOrder]);
+  const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
+  const canP=role==="secretaria"||role==="admin";const hideC=role==="produccion"||role==="preprensa";
+  const submit=async()=>{if(!f.client||!f.product_type)return alert("Completa: Cliente y Tipo");setSaving(true);try{await onSubmit(f);if(!editOrder)setF(empty)}catch(e){alert(e.message)}finally{setSaving(false)}};
+  const selC=c=>setF(p=>({...p,client:c.client,client_company:c.client_company||"",client_email:c.client_email||"",client_phone:c.client_phone||"",client_lada:c.client_lada||"+52",client_rfc:c.client_rfc||""}));
+
+  return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
+    {!editOrder&&canP&&<GuideBanner text={isMaq?"🚚 Orden de maquila — incluye proveedor, costo y precio":"📋 Crea la orden completa con datos, specs y precio"} color={isMaq?"#e67e22":"#5856d6"}/>}
+    {editOrder&&hideC&&<GuideBanner text="🔍 Revisa y completa las especificaciones"/>}
+    {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
+    <div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>
+    <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
+    {hideC?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><ClientInput value={f.client} onChange={v=>s("client",v)} onSelect={selC} clients={clients}/></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="📧 Email" br><input style={inp} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label="📱 WhatsApp" br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Descripción" br><input style={inp} value={f.product} onChange={e=>s("product",e.target.value)} placeholder="Etiquetas..."/></FC><FC label="Tipo" req><select style={{...inp,paddingRight:32}} value={f.product_type} onChange={e=>s("product_type",e.target.value)}>{PTYPES.map(t=><option key={t}>{t}</option>)}</select></FC></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Tiraje"/></FC><FC label="📅 Entrega" br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/></FC><FC label="# Producción"><input style={inp} value={f.production_number} onChange={e=>s("production_number",e.target.value)} placeholder="P-0001"/></FC></div>
+    {isMaq&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase"}}>🚚 Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input style={inp} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value)} placeholder="$0"/></FC><FC label="Precio cliente" br><input style={inp} type="number" step=".01" value={f.maq_price} onChange={e=>s("maq_price",e.target.value)} placeholder="$0"/></FC><FC label="% Ganancia"><div style={{padding:10,background:"#fff",borderRadius:12,fontSize:18,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center"}}>{margin!==null?margin+"%":"—"}</div></FC></div></>}
+    {!isMaq&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Couché 150g"/></FC><FC label="Tintas"><input style={inp} value={f.colors} onChange={e=>s("colors",e.target.value)} placeholder="4×4, CMYK"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Ancho cm" br><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></FC><FC label="Alto cm" br><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></FC><FC label="Horas"><input style={inp} type="number" step=".5" value={f.estimated_hours} onChange={e=>s("estimated_hours",e.target.value)}/></FC></div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><input style={inp} value={f.finishes} onChange={e=>s("finishes",e.target.value)} placeholder="Barniz UV, Laminado, Suaje"/></div></>}
+    {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>💰 Precio MXN</label><input style={inp} type="number" step=".01" value={f.price} onChange={e=>s("price",e.target.value)} placeholder="$0.00"/></div>}
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imagen (opcional)</label><div style={{display:"flex",alignItems:"center",gap:8}}>{f.image&&<div style={{position:"relative"}}><img src={f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button onClick={()=>s("image",null)} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1}}>📷 Subir<input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file||file.size>2e6)return;const r=new FileReader();r.onload=ev=>s("image",ev.target.result);r.readAsDataURL(file);e.target.value=""}}/></label></div></div>
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Notas</label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Instrucciones..."/></div>
+    <div style={{padding:"12px 20px 16px",display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving} style={{...bt(saving?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:saving?"not-allowed":"pointer"}}>{saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
+  </div>;
+}
+
+// ─── ORDER CARD ────────────────────────────────────
+function OCard({o,role,onAction,compact}) {
+  const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&new Date(o.due_date)<new Date()&&!o.stage.includes("delivered");
+  const canAct=st?.who===role||role==="admin";const stale=getStale(o);const hp=role==="produccion"||role==="preprensa";
+  const guide=GUIDES[role]?.[o.stage];
+
+  return <div draggable={o.stage==="ready"||o.stage==="in_production"} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
+    style={{background:C.bg,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",cursor:(o.stage==="ready"||o.stage==="in_production")?"grab":"default",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)}}>
+    {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
+    <div style={{display:"flex",gap:10}}>
+      {o.image&&<img src={o.image} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
+          <span style={{fontSize:8,color:C.t3}}>{o.id}</span>
+          <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:9,fontWeight:600}}>{st?.l}</span>
+          {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"1px 6px",borderRadius:6,fontSize:8,fontWeight:700}}>{PM[o.priority].l}</span>}
+          {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:6,fontSize:8,fontWeight:600}}>#{o.production_number}</span>}
+          {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:7,fontWeight:700}}>⚠️ RETRASO</span>}
+          {stale&&<span style={{background:(stale.lv==="critical"?C.dn:C.wn)+"12",color:stale.lv==="critical"?C.dn:C.wn,padding:"1px 5px",borderRadius:5,fontSize:7,fontWeight:700}}>{stale.lb}</span>}
+          {o.proof_approved&&<span style={{background:C.ok+"12",color:C.ok,padding:"1px 5px",borderRadius:5,fontSize:7}}>✓Prueba</span>}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={()=>!compact&&onAction(o.id,"client_history")}>{o.client}{!hp&&!compact&&o.client_company&&<span style={{fontWeight:400,color:C.t2,fontSize:11}}> · {o.client_company}</span>}</div>
+            {!compact&&!hp&&o.client_phone&&<div style={{fontSize:10,color:"#25d366",marginTop:1}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
+            <div style={{color:C.t2,fontSize:compact?10:11,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
+            {!compact&&o.paper_type&&<div style={{color:C.t3,fontSize:10,marginTop:2}}>📄 {o.paper_type}{o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":""}{o.colors?" | "+o.colors:""}</div>}
+            {o.due_date&&!compact&&<div style={{color:late?C.dn:C.t3,fontSize:10,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+          </div>
+          {!compact&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
+            {!hp?(o.price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok}}>✓Precio</span>:<span style={{fontSize:10,color:C.wn}}>⏳</span>)}
+          </div>}
+        </div>
+        {!compact&&o.stage==="in_production"&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac}}>🏭 {MACHINES.find(x=>x.id===a.machine)?.name}</span> <LiveTimer started={a.started}/></div>:null})()}
+        {!compact&&<ProgressBar order={o}/>}
+      </div>
+    </div>
+
+    {!compact&&canAct&&<div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+      {o.stage==="draft"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"edit")} style={bt("#007aff")}>🔍 Revisar Especificaciones</button>{o.paper_type&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt("#ec4899")}>🎨 Enviar a Diseño</button>}</>}
+      {o.stage==="design"&&(role==="preprensa"||role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt("#8b5cf6")}>🖨️ Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt("#0891b2")}>💿 Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>⏩ Sin CTP, Lista</button></>}
+      {o.stage==="proof_printing"&&(role==="preprensa"||role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}>📤 Enviar Prueba al Cliente</button>}
+      {o.stage==="proof_client"&&(role==="preprensa"||role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}>✅ Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}>❌ Pide Cambios</button></>}
+      {o.stage==="ctp"&&(role==="preprensa"||role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Placas Listas</button>}
+      {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.ok)}>📦 Enviar a Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button></>}
+      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
+      {o.stage==="maquila_in"&&<button onClick={()=>onAction(o.id,"advance","in_production")} style={bt("#007aff")}>🔄 Continuar Producción</button>}
+      {o.stage==="packaging"&&<button onClick={()=>onAction(o.id,"advance","delivered")} style={bt(C.ok)}>✅ Marcar Entregada</button>}
+      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
+      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}>⚙️ Proveedor Trabajando</button>}
+      {o.stage==="maq_in_progress"&&<button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt("#32ade6")}>📥 Recibimos el Trabajo</button>}
+      {o.stage==="maq_received"&&<button onClick={()=>onAction(o.id,"advance","maq_delivered")} style={bt(C.ok)}>✅ Entregada al Cliente</button>}
+      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+        {(o.stage.includes("delivered")||role==="admin")&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar">📋</button>}
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir">🖨️</button>
+        <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo">🔀</button>
+        {role==="admin"&&!o.stage.includes("delivered")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title="Editar">✏️</button>}
+        {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar">↩️</button>}
+      </div>
+    </div>}
+
+    {!compact&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","delivered"].includes(o.stage)&&<div style={{marginTop:6,padding:"8px 12px",background:C.wn+"06",borderRadius:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:11,color:C.wn,fontWeight:600}}>🗑️ Merma</span><button onClick={()=>onAction(o.id,"waste")} style={bs(C.wn)}>+ Registrar</button></div>
+      {(o.waste_log||[]).length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{(o.waste_log||[]).map((w,i)=><span key={i} style={{fontSize:9,color:C.wn,background:C.bg,padding:"2px 8px",borderRadius:6}}>{w.pliegos?"📄"+w.pliegos+"pl":""}{w.pliegos&&w.qty?" ":""}{w.qty?"📦"+w.qty+"pz":""}{w.note?" — "+w.note:""}</span>)}</div>}
+    </div>}
+    {!compact&&o.timeline?.length>0&&<Timeline tl={o.timeline}/>}
+    {!compact&&(isMaq||o.comments?.length>0)&&<CommentLog comments={o.comments||[]} onAdd={c=>onAction(o.id,"comment",c)} role={role}/>}
+  </div>;
+}
+
+// ─── PIPELINE ──────────────────────────────────────
+function Pipeline({orders,role,onAction}) {
+  const iSt=INT_FLOW.filter(s=>s.id!=="delivered");const mSt=MAQ_FLOW.filter(s=>s.id!=="maq_delivered");
+  const intO=orders.filter(o=>o.order_type!=="maquila"&&o.stage!=="delivered");const maqO=orders.filter(o=>o.order_type==="maquila"&&o.stage!=="maq_delivered");
+  const delC=orders.filter(o=>o.stage.includes("delivered")).length;const staleC=orders.filter(o=>getStale(o)).length;
+  return <div>
+    {staleC>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}>⚠️ {staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
+    <div style={{fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}>🏭 Internas ({intO.length})</div>
+    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10,marginBottom:16}}>
+      {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
+      <div style={{minWidth:90,flex:"0 0 auto",background:C.ok+"08",borderRadius:14,padding:12,borderTop:"3px solid "+C.ok,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:22,fontWeight:800,color:C.ok}}>{delC}</div><div style={{fontSize:9,color:C.t2}}>Entregadas</div></div>
+    </div>
+    {maqO.length>0&&<><div style={{fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}>🚚 Maquila ({maqO.length})</div><div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</div></>}
+  </div>;
+}
+
+// ─── KANBAN ────────────────────────────────────────
+function Kanban({orders,onDrop,onAction,role}) {
+  const ready=orders.filter(o=>o.stage==="ready").sort(prioSort);const [dO,setDO]=useState(null);
+  const drop=(mid,e)=>{e.preventDefault();setDO(null);const oid=e.dataTransfer.getData("orderId");if(oid)onDrop(oid,mid)};
+  const cc={preprensa:"#0891b2",offset:C.ac,digital:"#7c3aed",acabados:"#e67e22"};
+  return <div>
+    {ready.length>0&&<div style={{marginBottom:14}}><GuideBanner text="👆 Arrastra una orden a la máquina donde debe iniciar" color={C.ok}/><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:6}}>{ready.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div></div>}
+    {ready.length===0&&orders.filter(o=>o.stage==="in_production").length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>🏭</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Cuando una orden esté en "Lista", arrástrala aquí</div></div>}
+    {["preprensa","offset","digital","acabados"].map(type=>{const ms=MACHINES.filter(m=>m.type===type&&m.status==="active");if(!ms.length)return null;
+    return <div key={type} style={{marginBottom:18}}><div style={{fontSize:11,color:cc[type],fontWeight:600,textTransform:"uppercase",marginBottom:8}}>{type==="preprensa"?"💿 Pre-prensa":type==="offset"?"⚙️ Offset":type==="digital"?"🖨️ Digital":"🔧 Acabados"}</div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(165px,1fr))",gap:8}}>{ms.map(m=>{const mo=orders.filter(o=>o.stage==="in_production"&&o.current_machine===m.id);const isD=dO===m.id;
+    return <div key={m.id} onDragOver={e=>{e.preventDefault();setDO(m.id)}} onDragLeave={()=>setDO(null)} onDrop={e=>drop(m.id,e)} style={{background:isD?cc[type]+"10":C.sf,borderRadius:12,padding:12,border:"2px dashed "+(isD?cc[type]:mo.length>0?cc[type]+"30":"transparent"),minHeight:80}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.tx,marginBottom:2}}>{m.name}</div><div style={{fontSize:9,color:C.t2,marginBottom:8}}>{m.sub}</div>
+      {mo.length===0?<div style={{textAlign:"center",padding:"8px 0",color:C.ph,fontSize:10}}>{isD?"⬇ Soltar aquí":"Sin órdenes"}</div>:mo.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} style={{background:C.bg,borderRadius:8,padding:8,marginBottom:4,cursor:"grab",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:10,fontWeight:700}}>⠿ {o.client}</span>{(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}</div>
+        <div style={{fontSize:9,color:C.t2}}>{o.product_type}</div>
+        <div style={{display:"flex",gap:4,marginTop:4}}><button onClick={()=>onAction(o.id,"advance","packaging")} style={bs(C.ok)}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs("#e67e22"),padding:"4px 8px"}}>🚚</button><button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px"}}>🗑️</button></div>
+      </div>)}
+    </div>})}</div></div>})}
+  </div>;
+}
+
+// ─── ANALYTICS ─────────────────────────────────────
+function Analytics({orders}) {
+  const del=orders.filter(o=>o.stage.includes("delivered"));const tR=orders.filter(o=>o.order_type!=="maquila").reduce((s,o)=>s+(parseFloat(o.price)||0),0);
+  const maq=orders.filter(o=>o.order_type==="maquila");const mR=maq.reduce((s,o)=>s+(parseFloat(o.maq_price)||0),0);const mC=maq.reduce((s,o)=>s+(parseFloat(o.maq_cost)||0),0);
+  const byType={};orders.forEach(o=>{byType[o.product_type]=(byType[o.product_type]||0)+1});const sT=Object.entries(byType).sort((a,b)=>b[1]-a[1]);const mx=sT[0]?.[1]||1;
+  const cls=["#546e7a","#34c759","#ff3b30","#ff9500","#5856d6","#32ade6","#af52de","#007aff"];
+  const byM={};orders.forEach(o=>(o.machine_log||[]).forEach(e=>{if(!e.minutes)return;if(!byM[e.machine])byM[e.machine]={j:0,m:0};byM[e.machine].j++;byM[e.machine].m+=e.minutes}));
+  const mStats=Object.entries(byM).map(([mid,d])=>({m:MACHINES.find(x=>x.id===mid),j:d.j,t:d.m,a:Math.round(d.m/d.j)})).filter(x=>x.m).sort((a,b)=>b.t-a.t);
+  const Stat=({l,v,s:sub,c=C.tx})=><div style={{background:C.sf,borderRadius:12,padding:14,flex:"1 1 130px",minWidth:120}}><div style={{fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>{sub}</div>}</div>;
+  return <div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}><Stat l="📋 Total" v={orders.length} s={del.length+" entregadas"} c={C.ac}/><Stat l="🏭 Internas" v={fmt(tR)} c={C.ok}/><Stat l="🚚 Maquila" v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)} c="#e67e22"/><Stat l="⏱ Producción" v={fmtM(mStats.reduce((s,x)=>s+x.t,0))} c="#007aff"/></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div style={{background:C.sf,borderRadius:14,padding:16}}><div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}>📊 Productos</div>{sT.map(([t,c],i)=><div key={t} style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12}}>{t}</span><span style={{fontSize:11,color:C.t2}}>{c} ({((c/orders.length)*100).toFixed(0)}%)</span></div><div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((c/mx)*100)+"%",height:"100%",background:cls[i%cls.length],borderRadius:3}}/></div></div>)}</div>
+      <div style={{background:C.sf,borderRadius:14,padding:16}}><div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}>⏱ Tiempo/Máquina</div>{mStats.map(({m,j,t,a})=>{const tc={preprensa:"#0891b2",offset:C.ac,digital:"#7c3aed",acabados:"#e67e22"};return <div key={m.id} style={{marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:11,fontWeight:600}}>{m.name}</span><span style={{fontSize:10,color:C.t2}}>{fmtM(t)} · {j} · Prom:{fmtM(a)}</span></div><div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((t/(mStats[0]?.t||1))*100)+"%",height:"100%",background:tc[m.type]||C.ac,borderRadius:3}}/></div></div>})}{mStats.length===0&&<div style={{color:C.t3,textAlign:"center",padding:16,fontSize:11}}>Los tiempos se registran al mover órdenes</div>}</div>
+    </div>
+  </div>;
+}
+
+// ─── MAIN ──────────────────────────────────────────
+export default function PrintFlow() {
+  const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
+  const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
+  const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);
+  const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
+  const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);
+
+  // Load orders from Supabase
+  const reload = useCallback(async () => {
+    const data = await db.loadOrders();
+    setOrders(data);
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => { if (user) reload(); }, [user, reload]);
+
+  // Realtime subscription — reload when any client makes changes
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel("orders-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => reload())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_timeline" }, () => reload())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_comments" }, () => reload())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, reload]);
+
+  // Extract clients for autocomplete
+  useEffect(() => {
+    if (!loaded) return;
+    const cm = {};
+    orders.forEach(o => { if (o.client && !cm[o.client]) cm[o.client] = { client: o.client, client_company: o.client_company, client_email: o.client_email, client_phone: o.client_phone, client_lada: o.client_lada, client_rfc: o.client_rfc }; });
+    setClients(Object.values(cm));
+  }, [orders, loaded]);
+
+  const addTL=(o,action,extra={})=>[...(o.timeline||[]),{action,date:new Date().toISOString(),by:user||"sistema",color:SM[extra.to]?.c||C.t3,...extra}];
+  const closeML=o=>{const l=[...(o.machine_log||[])];const i=l.findIndex(e=>!e.ended);if(i>=0){const s=new Date(l[i].started);const e=new Date();l[i]={...l[i],ended:e.toISOString(),minutes:Math.round((e-s)/60000)}}return l};
+
+  const create=useCallback(async f=>{
+    const isMaq=f.order_type==="maquila";
+    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",created_at:new Date().toISOString(),created_by:user,price:f.price?parseFloat(f.price):null,quantity:f.quantity?parseInt(f.quantity):null,estimated_hours:f.estimated_hours?parseFloat(f.estimated_hours):null,maq_cost:f.maq_cost?parseFloat(f.maq_cost):null,maq_price:f.maq_price?parseFloat(f.maq_price):null,machine_log:[],waste_log:[],comments:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    setOrders(p=>[newOrder,...p]);
+    await db.saveOrder(newOrder);
+    await db.addTimeline(newOrder.id,"📋 Orden creada",user,C.ac);
+    setView("pipeline");
+  },[user]);
+
+  const update=useCallback(async f=>{
+    setOrders(p=>p.map(o=>o.id===f.id?{...o,...f,price:f.price?parseFloat(f.price):o.price,timeline:addTL(o,"✏️ Editada")}:o));
+    await db.saveOrder({...f,price:f.price?parseFloat(f.price):null});
+    await db.addTimeline(f.id,"✏️ Editada",user,C.t3);
+    setEditO(null);setView("pipeline");
+  },[user]);
+
+  const doAdv=useCallback(async(id,ns)=>{
+    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(o.current_machine&&["packaging","delivered","maquila_out","ready"].includes(ns)){u.machine_log=closeML(o);u.current_machine=null}if(ns.includes("delivered"))u.deliveredAt=new Date().toISOString();return u}));
+    // Sync to Supabase
+    const o=orders.find(x=>x.id===id);if(!o)return;
+    const upd={id,stage:ns,current_machine:null};
+    if(o.current_machine&&["packaging","delivered","maquila_out","ready"].includes(ns)){await db.closeMachineLog(id)}
+    if(ns.includes("delivered"))upd.delivered_at=new Date().toISOString();
+    await supabase.from("orders").update(upd).eq("id",id);
+    await db.addTimeline(id,(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),user,SM[ns]?.c);
+  },[user,orders]);
+
+  const advance=useCallback((id,ns)=>{if(["delivered","maq_delivered","packaging"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:"#af52de",onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)},[doAdv]);
+
+  const approveProof=useCallback(async id=>{
+    const now=new Date().toISOString();
+    setOrders(p=>p.map(o=>o.id===id?{...o,stage:"ctp",proof_approved:now,timeline:addTL(o,"✅ Prueba aprobada",{to:"ctp"}),comments:[...(o.comments||[]),{text:"✅ Prueba aprobada",by:"sistema",date:now}]}:o));
+    await supabase.from("orders").update({stage:"ctp",proof_approved:now}).eq("id",id);
+    await db.addTimeline(id,"✅ Prueba aprobada",user,"#0891b2");
+    await db.addComment(id,"✅ Prueba aprobada","sistema");
+  },[user]);
+
+  const assignMachine=useCallback(async(oid,mid)=>{
+    setOrders(p=>p.map(o=>{if(o.id!==oid)return o;const l=closeML(o);l.push({machine:mid,started:new Date().toISOString()});return{...o,stage:"in_production",current_machine:mid,machine_log:l,timeline:addTL(o,"🏭 "+MACHINES.find(x=>x.id===mid)?.name,{to:"in_production"})}}));
+    await db.closeMachineLog(oid);
+    await db.addMachineLog(oid,mid);
+    await supabase.from("orders").update({stage:"in_production",current_machine:mid}).eq("id",oid);
+    await db.addTimeline(oid,"🏭 "+(MACHINES.find(x=>x.id===mid)?.name||mid),user,"#ff9500");
+  },[user]);
+
+  const sendMaquila=useCallback(async(oid,prov,note)=>{
+    setOrders(p=>p.map(o=>{if(o.id!==oid)return o;const l=closeML(o);return{...o,stage:"maquila_out",maquila_provider:prov,current_machine:null,machine_log:l,timeline:addTL(o,"🚚 "+prov,{to:"maquila_out"}),comments:[...(o.comments||[]),{text:"🚚 "+prov+(note?" — "+note:""),by:"sistema",date:new Date().toISOString()}]}}));
+    await db.closeMachineLog(oid);
+    await supabase.from("orders").update({stage:"maquila_out",maquila_provider:prov,current_machine:null}).eq("id",oid);
+    await db.addTimeline(oid,"🚚 "+prov,user,"#e67e22");
+    await db.addComment(oid,"🚚 "+prov+(note?" — "+note:""),"sistema");
+    setMaqModal(null);
+  },[user]);
+
+  const addWaste=useCallback(async(oid,pz,pl,note)=>{
+    setOrders(p=>p.map(o=>o.id===oid?{...o,waste_log:[...(o.waste_log||[]),{qty:pz,pliegos:pl,note,date:new Date().toISOString()}],timeline:addTL(o,"🗑️ Merma")}:o));
+    await db.addWaste(oid,pl,pz,note);
+    await db.addTimeline(oid,"🗑️ Merma",user,C.wn);
+    setWasteModal(null);
+  },[user]);
+
+  const duplicate=useCallback(async id=>{
+    const orig=orders.find(o=>o.id===id);if(!orig)return;
+    const dup={...orig,id:gid(),stage:"draft",created_at:new Date().toISOString(),created_by:user,machine_log:[],waste_log:[],comments:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,timeline:[{action:"📋 Duplicada de "+orig.id,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
+    setOrders(p=>[dup,...p]);
+    await db.saveOrder(dup);
+    await db.addTimeline(dup.id,"📋 Duplicada de "+orig.id,user,"#5856d6");
+  },[orders,user]);
+
+  const addComment=useCallback(async(oid,c)=>{
+    setOrders(p=>p.map(o=>o.id===oid?{...o,comments:[...(o.comments||[]),c]}:o));
+    await db.addComment(oid,c.text,c.by);
+  },[]);
+
+  const changeDate=useCallback(async(oid,newDate)=>{
+    setOrders(p=>p.map(o=>o.id===oid?{...o,due_date:newDate,timeline:[...(o.timeline||[]),{action:"📅 Fecha cambiada a "+fD(newDate),date:new Date().toISOString(),by:user||"sistema",color:C.wn}]}:o));
+    await supabase.from("orders").update({due_date:newDate}).eq("id",oid);
+    await db.addTimeline(oid,"📅 Fecha cambiada a "+fD(newDate),user,C.wn);
+  },[user]);
+
+  const handleAction=useCallback((id,action,payload)=>{
+    if(action==="edit"){setEditO(orders.find(o=>o.id===id));setView("form")}
+    if(action==="advance")advance(id,payload);
+    if(action==="approve_proof")approveProof(id);
+    if(action==="send_maquila")setMaqModal(id);
+    if(action==="waste")setWasteModal(id);
+    if(action==="comment")addComment(id,payload);
+    if(action==="duplicate")duplicate(id);
+    if(action==="print"){const o=orders.find(x=>x.id===id);if(o)setPrintModal(o)}
+    if(action==="client_history"){const o=orders.find(x=>x.id===id);if(o)setClientHistory(o.client)}
+    if(action==="flow"){const o=orders.find(x=>x.id===id);if(o)setFlowDiagram({stage:o.stage,type:o.order_type})}
+    if(action==="revert"){const o=orders.find(x=>x.id===id);if(!o)return;const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const ci=flow.findIndex(s=>s.id===o.stage);if(ci>0){const prev=flow[ci-1];setConfirmModal({title:"↩️ Regresar",message:"¿A \""+SM[prev.id]?.l+"\"?",confirmLabel:"Sí",confirmColor:C.wn,onConfirm:()=>{doAdv(id,prev.id);setConfirmModal(null)}})}}
+  },[orders,advance,approveProof,addComment,duplicate,doAdv]);
+
+  const myTasks=useMemo(()=>{const srt=l=>l.sort(prioSort);if(user==="admin")return srt(orders.filter(o=>!o.stage.includes("delivered")));if(user==="produccion")return srt(orders.filter(o=>["draft","ready","in_production","maquila_out","maquila_in","packaging"].includes(o.stage)));if(user==="preprensa")return srt(orders.filter(o=>["design","proof_printing","proof_client","ctp"].includes(o.stage)));if(user==="secretaria")return srt(orders.filter(o=>["maq_created","maq_sent","maq_in_progress","maq_received"].includes(o.stage)));return []},[orders,user]);
+
+  if(!user) return (
+    <Login onLogin={(role, name)=>{setUser(role);setUserName(name);setView("pipeline");ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
+  );
+
+  const rL={produccion:"Producción",preprensa:"Pre-prensa",secretaria:"Secretaría",admin:"Admin"};
+  const rC={produccion:"#007aff",preprensa:"#ec4899",secretaria:"#5856d6",admin:C.ok};
+  const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
+  if(user==="secretaria"||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
+  if(user!=="secretaria")navs.push({id:"board",i:"🏭",l:"Tablero"});
+  navs.push({id:"calendar",i:"📅",l:"Entregas"});
+  navs.push({id:"orders",i:"📋",l:"Todas"});
+  if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
+
+  return (
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Poppins',sans-serif",color:C.tx}}>
+      <link href={FNT} rel="stylesheet"/>
+      <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}><img src={LOGO} alt="" style={{width:28,height:28,borderRadius:6}}/><span style={{fontWeight:800,fontSize:15,textTransform:"uppercase"}}>PrintFlow</span></div>
+        <div style={{display:"flex",gap:2,overflowX:"auto"}}>{navs.map(n=><button key={n.id} onClick={()=>{setView(n.id);if(n.id!=="form")setEditO(null)}} style={{background:view===n.id?C.acL:"transparent",border:"none",color:view===n.id?C.ac:C.t2,padding:"6px 10px",borderRadius:8,cursor:"pointer",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>{n.i} {n.l}</button>)}</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {(user==="admin"||user==="secretaria")&&<button onClick={()=>{const h=["ID","Fecha","Tipo","Prioridad","#Prod","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Ancho","Alto","Tintas","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Notas"];const r=orders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.client,o.client_company,(o.client_lada||"+52")+" "+o.client_phone,o.client_email,o.client_rfc,o.product,o.product_type,o.quantity,o.paper_type,o.width_cm,o.height_cm,o.colors,o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.notes]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={bs(C.ac)}>📥 CSV</button>}
+          <div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600}}>{rL[user]}</div>
+          <button onClick={()=>setUser(null)} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:1300,margin:"0 auto",padding:"14px 16px"}}>
+        {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{orders.length} órdenes · {orders.filter(o=>!o.stage.includes("delivered")).length} activas</p>{(user==="admin"||user==="secretaria")&&<WeeklyReport orders={orders}/>}<Pipeline orders={orders} role={user} onAction={handleAction}/></div>}
+        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{myTasks.length} pendiente{myTasks.length!==1?"s":""}</p>{myTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>¡Sin pendientes!</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando necesiten tu atención</div></div>:myTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction}/>)}</div>}
+        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?"Editar Orden":"Nueva Orden"}</h2><OrderForm role={user} onSubmit={editO?update:create} editOrder={editO} onCancel={()=>{setEditO(null);setView("pipeline")}} clients={clients}/></div>}
+        {view==="board"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><Kanban orders={orders} onDrop={assignMachine} onAction={handleAction} role={user}/></div>}
+        {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Calendario de Entregas</h2><Calendar orders={orders} onChangeDate={changeDate}/></div>}
+        {view==="orders"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8,flexWrap:"wrap"}}><h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}>Todas ({orders.length})</h2><input style={{...inp,width:200,padding:"8px 14px",fontSize:12}} placeholder="🔍 Buscar..." value={search} onChange={e=>setSearch(e.target.value)}/></div>{orders.filter(o=>{if(!search)return true;const q=search.toLowerCase();return[o.client,o.product,o.id,o.product_type,o.maq_provider,o.client_company,o.production_number].some(x=>x?.toLowerCase().includes(q))}).sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction}/>)}</div>}
+        {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2><Analytics orders={orders}/></div>}
+      </div>
+
+      {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
+      {maqModal&&<MaqModal onSend={(p,n)=>sendMaquila(maqModal,p,n)} onClose={()=>setMaqModal(null)}/>}
+      {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
+      {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
+      {printModal&&<PrintOrder order={printModal} onClose={()=>setPrintModal(null)}/>}
+      {clientHistory&&<ClientHistory clientName={clientHistory} orders={orders} role={user} onClose={()=>setClientHistory(null)}/>}
+      {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
+    </div>
+  );
+}
