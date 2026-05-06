@@ -808,7 +808,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <Row l="Nombre" v={o.client}/>
       {!hp&&vOwns&&<><Row l="Empresa" v={o.client_company}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
-      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
+      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/><Row l="Acabados" v={o.finishes}/></>}
       {o.agent&&<Row l="👤 Agente" v={o.agent}/>}
       {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
@@ -1977,7 +1977,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin}) {
             {!compact&&!hp&&vOwns&&o.client_phone&&<div style={{fontSize:10,color:"#25d366",marginTop:1}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
             <div style={{color:C.t2,fontSize:compact?10:11,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
             {!compact&&o.paper_type&&<div style={{color:C.t3,fontSize:10,marginTop:2}}>📄 {o.paper_type}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":""}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
-            {o.due_date&&!compact&&<div style={{color:late?C.dn:C.t3,fontSize:10,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+            {(o.created_at||o.due_date)&&<div style={{fontSize:compact?9:10,marginTop:1,color:C.t3}}>{o.created_at&&<>🗓️ {fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{color:late?C.dn:"inherit"}}>📅 {fD(o.due_date)}</span>}</div>}
           </div>
           {!compact&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
             {!hp&&vOwns?(o.price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok}}>✓Precio</span>:<span style={{fontSize:10,color:C.wn}}>⏳</span>)}
