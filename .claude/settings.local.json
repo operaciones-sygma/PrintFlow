@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes acorn --ecma2022 --module --jsx src/App.jsx)",
+      "Bash(echo \"exit=$?\")",
+      "PowerShell(npx --yes esbuild --loader=jsx src/App.jsx > $null; \"exit=$LASTEXITCODE\")",
+      "PowerShell(Get-Command node -ErrorAction SilentlyContinue; Get-Command npm -ErrorAction SilentlyContinue; Get-Command npx -ErrorAction SilentlyContinue; \"node?: $\\(\\(Get-Command node -ErrorAction SilentlyContinue\\) -ne $null\\)\"; \"npm?: $\\(\\(Get-Command npm -ErrorAction SilentlyContinue\\) -ne $null\\)\")",
+      "PowerShell($paths = @\\(\"$env:ProgramFiles\\\\nodejs\\\\node.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\nodejs\\\\node.exe\",\"$env:LOCALAPPDATA\\\\nvs\",\"$env:APPDATA\\\\npm\\\\node.exe\",\"$env:LOCALAPPDATA\\\\Programs\\\\Node\\\\node.exe\",\"$env:LOCALAPPDATA\\\\fnm_multishells\",\"$env:USERPROFILE\\\\AppData\\\\Local\\\\Volta\\\\bin\\\\node.exe\",\"$env:USERPROFILE\\\\scoop\\\\apps\\\\nodejs\\\\current\\\\node.exe\",\"$env:USERPROFILE\\\\.volta\\\\bin\\\\node.exe\"\\); foreach\\($p in $paths\\){ if\\(Test-Path $p\\){ \"FOUND: $p\" } }; \"Path env contains node? $\\($env:Path -match 'node'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}
