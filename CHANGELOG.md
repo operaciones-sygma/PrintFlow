@@ -1,0 +1,525 @@
+# PrintFlow — Changelog
+
+Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Documentación) se mantienen como referencia estructural y solo se actualizan en versiones mayores. Este archivo captura TODAS las actualizaciones incrementales.
+
+---
+
+
+## v10.9.1 — Vista Auditoría + Gap Detection (Karla, Admin)
+
+**Status:** ✅ Deployada en producción · Validada con test data SQL · 6 mayo 2026
+
+### Nueva funcionalidad
+
+**Pestaña 📑 Auditoría** — Visible solo para `admin` y `karla`. Muestra la salud completa de la secuencia de folios fiscales (D-XXXX facturas y R-XXXX remisiones), detectando gaps numéricos y duplicados de un vistazo. Read-only por diseño — la edición de folios sigue siendo en el detalle de orden.
+
+**Componente `AuditoriaView`** — Renderiza:
+- 4 stats cards: Total emitidos · Gaps detectados · Duplicados · Rango (oldest ↓ latest)
+- 2 tabs internos mutuamente excluyentes: 📄 Facturas (D-XXXX) / 📋 Remisiones (R-XXXX)
+- Filtro temporal: Últimos 90 días (default) / Este mes / Mes pasado / Todo el historial
+- Listado en orden numérico con filas resaltadas para gaps (rojo ⚠️ FALTANTE) y duplicados (naranja DUPLICADO)
+- Badges contextuales por orden: ⚡ ANTICIPADO (folios pre-asignados v10.9.0), CANCELADA, CANCELADA · NC
+- Botón 📥 Exportar CSV con BOM UTF-8 para cross-check con AlphaERP
+- Helper text al final con interpretación de gaps y duplicados
+
+### Sin cambios SQL
+
+Toda la data ya vive en columnas existentes: `orders.invoice_folio + invoice_type + invoiced_at + invoiced_by + invoice_pre_assigned + cancelled_at + nc_emitted`.
+
+### Decisiones tomadas
+
+| # | Decisión | Razón |
+|---|----------|-------|
+| 1 | Solo admin + Karla acceden | Datos fiscales sensibles; Lupita y vendedores no la necesitan |
+| 2 | Read-only en v10.9.1 | Reducir superficie de bugs; corrección de typos sigue en detalle de orden |
+| 3 | Sin integración AlphaERP (CSV manual) | AlphaERP no tiene API; CSV es vía suficiente para cross-check |
+| 4 | Detecta gaps numéricos obvios solamente | La clasificación "intencional vs error" llega en v10.9.2 si data real lo justifica |
+| 5 | Default 90 días | Ventana razonable para auditoría operativa sin saturar visualmente |
+
+### Detalles técnicos
+
+- **`AuditoriaView` aislado** — Componente standalone insertado entre `Analytics` y `ProductionPlanner` (líneas 3106-3226). No toca OCard, DetailModal ni ningún flujo existente.
+- **`parseFolio` regex** — `/[DRC]-(\d+)/` extrae el número del folio. Soporta D (factura), R (remisión) y prefijo C reservado para extensibilidad futura.
+- **Gap detection algorítmico** — Construye un `Map<number, orders[]>` por folio, encuentra min/max, itera del rango completo y marca como `gap` cualquier número sin órdenes asociadas. Marca como `duplicate` cualquier número con ≥2 órdenes.
+- **Filtros temporales con `useMemo`** — Recalculan `cutoffs` solo cuando cambia `filter`; recalculan `folioOrders` cuando cambia `cutoffs` o `type`; recalculan secuencia y métricas cuando cambia `folioOrders`. Sin lag perceptible en lista de ~500 folios.
+- **Convención de íconos consistente** — 📄 = factura, 📋 = remisión (alinea con líneas 794, 1104-1105, 1331, 1960, 2733); 📑 = pestaña Auditoría (alinea con sección "Info Fiscal" en línea 820).
+- **Archive load gate** — La pestaña requiere archivo histórico cargado. Si `archiveLoaded === false` muestra un fallback con botón "📂 Cargar archivo histórico para auditoría". Una vez cargado, queda accesible para Analytics y Auditoría sin recarga.
+- **CSV BOM UTF-8** — Prefijo `\uFEFF` para que Excel renderice acentos correctamente sin pasos manuales del usuario.
+- **Sintaxis verificada** con esbuild (Vite parser, 4572 líneas, 0 errores). 47 → 48 funciones en el archivo (solo se agregó `AuditoriaView`).
+
+### Bug encontrado y resuelto durante la sesión
+
+**Mojibake en transferencia de brief.** Al pasar el brief de planning desde Claude.ai web a Claude Code, los emojis Unicode se reinterpretaron como Latin-1 y Claude Code los reconstruyó con caracteres incorrectos (🔍 en lugar de 📑 para tab; 🧾 en lugar de 📄 para factura; 📄 en lugar de 📋 para remisión). Detectado y corregido pre-commit con 3 reemplazos quirúrgicos antes de pushear. **Aprendizaje:** verificar emojis específicos contra convenciones existentes del archivo antes de aprobar commits que introducen UI nueva.
+
+### Validación con test data
+
+Insertados 5 órdenes TEST con folios fuera del rango productivo (D-9990 a D-9993, R-9990 a R-9991) incluyendo gap intencional en D-9992 y `invoice_pre_assigned=true` en D-9993. Todas las métricas se calcularon correctamente, los badges aparecieron donde correspondía, y el CSV se exportó con encoding correcto. Test data eliminado después con `DELETE FROM orders WHERE id LIKE 'TEST-AUDIT-%'`.
+
+**Aprendizaje DB descubierto:** la columna `orders.order_type` tiene CHECK constraint que solo acepta `'interna'` o `'maquila'` (no `'internal'` que es el valor de la columna `source`). Documentado para evitar el error en futuros INSERTs de testing.
+
+### Workflow
+
+Primera versión completa (no patch menor) deployada con el workflow nuevo: planificación en Claude.ai web (Project Knowledge + memoria) → brief copy-paste → Claude Code en VS Code aplica edits → commit + push → Vercel auto-deploy. Tiempo total de la sesión: ~45 minutos para diseño + código + deploy + validación E2E + cleanup.
+
+### Próximo en horizonte
+
+- **v10.9.1 en operación real** durante 1-2 semanas antes de iterar — necesitamos data orgánica de Karla para entender qué tan frecuentes son los gaps reales
+- **v10.9.2 (tentativa)** — Clasificación de gaps como "intencionales" (NC emitida en AlphaERP) vs "alertas" (captura omitida); edición inline si data real lo justifica
+- **CobranzaFlow** — App separada que leerá `orders.invoice_folio` directamente (mismo Supabase project)
+
+---
+
+## v10.4.3 — Fix Órdenes Estancadas + Rediseño Tablero (3 bugs + 1 mejora UX)
+
+### Mejora UX
+
+1. **Tablero de Producción rediseñado — layout dos columnas con sidebar sticky** — Las zonas de Empaque, Salidas y Maquila estaban hasta abajo del tablero (después de Offset, Digital y las 11 máquinas de Acabados), haciendo muy difícil arrastrar órdenes desde "Listas" sin mucho scroll. **Rediseño:**
+   - **Columna izquierda (~70%):** Máquinas (Offset, Digital, Acabados) como antes
+   - **Columna derecha (260px, sticky):** Empaque, Salidas y Maquila apilados verticalmente, **siempre visibles** mientras se hace scroll por las máquinas
+   - Las órdenes Listas se mantienen arriba a ancho completo
+   - Cada zona del sidebar muestra badge con conteo, órdenes dentro (con timer y botones de acción), y reacciona visualmente al arrastrar sobre ella
+   - El sidebar se adhiere al viewport (`position: sticky`) para que siempre esté accesible sin importar cuánto scroll haya en las máquinas
+
+### Bugs corregidos (3)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🔴 | **`getStale` marcaba etapas de espera como estancadas** — `maquila_out` (proveedor externo, días/semanas), `proof_client` (esperando cliente), `maq_sent` y `maq_in_progress` (maquila propia en proceso) se marcaban falsamente como "estancadas" a las 24h. Esto causaba que órdenes legítimamente en espera aparecieran en el banner rojo. **Fix:** Nueva constante `WAIT_STAGES` que excluye estas 4 etapas de la detección de estancamiento |
+| 2 | 🔴 | **Banner de estancadas sin botones de acción — órdenes "atrapadas"** — Las órdenes en el banner de estancadas en Pendientes se renderizaban como divs simples (solo nombre/tipo/etapa) sin ningún botón de acción. Gerardo no podía hacer "📥 Recibido de Maquila" ni mover órdenes. Parecían desaparecer del flujo normal. **Fix:** Reemplazados divs simples por `OCard` completas con todos sus botones de acción, drag, merma, etc. |
+| 3 | 🟡 | **`staleTasks` usaba `viewOrders` en vez de `filteredOrders`** — Inconsistencia con filtro "Mis órdenes": stale tasks mostraba TODAS las órdenes sin respetar el filtro activo. Además los arrays de stages por rol incluían etapas de espera ya excluidas por `getStale`. **Fix:** Cambiado a `filteredOrders` + arrays de stages limpiados para consistencia |
+
+### Notas técnicas v10.4.3
+- **Sin migración SQL requerida** — Todos los cambios son solo frontend
+- **`WAIT_STAGES`** — Nueva constante `["maquila_out","proof_client","maq_sent","maq_in_progress"]` usada por `getStale()`. Etapas donde la espera es legítima y esperada, no deben generar alertas de estancamiento
+- **Banner estancadas → OCard** — El banner ahora usa `<OCard>` con props `noDragHint` y `busy={actionLoading===o.id}`, manteniendo el header visual del banner (conteo + título) pero con tarjetas funcionales completas
+- **`staleTasks` deps** — Cambiado de `[viewOrders,user]` a `[filteredOrders,user]` para consistencia con `myTasks`
+- **Efecto cascada en notificaciones** — Las notificaciones automáticas de estancamiento (admin session, cada 30min) también se benefician del fix #1 porque usan `getStale()` internamente
+- **Kanban two-column layout** — `display:flex` con `gap:16`. Columna izquierda `flex:1 1 0%` contiene las categorías de máquinas. Columna derecha `width:260,flexShrink:0,position:sticky,top:16,alignSelf:flex-start` contiene Empaque/Salidas/Maquila como drop zones compactas. Las órdenes listas y el summary bar permanecen a ancho completo arriba del flex
+- **Sidebar drop zones** — Cada zona reacciona al drag con borde más grueso y fondo coloreado (`dO===zoneid`). Empaque muestra DragCards con botones 📤/🚚/🗑️. Salidas muestra tarjetas compactas con fecha. Maquila solo muestra texto de drop
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` (2943 líneas, 0 errores)
+
+---
+
+## v10.4.2 — Cancelar Orden + Validación de Formulario + Folio Secuencial
+
+### Nuevas funcionalidades (3)
+
+1. **Cancelar Orden** — Nuevo flujo de cancelación permanente:
+   - Nuevo stage `cancelled` (internas) y `maq_cancelled` (maquila) en `ALL_S`
+   - `CancelOrderModal` con motivo obligatorio, info de la orden y confirmación
+   - **Quién puede cancelar:** Secretaría y Vendedor (solo órdenes propias) + Admin (cualquier orden)
+   - **Desde dónde:** Cualquier etapa excepto ya entregada o ya cancelada
+   - Botón ❌ visible tanto dentro como fuera del bloque `canAct` (secretaría/vendedor pueden cancelar incluso en stages que no les pertenecen)
+   - **Notificaciones:** Admin + Producción reciben notificación con motivo
+   - **Timeline + Comentario:** Queda registro completo con motivo de cancelación
+   - **Permanente:** No se puede revertir una cancelación
+   - **Excluida de:** Dashboard (activas), Pipeline, Pendientes, Calendar (pendientes), Stale alerts, MaquilaTracker
+   - **Incluida en:** Archive con badge rojo "❌ Cancelada", nombre tachado, sin contar en revenue. Sección Todas muestra la orden con badge cancelada
+
+2. **Validación Inteligente del Formulario** — Ya no falla silenciosamente:
+   - `missing` array calculado con `useMemo` detecta campos obligatorios faltantes en tiempo real
+   - Al dar click en "Crear Orden": si faltan campos, aparece banner rojo "⚠️ Campos obligatorios faltantes: Cliente, Proveedor..."
+   - Campos faltantes se resaltan con borde rojo
+   - Botón se pone gris cuando hay campos faltantes y se intentó enviar
+   - **Campos obligatorios:** Cliente, Tipo de Producto, Proveedor (solo maquila)
+   - **NO obligatorios:** Archivo, Descripción del producto, Cantidad, Fecha, Precio (todos opcionales)
+
+3. **Folio de Producción Secuencial** (de v10.4.1):
+   - Muestra último folio usado y siguiente sugerido
+   - Botón "→ Usar P-XXXX" auto-llena
+   - Advertencia "⚠️ Ya existe" si el folio está duplicado
+   - Rango P-0001 a P-5000, reinicia automáticamente
+
+### Mejoras
+- **"(USO INTERNO)"** agregado al label de Notas de Proceso / Aclaraciones en el formulario
+
+### Notas técnicas v10.4.2
+- **Sin migración SQL requerida** — `cancelled` y `maq_cancelled` son valores de texto en la columna `stage` existente, no requieren ALTER TABLE
+- **`CancelOrderModal`** — Componente con `useEscClose`, muestra info de la orden, textarea con borde rojo si vacío, confirmación de acción permanente
+- **`cancelOrder` useCallback** — Cierra machine logs abiertos, actualiza stage, agrega timeline + comentario, notifica admin + producción
+- **Botón ❌ dual** — Dentro de `canAct` para admin (junto a otros botones), fuera de `canAct` para sec/vendedor (visible en cualquier stage propio)
+- **`isFinal` helper** en `myTasks` — `s.includes("delivered")||s.includes("cancelled")` para excluir ambos
+- **Archive `archiveDate`** — Órdenes canceladas usan `created_at` como fecha de archivo (no tienen `delivered_at`)
+- **Archive revenue** — Excluye canceladas del cálculo de facturado (tanto en totales como en carpetas)
+- **Form validation** — `tried` state + `missing` useMemo + `errBorder` helper. `tried` se resetea al crear exitosamente
+- **`canSubmit`** — Boolean derivado de `missing.length===0`, no bloquea el botón hasta que el usuario intenta enviar
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` (2830 líneas, 0 errores)
+
+---
+
+## v10.4.1 — Revisión de Bugs + Aislamiento de Datos por Vendedor (10 bugs notificación + 11 aislamiento + 2 corrección regresión + 1 duplicado)
+
+### Bugs corregidos — Ronda 1: Notificaciones y Deps (10)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **`handleAction` — `userLogin` faltaba en deps** — Fix: agregado |
+| 2 | 🟡 | **`changeDate` — `userLogin` faltaba en deps** — Fix: agregado |
+| 3 | 🟡 | **`notifKey` ausente en deps de dos `useEffect`** — Fix: `notifKey` agregado a ambos arrays |
+| 4 | 🟡 | **`delivered` no notificaba a secretaría ni vendedor creador** — Fix: notificación manual a ambos |
+| 5 | 🟡 | **`maq_delivered` sin notificación** — Fix: `db.notifySecs()` |
+| 6 | 🟡 | **Rechazo de prueba no notificaba a sec/vendedor** — Fix: notificación a ambos |
+| 7 | 🟡 | **MaquilaTracker oculto para vendedor en Dashboard** — Fix: visible para todos |
+| 8 | 🟢 | **`maquila_in → ready` no notificaba a producción** — Fix: notificación añadida |
+| 9 | 🟢 | **Drop zone Salidas rechazaba `maquila_in`** — Fix: stage agregado |
+| 10 | 🟢 | **Avances maquila sin notificación a admin** — Fix: `maq_sent/maq_in_progress/maq_received` notifican |
+
+### Bugs corregidos — Ronda 2: Aislamiento de Datos por Vendedor (11)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 11 | 🔴 | **Calendar: vendedor podía cambiar fecha de órdenes ajenas** — Click bloqueado con `canEditDate()` |
+| 12 | 🔴 | **DetailModal: vendedor podía descargar archivos de órdenes ajenas** — Archivo oculto con `vOwns` |
+| 13 | 🔴 | **DetailModal: vendedor veía contactos y precios de órdenes ajenas** — Datos ocultos con `vOwns` |
+| 14 | 🟡 | **DetailModal: vendedor podía imprimir órdenes ajenas** — Botón oculto con `vOwns` |
+| 15 | 🟡 | **OCard: vendedor veía empresa, teléfono y precio de órdenes ajenas** — Datos ocultos con `vOwns` |
+| 16 | 🟡 | **OCard: vendedor podía agregar comentarios a órdenes ajenas** — CommentLog oculto con `vOwns` |
+| 17 | 🟡 | **OCard: vendedor podía agregar notas rápidas a órdenes ajenas** — QuickNotes oculto con `vOwns` |
+| 18 | 🟡 | **OCard: vendedor podía ver historial de cliente de órdenes ajenas** — Click bloqueado con `vOwns` |
+| 19 | 🟡 | **ClientHistory: vendedor veía órdenes de otros creadores** — Filtro por propiedad solo para vendedor |
+| 20 | 🟡 | **Archive: vendedor veía precios de órdenes ajenas** — Totales y precios filtrados con `owns()` |
+| 21 | 🟡 | **CSV Export: vendedor exportaba datos de todas las órdenes** — Filtrado solo para vendedor |
+
+### Bugs corregidos — Ronda 3: Corrección de regresión (2) + duplicado (1)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 22 | 🔴 | **Regresión: Secretaría no podía ver datos de órdenes del vendedor** — En ronda 2 se usó `secOwns` (que bloquea secretaría+vendedor) para gates de datos. Secretaría dejó de ver precios/contactos/archivos de órdenes creadas por vendedor. **Fix:** Creada variable separada `vOwns` (`role!=="vendedor"`) que solo restringe al vendedor. `secOwns` se mantiene solo para gates de acciones |
+| 23 | 🟡 | **MaquilaTracker exponía precios y contacto de órdenes ajenas al vendedor** — No recibía `userLogin`. Fix: prop agregado, precio gateado con `oOwns`, contacto de proveedor solo muestra de órdenes propias |
+| 24 | 🟡 | **`proof_client` — Admin recibía notificación duplicada** — Al enviar prueba al cliente, `db.notify("preprensa")` copiaba a admin Y `db.notifySecs()` también copiaba a admin. Fix: preprensa notificado con `addNotification` directo (sin copia auto a admin), `notifySecs` se encarga de la copia admin |
+
+### WeeklyReport filtrado para vendedor
+- Las 4 métricas básicas solo cuentan órdenes propias del vendedor (filtro `role==="vendedor"`)
+- Secretaría y Admin ven el reporte completo
+
+### Notas técnicas v10.4.1
+- **Sin migración SQL requerida** — Todos los cambios son solo frontend
+- **Dos variables de propiedad, roles distintos:**
+  - **`secOwns`** = `!isSec(role)||!o.created_by||o.created_by===userLogin` — Gate de **acciones**: bloquea AMBOS secretaría y vendedor en órdenes ajenas (botones, editar, aprobar, entregar). Admin y roles de piso siempre `true`
+  - **`vOwns`** = `role!=="vendedor"||!o.created_by||o.created_by===userLogin` — Gate de **datos**: solo bloquea vendedor en órdenes ajenas (precios, contactos, archivos, notas). Secretaría siempre `true` (trusted). Usada en DetailModal, OCard, Calendar, Archive, MaquilaTracker
+- **`owns()` helper en Archive** — Misma lógica que `vOwns` pero como función para `.filter()`
+- **`canEditDate()` en Calendar** — Misma lógica que `vOwns`
+- **`oOwns` en MaquilaTracker** — Variable per-order para gate de precio individual
+- **Props `userLogin` agregados** a: Calendar, DetailModal, ClientHistory, WeeklyReport, Archive, MaquilaTracker (×3 renders)
+- **`proof_client` sin duplicar admin** — `db.notify("preprensa")` reemplazado por `db.addNotification("preprensa")` porque `notifySecs` ya copia a admin. Patrón: cuando se usan `db.notify` + `db.notifySecs` en el mismo bloque, el `db.notify` debe ser `addNotification` directo
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` (2766 líneas, 0 errores)
+
+---
+
+## v10.4 — Rol Vendedor (6to usuario) + Mejoras de Impresión y Descripción
+
+### Nueva funcionalidad principal
+
+1. **Rol Vendedor (6to usuario)** — Nuevo rol para vendedores que operan de forma independiente:
+   - **Permisos idénticos a Secretaría:** crear órdenes (internas y maquila), ver precios y contactos, confirmar entregas, aprobar/rechazar pruebas de color, editar maquila, exportar CSV
+   - **Notificaciones completas:** recibe las mismas que Secretaría (validaciones, salidas, cambios de fecha, maquila, pruebas de color)
+   - **Badge visual** en cada tarjeta de orden mostrando quién creó la orden: "Secretaría" (morado) o "Vendedor" (naranja). Visible en Dashboard, Pendientes y Todas
+   - **Tablero de Salidas** visible para vendedor, puede confirmar entregas
+   - **WeeklyReport** visible para vendedor en Dashboard
+   - **Restricción de propiedad (Secretaría Y Vendedor):** Cada rol solo puede interactuar con las órdenes que **creó**: aprobar pruebas, marcar entregada, editar, avanzar maquila. Ve todas las órdenes en Dashboard/Todas/Calendario para consulta, pero NO tiene botones de acción en órdenes ajenas. Variable `secOwns` en `canAct` controla esto automáticamente
+   - **`created_by` guarda username** — En vez del rol, se guarda el nombre de usuario real (ej: "genaro", "secretaria") para identificar al creador exacto
+   - **Escalable:** para agregar más vendedores en el futuro, solo se necesita INSERT en tabla `users` con `role='vendedor'`
+   - **Helper `isSec()`** — función global que identifica roles tipo-secretaría (`secretaria` o `vendedor`), centraliza la lógica para evitar duplicación
+   - **`db.notifySecs()`** — método que notifica a todos los roles tipo-secretaría, evita auto-notificación y duplicados
+   - **Login:** usuario `genaro`, contraseña `1` (cambiar en producción)
+
+### Impresión Dual (de v10.3.1)
+
+2. **Impresión en dos versiones** — PrintOrder genera dos formatos según el rol:
+   - **Versión Completa** (Secretaría/Vendedor/Admin): incluye datos del cliente, precio, RFC, datos administrativos, datos de maquila
+   - **Copia Producción** (Producción/Pre-prensa/Germán): solo nombre del cliente, sin precio/contactos. Badge rojo "COPIA PRODUCCIÓN"
+   - Secretaría/Vendedor/Admin ven **dos botones** de impresión
+   - Secciones de Impresión y Acabados se ocultan para órdenes maquila
+   - Datos de maquila (proveedor, costo, precio) ahora aparecen en versión completa
+   - Columna "Color" vacía eliminada de tabla Impresión
+
+### Mejoras
+
+- **Descripción del producto rediseñada** — Formulario: campo full-width con textarea más alto (90px) y placeholder descriptivo. Impresión: fila propia de ancho completo con tipografía 12px, line-height 1.6 y soporte multilínea
+- **CSV incluye columna "CreadoPor"** — identifica si la orden fue creada por Secretaría, Vendedor o Admin
+
+### Bugs corregidos (10)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **PrintOrder modal sin ESC** — Fix: `useEscClose(onClose)` agregado |
+| 2 | 🟡 | **`duplicate` copiaba `production_number`** — Fix: `production_number: null` en duplicado |
+| 3 | 🟡 | **Revert: notificaciones sin try-catch** — Fix: envuelto en try-catch |
+| 4 | 🟡 | **Revert: notificaciones falsas si doAdv falla** — Fix: try-catch abarca doAdv + notificaciones |
+| 5 | 🟡 | **StorageTab popup sin ESC** — Fix: `useEffect` con keydown listener |
+| 6 | 🟡 | **`update` useCallback faltaba `reload` en deps** — Fix: agregado |
+| 7 | 🟢 | **`quick_note` no era optimistic** — Fix: `setOrders` primero, revert si falla |
+| 8 | 🟢 | **`searchFilter` no incluía `client_phone`** — Fix: agregado al array |
+| 9 | 🟢 | **`handleAction` deps incompletos** — Fix: `user` y `reload` agregados |
+| 10 | 🟢 | **Archive `fmt(o.price||o.maq_price)` sin parseFloat** — Fix: `parseFloat()` agregado |
+
+### Migración SQL requerida
+```sql
+-- 1. Update role constraint to allow 'vendedor'
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('produccion', 'preprensa', 'german', 'secretaria', 'vendedor', 'admin'));
+
+-- 2. Insert Genaro as vendedor
+INSERT INTO users (username, password_hash, role, display_name, active)
+VALUES ('genaro', '1', 'vendedor', 'Genaro', true);
+```
+
+### Notas técnicas v10.4
+- **`isSec(role)`** — Helper global: `r==="secretaria"||r==="vendedor"`. Usado para capacidades generales (crear, ver precios, imprimir, CSV)
+- **`db.notifySecs(orderId, type, msg, reason, byUser, createdBy)`** — Notifica a secretaria + al vendedor específico que creó la orden (por username). Skip sender, copia a admin
+- **`created_by` guarda username** — `userLogin||user` en create/duplicate. Para vendedores guarda "genaro", no "vendedor". Roles estándar siguen guardando el rol
+- **`notifKey`** — `user==="vendedor"?userLogin:user`. Vendedor carga/borra notificaciones por su username, otros roles por su rol
+- **canAct en OCard** — `(st?.who==="secretaria"&&isSec(role))` permite vendedor actuar en stages de maquila/salidas
+- **`secOwns` en canAct** — `!isSec(role)||o.created_by===userLogin`. Para roles isSec, TODOS los botones de acción (aprobar, avanzar, editar, entregar) solo aparecen si la orden es suya. Producción/Pre-prensa/Germán/Admin no se ven afectados
+- **Propiedad unificada** — 6 puntos usan propiedad: canAct (master gate), myTasks, Salidas board, botón Entregada, secciones edit/maquila OCard, handleAction edit lock
+- **Badge creador** — Detecta si `created_by` es "secretaria" (morado) o cualquier otro username no estándar = vendedor (naranja con nombre)
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` (2743 líneas, 0 errores)
+
+---
+
+## v10.3.1 — Impresión Dual + Revisión de Bugs (10 fixes, 1 feature)
+
+### Nueva funcionalidad
+
+1. **Impresión en dos versiones** — PrintOrder ahora genera dos formatos según el rol:
+   - **Versión Completa** (Secretaría/Admin): incluye datos del cliente (empresa, teléfono, email), precio, RFC, datos administrativos, y datos de maquila (proveedor, costo, precio)
+   - **Copia Producción** (Producción/Pre-prensa/Germán): solo nombre del cliente (sin contacto), sin precio, sin RFC, sin datos administrativos. Badge rojo "COPIA PRODUCCIÓN" en header
+   - Secretaría y Admin ven **dos botones**: "🖨️ Versión Completa" y "🏭 Copia Producción"
+   - Producción/Pre-prensa/Germán solo ven un botón que imprime la versión sin datos sensibles
+   - Datos de maquila (proveedor, costo, precio) ahora aparecen en versión completa para órdenes maquila
+   - Maquila parcial (proveedor externo) muestra datos de contacto en versión completa
+   - Secciones de Impresión y Acabados se ocultan para órdenes maquila (no aplican)
+   - Columna "Color" vacía eliminada de tabla Impresión (era redundante)
+
+### Bugs corregidos (10)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **PrintOrder modal sin ESC** — Único modal (de 14) que no tenía `useEscClose(onClose)`. Fix: agregado |
+| 2 | 🟡 | **`duplicate` copiaba `production_number`** — Al duplicar una orden se heredaba el folio P-XXXX, creando dos órdenes con el mismo número de producción. Fix: `production_number: null` en objeto duplicado |
+| 3 | 🟡 | **Revert: notificaciones sin try-catch** — `onConfirm` del revert enviaba `await db.addNotification()` sin protección. Si fallaba la red, unhandled rejection y modal se quedaba abierto. Fix: envuelto en try-catch |
+| 4 | 🟡 | **Revert: notificaciones falsas si doAdv falla** — `doAdv` atrapa errores internamente sin re-lanzar, así que las notificaciones de revert se enviaban aunque la DB no se actualizara. Fix: try-catch abarca todo el bloque (doAdv + notificaciones) |
+| 5 | 🟡 | **StorageTab popup "¿Ya descargaste?" sin ESC** — Modal `downloadedOrder` (position:fixed) no tenía listener de ESC. Fix: `useEffect` con keydown listener consistente con Calendar |
+| 6 | 🟡 | **`update` useCallback faltaba `reload` en deps** — `update` usa `reload()` en su catch pero no lo incluía en dependencias. Fix: `reload` agregado al array de deps |
+| 7 | 🟢 | **`quick_note` no era optimistic** — La nota aparecía solo después del `await db.addNote()`, causando delay visible. Fix: `setOrders` se ejecuta primero, revert con `reload()` si falla |
+| 8 | 🟢 | **`searchFilter` no incluía `client_phone`** — Buscar por número de teléfono no encontraba órdenes. Fix: `o.client_phone` agregado al array de búsqueda |
+| 9 | 🟢 | **`handleAction` deps incompletos en `useCallback`** — Faltaban `user` y `reload` en el array de dependencias. Fix: agregados |
+| 10 | 🟢 | **Archive `fmt(o.price||o.maq_price)` sin parseFloat** — Si `o.price` era string `"0"`, la expresión `||` saltaba incorrectamente a `maq_price`. Fix: `parseFloat()` agregado, consistente con el resto del código |
+
+### Mejoras
+- **Descripción del producto rediseñada** — En el formulario: el campo de descripción ahora ocupa todo el ancho (antes compartía fila con Tipo), textarea más alto (90px vs 52px) con placeholder descriptivo. En la impresión: la descripción tiene su propia fila de ancho completo con tipografía más grande (12px, line-height 1.6) y soporte para texto multilínea. Solo aparece si hay descripción escrita
+
+### Notas técnicas v10.3.1
+- **Sin migración SQL requerida** — Todos los cambios son solo frontend
+- **PrintOrder reescrito** — `printIt(mode)` acepta `"full"` o `"production"`. Variable `isProd` controla qué secciones se renderizan en el HTML de impresión. CSS class `.copy-badge` para el badge rojo de "Copia Producción"
+- **Impresión condicional** — Secciones Impresión y Acabados envueltas en `if(!isMaq)` para órdenes maquila. Datos Administrativos solo en `!isProd`, versión producción muestra solo Agente y Tipo de Orden
+- **Datos de maquila en impresión** — Nuevo bloque `if(isMaq&&!isProd)` muestra proveedor/costo/precio. Maquila parcial `if(!isMaq&&o.maquila_provider&&!isProd)` muestra contacto del proveedor
+- **Descripción del producto mejorada** — En formulario: campo full-width con `minHeight:90` y placeholder descriptivo. En impresión: fila propia `colspan=4` con `font-size:12px`, `line-height:1.6`, `white-space:pre-wrap`. Solo se muestra si hay descripción
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` (2723 líneas, 0 errores)
+
+---
+
+## v10.3 — Notas Rápidas + Reporte Semanal + Archivo + Costos Químicos + Alertas Estancadas (6 features, 14 bugs)
+
+### Nuevas funcionalidades (6)
+
+1. **Notas Rápidas entre roles** — Mini-chat por orden con burbujas estilo mensajería. Cada rol ve sus mensajes alineados a la derecha, los de otros a la izquierda. Colores por rol. Distinto del CommentLog (timeline). Nueva tabla `order_notes` en Supabase con Realtime. Accesible desde cada OCard (botón "💬 Notas Rápidas"). Se borran al eliminar orden
+2. **Reporte Semanal Completo** — WeeklyReport expandido para Admin con botón "▼ Reporte Completo". Incluye: entregas a tiempo (%), días promedio, horas máquina, merma (pliegos + piezas), consumo de químicos (revelador + reforzador), placas (chicas + grandes), costo de mantenimiento, top 5 clientes con medallas, top 5 productos, y lista de órdenes estancadas (48h+). Secretaría sigue viendo el resumen básico (4 métricas)
+3. **Archivo de Completadas** — Nueva vista "🗂️ Archivo" en navegación para todos los roles. Órdenes entregadas organizadas automáticamente en carpetas colapsables: Año → Mes → Semana. Tarjetas compactas con info esencial (cliente, producto, fecha, precio). Click abre DetailModal. Totales por carpeta. Año actual se abre automáticamente. Roles sin acceso a precios no ven montos
+4. **Análisis de Costos de Químicos** — Solo Admin, panel integrado en Químicos. Calcula automáticamente: costo mensual de revelador (descontando evaporación ~2.4L/mes) y reforzador, costo químico por placa proporcional al área (ratio chica/grande = 2.21×), tabla con desglose material + químico + IVA por tipo de placa. Configurador de precios editable (⚙️ Editar Precios) con tabla `app_config` en Supabase. Precios iniciales: Revelador $1,059.03/20L, Reforzador $1,370.51/20L, placa chica $29.49, placa grande $65.41, IVA 16%
+5. **Menú "⋯ Más" (nav overflow)** — Primeras 5 pestañas visibles, el resto en dropdown "⋯ Más". Admin pasa de 9 tabs amontonados a 5 + dropdown con 4. Al seleccionar un tab del dropdown, el botón muestra el icono y nombre del tab activo. Click fuera cierra el dropdown. Aplica a todos los roles con más de 5 pestañas
+6. **Alertas de Órdenes Estancadas (24h)** — Doble sistema de alerta: **Banner rojo en Pendientes** (todos los roles) con grid de órdenes estancadas 24h+ mostrando cliente, tipo, cantidad, etapa, tiempo y badge RETRASO. Las estancadas se separan del listado normal para máxima visibilidad. **Notificaciones automáticas** (solo sesión Admin envía, cada 30min) al rol responsable + Admin con mensaje "⚠️ Orden estancada: ClienteX lleva Xd en Etapa". Una notificación por orden por sesión (no spamea). `staleNotifiedRef` previene duplicados
+
+### Migración SQL requerida
+- Nueva tabla `order_notes` (id, order_id, text, by_user, created_at) + RLS + Realtime
+- Nueva tabla `app_config` (key TEXT PK, value JSONB, updated_at, updated_by) + RLS
+- Seed: `chemical_prices` con precios iniciales de Padilla Hnos.
+
+### Cambios técnicos
+- **`db.addNote()`** — nuevo método en capa de datos
+- **`db.loadConfig(key)`** — carga configuración por clave desde `app_config`
+- **`db.saveConfig(key, value, byUser)`** — guarda/actualiza configuración con upsert
+- **`loadOrders`** — incluye `order_notes` en Promise.all (5to query)
+- **`deleteOrder`** — borra `order_notes` antes de la orden
+- **Realtime** — suscripción a `order_notes` (INSERT → reload)
+- **`handleAction`** — nuevo caso `quick_note` con optimistic update
+- **`create`/`duplicate`** — inicializan `notes_log:[]`
+- **`WeeklyReport`** — recibe props `role`, `chemicals`, `plates`, `maintenance`
+- **State top-level** — `chemicals` y `plates` ahora se cargan en PrintFlow (antes solo en ChemicalPanel). Realtime actualiza ambos
+- **`Archive`** — componente nuevo con `useMemo` para agrupación por fecha. Tree: `{year: {month: {week: [orders]}}}`
+- **`ChemicalPanel`** — carga `chemical_prices` desde `app_config`, calcula costos con `useMemo`. Fórmula: costo proporcional por área (X para chica, 2.21X para grande, donde X = costoTotal / (plChicas + plGrandes × ratio))
+- **`PriceEditorModal`** — componente separado con `useEscClose`, formulario para actualizar 10 parámetros de costos, guardados en `app_config` vía `db.saveConfig`
+- **Nav overflow** — `MAX_VISIBLE=5`, `visibleNavs`/`moreNavs` split. Dropdown con overlay fijo para cerrar al click fuera. Estado `showMoreMenu`. Botón "⋯ Más" con punto indicador azul cuando un tab del dropdown está activo
+
+### Bugs corregidos (14)
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **Código muerto en cálculo de costos** — Fórmula compleja en costoQuimChica sobreescrita inmediatamente por fórmula correcta. Eliminada fórmula redundante |
+| 2 | 🟡 | **Archive `.sort()` muta array memoizado** — `tree[y][m][w].sort()` modificaba el array dentro del `useMemo` directamente. Fix: `.slice().sort()` |
+| 3 | 🟡 | **Archive `useMemo` dep `delivered` se recrea cada render** — `delivered` es array nuevo cada render, el memo nunca cacheaba. Fix: dep cambiada a `orders`, filtro movido dentro del memo |
+| 4 | 🟡 | **`saveOrder` no excluía `notes_log`** — Se pasaba al row sin destrucción. Fix: agregado `notes_log` al destructure de `saveOrder` |
+| 5 | 🟡 | **WeeklyReport `weekOnTime` % inflado** — Dividía entre TODAS las entregadas incluyendo las sin `due_date`, inflando % artificialmente. Fix: denominador solo órdenes con fecha |
+| 6 | 🟡 | **Price editor modal sin ESC** — Inconsistente con otros modales. Fix: extraído a `PriceEditorModal` componente con `useEscClose` |
+| 7 | 🟡 | **`saveRev`/`saveRef` sin try-catch** — Si `db.addChemical` fallaba, botón quedaba en "⏳..." permanente y form no se cerraba. Fix: try-catch-finally en ambas funciones |
+| 8 | 🟢 | **Archive `useEffect` dep `years` inestable** — `years` se recreaba cada render. Fix: dep cambiada a `tree` (memoizado), `years` calculado dentro del effect |
+| 9 | 🟢 | **DetailModal no mostraba QuickNotes** — Feature nueva invisible en detalle. Fix: sección "💬 Notas Rápidas" agregada con historial de notas en DetailModal |
+| 10 | 🔴 | **PrintOrder mostraba precio a Producción/Pre-prensa/Germán** — Gerardo podía ver precios al imprimir. Fix: PrintOrder recibe prop `role`, precio oculto para roles `hp` |
+| 11 | 🟡 | **Acabados personalizados ("Otros") no aparecían en orden impresa** — Custom finishes se perdían en la impresión. Fix: fila "Otros: ..." agregada debajo de checkboxes cuando hay acabados fuera de los 14 predefinidos |
+| 12 | 🟡 | **Merma visible en Procesadora (Germán)** — Botón 🗑️ aparecía en todas las tarjetas de PreprensaBoard. CTP/Procesadora no registran merma. Fix: botón eliminado de PreprensaBoard |
+| 13 | 🟡 | **Menú dropdown cambiaba texto del botón** — Al seleccionar un tab del dropdown, el botón "⋯ Más" cambiaba a mostrar el nombre del tab activo, confundiendo al usuario que no encontraba el menú. Fix: siempre muestra "⋯ Más" con punto indicador azul cuando un tab del dropdown está activo |
+| 14 | 🟡 | **Órdenes estancadas duplicadas en Pendientes** — Al agregar el banner de estancadas, las mismas órdenes aparecían en el banner rojo Y también como OCards normales debajo. Fix: las estancadas se separan a `normalTasks` (excluye stale), banner es su propia sección. Empty state solo si no hay ni stale ni normales |
+
+### Mejoras
+- **Orden impresa rediseñada** — Header mejorado con subtítulo "Padilla Hnos. Impresora · León, Gto." y fecha en folio. Tipografía más definida con labels de 7px y values de 12px. Sección de Impresión reorganizada (6 columnas sin columna "Color" redundante). Fecha de entrega resaltada en rojo para órdenes urgentes. Cantidad en rojo para visibilidad. Notas con white-space pre-wrap. Sección Datos del Cliente incluye teléfono. Acabados personalizados en fila "Otros". Márgenes de impresión optimizados a 8mm
+- **MXN/Hora corregido en Analytics** — Cálculo anterior dividía ingresos entre horas activas (la máquina produciendo), ignorando tiempo muerto. Ahora calcula horas disponibles reales: 9hrs/día (9am-7pm −1hr lunch) × 5 días/sem × días laborales del periodo. Muestra: **MXN/Hr Real** (ingresos ÷ horas disponibles), **Utilización %** (horas trabajadas ÷ disponibles, con color semáforo), **MXN/Hr Activa** (ingresos ÷ horas efectivas, solo en detalle). Barra de progreso ahora muestra utilización en vez de ingreso relativo
+- **Acabados: Engomado → Engomado Superior + Engomado Lateral** — Reemplazado en FINISHES, formulario y orden impresa
+- **Victor eliminado de Agentes** — Quedan Manuel, Genaro, Marcelo + Otro
+- **# Producción con prefijo P-** — Campo muestra "P-" fijo, solo se escriben 4 dígitos numéricos
+- **Tipo de producto "Otro"** — Al seleccionar Otro se abre input para escribir el tipo personalizado
+- **Bug "Otro" acabados corregido** — Ya no agrega texto "Otro" al string. Usa estado `showOtroFinish` con input limpio
+- **Descripción del producto mejorada** — Textarea con placeholder descriptivo "Revista 2 hojas a color, 5 hojas blanco y negro..."
+- **Notas renombradas** — "Notas de Proceso / Aclaraciones" con placeholder "No hay archivo, el cliente lo manda a Noemí..."
+- **Timeline muestra quién hizo el cambio** — Cada entrada ahora muestra nombre con color del rol (Producción, Noemí, Germán, etc.)
+- **Calendario mejorado** — Tarjetas más descriptivas con tipo, cantidad, etapa y prioridad. Leyenda de colores (Retrasada/Pendiente/Entregada). Banner "👆 Haz click para cambiar fecha". Modal con tarjeta de info completa de la orden. Hover con sombra en tarjetas
+- **`deleteOrder` con try-catch** — Cascada de 8 deletes ahora envuelta en try-catch con reload en caso de error
+- **Auto-fix validación dual** — Ahora verifica `error` de Supabase además de `count`
+
+---
+
+## v10.2 — Mejoras UX + Robustez DB (20 mejoras, 19 bugs corregidos)
+
+### Nuevas funcionalidades UX (20)
+1. **Toast de confirmación** — Popup temporal (3.2s) en 14 acciones: crear, validar, asignar máquina, aprobar prueba, enviar maquila, merma, duplicar, borrar, avanzar etapa. Colores por tipo (verde/rojo/amarillo). Timer estabilizado con `useRef` para evitar reset infinito
+2. **Loading overlay** — "⏳ Procesando..." con opacity y pointer-events:none en OCard. Activo en doAdv, approveProof, validate_prod, validate_pre (todas con `finally{setActionLoading(null)}`)
+3. **ESC cierra modales (stack-based)** — `escStack` global: solo cierra el modal más reciente. Ignora ESC en INPUT/TEXTAREA/SELECT. 13 modales con `useEscClose` + 2 drop confirms (Kanban/PreprensaBoard) + 1 Calendar date modal con listeners locales
+4. **Búsqueda global** — Input en header, visible solo en Pendientes y Todas. Se limpia al cambiar a otras vistas. `searchFilter` con `useCallback`
+5. **Indicador de conexión Realtime** — Punto junto al logo: amarillo (conectando), verde (SUBSCRIBED), rojo (desconectado). Inicia como `null`
+6. **Drag affordance** — Banner "⠿ Arrastra al Tablero" con borde punteado en OCards arrastrables. Suprimido en Pendientes/Todas vía prop `noDragHint`
+7. **Maquila urgencia visual** — Colores progresivos: verde (<3d), naranja (3-6d), amarillo (7-13d), rojo (14d+). Badge "⚠️ +14 días" automático
+8. **Nav tabs más grandes** — `fontSize:12, padding:8px 14px` (antes 10px/6px)
+9. **Fuentes mínimas 10px** — Eliminados todos los `fontSize:7` y subidos ~40 instancias de `fontSize:8` a 10px en badges, fechas, etiquetas, analytics, calendario, DragCards, validation indicators
+10. **Campos recomendados** — Cantidad, Entrega, Papel marcados con "(recomendado)" en naranja. Prop `rec` en componente FC
+11. **Botón renombrado** — "🔍 Revisar Specs" → "📋 Revisar y Editar"
+12. **Borrar todas las notificaciones** — Botón "🗑️ Borrar todas" en NotificationTray + `db.deleteAllNotifications(role)`
+13. **CSS animation** — `@keyframes toastIn` para fade+slide del Toast
+14. **Metas de químicos eliminadas** — Sin barras de progreso ni metas (80L/20L). Sin popup reminder. State `chemReminder` eliminado
+
+### 🔴 Bugs Críticos corregidos (5)
+1. **Órdenes fantasma (saveOrder enviaba `image` a DB)** — `image` no es columna en tabla `orders`. PostgREST rechazaba TODO el upsert silenciosamente. Orden existía en React state pero nunca en DB → desaparecía al cambiar sesión. **Fix:** Whitelist de 41 columnas válidas en `saveOrder` + `if(error) throw`
+2. **Supabase JS no lanza errores** — Todos los `.update()/.upsert()` retornan `{error}` pero nunca hacen throw. Los try-catch nunca se activaban. **Fix:** 9 puntos con destructuring `{error}` + `throw new Error(error.message)`: saveOrder, update, doAdv, approveProof, assignMachine, sendMaquila, validate_prod, validate_pre, changeDate
+3. **Toast timer se reseteaba infinitamente** — `onDone` como inline arrow creaba nueva referencia cada render → `useEffect` loop. **Fix:** `useRef` para estabilizar callback
+4. **`validate_prod`/`validate_pre` no verificaban error de supabase.update** — Validación aparecía localmente pero no se guardaba. **Fix:** `{error:vpErr}` + throw
+5. **`duplicate` sin try-catch + saveOrder ahora lanza throw** — Unhandled promise rejection + orden duplicada fantasma. **Fix:** Envuelto en try-catch
+
+### 🟡 Bugs Medios corregidos (8)
+6. **ESC cerraba modal mientras usuario escribía** — Ahora verifica `e.target.tagName` antes de cerrar
+7. **ESC cerraba múltiples modales apilados** — Sistema `escStack` con push/pop, solo cierra el más reciente
+8. **Búsqueda persistía en vistas que no la usan** — Se limpia al navegar + input solo visible en tasks/orders
+9. **Drag banner fuera de contexto** — Prop `noDragHint` suprime en Pendientes/Todas
+10. **`actionLoading` incompleto** — Agregado a doAdv y approveProof (antes solo validate)
+11. **`changeDate` sin error check** — Fecha cambiaba local pero no en DB si fallaba. **Fix:** try-catch + `{error:cdErr}`
+12. **`addWaste` sin try-catch** — Merma se perdía silenciosamente. **Fix:** try-catch + toast
+13. **Auto-fix `count` siempre null** — Supabase JS v2 retorna `count:null` sin `{count:'exact'}`. Timeline duplicado en multi-tab. **Fix:** `{count:"exact"}` en options
+
+### 🟢 Bugs Menores corregidos (6)
+14. **Indicador conexión verde prematuro** — Iniciaba `true`. **Fix:** `useState(null)` → punto amarillo hasta confirmar
+15. **`approveProof` sin try-catch/toast** — **Fix:** Envuelto con `{error:apErr}` + throw + toast
+16. **Kanban drop confirm sin ESC** — **Fix:** `useEffect` con keydown listener
+17. **Calendar date modal sin ESC** — **Fix:** `useEffect` con keydown listener (respeta inputs)
+18. **`addComment` sin try-catch** — **Fix:** try-catch + toast error
+19. **Inline handlers sin try-catch** — Devolver, Placas, Mantenimiento inicio/cierre. **Fix:** 4 handlers envueltos
+
+### Notas técnicas v10.2
+- **`saveOrder` whitelist:** 41 columnas explícitas. `image` excluido (campo UI-only, no persiste en DB). Cualquier campo desconocido se ignora silenciosamente en vez de romper el upsert
+- **Error propagation:** `supabase.from().update()` retorna `{data, error}` pero NO hace throw. Todos los puntos críticos ahora destructuran error y lanzan `throw new Error(error.message)` para que los try-catch funcionen
+- **`escStack`:** Objeto global singleton con `_bound` guard para evitar listeners duplicados en HMR. `push/pop/fire` pattern — solo el último modal registrado responde a ESC
+- **Toast `useRef` pattern:** `const cb=useRef(onDone); cb.current=onDone; useEffect(()=>{setTimeout(()=>cb.current(),3200)},[])`  — deps vacíos, timer estable
+- **Auto-fix `count:'exact'`:** Segundo argumento de `supabase.from().update(data, {count:'exact'})` — retorna count real para guard de deduplicación
+- **Solo CHANGELOG.md se actualiza por sesión.** Los otros 3 docs base (Contexto, Roadmap, Documentación) solo se actualizan en versiones mayores (v11+)
+
+---
+
+## v10.1 — Revisión Exhaustiva de Bugs (26 fixes en 4 rondas)
+
+### 🔴 Críticos (5)
+1. **Realtime no escuchaba `chemical_log` ni `plate_log`** — agregada suscripción con `chemKey` que fuerza remount del ChemicalPanel
+2. **`doAdv` usaba `orders` stale del closure** — orden capturada ANTES de `setOrders` para notificaciones con datos frescos
+3. **Auto-fix validación dual podía disparar múltiples veces** — `useRef` guard + verificación de `count` en el update
+4. **`deleteOrder` no limpiaba `plate_log`** — FK constraint hacía fallar el DELETE silenciosamente. Agregado `plate_log.delete()`
+5. **`update` (saveOrder) sobreescribía validaciones concurrentes** — reescrito con whitelist de 31 campos editables + `supabase.update()` en vez de `upsert(todoElRow)`
+
+### 🟡 Medios (13)
+6. **Maquila drop zone no aceptaba stage `ready`** — agregado a la lista de stages válidos
+7. **PreprensaBoard no bloqueaba drops en mantenimiento** — CTP/Procesadora ahora muestran 🔧 y rechazan drops
+8. **WelcomeGuide sin título para Germán** — agregado `german: "👋 Germán"`
+9. **`sendMaquila` no notificaba a Secretaría/Admin** — notificación agregada con datos del proveedor
+10. **Devolver a Diseño: Admin no notificaba a Producción** — `addNotification` directo a produccion cuando `user==="admin"`
+11. **`proof_approved` no se limpiaba al devolver a diseño** — ahora `ns==="design"` setea `proof_approved=null` en state + DB
+12. **`update` convertía precio $0 a null** — helper `toNum()` que distingue vacío→null, 0→0, NaN→null
+13. **Admin podía saltar CTP/Procesadora con botón en Pendientes** — "Placas Listas" solo aparece si `current_machine==="pp_proc"`, con guías contextuales para otros estados
+14. **Revert lineal producía stages incorrectos en rutas no-lineales** — reescrito: busca en timeline la transición cuyo destino es el stage actual, extrae el origen real
+15. **Revert multi-flecha fallaba en parsing** — usa `lastIndexOf`/`indexOf` para entries como "📝 → 🎨 Ambos validaron → Diseño"
+16. **Secretaría no podía editar órdenes maquila** — botón "✏️ Editar Maquila" agregado para stages maquila no entregados
+17. **Crear orden maquila no notificaba a Admin** — bloque `else` en `create` envía notificación con datos del proveedor
+18. **Admin revert no notificaba a nadie** — después de doAdv, notifica al rol responsable del stage destino (usa `SM[prevId]?.who`)
+
+### 🟢 Menores (8)
+19. **`delivered_at` no se limpiaba al revertir desde entregada** — setea null en state + DB al revertir de *delivered → stage
+20. **`closeMachineLog` (DB) solo cerraba primer log abierto** — eliminado `.limit(1)`, cierra todos con loop
+21. **`closeML` (local/optimistic) solo cerraba primer log** — `findIndex` reemplazado por `forEach` consistente con DB
+22. **`changeDate` ejecutaba si la fecha no cambió** — guard `if(o?.due_date===newDate) return`
+23. **`EndMaintenanceModal` aceptaba costo negativo** — validación `parseFloat(cost)<0`
+24. **Comentario de versión decía v7** — actualizado a v10
+25. **Búsqueda global no buscaba en agente, notas, papel, acabados** — 4 campos agregados al filtro
+26. **`useRef` faltaba en imports** — agregado para auto-fix guard
+
+### Cambios de comportamiento (sin bug previo)
+- Mantenimiento ahora visible en Tablero Germán (PreprensaBoard) — mismo visual 🔧 naranja que Kanban
+- `maintenance` prop pasado a PreprensaBoard desde ambos render points (Germán y Admin)
+- Búsqueda en "Todas" ahora incluye: agent, notes, paper_type, finishes
+
+---
+
+## v10 — Rol Germán + Químicos + Mantenimiento
+- **Nuevo rol: Germán** (5to usuario) — operador de CTP, Procesadora y Epson P7570
+- Flujo rediseñado: Noemí (diseño/archivos) → Germán (impresión/CTP) → Producción
+- Nueva etapa `placas_listas` entre CTP y ready (13 etapas total)
+- Noemí ya no opera el Tablero de máquinas — solo diseño y aprobación
+- Germán: Tablero propio con CTP + Procesadora
+- Secretaría puede aprobar/rechazar pruebas de color
+- Producción: "↩️ Devolver a Diseño" con motivo obligatorio
+- Zona de Maquila en Tablero Producción (drag & drop)
+- **Popup forzoso de placas** al arrastrar al CTP (tamaño + cantidad)
+- **Panel de Químicos y Placas**: revelador (limpiezas) y reforzador (consumo)
+- Recordatorio automático de químicos (popup día ≥15) — *eliminado en v10.2*
+- **Mantenimiento de máquinas**: inicio (Gerardo/Admin) + cierre con costo (Admin)
+- Notificaciones: borrar individual, nombres completos
+- Gestión de archivos prominente (Noemí sube/borra, Germán descarga)
+- 3 nuevas tablas: chemical_log, plate_log, maintenance_log
+- 8 bugs corregidos
+
+## v9.1 — Campos de Impresión + Orden SYGMA
+- Campo Agente/Vendedor (Manuel, Victor, Genaro, Marcelo + Otro)
+- Campo Gramaje (Grs.) en especificaciones
+- Tintas Frente y Tintas Vuelta separados
+- Acabados como checklist de 14 opciones + Otro
+- Orden impresa réplica formato SYGMA
+- Race condition fix: orders.update PRIMERO
+- **🔧 Fix Empaque:** vm_manual faltaba en tabla machines
+- CSV actualizado a 38 columnas
+
+## v9 — Reestructuración de Tableros + Notificaciones
+- Empaque como zona drag & drop con timer
+- Zona de Salidas, Tablero Pre-prensa separado
+- Notificaciones persistentes, 19 bugs corregidos
+
+## v8 — Supabase Producción
+- Migración completa a Supabase, validación dual, analytics, 29 bugs corregidos
+
+## v7 — UX Polish
+## v6 — Orden Imprimible + Calendario
+## v5 — Timeline + Autocomplete
+## v4 — Pre-prensa (4to Rol)
+## v3 — Dos Tipos de Orden
+## v2 — Máquinas Reales
+## v1 — Demo Inicial
+
+---
+
+## Estado de Bugs
+
+✅ **Sin bugs abiertos.** 167+ bugs resueltos en total (29 en v8, 19 en v9, 5 en v9.1, 8 en v10, 26 en v10.1, 19 en v10.2, 14 en v10.3, 10 en v10.4, 24 en v10.4.1, 10 en v10.4.2, 3 en v10.4.3).
