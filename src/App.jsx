@@ -168,13 +168,14 @@ const db = {
     return data||[];
   },
   // 🛒 v10.10.0 — Crea OC explícita (compleja) vía RPC atómico
-  async createPurchaseOrder({client, vendedor, deliveryDate, notes, total, byUser}) {
+  // Total inicia en 0 y se auto-calcula via trigger conforme se agregan productos
+  async createPurchaseOrder({client, vendedor, deliveryDate, notes, byUser}) {
     const {data, error}=await supabase.rpc("create_purchase_order",{
       p_client: client,
       p_vendedor: vendedor||null,
       p_delivery_date: deliveryDate||null,
       p_notes: notes||null,
-      p_total: total||0,
+      p_total: 0,
       p_created_by: byUser
     });
     if(error)throw new Error(error.message);
@@ -1923,9 +1924,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[]}) {
   const [advMode,setAdvMode]=useState(false);
   useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);setShowOtroFinish(fins.some(x=>!FINISHES.includes(x)&&x!=="Otro"));if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder]);
   const pnSetRef=useRef(false);
-  useEffect(()=>{if(!editOrder&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
+  useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
-  const submit=async()=>{setTried(true);if(!canSubmit)return;setSaving(true);try{const clean={...f};delete clean._specsOnly;if(clean.agent==="otro")clean.agent=null;if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;await onSubmit(clean);if(!editOrder){const usedNum=(f.production_number||"").match(/^P-(\d+)$/);const nxt=usedNum?parseInt(usedNum[1],10)+1:null;const nxtPN=nxt?"P-"+String(nxt>5000?1:nxt).padStart(4,"0"):"";setF({...empty,production_number:nxtPN});setAdvMode(false)}setTried(false)}catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}finally{setSaving(false)}};
+  const submit=async()=>{setTried(true);if(!canSubmit)return;setSaving(true);try{const clean={...f};delete clean._specsOnly;if(clean.agent==="otro")clean.agent=null;if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;await onSubmit(clean);if(!editOrder?.id){const usedNum=(f.production_number||"").match(/^P-(\d+)$/);const nxt=usedNum?parseInt(usedNum[1],10)+1:null;const nxtPN=nxt?"P-"+String(nxt>5000?1:nxt).padStart(4,"0"):"";setF({...empty,production_number:nxtPN});setAdvMode(false)}setTried(false)}catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}finally{setSaving(false)}};
   const selC=c=>setF(p=>({...p,client:c.client,client_company:c.client_company||"",client_email:c.client_email||"",client_phone:c.client_phone||"",client_lada:c.client_lada||"+52",client_rfc:c.client_rfc||""}));
 
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
@@ -3340,7 +3341,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
 
 // ─── MODAL: CREAR ORDEN DE COMPRA (v10.10.0) ───
 function CreateOCModal({onCreate, onClose}){
-  const [f, setF] = useState({client:"",vendedor:"",delivery_date:"",notes:"",total:""});
+  const [f, setF] = useState({client:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
   useEscClose(onClose);
   const canSubmit = f.client.trim().length > 0 && !saving;
@@ -3353,8 +3354,7 @@ function CreateOCModal({onCreate, onClose}){
         client: f.client.trim(),
         vendedor: f.vendedor || null,
         deliveryDate: f.delivery_date || null,
-        notes: f.notes.trim() || null,
-        total: f.total ? parseFloat(f.total) : 0
+        notes: f.notes.trim() || null
       });
     } catch(e) {
       setSaving(false);
@@ -3379,10 +3379,6 @@ function CreateOCModal({onCreate, onClose}){
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Fecha de entrega (opcional)</label>
           <input type="date" value={f.delivery_date} onChange={e=>s("delivery_date",e.target.value)} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
-        </div>
-        <div>
-          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Total estimado (opcional)</label>
-          <input type="number" step="0.01" value={f.total} onChange={e=>s("total",e.target.value)} placeholder="0.00" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Notas (opcional)</label>
