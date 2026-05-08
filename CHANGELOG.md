@@ -5,6 +5,107 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.10.0 — Órdenes de Compra (OC-XXXX) — Sesión A + B1 + B2 + Patches
+
+Nueva entidad **Purchase Orders (OC-XXXX)** que agrupa varios productos del mismo cliente bajo un mismo folio comercial. Las "OCs simples" se autogeneran en background para mantener consistencia con el flujo actual; las "OCs complejas" se crean explícitamente cuando un cliente hace un pedido de múltiples productos (típicamente Pepsi, Coca, etc.).
+
+Cinco entregas en una versión: Sesión A (DB + trigger), Sesión B1 (UI lectura), Sesión B2 (UI escritura), Patch P-XXXX + auto-total OC, Patch UX nav.
+
+### Nuevas funcionalidades (3)
+
+1. **Pestaña 📝 Órdenes de Compra** — Visible para Lupita, Karla, Marcelo y Vendedor. Posicionada justo después de "+ Nueva" para agrupar acciones de creación.
+   - **Lista de OCs complejas** (las simples retroactivas están ocultas por diseño)
+   - **Click en OC** → vista de detalle con info + productos linkeados
+   - Status badges: 🟢 Abierta · 🔄 En proceso · ✅ Completada · ❌ Cancelada
+   - Card con cliente, vendedor, fecha entrega, total, conteo de productos
+
+2. **Modal "Crear OC"** — Para casos complejos (cotizaciones de varios productos):
+   - Campos: Cliente (req), Vendedor (dropdown AGENTS), Fecha entrega, Notas
+   - Auto-genera OC-XXXX vía RPC atómico `create_purchase_order`
+   - Auto-navega al detalle de la OC recién creada
+   - **Sin campo "Total estimado"** — el total se calcula automáticamente cuando se agregan productos (ver auto-total)
+
+3. **Botón "+ Agregar producto a esta OC"** — Dentro del detalle de cada OC:
+   - Pre-llena el form normal de orden con cliente, email, phone, RFC, vendedor, fecha de entrega de la OC
+   - El producto creado se vincula automáticamente a la OC (`purchase_order_id` setado)
+   - Asigna P-XXXX automáticamente (igual que orden normal)
+   - Tras crear, regresa a la vista de la OC (no a Pipeline)
+
+### Cambios SQL (4)
+
+1. **Tabla `purchase_orders`** (16 columnas + 3 índices + RLS allow_all):
+   - `id` TEXT PK (formato `OC-XXXX`)
+   - `client` TEXT NOT NULL
+   - `client_email`, `client_phone`, `client_rfc` TEXT
+   - `total` NUMERIC(12,2) — auto-calculado por trigger
+   - `status` TEXT CHECK IN ('open','in_progress','completed','cancelled')
+   - `created_at`, `created_by`, `vendedor`
+   - `delivery_date`, `notes`
+   - `is_simple_oc` BOOLEAN — true si fue auto-generada por trigger, false si fue creada explícitamente
+   - `cancelled_at`, `cancelled_by`, `cancellation_reason`
+
+2. **Columna `orders.purchase_order_id`** (TEXT, FK nullable hacia `purchase_orders.id`)
+
+3. **Contador `oc`** en `invoice_counters` (`last_number=1003` después del cierre)
+
+4. **Triggers (2)**:
+   - **`ensure_purchase_order`** (BEFORE INSERT en orders, SECURITY DEFINER) — Si una orden se inserta SIN `purchase_order_id`, auto-genera una OC simple. Permite que la app actual (sin lógica de OC) siga funcionando sin cambios.
+   - **`recalculate_oc_total`** (AFTER INSERT/UPDATE/DELETE en orders, SECURITY DEFINER) — Recalcula `purchase_orders.total = SUM(COALESCE(price, maq_price, 0)) WHERE stage NOT IN ('cancelled','maq_cancelled')`. Maneja también el caso de cambio de OC (recalcula ambas).
+
+### Funciones SQL (1)
+
+- **`create_purchase_order`** — RPC atómico (SECURITY DEFINER) que incrementa el contador OC y crea la fila en `purchase_orders` en una sola transacción. Evita race conditions si dos usuarios crean OCs simultáneamente. Total inicia en 0 (se llena con el trigger conforme se agregan productos).
+
+### Migración inicial
+
+- 1 OC simple migrada (OC-1001 → OP-MOTC7UL8SIV) en Sesión A
+- Phantom record `OP-SEED-P3434-DO-NOT-DELETE` excluido del migration por diseño (queda con `purchase_order_id=NULL`)
+- Backup `orders_backup_v10_10_0` conservado 3-7 días post-deploy
+
+### Bug corregido (1)
+
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **`useEffect` de P-XXXX no asignaba número en form prefill** — Cuando se hacía "Agregar producto a OC", el `editO` pre-llenado era truthy pero sin `id`. La condición `!editOrder` rechazaba la asignación de `nextPN`. **Fix:** Cambiar `!editOrder` → `!editOrder?.id` en 2 lugares (useEffect + reset post-submit). Distingue entre "editar orden existente" vs "crear orden nueva con prefill". |
+
+### Mejoras UX (3)
+
+1. **Rename de pestaña**: `🛒 Compras` → `📝 Órdenes de Compra` (más claro, evita ambigüedad con e-commerce)
+2. **Reposición**: Pestaña movida desde el final del nav hasta justo después de "+ Nueva" (agrupa acciones de creación)
+3. **Auto-total en modal**: Eliminado el campo "Total estimado" del modal de crear OC. El total se calcula 100% de los productos (single source of truth)
+
+### Decisiones de diseño
+
+| ID | Decisión | Status |
+|---|---|---|
+| D1 | OCs simples auto-crear + ocultar de UI | ✅ Implementado |
+| D2 | Una OC puede mezclar internas + maquila | ✅ Implementado (sin restricciones) |
+| D3 | Cancelar OC solo si todos los productos están en draft/cancelled | ⏳ Diferido a v10.10.1 (opcional) |
+
+### Notas técnicas v10.10.0
+
+- **Sesión A ejecutada en Supabase SQL Editor** (45 min). Aprendizaje crítico: Supabase SQL Editor NO mantiene transacciones BEGIN/COMMIT entre ventanas distintas (cada ventana abre conexión nueva del pool). Se usaron DO blocks atómicos sin BEGIN explícito.
+- **Sub-brief B1 (lectura)** aplicó 7 ediciones a App.jsx (4571 → 4669 líneas, +98). Pre-validado con acorn ES2022 + JSX antes de Claude Code.
+- **Sub-brief B2 (escritura)** aplicó 6 ediciones a App.jsx (4669 → 4779 líneas, +110). Agregó componente `CreateOCModal`. Total funciones: 49 → 50.
+- **Patch P-XXXX + Auto-total** aplicó 4 ediciones a App.jsx (4779 → 4775, -4 por eliminación del campo Total) + trigger SQL.
+- **Patch UX Nav** movió 1 push y eliminó otro (mismo total de líneas).
+- **Total cambios v10.10.0**: ~+200 líneas netas, 0 archivos nuevos, 50 funciones, 1 tabla SQL nueva, 2 triggers nuevos, 1 RPC nuevo.
+- **Cero downtime**: Trigger `ensure_purchase_order` permite que la app vieja (sin saber de OCs) siga funcionando mientras se rolean los cambios. Migración suave.
+- **CobranzaFlow integration ready**: La columna `orders.purchase_order_id` y `purchase_orders` están preparadas para el bridge planeado con CobranzaFlow.
+- **Realtime subscriptions**: `purchase_orders` agregada a la suscripción para sincronización entre sesiones.
+- **RLS**: `allow_all` policy mirroreando `orders` (consistente con resto del sistema).
+- **Sintaxis verificada** con `acorn` + `acorn-jsx` en cada sub-entrega antes de commit.
+
+### Commits
+
+- `13dde30` — feat(v10.10.0-b1): Vista Órdenes de Compra (read-only)
+- `5c10aac` — feat(v10.10.0): Crear OC + agregar productos (UI escritura)
+- `f9a6bbf` — fix(v10.10.0): P-XXXX en form prefill + auto-total OC via trigger
+- `df50369` — style(v10.10.0): Renombrar pestaña Compras → Órdenes de Compra + reordenar
+- `[hash CHANGELOG]` — docs(v10.10.0): CHANGELOG entry para v10.10.0
+
+---
+
 ## v10.9.1 — Vista Auditoría + Gap Detection (Karla, Admin)
 
 **Status:** ✅ Deployada en producción · Validada con test data SQL · 6 mayo 2026
