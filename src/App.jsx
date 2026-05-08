@@ -66,7 +66,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -160,6 +160,12 @@ const db = {
   async saveConfig(key, value, byUser) {
     const {error}=await supabase.from("app_config").upsert({key,value,updated_at:new Date().toISOString(),updated_by:byUser});
     if(error)throw new Error(error.message);
+  },
+  // 🛒 v10.10.0 — Carga Órdenes de Compra (OC-XXXX)
+  async loadPurchaseOrders() {
+    const {data, error}=await supabase.from("purchase_orders").select("*").order("created_at",{ascending:false});
+    if(error)throw new Error(error.message);
+    return data||[];
   },
   // 🆕 v10.7.0 — Asigna folio fiscal interno (D-XXXX factura, R-XXXX remisión) y marca entregada
   // Llama RPC atómico que incrementa contador y actualiza orden en una sola transacción
@@ -3225,6 +3231,89 @@ function AuditoriaView({orders}){
   </div>;
 }
 
+// ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, onReload, showToast}){
+  const [selectedOCId, setSelectedOCId] = useState(null);
+  const complexOCs = useMemo(() =>
+    purchaseOrders.filter(po => !po.is_simple_oc).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
+    [purchaseOrders]);
+  const selectedOC = useMemo(() =>
+    selectedOCId ? purchaseOrders.find(po => po.id === selectedOCId) : null,
+    [selectedOCId, purchaseOrders]);
+  const ocOrders = useMemo(() =>
+    selectedOCId ? orders.filter(o => o.purchase_order_id === selectedOCId).sort(prioSort) : [],
+    [selectedOCId, orders]);
+  const statusBadge = (st) => {
+    const map = {
+      open: {color: C.ok, icon: "🟢", label: "Abierta"},
+      in_progress: {color: C.ac, icon: "🔄", label: "En proceso"},
+      completed: {color: C.t3, icon: "✅", label: "Completada"},
+      cancelled: {color: C.dn, icon: "❌", label: "Cancelada"}
+    };
+    const m = map[st] || {color: C.t3, icon: "⚪", label: st};
+    return <span style={{fontSize:11,fontWeight:700,color:m.color,background:m.color+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{m.icon} {m.label}</span>;
+  };
+
+  if (selectedOC) {
+    return <div>
+      <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
+      <div style={{background:C.bg,borderRadius:12,padding:16,border:"1px solid "+C.bd,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+          <div>
+            <div style={{fontSize:20,fontWeight:800,color:C.ac}}>🛒 {selectedOC.id}</div>
+            <div style={{fontSize:14,fontWeight:700,marginTop:4}}>{selectedOC.client}</div>
+          </div>
+          {statusBadge(selectedOC.status)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginTop:14}}>
+          {selectedOC.vendedor && <div><div style={{fontSize:10,color:C.t2}}>👤 Vendedor</div><div style={{fontSize:13,fontWeight:600}}>{selectedOC.vendedor}</div></div>}
+          {selectedOC.delivery_date && <div><div style={{fontSize:10,color:C.t2}}>📅 Entrega</div><div style={{fontSize:13,fontWeight:600}}>{fD(selectedOC.delivery_date)}</div></div>}
+          {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2}}>💰 Total</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(selectedOC.total)}</div></div>}
+          <div><div style={{fontSize:10,color:C.t2}}>Productos</div><div style={{fontSize:13,fontWeight:700}}>{ocOrders.length}</div></div>
+        </div>
+        {selectedOC.notes && <div style={{marginTop:10,padding:"8px 10px",background:C.bd+"40",borderRadius:6,fontSize:12,color:C.t2}}>{selectedOC.notes}</div>}
+      </div>
+      <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 10px",textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
+      {ocOrders.length === 0
+        ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+            <div style={{fontSize:36}}>📋</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:8}}>Esta OC no tiene productos todavía</div>
+          </div>
+        : ocOrders.map(o => <OCard key={o.id} o={o} role={role} onAction={onAction} busy={false} noDragHint userLogin={userLogin}/>)
+      }
+    </div>;
+  }
+
+  return <div>
+    <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🛒 Órdenes de Compra</h2>
+    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{complexOCs.length} OC{complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño</p>
+    {complexOCs.length === 0
+      ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+          <div style={{fontSize:48}}>📋</div>
+          <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin Órdenes de Compra complejas</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:4}}>Las OCs aparecerán aquí cuando se cree una con varios productos</div>
+        </div>
+      : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+          {complexOCs.map(po => {
+            const products = orders.filter(o => o.purchase_order_id === po.id);
+            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.bg,borderRadius:12,padding:14,cursor:"pointer",border:"1px solid "+C.bd,borderLeft:"4px solid "+C.ac,boxShadow:"0 1px 4px rgba(0,0,0,0.04)",transition:"transform 0.1s"}} onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+                <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>
+                {statusBadge(po.status)}
+              </div>
+              <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}</div>
+              <div style={{display:"flex",gap:10,marginTop:8,fontSize:11,color:C.t2,flexWrap:"wrap"}}>
+                <span><strong style={{color:C.tx}}>{products.length}</strong> productos</span>
+                {po.delivery_date && <span>📅 {fD(po.delivery_date)}</span>}
+                {po.total > 0 && <span style={{color:C.ok,fontWeight:700}}>{fmt(po.total)}</span>}
+              </div>
+            </div>;
+          })}
+        </div>
+    }
+  </div>;
+}
+
 // ─── PRODUCTION PLANNER (v10.8.0) ─── Cola única de planificación de Gerardo
 function ProductionPlanner({orders, role, userLogin, onAction, onReload, showToast, setConfirmModal}) {
   const [planItems, setPlanItems] = useState([]);
@@ -3798,6 +3887,7 @@ function ProductionPlanner({orders, role, userLogin, onAction, onReload, showToa
 // ─── MAIN ──────────────────────────────────────────
 export default function PrintFlow() {
   const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
+  const [purchaseOrders,setPurchaseOrders]=useState([]); // 🛒 v10.10.0
   const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
   const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
@@ -3831,8 +3921,12 @@ export default function PrintFlow() {
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
   // When archive loaded: loads everything including related data for historical (full)
   const reload = useCallback(async () => {
-    const data = await db.loadOrders(!archiveLoadedRef.current);
+    const [data, pos] = await Promise.all([
+      db.loadOrders(!archiveLoadedRef.current),
+      db.loadPurchaseOrders()
+    ]);
     setOrders(data);
+    setPurchaseOrders(pos);
     setLoaded(true);
   }, []);
 
@@ -3876,6 +3970,7 @@ export default function PrintFlow() {
       .on("postgres_changes", { event: "*", schema: "public", table: "chemical_log" }, () => { setChemKey(k=>k+1); db.loadChemicals().then(setChemicals); })
       .on("postgres_changes", { event: "*", schema: "public", table: "plate_log" }, () => { setChemKey(k=>k+1); db.loadPlates().then(setPlates); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_notes" }, doReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_orders" }, doReload)
       .subscribe((status) => { setConnected(status==="SUBSCRIBED"); });
     return () => { supabase.removeChannel(channel); };
   }, [user, notifKey]);
@@ -4409,6 +4504,7 @@ export default function PrintFlow() {
   navs.push({id:"archive",i:"🗂️",l:"Archivo"});
   if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
   if(user==="admin"||user==="karla")navs.push({id:"audit",i:"📑",l:"Auditoría"});
+  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"🛒",l:"Compras"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",i:"📁",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
 
@@ -4482,6 +4578,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders}/>}</div>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} onAction={handleAction} onReload={reload} showToast={showToast}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
