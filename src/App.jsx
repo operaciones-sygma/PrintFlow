@@ -4602,6 +4602,7 @@ export default function PrintFlow() {
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
   if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
+  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
   if(isSec(user)||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
   if(user==="produccion"||user==="admin"||user==="karla")navs.push({id:"board",i:"🏭",l:user==="karla"?"Folios":"Tablero"});
   if(user==="produccion"||user==="admin")navs.push({id:"planner",i:"🗓️",l:"Planificador"});
@@ -4610,7 +4611,6 @@ export default function PrintFlow() {
   navs.push({id:"archive",i:"🗂️",l:"Archivo"});
   if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
   if(user==="admin"||user==="karla")navs.push({id:"audit",i:"📑",l:"Auditoría"});
-  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"🛒",l:"Compras"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",i:"📁",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
 
