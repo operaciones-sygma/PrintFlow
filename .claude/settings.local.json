@@ -12,7 +12,8 @@
       "Bash(grep -v '^$')",
       "PowerShell($tmp = Join-Path $PWD '.claude\\\\tmp_changelog_mojibake.txt'; $out = Join-Path $PWD 'CHANGELOG.md'; $content = [System.IO.File]::ReadAllText\\($tmp, [System.Text.Encoding]::UTF8\\); $bytes = [System.Text.Encoding]::GetEncoding\\('ISO-8859-1'\\).GetBytes\\($content\\); [System.IO.File]::WriteAllBytes\\($out, $bytes\\); \"wrote $\\($bytes.Length\\) bytes\"; \"tmp char length: $\\($content.Length\\)\")",
       "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\('CHANGELOG.md'\\); \"total=$\\($bytes.Length\\)\"; \"first 60 bytes hex:\"; \\($bytes[0..59] | ForEach-Object { '{0:X2}' -f $_ }\\) -join ' '; \"---\"; \"around 'ltimos' search\"; $idx = -1; for\\($i=0;$i -lt $bytes.Length-7;$i++\\){ if\\($bytes[$i] -eq 0x6C -and $bytes[$i+1] -eq 0x74 -and $bytes[$i+2] -eq 0x69 -and $bytes[$i+3] -eq 0x6D -and $bytes[$i+4] -eq 0x6F -and $bytes[$i+5] -eq 0x73\\){ $idx=$i; break } }; if\\($idx -gt 0\\){ \"found 'ltimos' at offset $idx, prev 4 bytes: $\\(\\(\\($bytes[\\($idx-4\\)..\\($idx-1\\)] | ForEach-Object { '{0:X2}' -f $_ }\\) -join ' '\\)\\)\" } else { 'not found' })",
-      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\('CHANGELOG.md'\\); \"size_bytes=$\\($bytes.Length\\)\"; \"first 60 hex:\"; \\($bytes[0..59] | ForEach-Object { '{0:X2}' -f $_ }\\) -join ' ')"
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\('CHANGELOG.md'\\); \"size_bytes=$\\($bytes.Length\\)\"; \"first 60 hex:\"; \\($bytes[0..59] | ForEach-Object { '{0:X2}' -f $_ }\\) -join ' ')",
+      "PowerShell($src = Get-Content -Raw -LiteralPath 'CHANGELOG.md'; \"FFFD count: $\\(\\(\\($src.ToCharArray\\(\\) | Where-Object { $_ -eq [char]0xFFFD }\\)\\).Count\\)\"; \"size_bytes: $\\(\\(Get-Item CHANGELOG.md\\).Length\\)\")"
     ]
   }
 }
