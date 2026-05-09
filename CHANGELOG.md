@@ -5,6 +5,82 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.11.0 — Sub-fase A: Mover órdenes entre OCs (1-a-1)
+
+Primera capacidad de flexibilidad sobre el modelo de Órdenes de Compra introducido en v10.10.0. Las OCs ahora son contenedores reorganizables: una orden puede moverse de una OC a otra sin cancelarla ni recrearla, con limpieza automática de la OC origen si quedó vacía.
+
+**Caso de uso típico:** Pepsi pide 4 productos en una OC. A medio camino dice "el último era para Coca". Lupita reasigna ese producto sin interrumpir el flujo de producción.
+
+### Nueva funcionalidad
+
+**Botón ↔️ Mover en cada OCard dentro de la vista de OC** — Visible para admin, Lupita y Vendedor (con `secOwns`). Solo aparece cuando la `OCard` se renderea dentro de `OrdenesCompraView` (prop `inOCView={true}`). En otras vistas (Pipeline, Pendientes, Todas, Archivo, Dashboard) el botón está oculto por diseño.
+
+**Componente `MoveOrderModal`** — Modal con 2 modos mutuamente excluyentes:
+- **📁 OC existente** — Input de búsqueda libre + lista filtrable de cards de OCs candidatas. Filtra automáticamente OCs simples, canceladas, con `folios_locked=true` (forward-compat Sub-fase B), y la OC origen.
+- **➕ Crear OC nueva** — Form inline con `client/vendedor/delivery_date/notes`. Pre-rellena vendedor + fecha de la orden origen. **Cliente vacío por diseño** (decisión consciente: caso de uso de Sub-fase A es cambio de cliente, pre-fill heredaría errores).
+
+**Flujo "Crear OC y mover"** — Acción de un solo clic: crea la OC vía RPC atómico + mueve la orden ahí + muestra toast `🛒 OC-XXXX creada · ↔️ orden movida`. Sin pasos manuales intermedios.
+
+### Cambios SQL (1 RPC nueva)
+
+**`move_order_to_oc(p_order_id TEXT, p_target_oc_id TEXT, p_actor TEXT)`** — RPC atómica `SECURITY DEFINER` que:
+1. Valida que la orden no tenga `invoice_folio` (folios fiscales son inmutables — moverlos rompería trazabilidad CFDI)
+2. Valida que la orden no esté en stage `cancelled` o `maq_cancelled`
+3. Valida que la OC destino exista, no sea simple (decisión A2), no esté cancelada, y no esté `folios_locked=true`
+4. Bloquea no-op (origen === destino)
+5. Hace UPDATE de `orders.purchase_order_id`
+6. Después del UPDATE: cuenta órdenes activas en la OC origen. Si quedan 0:
+   - **OC simple** → `DELETE` de `purchase_orders` (decisión A1, son invisibles al usuario)
+   - **OC compleja** → `UPDATE status='cancelled'` con razón `'OC vacía tras movimiento de productos'`, registra `cancelled_at` y `cancelled_by=p_actor` (decisión A1, deja rastro auditable)
+
+El trigger `recalculate_oc_total` (existente desde v10.10.0) se dispara automáticamente y recalcula los totales de AMBAS OCs sin código adicional.
+
+### Decisiones de diseño aplicadas
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| **D4** | "Quitar de OC" = cancelar (botón ❌ existente). Para mover sin cancelar = nuevo botón ↔️ | Evita confusión semántica entre "ya no quiero esto" y "esto va en otro lado" |
+| **D5** | UX 1-a-1 (botón por orden, sin checkboxes) | Mobile-friendly, simple. Multi-selección difería a v10.11.1 si data real lo justifica |
+| **A1** | OC origen vacía: DELETE si simple, CANCEL si compleja (híbrida) | Las simples son invisibles al usuario, no tiene sentido conservar huérfanos. Las complejas dejan rastro auditable |
+| **A2** | NO permitir mover hacia OC simple existente | Preserva invariante "OC simple = 1 sola orden, oculta al usuario" |
+
+### Bugs detectados y resueltos durante QA
+
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🟡 | **`inOCView` no se propagaba en `OrdenesCompraView`** — Diagnóstico: Lupita reportó que NO veía el botón ↔️ pero SÍ los demás botones. Grep mostró que la prop estaba en su lugar (línea 3429). Resolución durante validación con Lupita: hard-refresh + verificación de versión deployada (estaba viendo Vercel pre-deploy). El código estaba correcto, era cache de browser. |
+| 2 | 🟡 | **Helper `db.moveOrderToOC` llamaba RPC sin `p_actor`** — Test 1 falló con error de PostgreSQL: `Could not find the function public.move_order_to_oc(p_order_id, p_target_oc_id) in the schema cache`. La función SQL requiere 3 parámetros pero el helper JS solo enviaba 2. **Fix:** agregado 3er parámetro `actor` al helper, propagado `userLogin\|\|user` desde ambos handlers (`moveOrderToOC` y `createOCAndMove`). |
+
+### Notas técnicas v10.11.0 Sub-fase A
+
+- **11 ediciones a App.jsx** (4775 → 4934 líneas, +159 netas, +164/-5)
+- **Componente `MoveOrderModal`** insertado antes de `OCard` para cohesión visual
+- **Prop `inOCView`** agregada a la signature de `OCard` — defaulting a falsy en todos los renders excepto el de `OrdenesCompraView` (línea 3429)
+- **Botón `↔️` en 2 ubicaciones** dentro de `OCard`: dentro de `canAct` (admin con todas las stages, sec/vendedor con stages aplicables) y fuera de `canAct` (sec/vendedor para stages donde no son actor pero sí dueños). Mismo gating de propiedad y validaciones que el botón `❌` cancelar.
+- **Forward-compat con Sub-fase B**: el filtro de OCs candidatas chequea `po.folios_locked !== true`. Si la columna no existe en DB, `select *` la retorna como `undefined`, el filtro no la rechaza. Cuando Sub-fase B agregue la columna, el filtro empieza a aplicar automáticamente.
+- **Realtime ya configurado** desde v10.10.0 para `purchase_orders` — la limpieza de OC origen vacía y el recálculo de totales se propagan a otras sesiones automáticamente.
+- **Defensa en profundidad**: el case `move_to_oc` en `handleAction` revalida `invoice_folio`, `cancelled/delivered`, y `purchase_order_id` antes de abrir el modal. Tanto el botón como el handler verifican condiciones — cinturón + tirantes.
+
+### Validación con tests E2E
+
+Lupita ejecutó 12 tests del brief. Resultados:
+- **Pasados manualmente (8)**: 1 (mover entre 2 OCs complejas), 5 (limpieza OC compleja vacía → cancelled con razón), 6 (limpieza OC simple → DELETE silencioso), 7 (OC simple no aparece como destino), 8 (OC cancelada no aparece como destino), 9 (crear OC nueva + mover en flujo continuo), 10 (edge case origen=destino bloqueado por RPC), 12 (Sub-fase C: ❌ Cancelar coexiste con ↔️)
+- **Saltados (2)**: 2 (sin orden web a mano para conservación de W-XXXX), 3 (validación visual en operación real diferida)
+- **Implícitos por validación de RPC (2)**: 4, 11
+
+### Próximo en horizonte
+
+- **Sub-fase B (deferred)** — Folios compartidos OC + columna `folios_locked` (chequeo defensivo ya implementado en frontend). Decisiones diferidas: modelo de folio compartido, default del modo de asignación, qué pasa con folios pre-asignados al cancelar, cómo se ve folio compartido en Auditoría.
+- **v10.11.1 (tentativa)** — Multi-selección para mover varios productos a la vez si Lupita lo pide tras 1-2 semanas de uso real con la versión 1-a-1.
+
+### Commits
+
+- `bb8c14c` — chore: agregar ROADMAP_v10.11.0_Flexibilidad_OCs.md
+- `23d6418` — feat(v10.11.0-A): MoveOrderModal + handlers + botón ↔️ en OCard (164 inserciones)
+- `d7a60db` — fix(v10.11.0-A): agregar p_actor a llamadas de db.moveOrderToOC
+
+---
+
 ## v10.10.0 — Órdenes de Compra (OC-XXXX) — Sesión A + B1 + B2 + Patches
 
 Nueva entidad **Purchase Orders (OC-XXXX)** que agrupa varios productos del mismo cliente bajo un mismo folio comercial. Las "OCs simples" se autogeneran en background para mantener consistencia con el flujo actual; las "OCs complejas" se crean explícitamente cuando un cliente hace un pedido de múltiples productos (típicamente Pepsi, Coca, etc.).
