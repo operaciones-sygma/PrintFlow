@@ -183,10 +183,11 @@ const db = {
   },
   // ↔️ v10.11.0 Sub-fase A — Mueve orden entre OCs vía RPC atómica
   // El RPC valida invoice_folio, stage, OC destino (no simple/cancelled/folios_locked) y limpia OC origen vacía
-  async moveOrderToOC(orderId, targetOCId) {
+  async moveOrderToOC(orderId, targetOCId, actor) {
     const {data, error}=await supabase.rpc("move_order_to_oc",{
       p_order_id: orderId,
-      p_target_oc_id: targetOCId
+      p_target_oc_id: targetOCId,
+      p_actor: actor
     });
     if(error)throw new Error(error.message);
     return data;
@@ -4328,18 +4329,19 @@ export default function PrintFlow() {
     try{
       const o=orders.find(x=>x.id===orderId);
       const fromId=o?.purchase_order_id;
-      await db.moveOrderToOC(orderId,targetOCId);
+      await db.moveOrderToOC(orderId,targetOCId,userLogin||user);
       showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId);
       setMoveModal(null);
       reload();
     }catch(e){console.error("[moveOrderToOC] Error:",e);showToast("❌ No se pudo mover: "+(e?.message||"error desconocido"),"error")}
-  },[orders,showToast,reload]);
+  },[user,userLogin,orders,showToast,reload]);
 
   // ↔️ v10.11.0 Sub-fase A — Crea OC nueva y mueve la orden ahí en un solo flujo
   const createOCAndMove=useCallback(async(orderId,ocData)=>{
     try{
-      const newOCId=await db.createPurchaseOrder({...ocData,byUser:userLogin||user});
-      await db.moveOrderToOC(orderId,newOCId);
+      const actor=userLogin||user;
+      const newOCId=await db.createPurchaseOrder({...ocData,byUser:actor});
+      await db.moveOrderToOC(orderId,newOCId,actor);
       showToast("🛒 "+newOCId+" creada · ↔️ orden movida");
       setMoveModal(null);
       reload();
