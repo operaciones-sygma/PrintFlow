@@ -3603,6 +3603,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
     const hasShared = !!selectedOC.shared_invoice_folio;
     const canAddProduct = canCreateOC && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
     const canAssignFolio = (role === "admin" || role === "karla") && pendingOrders.length > 0 && !hasShared && !isLocked && selectedOC.status !== "cancelled";
+    // 📄 Solo permitir asignar folio inmediato si TODAS las pendientes están listas para entrega (stages 'salidas'/'maq_received'),
+    // consistente con el flujo individual del botón "📄 Asignar Folio y Entregar" en cada OCard.
+    // Pre-asignar (🔒) NO requiere este check — Karla puede reservar folios en cualquier estado.
+    const allPendingReady = pendingOrders.every(o => o.stage === "salidas" || o.stage === "maq_received");
     const sharedFolioType = hasShared ? (selectedOC.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
     const sharedFolioColor = sharedFolioType === "factura" ? "#5856d6" : "#34c759";
     const sharedFolioIcon = sharedFolioType === "factura" ? "📄" : "📋";
@@ -3633,8 +3637,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
         <h3 style={{fontSize:14,fontWeight:800,margin:0,textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {canCreateOC && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
-          {canAssignFolio && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a las órdenes pendientes (inmediato — marca como entregadas)">📄 Asignar folio</button>}
-          {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Pre-asigna folio anticipado — la OC quedará bloqueada hasta cerrar el ciclo fiscal">🔒 Pre-asignar folio</button>}
+          {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
+          {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
         </div>
       </div>
       {ocOrders.length === 0
