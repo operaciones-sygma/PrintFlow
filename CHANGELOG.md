@@ -5,6 +5,119 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.11.0 Sub-fase B — Folios fiscales a nivel OC
+
+Karla ahora asigna folios D-XXXX/R-XXXX a **toda una OC de una vez** — agrupados (1 folio para N órdenes) o consecutivos (N folios para N órdenes) — y puede **pre-asignarlos anticipadamente** cuando un cliente paga adelanto o exige factura antes de entregar. La OC queda bloqueada para modificaciones mientras tenga folios pre-asignados.
+
+### Nueva funcionalidad
+
+**Botones en vista de detalle de OC** (admin + karla):
+- **📄 Asignar folio** — inmediato. Marca las órdenes pendientes como entregadas con folio asignado. **Visibilidad condicional**: solo aparece si TODAS las pendientes están en stage `salidas` o `maq_received` (consistente con el flujo individual de `OCard`).
+- **🔒 Pre-asignar folio** — anticipado. Reserva folios sin marcar entregada. Bloquea la OC para nuevos productos y movimientos (`folios_locked=true`). Visible en cualquier stage de las pendientes.
+
+**Componente `AssignOCFolioModal`**:
+- Resumen contextual: cliente, productos totales, ya facturados (inmutables), pendientes
+- Toggle tipo: 📄 Factura (D-) / 📋 Remisión (R-)
+- Toggle modo (default `shared`): un folio compartido para los N pendientes, o N folios consecutivos
+- Input **"Folio inicial"** editable, pre-cargado vía `db.getNextFolioSuggestion()`. Label "capturado por Karla, verificado contra AlphaERP" para reforzar el flujo de validación. Warning amarillo (no bloqueante) si el valor es menor a la sugerencia DB
+- Preview dinámico en vivo: muestra los folios que se asignarán ("Se asignará D-5780..." o "Se asignarán D-5780, D-5781, ..., D-5784")
+- Si pre-asignar: textarea **Razón** obligatoria (ej. "Pago adelantado", "Reserva fiscal fin de mes")
+
+**Badges visuales**:
+- Card de OC en lista: `📄 D-5780` o `📋 R-1180` si tiene `shared_invoice_folio`; `🔒 Bloqueada` si `folios_locked=true`. Borde izquierdo cambia a `C.wn` cuando bloqueada
+- Header del detalle de OC: mismos badges en mayor tamaño + contador "X facturado(s)" en el grid. Banner con razón del bloqueo si aplica
+- **+ Agregar producto**: deshabilitado con tooltip cuando la OC está bloqueada
+- **`MoveOrderModal`** (Sub-fase A) ya validaba `folios_locked` defensivamente desde su implementación original — sin cambios
+
+**Pestaña Auditoría reclasificada**:
+- Nueva stat card "Compartidos" junto a Total/Gaps/Duplicados/Rango
+- Folios donde >1 órdenes comparten el mismo número pero pertenecen a una OC con `shared_invoice_folio === folio` se marcan como `📄 COMPARTIDO · N órdenes` (verde) en lugar de `DUPLICADO` (naranja)
+- Nueva sección "📄 Folios compartidos" arriba de la lista principal: muestra OCs con `shared_invoice_folio`, cliente, conteo de órdenes y estado de bloqueo
+- CSV export incluye "COMPARTIDO" como status nuevo
+- Helper text actualizado para explicar la distinción duplicado vs compartido
+
+### Cambios SQL
+
+**Tabla `purchase_orders` — 5 columnas nuevas**:
+- `shared_invoice_folio TEXT NULL` — folio del último batch compartido (T2: refleja batch, no universalidad)
+- `folios_locked BOOLEAN NOT NULL DEFAULT false` — bloqueo post pre-asignación
+- `folios_locked_at TIMESTAMPTZ NULL` — timestamp del bloqueo
+- `folios_locked_by TEXT NULL` — quién bloqueó
+- `folios_lock_reason TEXT NULL` — razón visible en UI
+
+**RPC `assign_folio_to_oc(p_oc_id, p_invoice_type, p_mode, p_folio_start, p_pre_assigned, p_reason, p_actor)`** — atómica, `SECURITY DEFINER`, `GRANT EXECUTE ... TO authenticated`. Validaciones:
+- Tipo (`factura`/`remision`), modo (`shared`/`consecutive`)
+- OC no cancelada, no bloqueada, sin `shared_invoice_folio` previo
+- Razón requerida si pre-asignar
+- Productos pendientes existen (sin folio, no canceladas)
+- Folio inicial > último usado (rechazo duro contra contador)
+
+Lock con `FOR UPDATE` en la OC + `UPDATE invoice_counters ... RETURNING` para serializar contra concurrencia. Stage transitions a `delivered`/`maq_delivered` si NO es pre-asignado, mantiene stage si lo es.
+
+### Decisiones aplicadas
+
+| ID | Decisión | Implementación |
+|---|---|---|
+| **T1** | Modelo de folio compartido | Columna `shared_invoice_folio TEXT NULL` en `purchase_orders`. Las órdenes individuales mantienen `orders.invoice_folio` (retrocompatibilidad — 15+ puntos del código siguen funcionando sin cambios) |
+| **T2** | Default del modo | `shared` (caso más común: 1 factura por OC) |
+| **T3** | Folio quemado al cancelar | RPC no toca cancelación. La lógica existente de `cancelInvoicedOrder` aplica. Gap permanente queda visible en Auditoría con badges ⚡ ANTICIPADO + CANCELADA |
+| **T4** | Folios compartidos en Auditoría | Reclasificación client-side: cruza `orders.invoice_folio` con `purchase_orders.shared_invoice_folio`. Sección dedicada agrupa OCs compartidas con conteo de órdenes |
+
+### Mejora UX aplicada durante QA (commit `997ba71`)
+
+- `📄 Asignar folio` solo visible si `pendingOrders.every(o => o.stage==='salidas' || o.stage==='maq_received')` — evita asignar a productos no listos para entrega
+- `🔒 Pre-asignar folio` mantiene visibilidad amplia (Karla puede reservar en cualquier stage)
+- Tooltips reescritos para describir consecuencias en lenguaje claro:
+  - 📄: *"Asigna folio fiscal a los productos listos para entrega y los marca como entregados."*
+  - 🔒: *"Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales."*
+
+### Tests validados durante QA (9)
+
+| # | Caso | Status |
+|---|---|---|
+| 3 | Pre-asignar shared con razón "Pago adelantado" | ✅ |
+| 4 | + Agregar producto deshabilitado en OC bloqueada | ✅ |
+| 5 | OC bloqueada NO aparece como destino al mover (defensa Sub-fase A) | ✅ |
+| 7 | OC sin pendientes oculta ambos botones | ✅ implícito |
+| 8 | Razón vacía deshabilita Confirmar | ✅ visto en modal |
+| 10 | Sección "Folios compartidos" en Auditoría | ✅ |
+| 13 | OC con shared previo oculta botones | ✅ |
+
+### Tests diferidos a QA operacional
+
+- **1, 2, 9** — Asignación shared/consecutive inmediata con N productos (requiere data real con órdenes listas para entrega)
+- **6** — OC con folios mixtos (parciales pre-existentes; espera caso de uso natural)
+- **11** — Cancelar orden con folio pre-asignado por admin (flujo NC existente)
+- **12** — Regresión: flujo individual de Karla en `salidas`/`maq_received` (no se tocó; confirmación visual rápida)
+
+### Aprendizajes clave
+
+- **Captura manual editable contra auto-asignación**: el flujo individual de Karla usa captura manual del folio (verifica contra AlphaERP). Para Sub-fase B se mantuvo ese patrón — el modal pre-llena con `getNextFolioSuggestion()` pero permite editar. La RPC valida server-side que el folio inicial sea mayor al último usado. Esto previene desincronización entre PrintFlow y AlphaERP cuando facturas se emiten desde otra estación.
+- **Forward-compat ya pagada en Sub-fase A**: la columna `folios_locked` se chequeaba defensivamente desde Sub-fase A en `MoveOrderModal` con `po.folios_locked !== true`. Al crearse formalmente en Sub-fase B, el filtro de OCs candidatas para mover empezó a aplicar automáticamente — sin tocar Sub-fase A.
+- **Reclasificación client-side > query SQL nueva**: la Auditoría es 100% JS sobre props (`orders` + `purchaseOrders`). No fue necesaria nueva función SQL ni vista materializada — la lógica "duplicado vs compartido" es derivable cruzando ambos arrays.
+- **`shared_invoice_folio` refleja "último batch", no "universal"** (T2 documentado vía COMMENT en SQL): OCs con folios parciales pre-existentes ven la columna poblada con el folio del batch nuevo. La consistencia visual "este folio es compartido" se mantiene en la sección de Auditoría.
+
+### Out of scope (futuros patches si surgen)
+
+- Re-asignación de folio compartido ya emitido (hoy la RPC rechaza si `shared_invoice_folio IS NOT NULL`)
+- Liberación manual de folios quemados (hoy quedan como gap permanente)
+- Multi-selección para asignar a subset de pendientes (hoy: todas o ninguna)
+- Badge "(compartido)" en OCards fuera de vista de OC (P5 — diferido por simplicidad)
+
+### Stats App.jsx
+
+- 9 ediciones top-down
+- **+266/-21 líneas** netas (`+260/-19` Sub-fase B principal + `+6/-2` UX adjustment)
+- 1 componente nuevo (`AssignOCFolioModal`, ~120 líneas, mismo patrón visual que `CreateOCModal`/`MoveOrderModal`)
+- 1 helper db nuevo (`db.assignFolioToOC`)
+
+### Commits
+
+- `ab96c74` — feat(v10.11.0-B): AssignOCFolioModal + 9 ediciones (commit "yes" desde VS Code)
+- `997ba71` — v10.11.0 Sub-fase B (UX): visibilidad condicional + tooltips diferenciados
+
+---
+
 ## v10.11.0.1 — Karla puede mover órdenes entre OCs
 
 Patch sobre Sub-fase A. Karla (rol Facturación) ahora ve el botón ↔️ Mover sin recibir ❌ Cancelar — útil para reagrupar órdenes pre-facturación sin depender de Lupita.
