@@ -5,6 +5,17 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.11.0.1 — Karla puede mover órdenes entre OCs
+
+Patch sobre Sub-fase A. Karla (rol Facturación) ahora ve el botón ↔️ Mover sin recibir ❌ Cancelar — útil para reagrupar órdenes pre-facturación sin depender de Lupita.
+
+- Permiso `↔️` extendido a `karla` en ambos contenedores de `OCard` (dentro y fuera de `canAct`)
+- Sin `secOwns`/`vOwns`: ownership operativo no aplica a Facturación
+- Sin SQL — la RPC `move_order_to_oc` ya valida `invoice_folio` server-side como respaldo
+- 5 cambios in-line en App.jsx (0 líneas netas, +5/-5); 7 tests E2E validados (Test 2: OC-1006 con 3 productos, total $5,729.99 recalculado por trigger)
+
+---
+
 ## v10.11.0 — Sub-fase A: Mover órdenes entre OCs (1-a-1)
 
 Primera capacidad de flexibilidad sobre el modelo de Órdenes de Compra introducido en v10.10.0. Las OCs ahora son contenedores reorganizables: una orden puede moverse de una OC a otra sin cancelarla ni recrearla, con limpieza automática de la OC origen si quedó vacía.
