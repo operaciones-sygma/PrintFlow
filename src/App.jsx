@@ -219,6 +219,16 @@ const db = {
     if(error) throw new Error(error.message);
     return data; // devuelve el folio asignado
   },
+  // 🌐 v10.12.0 Sub-fase B — Aprueba en lote todas las órdenes web_pending de un carrito (cart_folio).
+  // RPC atómica: asigna stage='draft', P-XXXX por orden, timeline a cada una.
+  async approveWebCart(cartFolio, byUser) {
+    const {data, error}=await supabase.rpc("approve_web_cart",{
+      p_cart_folio: cartFolio,
+      p_user: byUser
+    });
+    if(error)throw new Error(error.message);
+    return data; // INTEGER = cantidad aprobada
+  },
   // 📄 v10.11.0 Sub-fase B — Asignación de folio(s) fiscal(es) a nivel OC.
   // Modos: 'shared' (1 folio para todos los pendientes) | 'consecutive' (N folios desde folioStart).
   // Si preAssigned=true, requiere razón y bloquea la OC (folios_locked=true).
@@ -3062,11 +3072,71 @@ function WebRejectModal({order,onConfirm,onClose}) {
   </div></div>;
 }
 
-function WebOrdersBandeja({orders,onApprove,onReject,onDetail,actionLoading}) {
+// 🌐 v10.12.0 Sub-fase B — Fila compacta para cada W-XXXX dentro de WebCartCard
+function WebCartChildRow({order,onApprove,onReject,busy}){
+  return <div style={{padding:"8px 10px",background:C.sf,borderRadius:10,opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
+    {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:10}}><span style={{fontSize:11,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"3px 10px",borderRadius:6}}>⏳ Procesando...</span></div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:10,fontWeight:600,color:C.t2,fontFamily:"monospace",letterSpacing:0.3}}>{order.web_folio||order.id}</div>
+        <div style={{fontSize:12,fontWeight:600,color:C.tx,marginTop:2}}>{order.product_type||"Producto"}{order.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
+        {(order.paper_type||order.width_cm)&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>{order.paper_type||""}{order.paper_grammage?" "+order.paper_grammage+"g":""}{order.width_cm?" | "+order.width_cm+"×"+order.height_cm+"cm":""}{order.ink_front?" | F:"+order.ink_front:""}{order.ink_back?" V:"+order.ink_back:""}</div>}
+        {order.finishes&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>✨ {order.finishes}</div>}
+      </div>
+      {order.price&&<div style={{fontSize:13,fontWeight:800,color:C.ok,whiteSpace:"nowrap"}}>{fmt(order.price)}</div>}
+    </div>
+    <div style={{display:"flex",gap:4}}>
+      <button onClick={()=>onApprove(order.id)} style={{...bs(C.ok),flex:1,justifyContent:"center",fontSize:11}}>✅ Aprobar</button>
+      <button onClick={()=>onReject(order)} style={{...bs(C.dn),flex:1,justifyContent:"center",fontSize:11}}>❌ Rechazar</button>
+    </div>
+  </div>;
+}
+
+// 🌐 v10.12.0 Sub-fase B — Card-padre que agrupa hermanas del mismo cart_folio
+function WebCartCard({cartFolio,orders,onApprove,onReject,onApproveCart,onDetail,actionLoading,fmtDate}){
+  const first=orders[0];
+  const total=orders.reduce((s,o)=>s+(parseFloat(o.price)||0),0);
+  const oldest=orders.reduce((min,o)=>{const d=new Date(o.created_at);return !min||d<min?d:min},null);
+  const cartBusy=orders.some(o=>actionLoading===o.id);
+  return <div style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+      <div style={{display:"flex",flexDirection:"column",gap:3,flex:1,minWidth:0}}>
+        <span style={{fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {cartFolio}</span>
+        <span style={{fontSize:10,color:"#06b6d4",fontWeight:600}}>🌐 Carrito web · {orders.length} productos</span>
+      </div>
+      <span style={{fontSize:10,color:C.t3,whiteSpace:"nowrap"}}>{fmtDate(oldest)}</span>
+    </div>
+    <div style={{fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>onDetail(first.id)}>{first.client||"Sin nombre"}</div>
+    {first.client_phone&&<div style={{fontSize:11,color:"#25d366",marginTop:2}}>📱 {first.client_lada||"+52"} {first.client_phone}</div>}
+    {first.client_email&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>📧 {first.client_email}</div>}
+    {total>0&&<div style={{marginTop:8,padding:"6px 10px",background:C.ok+"10",border:"1px solid "+C.ok+"30",borderRadius:8,display:"inline-block"}}><span style={{fontSize:10,color:C.t2,fontWeight:600}}>💰 Total: </span><span style={{fontSize:14,fontWeight:800,color:C.ok}}>{fmt(total)}</span></div>}
+    <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:10}}>
+      {orders.map(o=><WebCartChildRow key={o.id} order={o} onApprove={onApprove} onReject={onReject} busy={actionLoading===o.id}/>)}
+    </div>
+    <button onClick={()=>onApproveCart(cartFolio)} disabled={cartBusy} style={{...bt(C.ok),width:"100%",marginTop:12,justifyContent:"center",fontSize:13,fontWeight:700,opacity:cartBusy?0.5:1,cursor:cartBusy?"not-allowed":"pointer"}}>✅ Aprobar carrito completo ({orders.length})</button>
+  </div>;
+}
+
+function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,actionLoading}) {
   const [showRejected,setShowRejected]=useState(false);
   const pending=orders.filter(o=>o.stage==="web_pending").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const rejected=orders.filter(o=>o.stage==="web_rejected").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const fmtDate=d=>d?new Date(d).toLocaleString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+  // 🌐 v10.12.0 Sub-fase B — Agrupar pending por cart_folio. Solo (1 producto) o carrito (2+).
+  const grouped=useMemo(()=>{
+    const groups={};
+    pending.forEach(o=>{
+      const key=o.cart_folio||("solo:"+o.id);
+      if(!groups[key])groups[key]={cartFolio:o.cart_folio,orders:[]};
+      groups[key].orders.push(o);
+    });
+    // Mantener orden por fecha más reciente del grupo (created_at máx)
+    return Object.values(groups).sort((a,b)=>{
+      const ma=Math.max(...a.orders.map(o=>new Date(o.created_at).getTime()));
+      const mb=Math.max(...b.orders.map(o=>new Date(o.created_at).getTime()));
+      return mb-ma;
+    });
+  },[pending]);
 
   return <div>
     <div style={{background:"#06b6d408",border:"1px solid #06b6d425",borderRadius:14,padding:14,marginBottom:14}}>
@@ -3089,33 +3159,41 @@ function WebOrdersBandeja({orders,onApprove,onReject,onDetail,actionLoading}) {
         <span style={{background:"#06b6d4",color:"#fff",borderRadius:10,padding:"1px 8px",fontSize:10}}>{pending.length}</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
-        {pending.map(o=>{const busy=actionLoading===o.id;return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
-          {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8}}>⏳ Procesando...</span></div>}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
-            <div style={{display:"flex",flexDirection:"column",gap:3}}>
-              {o.cart_folio&&<span style={{fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {o.cart_folio}</span>}
-              {o.web_folio&&<span style={{fontSize:11,fontWeight:600,color:C.t2,letterSpacing:0.3,lineHeight:1}}>{o.web_folio}</span>}
-              <span style={{fontSize:10,color:C.t3}}>{o.id}</span>
-              <span style={{fontSize:10,color:"#06b6d4",fontWeight:600}}>🌐 {o.web_order_ref||"Pedido web"}</span>
+        {grouped.map(g=>{
+          // Carrito de 2+ productos: card-padre con hijas anidadas
+          if(g.orders.length>1&&g.cartFolio){
+            return <WebCartCard key={g.cartFolio} cartFolio={g.cartFolio} orders={g.orders} onApprove={onApprove} onReject={onReject} onApproveCart={onApproveCart} onDetail={onDetail} actionLoading={actionLoading} fmtDate={fmtDate}/>;
+          }
+          // Carrito de 1 producto (o sin cart_folio): card individual idéntico al UI previo
+          const o=g.orders[0];const busy=actionLoading===o.id;
+          return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
+            {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8}}>⏳ Procesando...</span></div>}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
+              <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                {o.cart_folio&&<span style={{fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {o.cart_folio}</span>}
+                {o.web_folio&&<span style={{fontSize:11,fontWeight:600,color:C.t2,letterSpacing:0.3,lineHeight:1}}>{o.web_folio}</span>}
+                <span style={{fontSize:10,color:C.t3}}>{o.id}</span>
+                <span style={{fontSize:10,color:"#06b6d4",fontWeight:600}}>🌐 {o.web_order_ref||"Pedido web"}</span>
+              </div>
+              <span style={{fontSize:10,color:C.t3}}>{fmtDate(o.created_at)}</span>
             </div>
-            <span style={{fontSize:10,color:C.t3}}>{fmtDate(o.created_at)}</span>
-          </div>
-          <div style={{fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>onDetail(o.id)}>{o.client||"Sin nombre"}</div>
-          {o.client_phone&&<div style={{fontSize:11,color:"#25d366",marginTop:2}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
-          {o.client_email&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>📧 {o.client_email}</div>}
-          <div style={{marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.product_type||"Producto"}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
-            {(o.paper_type||o.width_cm||o.ink_front)&&<div style={{fontSize:10,color:C.t3,marginTop:3}}>{o.paper_type||""}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":""}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
-            {o.finishes&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>✨ {o.finishes}</div>}
-            {o.product&&<div style={{fontSize:10,color:C.t2,marginTop:4,fontStyle:"italic"}}>{o.product}</div>}
-          </div>
-          {o.price&&<div style={{marginTop:8,fontSize:16,fontWeight:800,color:C.ok}}>{fmt(o.price)}</div>}
-          <div style={{display:"flex",gap:6,marginTop:12}}>
-            <button onClick={()=>onApprove(o.id)} style={{...bt(C.ok),flex:1,justifyContent:"center"}}>✅ Aprobar</button>
-            <button onClick={()=>onReject(o)} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>❌ Rechazar</button>
-          </div>
-          <div style={{fontSize:9,color:C.t3,marginTop:6,textAlign:"center"}}>Al aprobar entra al flujo normal de validación</div>
-        </div>})}
+            <div style={{fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>onDetail(o.id)}>{o.client||"Sin nombre"}</div>
+            {o.client_phone&&<div style={{fontSize:11,color:"#25d366",marginTop:2}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
+            {o.client_email&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>📧 {o.client_email}</div>}
+            <div style={{marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.product_type||"Producto"}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
+              {(o.paper_type||o.width_cm||o.ink_front)&&<div style={{fontSize:10,color:C.t3,marginTop:3}}>{o.paper_type||""}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":""}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
+              {o.finishes&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>✨ {o.finishes}</div>}
+              {o.product&&<div style={{fontSize:10,color:C.t2,marginTop:4,fontStyle:"italic"}}>{o.product}</div>}
+            </div>
+            {o.price&&<div style={{marginTop:8,fontSize:16,fontWeight:800,color:C.ok}}>{fmt(o.price)}</div>}
+            <div style={{display:"flex",gap:6,marginTop:12}}>
+              <button onClick={()=>onApprove(o.id)} style={{...bt(C.ok),flex:1,justifyContent:"center"}}>✅ Aprobar</button>
+              <button onClick={()=>onReject(o)} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>❌ Rechazar</button>
+            </div>
+            <div style={{fontSize:9,color:C.t3,marginTop:6,textAlign:"center"}}>Al aprobar entra al flujo normal de validación</div>
+          </div>;
+        })}
       </div>
     </div>}
 
@@ -4486,16 +4564,34 @@ export default function PrintFlow() {
 
   // Web order alerts — notify secretaria + admin when a new web_pending order appears
   // Admin session does the notifying to avoid duplicates across multiple open sessions
+  // 🌐 v10.12.0 Sub-fase B — Deduplicación por cart_folio: 1 sola notificación por carrito (no N por orden).
+  // Carritos de 2+ productos consolidan en mensaje "Nuevo carrito C-XXXX (N productos)".
   useEffect(() => {
     if (!loaded || !user || user !== "admin") return;
+    const fmtMXN = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n);
+    // Agrupar pending por cart_folio (o por orden si no tiene carrito)
+    const byCart = {};
     orders.forEach(o => {
       if (o.stage !== "web_pending") return;
-      if (webNotifiedRef.current.has(o.id)) return;
-      webNotifiedRef.current.add(o.id);
-      const folioTxt = o.cart_folio ? (o.cart_folio + (o.web_folio ? " · " + o.web_folio : "")) : (o.web_folio || "");
-      const msg = "🌐 Nuevo pedido web" + (folioTxt ? " " + folioTxt : "") + ": " + (o.client || "Sin nombre") + " — " + (o.product_type || "") + (o.price ? " · " + new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(o.price) : "");
-      db.addNotification("secretaria", o.id, "new_order", msg, null, "sistema");
-      db.addNotification("admin", o.id, "new_order", msg, null, "sistema");
+      const key = o.cart_folio || ("solo:" + o.id);
+      if (!byCart[key]) byCart[key] = { cart: o.cart_folio, orders: [] };
+      byCart[key].orders.push(o);
+    });
+    Object.entries(byCart).forEach(([key, group]) => {
+      if (webNotifiedRef.current.has(key)) return;
+      webNotifiedRef.current.add(key);
+      const first = group.orders[0];
+      let msg;
+      if (group.orders.length === 1) {
+        const o = first;
+        const folioTxt = o.cart_folio ? (o.cart_folio + (o.web_folio ? " · " + o.web_folio : "")) : (o.web_folio || "");
+        msg = "🌐 Nuevo pedido web" + (folioTxt ? " " + folioTxt : "") + ": " + (o.client || "Sin nombre") + " — " + (o.product_type || "") + (o.price ? " · " + fmtMXN(o.price) : "");
+      } else {
+        const total = group.orders.reduce((s,o)=>s+(parseFloat(o.price)||0),0);
+        msg = "🌐 Nuevo carrito " + group.cart + " (" + group.orders.length + " productos) — " + (first.client || "Sin nombre") + (total>0 ? " · " + fmtMXN(total) : "");
+      }
+      db.addNotification("secretaria", first.id, "new_order", msg, null, "sistema");
+      db.addNotification("admin", first.id, "new_order", msg, null, "sistema");
     });
   }, [loaded, user, orders]);
 
@@ -4844,6 +4940,23 @@ export default function PrintFlow() {
     finally{setActionLoading(null)}
   },[orders,user,showToast,reload]);
 
+  // 🌐 v10.12.0 Sub-fase B — Aprueba todas las órdenes web_pending de un carrito en lote vía RPC atómica.
+  // RPC asigna stage='draft' + P-XXXX + timeline a cada hija. Frontend envía 1 sola notificación (no N).
+  const approveCartComplete=useCallback(async(cartFolio)=>{
+    if(!confirm("¿Aprobar todos los pedidos del carrito "+cartFolio+"?"))return;
+    const cartOrders=orders.filter(o=>o.cart_folio===cartFolio&&o.stage==="web_pending");
+    const firstOrder=cartOrders[0];
+    if(!firstOrder){showToast("❌ Carrito sin órdenes pendientes","error");return}
+    try{
+      const count=await db.approveWebCart(cartFolio,user);
+      const msg="✅ Carrito "+cartFolio+" aprobado completo ("+count+" productos) — "+(firstOrder.client||"");
+      await db.notifySecs(firstOrder.id,"approval",msg,null,user,firstOrder.created_by);
+      if(user!=="admin")await db.addNotification("admin",firstOrder.id,"approval",msg,null,user);
+      showToast("✅ "+count+" pedidos aprobados");
+      reload();
+    }catch(e){console.error("[approveCartComplete] Error:",e);showToast("❌ No se pudo aprobar el carrito: "+(e?.message||"error desconocido"),"error");reload()}
+  },[user,orders,showToast,reload]);
+
   const changeDate=useCallback(async(oid,newDate,reason)=>{
     const o=orders.find(x=>x.id===oid);
     if(o?.due_date===newDate)return; // skip if same date
@@ -5078,7 +5191,7 @@ export default function PrintFlow() {
           </div>}
           {normalTasks.length===0&&staleTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{search?"Sin resultados":"¡Sin pendientes!"}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención"}</div></div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders}/></div>}
-        {view==="web_orders"&&(isSec(user)||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
+        {view==="web_orders"&&(isSec(user)||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
