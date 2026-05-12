@@ -72,8 +72,11 @@ const ACTION_ROLES = {
   createOCAndMove:     { allowed:["admin","secretaria"], ownerBound:[] },
   assignFolioToOC:     { allowed:["admin","karla"], ownerBound:[] },
   approveCartComplete: { allowed:["admin","secretaria"], ownerBound:[] },
-  // ─── Phase 3 (cleanup futuro) ───
-  // client_history, edit_specs, approve_proof, web_request_file, etc.
+  // ─── Phase 3 (v10.12.0.4) — handlers descubiertos durante Phase 2 ───
+  approve_proof:    { allowed:["admin","secretaria","vendedor","preprensa","produccion"], ownerBound:["vendedor"] },
+  web_request_file: { allowed:["admin","secretaria","preprensa"], ownerBound:[] },
+  edit_specs:       { allowed:["admin","preprensa","produccion"], ownerBound:[] },
+  // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
 // 🔒 v10.12.0.2 — Gate central. Retorna true si el user puede ejecutar la acción sobre esta orden.
@@ -116,7 +119,11 @@ function actionDeniedToast(action, order, user, userLogin) {
     moveOrderToOC: "mover",
     createOCAndMove: "crear OC y mover",
     assignFolioToOC: "asignar folio a",
-    approveCartComplete: "aprobar el carrito de"
+    approveCartComplete: "aprobar el carrito de",
+    // Phase 3 (v10.12.0.4)
+    approve_proof: "aprobar la prueba de",
+    web_request_file: "solicitar archivo del pedido web",
+    edit_specs: "editar specs técnicas de"
   };
   return "❌ Solo puedes "+(labels[action]||action)+" tus propias órdenes";
 }
@@ -991,8 +998,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <button onClick={deleteFile} disabled={deleting} style={bs(C.dn)}>{deleting?"⏳...":"🗑️ Sí, borrar archivo"}</button>
         </div>
       </div>}
-      {o.notes&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Notas</div><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5}}>{o.notes}</div></>}
-      {(o.notes_log||[]).length>0&&<><div style={{fontSize:10,fontWeight:600,color:"#007aff",textTransform:"uppercase",marginTop:12,marginBottom:4}}>💬 Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
+      {/* 🔒 v10.12.0.4 Phase 3 — Finding #12 (extensión): campo notes oculto para vendedor en órdenes ajenas (puede contener acuerdos verbales/descuentos/info comercial sensible) */}
+      {vOwns&&o.notes&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Notas</div><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5}}>{o.notes}</div></>}
+      {/* 🔒 v10.12.0.4 Phase 3 — Finding #12: quick_notes ocultos para vendedor en órdenes ajenas (mismo gate vOwns que precios/contactos) */}
+      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{fontSize:10,fontWeight:600,color:"#007aff",textTransform:"uppercase",marginTop:12,marginBottom:4}}>💬 Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-prensa</span></div>}
 
       {/* 🆕 v10.9.0 — Botón prominente "Facturar anticipado" para Karla/Admin */}
@@ -4926,9 +4935,11 @@ export default function PrintFlow() {
   },[orders,user,userLogin,showToast,doAdv]);
 
   const approveProof=useCallback(async id=>{
+    const o=orders.find(x=>x.id===id);
+    // 🔒 v10.12.0.4 Phase 3 — Hardstop: admin/sec/vendedor/preprensa/produccion (vendedor solo propias)
+    if(o&&!canExecuteAction("approve_proof",o,user,userLogin)){showToast(actionDeniedToast("approve_proof",o,user,userLogin),"error");return}
     setActionLoading(id);
     const now=new Date().toISOString();
-    const o=orders.find(x=>x.id===id);
     setOrders(p=>p.map(o=>o.id===id?{...o,stage:"ctp",proof_approved:now,timeline:addTL(o,"✅ Prueba aprobada",{to:"ctp"}),comments:[...(o.comments||[]),{text:"✅ Prueba aprobada",by:"sistema",date:now}]}:o));
     try{
     const {error:apErr}=await supabase.from("orders").update({stage:"ctp",proof_approved:now}).eq("id",id);
@@ -5145,7 +5156,11 @@ export default function PrintFlow() {
 
   const handleAction=useCallback((id,action,payload)=>{
     if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;if(o.invoice_folio&&user!=="admin"){showToast("❌ Esta orden ya tiene folio fiscal "+o.invoice_folio+" asignado y no se puede editar.","error");return}if(!canEditWebOrder(o,user)){showToast("❌ Solo Lupita y Admin pueden editar pedidos de origen web","error");return}if(isSec(user)&&o.created_by&&o.created_by!==userLogin)return;if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;setEditO(o);setView("form")}
-    if(action==="edit_specs"){const o=orders.find(x=>x.id===id);if(o){setEditO({...o,_specsOnly:true});setView("form")}}
+    if(action==="edit_specs"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.4 Phase 3 — Hardstop: solo admin/preprensa/produccion editan specs técnicas
+      if(o&&!canExecuteAction("edit_specs",o,user,userLogin)){showToast(actionDeniedToast("edit_specs",o,user,userLogin),"error");return}
+      if(o){setEditO({...o,_specsOnly:true});setView("form")}
+    }
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
@@ -5196,7 +5211,14 @@ export default function PrintFlow() {
       if(o&&!canExecuteAction("print",o,user,userLogin)){showToast(actionDeniedToast("print",o,user,userLogin),"error");return}
       if(o)setPrintModal(o)
     }
-    if(action==="client_history"){const o=orders.find(x=>x.id===id);if(o)setClientHistory(o.client)}
+    if(action==="client_history"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.4 Phase 3 — Finding #9: vendedor solo abre historial de clientes con los que tiene órdenes (evita reconocimiento lateral)
+      if(o&&user==="vendedor"){
+        const hasOrderWithClient=orders.some(x=>x.client===o.client&&x.created_by===userLogin);
+        if(!hasOrderWithClient){showToast("❌ No tienes órdenes con este cliente","error");return}
+      }
+      if(o)setClientHistory(o.client)
+    }
     if(action==="flow"){const o=orders.find(x=>x.id===id);if(o)setFlowDiagram({stage:o.stage,type:o.order_type})}
     if(action==="validate_prod"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/produccion validan producción
@@ -5231,6 +5253,8 @@ export default function PrintFlow() {
       showToast(calcDate?"✅ Validada · Entrega: "+fD(calcDate):"✅ Orden validada por Pre-prensa");
     }catch(e){console.error("[validate_pre] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()}
     if(action==="web_request_file"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // 🔒 v10.12.0.4 Phase 3 — Hardstop: solo admin/secretaria/preprensa solicitan archivos web
+      if(!canExecuteAction("web_request_file",o,user,userLogin)){showToast(actionDeniedToast("web_request_file",o,user,userLogin),"error");return}
       (async()=>{try{
         const reqMsg="📩 Falta archivo de pedido web — "+(o.client||"")+" · "+(o.production_number||"")+" · "+(o.product_type||"")+". Pre-prensa necesita el archivo para procesar. Solicítalo al cliente lo antes posible. ⏱️ El tiempo de entrega NO arranca hasta que Pre-prensa valide.";
         await db.addComment(id,"📩 Pre-prensa solicitó el archivo a Lupita",user);
