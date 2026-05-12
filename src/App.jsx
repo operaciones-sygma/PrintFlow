@@ -54,10 +54,26 @@ const ACTION_ROLES = {
   addComment:  { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
   quick_note:  { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
   deleteOrder: { allowed:["admin"], ownerBound:[] },
-  // ─── Phase 2 (próxima sesión, pre-mapeado para extensión trivial) ───
-  // advance, revert, validate_prod, validate_pre, send_maquila, waste,
-  // devolver_design, web_approve, web_reject, print, moveOrderToOC,
-  // createOCAndMove, assignFolioToOC, approveCartComplete
+  // ─── Phase 2 (v10.12.0.3) — workflow operativo ───
+  advance:         { allowed:["admin","secretaria","vendedor","produccion","preprensa","german"], ownerBound:["vendedor"] },
+  revert:          { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
+  validate_prod:   { allowed:["admin","produccion"], ownerBound:[] },
+  validate_pre:    { allowed:["admin","preprensa"], ownerBound:[] },
+  send_maquila:    { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
+  waste:           { allowed:["admin","produccion","german"], ownerBound:[] },
+  devolver_design: { allowed:["admin","preprensa","german"], ownerBound:[] },
+  // ─── Phase 2 — pedidos web ───
+  web_approve:     { allowed:["admin","secretaria"], ownerBound:[] },
+  web_reject:      { allowed:["admin","secretaria"], ownerBound:[] },
+  // ─── Phase 2 — print ───
+  print:           { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
+  // ─── Phase 2 — OCs (v10.10.0 + v10.11.0 + v10.12.0) ───
+  moveOrderToOC:       { allowed:["admin","secretaria","karla"], ownerBound:[] },
+  createOCAndMove:     { allowed:["admin","secretaria"], ownerBound:[] },
+  assignFolioToOC:     { allowed:["admin","karla"], ownerBound:[] },
+  approveCartComplete: { allowed:["admin","secretaria"], ownerBound:[] },
+  // ─── Phase 3 (cleanup futuro) ───
+  // client_history, edit_specs, approve_proof, web_request_file, etc.
 };
 
 // 🔒 v10.12.0.2 — Gate central. Retorna true si el user puede ejecutar la acción sobre esta orden.
@@ -77,11 +93,30 @@ function actionDeniedToast(action, order, user, userLogin) {
     return "❌ Tu rol no puede ejecutar esta acción";
   }
   const labels = {
+    // Phase 1 (v10.12.0.2)
     duplicate: "duplicar",
     changeDate: "cambiar la fecha de",
     addComment: "comentar",
     quick_note: "agregar notas a",
-    deleteOrder: "eliminar"
+    deleteOrder: "eliminar",
+    // Phase 2 — workflow operativo
+    advance: "avanzar",
+    revert: "revertir",
+    validate_prod: "validar producción de",
+    validate_pre: "validar pre-prensa de",
+    send_maquila: "enviar a maquila",
+    waste: "marcar desperdicio en",
+    devolver_design: "devolver a diseño",
+    // Phase 2 — pedidos web
+    web_approve: "aprobar el pedido web",
+    web_reject: "rechazar el pedido web",
+    // Phase 2 — print
+    print: "imprimir",
+    // Phase 2 — OCs
+    moveOrderToOC: "mover",
+    createOCAndMove: "crear OC y mover",
+    assignFolioToOC: "asignar folio a",
+    approveCartComplete: "aprobar el carrito de"
   };
   return "❌ Solo puedes "+(labels[action]||action)+" tus propias órdenes";
 }
@@ -4759,6 +4794,8 @@ export default function PrintFlow() {
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
   const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria/karla mueven órdenes entre OCs
+    if(!canExecuteAction("moveOrderToOC",null,user,userLogin)){showToast(actionDeniedToast("moveOrderToOC",null,user,userLogin),"error");return}
     try{
       const o=orders.find(x=>x.id===orderId);
       const fromId=o?.purchase_order_id;
@@ -4771,6 +4808,8 @@ export default function PrintFlow() {
 
   // ↔️ v10.11.0 Sub-fase A — Crea OC nueva y mueve la orden ahí en un solo flujo
   const createOCAndMove=useCallback(async(orderId,ocData)=>{
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria pueden crear OCs (karla no)
+    if(!canExecuteAction("createOCAndMove",null,user,userLogin)){showToast(actionDeniedToast("createOCAndMove",null,user,userLogin),"error");return null}
     try{
       const actor=userLogin||user;
       const newOCId=await db.createPurchaseOrder({...ocData,byUser:actor});
@@ -4784,6 +4823,8 @@ export default function PrintFlow() {
 
   // 📄 v10.11.0 Sub-fase B — Asigna folio(s) a las órdenes pendientes de una OC vía RPC atómica
   const assignFolioToOC=useCallback(async(ocId,invoiceType,mode,folioStart,preAssigned,reason)=>{
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/karla asignan folios fiscales a OCs
+    if(!canExecuteAction("assignFolioToOC",null,user,userLogin)){showToast(actionDeniedToast("assignFolioToOC",null,user,userLogin),"error");return null}
     try{
       const actor=userLogin||user;
       const result=await db.assignFolioToOC(ocId,invoiceType,mode,folioStart,preAssigned,reason,actor);
@@ -4877,7 +4918,12 @@ export default function PrintFlow() {
     }catch(e){console.error("[doAdv] Error al avanzar:",e);showToast("❌ No se pudo avanzar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
-  const advance=useCallback((id,ns)=>{if(["delivered","maq_delivered","salidas"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:"#16a34a",onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)},[doAdv]);
+  const advance=useCallback((id,ns)=>{
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: roles operativos solo en sus stages; vendedor solo en órdenes propias. (No tocamos doAdv para no afectar revert/drag)
+    const o=orders.find(x=>x.id===id);
+    if(o&&!canExecuteAction("advance",o,user,userLogin)){showToast(actionDeniedToast("advance",o,user,userLogin),"error");return}
+    if(["delivered","maq_delivered","salidas"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:"#16a34a",onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)
+  },[orders,user,userLogin,showToast,doAdv]);
 
   const approveProof=useCallback(async id=>{
     setActionLoading(id);
@@ -5013,6 +5059,8 @@ export default function PrintFlow() {
 
   const webApprove=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria aprueban pedidos web (vendedor excluido por visibility + esto)
+    if(!canExecuteAction("web_approve",o,user,userLogin)){showToast(actionDeniedToast("web_approve",o,user,userLogin),"error");return}
     setActionLoading(id);
     const newCreator=userLogin||user;
     // Assign next P-XXXX folio (same logic as OrderForm/duplicate). Defensive: preserve existing if already set.
@@ -5058,6 +5106,8 @@ export default function PrintFlow() {
   // 🌐 v10.12.0 Sub-fase B — Aprueba todas las órdenes web_pending de un carrito en lote vía RPC atómica.
   // RPC asigna stage='draft' + P-XXXX + timeline a cada hija. Frontend envía 1 sola notificación (no N).
   const approveCartComplete=useCallback(async(cartFolio)=>{
+    // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria aprueban carritos web (vendedor excluido)
+    if(!canExecuteAction("approveCartComplete",null,user,userLogin)){showToast(actionDeniedToast("approveCartComplete",null,user,userLogin),"error");return}
     if(!confirm("¿Aprobar todos los pedidos del carrito "+cartFolio+"?"))return;
     const cartOrders=orders.filter(o=>o.cart_folio===cartFolio&&o.stage==="web_pending");
     const firstOrder=cartOrders[0];
@@ -5120,8 +5170,18 @@ export default function PrintFlow() {
       setCancelInvoicedModal(o);
     }
     if(action==="approve_proof")approveProof(id);
-    if(action==="send_maquila")setMaqModal(id);
-    if(action==="waste")setWasteModal(id);
+    if(action==="send_maquila"){
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo propias)
+      const sm=orders.find(x=>x.id===id);
+      if(sm&&!canExecuteAction("send_maquila",sm,user,userLogin)){showToast(actionDeniedToast("send_maquila",sm,user,userLogin),"error");return}
+      setMaqModal(id);
+    }
+    if(action==="waste"){
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/produccion/german registran desperdicio
+      const wo=orders.find(x=>x.id===id);
+      if(wo&&!canExecuteAction("waste",wo,user,userLogin)){showToast(actionDeniedToast("waste",wo,user,userLogin),"error");return}
+      setWasteModal(id);
+    }
     if(action==="comment")addComment(id,payload);
     if(action==="quick_note"){
       // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no agrega notas a órdenes ajenas
@@ -5131,11 +5191,22 @@ export default function PrintFlow() {
     }
     if(action==="duplicate")duplicate(id);
     if(action==="delete")deleteOrder(id);
-    if(action==="print"){const o=orders.find(x=>x.id===id);if(o)setPrintModal(o)}
+    if(action==="print"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: vendedor solo imprime sus propias (datos del cliente quedan en hoja física)
+      if(o&&!canExecuteAction("print",o,user,userLogin)){showToast(actionDeniedToast("print",o,user,userLogin),"error");return}
+      if(o)setPrintModal(o)
+    }
     if(action==="client_history"){const o=orders.find(x=>x.id===id);if(o)setClientHistory(o.client)}
     if(action==="flow"){const o=orders.find(x=>x.id===id);if(o)setFlowDiagram({stage:o.stage,type:o.order_type})}
-    if(action==="validate_prod"){setActionLoading(id);const o=orders.find(x=>x.id===id);(async()=>{try{setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage="design";u.timeline=addTL(u,"📝 → 🎨 Ambos validaron → Diseño",{to:"design"})}return u}));const {error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:"design"}:{})}).eq("id",id);if(vpErr)throw new Error(vpErr.message);await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,"📝 → 🎨 Ambos validaron → Diseño",user,"#ec4899");await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()}
-    if(action==="validate_pre"){setActionLoading(id);const o=orders.find(x=>x.id===id);(async()=>{try{
+    if(action==="validate_prod"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/produccion validan producción
+      if(o&&!canExecuteAction("validate_prod",o,user,userLogin)){showToast(actionDeniedToast("validate_prod",o,user,userLogin),"error");return}
+      setActionLoading(id);(async()=>{try{setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage="design";u.timeline=addTL(u,"📝 → 🎨 Ambos validaron → Diseño",{to:"design"})}return u}));const {error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:"design"}:{})}).eq("id",id);if(vpErr)throw new Error(vpErr.message);await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,"📝 → 🎨 Ambos validaron → Diseño",user,"#ec4899");await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()
+    }
+    if(action==="validate_pre"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/preprensa validan pre-prensa
+      if(o&&!canExecuteAction("validate_pre",o,user,userLogin)){showToast(actionDeniedToast("validate_pre",o,user,userLogin),"error");return}
+      setActionLoading(id);(async()=>{try{
       // Auto-calculate delivery date for web orders (only if not already set)
       const isWeb=o?.source==="web";
       const shouldCalcDate=isWeb&&!o?.due_date;
@@ -5170,6 +5241,8 @@ export default function PrintFlow() {
       }catch(e){console.error("[web_request_file] Error:",e);showToast("❌ No se pudo enviar aviso: "+(e?.message||"error desconocido"),"error");reload()}})();
     }
     if(action==="revert"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo en propias)
+      if(!canExecuteAction("revert",o,user,userLogin)){showToast(actionDeniedToast("revert",o,user,userLogin),"error");return}
       // 🆕 v10.7.0 — Bloquear revert si la orden ya tiene folio fiscal asignado
       // (evita órdenes con folio en stages no-finales = inconsistencia fiscal)
       if(o.invoice_folio){
@@ -5212,9 +5285,18 @@ export default function PrintFlow() {
       if(!o.purchase_order_id){showToast("❌ Esta orden no pertenece a ninguna OC","error");return}
       setMoveModal(o);
     }
-    if(action==="devolver_design")setDevolverModal(id);
+    if(action==="devolver_design"){
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/preprensa/german devuelven a diseño
+      const dd=orders.find(x=>x.id===id);
+      if(dd&&!canExecuteAction("devolver_design",dd,user,userLogin)){showToast(actionDeniedToast("devolver_design",dd,user,userLogin),"error");return}
+      setDevolverModal(id);
+    }
     if(action==="web_approve")webApprove(id);
-    if(action==="web_reject"){const o=orders.find(x=>x.id===id);if(o)setWebRejectModal(o)}
+    if(action==="web_reject"){const o=orders.find(x=>x.id===id);
+      // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria rechazan pedidos web
+      if(o&&!canExecuteAction("web_reject",o,user,userLogin)){showToast(actionDeniedToast("web_reject",o,user,userLogin),"error");return}
+      if(o)setWebRejectModal(o)
+    }
   },[orders,advance,approveProof,addComment,duplicate,deleteOrder,doAdv,showToast,user,userLogin,reload,webApprove]);
 
   // Filtered orders for view — "mine" shows only orders created by current user, "all" shows everything
