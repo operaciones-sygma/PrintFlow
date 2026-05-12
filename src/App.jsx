@@ -31,6 +31,8 @@ const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
 const isSec=r=>r==="secretaria"||r==="vendedor";
+// 🌐 v10.12.0 Sub-fase C — Gate de edición para pedidos web: vendedor no edita órdenes con source='web'
+const canEditWebOrder=(order,user)=>{if(order?.source!=="web")return true;return user==="secretaria"||user==="admin"};
 
 // ═══ SUPABASE DATA LAYER ═══
 const db = {
@@ -403,6 +405,8 @@ const calcDeliveryDate=(startDate,method,finishes)=>{
 };
 
 const C={bg:"#ffffff",sf:"#f8f8fa",bd:"#ebebef",tx:"#1c1c1e",t2:"#86868b",t3:"#aeaeb2",ph:"#c7c7cc",ac:"#546e7a",acL:"rgba(84,110,122,0.08)",ok:"#34c759",wn:"#ff9500",dn:"#ff3b30"};
+// 🌐 v10.12.0 Sub-fase C — Azul saturado para badges de OCs web (distinto del cian #06b6d4 usado en cart_folio)
+const WEB_BLUE="#3b82f6";
 const FNT="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap";
 const inp={width:"100%",padding:"10px 14px",fontFamily:"'Poppins',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
@@ -2010,6 +2014,7 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
     const q = search.trim().toLowerCase();
     return purchaseOrders.filter(po =>
       !po.is_simple_oc &&
+      !po.is_web_oc &&                  // 🌐 v10.12.0 Sub-fase C — OCs web bloqueadas como destino de movimiento
       po.status !== "cancelled" &&
       po.folios_locked !== true &&
       po.id !== order?.purchase_order_id
@@ -2325,7 +2330,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
       {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <GuideBanner text="Orden esperando validación. Puedes editar mientras no validen ambos" color="#5856d6"/>
-        <button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>
+        {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>}
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
         <div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-p</span></div>
       </div>}
@@ -2337,7 +2342,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
     {/* Lupita: edit maquila orders (no validation lock) */}
     {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
-      <button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}>✏️ Editar Maquila</button>
+      {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}>✏️ Editar Maquila</button>}
       <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
     </div>}
 
@@ -3102,7 +3107,7 @@ function WebCartCard({cartFolio,orders,onApprove,onReject,onApproveCart,onDetail
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
       <div style={{display:"flex",flexDirection:"column",gap:3,flex:1,minWidth:0}}>
         <span style={{fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {cartFolio}</span>
-        <span style={{fontSize:10,color:"#06b6d4",fontWeight:600}}>🌐 Carrito web · {orders.length} productos</span>
+        <span style={{fontSize:10,color:"#06b6d4",fontWeight:600}}>🌐 Carrito web · {orders.length} producto{orders.length===1?"":"s"}</span>
       </div>
       <span style={{fontSize:10,color:C.t3,whiteSpace:"nowrap"}}>{fmtDate(oldest)}</span>
     </div>
@@ -3113,7 +3118,7 @@ function WebCartCard({cartFolio,orders,onApprove,onReject,onApproveCart,onDetail
     <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:10}}>
       {orders.map(o=><WebCartChildRow key={o.id} order={o} onApprove={onApprove} onReject={onReject} busy={actionLoading===o.id}/>)}
     </div>
-    <button onClick={()=>onApproveCart(cartFolio)} disabled={cartBusy} style={{...bt(C.ok),width:"100%",marginTop:12,justifyContent:"center",fontSize:13,fontWeight:700,opacity:cartBusy?0.5:1,cursor:cartBusy?"not-allowed":"pointer"}}>✅ Aprobar carrito completo ({orders.length})</button>
+    <button onClick={()=>onApproveCart(cartFolio)} disabled={cartBusy} style={{...bt(C.ok),width:"100%",marginTop:12,justifyContent:"center",fontSize:13,fontWeight:700,opacity:cartBusy?0.5:1,cursor:cartBusy?"not-allowed":"pointer"}}>{orders.length===1?"✅ Aprobar último producto":"✅ Aprobar carrito completo ("+orders.length+")"}</button>
   </div>;
 }
 
@@ -3160,11 +3165,12 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
         {grouped.map(g=>{
-          // Carrito de 2+ productos: card-padre con hijas anidadas
-          if(g.orders.length>1&&g.cartFolio){
+          // 🌐 v10.12.0 Sub-fase C — Opción B: card-padre persiste mientras exista cart_folio (incluso con 1 hija)
+          // Solo renderiza como card individual cuando NO hay cart_folio (caso raro: orden web aislada)
+          if(g.cartFolio){
             return <WebCartCard key={g.cartFolio} cartFolio={g.cartFolio} orders={g.orders} onApprove={onApprove} onReject={onReject} onApproveCart={onApproveCart} onDetail={onDetail} actionLoading={actionLoading} fmtDate={fmtDate}/>;
           }
-          // Carrito de 1 producto (o sin cart_folio): card individual idéntico al UI previo
+          // Sin cart_folio: card individual idéntico al UI previo
           const o=g.orders[0];const busy=actionLoading===o.id;
           return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
             {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8}}>⏳ Procesando...</span></div>}
@@ -3652,9 +3658,25 @@ function AuditoriaView({orders, purchaseOrders}){
 function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, onReload, showToast, onCreateOC, onAddProduct, onAssignFolio, onPreAssignFolio}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // 🌐 v10.12.0 Sub-fase C — Filtrar OCs visibles:
+  //   - OCs simples siempre ocultas (v10.10.0)
+  //   - OCs web ocultas hasta que ≥1 hija salga de web_pending (evita aparición prematura mientras Lupita revisa el carrito)
   const complexOCs = useMemo(() =>
-    purchaseOrders.filter(po => !po.is_simple_oc).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
-    [purchaseOrders]);
+    purchaseOrders.filter(po => {
+      if(po.is_simple_oc)return false;
+      if(po.is_web_oc){
+        const children=orders.filter(o=>o.purchase_order_id===po.id);
+        if(children.length===0)return false;
+        return children.some(o=>o.stage!=="web_pending");
+      }
+      return true;
+    }).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
+    [purchaseOrders, orders]);
+  // 🌐 v10.12.0 Sub-fase C — Obtiene el cart_folio (C-XXXX) del primer hijo web de una OC, fallback al id de la OC
+  const getCartFolio = (po) => {
+    const child = orders.find(o => o.purchase_order_id === po.id && o.cart_folio);
+    return child?.cart_folio || po.id;
+  };
   const selectedOC = useMemo(() =>
     selectedOCId ? purchaseOrders.find(po => po.id === selectedOCId) : null,
     [selectedOCId, purchaseOrders]);
@@ -3679,7 +3701,11 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
     const invoicedCount = ocOrders.filter(o => o.invoice_folio).length;
     const isLocked = selectedOC.folios_locked === true;
     const hasShared = !!selectedOC.shared_invoice_folio;
-    const canAddProduct = canCreateOC && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
+    // 🌐 v10.12.0 Sub-fase C — Flag de OC web + cart_folio para D5 hierarchy
+    const isWeb = selectedOC.is_web_oc === true;
+    const cartFolio = isWeb ? getCartFolio(selectedOC) : null;
+    // Bloquear "+ Agregar producto" en OCs web (productos fijados al pago original del cliente, D6)
+    const canAddProduct = canCreateOC && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked && !isWeb;
     const canAssignFolio = (role === "admin" || role === "karla") && pendingOrders.length > 0 && !hasShared && !isLocked && selectedOC.status !== "cancelled";
     // 📄 Solo permitir asignar folio inmediato si TODAS las pendientes están listas para entrega (stages 'salidas'/'maq_received'),
     // consistente con el flujo individual del botón "📄 Asignar Folio y Entregar" en cada OCard.
@@ -3690,14 +3716,21 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
     const sharedFolioIcon = sharedFolioType === "factura" ? "📄" : "📋";
     return <div>
       <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
-      <div style={{background:C.bg,borderRadius:12,padding:16,border:"1px solid "+C.bd,marginBottom:14}}>
+      <div style={{background:C.bg,borderRadius:12,padding:16,border:"1px solid "+C.bd,borderLeft:isWeb?"4px solid "+WEB_BLUE:undefined,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
           <div>
-            <div style={{fontSize:20,fontWeight:800,color:C.ac}}>🛒 {selectedOC.id}</div>
-            <div style={{fontSize:14,fontWeight:700,marginTop:4}}>{selectedOC.client}</div>
+            {isWeb ? <>
+              <div style={{fontSize:22,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3}}>🛒 {cartFolio}</div>
+              <div style={{fontSize:11,color:C.t3,marginTop:2}}>📝 {selectedOC.id}</div>
+              <div style={{fontSize:14,fontWeight:700,marginTop:6}}>{selectedOC.client}</div>
+            </> : <>
+              <div style={{fontSize:20,fontWeight:800,color:C.ac}}>🛒 {selectedOC.id}</div>
+              <div style={{fontSize:14,fontWeight:700,marginTop:4}}>{selectedOC.client}</div>
+            </>}
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
             {statusBadge(selectedOC.status)}
+            {isWeb && <span style={{fontSize:11,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",letterSpacing:0.3}}>🌐 Pedido web</span>}
             {hasShared && <span style={{fontSize:11,fontWeight:700,color:sharedFolioColor,background:sharedFolioColor+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",fontFamily:"monospace"}}>{sharedFolioIcon} {selectedOC.shared_invoice_folio} compartido</span>}
             {isLocked && <span style={{fontSize:11,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap"}} title={selectedOC.folios_lock_reason||"OC bloqueada por folios pre-asignados"}>🔒 Bloqueada</span>}
           </div>
@@ -3714,11 +3747,12 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"0 0 10px",flexWrap:"wrap",gap:8}}>
         <h3 style={{fontSize:14,fontWeight:800,margin:0,textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {canCreateOC && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
+          {canCreateOC && !isWeb && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
         </div>
       </div>
+      {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}>🌐 Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
       {ocOrders.length === 0
         ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
             <div style={{fontSize:36}}>📋</div>
@@ -3749,13 +3783,20 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
             const sFType = hasShared ? (po.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
             const sFColor = sFType === "factura" ? "#5856d6" : "#34c759";
             const sFIcon = sFType === "factura" ? "📄" : "📋";
-            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.bg,borderRadius:12,padding:14,cursor:"pointer",border:"1px solid "+C.bd,borderLeft:"4px solid "+(po.folios_locked?C.wn:C.ac),boxShadow:"0 1px 4px rgba(0,0,0,0.04)",transition:"transform 0.1s"}} onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
+            // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
+            const isWeb = po.is_web_oc === true;
+            const cartFolio = isWeb ? getCartFolio(po) : null;
+            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.bg,borderRadius:12,padding:14,cursor:"pointer",border:"1px solid "+C.bd,borderLeft:"4px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac)),boxShadow:"0 1px 4px rgba(0,0,0,0.04)",transition:"transform 0.1s"}} onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>
+                {isWeb ? <div>
+                  <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3}}>🛒 {cartFolio}</div>
+                  <div style={{fontSize:10,color:C.t3,marginTop:2}}>📝 {po.id}</div>
+                </div> : <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>}
                 {statusBadge(po.status)}
               </div>
               <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}</div>
-              {(hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+              {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
+                {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3}}>🌐 Pedido web</span>}
                 {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
                 {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"2px 6px",borderRadius:4}} title={po.folios_lock_reason||"OC bloqueada"}>🔒 Bloqueada</span>}
               </div>}
@@ -4977,7 +5018,7 @@ export default function PrintFlow() {
   },[user,userLogin,orders,showToast,reload]);
 
   const handleAction=useCallback((id,action,payload)=>{
-    if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;if(o.invoice_folio&&user!=="admin"){showToast("❌ Esta orden ya tiene folio fiscal "+o.invoice_folio+" asignado y no se puede editar.","error");return}if(isSec(user)&&o.created_by&&o.created_by!==userLogin)return;if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;setEditO(o);setView("form")}
+    if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;if(o.invoice_folio&&user!=="admin"){showToast("❌ Esta orden ya tiene folio fiscal "+o.invoice_folio+" asignado y no se puede editar.","error");return}if(!canEditWebOrder(o,user)){showToast("❌ Solo Lupita y Admin pueden editar pedidos de origen web","error");return}if(isSec(user)&&o.created_by&&o.created_by!==userLogin)return;if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;setEditO(o);setView("form")}
     if(action==="edit_specs"){const o=orders.find(x=>x.id===id);if(o){setEditO({...o,_specsOnly:true});setView("form")}}
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
