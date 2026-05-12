@@ -33,6 +33,16 @@ const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 const isSec=r=>r==="secretaria"||r==="vendedor";
 // 🌐 v10.12.0 Sub-fase C — Gate de edición para pedidos web: vendedor no edita órdenes con source='web'
 const canEditWebOrder=(order,user)=>{if(order?.source!=="web")return true;return user==="secretaria"||user==="admin"};
+// 🛒 v10.12.0.1 — Permiso para agregar productos a una OC. Reglas:
+//   - OCs web bloqueadas (Sub-fase C, productos fijados al pago original)
+//   - admin/secretaria: todas las OCs
+//   - vendedor: solo OCs donde es el vendedor asignado (oc.vendedor === userLogin)
+const canAddProductToOC=(oc,user,userLogin)=>{
+  if(!oc||oc.is_web_oc)return false;
+  if(user==="admin"||user==="secretaria")return true;
+  if(user==="vendedor")return oc.vendedor===userLogin;
+  return false;
+};
 
 // ═══ SUPABASE DATA LAYER ═══
 const db = {
@@ -3655,23 +3665,26 @@ function AuditoriaView({orders, purchaseOrders}){
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, onReload, showToast, onCreateOC, onAddProduct, onAssignFolio, onPreAssignFolio}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAssignFolio, onPreAssignFolio}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   // 🌐 v10.12.0 Sub-fase C — Filtrar OCs visibles:
   //   - OCs simples siempre ocultas (v10.10.0)
   //   - OCs web ocultas hasta que ≥1 hija salga de web_pending (evita aparición prematura mientras Lupita revisa el carrito)
+  // 🛒 v10.12.0.1 — Filtro por vendedor: si vendedor está en modo "Mis Órdenes", solo OCs donde es el vendedor asignado
   const complexOCs = useMemo(() =>
     purchaseOrders.filter(po => {
       if(po.is_simple_oc)return false;
       if(po.is_web_oc){
         const children=orders.filter(o=>o.purchase_order_id===po.id);
         if(children.length===0)return false;
-        return children.some(o=>o.stage!=="web_pending");
+        if(!children.some(o=>o.stage!=="web_pending"))return false;
       }
+      // Aislamiento de vendedor: ve solo OCs donde es el vendedor asignado cuando filtra "Mis Órdenes"
+      if(role==="vendedor"&&orderFilter==="mine"&&po.vendedor!==userLogin)return false;
       return true;
     }).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
-    [purchaseOrders, orders]);
+    [purchaseOrders, orders, role, userLogin, orderFilter]);
   // 🌐 v10.12.0 Sub-fase C — Obtiene el cart_folio (C-XXXX) del primer hijo web de una OC, fallback al id de la OC
   const getCartFolio = (po) => {
     const child = orders.find(o => o.purchase_order_id === po.id && o.cart_folio);
@@ -3705,7 +3718,9 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
     const isWeb = selectedOC.is_web_oc === true;
     const cartFolio = isWeb ? getCartFolio(selectedOC) : null;
     // Bloquear "+ Agregar producto" en OCs web (productos fijados al pago original del cliente, D6)
-    const canAddProduct = canCreateOC && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked && !isWeb;
+    // 🛒 v10.12.0.1 — Usar canAddProductToOC para gating por rol+ownership; status/locked se gatean adicionalmente
+    const canAddProductHere = canAddProductToOC(selectedOC, role, userLogin);
+    const canAddProduct = canAddProductHere && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
     const canAssignFolio = (role === "admin" || role === "karla") && pendingOrders.length > 0 && !hasShared && !isLocked && selectedOC.status !== "cancelled";
     // 📄 Solo permitir asignar folio inmediato si TODAS las pendientes están listas para entrega (stages 'salidas'/'maq_received'),
     // consistente con el flujo individual del botón "📄 Asignar Folio y Entregar" en cada OCard.
@@ -3747,7 +3762,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, onAction, o
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"0 0 10px",flexWrap:"wrap",gap:8}}>
         <h3 style={{fontSize:14,fontWeight:800,margin:0,textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {canCreateOC && !isWeb && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
+          {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
         </div>
@@ -4603,6 +4618,11 @@ export default function PrintFlow() {
     return () => clearInterval(iv);
   }, [loaded, user, orders]);
 
+  // 🛒 v10.12.0.1 — Defensive redirect: vendedor no debe estar en view==="web_orders" (cache, navegación stale)
+  useEffect(() => {
+    if (user === "vendedor" && view === "web_orders") setView("pipeline");
+  }, [user, view]);
+
   // Web order alerts — notify secretaria + admin when a new web_pending order appears
   // Admin session does the notifying to avoid duplicates across multiple open sessions
   // 🌐 v10.12.0 Sub-fase B — Deduplicación por cart_folio: 1 sola notificación por carrito (no N por orden).
@@ -4676,7 +4696,12 @@ export default function PrintFlow() {
   },[user,userLogin,showToast,reload]);
 
   // 🛒 v10.10.0 — Agregar producto a OC existente (pre-llena form y navega)
+  // 🛒 v10.12.0.1 — Defensa en profundidad: bloquear si vendedor no es dueño de la OC o si es OC web
   const addProductToOC=useCallback(oc=>{
+    if(!canAddProductToOC(oc,user,userLogin)){
+      showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":"❌ Solo el vendedor asignado a esta OC puede agregar productos","error");
+      return;
+    }
     setEditO({
       client: oc.client||"",
       client_email: oc.client_email||"",
@@ -4688,7 +4713,7 @@ export default function PrintFlow() {
       _fromOC: true
     });
     setView("form");
-  },[]);
+  },[user,userLogin,showToast]);
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
   const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
@@ -5161,7 +5186,7 @@ export default function PrintFlow() {
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
   if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
-  if(isSec(user)||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
+  if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
   if(user==="produccion"||user==="admin"||user==="karla")navs.push({id:"board",i:"🏭",l:user==="karla"?"Folios":"Tablero"});
   if(user==="produccion"||user==="admin")navs.push({id:"planner",i:"🗓️",l:"Planificador"});
   navs.push({id:"calendar",i:"📅",l:"Entregas"});
@@ -5232,7 +5257,7 @@ export default function PrintFlow() {
           </div>}
           {normalTasks.length===0&&staleTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{search?"Sin resultados":"¡Sin pendientes!"}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención"}</div></div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders}/></div>}
-        {view==="web_orders"&&(isSec(user)||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
+        {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
@@ -5242,7 +5267,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
