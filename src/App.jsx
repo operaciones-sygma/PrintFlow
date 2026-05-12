@@ -44,6 +44,48 @@ const canAddProductToOC=(oc,user,userLogin)=>{
   return false;
 };
 
+// 🔒 v10.12.0.2 Phase 1 — Permisos centralizados por acción.
+// Cada acción declara: roles permitidos + cuáles de esos están ownership-bound (solo en órdenes propias).
+// Mantener sincronizado con el set de acciones reales que dispara handleAction o callbacks directos.
+const ACTION_ROLES = {
+  // ─── Phase 1 (v10.12.0.2) ───
+  duplicate:   { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
+  changeDate:  { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
+  addComment:  { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
+  quick_note:  { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
+  deleteOrder: { allowed:["admin"], ownerBound:[] },
+  // ─── Phase 2 (próxima sesión, pre-mapeado para extensión trivial) ───
+  // advance, revert, validate_prod, validate_pre, send_maquila, waste,
+  // devolver_design, web_approve, web_reject, print, moveOrderToOC,
+  // createOCAndMove, assignFolioToOC, approveCartComplete
+};
+
+// 🔒 v10.12.0.2 — Gate central. Retorna true si el user puede ejecutar la acción sobre esta orden.
+function canExecuteAction(action, order, user, userLogin) {
+  const rule = ACTION_ROLES[action];
+  if (!rule) return false;
+  if (!rule.allowed.includes(user)) return false;
+  if (rule.ownerBound.includes(user) && order?.created_by && order.created_by !== userLogin) return false;
+  return true;
+}
+
+// 🔒 v10.12.0.2 — Mensaje contextual cuando canExecuteAction falla.
+function actionDeniedToast(action, order, user, userLogin) {
+  const rule = ACTION_ROLES[action];
+  if (!rule || !rule.allowed.includes(user)) {
+    if (action === "deleteOrder") return "❌ Solo Admin puede eliminar órdenes";
+    return "❌ Tu rol no puede ejecutar esta acción";
+  }
+  const labels = {
+    duplicate: "duplicar",
+    changeDate: "cambiar la fecha de",
+    addComment: "comentar",
+    quick_note: "agregar notas a",
+    deleteOrder: "eliminar"
+  };
+  return "❌ Solo puedes "+(labels[action]||action)+" tus propias órdenes";
+}
+
 // ═══ SUPABASE DATA LAYER ═══
 const db = {
   async loadOrders(relatedOnly=false) {
@@ -4898,6 +4940,8 @@ export default function PrintFlow() {
 
   const duplicate=useCallback(async id=>{
     const orig=orders.find(o=>o.id===id);if(!orig)return;
+    // 🔒 v10.12.0.2 Phase 1 — Hardstop: bloquea bypass via DevTools en órdenes ajenas (vendedor) o roles no permitidos
+    if(!canExecuteAction("duplicate",orig,user,userLogin)){showToast(actionDeniedToast("duplicate",orig,user,userLogin),"error");return}
     const origLabel=orig.cart_folio||orig.production_number||orig.id.slice(0,8);
     const nums=orders.map(o=>{const m=(o.production_number||"").match(/^P-(\d+)$/);return m?parseInt(m[1],10):0}).filter(n=>n>0);const maxN=nums.length>0?Math.max(...nums):0;const dupFolio="P-"+String((maxN>=5000?1:maxN+1)).padStart(4,"0");
     const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
@@ -4911,6 +4955,8 @@ export default function PrintFlow() {
 
   const deleteOrder=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
+    // 🔒 v10.12.0.2 Phase 1 — Hardstop: solo admin, defensa en profundidad contra bypass via DevTools
+    if(!canExecuteAction("deleteOrder",o,user,userLogin)){showToast(actionDeniedToast("deleteOrder",o,user,userLogin),"error");return}
     // 🆕 v10.7.0 — Bloquear borrado si la orden tiene folio fiscal asignado
     // Esto preserva la integridad de la serie D-XXXX/R-XXXX (no quedan huecos)
     if(o.invoice_folio){
@@ -4958,9 +5004,12 @@ export default function PrintFlow() {
   },[orders,user,showToast,reload]);
 
   const addComment=useCallback(async(oid,c)=>{
+    // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no comenta en órdenes ajenas
+    const o=orders.find(x=>x.id===oid);
+    if(o&&!canExecuteAction("addComment",o,user,userLogin)){showToast(actionDeniedToast("addComment",o,user,userLogin),"error");return}
     setOrders(p=>p.map(o=>o.id===oid?{...o,comments:[...(o.comments||[]),c]}:o));
     try{await db.addComment(oid,c.text,c.by)}catch(e){console.error("[addComment] Error:",e);showToast("❌ No se pudo guardar nota: "+(e?.message||"error desconocido"),"error")}
-  },[showToast]);
+  },[orders,user,userLogin,showToast]);
 
   const webApprove=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
@@ -5025,6 +5074,8 @@ export default function PrintFlow() {
 
   const changeDate=useCallback(async(oid,newDate,reason)=>{
     const o=orders.find(x=>x.id===oid);
+    // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no cambia fechas de órdenes ajenas (UI gating en Calendar ya lo bloquea, esto cierra el bypass)
+    if(o&&!canExecuteAction("changeDate",o,user,userLogin)){showToast(actionDeniedToast("changeDate",o,user,userLogin),"error");return}
     if(o?.due_date===newDate)return; // skip if same date
     const msg="📅 Fecha cambiada a "+fD(newDate)+(reason?" — "+reason:"");
     setOrders(p=>p.map(x=>x.id===oid?{...x,due_date:newDate,timeline:[...(x.timeline||[]),{action:msg,date:new Date().toISOString(),by:user||"sistema",color:C.wn}]}:x));
@@ -5072,7 +5123,12 @@ export default function PrintFlow() {
     if(action==="send_maquila")setMaqModal(id);
     if(action==="waste")setWasteModal(id);
     if(action==="comment")addComment(id,payload);
-    if(action==="quick_note"){const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()}
+    if(action==="quick_note"){
+      // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no agrega notas a órdenes ajenas
+      const qnOrd=orders.find(x=>x.id===id);
+      if(qnOrd&&!canExecuteAction("quick_note",qnOrd,user,userLogin)){showToast(actionDeniedToast("quick_note",qnOrd,user,userLogin),"error");return}
+      const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
+    }
     if(action==="duplicate")duplicate(id);
     if(action==="delete")deleteOrder(id);
     if(action==="print"){const o=orders.find(x=>x.id===id);if(o)setPrintModal(o)}
@@ -5234,7 +5290,10 @@ export default function PrintFlow() {
           {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap"}}>👤 Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap"}}>📋 Todas</button></div>}
           <input style={{...inp,width:180,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="🔍 Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
-          {(user==="admin"||isSec(user))&&<button onClick={()=>{const csvOrders=viewOrders;const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={bs(C.ac)}>📥 CSV</button>}
+          {(user==="admin"||isSec(user))&&<button onClick={()=>{const csvOrdersRaw=viewOrders;
+        /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
+        const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
+        const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={bs(C.ac)}>📥 CSV</button>}
           <div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600}}>{rL[user]}</div>
           <button onClick={()=>{setUser(null);setUserLogin(null);setOrderFilter(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
         </div>
