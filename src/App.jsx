@@ -656,10 +656,49 @@ function Timeline({tl=[]}) {
   const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   return <div style={{marginTop:6}}><button onClick={()=>setOp(!op)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>📜 ({tl.length}) {op?"▲":"▼"}</button>{(op||tl.length<=3)&&<div style={{marginTop:6,borderLeft:"2px solid "+C.bd,paddingLeft:12}}>{show.map((e,i)=><div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:C.tx,fontWeight:500}}>{e.action}</div><div style={{fontSize:10,color:C.t3}}><span style={{color:rc[e.by]||C.t3,fontWeight:600}}>{rN[e.by]||e.by||""}</span>{e.by?" · ":""}{fDT(e.date)}</div></div>)}</div>}</div>;
 }
+// 🆕 v10.13.0 — Typeahead contra cobranza.clients (RPC search_clients_typeahead)
 function ClientInput({value,onChange,onSelect,clients}) {
   const [show,setShow]=useState(false);
-  const m=(value||"").length>=2?clients.filter(c=>c.client?.toLowerCase().includes(value.toLowerCase())).slice(0,5):[];
-  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&m.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:50,border:"0.5px solid "+C.bd,marginTop:4}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>Clientes anteriores</div>{m.map((c,i)=><div key={i} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<m.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.client}</div><div style={{fontSize:10,color:C.t2}}>{[c.client_company,c.client_phone].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
+  const [matches,setMatches]=useState([]);
+  const [searching,setSearching]=useState(false);
+  const debounceRef=useRef(null);
+  useEffect(()=>{
+    if(debounceRef.current)clearTimeout(debounceRef.current);
+    const q=(value||"").trim();
+    if(q.length<2){setMatches([]);return}
+    debounceRef.current=setTimeout(async()=>{
+      setSearching(true);
+      try{
+        const {data,error}=await sb.rpc("search_clients_typeahead",{p_query:q,p_limit:10});
+        if(error)throw error;
+        setMatches(data||[]);
+      }catch(e){console.error("typeahead error:",e);setMatches([])}
+      finally{setSearching(false)}
+    },250);
+    return()=>debounceRef.current&&clearTimeout(debounceRef.current);
+  },[value]);
+  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
+}
+
+// 🆕 v10.13.0 — Modal de confirmación de cliente similar (typeahead)
+function ClientConfirmModal({open,typed,matches,onResolve}) {
+  if(!open)return null;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>onResolve("cancel")}>
+    <div style={{background:C.bg,borderRadius:14,padding:24,maxWidth:520,width:"90%",boxShadow:"0 12px 40px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+      <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
+      <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+        {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Poppins',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
+          <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
+        </button>)}
+      </div>
+      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={()=>onResolve("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
+        <button onClick={()=>onResolve("new")} style={{...bs(C.ac),padding:"8px 16px"}}>➕ Crear "{typed}" como nuevo cliente</button>
+      </div>
+    </div>
+  </div>;
 }
 function CommentLog({comments=[],onAdd,role}) {
   const [text,setText]=useState("");const [show,setShow]=useState(false);
@@ -2034,8 +2073,8 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
 }
 
 // ─── ORDER FORM ────────────────────────────────────
-function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[]}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"Etiqueta colgante",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",image:null};
+function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"Etiqueta colgante",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",image:null};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
   const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
@@ -2064,8 +2103,50 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[]}) {
   const pnSetRef=useRef(false);
   useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
-  const submit=async()=>{setTried(true);if(!canSubmit)return;setSaving(true);try{const clean={...f};delete clean._specsOnly;if(clean.agent==="otro")clean.agent=null;if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;await onSubmit(clean);if(!editOrder?.id){const usedNum=(f.production_number||"").match(/^P-(\d+)$/);const nxt=usedNum?parseInt(usedNum[1],10)+1:null;const nxtPN=nxt?"P-"+String(nxt>5000?1:nxt).padStart(4,"0"):"";setF({...empty,production_number:nxtPN});setAdvMode(false)}setTried(false)}catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}finally{setSaving(false)}};
-  const selC=c=>setF(p=>({...p,client:c.client,client_company:c.client_company||"",client_email:c.client_email||"",client_phone:c.client_phone||"",client_lada:c.client_lada||"+52",client_rfc:c.client_rfc||""}));
+  const submit=async()=>{
+    setTried(true);if(!canSubmit)return;setSaving(true);
+    try{
+      const clean={...f};delete clean._specsOnly;
+      if(clean.agent==="otro")clean.agent=null;
+      if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;
+      // 🆕 v10.13.0 — Resolver client_id contra cobranza.clients antes de guardar (solo en creación)
+      if(!editOrder?.id&&!clean.client_id&&clean.client?.trim()){
+        try{
+          const {data:resolution,error:resErr}=await sb.rpc("resolve_client_for_order",{p_name:clean.client.trim()});
+          if(resErr)throw resErr;
+          if(resolution?.exact_match){
+            clean.client_id=resolution.exact_match;
+            showToast?.(`Vinculado automáticamente: ${resolution.exact_name}`,"success");
+          }else if(resolution?.similar_matches?.length>0){
+            const confirmed=await window.__showClientConfirmModal?.({typed:clean.client.trim(),matches:resolution.similar_matches});
+            if(confirmed==="cancel"){setSaving(false);return}
+            if(confirmed==="new"){
+              const {data:newId,error:createErr}=await sb.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
+              if(createErr)throw createErr;
+              clean.client_id=newId;
+              showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
+            }else{
+              clean.client_id=confirmed;
+            }
+          }else{
+            const {data:newId,error:createErr}=await sb.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
+            if(createErr)throw createErr;
+            clean.client_id=newId;
+            showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
+          }
+        }catch(e){
+          console.error("client resolution error:",e);
+          showToast?.("Error resolviendo cliente: "+(e?.message||"desconocido"),"error");
+          setSaving(false);return;
+        }
+      }
+      await onSubmit(clean);
+      if(!editOrder?.id){const usedNum=(f.production_number||"").match(/^P-(\d+)$/);const nxt=usedNum?parseInt(usedNum[1],10)+1:null;const nxtPN=nxt?"P-"+String(nxt>5000?1:nxt).padStart(4,"0"):"";setF({...empty,production_number:nxtPN});setAdvMode(false)}
+      setTried(false);
+    }catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}
+    finally{setSaving(false)}
+  };
+  const selC=c=>setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||""}));
 
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
     {!editOrder&&canP&&<GuideBanner text={isMaq?"🚚 Orden de maquila — incluye proveedor, costo y precio":"📋 Crea la orden completa con datos, specs y precio"} color={isMaq?"#e67e22":"#5856d6"}/>}
@@ -2074,7 +2155,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[]}) {
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>s("client",v)} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req><select style={{...inp,paddingRight:32}} value={PTYPES.includes(f.product_type)?f.product_type:"Otro"} onChange={e=>{if(e.target.value==="Otro"){s("product_type","Otro")}else{s("product_type",e.target.value)}}}>{PTYPES.map(t=><option key={t}>{t}</option>)}</select>{(!PTYPES.includes(f.product_type)||f.product_type==="Otro")&&<input style={{...inp,marginTop:6}} value={f.product_type==="Otro"?"":f.product_type} onChange={e=>s("product_type",e.target.value||"Otro")} placeholder="Escribe el tipo de producto"/>}</FC></div>
     {!isMaq&&!specsOnly&&<div style={{padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:11,fontWeight:700,color:advMode?"#8b5cf6":C.t2}}>{advMode?"📖 Modo Avanzado":"📋 Modo Sencillo"}</div><div style={{fontSize:9,color:C.t3,marginTop:1}}>{advMode?"Libros, cuadernos, calendarios — escribe todos los datos técnicos":"Etiquetas, flyers, volantes — descripción rápida del producto"}</div></div><button onClick={()=>setAdvMode(!advMode)} style={{position:"relative",width:44,height:24,borderRadius:12,border:"none",background:advMode?"#8b5cf6":"#d1d5db",cursor:"pointer",transition:"background .2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:advMode?22:2,width:20,height:20,borderRadius:10,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)",transition:"left .2s"}}/></button></div>}
@@ -4565,11 +4646,19 @@ export default function PrintFlow() {
   const staleNotifiedRef=useRef(new Set()); // guard against duplicate stale notifications
   const webNotifiedRef=useRef(new Set()); // guard against duplicate web order notifications
   const [toast,setToast]=useState(null); // {message,type}
+  const [clientConfirmModal,setClientConfirmModal]=useState(null); // 🆕 v10.13.0 — Modal de confirmación cliente similar
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
   const [showMoreMenu,setShowMoreMenu]=useState(false);
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
   const showToast=useCallback((message,type="success")=>setToast({message,type}),[]);
+  // 🆕 v10.13.0 — Registrar hook global para que OrderForm.submit pueda esperar la resolución del modal de cliente similar
+  useEffect(()=>{
+    window.__showClientConfirmModal=(props)=>new Promise(resolve=>{
+      setClientConfirmModal({...props,onResolve:(result)=>{setClientConfirmModal(null);resolve(result)}});
+    });
+    return()=>{delete window.__showClientConfirmModal};
+  },[]);
   const [archiveLoaded,setArchiveLoaded]=useState(false);
   const archiveLoadedRef=useRef(false);
 
@@ -5421,7 +5510,7 @@ export default function PrintFlow() {
             {staleTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
           </div>}
           {normalTasks.length===0&&staleTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{search?"Sin resultados":"¡Sin pendientes!"}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención"}</div></div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
-        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders}/></div>}
+        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></>}</div>}
@@ -5518,6 +5607,8 @@ export default function PrintFlow() {
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
+      {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
+      {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} onResolve={clientConfirmModal.onResolve}/>}
       {toast&&<Toast message={toast.message} type={toast.type} onDone={()=>setToast(null)}/>}
     </div>
   );
