@@ -2146,7 +2146,18 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     }catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}
     finally{setSaving(false)}
   };
-  const selC=c=>setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||""}));
+  // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
+  const selC=async c=>{
+    setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||""}));
+    if(!c.email||!c.whatsapp){
+      try{
+        const {data,error}=await sb.rpc("get_last_contact_for_client",{p_client_id:c.id});
+        if(error)throw error;
+        if(!data)return;
+        setF(p=>({...p,client_email:p.client_email||data.last_email||"",client_phone:p.client_phone||data.last_phone||"",client_lada:p.client_lada||data.last_lada||"+52",client_rfc:p.client_rfc||data.last_rfc||"",client_company:p.client_company||data.last_company||p.client||""}));
+      }catch(e){console.warn("get_last_contact_for_client falló:",e)}
+    }
+  };
 
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
     {!editOrder&&canP&&<GuideBanner text={isMaq?"🚚 Orden de maquila — incluye proveedor, costo y precio":"📋 Crea la orden completa con datos, specs y precio"} color={isMaq?"#e67e22":"#5856d6"}/>}
