@@ -669,7 +669,7 @@ function ClientInput({value,onChange,onSelect,clients}) {
     debounceRef.current=setTimeout(async()=>{
       setSearching(true);
       try{
-        const {data,error}=await sb.rpc("search_clients_typeahead",{p_query:q,p_limit:10});
+        const {data,error}=await supabase.rpc("search_clients_typeahead",{p_query:q,p_limit:10});
         if(error)throw error;
         setMatches(data||[]);
       }catch(e){console.error("typeahead error:",e);setMatches([])}
@@ -2112,7 +2112,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       // 🆕 v10.13.0 — Resolver client_id contra cobranza.clients antes de guardar (solo en creación)
       if(!editOrder?.id&&!clean.client_id&&clean.client?.trim()){
         try{
-          const {data:resolution,error:resErr}=await sb.rpc("resolve_client_for_order",{p_name:clean.client.trim()});
+          const {data:resolution,error:resErr}=await supabase.rpc("resolve_client_for_order",{p_name:clean.client.trim()});
           if(resErr)throw resErr;
           if(resolution?.exact_match){
             clean.client_id=resolution.exact_match;
@@ -2121,7 +2121,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             const confirmed=await window.__showClientConfirmModal?.({typed:clean.client.trim(),matches:resolution.similar_matches});
             if(confirmed==="cancel"){setSaving(false);return}
             if(confirmed==="new"){
-              const {data:newId,error:createErr}=await sb.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
+              const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
               if(createErr)throw createErr;
               clean.client_id=newId;
               showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
@@ -2129,7 +2129,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
               clean.client_id=confirmed;
             }
           }else{
-            const {data:newId,error:createErr}=await sb.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
+            const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
             if(createErr)throw createErr;
             clean.client_id=newId;
             showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
@@ -2151,7 +2151,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||""}));
     if(!c.email||!c.whatsapp){
       try{
-        const {data,error}=await sb.rpc("get_last_contact_for_client",{p_client_id:c.id});
+        const {data,error}=await supabase.rpc("get_last_contact_for_client",{p_client_id:c.id});
         if(error)throw error;
         if(!data)return;
         setF(p=>({...p,client_email:p.client_email||data.last_email||"",client_phone:p.client_phone||data.last_phone||"",client_lada:p.client_lada||data.last_lada||"+52",client_rfc:p.client_rfc||data.last_rfc||"",client_company:p.client_company||data.last_company||p.client||""}));
