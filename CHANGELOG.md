@@ -5,6 +5,26 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.15.2 — Hotfix UX preview de imagen — 14-may-2026
+
+Fix de UX reportado por Marcelo justo después de v10.15.1: las imágenes en DetailModal se recortaban con `objectFit:"cover"`. Cambio mínimo, sin SQL.
+
+### Cambios
+
+- `objectFit` cambiado de `cover` → `contain`: la imagen completa siempre visible, sin recortes
+- `maxHeight` ampliado de 160px → 280px para dar más espacio a imágenes verticales
+- Background `#f5f5f7` cuando hay letterbox (imagen no llena todo el espacio): se ve elegante en vez de espacio en blanco
+- **Click en la imagen** → abre en pestaña nueva para ver tamaño original (útil para revisar detalles finos)
+- Tooltip "Click para ver en tamaño original" en hover
+- Cursor pointer en hover
+
+### Lo que NO cambia
+
+- Thumbnail de OCard (48×48) sigue con `cover` (intencional: en miniatura queremos representación rápida, no letterbox)
+- Detección de imagen por extensión sigue igual
+- Prioridad `image_url > image > file_url` sin cambios
+
+
 ## v10.15.1 — Storage 100GB + Preview retroactivo de imágenes en file_url — 14-may-2026
 
 Dos fixes pequeños post-deploy de v10.15.0:

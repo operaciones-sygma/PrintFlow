@@ -1010,7 +1010,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:C.t3,padding:4}}>✕</button>
       </div>
-      {(o.image_url||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<img src={o.image_url||o.image||o.file_url} alt="" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:12,marginBottom:12}}/>}
+      {(o.image_url||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<img src={o.image_url||o.image||o.file_url} alt="" onClick={()=>window.open(o.image_url||o.image||o.file_url,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,marginBottom:12,background:"#f5f5f7",cursor:"pointer"}}/>}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?"♻️ Placa ya existe (auto-salta CTP)":"🆕 Nueva placa CTP requerida"}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
