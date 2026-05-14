@@ -4746,7 +4746,7 @@ function ProductionPlanner({orders, role, userLogin, onAction, onReload, showToa
 
 // ─── MAIN ──────────────────────────────────────────
 export default function PrintFlow() {
-  const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
+  const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
   const [purchaseOrders,setPurchaseOrders]=useState([]); // 🛒 v10.10.0
   const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
   const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);
@@ -4812,6 +4812,55 @@ export default function PrintFlow() {
   useEffect(() => { if (user) reload(); }, [user, reload]);
 
   // For vendedor, notifications are per-username (not per-role)
+  // v10.17.0 — Restaurar sesión al montar la app (persistencia en localStorage).
+  // Si hay sesión guardada, re-verifica contra DB que el usuario sigue activo y restaura el state.
+  // Si no hay sesión o es inválida, limpia localStorage y deja que aparezca el Login.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = localStorage.getItem("pf-session");
+        if (!raw) { if (!cancelled) setAuthChecked(true); return; }
+        const session = JSON.parse(raw);
+        if (!session || !session.username) {
+          localStorage.removeItem("pf-session");
+          if (!cancelled) setAuthChecked(true);
+          return;
+        }
+        // Re-verificar contra DB: usuario debe existir Y estar activo
+        const { data: dbUser, error } = await supabase.from("users")
+          .select("username,role,display_name,active")
+          .eq("username", session.username)
+          .eq("active", true)
+          .single();
+        if (cancelled) return;
+        if (error || !dbUser) {
+          // Usuario no existe o está desactivado → invalidar sesión
+          localStorage.removeItem("pf-session");
+          setAuthChecked(true);
+          return;
+        }
+        // Sesión válida → usar SIEMPRE los datos de la DB (no los de localStorage)
+        setUser(dbUser.role);
+        setUserName(dbUser.display_name);
+        setUserLogin(dbUser.username);
+        setOrderFilter(dbUser.role === "vendedor" ? "mine" : "all");
+        // Re-guardar para mantener el role/displayName sincronizados
+        localStorage.setItem("pf-session", JSON.stringify({
+          username: dbUser.username,
+          role: dbUser.role,
+          displayName: dbUser.display_name
+        }));
+        setAuthChecked(true);
+      } catch (err) {
+        console.error("[auth restore] Error:", err);
+        try { localStorage.removeItem("pf-session"); } catch {}
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // solo al montar
+
   const notifKey=user==="vendedor"?userLogin:user;
 
   // Load notifications and maintenance
@@ -5594,8 +5643,18 @@ export default function PrintFlow() {
   // Stale alerts use unfiltered viewOrders so they always show regardless of search
   const staleTasks=useMemo(()=>{const isFinal=s=>s.includes("delivered")||s.includes("cancelled")||s==="web_pending"||s==="web_rejected";let pool=filteredOrders;if(user==="produccion")pool=pool.filter(o=>["draft","ready","in_production","maquila_in","packaging","placas_listas"].includes(o.stage));else if(user==="preprensa")pool=pool.filter(o=>["draft","design"].includes(o.stage));else if(user==="german")pool=pool.filter(o=>["proof_printing","ctp"].includes(o.stage));else if(user==="karla")pool=pool.filter(o=>["salidas","maq_received"].includes(o.stage));else if(isSec(user))pool=pool.filter(o=>["draft","maq_created"].includes(o.stage));else if(user==="admin")pool=pool.filter(o=>!isFinal(o.stage));return pool.filter(o=>getStale(o)).sort((a,b)=>hoursAgo(b.timeline?.length>0?b.timeline[b.timeline.length-1].date:b.created_at)-hoursAgo(a.timeline?.length>0?a.timeline[a.timeline.length-1].date:a.created_at))},[filteredOrders,user]);
 
+  // v10.17.0 — Mostrar loading screen mientras se restaura la sesión (evita flash del Login)
+  if(!authChecked) return (
+    <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Poppins',sans-serif"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:36,fontWeight:800,color:C.tx,marginBottom:6,letterSpacing:"-0.5px"}}>Σ PrintFlow</div>
+        <div style={{fontSize:12,color:C.t2,fontWeight:500}}>⏳ Cargando...</div>
+      </div>
+    </div>
+  );
+
   if(!user) return (
-    <Login onLogin={(role, name, login)=>{setUser(role);setUserName(name);setUserLogin(login);setOrderFilter(role==="vendedor"?"mine":"all");setView("pipeline");ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
+    <Login onLogin={(role, name, login)=>{setUser(role);setUserName(name);setUserLogin(login);setOrderFilter(role==="vendedor"?"mine":"all");setView("pipeline");try{localStorage.setItem("pf-session",JSON.stringify({username:login,role,displayName:name}))}catch{}ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
   );
 
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
@@ -5657,7 +5716,7 @@ export default function PrintFlow() {
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
         const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={bs(C.ac)}>📥 CSV</button>}
           <div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600}}>{rL[user]}</div>
-          <button onClick={()=>{setUser(null);setUserLogin(null);setOrderFilter(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
+          <button onClick={()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
         </div>
       </div>
 

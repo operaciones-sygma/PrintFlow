@@ -5,6 +5,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.17.0 — Persistencia de sesión (no más logout al refresh) — 14-may-2026
+
+Resuelve un dolor reportado por Marcelo: al hacer F5 o cerrar/abrir el navegador, todos los usuarios debían volver a hacer login porque la sesión vivía solo en React state. CobranzaFlow no tiene este problema porque usa Supabase Auth con JWT en localStorage; PrintFlow tiene auth custom (consulta directa a tabla `users`) que se perdía al recargar.
+
+### Decisión de diseño
+
+Se eligió **persistencia en localStorage** sobre **migración a Supabase Auth**. Razones:
+- Equipo interno de 7 personas en oficina física → riesgo de suplantación bajo
+- Migrar a Supabase Auth tomaría 4-8h con riesgo de regresiones (todos los `created_by` usan username, no UUID)
+- localStorage + re-verificación cubre el 100% del caso de uso reportado
+
+### Implementación
+
+1. **Al hacer login exitoso:** se guarda `{username, role, displayName}` en `localStorage.pf-session`
+2. **Al montar la app:** `useEffect` con `[]` deps lee `pf-session`, re-verifica contra DB que el usuario sigue activo, y restaura `user`/`userName`/`userLogin` desde **datos de la DB** (no de localStorage)
+3. **Al hacer "Salir":** se borra `pf-session` antes de limpiar el state de React
+4. **Loading screen** mientras se verifica la sesión (evita flash del Login)
+
+### Seguridad
+
+- localStorage NO almacena password
+- El role siempre viene de la DB en cada carga (un atacante que manipule localStorage no puede escalar privilegios)
+- Si un usuario es desactivado (`active=false`), la próxima recarga lo expulsa al Login automáticamente
+- Riesgo residual aceptado: acceso físico a una compu con sesión activa = acceso a esa sesión
+
+### Notas técnicas
+
+- Key de localStorage: `pf-session` (consistente con prefix `pf-` de PrintFlow)
+- El `useEffect` de restauración tiene cleanup con flag `cancelled` para evitar setState después de unmount
+- Si `localStorage` falla (modo incógnito agresivo, cookies bloqueadas), la app sigue funcionando — solo no persiste la sesión, que es el comportamiento actual
+- No se introdujo expiración de sesión (intencional: el dolor es "no me hagas re-login innecesario")
+
+
 ## v10.16.0 — Auto-cleanup de imágenes + Compresión client-side (campo Imagen) — 14-may-2026
 
 Cierre del tema storage. Dos mejoras complementarias que reducen el crecimiento del bucket sin afectar los archivos de producción que se imprimen.
