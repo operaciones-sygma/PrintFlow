@@ -515,6 +515,37 @@ if(typeof document!=="undefined"&&!document.getElementById("pf-placeholder-style
   _pfStyle.textContent="input::placeholder,textarea::placeholder{font-style:italic;color:#c7c7cc;opacity:1}";
   document.head.appendChild(_pfStyle);
 }
+
+// v10.16.0 — Helper para comprimir imágenes ANTES de subir.
+// SOLO se usa en el campo "📷 Imagen" (image_url). NUNCA en archivos de producción (file_url).
+// Estrategia conservadora:
+//   - Si la imagen ya es pequeña (<500KB) y de dimensiones razonables (<=1920px), retorna el original sin tocar.
+//   - Si es grande, hace resize a max 1920px (manteniendo aspect ratio) + re-encode JPEG quality 0.92.
+//   - Si por algún motivo la compresión NO reduce tamaño, retorna el original.
+//   - Solo procesa JPG/PNG/WEBP. GIF, BMP, etc. pasan sin tocar.
+const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
+  if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) { resolve(file); return; }
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    let { width:w, height:h } = img;
+    if (file.size < 500*1024 && w <= maxDim && h <= maxDim) { resolve(file); return; }
+    if (w > maxDim || h > maxDim) {
+      const r = Math.min(maxDim/w, maxDim/h);
+      w = Math.round(w*r); h = Math.round(h*r);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    canvas.toBlob(blob => {
+      if (!blob || blob.size >= file.size) { resolve(file); return; }
+      resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+    }, "image/jpeg", q);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+  img.src = url;
+});
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
@@ -2230,7 +2261,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Poppins',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}♻️ Ya existe (reutilizar)</button>
     </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:10,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para Producción".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:10,color:"#0891b2",fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
     {/* v10.15.0 — Bug 4: imagen ahora sube a Supabase Storage (antes era base64 UI-only y se perdía al recargar). */}
-    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imagen (opcional)</label><div style={{display:"flex",alignItems:"center",gap:8}}>{(f.image_url||f.image)&&<div style={{position:"relative"}}><img src={f.image_url||f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f.image_url){try{const path=f.image_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s("image_url",null);s("image",null)}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1}}>📷 Subir<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const file=e.target.files[0];e.target.value="";if(!file)return;if(file.size>2e6){alert("Imagen muy grande (máx 2MB)");return}try{const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s("image_url",urlData.publicUrl);s("image",null)}catch(err){console.error("[image upload]",err);alert("Error al subir imagen: "+(err?.message||err))}}}/></label></div></div>
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imagen (opcional)</label><div style={{display:"flex",alignItems:"center",gap:8}}>{(f.image_url||f.image)&&<div style={{position:"relative"}}><img src={f.image_url||f.image} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f.image_url){try{const path=f.image_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s("image_url",null);s("image",null)}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1}}>📷 Subir<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){alert("Imagen muy grande (máx 10MB)");return}try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s("image_url",urlData.publicUrl);s("image",null)}catch(err){console.error("[image upload]",err);alert("Error al subir imagen: "+(err?.message||err))}}}/></label></div></div>
     {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={()=>{s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📝 Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:9,fontWeight:500}}>(USO INTERNO)</span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
     <div style={{padding:"12px 20px 16px"}}>
@@ -4866,18 +4897,32 @@ export default function PrintFlow() {
     });
   }, [orders, loaded, user]);
 
-  // Auto-cleanup: delete files older than 30 days from Supabase Storage
+  // Auto-cleanup: delete files AND images older than 30 days from Supabase Storage (v10.16.0)
   useEffect(() => {
     if (!loaded || !user) return;
     const cleanup = async () => {
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-      const { data: old } = await supabase.from("orders").select("id,file_url,file_name,stage").not("file_url", "is", null).lt("created_at", cutoff).or("stage.eq.delivered,stage.eq.maq_delivered,stage.eq.cancelled,stage.eq.maq_cancelled");
+      // Buscar órdenes terminadas hace +30 días con CUALQUIER archivo o imagen asociada
+      const { data: old } = await supabase.from("orders").select("id,file_url,file_name,image_url,stage").lt("created_at", cutoff).or("stage.eq.delivered,stage.eq.maq_delivered,stage.eq.cancelled,stage.eq.maq_cancelled");
       if (!old || old.length === 0) return;
       for (const o of old) {
+        if (!o.file_url && !o.image_url) continue; // saltar órdenes sin nada que limpiar
         try {
-          const path = o.file_url.split("/order-files/")[1];
-          if (path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
-          await supabase.from("orders").update({ file_url: null, file_name: null }).eq("id", o.id);
+          const updates = {};
+          // Limpiar archivo de producción (file_url)
+          if (o.file_url) {
+            const path = o.file_url.split("/order-files/")[1];
+            if (path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+            updates.file_url = null;
+            updates.file_name = null;
+          }
+          // Limpiar imagen de referencia (image_url) — v10.16.0
+          if (o.image_url) {
+            const imgPath = o.image_url.split("/order-files/")[1];
+            if (imgPath) await supabase.storage.from("order-files").remove([decodeURIComponent(imgPath)]);
+            updates.image_url = null;
+          }
+          if (Object.keys(updates).length) await supabase.from("orders").update(updates).eq("id", o.id);
         } catch {}
       }
       reload();

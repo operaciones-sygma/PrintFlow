@@ -5,6 +5,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.16.0 — Auto-cleanup de imágenes + Compresión client-side (campo Imagen) — 14-may-2026
+
+Cierre del tema storage. Dos mejoras complementarias que reducen el crecimiento del bucket sin afectar los archivos de producción que se imprimen.
+
+### Mejoras
+
+1. **Auto-cleanup extendido a `image_url`** — El cleanup automático que ya borraba `file_url` de órdenes entregadas/canceladas hace +30 días ahora también borra `image_url`. Mismo criterio, misma frecuencia (1 vez por sesión al cargar). Una query única extrae ambos campos en lugar de duplicar.
+
+2. **Compresión client-side EXCLUSIVA del campo "📷 Imagen"** — Antes de subir a Storage, las imágenes >500KB o >1920px se redimensionan a max 1920px en la dimensión mayor y se re-encodean como JPEG quality 0.92. Reducción típica de 3-4 MB → 200-300 KB (10x). Beneficios:
+   - Storage crece más lento
+   - OCards cargan más rápido (los thumbnails son ~10x más livianos)
+   - El equipo puede subir fotos del celular directamente sin pre-procesar
+   - Límite del campo Imagen subido de **2MB → 10MB** (gracias a la compresión)
+
+### ⚠️ Garantías de seguridad
+
+- **`FileUpload` (componente del campo Archivo de Producción) NO se modifica en absoluto.** Los PDF/AI/PSD que van a imprenta siguen subiéndose bit a bit, sin tocar.
+- La compresión solo se ejecuta dentro del handler del campo Imagen (`<input type="file">` inline en `OrderForm`).
+- Si la compresión por algún motivo no reduce el tamaño, el archivo original se usa sin modificar.
+- GIF, BMP y otros formatos pasan sin tocar.
+
+### Detalles técnicos
+
+- **Helper `compressImg(file, maxDim=1920, q=0.92)`** definido a nivel módulo, junto a la inyección de CSS placeholder.
+- **Skip optimization:** si la imagen original ya es <500KB y <=1920px en ambas dimensiones, no se procesa. Se sube tal cual.
+- **Aspect ratio preservado:** resize proporcional con `Math.min(maxDim/w, maxDim/h)`.
+- **Output siempre JPEG** (incluso si el original era PNG). Para fotos de referencia visual esto es óptimo. Si en el futuro se necesita preservar PNG con transparencia, agregar lógica de detección de canal alpha.
+- **Extensión de archivo en Storage:** ahora siempre `.jpg` (antes era la original). El `image_url` apunta correctamente al `.jpg` en Storage.
+
+
 ## v10.15.2 — Hotfix UX preview de imagen — 14-may-2026
 
 Fix de UX reportado por Marcelo justo después de v10.15.1: las imágenes en DetailModal se recortaban con `objectFit:"cover"`. Cambio mínimo, sin SQL.
