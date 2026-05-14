@@ -5,6 +5,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.15.0 — Placa CTP + Imagen en Storage + Realtime robusto + Placeholders UX — 14-may-2026
+
+Cuatro fixes priorizados por Marcelo tras feedback de Gerardo y equipo: campo para indicar si la placa ya existe (auto-salta CTP), imagen de orden ahora persiste correctamente en DB, realtime ya no se queda colgado en pestañas inactivas, y placeholders del formulario son visualmente distintos de datos reales.
+
+> **Nota:** el brief original proponía esto como v10.13.0 pero esa numeración ya estaba ocupada por el typeahead. Renumerado a v10.15.0 al aplicarlo.
+
+### Nuevas funcionalidades (1)
+
+1. **Campo Placa CTP en formulario** — 2 botones (🆕 Nueva CTP / ♻️ Ya existe) en el formulario de orden. Editable por Secretaría, Vendedor, Pre-prensa, Producción y Admin. Cuando se marca "Ya existe" y ambos roles validan, la orden **auto-salta a "Lista para Producción"** (omite Diseño + CTP), con notificación automática a Producción. Badge visible en OCard (♻️ Placa / 🆕 CTP) y en DetailModal con texto explicativo.
+
+### Bugs corregidos (3)
+
+1. 🔴 **Imagen no persistía en BD** — `saveOrder` whitelist no incluía `image` (intencional desde v10.2 porque era base64 UI-only). Imagen se veía durante la sesión pero desaparecía al recargar. **Fix:** Nueva columna `image_url`, upload directo a Supabase Storage (bucket `order-files`), borrado automático al quitar via "✕". OCard y DetailModal leen `image_url || image` (compatibilidad).
+
+2. 🟡 **Realtime se desconectaba en pestañas inactivas** — Sin listener de `visibilitychange` ni `focus`, los navegadores throttle el WebSocket y la suscripción muere silenciosamente. Gerardo y otros usuarios reportaban tener que refrescar manualmente. **Fix:** `visibilitychange` + `focus` listeners disparan `reload()` + `loadNotifications()` al regresar al foreground.
+
+3. 🟢 **Placeholders confundidos con datos reales** — Producción/Pre-prensa interpretaba "Ej: 4 tintas, CMYK" como si Secretaría hubiera escrito eso. **Fix:** CSS `::placeholder` con itálicas + gris claro (#c7c7cc), inyectado al `document.head` una sola vez. Prefijos cambiados de "Ej:" a "Ejemplo · " o "Ejemplo (escribe aquí) · " en 7 campos críticos (papel, gramaje, tintas frente/vuelta, cantidad, descripción, notas).
+
+### Migración SQL requerida (ya aplicada en producción)
+
+```sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS plate_status TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS image_url TEXT;
+```
+
+### Notas técnicas v10.15.0
+
+- **`plate_status`** valores válidos: `'existing'` (auto-skip CTP) | `'new_ctp'` (flujo normal con indicador) | `NULL`/`""` (no definido, flujo normal).
+- **Auto-skip CTP solo dispara al transicionar draft → next stage.** Si Noemí cambia `plate_status` después de que la orden ya está en `design`, no auto-avanza (intencional, evita sorpresas).
+- **Imagen en Storage:** path es `{orderId||"new-img-"+timestamp}/img-{timestamp}.{ext}`. Mismo bucket `order-files`.
+- **Limitación conocida (no bloqueante):** El auto-cleanup de 30 días borra `file_url` pero NO `image_url`. Las imágenes se acumulan en Storage. A revisar en versión futura si crece el bucket.
+- **Limitación conocida (no bloqueante):** Si se reemplaza imagen directamente (sin tocar "✕"), la versión vieja queda huérfana en Storage. Solo el botón "✕" la borra.
+- **Reload on focus:** sin polling adicional. Sigue confiando en realtime cuando hay conexión activa; los listeners solo cubren el gap al regresar al tab.
+- **CSS placeholder:** inyectado vía `document.createElement("style")` con `id="pf-placeholder-style"` para evitar duplicados en HMR/re-renders.
+- **`image:null` se mantiene en `empty` form state** por compatibilidad UI temporal; ya no se persiste a DB (whitelist no la incluye).
+
+
 ## v10.14.0 — Typeahead en OCs + Folio P-XXXX editable — 13/14-may-2026
 
 Dos features que cierran el flujo de captura iniciado con v10.13.x: el typeahead ahora también funciona al crear Órdenes de Compra (no solo órdenes individuales), y el folio P-XXXX se vuelve editable para Lupita/Admin/Vendedor durante esta semana de prueba con hojas físicas.
