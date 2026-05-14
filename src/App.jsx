@@ -3074,30 +3074,83 @@ function StorageTab({orders,onReload}) {
   const [storageUsed,setStorageUsed]=useState(null);const [loadingSize,setLoadingSize]=useState(true);
   const [deleting,setDeleting]=useState(null);
   const [downloadedOrder,setDownloadedOrder]=useState(null);
+  // v10.18.0 — Estados para Top archivos, Huérfanos y Breakdown
+  const [topFiles,setTopFiles]=useState([]);
+  const [orphans,setOrphans]=useState([]);
+  const [breakdown,setBreakdown]=useState({prod:{count:0,bytes:0},img:{count:0,bytes:0}});
+  const [cleaningOrphans,setCleaningOrphans]=useState(false);
+  const [refreshKey,setRefreshKey]=useState(0);
+  // Helper: formatear bytes a MB/KB
+  const fmtBytes=(b)=>b>=1048576?(b/1048576).toFixed(1)+" MB":b>=1024?(b/1024).toFixed(0)+" KB":b+" B";
   useEffect(()=>{if(!downloadedOrder)return;const h=e=>{if(e.key==="Escape")setDownloadedOrder(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[downloadedOrder]);
   const maxStorage=102400; // 100GB in MB (Supabase Pro plan)
   const withFile=orders.filter(o=>o.file_url);
   const oldFiles=withFile.filter(o=>{const d=new Date(o.created_at);return(Date.now()-d.getTime())>30*86400000});
 
-  // Calculate storage usage from Supabase
+  // v10.18.0 — Calcula storage usado + Top archivos + Huérfanos + Breakdown en una sola pasada
   useEffect(()=>{
     (async()=>{
       setLoadingSize(true);
       try{
         const{data}=await supabase.storage.from("order-files").list("",{limit:1000});
-        if(!data){setStorageUsed(0);setLoadingSize(false);return}
-        // List all folders and their files
+        if(!data){setStorageUsed(0);setTopFiles([]);setOrphans([]);setLoadingSize(false);return}
+        // Construir set de paths referenciados desde orders (file_url + image_url)
+        const prodRefPaths=new Set();
+        const imgRefPaths=new Set();
+        const orderByPath={}; // path → order para enriquecer Top
+        orders.forEach(o=>{
+          if(o.file_url){
+            const p=o.file_url.split("/order-files/")[1];
+            if(p){const dp=decodeURIComponent(p);prodRefPaths.add(dp);orderByPath[dp]=o}
+          }
+          if(o.image_url){
+            const p=o.image_url.split("/order-files/")[1];
+            if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}
+          }
+        });
+        // Recolectar todos los archivos con path completo
         let totalBytes=0;
+        const allFiles=[];
         for(const folder of data){
-          if(folder.id){totalBytes+=folder.metadata?.size||0;continue}
+          if(folder.id){
+            // Archivo en raíz (raro pero posible)
+            totalBytes+=folder.metadata?.size||0;
+            allFiles.push({path:folder.name,name:folder.name,folder:"",size:folder.metadata?.size||0,created_at:folder.created_at});
+            continue;
+          }
           const{data:files}=await supabase.storage.from("order-files").list(folder.name,{limit:100});
-          if(files)files.forEach(f=>{totalBytes+=f.metadata?.size||0});
+          if(files)files.forEach(f=>{
+            const sz=f.metadata?.size||0;
+            totalBytes+=sz;
+            allFiles.push({path:folder.name+"/"+f.name,name:f.name,folder:folder.name,size:sz,created_at:f.created_at});
+          });
         }
         setStorageUsed(Math.round(totalBytes/1024/1024*10)/10);
-      }catch{setStorageUsed(null)}
+        // Calcular breakdown
+        const bd={prod:{count:0,bytes:0},img:{count:0,bytes:0}};
+        const orphanList=[];
+        allFiles.forEach(f=>{
+          if(prodRefPaths.has(f.path)){bd.prod.count++;bd.prod.bytes+=f.size}
+          else if(imgRefPaths.has(f.path)){bd.img.count++;bd.img.bytes+=f.size}
+          else orphanList.push(f); // ni en file_url ni en image_url → huérfano
+        });
+        setBreakdown(bd);
+        setOrphans(orphanList);
+        // Top 5 archivos más grandes (con enriquecimiento de orden)
+        const top=[...allFiles].sort((a,b)=>b.size-a.size).slice(0,5).map(f=>({
+          ...f,
+          order:orderByPath[f.path]||null,
+          isOrphan:!prodRefPaths.has(f.path)&&!imgRefPaths.has(f.path),
+          isImage:imgRefPaths.has(f.path)
+        }));
+        setTopFiles(top);
+      }catch(err){
+        console.error("[StorageTab]",err);
+        setStorageUsed(null);
+      }
       setLoadingSize(false);
     })();
-  },[cleaned,deleting]);
+  },[cleaned,deleting,refreshKey,orders]);
 
   const usedPct=storageUsed!==null?Math.min((storageUsed/maxStorage)*100,100):0;
   const barColor=usedPct>=90?"#ff3b30":usedPct>=70?"#ff9500":"#34c759";
@@ -3105,6 +3158,43 @@ function StorageTab({orders,onReload}) {
   const cleanup=async()=>{if(!confirm("¿Borrar archivos de órdenes con más de 30 días? ("+oldFiles.length+" archivos)\n\nEsta acción no se puede deshacer."))return;setCleaning(true);let c=0;for(const o of oldFiles){try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);c++}catch{}}setCleaned(c);setCleaning(false);if(c>0&&onReload)onReload()};
 
   const deleteOne=async(o)=>{if(!confirm("¿Borrar archivo de "+o.client+"?\n"+o.file_name))return;setDeleting(o.id);try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);if(onReload)onReload()}catch{alert("Error al borrar")}setDeleting(null)};
+
+  // v10.18.0 — Limpiar archivos huérfanos (sin referencia en orders.file_url ni orders.image_url)
+  const cleanupOrphans=async()=>{
+    if(orphans.length===0)return;
+    const totalMB=(orphans.reduce((s,f)=>s+f.size,0)/1048576).toFixed(1);
+    if(!confirm("¿Borrar "+orphans.length+" archivo"+(orphans.length>1?"s":"")+" huérfano"+(orphans.length>1?"s":"")+"? ("+totalMB+" MB)\n\nEstos archivos no apuntan a ninguna orden y no son visibles desde la app. Esta acción no se puede deshacer."))return;
+    setCleaningOrphans(true);
+    let c=0;
+    for(const f of orphans){
+      try{await supabase.storage.from("order-files").remove([f.path]);c++}catch(e){console.error("[cleanupOrphans]",f.path,e)}
+    }
+    setCleaningOrphans(false);
+    setRefreshKey(k=>k+1);
+    if(c>0){alert("✅ "+c+" archivo"+(c>1?"s":"")+" huérfano"+(c>1?"s":"")+" eliminado"+(c>1?"s":""));if(onReload)onReload()}
+  };
+
+  // v10.18.0 — Borrar un archivo huérfano individual
+  const deleteOrphan=async(f)=>{
+    if(!confirm("¿Borrar archivo huérfano?\n"+f.path+" ("+fmtBytes(f.size)+")"))return;
+    try{await supabase.storage.from("order-files").remove([f.path]);setRefreshKey(k=>k+1)}catch(e){alert("Error al borrar: "+e.message)}
+  };
+
+  // v10.18.0 — Borrar un archivo del Top 5 (puede ser archivo de producción, imagen o huérfano)
+  const deleteTopFile=async(f)=>{
+    if(f.isOrphan){return deleteOrphan(f)}
+    const label=f.isImage?"imagen":"archivo";
+    if(!confirm("¿Borrar "+label+" de "+(f.order?.client||"orden")+"?\n"+f.name+" ("+fmtBytes(f.size)+")"))return;
+    try{
+      await supabase.storage.from("order-files").remove([f.path]);
+      if(f.order){
+        const upd=f.isImage?{image_url:null}:{file_url:null,file_name:null};
+        await supabase.from("orders").update(upd).eq("id",f.order.id);
+      }
+      setRefreshKey(k=>k+1);
+      if(onReload)onReload();
+    }catch(e){alert("Error al borrar: "+(e.message||e))}
+  };
 
   const Stat=({l,v,s:sub,c=C.tx})=><div style={{background:C.sf,borderRadius:12,padding:18,flex:"1 1 180px",minWidth:150}}><div style={{fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{l}</div><div style={{fontSize:24,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>{sub}</div>}</div>;
 
@@ -3125,6 +3215,20 @@ function StorageTab({orders,onReload}) {
       {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600}}>{usedPct>=90?"⚠️ Almacenamiento casi lleno — limpia archivos antiguos":"⚡ Más del 70% usado — considera limpiar archivos antiguos"}</div>}
     </div>
 
+    {/* v10.18.0 — Breakdown imágenes vs archivos */}
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+      <div style={{flex:"1 1 200px",minWidth:180,background:C.ac+"08",border:"1px solid "+C.ac+"20",borderRadius:12,padding:14}}>
+        <div style={{fontSize:9,color:C.ac,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>📁 Archivos Producción</div>
+        <div style={{fontSize:20,fontWeight:800,color:C.ac}}>{breakdown.prod.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.prod.bytes)}</span></div>
+        <div style={{fontSize:9,color:C.t3,marginTop:2}}>PDF, AI, PSD para imprenta</div>
+      </div>
+      <div style={{flex:"1 1 200px",minWidth:180,background:"#ec489908",border:"1px solid #ec489920",borderRadius:12,padding:14}}>
+        <div style={{fontSize:9,color:"#ec4899",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>📷 Imágenes Referencia</div>
+        <div style={{fontSize:20,fontWeight:800,color:"#ec4899"}}>{breakdown.img.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.img.bytes)}</span></div>
+        <div style={{fontSize:9,color:C.t3,marginTop:2}}>Fotos para visualizar el producto</div>
+      </div>
+    </div>
+
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       <Stat l="📁 Total con Archivo" v={withFile.length} s={orders.length+" órdenes totales"} c={C.ac}/>
       <Stat l="📦 Archivos >30 días" v={oldFiles.length} s="elegibles para limpieza" c={oldFiles.length>0?C.wn:C.ok}/>
@@ -3137,6 +3241,56 @@ function StorageTab({orders,onReload}) {
       <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?"#d1d1d6":C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?"⏳ Limpiando...":cleaned>0?"✅ "+cleaned+" borrados":"🗑️ Borrar Todos los Antiguos ("+oldFiles.length+")"}</button>
     </div>}
     {oldFiles.length===0&&<div style={{background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:14,padding:16,marginBottom:16,textAlign:"center"}}><div style={{fontSize:14,fontWeight:700,color:C.ok}}>✅ Sin archivos antiguos</div><div style={{fontSize:11,color:C.t2,marginTop:4}}>Todos los archivos tienen menos de 30 días</div></div>}
+
+    {/* v10.18.0 — Top 5 archivos más grandes */}
+    {topFiles.length>0&&<div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>🏆 Archivos Más Pesados</div>
+        <div style={{fontSize:9,color:C.t3}}>Top {topFiles.length}</div>
+      </div>
+      {topFiles.map((f,i)=>{
+        const age=Math.round((Date.now()-new Date(f.created_at).getTime())/86400000);
+        return <div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topFiles.length-1?"0.5px solid "+C.bd:"none"}}>
+          <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:18,fontWeight:800,color:C.t3,width:18,textAlign:"center"}}>{i+1}</div>
+            <div style={{fontSize:16}}>{f.isOrphan?"🧩":f.isImage?"📷":"📁"}</div>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {f.isOrphan?<span style={{color:C.t3,fontStyle:"italic"}}>(huérfano)</span>:f.order?.client||"—"}
+              </div>
+              <div style={{fontSize:9,color:C.t3}}>{f.name} · {age} días{f.order?" · "+f.order.product_type:""}</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.tx,minWidth:60,textAlign:"right"}}>{fmtBytes(f.size)}</span>
+            {f.isOrphan&&<span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>HUÉRFANO</span>}
+            <button onClick={()=>deleteTopFile(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30"}} title="Borrar">🗑️</button>
+          </div>
+        </div>;
+      })}
+    </div>}
+
+    {/* v10.18.0 — Archivos Huérfanos */}
+    {orphans.length>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:14,padding:16,marginBottom:16}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,flexWrap:"wrap",gap:8}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:C.wn,marginBottom:4}}>🧩 Archivos Huérfanos Detectados</div>
+          <div style={{fontSize:10,color:C.t2}}>{orphans.length} archivo{orphans.length>1?"s":""} sin referencia en BD · {fmtBytes(orphans.reduce((s,f)=>s+f.size,0))}</div>
+          <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Estos archivos están en Storage pero no apuntan a ninguna orden. Pueden borrarse de forma segura.</div>
+        </div>
+        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?"#d1d1d6":C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?"⏳ Limpiando...":"🗑️ Limpiar Todos ("+orphans.length+")"}</button>
+      </div>
+      <div style={{maxHeight:200,overflowY:"auto",marginTop:8}}>
+        {orphans.slice(0,20).map(f=><div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:10}}>
+          <div style={{flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:C.t2}}>{f.path}</div>
+          <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:8}}>
+            <span style={{color:C.tx,fontWeight:600,minWidth:50,textAlign:"right"}}>{fmtBytes(f.size)}</span>
+            <button onClick={()=>deleteOrphan(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",padding:"2px 6px",fontSize:10}} title="Borrar">🗑️</button>
+          </div>
+        </div>)}
+        {orphans.length>20&&<div style={{fontSize:10,color:C.t3,textAlign:"center",padding:"8px 0",fontStyle:"italic"}}>+{orphans.length-20} más (usa "Limpiar Todos" para borrarlos)</div>}
+      </div>
+    </div>}
 
     {/* File list with individual delete */}
     <div style={{background:C.sf,borderRadius:14,padding:16}}>

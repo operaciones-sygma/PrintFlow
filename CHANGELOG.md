@@ -5,6 +5,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.18.0 — StorageTab mejorado (Top + Huérfanos + Breakdown) — 14-may-2026
+
+Mejoras de visibilidad y limpieza al StorageTab (accesible para Pre-prensa, Germán y Admin). Cierre del tema storage que arrancó con v10.16.0.
+
+### Nuevas funcionalidades
+
+1. **📁/📷 Breakdown imágenes vs archivos** — Separa visualmente el uso por tipo: "Archivos Producción" (referenciados en `file_url`) vs "Imágenes Referencia" (referenciados en `image_url`). Útil para ver dónde está creciendo el storage.
+
+2. **🏆 Top 5 archivos más grandes** — Ranking ordenado por tamaño. Muestra cliente, producto, edad, tamaño y permite borrar individualmente. Identifica de un vistazo "qué borrar primero". Los archivos huérfanos se marcan con icono 🧩 y badge.
+
+3. **🧩 Detección + limpieza de archivos huérfanos** — Identifica archivos en Storage que ya no apuntan a ninguna orden (`file_url` ni `image_url` los referencia). Esto puede pasar por uploads abandonados, órdenes borradas, o bugs históricos. Botón "🗑️ Limpiar Todos" hace cleanup masivo en bulk. Cero riesgo: solo borra archivos SIN referencia en la DB.
+
+### Detalles técnicos
+
+- **Cálculo unificado:** el `useEffect` recolecta todos los archivos en una sola pasada y calcula simultáneamente: total bytes, breakdown, top 5, y huérfanos. Sin queries adicionales.
+- **Refresh manual:** las acciones de limpieza usan `setRefreshKey(k=>k+1)` para re-disparar el `useEffect` sin esperar polling.
+- **`orderByPath`:** se construye un map de `path → order` para enriquecer el Top con datos de cliente sin queries N+1.
+- **Performance:** para Storage con miles de archivos, el `list("",{limit:1000})` puede no traer todo. Si el bucket crece a >1000 carpetas, paginar.
+- **Top hardcoded a 5:** si en el futuro se quiere más, cambiar `.slice(0,5)` por un state.
+
+
 ## v10.17.0 — Persistencia de sesión (no más logout al refresh) — 14-may-2026
 
 Resuelve un dolor reportado por Marcelo: al hacer F5 o cerrar/abrir el navegador, todos los usuarios debían volver a hacer login porque la sesión vivía solo en React state. CobranzaFlow no tiene este problema porque usa Supabase Auth con JWT en localStorage; PrintFlow tiene auth custom (consulta directa a tabla `users`) que se perdía al recargar.
