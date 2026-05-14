@@ -5,6 +5,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.15.1 — Storage 100GB + Preview retroactivo de imágenes en file_url — 14-may-2026
+
+Dos fixes pequeños post-deploy de v10.15.0:
+
+1. **Display de storage usa 100GB (Plan Pro)** — La barra de almacenamiento mostraba "1 GB" hardcoded (legacy del Free tier). Ahora muestra el límite real del Plan Pro de Supabase: 100GB. Display dinámico GB/MB según el tamaño usado y libre.
+
+2. **Preview automático de imágenes en `file_url`** — El equipo tradicionalmente ha subido todas las imágenes (JPG/PNG) al campo "📁 Archivo de Producción" en vez del campo "📷 Imagen". Antes, esas imágenes solo aparecían como link de descarga. Ahora se renderizan automáticamente como preview en OCard (thumbnail 48×48) y DetailModal (max 160px de alto), **además** de mantener el link de descarga. Beneficia retroactivamente a las 4 órdenes existentes que ya tienen imagen en `file_url` (P-3501, P-3502, P-3503, P-3504), sin migración de datos.
+
+### Detalles técnicos
+
+- Detección por extensión: `/\.(jpe?g|png|gif|webp)$/i.test(file_name)`
+- Prioridad de display: `image_url > image > file_url` (cuando file_url es imagen)
+- No hay cambio de schema. Cero SQL. Cero migración.
+- El campo "📷 Imagen" sigue funcionando como en v10.15.0 (sube a Storage, persiste en `image_url`). No deprecado.
+
+
 ## v10.15.0 — Placa CTP + Imagen en Storage + Realtime robusto + Placeholders UX — 14-may-2026
 
 Cuatro fixes priorizados por Marcelo tras feedback de Gerardo y equipo: campo para indicar si la placa ya existe (auto-salta CTP), imagen de orden ahora persiste correctamente en DB, realtime ya no se queda colgado en pestañas inactivas, y placeholders del formulario son visualmente distintos de datos reales.

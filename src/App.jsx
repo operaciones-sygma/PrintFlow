@@ -1010,7 +1010,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:C.t3,padding:4}}>✕</button>
       </div>
-      {(o.image_url||o.image)&&<img src={o.image_url||o.image} alt="" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:12,marginBottom:12}}/>}
+      {(o.image_url||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<img src={o.image_url||o.image||o.file_url} alt="" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:12,marginBottom:12}}/>}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?"♻️ Placa ya existe (auto-salta CTP)":"🆕 Nueva placa CTP requerida"}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
@@ -2489,7 +2489,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><span style={{fontSize:12,color:C.ac}}>⠿</span><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
     {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
-      {(o.image_url||o.image)&&<img src={o.image_url||o.image} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}
+      {(o.image_url||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<img src={o.image_url||o.image||o.file_url} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10,flexShrink:0}}/>}
       <div style={{flex:1,minWidth:0}}>
         {o.cart_folio&&!compact&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{fontSize:16,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {o.cart_folio}</span></div>}
         {o.web_folio&&!compact&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
@@ -3044,7 +3044,7 @@ function StorageTab({orders,onReload}) {
   const [deleting,setDeleting]=useState(null);
   const [downloadedOrder,setDownloadedOrder]=useState(null);
   useEffect(()=>{if(!downloadedOrder)return;const h=e=>{if(e.key==="Escape")setDownloadedOrder(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[downloadedOrder]);
-  const maxStorage=1024; // 1GB in MB
+  const maxStorage=102400; // 100GB in MB (Supabase Pro plan)
   const withFile=orders.filter(o=>o.file_url);
   const oldFiles=withFile.filter(o=>{const d=new Date(o.created_at);return(Date.now()-d.getTime())>30*86400000});
 
@@ -3082,14 +3082,14 @@ function StorageTab({orders,onReload}) {
     <div style={{background:C.sf,borderRadius:14,padding:20,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div style={{fontSize:13,fontWeight:700}}>💾 Almacenamiento Supabase</div>
-        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{loadingSize?"⏳ Calculando...":(storageUsed!==null?storageUsed+" MB":"Error")}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?"1 GB":maxStorage+" MB"}</span></div>
+        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{loadingSize?"⏳ Calculando...":(storageUsed!==null?(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"):"Error")}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
       </div>
       <div style={{background:C.bg,borderRadius:8,height:20,overflow:"hidden",border:"0.5px solid "+C.bd}}>
         <div style={{width:usedPct+"%",height:"100%",background:barColor,borderRadius:8,transition:"width .8s ease",minWidth:usedPct>0?"8px":"0"}}/>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
         <span style={{fontSize:9,color:C.t3}}>{usedPct.toFixed(1)}% usado</span>
-        <span style={{fontSize:9,color:C.t3}}>{storageUsed!==null?(maxStorage-storageUsed).toFixed(1)+" MB libres":"—"}</span>
+        <span style={{fontSize:9,color:C.t3}}>{storageUsed!==null?(maxStorage-storageUsed>=1024?((maxStorage-storageUsed)/1024).toFixed(1)+" GB libres":(maxStorage-storageUsed).toFixed(1)+" MB libres"):"—"}</span>
       </div>
       {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600}}>{usedPct>=90?"⚠️ Almacenamiento casi lleno — limpia archivos antiguos":"⚡ Más del 70% usado — considera limpiar archivos antiguos"}</div>}
     </div>
