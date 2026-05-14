@@ -5,6 +5,153 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.14.0 — Typeahead en OCs + Folio P-XXXX editable — 13/14-may-2026
+
+Dos features que cierran el flujo de captura iniciado con v10.13.x: el typeahead ahora también funciona al crear Órdenes de Compra (no solo órdenes individuales), y el folio P-XXXX se vuelve editable para Lupita/Admin/Vendedor durante esta semana de prueba con hojas físicas.
+
+### Nuevas funcionalidades (2)
+
+1. **Typeahead + auto-fill en `CreateOCModal`** — Comportamiento idéntico al typeahead de órdenes (v10.13.0):
+   - Al escribir 2+ caracteres en "Cliente", aparece dropdown con clientes de `cobranza.clients`
+   - Al seleccionar, se prellena email/whatsapp/RFC del master
+   - Si master no tiene contacto, fallback a última orden del cliente (v10.13.1)
+   - Nuevos campos en el modal: 📧 Email, 📱 WhatsApp, RFC (todos opcionales)
+   - Si Lupita edita el nombre manualmente después de seleccionar, se rompe el vínculo `client_id`
+
+2. **Folio P-XXXX editable con validación** — Solo para roles `admin`, `lupita`, `vendedor`:
+   - El campo deja de ser read-only, se vuelve `<input>` editable
+   - Valor inicial = sugerencia automática (siguiente consecutivo)
+   - Si el usuario teclea un folio distinto, aparece botón "💡 Sugerido: P-XXXX" para volver al consecutivo natural
+   - Validación con debounce 400ms vía RPC `validate_production_number`
+   - Estados visuales: ✓ OK (verde) | ⚠️ duplicado/formato inválido (rojo con nombre del cliente conflictivo)
+   - Submit bloqueado con alert si folio inválido al guardar
+   - **Karla, Producción, Preprensa, German siguen viendo el campo read-only** (solo admin/lupita/vendedor editan)
+
+### Cambios SQL (3)
+
+1. **`purchase_orders.client_id`** UUID NULL REFERENCES `cobranza.clients(id)` ON DELETE SET NULL + index `idx_purchase_orders_client_id`
+
+2. **RPC `create_purchase_order` extendida** con 4 parámetros nuevos opcionales (retrocompatible): `p_client_id`, `p_client_email`, `p_client_phone`, `p_client_rfc`. Se dropeó la versión vieja para evitar ambigüedad de overload. Fix: status default cambiado de `'active'` (inválido) a `'open'` (válido en check constraint).
+
+3. **RPC `validate_production_number(p_number text, p_exclude_order_id text)`** — STABLE SECURITY DEFINER. Valida formato regex `^P-[0-9]+$` y duplicados en `orders.production_number` (case-insensitive). Devuelve jsonb `{valid, reason, message, existing_order_id?, existing_client?}`.
+
+### Bugs corregidos (1 — hotfix v10.13.2)
+
+| # | Sev | Descripción |
+|---|-----|-------------|
+| 1 | 🔴 | **`ReferenceError: sb is not defined`** — En briefs de v10.13.0 y v10.13.1 usé `sb.rpc(...)` (nombre del cliente Supabase usado en CobranzaFlow), pero PrintFlow lo llama `supabase`. Resultado: typeahead crashaba silenciosamente en consola, no aparecía dropdown. **Fix:** Find&replace `sb.rpc(` → `supabase.rpc(` en 2 ocurrencias (componente ClientInput + handler selC). Hotfix v10.13.2 deployado independiente. |
+
+### Decisiones de diseño
+
+| ID | Decisión | Status |
+|---|---|---|
+| D-1 | Override de folio manual SOLO en P-XXXX, NUNCA en D-XXXX/R-XXXX | ✅ Karla intacta, folios fiscales 100% automáticos |
+| D-2 | Permitir saltarse números de P-XXXX (sin obligar consecutividad) | ✅ Necesario para trasladar hojas físicas con folios desordenados |
+| D-3 | Bloquear duplicados con mensaje claro (no warning, hard rejection) | ✅ Previene 2 órdenes con mismo P-XXXX |
+| D-4 | Vendedores SÍ pueden editar P-XXXX | ⚠️ Esta semana de prueba; revisar si abusan |
+| D-5 | Conservar sugerencia automática como default | ✅ Si Lupita no toca el campo, comportamiento idéntico al de antes |
+
+### Smoke tests pasados
+
+**Typeahead OC:**
+- ✅ Login lupita → "+ Nueva OC" → "cerv" → dropdown muestra CERVECERIA MODELO
+- ✅ Seleccionar → email luceropg@hotmail.com prellenado
+- ✅ Crear OC sin error → guardada con `client_id` correcto
+
+**Folio editable:**
+- ✅ Lupita/admin/vendedor ven input editable con sugerencia
+- ✅ Folio nuevo → ✓ OK + botón "Sugerido"
+- ✅ Folio existente (P-3495 seed) → ⚠️ con nombre cliente conflictivo
+- ✅ Folio malformado ("ABC") → rechazado
+- ✅ Submit bloqueado con alert si inválido
+- ✅ Karla/produccion → read-only (no editable)
+
+---
+
+## v10.13.2 — Hotfix: `sb` → `supabase` — 13-may-2026
+
+Find&replace en App.jsx para corregir nombre del cliente Supabase. Sin cambios funcionales, sin cambios SQL, sin cambios UX. Restaura el funcionamiento del typeahead de v10.13.0 y el auto-fill de v10.13.1.
+
+---
+
+## v10.13.1 — Auto-fill de contacto desde última orden — 13-may-2026
+
+Extensión del typeahead v10.13.0 con auto-fill híbrido: si el cliente master en `cobranza.clients` no tiene email/whatsapp, el sistema busca la última orden de ese cliente y prellena con esos datos. Los campos quedan editables (Genaro puede borrar/cambiar sin afectar nada externo).
+
+### Cambios SQL (1)
+
+- **RPC `get_last_contact_for_client(p_client_id uuid)`** — STABLE SECURITY DEFINER. Devuelve jsonb con `master_email`, `master_whatsapp`, `master_rfc`, `master_name` (del cliente master) + `last_email`, `last_phone`, `last_lada`, `last_company`, `last_rfc`, `last_order_id`, `last_order_date` (de la última orden con contacto). Query usa `LIMIT 1` con `ORDER BY created_at DESC` y filtro `WHERE client_email IS NOT NULL OR client_phone IS NOT NULL`.
+
+### Cambios UI (1)
+
+- **`selC` ahora es async** — Tras aplicar datos del master, si email o whatsapp están vacíos, llama RPC y rellena solo campos vacíos (no pisa lo que ya venía del master). Catch silencioso si la RPC falla (no bloquea creación de orden).
+
+### Decisiones de diseño
+
+| ID | Decisión | Status |
+|---|---|---|
+| D-1 | Opción C híbrida (master + última orden, no auto-actualizar master) | ✅ Implementada |
+| D-2 | No actualizar master automáticamente desde captura de orden | ✅ Solo Dirección/CXC puede editar master desde CobranzaFlow |
+| D-3 | Auto-fill solo llena campos vacíos (no pisa master) | ✅ Preserva intención del usuario |
+
+---
+
+## v10.13.0 — Client Typeahead vs cobranza.clients — 13-may-2026
+
+Reemplazo del autocomplete viejo (que buscaba contra clientes anteriores derivados de `orders`) por typeahead real contra `cobranza.clients` (459 clientes catálogo AlphaERP). Al guardar la orden, resolución inteligente: auto-link si hay match exacto, modal de confirmación si hay matches similares, creación automática si no hay matches.
+
+### Nuevas funcionalidades (3)
+
+1. **Typeahead real-time** — Búsqueda con debounce 250ms contra `cobranza.clients`. Muestra dropdown con nombre + RFC + WhatsApp + días de crédito. Prioriza matches que empiezan con la query.
+
+2. **Auto-link al guardar** — Si el usuario tecleó un nombre sin seleccionar del dropdown:
+   - **Match exacto** → vincula silenciosamente con toast confirmatorio
+   - **Matches similares (1-5)** → modal "¿Quisiste decir...?" con opciones + botón "Crear nuevo"
+   - **Sin matches** → crea cliente nuevo automáticamente en `cobranza.clients`
+
+3. **Modal de confirmación de cliente** — `ClientConfirmModal` con lista de candidatos similares + opción "Crear como nuevo cliente". Hack `window.__showClientConfirmModal` para permitir await async desde submit handler.
+
+### Cambios SQL (5)
+
+1. **`orders.client_id`** UUID NULL REFERENCES `cobranza.clients(id)` ON DELETE SET NULL + index `idx_orders_client_id`
+
+2. **RPC `search_clients_typeahead(p_query text, p_limit int DEFAULT 10)`** — STABLE SECURITY DEFINER. Devuelve top-N clientes activos que matchean LIKE %query% (case-insensitive). Prioriza matches que empiezan con la query. Mínimo 2 caracteres para activarse.
+
+3. **RPC `create_client_from_printflow(p_name, p_rfc, p_email, p_whatsapp, p_dias_credito)`** — SECURITY DEFINER. Devuelve UUID. Si el nombre ya existe (case-insensitive exacto), devuelve el UUID existente en lugar de crear duplicado. Log en `cobranza.audit_log`.
+
+4. **RPC `resolve_client_for_order(p_name text)`** — STABLE SECURITY DEFINER. Devuelve jsonb `{exact_match: uuid|null, exact_name: text, similar_matches: [{id, name, rfc, dias_credito}]}`. Usado al submit para decidir flujo de resolución.
+
+5. **Bridge actualizado** — `sync_invoice_from_orders` y `sync_invoice_from_oc` ahora priorizan `orders.client_id` sobre `cobranza.resolve_client(client_name)`. Si client_id NOT NULL, usa directo. Si NULL, fallback al comportamiento anterior (resolve por nombre).
+
+### Decisiones de diseño
+
+| ID | Decisión | Status |
+|---|---|---|
+| D-1 | Convivir client_id (FK) + snapshot text (client, client_company, etc.) | ✅ Integridad histórica fiscal preservada |
+| D-2 | Permitir texto libre + auto-link/confirm al guardar (no obligar seleccionar) | ✅ Velocidad de captura + cero duplicados silenciosos |
+| D-3 | Permitir crear cliente nuevo desde typeahead (no requerir aprobación) | ✅ Flujo real de imprenta: cliente nuevo de la calle es común |
+| D-4 | Híbrido email/teléfono/RFC: master por defecto + editable por orden | ✅ Cada orden puede tener contacto distinto sin contaminar master |
+
+### Importación masiva ejecutada hoy
+
+**Catálogo AlphaERP (cata_cte_20260512):**
+- 4676 filas parseadas → 467 clientes únicos
+- 378 nuevos importados a `cobranza.clients` (8 duplicados detectados y descartados por matching difuso)
+- 33 clientes existentes enriquecidos con RFC del catálogo
+- **Total: 81 → 459 clientes** (175 con RFC, todos con alpha_code)
+
+**Contactos (Clientes_Contactos_Cobranza):**
+- 85 clientes con adeudo procesados
+- 84 matcheados contra cobranza (1 era duplicado descartado)
+- 50 emails poblados (de 76, 25 eran "(sin contacto)" → movidos a notas)
+- 52 whatsapps poblados (de 57, formatos limpiados: múltiples teléfonos al campo + notas; nombres en lugar de teléfono a notas)
+- 45 notas valiosas importadas ("YA SE PAGO", "YA NO DEBE", "CHECAR CON DULCE", "Tel alterno: X", "Contacto vía: Y")
+
+### Bugs corregidos en versiones siguientes
+
+Ver v10.13.2 (`sb` → `supabase`).
+
+
 ## v10.11.0 Sub-fase B — Folios fiscales a nivel OC
 
 Karla ahora asigna folios D-XXXX/R-XXXX a **toda una OC de una vez** — agrupados (1 folio para N órdenes) o consecutivos (N folios para N órdenes) — y puede **pre-asignarlos anticipadamente** cuando un cliente paga adelanto o exige factura antes de entregar. La OC queda bloqueada para modificaciones mientras tenga folios pre-asignados.
