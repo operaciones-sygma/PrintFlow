@@ -265,14 +265,18 @@ const db = {
   },
   // 🛒 v10.10.0 — Crea OC explícita (compleja) vía RPC atómico
   // Total inicia en 0 y se auto-calcula via trigger conforme se agregan productos
-  async createPurchaseOrder({client, vendedor, deliveryDate, notes, byUser}) {
+  async createPurchaseOrder({client, client_id, client_email, client_phone, client_rfc, vendedor, deliveryDate, notes, byUser}) {
     const {data, error}=await supabase.rpc("create_purchase_order",{
       p_client: client,
       p_vendedor: vendedor||null,
       p_delivery_date: deliveryDate||null,
       p_notes: notes||null,
       p_total: 0,
-      p_created_by: byUser
+      p_created_by: byUser,
+      p_client_id: client_id||null,
+      p_client_email: client_email||null,
+      p_client_phone: client_phone||null,
+      p_client_rfc: client_rfc||null
     });
     if(error)throw new Error(error.message);
     return data;
@@ -2102,9 +2106,43 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);setShowOtroFinish(fins.some(x=>!FINISHES.includes(x)&&x!=="Otro"));if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder]);
   const pnSetRef=useRef(false);
   useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
+  // 🆕 v10.14.0 — Folio P-XXXX editable para Lupita/Admin/Vendedor (NO Karla/Producción/etc)
+  const canEditProductionNumber = !editOrder?.id && (isSec(role) || role === "admin");
+  const [pnValidation, setPnValidation] = useState({valid: true, message: null, existing: null});
+  const pnValidateTimerRef = useRef(null);
+  useEffect(() => {
+    if (!canEditProductionNumber) return;
+    if (pnValidateTimerRef.current) clearTimeout(pnValidateTimerRef.current);
+    const num = (f.production_number || "").trim();
+    if (!num || num === nextPN) {
+      setPnValidation({valid: true, message: null, existing: null});
+      return;
+    }
+    pnValidateTimerRef.current = setTimeout(async () => {
+      try {
+        const {data, error} = await supabase.rpc("validate_production_number", {p_number: num, p_exclude_order_id: editOrder?.id || null});
+        if (error) throw error;
+        setPnValidation({
+          valid: !!data?.valid,
+          message: data?.message || null,
+          existing: data?.existing_order_id ? {id: data.existing_order_id, client: data.existing_client} : null
+        });
+      } catch (e) {
+        console.warn("validate_production_number falló:", e);
+        setPnValidation({valid: true, message: null, existing: null});
+      }
+    }, 400);
+    return () => pnValidateTimerRef.current && clearTimeout(pnValidateTimerRef.current);
+  }, [f.production_number, canEditProductionNumber, nextPN, editOrder?.id]);
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
   const submit=async()=>{
-    setTried(true);if(!canSubmit)return;setSaving(true);
+    setTried(true);if(!canSubmit)return;
+    // 🆕 v10.14.0 — Bloquear submit si el folio P-XXXX está inválido (solo cuando es editable)
+    if(canEditProductionNumber&&!pnValidation.valid&&pnValidation.message){
+      alert("⚠️ Folio inválido: "+pnValidation.message+(pnValidation.existing?"\nOrden existente: "+pnValidation.existing.client:""));
+      return;
+    }
+    setSaving(true);
     try{
       const clean={...f};delete clean._specsOnly;
       if(clean.agent==="otro")clean.agent=null;
@@ -2173,7 +2211,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="4 tintas, CMYK"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Ancho cm" br><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></FC><FC label="Alto cm"><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></FC></div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", ")} onChange={e=>{const std=(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>FINISHES.includes(x));const custom=e.target.value?e.target.value.split(",").map(s=>s.trim()).filter(Boolean):[];s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
     {!specsOnly&&!advMode&&!isMaq&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="📝 Descripción del producto"><textarea style={{...inp,minHeight:90,resize:"vertical",lineHeight:1.6}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder="Describe el producto con detalle: Etiqueta adhesiva a 4 tintas en couché 150g, suaje redondo 5cm, barniz UV..."/></FC></div>}
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?"📝 Descripción del trabajo":"📖 Datos Técnicos Completos"}><div style={{background:(isMaq?"#e67e22":"#8b5cf6")+"08",borderRadius:12,padding:2}}><textarea style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:13}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:9,color:"#8b5cf6",marginTop:4,fontStyle:"italic"}}>💡 Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico</div>}</FC></div>}
-    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" rec br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Tiraje"/></FC><FC label="📅 Entrega" rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9.5,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)">⏱️ Sugerir fecha</button></FC><FC label="# Producción (automático)"><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:9,color:C.ok,fontWeight:600}}>✓ Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</FC></div>}
+    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" rec br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Tiraje"/></FC><FC label="📅 Entrega" rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9.5,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)">⏱️ Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:9,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}>⚠️ {pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok}}>✓ OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)">💡 Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:9,color:C.ok,fontWeight:600}}>✓ Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
     {!specsOnly&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>👤 Agente / Vendedor</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} onClick={()=>s("agent",a)} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>{a}</button>)}<button onClick={()=>s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>Otro...</button></div>{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>s("agent",e.target.value||"otro")} placeholder="Nombre del agente"/>}</div>}
     {isMaq&&!specsOnly&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase"}}>🚚 Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value)} placeholder="$0"/></FC><FC label="Precio cliente" br><input style={inp} type="number" step=".01" value={f.maq_price} onChange={e=>s("maq_price",e.target.value)} placeholder="$0"/></FC><FC label="% Ganancia"><div style={{padding:10,background:"#fff",borderRadius:12,fontSize:18,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center"}}>{margin!==null?margin+"%":"—"}</div></FC></div></>}
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>💰 Precio MXN</label><input style={inp} type="number" step=".01" value={f.price} onChange={e=>s("price",e.target.value)} placeholder="$0.00"/></div>}
@@ -4008,17 +4046,31 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
 
 // ─── MODAL: CREAR ORDEN DE COMPRA (v10.10.0) ───
 function CreateOCModal({onCreate, onClose}){
-  const [f, setF] = useState({client:"",vendedor:"",delivery_date:"",notes:""});
+  const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
   useEscClose(onClose);
   const canSubmit = f.client.trim().length > 0 && !saving;
   const s = (k,v) => setF(p => ({...p, [k]: v}));
+  // 🆕 v10.14.0 — Typeahead select: aplica master + fallback a última orden
+  const selC = async c => {
+    setF(p => ({...p, client_id:c.id, client:c.name, client_email:c.email||"", client_phone:c.whatsapp||"", client_rfc:c.rfc||""}));
+    if (!c.email || !c.whatsapp) {
+      try {
+        const {data} = await supabase.rpc("get_last_contact_for_client", {p_client_id: c.id});
+        if (data) setF(p => ({...p, client_email:p.client_email||data.last_email||"", client_phone:p.client_phone||data.last_phone||"", client_rfc:p.client_rfc||data.last_rfc||""}));
+      } catch (e) { console.warn("get_last_contact_for_client falló:", e); }
+    }
+  };
   const submit = async () => {
     if (!canSubmit) return;
     setSaving(true);
     try {
       await onCreate({
         client: f.client.trim(),
+        client_id: f.client_id || null,
+        client_email: f.client_email.trim() || null,
+        client_phone: f.client_phone.trim() || null,
+        client_rfc: f.client_rfc.trim() || null,
         vendedor: f.vendedor || null,
         deliveryDate: f.delivery_date || null,
         notes: f.notes.trim() || null
@@ -4034,7 +4086,21 @@ function CreateOCModal({onCreate, onClose}){
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Cliente *</label>
-          <input value={f.client} onChange={e=>s("client",e.target.value)} placeholder="Nombre o razón social" autoFocus style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={[]}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>📧 Email</label>
+            <input value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com" type="email" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>📱 WhatsApp</label>
+            <input value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678" type="tel" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          </div>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>RFC</label>
+          <input value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Vendedor</label>
