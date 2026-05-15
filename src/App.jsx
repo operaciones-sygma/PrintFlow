@@ -5913,7 +5913,7 @@ export default function PrintFlow() {
   if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
   if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
-  if(user==="produccion"||user==="admin"||user==="karla")navs.push({id:"board",i:"🏭",l:user==="karla"?"Folios":"Tablero"});
+  if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
   if(user==="produccion"||user==="admin")navs.push({id:"planner",i:"🗓️",l:"Planificador"});
   navs.push({id:"calendar",i:"📅",l:"Entregas"});
   navs.push({id:"orders",i:"📋",l:"Todas"});
