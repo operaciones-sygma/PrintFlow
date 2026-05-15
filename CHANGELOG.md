@@ -5,6 +5,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.20.0 — Duplicar ampliado + Mover OC fuera de vista + Fix race condition de folios — 15-may-2026
+
+> **Nota:** el brief original proponía esto como v10.12.0.6 pero esa numeración quedaba retroactiva (ya teníamos v10.13.0–v10.19.0). Renumerado a v10.20.0 al aplicarlo.
+>
+> **Aplicación parcial:** El brief proponía crear un componente `MoveToOCModal` nuevo + state `moveToOCModal` + callback `moveToOC` aparte. Pero **ya existía** `MoveOrderModal` (desde v10.11.0 Sub-fase A) con la misma función — incluso permite crear OC nueva al mover, feature que el brief no contemplaba. Se aplicó la opción parcial: solo extender el botón existente para que se vea fuera de la vista OC, y agregar notifs al trío en el callback `moveOrderToOC` existente. No se duplicaron componentes.
+
+### Nuevas funcionalidades
+
+1. **Duplicar disponible para más roles** — Lupita y vendedores (con ownership) pueden duplicar sus propias órdenes en cualquier stage activa (no solo entregadas). Admin sigue pudiendo duplicar cualquiera. Solo se bloquea en órdenes canceladas.
+
+2. **Botón "Cambiar OC" visible fuera de vista OC** — antes solo aparecía dentro de la vista OC (`inOCView`); ahora cualquier OCard con `purchase_order_id` (y sin invoice/cancelled/delivered/cart_folio) muestra el botón ↔️. Reutiliza el `MoveOrderModal` existente que permite también crear OC nueva.
+
+### Backend (Supabase, schema public)
+
+- **Función nueva** `next_production_number()` con `pg_advisory_xact_lock` — garantiza folios P-XXXX únicos incluso bajo cargas concurrentes (aplicada vía MCP).
+- **UNIQUE INDEX nuevo** `idx_orders_production_number_unique` en `orders(production_number) WHERE NOT NULL` — defensa final a nivel BD contra el bug de duplicados que ocurrió con P-3503 (aplicada vía MCP).
+- **Función existente** `move_order_to_oc()` sigue siendo la backend del callback `moveOrderToOC` (no cambia).
+
+### Frontend (App.jsx)
+
+- **Botón Duplicar (línea ~2621)**: visibilidad ampliada a secretaria/vendedor con ownership.
+- **`duplicate`**: ahora llama RPC `next_production_number()` (atómico) en vez de calcular `MAX+1` local. Toast incluye el folio asignado.
+- **`create`**: igual, llama RPC antes de INSERT. El preview de OrderForm sigue siendo local (UX), pero el folio real lo asigna el backend.
+- **`webApprove`**: igual, llama RPC al aprobar pedido web.
+- **`moveOrderToOC`**: extendido con notifs al trío Lupita+Noemí+Gerardo (excepto al que movió) + creador externo + admin in-app. Usa `userDisplayName` de v10.19.0.
+- **Botón "Cambiar OC" en OCard** (líneas ~2629 y ~2638): removido el guard `inOCView`, agregado `!o.cart_folio` para excluir órdenes web.
+
+### Bug fixes
+
+- **Race condition de folios P-XXXX**: la combinación de `pg_advisory_xact_lock` + RPC + UNIQUE INDEX elimina la posibilidad de generar duplicados como el P-3503 de hoy.
+
+### Tipo nuevo de notificación
+
+- `oc_change`: se dispara cuando una orden cambia de OC. Notifica al trío + admin (in-app) + creador fuera del trío. NO está en filtro 2B para admin (admin solo recibe new_order + stale_alert por Telegram).
+
+
 ## v10.19.0 — Notificaciones detalladas de edits y cambios de fecha — 15-may-2026
 
 > **Nota:** el brief original proponía esto como v10.12.0.5 pero esa numeración quedaba retroactiva (ya teníamos v10.13.0–v10.18.0). Renumerado a v10.19.0 al aplicarlo.

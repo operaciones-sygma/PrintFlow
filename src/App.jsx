@@ -2618,14 +2618,15 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="maq_in_progress"&&<button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt("#32ade6")}>📥 Recibimos el Trabajo</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
-        {(o.stage.includes("delivered")||role==="admin")&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar">📋</button>}
+        {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
+        {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar">📋</button>}
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir">🖨️</button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo">🔀</button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.invoice_folio?"Editar (orden facturada)":"Editar"}>✏️</button>}
         {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar">↩️</button>}
         {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌</button>}
-        {/* ↔️ v10.11.0 Sub-fase A — Mover orden a otra OC (solo dentro de vista de OC) */}
-        {inOCView&&o.purchase_order_id&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Mover a otra OC">↔️</button>}
+        {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
+        {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC">↔️</button>}
         {/* 🆕 v10.9.0 — Botón "Cancelar (NC)" solo para admin cuando hay folio */}
         {role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"cancel_with_nc")} style={bs(C.sf,C.dn)} title="Cancelar con Nota de Crédito">❌</button>}
         {role==="admin"&&<button onClick={()=>onAction(o.id,"delete")} style={bs(C.sf,C.dn)} title="Borrar orden">🗑️</button>}
@@ -2634,7 +2635,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
-      {inOCView&&o.purchase_order_id&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Mover a otra OC">↔️ Mover</button>}
+      {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC">↔️ Mover</button>}
       {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌ Cancelar</button>}
     </div>}
 
@@ -5247,7 +5248,14 @@ export default function PrintFlow() {
     // Convert empty strings to null for numeric/date columns (PostgREST rejects "" for NUMERIC/DATE types)
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     const toStr=v=>v===""||v==null?null:v;
-    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:toNum(f.width_cm,parseFloat),height_cm:toNum(f.height_cm,parseFloat),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    // v10.20.0 — RPC atómico para folio (el preview de OrderForm es UX, el real lo asigna el backend)
+    let assignedPN=f.production_number;
+    try{
+      const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
+      if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
+      assignedPN=rpcPN;
+    }catch(e){if(e?.message==="folio_failed")return;throw e}
+    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:toNum(f.width_cm,parseFloat),height_cm:toNum(f.height_cm,parseFloat),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
     await db.saveOrder(newOrder);
@@ -5308,6 +5316,21 @@ export default function PrintFlow() {
       await db.moveOrderToOC(orderId,targetOCId,userLogin||user);
       showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId);
       setMoveModal(null);
+      // v10.20.0 — Notif al trío Lupita+Noemí+Gerardo (excepto al que movió) + creador externo + admin in-app
+      try{
+        const userName=userDisplayName(user);
+        const folioStr=o?.production_number?" ("+o.production_number+")":"";
+        const notifMsg="↔️ "+userName+" movió la orden de "+(o?.client||"")+folioStr+"\n\nDe: "+(fromId||"sin OC")+"\nA: "+targetOCId;
+        const trio=["secretaria","preprensa","produccion"];
+        for(const targetRole of trio){
+          if(user!==targetRole)await db.addNotification(targetRole,orderId,"oc_change",notifMsg,null,user);
+        }
+        const stdR=["secretaria","produccion","preprensa","german","admin","karla","sistema"];
+        if(o?.created_by&&!stdR.includes(o.created_by)&&o.created_by!==user){
+          await db.addNotification(o.created_by,orderId,"oc_change",notifMsg,null,user);
+        }
+        if(user!=="admin")await db.addNotification("admin",orderId,"oc_change",notifMsg,null,user);
+      }catch(notifErr){console.error("[moveOrderToOC notif]",notifErr)}
       reload();
     }catch(e){console.error("[moveOrderToOC] Error:",e);showToast("❌ No se pudo mover: "+(e?.message||"error desconocido"),"error")}
   },[user,userLogin,orders,showToast,reload]);
@@ -5515,13 +5538,15 @@ export default function PrintFlow() {
     // 🔒 v10.12.0.2 Phase 1 — Hardstop: bloquea bypass via DevTools en órdenes ajenas (vendedor) o roles no permitidos
     if(!canExecuteAction("duplicate",orig,user,userLogin)){showToast(actionDeniedToast("duplicate",orig,user,userLogin),"error");return}
     const origLabel=orig.cart_folio||orig.production_number||orig.id.slice(0,8);
-    const nums=orders.map(o=>{const m=(o.production_number||"").match(/^P-(\d+)$/);return m?parseInt(m[1],10):0}).filter(n=>n>0);const maxN=nums.length>0?Math.max(...nums):0;const dupFolio="P-"+String((maxN>=5000?1:maxN+1)).padStart(4,"0");
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
+    // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
+    const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
+    if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
     setOrders(p=>[dup,...p]);
     try{
     await db.saveOrder(dup);
     await db.addTimeline(dup.id,"📋 Duplicada de "+origLabel,user,"#5856d6");
-    showToast("📋 Orden duplicada");
+    showToast("📋 Orden duplicada como "+dupFolio);
     }catch(e){console.error("[duplicate] Error:",e);showToast("❌ No se pudo duplicar: "+(e?.message||"error desconocido"),"error");reload()}
   },[orders,user,userLogin,showToast,reload]);
 
@@ -5589,12 +5614,12 @@ export default function PrintFlow() {
     if(!canExecuteAction("web_approve",o,user,userLogin)){showToast(actionDeniedToast("web_approve",o,user,userLogin),"error");return}
     setActionLoading(id);
     const newCreator=userLogin||user;
-    // Assign next P-XXXX folio (same logic as OrderForm/duplicate). Defensive: preserve existing if already set.
+    // v10.20.0 — Folio atómico vía RPC (preserva si la orden ya lo tiene asignado)
     let newPN=o.production_number;
     if(!newPN){
-      const nums=orders.map(x=>{const m=(x.production_number||"").match(/^P-(\d+)$/);return m?parseInt(m[1],10):0}).filter(n=>n>0);
-      const maxN=nums.length>0?Math.max(...nums):0;
-      newPN="P-"+String((maxN>=5000?1:maxN+1)).padStart(4,"0");
+      const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
+      if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");setActionLoading(null);return}
+      newPN=rpcPN;
     }
     setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:"draft",created_by:newCreator,production_number:newPN,timeline:addTL(x,"🌐 → 📝 Aprobado · "+newPN,{to:"draft"})}));
     try{
