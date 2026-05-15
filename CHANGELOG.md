@@ -5,6 +5,41 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.19.0 — Notificaciones detalladas de edits y cambios de fecha — 15-may-2026
+
+> **Nota:** el brief original proponía esto como v10.12.0.5 pero esa numeración quedaba retroactiva (ya teníamos v10.13.0–v10.18.0). Renumerado a v10.19.0 al aplicarlo.
+
+- Cualquier edit a una orden notifica al trío Lupita+Noemí+Gerardo (excepto al editor) con detalle de qué campos cambiaron, valores antes y después.
+- Cambio de fecha de entrega ahora también notifica a Noemí (antes solo Lupita+Gerardo).
+- Si la orden fue creada por alguien fuera del trío (típicamente Genaro vendedor), también recibe la notificación.
+- Karla sigue recibiendo notif cuando se edita una orden con invoice_folio (post-factura).
+- Admin (Marcelo) sigue recibiendo in-app pero NO por Telegram (filtro 2B preserva `new_order` + `stale_alert` solamente).
+
+### Helpers agregados (App.jsx)
+
+- `TRACKED_EDIT_FIELDS` — diccionario de 25 campos editables con labels legibles
+- `diffOrderFields(before, after)` — detecta cambios entre estados de la orden
+- `fmtEditValue(field, v)` — formatea valores para mostrar (currency, fechas, archivos)
+- `userDisplayName(username)` — mapea username a nombre legible (Lupita, Noemí, Gerardo, etc.)
+
+### Funciones modificadas (App.jsx)
+
+- `update` — reemplazado bloque de notificaciones
+- `changeDate` — reemplazado bloque de notificaciones
+
+### Cambios de comportamiento intencionales
+
+- Edits que cambian SOLO campos NO trackeados (ej. solo `client_email`) ya no generan notif.
+- Edits post-factura incluyen el detalle de cambios en el mismo mensaje (antes era genérico).
+
+### Sin cambios
+
+- Backend SQL (no requiere migración)
+- Workflow n8n (no requiere cambios)
+- DB schema (no requiere cambios)
+- Filtro 2B Telegram para admin sigue intacto
+
+
 ## v10.18.0 — StorageTab mejorado (Top + Huérfanos + Breakdown) — 14-may-2026
 
 Mejoras de visibilidad y limpieza al StorageTab (accesible para Pre-prensa, Germán y Admin). Cierre del tema storage que arrancó con v10.16.0.

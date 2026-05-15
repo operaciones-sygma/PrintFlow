@@ -31,6 +31,44 @@ const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
 const isSec=r=>r==="secretaria"||r==="vendedor";
+
+// ============================================================
+// v10.19.0 — Helpers para notificaciones detalladas de edit
+// ============================================================
+// Campos que disparan notificación cuando cambian (con su label legible)
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila"};
+
+// Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
+function diffOrderFields(before,after){
+  const out=[];
+  for(const k of Object.keys(TRACKED_EDIT_FIELDS)){
+    if(!(k in after))continue;
+    const a=before==null?undefined:before[k];
+    const b=after[k];
+    // Tratar null/undefined/"" como equivalentes (sin cambio real)
+    const aEmpty=a==null||a==="";
+    const bEmpty=b==null||b==="";
+    if(aEmpty&&bEmpty)continue;
+    if(a===b)continue;
+    out.push({key:k,label:TRACKED_EDIT_FIELDS[k],before:a,after:b});
+  }
+  return out;
+}
+
+// Formatea valores para mostrar en mensaje de notif (Telegram)
+function fmtEditValue(field,v){
+  if(v==null||v==="")return"(vacío)";
+  if(field==="due_date")return fD(v);
+  if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
+  if(field==="file_url")return v?"(archivo cargado)":"(sin archivo)";
+  if(typeof v==="string"&&v.length>60)return v.substring(0,60)+"…";
+  return String(v);
+}
+
+// Mapea username (rol) a nombre legible para los mensajes
+function userDisplayName(u){
+  return {secretaria:"Lupita",preprensa:"Noemí",produccion:"Gerardo",german:"Germán",karla:"Karla",admin:"Admin",genaro:"Genaro",vendedor:"Vendedor",sistema:"Sistema"}[u]||u||"Usuario";
+}
 // 🌐 v10.12.0 Sub-fase C — Gate de edición para pedidos web: vendedor no edita órdenes con source='web'
 const canEditWebOrder=(order,user)=>{if(order?.source!=="web")return true;return user==="secretaria"||user==="admin"};
 // 🛒 v10.12.0.1 — Permiso para agregar productos a una OC. Reglas:
@@ -5329,15 +5367,33 @@ export default function PrintFlow() {
     const {error}=await supabase.from("orders").update(safeUpdate).eq("id",f.id);
     if(error)throw new Error(error.message);
     await db.addTimeline(f.id,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada",user,willMarkPostEdit?"#ff9500":C.t3);
-    if(user==="produccion"||user==="preprensa"){
-      const o=orders.find(x=>x.id===f.id);
-      await db.notifySecs(f.id,"order_edit","✏️ "+(user==="produccion"?"Producción":"Pre-prensa")+" editó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);
-    }
-    if(willMarkPostEdit){
-      // Notificar a Karla y a Marcelo (si no fue admin) cuando se edita orden facturada
-      const folio=orderBefore.invoice_folio;
-      const editMsg="⚠️ Orden con folio "+folio+" fue editada — "+(orderBefore.client||"")+" / "+(orderBefore.product_type||"");
-      await db.addNotification("karla",f.id,"order_edit",editMsg,null,user);
+    // v10.19.0 — Notificación detallada al trío Lupita+Noemí+Gerardo (+ creador si está fuera del trío)
+    const changes=diffOrderFields(orderBefore,safeUpdate);
+    if(changes.length>0){
+      const userName=userDisplayName(user);
+      const folioStr=orderBefore?.production_number?" ("+orderBefore.production_number+")":"";
+      const clientStr=orderBefore?.client||"";
+      const fiscalFolio=orderBefore?.invoice_folio;
+      let editMsg;
+      if(fiscalFolio){
+        editMsg="⚠️ "+userName+" editó la orden "+fiscalFolio+" (ya facturada) — "+clientStr+folioStr+"\n\nCambios:";
+      }else{
+        editMsg="✏️ "+userName+" editó la orden de "+clientStr+folioStr+"\n\nCambios:";
+      }
+      changes.forEach(c=>{editMsg+="\n• "+c.label+": "+fmtEditValue(c.key,c.before)+" → "+fmtEditValue(c.key,c.after)});
+      // Notif al trío (Lupita+Noemí+Gerardo) excepto al editor
+      const editTrio=["secretaria","preprensa","produccion"];
+      for(const targetRole of editTrio){
+        if(user!==targetRole)await db.addNotification(targetRole,f.id,"order_edit",editMsg,null,user);
+      }
+      // Karla si la orden ya estaba facturada
+      if(fiscalFolio&&user!=="karla")await db.addNotification("karla",f.id,"order_edit",editMsg,null,user);
+      // Si la orden fue creada por alguien fuera del trío (típicamente Genaro vendedor), también notificarle
+      const stdR=["secretaria","produccion","preprensa","german","admin","karla","sistema"];
+      if(orderBefore?.created_by&&!stdR.includes(orderBefore.created_by)&&orderBefore.created_by!==user){
+        await db.addNotification(orderBefore.created_by,f.id,"order_edit",editMsg,null,user);
+      }
+      // Admin in-app (filtro 2B en trigger Telegram excluye order_edit para admin)
       if(user!=="admin")await db.addNotification("admin",f.id,"order_edit",editMsg,null,user);
     }
     showToast(willMarkPostEdit?"💾 Orden actualizada (marcada como editada post-factura)":"💾 Orden actualizada");
@@ -5603,11 +5659,25 @@ export default function PrintFlow() {
     const {error:cdErr}=await supabase.from("orders").update({due_date:newDate}).eq("id",oid);
     if(cdErr)throw new Error(cdErr.message);
     await db.addTimeline(oid,msg,user,C.wn);
-    const dateMsg="📅 Fecha cambiada para "+(o?.client||"")+" — "+(o?.product_type||"")+": "+fD(newDate);
-    const stdR=["secretaria","produccion","preprensa","german","admin"];
-    if(user!=="secretaria")await db.addNotification("secretaria",oid,"date_change",dateMsg,reason,user);
-    if(o?.created_by&&!stdR.includes(o.created_by)&&o.created_by!==(userLogin||user))await db.addNotification(o.created_by,oid,"date_change",dateMsg,reason,user);
-    if(user!=="produccion")await db.addNotification("produccion",oid,"date_change",dateMsg,reason,user);
+    // v10.19.0 — Notificación detallada de cambio de fecha al trío Lupita+Noemí+Gerardo (+ creador)
+    const userName=userDisplayName(user);
+    const folioStr=o?.production_number?" ("+o.production_number+")":"";
+    const clientStr=o?.client||"";
+    const oldDateStr=o?.due_date?fD(o.due_date):"(sin fecha)";
+    const newDateStr=fD(newDate);
+    let dateMsg="📅 "+userName+" cambió la fecha de entrega de "+clientStr+folioStr+"\n\nCambio: "+oldDateStr+" → "+newDateStr;
+    if(reason)dateMsg+="\n\nRazón: "+reason;
+    // Notif al trío (Lupita+Noemí+Gerardo) excepto a quien cambió
+    const dateTrio=["secretaria","preprensa","produccion"];
+    for(const targetRole of dateTrio){
+      if(user!==targetRole)await db.addNotification(targetRole,oid,"date_change",dateMsg,reason,user);
+    }
+    // Creador fuera del trío (ej. Genaro vendedor)
+    const stdR=["secretaria","produccion","preprensa","german","admin","karla","sistema"];
+    if(o?.created_by&&!stdR.includes(o.created_by)&&o.created_by!==(userLogin||user)){
+      await db.addNotification(o.created_by,oid,"date_change",dateMsg,reason,user);
+    }
+    // Admin in-app (filtro 2B en trigger Telegram excluye date_change para admin)
     if(user!=="admin")await db.addNotification("admin",oid,"date_change",dateMsg,reason,user);
     showToast("📅 Fecha actualizada");
     }catch(e){console.error("[changeDate] Error:",e);showToast("❌ No se pudo cambiar fecha: "+(e?.message||"error desconocido"),"error");reload()}
