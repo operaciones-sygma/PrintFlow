@@ -5,6 +5,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.22.0 — Hasta 2 imágenes de referencia por orden — 15-may-2026
+
+Reportado por Marcelo: el equipo necesita poder adjuntar 2 imágenes a una orden (frente y reverso de muestra, referencia + ejemplo de cliente, etc.). Antes solo se podía 1.
+
+### Migración SQL aplicada (via MCP)
+
+```sql
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS image_url_2 TEXT;
+```
+
+### Cambios en App.jsx
+
+1. **`empty` state** — agregado `image_url_2: null`.
+2. **`dbCols` whitelist** (saveOrder) — agregado `image_url_2`.
+3. **`editableFields` whitelist** (update) — agregado `image_url_2`.
+4. **Form UI** — bloque de imagen refactorizado a un `.map(["image_url","image_url_2"])` que genera 2 slots independientes con preview 48×48, botón ✕ para eliminar (borra el archivo de Storage también), y botón "📷 Subir 1ra/2da" o "📷 Cambiar". Cada slot usa `compressImg` y sube a Supabase Storage con path `{orderId}/img-{1|2}-{timestamp}.jpg`.
+5. **OCard preview** — muestra la primera imagen disponible (`image_url || image_url_2 || image || file_url`). Si hay dos imágenes (`image_url && image_url_2`), aparece un badge `+1` en la esquina inferior derecha del thumbnail.
+6. **DetailModal** — refactorizado a renderizar un array `[image_url, image_url_2, image, file_url]` filtrado. Si hay 2, muestra en grid `1fr 1fr` lado a lado. Si hay 1, fullwidth. Click en cualquiera abre tamaño natural.
+7. **Auto-cleanup 30 días** — el cleanup automático ahora también limpia `image_url_2` (extiende el SELECT, condición de skip y bloque de borrado de Storage).
+
+### Comportamiento
+
+- Si el usuario sube solo 1 imagen, `image_url_2` queda null — comportamiento idéntico a v10.21.0.
+- Subir/cambiar/eliminar cada imagen es independiente.
+- Backward compat con `image` legacy (base64 UI-only): solo en el primer slot.
+
+
 ## v10.21.0 — Doble scrollbar horizontal (arriba + abajo) en tablas y dashboards — 15-may-2026
 
 Reportado por Marcelo: muchas computadoras del equipo tienen mouse tradicional (sin trackpad), por lo que no pueden deslizar lateralmente. El scrollbar de abajo en tablas anchas es difícil de alcanzar.
