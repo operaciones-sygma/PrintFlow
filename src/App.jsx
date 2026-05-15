@@ -546,6 +546,16 @@ const WEB_BLUE="#3b82f6";
 const FNT="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap";
 const inp={width:"100%",padding:"10px 14px",fontFamily:"'Poppins',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
 
+// v10.21.0 — DualScroll: barras de scroll horizontal arriba y abajo, sincronizadas.
+// Pensado para users con mouse tradicional (sin trackpad) que no pueden deslizar lateralmente.
+function DualScroll({children,style}){
+  const topRef=useRef(null);const bottomRef=useRef(null);const [w,setW]=useState(0);const syncRef=useRef(false);
+  useEffect(()=>{const node=bottomRef.current;if(!node)return;const m=()=>setW(node.scrollWidth);m();const ro=new ResizeObserver(m);ro.observe(node);if(node.firstElementChild)ro.observe(node.firstElementChild);return()=>ro.disconnect()},[children]);
+  const onTop=()=>{if(syncRef.current)return;syncRef.current=true;if(bottomRef.current&&topRef.current)bottomRef.current.scrollLeft=topRef.current.scrollLeft;requestAnimationFrame(()=>{syncRef.current=false})};
+  const onBottom=()=>{if(syncRef.current)return;syncRef.current=true;if(bottomRef.current&&topRef.current)topRef.current.scrollLeft=bottomRef.current.scrollLeft;requestAnimationFrame(()=>{syncRef.current=false})};
+  return <div><div ref={topRef} onScroll={onTop} style={{overflowX:"auto",overflowY:"hidden"}}><div style={{width:w,height:1}}/></div><div ref={bottomRef} onScroll={onBottom} style={{overflowX:"auto",...style}}>{children}</div></div>;
+}
+
 // v10.15.0 — Bug 2: hacer placeholders visualmente distintos (itálicas + gris claro)
 if(typeof document!=="undefined"&&!document.getElementById("pf-placeholder-style")){
   const _pfStyle=document.createElement("style");
@@ -1810,7 +1820,7 @@ function ChemicalPanel({user}) {
       {/* Per-plate costs */}
       {plTotal>0&&<div style={{marginBottom:8}}>
         <div style={{fontSize:11,fontWeight:700,color:C.tx,marginBottom:6}}>📊 Costo por Placa (proporcional por área, ratio {costs.ratio.toFixed(2)}×)</div>
-        <div style={{overflowX:"auto"}}>
+        <DualScroll>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,background:"#fff",borderRadius:10,overflow:"hidden"}}>
             <thead><tr style={{background:"#f8fafb"}}>
               <th style={{padding:"8px 10px",textAlign:"left",fontWeight:700,color:C.t2,fontSize:10,borderBottom:"1px solid "+C.bd}}>Concepto</th>
@@ -1824,7 +1834,7 @@ function ChemicalPanel({user}) {
               <tr style={{background:"#f0fdf4"}}><td style={{padding:"8px 10px",fontWeight:800}}>Total + IVA ({(costs.iva*100).toFixed(0)}%)</td><td style={{padding:"8px 10px",textAlign:"right",fontWeight:800,color:"#16a34a",fontSize:14}}>{fmt(costs.fullChica)}</td><td style={{padding:"8px 10px",textAlign:"right",fontWeight:800,color:"#16a34a",fontSize:14}}>{fmt(costs.fullGrande)}</td></tr>
             </tbody>
           </table>
-        </div>
+        </DualScroll>
         <div style={{fontSize:10,color:C.t3,marginTop:6,textAlign:"right"}}>Promedio químico por placa: {fmt(costs.costoQuimProm)}</div>
       </div>}
       {plTotal===0&&<div style={{fontSize:11,color:C.t3,textAlign:"center",padding:"10px 0"}}>Registra placas para ver costos por placa</div>}
@@ -2779,11 +2789,11 @@ function Pipeline({orders,role,onAction}) {
   return <div>
     {staleC>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}>⚠️ {staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
     <div style={{fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}>🏭 Internas ({intO.length})</div>
-    <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10,marginBottom:16}}>
+    <DualScroll style={{display:"flex",gap:6,paddingBottom:10,marginBottom:16}}>
       {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
       <div style={{minWidth:90,flex:"0 0 auto",background:C.ok+"08",borderRadius:14,padding:12,borderTop:"3px solid "+C.ok,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:22,fontWeight:800,color:C.ok}}>{delC}</div><div style={{fontSize:9,color:C.t2}}>Entregadas</div></div>
-    </div>
-    {maqO.length>0&&<><div style={{fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}>🚚 Maquila ({maqO.length})</div><div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</div></>}
+    </DualScroll>
+    {maqO.length>0&&<><div style={{fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}>🚚 Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
   </div>;
 }
 
@@ -3749,11 +3759,11 @@ function Analytics({orders,onReload}) {
 
   return <div>
     {/* Tab navigation */}
-    <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto"}}>
+    <DualScroll style={{display:"flex",gap:4,marginBottom:16}}>
       {[{id:"finance",l:"💰 Financiero"},{id:"machines",l:"🏭 Máquinas"},{id:"efficiency",l:"📊 Eficiencia"},{id:"clients",l:"👥 Clientes"},{id:"storage",l:"📁 Archivos"}].map(t=>
         <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>{t.l}</button>
       )}
-    </div>
+    </DualScroll>
 
     {/* ══ FINANCIERO ══ */}
     {tab==="finance"&&<div>

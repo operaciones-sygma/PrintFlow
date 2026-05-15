@@ -5,6 +5,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.21.0 — Doble scrollbar horizontal (arriba + abajo) en tablas y dashboards — 15-may-2026
+
+Reportado por Marcelo: muchas computadoras del equipo tienen mouse tradicional (sin trackpad), por lo que no pueden deslizar lateralmente. El scrollbar de abajo en tablas anchas es difícil de alcanzar.
+
+### Solución
+
+- Componente nuevo `DualScroll` que envuelve cualquier contenido y agrega **dos barras de scroll horizontales sincronizadas**: una arriba y otra abajo (la existente se preserva).
+- Mover la barra de arriba mueve también la de abajo y viceversa — `ResizeObserver` detecta cambios de ancho del contenido para mantener el ancho del scrollbar superior sincronizado.
+- Aplicado a las 4 zonas con scroll horizontal: tabla de costos de placas, dashboard de stages internas, dashboard de stages maquila, y tabs de Analytics.
+
+### Detalles técnicos
+
+- El div superior contiene un "fantasma" de `width = bottomRef.scrollWidth` que reproduce la barra del navegador.
+- Un `syncRef` con `requestAnimationFrame` evita el loop infinito al sincronizar scrollLeft entre ambos divs.
+- El prop `style` se aplica al div inferior (donde vive el contenido real) — preserva `display:flex`, `gap`, `paddingBottom`, etc.
+
+
 ## v10.20.0 — Duplicar ampliado + Mover OC fuera de vista + Fix race condition de folios — 15-may-2026
 
 > **Nota:** el brief original proponía esto como v10.12.0.6 pero esa numeración quedaba retroactiva (ya teníamos v10.13.0–v10.19.0). Renumerado a v10.20.0 al aplicarlo.
