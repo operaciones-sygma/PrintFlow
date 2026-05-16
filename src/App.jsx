@@ -2618,8 +2618,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
       {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Recoger Placas → Lista</button>}
-      {/* v10.23.0 — Sacar orden de máquina y regresarla a Lista (admin/producción) */}
-      {o.stage==="in_production"&&(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(o.id,"return_to_ready")} style={bt("#007aff")}>🔄 Volver a Lista</button>}
+      {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
       {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"devolver_design")} style={bt(C.dn)}>↩️ Devolver a Diseño</button>}</>}
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
@@ -2931,11 +2930,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                     </div>
                     :mo.map(o=><div key={o.id}>
                       <DragCard o={o} borderColor={cc[type]}/>
+                      {/* v10.24.0 — Solo 2 botones: avanzar a Empaque, o devolver a Lista (sale de máquina) */}
                       <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:6,paddingLeft:4}}>
                         <button onClick={()=>onAction(o.id,"advance","packaging")} style={bs("#af52de")}>📦 Empaque</button>
-                        <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs("#e67e22"),padding:"4px 8px"}}>🚚</button>
-                        <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}}>🗑️</button>
-                        <button onClick={()=>onAction(o.id,"devolver_design")} style={{...bs(C.dn),padding:"4px 8px"}}>↩️</button>
+                        {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(o.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
                       </div>
                     </div>)}
                   </div>})}

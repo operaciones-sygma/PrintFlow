@@ -5,6 +5,32 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.24.0 — Limpieza de botones bajo DragCard en Kanban de máquinas — 16-may-2026
+
+Reportado por Marcelo: los botones bajo el DragCard del Kanban de máquinas estaban saturados. Simplificación de la barra de acciones.
+
+### Cambios en el Kanban (bloque de máquinas)
+
+**Antes** (4 botones): 📦 Empaque · 🚚 (Enviar a Maquila) · 🗑️ (Merma) · ↩️ (Volver a Diseño)
+**Después** (2 botones): 📦 Empaque · 🔄 (Volver a Lista, solo admin/producción)
+
+- ✅ Mantiene el flujo principal de avance (Empaque)
+- ➕ El nuevo botón 🔄 saca la orden de la máquina y la regresa a `ready` (introducido en v10.23.0; movido aquí desde el OCard general donde se quitó)
+- ➖ Quitados: send_maquila, waste, devolver_design — siguen disponibles desde el OCard general (Pendientes/Todas/Archivo) cuando la orden necesita esas acciones, pero ya no contaminan el tablero
+
+### Donde NO se tocó
+
+- **Bloque Empaque del Kanban** (sticky derecha): mantiene 📤 + 🚚 + 🗑️ intacto. Empaque es etapa final donde sigue teniendo sentido enviar a maquila o registrar merma.
+- **OCard general** (Pendientes, Todas, Archivo): mantiene Empaque + Enviar a Maquila + Devolver a Diseño para `in_production`. Solo el botón 🔄 Volver a Lista se quitó de ahí (vivía a destiempo, ahora vive en el Kanban donde tiene sentido visual).
+- Action handlers `send_maquila`, `waste`, `devolver_design` siguen registrados — solo se quitaron de la UI del Kanban.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Backend / RPCs
+- Notif logic (v10.19.0 sigue intacto)
+
+
 ## v10.23.0 — Fix timezone fecha + Botón "Volver a Lista" — 16-may-2026
 
 ### Bug fix — Fecha de entrega aparecía un día antes
