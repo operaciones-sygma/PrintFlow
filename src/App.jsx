@@ -974,7 +974,14 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       <tr><td colspan="5" class="section-title">Impresión</td></tr>
       <tr class="hdr"><td class="hdr" style="width:28%">Tipo de Papel</td><td class="hdr" style="width:12%">Gramaje</td><td class="hdr" style="width:25%">Tintas Frente</td><td class="hdr" style="width:25%">Tintas Vuelta</td><td class="hdr" style="width:10%">Medidas</td></tr>
       <tr><td style="font-weight:600">${o.paper_type||""}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${o.ink_front||o.colors||""}</td><td style="font-weight:600">${o.ink_back||""}</td><td style="text-align:center">${o.width_cm?o.width_cm+" × "+o.height_cm:""}</td></tr>
-      ${(Array.isArray(o.pantone_front)&&o.pantone_front.length>0)||(Array.isArray(o.pantone_back)&&o.pantone_back.length>0)?`<tr><td colspan="5" style="font-size:10px;padding:4px 8px;background:#f5f5f7"><strong>Pantones:</strong>${(o.pantone_front||[]).length>0?` Frente: ${o.pantone_front.join(", ")}`:""}${(o.pantone_back||[]).length>0?` · Vuelta: ${o.pantone_back.join(", ")}`:""}</td></tr>`:""}
+      </table>`;
+    }
+    // v10.25.2 — Pantones en bloque independiente (aparece en modo Sencillo Y Avanzado, mientras haya pantones capturados)
+    if(!isMaq&&((Array.isArray(o.pantone_front)&&o.pantone_front.length>0)||(Array.isArray(o.pantone_back)&&o.pantone_back.length>0))){
+      h+=`<table class="imp-table" style="margin-top:-1px">
+      <tr><td colspan="2" class="section-title">🎨 Pantones</td></tr>
+      <tr class="hdr"><td class="hdr" style="width:50%">Frente</td><td class="hdr" style="width:50%">Vuelta</td></tr>
+      <tr><td style="font-weight:600">${(o.pantone_front||[]).join(", ")||"—"}</td><td style="font-weight:600">${(o.pantone_back||[]).join(", ")||"—"}</td></tr>
       </table>`;
     }
 

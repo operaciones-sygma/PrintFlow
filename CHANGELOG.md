@@ -5,6 +5,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.25.2 — Pantones también en impresión modo Avanzado — 16-may-2026
+
+Bug reportado por Marcelo justo después de v10.25.1: los pantones SOLO se imprimían en órdenes en modo Sencillo. En Avanzado no aparecían.
+
+### Causa raíz
+
+La fila de pantones que agregué en v10.25.0 estaba dentro del bloque `if(!isMaq && hasSpecs)` del `PrintOrder`. `hasSpecs` requiere `paper_type`, `ink_front` o `width_cm` (campos individuales del modo Sencillo). En modo Avanzado esos campos están vacíos (todo va en `product`/textarea), entonces `hasSpecs = false` y el bloque entero se saltaba — incluyendo los pantones.
+
+### Fix
+
+Saqué los pantones a un **bloque independiente** que solo depende de:
+1. No ser maquila (consistente con D-7)
+2. Tener al menos un pantone capturado en `pantone_front` o `pantone_back`
+
+Resultado: aparece en **ambos modos** (Sencillo y Avanzado) cuando hay pantones. Se ve como mini-tabla con header "🎨 Pantones" y 2 columnas (Frente / Vuelta).
+
+Sin cambios DB.
+
+
 ## v10.25.1 — Pantones también en modo Avanzado — 16-may-2026
 
 Extensión menor de v10.25.0 reportada por Marcelo: los PantoneInputs estaban solo en el modo Sencillo del formulario. Faltaba en Modo Avanzado (donde los datos técnicos van en un textarea libre).
