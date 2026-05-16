@@ -5,6 +5,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.25.1 — Pantones también en modo Avanzado — 16-may-2026
+
+Extensión menor de v10.25.0 reportada por Marcelo: los PantoneInputs estaban solo en el modo Sencillo del formulario. Faltaba en Modo Avanzado (donde los datos técnicos van en un textarea libre).
+
+### Cambio
+
+- Bloque nuevo con guarda `!specsOnly && advMode && !isMaq` justo después del textarea de "Datos Técnicos Completos". Mismos 2 PantoneInputs (Frente + Vuelta) que en el modo Sencillo.
+- No aplica a Maquila (consistente con D-7 de v10.25.0).
+- Sin cambios de DB ni de schema.
+
+### Por qué tiene sentido
+
+En modo Avanzado el equipo escribe libremente los datos técnicos en un solo textarea (libros, calendarios complejos, etc.). Antes los pantones tenían que mencionarse en ese texto. Ahora se estructuran aparte con preview, manteniendo el textarea para todo lo demás.
+
+
 ## v10.25.0 — Pantones por orden con preview de color — 16-may-2026
 
 Captura estructurada de tintas Pantone con typeahead + preview visual del color. Antes los pantones se escribían en texto libre dentro de `ink_front`/`ink_back` o `notes` sin posibilidad de ver el color en pantalla.
