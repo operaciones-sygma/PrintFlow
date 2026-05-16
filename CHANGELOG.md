@@ -5,6 +5,49 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.23.0 — Fix timezone fecha + Botón "Volver a Lista" — 16-may-2026
+
+### Bug fix — Fecha de entrega aparecía un día antes
+
+Reportado por Lupita: la fecha en DetailModal y OCard se mostraba un día antes de la seleccionada. La ventana de Entregas (Calendar) mostraba bien.
+
+**Causa raíz:** `fD()` y `fDT()` hacían `new Date("YYYY-MM-DD")` que JS interpreta como UTC midnight; en zona México (UTC−6) cae al día anterior. Calendar ya tenía el patrón `+"T12:00:00"` hardcoded.
+
+**Fix:** los helpers `fD` y `fDT` ahora detectan strings ISO de fecha pelada (`YYYY-MM-DD`) y les agregan `T12:00:00` antes de parsear (mediodía local — nunca cruza día). Nuevo helper `parseDate()` con el mismo patrón usado en las 11 comparaciones `new Date(o.due_date)` del archivo (replaced via `replace_all`). Sin cambio de schema; el almacenamiento sigue siendo `"YYYY-MM-DD"`.
+
+### Nueva funcionalidad — Botón "🔄 Volver a Lista"
+
+Una orden en `in_production` con `current_machine` asignada antes no se podía revertir a `ready` desde UI (solo avanzar). Ahora admin y producción ven el botón en OCard, que:
+
+- Pone `stage='ready'`, `current_machine=null` (UPDATE en `orders` solo con columnas reales).
+- Cierra cualquier machine_log abierto vía `db.closeMachineLog(id)` — la columna `ended_at` y `minutes` se calculan en `order_machine_log`.
+- Agrega entry al timeline vía `db.addTimeline()` (tabla `order_timeline`).
+- Notifica al trío Lupita+Noemí+Gerardo + admin in-app (filtro 2B para admin sigue aplicando en Telegram).
+
+Útil cuando se arrastra una orden a la máquina equivocada o cambian prioridades. Caso real que disparó esta versión: P-3505 quedó atorada por test de admin sin forma de revertir.
+
+### Fix puntual P-3505 (aplicado vía MCP)
+
+`P-3505` se quedó en `stage=in_production`, `current_machine=off_pm74`, con 1 machine_log abierto. SQL ejecutado en Supabase:
+
+1. `UPDATE orders SET stage='ready', current_machine=NULL`
+2. `UPDATE order_machine_log SET ended_at=NOW(), minutes=...` para los logs abiertos
+3. `INSERT INTO order_timeline` con la corrección
+
+Verificación: ahora `stage=ready`, sin máquina, 0 logs abiertos.
+
+### Nota de implementación
+
+El brief original sugería UPDATE en `orders` incluyendo `machine_log` y `timeline` como columnas jsonb. **Esto no funcionaría:** ambas son tablas separadas (`order_machine_log` y `order_timeline`) — el campo en `orders` que ve el cliente se calcula en `db.loadOrders` desde esas tablas. Se ajustó a usar los helpers existentes `db.closeMachineLog()` + `db.addTimeline()`.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Workflow n8n
+- Bridge CobranzaFlow
+- Calendar (línea 877 ya estaba bien con `+"T12:00:00"`)
+
+
 ## v10.22.0 — Hasta 2 imágenes de referencia por orden — 15-may-2026
 
 Reportado por Marcelo: el equipo necesita poder adjuntar 2 imágenes a una orden (frente y reverso de muestra, referencia + ejemplo de cliente, etc.). Antes solo se podía 1.

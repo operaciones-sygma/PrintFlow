@@ -23,8 +23,10 @@ const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 
 const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
 const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n||0);
-const fD=d=>d?new Date(d).toLocaleDateString("es-MX",{day:"2-digit",month:"short"}):"";
-const fDT=d=>d?new Date(d).toLocaleDateString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+// v10.23.0 — Fix timezone bug: strings ISO YYYY-MM-DD se parsean como mediodía local (no UTC midnight)
+const fD=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short"})};
+const fDT=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})};
+const parseDate=d=>{if(!d)return null;const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s)};
 const pct=(c,p)=>p>0?Math.round(((p-c)/p)*100):0;
 const fmtM=m=>{if(!m&&m!==0)return "—";const h=Math.floor(m/60);return h>0?h+"h "+(m%60)+"m":m+"m"};
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
@@ -2020,7 +2022,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const myOrders=orders;
   const created=myOrders.filter(o=>new Date(o.created_at)>=wa);const delivered=myOrders.filter(o=>(o.deliveredAt||o.delivered_at)&&new Date(o.deliveredAt||o.delivered_at)>=wa);
   const rev=delivered.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
-  const late=myOrders.filter(o=>o.due_date&&new Date(o.due_date)<now&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
+  const late=myOrders.filter(o=>o.due_date&&parseDate(o.due_date)<now&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
   const St=({l,v,c=C.tx})=><div style={{background:C.bg,borderRadius:10,padding:10,flex:"1 1 90px",textAlign:"center"}}><div style={{fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div></div>;
 
   // Extended stats for admin
@@ -2029,7 +2031,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const weekMermaPz=delivered.reduce((s,o)=>s+(o.waste_log||[]).reduce((s2,w)=>s2+(w.qty||0),0),0);
   const weekMachineMin=delivered.reduce((s,o)=>s+(o.machine_log||[]).reduce((s2,m)=>s2+(m.minutes||0),0),0);
   const delWithDate=delivered.filter(o=>o.due_date);
-  const weekOnTime=delWithDate.filter(o=>new Date(o.delivered_at||o.deliveredAt)<=new Date(o.due_date)).length;
+  const weekOnTime=delWithDate.filter(o=>new Date(o.delivered_at||o.deliveredAt)<=parseDate(o.due_date)).length;
   const otPct=delWithDate.length>0?Math.round((weekOnTime/delWithDate.length)*100):0;
   const avgDays=delivered.length>0?(delivered.reduce((s,o)=>{const c=new Date(o.created_at);const d=new Date(o.delivered_at||o.deliveredAt);return s+(d-c)/86400000},0)/delivered.length).toFixed(1):"—";
 
@@ -2554,7 +2556,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
 
 // ─── ORDER CARD ────────────────────────────────────
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
-  const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&new Date(o.due_date)<new Date()&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
+  const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&parseDate(o.due_date)<new Date()&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   const secOwns=!isSec(role)||!o.created_by||o.created_by===userLogin;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
   const guide=GUIDES[role]?.[o.stage];
   const isDraggable=["ready","in_production","maquila_in","packaging"].includes(o.stage);
@@ -2616,6 +2618,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
       {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Recoger Placas → Lista</button>}
+      {/* v10.23.0 — Sacar orden de máquina y regresarla a Lista (admin/producción) */}
+      {o.stage==="in_production"&&(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(o.id,"return_to_ready")} style={bt("#007aff")}>🔄 Volver a Lista</button>}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
       {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"devolver_design")} style={bt(C.dn)}>↩️ Devolver a Diseño</button>}</>}
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
@@ -2776,7 +2780,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               {!hp&&oOwns&&(o.price||o.maq_price)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}
             </div>
           </div>
-          {o.due_date&&<div style={{fontSize:10,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}{new Date(o.due_date)<new Date()?" ⚠️ RETRASO":""}</div>}
+          {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}{parseDate(o.due_date)<new Date()?" ⚠️ RETRASO":""}</div>}
         </div>})}
     </div>})}
   </div>;
@@ -2833,7 +2837,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
     {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-block"}}>🔴 URGENTE</span>}
-    {o.due_date&&<div style={{fontSize:10,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
+    {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
   </div>;
 
   return <div>
@@ -2877,7 +2881,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           </div>
         </div>
-        {o.due_date&&<div style={{fontSize:9,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
@@ -2983,7 +2987,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
-              {o.due_date&&<div style={{fontSize:9,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
+              {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
             </div>)}
           </div>
         </div>
@@ -3059,7 +3063,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[]})
         <div style={{fontSize:12,fontWeight:700}}>⠿ {o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>📄 {o.paper_type}</div>}
-        {o.due_date&&<div style={{fontSize:9,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
@@ -3089,7 +3093,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[]})
               {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
             </div>
             <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-            {o.due_date&&<div style={{fontSize:9,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
+            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
             <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6}}>
               {o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bs("#06b6d4")}>📋 Placas Listas</button>}
             </div>
@@ -4768,7 +4772,7 @@ function ProductionPlanner({orders, role, userLogin, onAction, onReload, showToa
                 {o.priority === "urgente" && 
                   <div style={{fontSize: 9, color: C.dn, marginTop: 2, fontWeight: 600}}>🔴 URGENTE</div>}
                 {o.due_date && 
-                  <div style={{fontSize: 9, color: new Date(o.due_date) < new Date() ? C.dn : C.t3, marginTop: 2}}>📅 {fD(o.due_date)}</div>}
+                  <div style={{fontSize: 9, color: parseDate(o.due_date) < new Date() ? C.dn : C.t3, marginTop: 2}}>📅 {fD(o.due_date)}</div>}
               </div>
             )}
           </div>
@@ -5775,6 +5779,37 @@ export default function PrintFlow() {
       const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
     }
     if(action==="duplicate")duplicate(id);
+    // v10.23.0 — Sacar orden de máquina y devolver a Lista. Solo admin/producción.
+    // timeline y machine_log son tablas separadas (order_timeline / order_machine_log),
+    // por eso usamos db.addTimeline y db.closeMachineLog en vez de incluirlos en el UPDATE.
+    if(action==="return_to_ready"){
+      const o=orders.find(x=>x.id===id);
+      if(!o){return}
+      if(user!=="admin"&&user!=="produccion"){showToast("❌ Solo admin/producción pueden volver a Lista","error");return}
+      setActionLoading(id);
+      (async()=>{
+        try{
+          const fromMachine=o.current_machine||"máquina";
+          // 1. ORDERS UPDATE FIRST (race condition rule) — solo columnas reales
+          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",current_machine:null}).eq("id",id);
+          if(rtErr)throw new Error(rtErr.message);
+          // 2. Cerrar machine_logs abiertos (tabla order_machine_log)
+          await db.closeMachineLog(id);
+          // 3. Timeline entry (tabla order_timeline)
+          await db.addTimeline(id,"🔄 Devuelta a Lista (desde "+fromMachine+")",userLogin||user,"#007aff");
+          // 4. State local — espejo de lo persistido para refresh visual inmediato
+          const now=new Date();
+          const ml=Array.isArray(o.machine_log)?o.machine_log.slice():[];
+          ml.forEach((e,i)=>{if(!e.ended){const s=new Date(e.started);ml[i]={...e,ended:now.toISOString(),minutes:Math.round((now-s)/60000)}}});
+          const newTL=[...(o.timeline||[]),{action:"🔄 Devuelta a Lista (desde "+fromMachine+")",date:now.toISOString(),by:userLogin||user,color:"#007aff"}];
+          setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_log:ml,timeline:newTL}:x));
+          // 5. Notif al trío + admin (filtro 2B Telegram para admin sigue aplicando)
+          await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
+          showToast("🔄 Devuelta a Lista");
+        }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
+        finally{setActionLoading(null)}
+      })();
+    }
     if(action==="delete")deleteOrder(id);
     if(action==="print"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: vendedor solo imprime sus propias (datos del cliente quedan en hoja física)
@@ -6005,7 +6040,7 @@ export default function PrintFlow() {
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:new Date(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="planner"&&(user==="produccion"||user==="admin")&&<ProductionPlanner orders={orders} role={user} userLogin={userLogin} onAction={handleAction} onReload={reload} showToast={showToast} setConfirmModal={setConfirmModal}/>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · 🔍 "{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
