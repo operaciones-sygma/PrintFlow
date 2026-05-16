@@ -5,6 +5,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.25.0 — Pantones por orden con preview de color — 16-may-2026
+
+Captura estructurada de tintas Pantone con typeahead + preview visual del color. Antes los pantones se escribían en texto libre dentro de `ink_front`/`ink_back` o `notes` sin posibilidad de ver el color en pantalla.
+
+> **Nota:** el brief original proponía v10.24.0 pero esa numeración estaba ocupada. Renumerado a v10.25.0 (mismo patrón de versiones previas).
+
+### Backend (Supabase)
+
+- **Tabla nueva `public.pantone_colors`** — 1148 entries hidratadas desde dataset MIT (`adonald/Pantone-CMYK-RGB-Hex`). Cubre PMS Coated completo (códigos 100 C–814 C, Process Yellow/Magenta/Cyan/Black, Pantone Yellow/Red/Blue/Green/Orange/Purple, Reflex Blue, Rubine Red, Rhodamine Red, Warm Red, Violet, Black 2–7, Warm Gray 1–11, Cool Gray 1–11, Metallics 801–807 + 2X variants). 102 marcados como `is_common=true`.
+- **Campos:** `code` (PK), `code_normalized` (LIKE rápido), `name`, `hex`, `rgb_r/g/b`, `system` (Coated/Uncoated/Metallic/etc.), `is_common`.
+- **Índices:** `code_normalized text_pattern_ops`, `system`, parcial sobre `is_common WHERE true`.
+- **RLS:** `SELECT abierto`. INSERT/UPDATE/DELETE solo service_role.
+- **RPC `search_pantone(p_query, p_limit)`** — typeahead optimizado: prefix match prioritario, comunes primero, Coated antes que Uncoated, códigos cortos antes que largos. STABLE SECURITY DEFINER. GRANT a `authenticated` y `anon`.
+- **RPC `get_pantone_by_code(p_code)`** — resolución exacta normalizada (case-insensitive, sin espacios) para hidratar chips de órdenes existentes con su color.
+- **Columnas nuevas en `public.orders`:** `pantone_front TEXT[] DEFAULT '{}'` y `pantone_back TEXT[] DEFAULT '{}'`.
+
+### Frontend (App.jsx)
+
+- **Componente nuevo `PantoneInput`** — input con typeahead async (debounce 250ms vs `search_pantone`), chips con preview de color circular (18px), botón `×` para quitar. Cache local de hex para evitar refetch (hidrata chips existentes vía `get_pantone_by_code`).
+- **Componente nuevo `PantoneChips`** — render read-only para DetailModal con cuadritos de 14px, mismo fuente que el resto del UI. Cancela fetches in-flight en unmount.
+- **OrderForm:** 2 PantoneInputs (Frente + Vuelta) después del grid de Tintas, dentro del bloque `!isMaq` (no aplican a maquila — el proveedor maneja sus tintas).
+- **DetailModal:** 2 filas nuevas en sección Especificaciones (`<Row>` con `<PantoneChips>` como valor), solo si hay pantones capturados.
+- **Orden impresa (`PrintOrder`):** fila adicional `colspan=5` debajo de la tabla Impresión con resumen "Frente: X, Y · Vuelta: Z" (sin preview por ser print).
+- **OCard:** sin cambios (decisión consciente para preservar compacidad).
+- **Notificaciones detalladas (v10.19.0):** `pantone_front` y `pantone_back` agregados a `TRACKED_EDIT_FIELDS` + manejo especial en `fmtEditValue` para arrays (`Array.isArray` check, join con `", "`).
+- **Whitelists actualizados:** `empty`, `dbCols`, `editableFields`.
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Frente y Vuelta separados (TEXT[] cada uno) | Replica patrón existente de `ink_front`/`ink_back` |
+| D-2 | Múltiples pantones por lado (no uno solo) | Una orden puede usar varios pantones (logo + acento + base) |
+| D-3 | Tabla Supabase + RPC en lugar de dataset embebido en JS | Pantone Inc. no expone API gratuita; permite actualizar catálogo sin redeploy |
+| D-4 | Preview visible en formulario + DetailModal | Pedido explícito |
+| D-5 | OCard sin preview | Mantener compacto el listado principal |
+| D-6 | Preview solo en pantalla, no en print | El monitor nunca es 100% fiel al pantone físico |
+| D-7 | Texto libre en `ink_front`/`ink_back` se mantiene | Permite seguir escribiendo "4 tintas CMYK" para casos no-Pantone |
+
+### Cómo se generó el dataset
+
+1. `curl` de `adonald/Pantone-CMYK-RGB-Hex/master/pantone_CMYK_RGB_Hex.json` (MIT license, 1149 entries).
+2. Script `awk` procesa el JSON: agrega sufijo " C" a códigos numéricos, normaliza, marca ~30 como `is_common`, escapa SQL.
+3. SQL dividido en 5 chunks de ~250 filas, aplicados vía MCP `execute_sql`. Total persistido: 1148 (1 duplicado por nombre "Black" deduplicado vía `ON CONFLICT DO NOTHING`).
+
+### Limitaciones conocidas
+
+- No migra órdenes anteriores (sus `pantone_front`/`pantone_back` quedan en `'{}'`). Captura retroactiva es manual.
+- Sin Uncoated/Pastels/Neons todavía (todos los códigos están marcados `Coated` por el dataset usado). Si se necesita: agregar via Supabase Studio o un INSERT separado.
+- Precisión del preview: depende de calibración de monitor + papel + tinta. Es referencia aproximada — el código texto en la orden impresa es lo definitivo.
+
+
 ## v10.24.1 — Hotfix: 5 bugs funcionales detectados en scan — 16-may-2026
 
 Scan de bugs funcionales (subagent Explore + verificación crítica). 5 hallazgos reales corregidos en 1 commit.

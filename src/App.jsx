@@ -38,7 +38,7 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 // v10.19.0 — Helpers para notificaciones detalladas de edit
 // ============================================================
 // Campos que disparan notificación cuando cambian (con su label legible)
-const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila"};
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
 function diffOrderFields(before,after){
@@ -59,6 +59,11 @@ function diffOrderFields(before,after){
 
 // Formatea valores para mostrar en mensaje de notif (Telegram)
 function fmtEditValue(field,v){
+  // v10.25.0 — array fields (pantones)
+  if(field==="pantone_front"||field==="pantone_back"){
+    if(!Array.isArray(v)||v.length===0)return "—";
+    return v.join(", ");
+  }
   if(v==null||v==="")return"(vacío)";
   if(field==="due_date")return fD(v);
   if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
@@ -204,7 +209,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -969,6 +974,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       <tr><td colspan="5" class="section-title">Impresión</td></tr>
       <tr class="hdr"><td class="hdr" style="width:28%">Tipo de Papel</td><td class="hdr" style="width:12%">Gramaje</td><td class="hdr" style="width:25%">Tintas Frente</td><td class="hdr" style="width:25%">Tintas Vuelta</td><td class="hdr" style="width:10%">Medidas</td></tr>
       <tr><td style="font-weight:600">${o.paper_type||""}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${o.ink_front||o.colors||""}</td><td style="font-weight:600">${o.ink_back||""}</td><td style="text-align:center">${o.width_cm?o.width_cm+" × "+o.height_cm:""}</td></tr>
+      ${(Array.isArray(o.pantone_front)&&o.pantone_front.length>0)||(Array.isArray(o.pantone_back)&&o.pantone_back.length>0)?`<tr><td colspan="5" style="font-size:10px;padding:4px 8px;background:#f5f5f7"><strong>Pantones:</strong>${(o.pantone_front||[]).length>0?` Frente: ${o.pantone_front.join(", ")}`:""}${(o.pantone_back||[]).length>0?` · Vuelta: ${o.pantone_back.join(", ")}`:""}</td></tr>`:""}
       </table>`;
     }
 
@@ -1102,7 +1108,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {!hp&&vOwns&&<><Row l="Empresa" v={o.client_company}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
-      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/><Row l="Acabados" v={o.finishes}/></>}
+      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
       {o.agent&&<Row l="👤 Agente" v={o.agent}/>}
       {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
       {!hp&&vOwns&&isMaq&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginTop:12,marginBottom:4}}>Maquila</div><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
@@ -2170,9 +2176,104 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
   </div>;
 }
 
+// ─── PANTONE INPUT (v10.25.0) ─────────────────────
+// Typeahead async vs cobranza public.search_pantone con chips + preview de color.
+// Cache local hexCache para evitar refetch al re-renderizar chips ya seleccionados.
+function PantoneInput({label, value, onChange}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [hexCache, setHexCache] = useState({});
+  const [open, setOpen] = useState(false);
+  const debRef = useRef(null);
+  const arr = Array.isArray(value) ? value : [];
+  useEffect(() => {
+    if (debRef.current) clearTimeout(debRef.current);
+    if (!query || query.length < 1) { setResults([]); return; }
+    debRef.current = setTimeout(async () => {
+      const { data, error } = await supabase.rpc("search_pantone", { p_query: query, p_limit: 10 });
+      if (!error && data) {
+        setResults(data);
+        setHexCache(prev => { const next = {...prev}; data.forEach(d => { next[d.code] = d.hex; }); return next; });
+      }
+    }, 250);
+    return () => { if (debRef.current) clearTimeout(debRef.current); };
+  }, [query]);
+  // Resolver hexes de chips ya seleccionados (al cargar orden existente)
+  useEffect(() => {
+    arr.forEach(async (code) => {
+      if (hexCache[code]) return;
+      const { data } = await supabase.rpc("get_pantone_by_code", { p_code: code });
+      if (data && data[0]) setHexCache(prev => ({...prev, [code]: data[0].hex}));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arr.length]);
+  const addPantone = (code) => {
+    if (arr.includes(code)) return;
+    onChange([...arr, code]);
+    setQuery(""); setResults([]); setOpen(false);
+  };
+  const removePantone = (code) => onChange(arr.filter(c => c !== code));
+  return (
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
+      <label style={lbl}>{label}</label>
+      {arr.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,marginBottom:6}}>
+        {arr.map(code => {
+          const hex = hexCache[code] || "#cccccc";
+          return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Poppins',sans-serif"}}>
+            <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+            <span>{code}</span>
+            <button type="button" onClick={()=>removePantone(code)} style={{border:"none",background:"transparent",cursor:"pointer",color:C.t3,fontSize:14,padding:0,marginLeft:2,lineHeight:1}} title="Quitar">×</button>
+          </div>;
+        })}
+      </div>}
+      <div style={{position:"relative"}}>
+        <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} placeholder="Buscar Pantone (ej. 186 C, Reflex Blue)..."/>
+        {open && results.length > 0 && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:10,maxHeight:240,overflowY:"auto"}}>
+          {results.map(r => (
+            <div key={r.code} onMouseDown={e=>{e.preventDefault();addPantone(r.code)}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:"0.5px solid "+C.bd,fontFamily:"'Poppins',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+              <div style={{width:24,height:24,borderRadius:12,background:r.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{r.code}</div>
+                {r.name && <div style={{fontSize:10,color:C.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>}
+              </div>
+              <div style={{fontSize:9,color:C.t3,padding:"2px 6px",borderRadius:6,background:C.sf}}>{r.system}</div>
+            </div>
+          ))}
+        </div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── PANTONE CHIPS (read-only, para DetailModal) ───
+function PantoneChips({codes}) {
+  const [hexes, setHexes] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (const code of codes) {
+        if (hexes[code]) continue;
+        const { data } = await supabase.rpc("get_pantone_by_code", { p_code: code });
+        if (!cancelled && data && data[0]) setHexes(prev => ({...prev, [code]: data[0].hex}));
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codes.join(",")]);
+  return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>
+    {codes.map(code => {
+      const hex = hexes[code] || "#cccccc";
+      return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px 2px 3px",borderRadius:12,background:"#f5f5f7",fontSize:11,fontWeight:600,fontFamily:"'Poppins',sans-serif"}}>
+        <div style={{width:14,height:14,borderRadius:7,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+        <span>{code}</span>
+      </div>;
+    })}
+  </div>;
+}
+
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"Etiqueta colgante",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null};
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"Etiqueta colgante",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[]};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
   const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
@@ -2302,7 +2403,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req><select style={{...inp,paddingRight:32}} value={PTYPES.includes(f.product_type)?f.product_type:"Otro"} onChange={e=>{if(e.target.value==="Otro"){s("product_type","Otro")}else{s("product_type",e.target.value)}}}>{PTYPES.map(t=><option key={t}>{t}</option>)}</select>{(!PTYPES.includes(f.product_type)||f.product_type==="Otro")&&<input style={{...inp,marginTop:6}} value={f.product_type==="Otro"?"":f.product_type} onChange={e=>s("product_type",e.target.value||"Otro")} placeholder="Escribe el tipo de producto"/>}</FC></div>
     {!isMaq&&!specsOnly&&<div style={{padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:11,fontWeight:700,color:advMode?"#8b5cf6":C.t2}}>{advMode?"📖 Modo Avanzado":"📋 Modo Sencillo"}</div><div style={{fontSize:9,color:C.t3,marginTop:1}}>{advMode?"Libros, cuadernos, calendarios — escribe todos los datos técnicos":"Etiquetas, flyers, volantes — descripción rápida del producto"}</div></div><button onClick={()=>setAdvMode(!advMode)} style={{position:"relative",width:44,height:24,borderRadius:12,border:"none",background:advMode?"#8b5cf6":"#d1d5db",cursor:"pointer",transition:"background .2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:advMode?22:2,width:20,height:20,borderRadius:10,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)",transition:"left .2s"}}/></button></div>}
-    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Ancho cm" br><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></FC><FC label="Alto cm"><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></FC></div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", ")} onChange={e=>{const std=(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>FINISHES.includes(x));const custom=e.target.value?e.target.value.split(",").map(s=>s.trim()).filter(Boolean):[];s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
+    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Ancho cm" br><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></FC><FC label="Alto cm"><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></FC></div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", ")} onChange={e=>{const std=(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>FINISHES.includes(x));const custom=e.target.value?e.target.value.split(",").map(s=>s.trim()).filter(Boolean):[];s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
     {!specsOnly&&!advMode&&!isMaq&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="📝 Descripción del producto"><textarea style={{...inp,minHeight:90,resize:"vertical",lineHeight:1.6}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder="Ejemplo (escribe aquí) · Etiqueta adhesiva a 4 tintas en couché 150g, suaje redondo 5cm, barniz UV..."/></FC></div>}
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?"📝 Descripción del trabajo":"📖 Datos Técnicos Completos"}><div style={{background:(isMaq?"#e67e22":"#8b5cf6")+"08",borderRadius:12,padding:2}}><textarea style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:13}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:9,color:"#8b5cf6",marginTop:4,fontStyle:"italic"}}>💡 Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico</div>}</FC></div>}
     {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" rec br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Ejemplo · 1000"/></FC><FC label="📅 Entrega" rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9.5,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)">⏱️ Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:9,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}>⚠️ {pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok}}>✓ OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)">💡 Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:9,color:C.ok,fontWeight:600}}>✓ Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
@@ -5391,7 +5492,7 @@ export default function PrintFlow() {
 
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
-    const editableFields=["order_type","priority","production_number","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2"];
+    const editableFields=["order_type","priority","production_number","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     if("price" in safeUpdate)safeUpdate.price=toNum(safeUpdate.price,parseFloat);
