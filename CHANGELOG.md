@@ -5,6 +5,48 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.24.1 — Hotfix: 5 bugs funcionales detectados en scan — 16-may-2026
+
+Scan de bugs funcionales (subagent Explore + verificación crítica). 5 hallazgos reales corregidos en 1 commit.
+
+### Fixes
+
+**A. `compressImg` null-check de `file.type`** ([App.jsx:579](src/App.jsx#L579))
+- Antes: `if (!/^image\/.../.test(file.type))` — explota si `file.type` es null/undefined.
+- Después: `if (!file.type || !/^image\/.../.test(file.type))`. Si MIME está vacío, retorna el archivo sin procesar (skip seguro).
+
+**B. `compressImg` null-check de `file.name`** ([App.jsx:594](src/App.jsx#L594))
+- Antes: `file.name.replace(/\.[^.]+$/, ".jpg")` — explota si `file.name` es vacío.
+- Después: `(file.name || "image").replace(...)`. Fallback a `"image.jpg"`.
+
+**C. `return_to_ready` validar `e.started` antes de calcular minutes** ([App.jsx:5808-5814](src/App.jsx#L5808-L5814))
+- Antes: `new Date(e.started)` sin validar — si `e.started` es null/inválido, `(now - s) / 60000 = NaN`. machine_log local quedaba con `minutes: NaN`.
+- Después: chequear `e.started` y `!isNaN(s.getTime())` antes de calcular; fallback a `minutes: 0`.
+
+**D. `return_to_ready` usar `canExecuteAction` (hardstop central)** ([App.jsx:5786](src/App.jsx#L5786))
+- Antes: check manual `if(user!=="admin"&&user!=="produccion")`.
+- Después: usa el gate central `canExecuteAction("return_to_ready", o, user, userLogin)`. Consistente con `advance`, `validate_prod`, `send_maquila`, etc.
+- Agregado a `ACTION_ROLES`: `return_to_ready: { allowed:["admin","produccion"], ownerBound:[] }`.
+
+**E. `DualScroll` guard `ResizeObserver`** ([App.jsx:557](src/App.jsx#L557))
+- Antes: `new ResizeObserver(m)` sin feature check — navegadores muy viejos (IE11, Safari <13.1) lanzaban ReferenceError.
+- Después: `if (typeof ResizeObserver === "undefined") return;` antes de instanciar. En navegadores legacy, DualScroll funciona con scrollbar inferior solamente (sin barra superior dinámica). Sin breaking change.
+
+### Falsos positivos descartados del scan
+
+- Cleanup `image_url`/`image_url_2` "sin manejo de errores parciales" — el `try{...}catch{}` general SÍ protege atomicidad. Si un remove falla, el UPDATE no ocurre — orden queda intacta.
+- `parseDate` "no matchea ISO full timestamps" — es comportamiento esperado. ISO completos con `T` se pasan directo a `new Date()` que ya los interpreta correctamente.
+- `setAuthChecked` "puede no ejecutarse" — verificados los 5 paths; todos lo invocan.
+- Validación de schema en RPCs (paranoia útil pero no urgente — los RPCs están versionados en SQL).
+- `doAdv` notifs "no transaccionales" — design choice intencional.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Backend / RPCs
+- UI: ningún cambio visible para el usuario
+
+
 ## v10.24.0 — Limpieza de botones bajo DragCard en Kanban de máquinas — 16-may-2026
 
 Reportado por Marcelo: los botones bajo el DragCard del Kanban de máquinas estaban saturados. Simplificación de la barra de acciones.

@@ -102,6 +102,8 @@ const ACTION_ROLES = {
   send_maquila:    { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   waste:           { allowed:["admin","produccion","german"], ownerBound:[] },
   devolver_design: { allowed:["admin","preprensa","german"], ownerBound:[] },
+  return_to_ready: { allowed:["admin","produccion"], ownerBound:[] }, // v10.24.1
+
   // ─── Phase 2 — pedidos web ───
   web_approve:     { allowed:["admin","secretaria"], ownerBound:[] },
   web_reject:      { allowed:["admin","secretaria"], ownerBound:[] },
@@ -552,7 +554,7 @@ const inp={width:"100%",padding:"10px 14px",fontFamily:"'Poppins',sans-serif",fo
 // Pensado para users con mouse tradicional (sin trackpad) que no pueden deslizar lateralmente.
 function DualScroll({children,style}){
   const topRef=useRef(null);const bottomRef=useRef(null);const [w,setW]=useState(0);const syncRef=useRef(false);
-  useEffect(()=>{const node=bottomRef.current;if(!node)return;const m=()=>setW(node.scrollWidth);m();const ro=new ResizeObserver(m);ro.observe(node);if(node.firstElementChild)ro.observe(node.firstElementChild);return()=>ro.disconnect()},[children]);
+  useEffect(()=>{const node=bottomRef.current;if(!node)return;const m=()=>setW(node.scrollWidth);m();/* v10.24.1 — guard ResizeObserver para navegadores legacy */if(typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(m);ro.observe(node);if(node.firstElementChild)ro.observe(node.firstElementChild);return()=>ro.disconnect()},[children]);
   const onTop=()=>{if(syncRef.current)return;syncRef.current=true;if(bottomRef.current&&topRef.current)bottomRef.current.scrollLeft=topRef.current.scrollLeft;requestAnimationFrame(()=>{syncRef.current=false})};
   const onBottom=()=>{if(syncRef.current)return;syncRef.current=true;if(bottomRef.current&&topRef.current)topRef.current.scrollLeft=bottomRef.current.scrollLeft;requestAnimationFrame(()=>{syncRef.current=false})};
   return <div><div ref={topRef} onScroll={onTop} style={{overflowX:"auto",overflowY:"hidden"}}><div style={{width:w,height:1}}/></div><div ref={bottomRef} onScroll={onBottom} style={{overflowX:"auto",...style}}>{children}</div></div>;
@@ -574,7 +576,8 @@ if(typeof document!=="undefined"&&!document.getElementById("pf-placeholder-style
 //   - Si por algún motivo la compresión NO reduce tamaño, retorna el original.
 //   - Solo procesa JPG/PNG/WEBP. GIF, BMP, etc. pasan sin tocar.
 const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
-  if (!/^image\/(jpe?g|png|webp)$/i.test(file.type)) { resolve(file); return; }
+  // v10.24.1 — null-check de file.type y file.name (algunos navegadores no los setean siempre)
+  if (!file.type || !/^image\/(jpe?g|png|webp)$/i.test(file.type)) { resolve(file); return; }
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
@@ -590,7 +593,8 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
     canvas.getContext("2d").drawImage(img, 0, 0, w, h);
     canvas.toBlob(blob => {
       if (!blob || blob.size >= file.size) { resolve(file); return; }
-      resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+      const safeName = (file.name || "image").replace(/\.[^.]+$/, ".jpg");
+      resolve(new File([blob], safeName, { type: "image/jpeg" }));
     }, "image/jpeg", q);
   };
   img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
@@ -5783,7 +5787,8 @@ export default function PrintFlow() {
     if(action==="return_to_ready"){
       const o=orders.find(x=>x.id===id);
       if(!o){return}
-      if(user!=="admin"&&user!=="produccion"){showToast("❌ Solo admin/producción pueden volver a Lista","error");return}
+      // 🔒 v10.24.1 — Hardstop centralizado (antes era check manual)
+      if(!canExecuteAction("return_to_ready",o,user,userLogin)){showToast(actionDeniedToast("return_to_ready",o,user,userLogin),"error");return}
       setActionLoading(id);
       (async()=>{
         try{
@@ -5798,7 +5803,14 @@ export default function PrintFlow() {
           // 4. State local — espejo de lo persistido para refresh visual inmediato
           const now=new Date();
           const ml=Array.isArray(o.machine_log)?o.machine_log.slice():[];
-          ml.forEach((e,i)=>{if(!e.ended){const s=new Date(e.started);ml[i]={...e,ended:now.toISOString(),minutes:Math.round((now-s)/60000)}}});
+          ml.forEach((e,i)=>{
+            if(e&&!e.ended){
+              // v10.24.1 — validar e.started para evitar NaN en minutes
+              const s=e.started?new Date(e.started):null;
+              const valid=s&&!isNaN(s.getTime());
+              ml[i]={...e,ended:now.toISOString(),minutes:valid?Math.round((now-s)/60000):0};
+            }
+          });
           const newTL=[...(o.timeline||[]),{action:"🔄 Devuelta a Lista (desde "+fromMachine+")",date:now.toISOString(),by:userLogin||user,color:"#007aff"}];
           setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_log:ml,timeline:newTL}:x));
           // 5. Notif al trío + admin (filtro 2B Telegram para admin sigue aplicando)
