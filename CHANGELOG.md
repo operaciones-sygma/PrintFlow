@@ -133,7 +133,102 @@ Scan de bugs funcionales (subagent Explore + verificación crítica). 5 hallazgo
 - UI: ningún cambio visible para el usuario
 
 
-## v10.24.0 — Limpieza de botones bajo DragCard en Kanban de máquinas — 16-may-2026
+## v10.24.0 — Silencio de notificaciones fin de semana — 16-may-2026
+
+Solicitado por Marcelo: el equipo necesita desconexión real los fines de semana sin notificaciones que interrumpan. Las notificaciones del sistema se descartan automáticamente durante la ventana **viernes 20:00 → lunes 09:00 hora México** (61 horas continuas). Aplica a todos los canales y orígenes.
+
+### Migración aplicada (vía Supabase MCP)
+
+- Nombre registrado: `silent_window_notifications_v10_24`
+- Aplicada: 2026-05-16 17:48:43 UTC (11:48 hora MX)
+- Sin cambios en App.jsx, Vercel, n8n, o DB schema
+
+### Funciones creadas (schema public)
+
+- **`is_business_hours()`** — BOOLEAN STABLE — devuelve TRUE si `NOW()` está en horario laboral hora MX (`America/Mexico_City`, UTC-6 sin DST desde oct-2022). FALSE durante ventana de silencio.
+- **`is_business_hours_at(timestamptz)`** — BOOLEAN STABLE — versión testeable con timestamp arbitrario, idéntica lógica.
+- **`skip_silent_window_notifications()`** — RETURNS TRIGGER — devuelve NULL durante ventana de silencio (cancela INSERT silenciosamente, sin error).
+
+### Trigger creado
+
+- **`trg_skip_silent_window`** BEFORE INSERT ON `public.notifications` FOR EACH ROW — aplica el filtro antes de cualquier otro trigger.
+
+### Cobertura
+
+El trigger BEFORE INSERT cubre **TODOS** los orígenes que insertan en `public.notifications`:
+
+- ✅ Frontend (`db.notifySecs`, `db.notify`, etc. desde Lupita/Gerardo/etc.)
+- ✅ Webhook Wix (pedidos web sábado/domingo)
+- ✅ Cron jobs (`stale_alert` que corre cada hora)
+- ✅ Triggers backend (bridges PrintFlow→CobranzaFlow)
+- ✅ Cualquier canal futuro (SMS, email, push) que beba de la misma tabla
+- ✅ Como el AFTER `trg_telegram_notify` solo corre si el INSERT realmente sucede, también queda silenciado automáticamente
+
+### Lógica de ventana de silencio (61h)
+
+| Día/Hora MX | Estado |
+|---|---|
+| Lunes 00:00 → 08:59:59 | 🔇 Silencio |
+| Lunes 09:00 → Viernes 19:59:59 | 🔔 Horario laboral (notifs normales) |
+| Viernes 20:00 → Domingo 23:59:59 | 🔇 Silencio |
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Silenciar TODOS los canales (Telegram + in-app + email futuro) | Pedido explícito: "Telegram + in-app + email" |
+| D-2 | Descartar (no acumular ni reportar el lunes) | "Silenciar y descartar (nunca se entera)" |
+| D-3 | Filtro BEFORE INSERT en `notifications` | Una sola fuente de verdad, cubre todos los orígenes |
+| D-4 | Sin override por usuario individual | KISS — si alguien quiere recibir en fin, se discute caso a caso después |
+| D-5 | Sin log de notifs descartadas | Cero auditoría innecesaria; el "qué pasó" se reconstruye desde `orders`/`order_comments` |
+| D-6 | Solo `public.notifications` (no `cobranza.notifications`) | CobranzaFlow tiene su propia tabla; si después se quiere extender, se replica el trigger |
+| D-7 | Zona horaria `America/Mexico_City` (no UTC, no offset hardcoded) | Postgres mantiene zoneinfo IANA actualizada; refleja correctamente que MX no tiene DST desde oct-2022 |
+
+### Smoke tests pasados
+
+- ✅ 8/8 tests determinísticos con `is_business_hours_at(timestamptz)`:
+  - Lunes 14:00 MX → laboral ✓
+  - Lunes 08:59 MX → silencio ✓
+  - Lunes 09:00 MX → abre ✓
+  - Viernes 19:59 MX → laboral ✓
+  - Viernes 20:00 MX → cierra ✓
+  - Sábado 12:00 MX → silencio ✓
+  - Domingo 12:00 MX → silencio ✓
+  - Miércoles 10:00 MX → laboral ✓
+- ✅ Smoke test en vivo: INSERT durante sábado 11:49 hora MX fue descartado silenciosamente, cero notif Telegram, cero error UI, cero registro en `notifications`.
+
+### Reversión / control
+
+Para deshabilitar temporalmente (ej. semana de emergencia con producción de fin):
+
+```sql
+ALTER TABLE public.notifications DISABLE TRIGGER trg_skip_silent_window;
+-- ... después ...
+ALTER TABLE public.notifications ENABLE TRIGGER trg_skip_silent_window;
+```
+
+Para eliminar permanentemente:
+
+```sql
+DROP TRIGGER IF EXISTS trg_skip_silent_window ON public.notifications;
+DROP FUNCTION IF EXISTS public.skip_silent_window_notifications();
+DROP FUNCTION IF EXISTS public.is_business_hours_at(TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS public.is_business_hours();
+```
+
+### Sin cambios
+
+- App.jsx (cero cambios en frontend)
+- Vercel (cero redeploy)
+- DB schema base (cero ALTER TABLE)
+- Workflow n8n PrintFlow Telegram Notifier
+- Bridge PrintFlow→CobranzaFlow
+- Memoria operativa del equipo (siguen viendo sus pendientes el lunes)
+
+
+## v10.24.0.5 — Limpieza de botones bajo DragCard en Kanban de máquinas — 16-may-2026
+
+> **Nota:** Originalmente esta versión iba a ser v10.24.0, pero v10.24.0 se asignó retroactivamente al **Silencio de notificaciones fin de semana** (migración SQL aplicada el mismo día, 16-may-2026 a las 11:48 hora MX, que no había sido documentada en CHANGELOG al momento del commit de esta versión). Renumerada como sub-patch v10.24.0.5 para preservar orden cronológico y reflejar que es un cambio menor de UX vs. el cambio de infraestructura del silencio. El contenido del entry es idéntico al original; solo cambió la numeración.
 
 Reportado por Marcelo: los botones bajo el DragCard del Kanban de máquinas estaban saturados. Simplificación de la barra de acciones.
 
