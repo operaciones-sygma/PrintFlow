@@ -246,6 +246,34 @@ Reportado por Marcelo: muchas computadoras del equipo tienen mouse tradicional (
 - El prop `style` se aplica al div inferior (donde vive el contenido real) — preserva `display:flex`, `gap`, `paddingBottom`, etc.
 
 
+## v10.20.1 — Hotfix: agregar Germán al nav del Tablero — 15-may-2026
+
+Bug pre-existente desde el initial commit del repo (5-may-2026), reportado por Marcelo cuando a Germán le llegó una orden y no podía arrastrarla a CTP.
+
+### Causa raíz
+
+[App.jsx:5916](src/App.jsx#L5916) construía el array `navs` con `if(user==="produccion"||user==="admin"||user==="karla")navs.push({id:"board",...})`. **Germán nunca estuvo en esa condición**, así que el botón "Tablero" jamás aparecía en su nav. El render del Tablero Germán SÍ existía ([App.jsx:5990](src/App.jsx#L5990)) y otros lugares asumían que él lo usaba (hints en líneas 2604 y 5977), pero nadie podía llegar ahí.
+
+Misterio sin resolver: cómo había operado Germán hasta ese día sin acceso al Tablero. Probable workaround manual con URL directa o vía admin.
+
+### Fix
+
+Cambio de 1 línea: agregar `||user==="german"` al condicional + ícono específico:
+
+```js
+if(user==="produccion"||user==="admin"||user==="karla"||user==="german")
+  navs.push({id:"board",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
+```
+
+Germán ahora ve `💿 Tablero` en su nav, accede a su `PreprensaBoard` con CTP y Procesadora.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Permisos / canExecuteAction
+- Otros roles
+
+
 ## v10.20.0 — Duplicar ampliado + Mover OC fuera de vista + Fix race condition de folios — 15-may-2026
 
 > **Nota:** el brief original proponía esto como v10.12.0.6 pero esa numeración quedaba retroactiva (ya teníamos v10.13.0–v10.19.0). Renumerado a v10.20.0 al aplicarlo.
