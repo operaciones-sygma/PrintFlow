@@ -3073,8 +3073,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                         <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
                         {enEspera.map(o=><div key={o.id} draggable
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
-                            onDragOver={e=>{e.preventDefault();e.stopPropagation()}}
-                            onDrop={e=>{e.preventDefault();e.stopPropagation();const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                            onDragOver={e=>{e.preventDefault()}}
+                            onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
                             <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
@@ -3259,8 +3259,8 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
               <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
               {enEspera.map(o=><div key={o.id} draggable
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
-                  onDragOver={e=>{e.preventDefault();e.stopPropagation()}}
-                  onDrop={e=>{e.preventDefault();e.stopPropagation();const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                  onDragOver={e=>{e.preventDefault()}}
+                  onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                   style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
                   <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>

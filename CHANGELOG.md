@@ -5,6 +5,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.26.1 — Hotfix: drop de Lista a máquina con cola — 17-may-2026
+
+Bug reportado por Marcelo inmediatamente después de v10.26.0: al arrastrar una orden desde **Lista** a una máquina que tenía órdenes **activa + en espera**, el drop fallaba silenciosamente. Solo funcionaba si la máquina estaba vacía o solo tenía la activa.
+
+### Causa raíz
+
+Las tarjetas de `enEspera` tenían `onDragOver={e=>{e.preventDefault();e.stopPropagation()}}` y `onDrop={e=>{e.preventDefault();e.stopPropagation();...}}` con stopPropagation **incondicional**, ejecutado **antes** de validar si era reorder o asignación nueva. Cuando el drop venía desde Lista (no de la misma cola), la condición `fromMachine===m.id` fallaba, no se hacía nada, pero la propagación al wrapper de máquina ya estaba bloqueada — el `drop(m.id,e)` del wrapper nunca se llamaba y `setDropConfirm` nunca abría el modal.
+
+### Fix
+
+`stopPropagation` ahora solo se llama **dentro del condicional**, no antes. Si el drop no es un reorder válido (fromMachine vacío o distinto), el evento burbujea hasta el wrapper de máquina que lo procesa como asignación nueva normalmente. Mismo cambio en Kanban y PreprensaBoard.
+
+Sin cambios DB.
+
+
 ## v10.26.0 — Cola por máquina (eliminación del Planificador) — 17-may-2026
 
 Cambio mayor en cómo se modelan las órdenes asignadas a máquina. Antes: cualquier número de órdenes podía compartir la misma máquina simultáneamente (timer corriendo en todas) y el Planificador era una capa extra para ordenarlas. Ahora: cada máquina tiene una **cola posicional** donde solo `position=0` está ACTIVA (con `order_machine_log` abierto). El resto espera en `position=1,2,...`. Al sacar la activa, la siguiente se promueve automáticamente.
