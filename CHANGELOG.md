@@ -5,6 +5,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.26.2 — Botón "Volver a Lista" en cola en espera + permiso German — 17-may-2026
+
+Pedido de Marcelo: agregar el botón 🔄 ("Sacar de la máquina y volver a Lista") también a las tarjetas de **órdenes en espera**, no solo a la activa.
+
+### Cambios
+
+- **Kanban y PreprensaBoard**: cada tarjeta de `enEspera` ahora muestra el botón 🔄 junto al "⏯️ Activar" (header de la card, en una fila con `gap:3`). El handler `return_to_ready` ya soportaba órdenes en cola (no solo activas) desde v10.26.0 — la RPC `move_order_in_queue` saca la orden de la cola y shiftea las demás. No requiere cerrar machine_log (no tenía uno abierto).
+- **Bug latente arreglado**: el whitelist `ACTION_ROLES.return_to_ready` solo permitía `["admin","produccion"]`, pero en FASE 4 (v10.26.0) expuse el botón 🔄 en la activa de PreprensaBoard para el rol "german". Resultado: German clickeando el botón obtenía "Tu rol no puede ejecutar esta acción". Agregado "german" al whitelist (tiene sentido conceptualmente: él gestiona órdenes en CTP/Procesadora, debe poder regresarlas a Lista si algo sale mal).
+
+Sin cambios DB.
+
+
 ## v10.26.1 — Hotfix: drop de Lista a máquina con cola — 17-may-2026
 
 Bug reportado por Marcelo inmediatamente después de v10.26.0: al arrastrar una orden desde **Lista** a una máquina que tenía órdenes **activa + en espera**, el drop fallaba silenciosamente. Solo funcionaba si la máquina estaba vacía o solo tenía la activa.

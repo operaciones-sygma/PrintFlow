@@ -109,7 +109,7 @@ const ACTION_ROLES = {
   send_maquila:    { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   waste:           { allowed:["admin","produccion","german"], ownerBound:[] },
   devolver_design: { allowed:["admin","preprensa","german"], ownerBound:[] },
-  return_to_ready: { allowed:["admin","produccion"], ownerBound:[] }, // v10.24.1
+  return_to_ready: { allowed:["admin","produccion","german"], ownerBound:[] }, // v10.24.1 + v10.26.2 (german para CTP)
 
   // ─── Phase 2 — pedidos web ───
   web_approve:     { allowed:["admin","secretaria"], ownerBound:[] },
@@ -3076,9 +3076,12 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                             <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
-                            {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                            <div style={{display:"flex",gap:3}}>
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                            </div>
                           </div>
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
@@ -3262,9 +3265,12 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                   onDragOver={e=>{e.preventDefault()}}
                   onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                   style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                   <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
-                  {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                  <div style={{display:"flex",gap:3}}>
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                  </div>
                 </div>
                 <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                   <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
