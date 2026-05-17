@@ -547,6 +547,68 @@ const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
 const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]??1)-(p[b.priority]??1)};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||WAIT_STAGES.includes(o.stage))return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+
+// v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
+const STAGE_RESPONSIBLE = {
+  draft: { role: "both", name: "Producción + Pre-prensa" },
+  design: { role: "preprensa", name: "Noemí" },
+  proof_printing: { role: "german", name: "Germán" },
+  proof_client: { role: "preprensa", name: "Noemí" },
+  ctp: { role: "german", name: "Germán" },
+  placas_listas: { role: "produccion", name: "Gerardo" },
+  ready: { role: "produccion", name: "Gerardo" },
+  in_production: { role: "produccion", name: "Gerardo" },
+  packaging: { role: "produccion", name: "Gerardo" },
+  salidas: { role: "karla", name: "Karla" },
+  maquila_out: { role: "produccion", name: "Gerardo" },
+  maquila_in: { role: "produccion", name: "Gerardo" },
+  maq_created: { role: "secretaria", name: "Lupita" },
+  maq_sent: { role: "secretaria", name: "Lupita" },
+  maq_in_progress: { role: "secretaria", name: "Lupita" },
+  maq_received: { role: "karla", name: "Karla" }
+};
+
+const TERMINAL_STAGES = ["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected"];
+
+function getTopPriority(activeOrders) {
+  let topScore = -1, topOrder = null;
+  activeOrders.forEach(o => {
+    let score = 0;
+    if (o.due_date && new Date(o.due_date + "T12:00:00") < new Date()) score += 1000;
+    else if (o.due_date && new Date(o.due_date + "T12:00:00") <= new Date(Date.now() + 2*86400000)) score += 500;
+    const st = getStale(o);
+    if (st?.lv === "critical") score += 300;
+    else if (st?.lv === "warning") score += 100;
+    const money = o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
+    score += Math.min(money / 1000, 500);
+    if (score > topScore) { topScore = score; topOrder = o; }
+  });
+  return topOrder;
+}
+
+function getIncompleteData(orders) {
+  const active = orders.filter(o => !TERMINAL_STAGES.includes(o.stage));
+  const fileStages = ["proof_printing","proof_client","ctp","placas_listas","ready","in_production","packaging","salidas"];
+  return {
+    vencidas: active.filter(o => o.due_date && new Date(o.due_date + "T12:00:00") < new Date()),
+    sinFecha: active.filter(o => !o.due_date),
+    sinPrecio: active.filter(o => o.order_type === "maquila" ? (!o.maq_price || Number(o.maq_price) === 0) : (!o.price || Number(o.price) === 0)),
+    sinCantidad: active.filter(o => !o.quantity || Number(o.quantity) === 0),
+    sinArchivoStageAvanzado: active.filter(o => fileStages.includes(o.stage) && !o.file_url && !o.image_url && !o.image_url_2),
+    sinTelefono: active.filter(o => !o.client_phone),
+    sinEmail: active.filter(o => !o.client_email),
+    sinAgente: active.filter(o => !o.agent),
+    maquilaSinProveedor: active.filter(o => o.order_type === "maquila" && !o.maq_provider)
+  };
+}
+
+function getOrphanOCs(purchaseOrders, orders) {
+  if (!purchaseOrders || !Array.isArray(purchaseOrders)) return [];
+  return purchaseOrders.filter(po =>
+    po.status !== "cancelled" &&
+    !orders.some(o => o.purchase_order_id === po.id && !["cancelled","maq_cancelled"].includes(o.stage))
+  );
+}
 const getProgress=o=>{const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const idx=flow.findIndex(s=>s.id===o.stage);return{cur:idx+1,tot:flow.length,pct:Math.round(((idx+1)/flow.length)*100)}};
 
 // Calcula fecha de entrega para pedidos web según reglas de negocio.
@@ -4519,6 +4581,408 @@ function StatCard({ label, value, subValue, color }) {
   );
 }
 
+// ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
+function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload }) {
+  const [expandedSection, setExpandedSection] = useState({});
+
+  if (role !== "admin") return null;
+
+  const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage)), [orders]);
+
+  const orderMoney = (o) => o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
+  const isVencida = (o) => o.due_date && new Date(o.due_date + "T12:00:00") < new Date();
+  const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(o.due_date + "T12:00:00") <= new Date(Date.now() + 2*86400000);
+
+  const topPriority = useMemo(() => getTopPriority(active), [active]);
+
+  const responsiblePulse = useMemo(() => {
+    const icons = { preprensa: "🎨", produccion: "⚙️", secretaria: "📋", karla: "🧾", german: "💿" };
+    const map = {};
+    active.forEach(o => {
+      const resp = STAGE_RESPONSIBLE[o.stage];
+      if (!resp || resp.role === "both") return;
+      if (!map[resp.role]) {
+        map[resp.role] = {
+          role: resp.role, name: resp.name, icon: icons[resp.role] || "👤",
+          orders: [], vencidas: 0, urgentes: 0, horasSinActividad: 0
+        };
+      }
+      const r = map[resp.role];
+      r.orders.push(o);
+      if (isVencida(o)) r.vencidas += 1;
+      if (isUrgente(o)) r.urgentes += 1;
+      const lastAct = o.timeline?.length > 0 ? o.timeline[o.timeline.length - 1].date : o.created_at;
+      const h = hoursAgo(lastAct);
+      if (h > r.horasSinActividad) r.horasSinActividad = h;
+    });
+    return Object.values(map).sort((a, b) => b.vencidas - a.vencidas || b.urgentes - a.urgentes);
+  }, [active]);
+
+  const stale = useMemo(() => {
+    const list = active.map(o => ({ ...o, _stale: getStale(o) })).filter(o => o._stale);
+    return {
+      critical: list.filter(o => o._stale.lv === "critical"),
+      warning: list.filter(o => o._stale.lv === "warning"),
+      total: list.length
+    };
+  }, [active]);
+
+  const incomplete = useMemo(() => getIncompleteData(orders), [orders]);
+
+  const machineStatus = useMemo(() => {
+    const inMaintenance = (maintenance || []).filter(m => !m.ended_at);
+    const machinesWithOrders = {};
+    active.forEach(o => {
+      if (o.current_machine && o.current_machine !== "vm_manual") {
+        if (!machinesWithOrders[o.current_machine]) {
+          machinesWithOrders[o.current_machine] = { id: o.current_machine, orders: [], money: 0 };
+        }
+        machinesWithOrders[o.current_machine].orders.push(o);
+        machinesWithOrders[o.current_machine].money += orderMoney(o);
+      }
+    });
+    return { inMaintenance, activeMachines: Object.values(machinesWithOrders).sort((a, b) => b.money - a.money) };
+  }, [active, maintenance]);
+
+  const orphanOCs = useMemo(() => getOrphanOCs(purchaseOrders || [], orders), [purchaseOrders, orders]);
+
+  const unreadNotifs = useMemo(() =>
+    (notifications || []).filter(n => !n.read && n.target_role === "admin"),
+    [notifications]
+  );
+
+  const notifyResponsible = (order) => {
+    const resp = STAGE_RESPONSIBLE[order.stage];
+    if (!resp || resp.role === "both") return;
+    const msg = "🚨 Admin pide atención: " + order.production_number + " · " + (order.client || "—").trim() + " · " + (SM[order.stage]?.l || order.stage);
+    setConfirmModal({
+      title: "Notificar a " + resp.name,
+      message: 'Se enviará una notificación con el mensaje:\n\n"' + msg + '"',
+      confirmLabel: "Enviar notificación",
+      confirmColor: "#007aff",
+      onConfirm: async () => {
+        try {
+          await supabase.from("notifications").insert({ target_role: resp.role, order_id: order.id, type: "admin_attention", message: msg, by_user: "admin" });
+          showToast("📣 Notificación enviada a " + resp.name);
+        } catch (e) {
+          showToast("❌ No se pudo notificar: " + (e?.message || "error"), "error");
+        }
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  const cancelOrphanOC = (oc) => {
+    setConfirmModal({
+      title: "Cancelar OC " + oc.id,
+      message: "Esta acción cancelará permanentemente la OC " + oc.id + " (" + (oc.client || "—") + "). No tiene órdenes activas asociadas.",
+      confirmLabel: "Sí, cancelar OC",
+      confirmColor: "#ff3b30",
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase.from("purchase_orders").update({
+            status: "cancelled",
+            cancelled_at: new Date().toISOString(),
+            cancelled_by: "admin",
+            cancellation_reason: "Limpieza desde Salud Operativa — sin órdenes activas"
+          }).eq("id", oc.id);
+          if (error) throw new Error(error.message);
+          showToast("✅ OC " + oc.id + " cancelada");
+          reload();
+        } catch (e) {
+          showToast("❌ No se pudo cancelar OC: " + (e?.message || "error"), "error");
+        }
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  const markAllNotifsRead = () => {
+    setConfirmModal({
+      title: "Marcar " + unreadNotifs.length + " notificaciones como leídas",
+      message: "Esto marcará TODAS las notificaciones admin como leídas. No se pueden recuperar como 'no leídas' fácilmente. ¿Continuar?",
+      confirmLabel: "Sí, marcar todas",
+      confirmColor: "#5856d6",
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase.from("notifications")
+            .update({ read: true })
+            .eq("target_role", "admin")
+            .eq("read", false);
+          if (error) throw new Error(error.message);
+          showToast("✅ " + unreadNotifs.length + " notificaciones marcadas como leídas");
+        } catch (e) {
+          showToast("❌ No se pudieron marcar: " + (e?.message || "error"), "error");
+        }
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  return (
+    <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
+        🩺 Salud Operativa
+      </h2>
+      <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
+        Supervisión diaria del taller. Última actualización: ahora.
+      </p>
+
+      {/* SECCIÓN 1: Top Prioridad */}
+      {topPriority && (
+        <div style={{
+          background: isVencida(topPriority) ? "#ff3b3008" : isUrgente(topPriority) ? "#ff950008" : "#f5f5f7",
+          border: "2px solid " + (isVencida(topPriority) ? "#ff3b30" : isUrgente(topPriority) ? "#ff9500" : C.bd),
+          borderRadius: 14,
+          padding: "16px 20px",
+          marginBottom: 24
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: isVencida(topPriority) ? "#ff3b30" : "#ff9500", textTransform: "uppercase", marginBottom: 8 }}>
+            🚨 Top Prioridad del Día
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
+            {topPriority.production_number || "—"} · {(topPriority.client || "—").trim()}
+          </div>
+          <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
+            {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
+            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(topPriority.due_date + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
+            {isUrgente(topPriority) && <span style={{ color: "#ff9500", fontWeight: 600 }}>URGENTE · </span>}
+            {SM[topPriority.stage]?.l || topPriority.stage} · {STAGE_RESPONSIBLE[topPriority.stage]?.name || "—"}
+            {(() => {
+              const lastAct = topPriority.timeline?.length > 0 ? topPriority.timeline[topPriority.timeline.length - 1].date : topPriority.created_at;
+              const h = hoursAgo(lastAct);
+              return h >= 24 ? <> · {h}h sin actividad</> : null;
+            })()}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => onAction(topPriority.id, "detail")} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#007aff", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
+              Ver orden
+            </button>
+            {STAGE_RESPONSIBLE[topPriority.stage] && STAGE_RESPONSIBLE[topPriority.stage].role !== "both" && (
+              <button onClick={() => notifyResponsible(topPriority)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff", color: C.tx, border: "1px solid " + C.bd, borderRadius: 8, cursor: "pointer" }}>
+                📣 Notificar {STAGE_RESPONSIBLE[topPriority.stage].name}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SECCIÓN 2: Pulso por Responsable */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>👥 Pulso por Responsable</h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 24 }}>
+        {responsiblePulse.length === 0 && (
+          <div style={{ padding: 20, textAlign: "center", color: C.t3, fontSize: 12 }}>Sin órdenes activas</div>
+        )}
+        {responsiblePulse.map(r => (
+          <div key={r.role} style={{
+            background: "#fff",
+            border: "1px solid " + C.bd,
+            borderLeft: "4px solid " + (r.vencidas > 0 ? "#ff3b30" : r.urgentes > 0 ? "#ff9500" : "#34c759"),
+            borderRadius: 12,
+            padding: 14
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
+              {r.icon} {r.name}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: C.tx, marginBottom: 8 }}>{r.orders.length}</div>
+            <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>
+              {r.vencidas > 0 ? "🔴 " + r.vencidas + " vencida" + (r.vencidas !== 1 ? "s" : "") : "🟢 0 vencidas"}
+            </div>
+            <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>
+              {r.urgentes > 0 ? "🟠 " + r.urgentes + " urgente" + (r.urgentes !== 1 ? "s" : "") : "🟢 0 urgentes"}
+            </div>
+            <div style={{ fontSize: 11, color: C.t2, marginBottom: 8 }}>
+              ⏱️ {r.horasSinActividad}h máx sin actividad
+            </div>
+            <button onClick={() => setExpandedSection(s => ({ ...s, ["resp_" + r.role]: !s["resp_" + r.role] }))} style={{ width: "100%", padding: "6px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer" }}>
+              {expandedSection["resp_" + r.role] ? "Ocultar ▲" : "Ver todas ▼"}
+            </button>
+            {expandedSection["resp_" + r.role] && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid " + C.bd }}>
+                {r.orders.map(o => (
+                  <div key={o.id} onClick={() => onAction(o.id, "detail")} style={{
+                    fontSize: 10, color: C.t2, padding: "3px 0", cursor: "pointer", display: "flex", justifyContent: "space-between"
+                  }}>
+                    <span>{o.production_number || "—"} · {(o.client || "—").trim().substring(0, 18)}</span>
+                    <span>{SM[o.stage]?.l || o.stage}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* SECCIÓN 3: Estancadas */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>
+        ⏳ Estancadas ({stale.total})
+      </h3>
+      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: C.t2 }}>🔴 Críticas (&gt;48h): <strong>{stale.critical.length}</strong></span>
+          <span style={{ fontSize: 11, color: C.t2 }}>🟠 Warning (24-48h): <strong>{stale.warning.length}</strong></span>
+        </div>
+        {[...stale.critical, ...stale.warning].slice(0, expandedSection.stale ? 999 : 8).map(o => (
+          <div key={o.id} onClick={() => onAction(o.id, "detail")} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "6px 0", borderBottom: "0.5px solid " + C.bd, fontSize: 11, cursor: "pointer", gap: 8
+          }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: o._stale.lv === "critical" ? "#ff3b30" : "#ff9500" }}>
+                {o._stale.lv === "critical" ? "🔴" : "🟠"} {o.production_number || "—"}
+              </span>
+              <span style={{ color: C.t2 }}>{(o.client || "—").trim().substring(0, 22)}</span>
+              <span style={{ color: C.t3 }}>{SM[o.stage]?.l || o.stage}</span>
+              <span style={{ color: C.t3 }}>{o._stale.lb}</span>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+              {isVencida(o) && <span style={{ fontSize: 9, color: "#ff3b30", fontWeight: 700, padding: "2px 6px", background: "#ff3b3010", borderRadius: 4 }}>VENCIDA</span>}
+              {isUrgente(o) && <span style={{ fontSize: 9, color: "#ff9500", fontWeight: 700, padding: "2px 6px", background: "#ff950010", borderRadius: 4 }}>URGENTE</span>}
+              {orderMoney(o) > 0 && <span style={{ fontSize: 10, color: C.t2 }}>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>}
+            </div>
+          </div>
+        ))}
+        {stale.total > 8 && (
+          <button onClick={() => setExpandedSection(s => ({ ...s, stale: !s.stale }))} style={{ marginTop: 8, padding: "4px 12px", fontSize: 11, background: "transparent", border: "none", color: "#007aff", cursor: "pointer" }}>
+            {expandedSection.stale ? "Ocultar ▲" : "Ver todas (" + stale.total + ") ▼"}
+          </button>
+        )}
+        {stale.total === 0 && <div style={{ textAlign: "center", color: "#34c759", fontSize: 12, padding: 20 }}>✅ Sin órdenes estancadas</div>}
+      </div>
+
+      {/* SECCIÓN 4: Datos Incompletos */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>❗ Datos Incompletos</h3>
+      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+        {[
+          { key: "vencidas", label: "Vencidas", icon: "🔴", color: "#ff3b30", list: incomplete.vencidas, alwaysExpanded: true },
+          { key: "sinFecha", label: "Sin fecha de entrega", icon: "🔴", color: "#ff3b30", list: incomplete.sinFecha, alwaysExpanded: true },
+          { key: "sinPrecio", label: "Sin precio", icon: "🟠", color: "#ff9500", list: incomplete.sinPrecio, alwaysExpanded: true },
+          { key: "sinCantidad", label: "Sin cantidad", icon: "🟠", color: "#ff9500", list: incomplete.sinCantidad, alwaysExpanded: true },
+          { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", icon: "🟠", color: "#ff9500", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
+          { key: "maquilaSinProveedor", label: "Maquila sin proveedor", icon: "🔴", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
+          { key: "sinAgente", label: "Sin agente asignado", icon: "🟡", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
+          { key: "sinTelefono", label: "Sin teléfono cliente", icon: "🟡", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
+          { key: "sinEmail", label: "Sin email cliente", icon: "🟡", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
+        ].filter(s => s.list.length > 0).map(section => {
+          const expanded = section.alwaysExpanded || expandedSection["inc_" + section.key];
+          return (
+            <div key={section.key} style={{ borderBottom: "0.5px solid " + C.bd }}>
+              <div onClick={() => !section.alwaysExpanded && setExpandedSection(s => ({ ...s, ["inc_" + section.key]: !s["inc_" + section.key] }))} style={{
+                padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                cursor: section.alwaysExpanded ? "default" : "pointer", background: section.color + "08"
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: section.color }}>
+                  {section.icon} {section.label} ({section.list.length})
+                </span>
+                {!section.alwaysExpanded && <span style={{ fontSize: 11, color: C.t3 }}>{expanded ? "▲" : "▼"}</span>}
+              </div>
+              {expanded && (
+                <div style={{ padding: "4px 14px 10px" }}>
+                  {section.list.slice(0, 10).map(o => (
+                    <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd, gap: 8 }}>
+                      <span onClick={() => onAction(o.id, "detail")} style={{ cursor: "pointer", color: C.t2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim().substring(0, 22)} · {SM[o.stage]?.l || o.stage}
+                      </span>
+                      <button onClick={() => onAction(o.id, "edit")} style={{ fontSize: 10, padding: "3px 8px", background: section.color, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>
+                        ✏️ Editar
+                      </button>
+                    </div>
+                  ))}
+                  {section.list.length > 10 && <div style={{ fontSize: 10, color: C.t3, fontStyle: "italic", marginTop: 4 }}>+ {section.list.length - 10} más</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {Object.values(incomplete).every(arr => arr.length === 0) && <div style={{ padding: 20, textAlign: "center", color: "#34c759", fontSize: 12 }}>✅ Datos completos en todas las órdenes activas</div>}
+      </div>
+
+      {/* SECCIÓN 5: Estado de Máquinas */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🏭 Estado de Máquinas</h3>
+      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+        {machineStatus.inMaintenance.length > 0 ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#ff9500", marginBottom: 8 }}>
+              🔧 {machineStatus.inMaintenance.length} en mantenimiento
+            </div>
+            {machineStatus.inMaintenance.map(m => {
+              const machineName = MACHINES.find(x => x.id === m.machine_id)?.name || m.machine_id;
+              const daysInMaint = Math.floor((Date.now() - new Date(m.started_at).getTime()) / 86400000);
+              const ordersStuck = active.filter(o => o.current_machine === m.machine_id).length;
+              return (
+                <div key={m.id} style={{ fontSize: 11, padding: "6px 0", borderBottom: "0.5px solid " + C.bd }}>
+                  <strong>{machineName}</strong> · {daysInMaint} día(s) · iniciado por {m.started_by}
+                  {m.notes && <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{m.notes}</div>}
+                  {ordersStuck > 0 && <div style={{ fontSize: 10, color: "#ff9500" }}>⚠️ {ordersStuck} órdenes detenidas</div>}
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          <div style={{ fontSize: 12, color: "#34c759", marginBottom: 12 }}>✅ Todas las máquinas operativas (0 en mantenimiento)</div>
+        )}
+
+        {machineStatus.activeMachines.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 600, color: C.t2, marginTop: 12, marginBottom: 6, textTransform: "uppercase" }}>
+              Máquinas con carga activa
+            </div>
+            {machineStatus.activeMachines.map(m => {
+              const machineName = MACHINES.find(x => x.id === m.id)?.name || m.id;
+              return (
+                <div key={m.id} style={{ fontSize: 11, padding: "4px 0", display: "flex", justifyContent: "space-between" }}>
+                  <span>{machineName} · {m.orders.length} órd</span>
+                  <span style={{ fontWeight: 600, color: C.tx }}>${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+
+      {/* SECCIÓN 6: Limpieza Sugerida */}
+      {(orphanOCs.length > 0 || unreadNotifs.length > 10) && (
+        <>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🧹 Limpieza Sugerida</h3>
+          <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+            {orphanOCs.length > 0 && (
+              <div style={{ marginBottom: unreadNotifs.length > 10 ? 16 : 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>
+                  🟡 {orphanOCs.length} OCs huérfanas (sin órdenes activas)
+                </div>
+                {orphanOCs.map(oc => (
+                  <div key={oc.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd }}>
+                    <span>{oc.id} · {oc.client || "—"}</span>
+                    <button onClick={() => cancelOrphanOC(oc)} style={{ fontSize: 10, padding: "3px 8px", background: "#ff3b30", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
+                      ❌ Cancelar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unreadNotifs.length > 10 && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#5856d6" }}>
+                    💬 {unreadNotifs.length} notificaciones admin sin leer
+                  </span>
+                  <button onClick={markAllNotifsRead} style={{ fontSize: 11, padding: "5px 10px", background: "#5856d6", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
+                    ✅ Marcar todas como leídas
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
+                  Tip: este dashboard reemplaza el valor informativo de la mayoría de notifs.
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── AUDITORIA DE FOLIOS (v10.9.1) ─── Gap detection + duplicados en secuencia D/R
 function AuditoriaView({orders, purchaseOrders}){
   const [filter,setFilter]=useState("90d");
@@ -6097,6 +6561,7 @@ export default function PrintFlow() {
   navs.push({id:"archive",i:"🗂️",l:"Archivo"});
   if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
   if(user==="admin")navs.push({id:"wip",i:"💰",l:"Dinero en Proceso"}); // v10.27.0
+  if(user==="admin")navs.push({id:"health",i:"🩺",l:"Salud Operativa"}); // v10.28.0
   if(user==="admin"||user==="karla")navs.push({id:"audit",i:"📑",l:"Auditoría"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",i:"📁",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
@@ -6173,6 +6638,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
+        {view==="health"&&user==="admin"&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}

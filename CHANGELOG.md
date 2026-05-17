@@ -5,6 +5,63 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.28.0 — Dashboard "🩺 Salud Operativa" (admin) — 17-may-2026
+
+Segunda vista admin-only del nav "⋯ Más" después de v10.27.0. Mientras "💰 Dinero en Proceso" responde "¿cuánto dinero está atorado dónde?", esta vista responde "¿qué está mal hoy y quién debería arreglarlo?". Consolida en una sola pantalla la detección de problemas (datos incompletos, estancadas, mantenimientos, OCs huérfanas) que antes vivía dispersa en 5 vistas y 112+ notificaciones.
+
+### Secciones (6)
+
+1. **🚨 Top Prioridad del Día** — banner con la orden más crítica según scoring: vencida (+1000) > urgente <=2d (+500) > estancada crítica >48h (+300) > warning 24-48h (+100) > min(dinero/1000, 500). Botones: "Ver orden" + "📣 Notificar [Responsable]".
+2. **👥 Pulso por Responsable** — card por cada rol activo (Noemí/Gerardo/Lupita/Germán/Karla) con: total órdenes, vencidas, urgentes, horas máx sin actividad. Click "Ver todas ▼" expande la lista. Borde rojo si tiene vencidas, naranja si urgentes, verde si todo OK.
+3. **⏳ Estancadas** — reusa `getStale()` existente. Separa críticas (>48h) de warning (24-48h). Lista compacta con badges VENCIDA/URGENTE y dinero atorado. "Ver todas" si hay más de 8.
+4. **❗ Datos Incompletos** — 9 categorías: vencidas, sin fecha, sin precio, sin cantidad, sin archivo en stage avanzado, maquila sin proveedor, sin agente, sin teléfono, sin email. Las críticas (rojo) están siempre expandidas; las informativas (amarillo) colapsadas. Botón "✏️ Editar" inline que reusa `handleAction("edit")`.
+5. **🏭 Estado de Máquinas** — mantenimientos activos (con días iniciado + órdenes atascadas) + máquinas con carga ordenadas por dinero.
+6. **🧹 Limpieza Sugerida** — solo aparece si hay OCs huérfanas o notifs admin sin leer >10. Acciones masivas con confirmación.
+
+### Acciones inline (con confirmación reutilizando ConfirmModal existente)
+
+- **Cancelar OC huérfana** → UPDATE `purchase_orders.status='cancelled'` + `cancelled_at/by/cancellation_reason="Limpieza desde Salud Operativa — sin órdenes activas"`.
+- **Marcar todas las notifs admin como leídas** → bulk UPDATE en `notifications` donde `target_role='admin' AND read=false`.
+- **Notificar a responsable** → INSERT en `notifications` con tipo `admin_attention`, dirigido al rol que tiene la pelota según `STAGE_RESPONSIBLE`.
+
+### Mapeo `STAGE_RESPONSIBLE` (constante global)
+
+| Stage | Responsable |
+|---|---|
+| design, proof_client | Noemí (preprensa) |
+| proof_printing, ctp | Germán |
+| placas_listas, ready, in_production, packaging, maquila_out, maquila_in | Gerardo (producción) |
+| maq_created, maq_sent, maq_in_progress | Lupita (secretaría) |
+| salidas, maq_received | Karla |
+| draft | both (no se cuenta en Pulso) |
+
+### Implementación
+
+- **`OperationalHealthView`** (~390 líneas) entre `StatCard` y `AuditoriaView`, estilo multi-línea legible (consistente con v10.27.0).
+- **4 helpers globales** cerca de `getStale`: `STAGE_RESPONSIBLE`, `TERMINAL_STAGES`, `getTopPriority`, `getIncompleteData`, `getOrphanOCs`.
+- **Reutiliza `ConfirmModal` existente** vía `setConfirmModal` (no crea componente nuevo como sugería el brief).
+- **Cero SQL, cero migración, cero RPC**. Todo se calcula con `useMemo` sobre el state local `orders`, `notifications`, `maintenance`, `purchaseOrders` (realtime ya estaba).
+
+### Auto-fix vs brief
+
+- Brief usa `onAction(o.id, "view")` (típo recurrente como en v10.27.0) → corregido a `"detail"` (la action real del codebase).
+- Brief sugiere crear `ConfirmActionModal` nuevo → reutilizado el `ConfirmModal` existente con `setConfirmModal`, mismo patrón que `doAdv`, `cancelOrder`, `revert`.
+
+### Snapshot al deploy (17-may-2026)
+
+- 3 órdenes vencidas en el día
+- 3 OCs huérfanas (validado contra Supabase)
+- 112 notificaciones admin sin leer
+- Top Prioridad esperado: P-3508 GRUPO MODELO ($150K, vencida, design, Noemí)
+- Cuello de botella detectado en Pulso: Noemí con 2 vencidas + 1 urgente
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Helpers de negocio (`getStale`, `db.notifySecs`, etc.)
+- Resto de la UI
+
+
 ## v10.27.0 — Dashboard "💰 Dinero en Proceso" (admin) — 17-may-2026
 
 Nueva vista admin-only que muestra distribución de capital atorado en cada zona del workflow. Visible solo para Marcelo en el "⋯ Más" del nav (queda fuera de los primeros 5 tabs visibles).
