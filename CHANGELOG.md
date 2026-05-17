@@ -5,6 +5,70 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.27.0 — Dashboard "💰 Dinero en Proceso" (admin) — 17-may-2026
+
+Nueva vista admin-only que muestra distribución de capital atorado en cada zona del workflow. Visible solo para Marcelo en el "⋯ Más" del nav (queda fuera de los primeros 5 tabs visibles).
+
+### Métricas mostradas
+
+- **Resumen global:** total atorado en $MXN, órdenes activas, alertas de sin precio, top cliente con porcentaje sobre el total.
+- **Por zona del workflow** (6 zonas, agrupan 18 stages): Captura, Pre-prensa, Producción, Maquila Externa, Regreso Maquila, Salida. Cada zona muestra dinero, conteo, tiempo promedio (días desde `created_at`), órdenes sin precio. Click expande a stages individuales con lista compacta de las 5 órdenes más relevantes (+ contador "+N más" si hay más).
+- **Producción — desglose por máquina:** al expandir Producción, además de stages aparece "🏭 Por máquina" mostrando cuánto dinero/órdenes en cada máquina física (Printmaster 74, GTO, etc.) ordenado por dinero descendente.
+- **Maquila — margen:** en las zonas Maquila Externa y Regreso Maquila se muestra `maq_price − maq_cost` total (etiqueta "M $X").
+- **Top 5 clientes con dinero atorado** con medallas 🥇🥈🥉 (dorado/plata/bronce) para los primeros 3.
+- **Alertas:** lista de órdenes sin precio capturado con botón "✏️ Editar Precio" inline que abre el formulario de edición.
+
+### Cobertura del workflow
+
+| Zona | Stages incluidos |
+|---|---|
+| 📝 Captura | draft, maq_created |
+| 🎨 Pre-prensa | design, proof_printing, proof_client, ctp, placas_listas |
+| ⚙️ Producción | ready, in_production |
+| 🚚 Maquila Externa | maquila_out, maq_sent, maq_in_progress |
+| 📥 Regreso Maquila | maquila_in, maq_received |
+| 📤 Salida | packaging, salidas |
+
+Stages excluidos (terminales): delivered, maq_delivered, cancelled, maq_cancelled, web_pending, web_rejected.
+
+### Implementación
+
+- **Componente nuevo `WIPDashboard`** (~330 líneas) entre `Analytics` y `AuditoriaView`. Estilo multi-línea legible (decisión consciente, contrasta con el resto del archivo compacto).
+- **Helper `StatCard`** para las 4 tarjetas del resumen global.
+- **Constante `WORKFLOW_ZONES`** declarada arriba junto a `SM` y `MACHINES`.
+- **Cero SQL, cero migración, cero RPC.** Todo se calcula con `useMemo` sobre el state local `orders` (realtime ya estaba). Si la pestaña falla a runtime, la app sigue funcionando.
+
+### Snapshot al deploy (17-may-2026)
+
+- Total atorado: **$256,631 MXN**
+- 19 órdenes activas
+- 2 sin precio (P-3512 Lucy Perez, P-3514 Alejandra Rodriguez — ambas en design)
+- Top cliente: GRUPO MODELO con $150,010 (58% del total) en 1 sola orden
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Zonas expandibles a stages al click | Vista alto nivel + detalle a demanda |
+| D-2 | Dashboard completo (todas las métricas) | Esfuerzo marginal extra vs solo dinero |
+| D-3 | Solo admin | Conservador para v1, ampliar después si piden |
+| D-4 | Todo frontend, sin SQL | `orders` ya tiene realtime |
+| D-5 | Tab en "⋯ Más" del nav admin | No saturar barra principal |
+| D-6 | Tiempo en stage usa `created_at` | Aproximación; cálculo exacto requeriría leer `order_timeline` |
+| D-7 | Click en orden → DetailModal | Reutiliza acción `detail` existente |
+| D-8 | Botón "Editar Precio" usa acción `edit` | Cero código nuevo de form |
+| D-9 | Estilo multi-línea (no compacto) | Marcelo eligió legibilidad para componente nuevo de ~330 líneas |
+| D-10 | "Por máquina" muestra solo total (sin desglose activa/cola) | Marcelo eligió simplicidad; dashboard es de dinero, no workflow |
+
+### Limitaciones conocidas (para versiones futuras)
+
+- Tiempo en stage es aproximación con `created_at` (si una orden lleva 2 días en design pero fue creada hace 5, mostrará "5 días"). Fix futuro: leer `order_timeline`.
+- Sin filtro temporal (siempre snapshot actual).
+- Sin exportación CSV.
+- Top clientes no normaliza espacios ("ROBERTO " vs "ROBERTO" cuentan separado). Fix correcto sería en la captura, no aquí.
+- Click en stage muestra solo top 5 órdenes con "+N más" si hay más.
+
+
 ## v10.26.2 — Botón "Volver a Lista" en cola en espera + permiso German — 17-may-2026
 
 Pedido de Marcelo: agregar el botón 🔄 ("Sacar de la máquina y volver a Lista") también a las tarjetas de **órdenes en espera**, no solo a la activa.

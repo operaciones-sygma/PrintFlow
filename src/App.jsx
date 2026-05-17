@@ -22,6 +22,15 @@ const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",c:"#ff3b3
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 // v10.26.0 — Devuelve órdenes de una máquina ordenadas por position (0=activa, 1+=cola)
 const getMachineQueue=(orders,machineId)=>orders.filter(o=>o.current_machine===machineId&&o.machine_queue_position!=null).sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));
+// v10.27.0 — Zonas del workflow para WIPDashboard (Dinero en Proceso)
+const WORKFLOW_ZONES=[
+  {id:"captura",label:"📝 Captura",color:"#aeaeb2",stages:["draft","maq_created"]},
+  {id:"preprensa",label:"🎨 Pre-prensa",color:"#ec4899",stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
+  {id:"produccion",label:"⚙️ Producción",color:"#ff9500",stages:["ready","in_production"]},
+  {id:"maquila_ext",label:"🚚 Maquila Externa",color:"#e67e22",stages:["maquila_out","maq_sent","maq_in_progress"]},
+  {id:"regreso_maq",label:"📥 Regreso Maquila",color:"#32ade6",stages:["maquila_in","maq_received"]},
+  {id:"salida",label:"📤 Salida",color:"#16a34a",stages:["packaging","salidas"]}
+];
 
 const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
 const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n||0);
@@ -4135,6 +4144,381 @@ function Analytics({orders,onReload}) {
   </div>;
 }
 
+// ─── WIP DASHBOARD (v10.27.0) ─── Dinero en Proceso — admin-only
+function WIPDashboard({ orders, role, onAction }) {
+  const [expandedZone, setExpandedZone] = useState(null);
+
+  if (role !== "admin") return null;
+
+  const active = useMemo(() => {
+    const terminal = ["delivered", "maq_delivered", "cancelled", "maq_cancelled", "web_pending", "web_rejected"];
+    return orders.filter(o => !terminal.includes(o.stage));
+  }, [orders]);
+
+  const orderMoney = (o) => {
+    if (o.order_type === "maquila") return Number(o.maq_price) || 0;
+    return Number(o.price) || 0;
+  };
+  const hasPrice = (o) => orderMoney(o) > 0;
+  const daysAgo = (dateStr) => {
+    if (!dateStr) return 0;
+    return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  };
+
+  const totals = useMemo(() => {
+    const totalMoney = active.reduce((s, o) => s + orderMoney(o), 0);
+    const ordersWithoutPrice = active.filter(o => !hasPrice(o));
+    return {
+      totalMoney,
+      totalOrders: active.length,
+      withoutPriceCount: ordersWithoutPrice.length,
+      withoutPriceList: ordersWithoutPrice
+    };
+  }, [active]);
+
+  const byZone = useMemo(() => {
+    return WORKFLOW_ZONES.map(zone => {
+      const zoneOrders = active.filter(o => zone.stages.includes(o.stage));
+      const money = zoneOrders.reduce((s, o) => s + orderMoney(o), 0);
+      const avgDays = zoneOrders.length > 0
+        ? zoneOrders.reduce((s, o) => s + daysAgo(o.created_at), 0) / zoneOrders.length
+        : 0;
+      const withoutPrice = zoneOrders.filter(o => !hasPrice(o)).length;
+
+      let maqMargin = null;
+      if (zone.id === "maquila_ext" || zone.id === "regreso_maq") {
+        maqMargin = zoneOrders.reduce((s, o) => {
+          const price = Number(o.maq_price) || 0;
+          const cost = Number(o.maq_cost) || 0;
+          return s + (price - cost);
+        }, 0);
+      }
+
+      const stages = zone.stages.map(stageId => {
+        const stageOrders = zoneOrders.filter(o => o.stage === stageId);
+        const stageMoney = stageOrders.reduce((s, o) => s + orderMoney(o), 0);
+        const stageAvgDays = stageOrders.length > 0
+          ? stageOrders.reduce((s, o) => s + daysAgo(o.created_at), 0) / stageOrders.length
+          : 0;
+        return {
+          id: stageId,
+          label: SM[stageId]?.l || stageId,
+          color: SM[stageId]?.c || "#aeaeb2",
+          count: stageOrders.length,
+          money: stageMoney,
+          avgDays: stageAvgDays,
+          orders: stageOrders
+        };
+      }).filter(s => s.count > 0);
+
+      let byMachine = null;
+      if (zone.id === "produccion") {
+        const inProd = zoneOrders.filter(o => o.stage === "in_production");
+        if (inProd.length > 0) {
+          const machineMap = {};
+          inProd.forEach(o => {
+            const mid = o.current_machine || "sin_asignar";
+            if (!machineMap[mid]) machineMap[mid] = { machine: mid, count: 0, money: 0, orders: [] };
+            machineMap[mid].count += 1;
+            machineMap[mid].money += orderMoney(o);
+            machineMap[mid].orders.push(o);
+          });
+          byMachine = Object.values(machineMap).sort((a, b) => b.money - a.money);
+        }
+      }
+
+      return {
+        ...zone,
+        count: zoneOrders.length,
+        money,
+        avgDays,
+        withoutPrice,
+        stages,
+        byMachine,
+        maqMargin
+      };
+    });
+  }, [active]);
+
+  const topClients = useMemo(() => {
+    const map = {};
+    active.forEach(o => {
+      const key = (o.client || "—").trim();
+      if (!map[key]) map[key] = { client: key, count: 0, money: 0, stages: new Set() };
+      map[key].count += 1;
+      map[key].money += orderMoney(o);
+      map[key].stages.add(SM[o.stage]?.l || o.stage);
+    });
+    return Object.values(map)
+      .sort((a, b) => b.money - a.money)
+      .slice(0, 5)
+      .map(c => ({ ...c, stages: Array.from(c.stages).join(", ") }));
+  }, [active]);
+
+  return (
+    <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
+      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: C.tx }}>
+        💰 Dinero en Proceso
+      </h2>
+      <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
+        Distribución de capital atorado por zona del workflow. Excluye entregadas, canceladas y rechazadas.
+      </p>
+
+      {/* Resumen Global */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+        <StatCard
+          label="Total $$$"
+          value={"$" + totals.totalMoney.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+          color="#34c759"
+        />
+        <StatCard
+          label="Órdenes activas"
+          value={String(totals.totalOrders)}
+          color="#007aff"
+        />
+        <StatCard
+          label="Sin precio"
+          value={totals.withoutPriceCount > 0 ? "⚠️ " + totals.withoutPriceCount : "✅ 0"}
+          color={totals.withoutPriceCount > 0 ? "#ff9500" : "#34c759"}
+        />
+        <StatCard
+          label={topClients[0]?.client || "—"}
+          value={topClients[0] ? "$" + topClients[0].money.toLocaleString("es-MX", { maximumFractionDigits: 0 }) : "$0"}
+          subValue={topClients[0] && totals.totalMoney > 0 ? Math.round((topClients[0].money / totals.totalMoney) * 100) + "% del total" : ""}
+          color="#5856d6"
+        />
+      </div>
+
+      {/* Zonas */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>📊 Por zona del workflow</h3>
+      <div style={{ marginBottom: 24 }}>
+        {byZone.map(zone => (
+          <div key={zone.id} style={{
+            border: "1px solid " + zone.color + "30",
+            borderRadius: 12,
+            marginBottom: 8,
+            background: "#fff",
+            overflow: "hidden"
+          }}>
+            <div
+              onClick={() => zone.count > 0 && setExpandedZone(expandedZone === zone.id ? null : zone.id)}
+              style={{
+                padding: "12px 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: zone.count > 0 ? "pointer" : "default",
+                background: zone.color + "08",
+                opacity: zone.count === 0 ? 0.5 : 1
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: zone.color }}>{zone.label}</span>
+                <span style={{ fontSize: 11, color: C.t3 }}>{zone.count} órd</span>
+                {zone.avgDays > 0 && <span style={{ fontSize: 11, color: C.t3 }}>⏱️ {zone.avgDays.toFixed(1)}d prom</span>}
+                {zone.withoutPrice > 0 && <span style={{ fontSize: 11, color: "#ff9500", fontWeight: 600 }}>⚠️ {zone.withoutPrice} sin precio</span>}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.tx }}>
+                  ${zone.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                </span>
+                {zone.maqMargin !== null && zone.maqMargin > 0 && (
+                  <span style={{ fontSize: 10, color: "#34c759", fontWeight: 600 }}>
+                    M ${zone.maqMargin.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                  </span>
+                )}
+                {zone.count > 0 && (
+                  <span style={{ fontSize: 12, color: C.t3 }}>
+                    {expandedZone === zone.id ? "▼" : "▶"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {expandedZone === zone.id && zone.count > 0 && (
+              <div style={{ padding: "12px 16px", borderTop: "1px solid " + C.bd }}>
+                {zone.stages.map(stage => (
+                  <div key={stage.id} style={{ marginBottom: 8 }}>
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "6px 0",
+                      borderBottom: "0.5px solid " + C.bd
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: stage.color }}>{stage.label}</span>
+                        <span style={{ fontSize: 10, color: C.t3 }}>{stage.count} órd</span>
+                        {stage.avgDays > 0 && <span style={{ fontSize: 10, color: C.t3 }}>⏱️ {stage.avgDays.toFixed(1)}d</span>}
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
+                        ${stage.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                    <div style={{ marginTop: 4, marginLeft: 12 }}>
+                      {stage.orders.slice(0, 5).map(o => (
+                        <div
+                          key={o.id}
+                          onClick={() => onAction(o.id, "detail")}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "3px 0",
+                            fontSize: 10,
+                            color: C.t2,
+                            cursor: "pointer"
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.color = C.tx}
+                          onMouseLeave={e => e.currentTarget.style.color = C.t2}
+                        >
+                          <span>{o.production_number || "—"} · {(o.client || "—").trim()}</span>
+                          <span>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>
+                        </div>
+                      ))}
+                      {stage.orders.length > 5 && (
+                        <div style={{ fontSize: 9, color: C.t3, fontStyle: "italic", marginTop: 2 }}>
+                          + {stage.orders.length - 5} más
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {zone.byMachine && zone.byMachine.length > 0 && (
+                  <div style={{ marginTop: 12, padding: "10px", background: "#ff950008", borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#ff9500", marginBottom: 6 }}>
+                      🏭 Por máquina
+                    </div>
+                    {zone.byMachine.map(m => (
+                      <div key={m.machine} style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 11,
+                        padding: "3px 0",
+                        color: C.t2
+                      }}>
+                        <span>{MACHINES.find(x => x.id === m.machine)?.name || m.machine} · {m.count} órd</span>
+                        <span style={{ fontWeight: 600, color: C.tx }}>
+                          ${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Top 5 clientes */}
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🏆 Top 5 clientes con dinero atorado</h3>
+      <div style={{
+        background: "#fff",
+        borderRadius: 12,
+        border: "1px solid " + C.bd,
+        overflow: "hidden",
+        marginBottom: 24
+      }}>
+        {topClients.map((c, i) => (
+          <div key={c.client} style={{
+            padding: "10px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: i < topClients.length - 1 ? "0.5px solid " + C.bd : "none"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{
+                fontSize: 16,
+                fontWeight: 800,
+                color: i === 0 ? "#FFD700" : i === 1 ? "#C0C0C0" : i === 2 ? "#CD7F32" : C.t3,
+                width: 20
+              }}>
+                {i + 1}
+              </span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.tx }}>{c.client}</div>
+                <div style={{ fontSize: 10, color: C.t3 }}>{c.count} órd · {c.stages}</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.tx }}>
+              ${c.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Alertas: órdenes sin precio */}
+      {totals.withoutPriceList.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
+            ⚠️ Órdenes sin precio capturado
+          </h3>
+          <div style={{
+            background: "#ff950008",
+            border: "1px solid #ff950040",
+            borderRadius: 12,
+            overflow: "hidden"
+          }}>
+            {totals.withoutPriceList.map((o, i) => (
+              <div key={o.id} style={{
+                padding: "10px 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderBottom: i < totals.withoutPriceList.length - 1 ? "0.5px solid #ff950025" : "none"
+              }}>
+                <div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
+                    {o.production_number || "—"} · {(o.client || "—").trim()}
+                  </span>
+                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
+                    {SM[o.stage]?.l || o.stage} · {daysAgo(o.created_at)} días
+                  </div>
+                </div>
+                <button
+                  onClick={() => onAction(o.id, "edit")}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: "#ff9500",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: "pointer"
+                  }}
+                >
+                  ✏️ Editar Precio
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, subValue, color }) {
+  return (
+    <div style={{
+      background: "#fff",
+      border: "1px solid " + C.bd,
+      borderLeft: "4px solid " + color,
+      borderRadius: 12,
+      padding: "12px 16px"
+    }}>
+      <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: C.tx }}>{value}</div>
+      {subValue && <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{subValue}</div>}
+    </div>
+  );
+}
+
 // ─── AUDITORIA DE FOLIOS (v10.9.1) ─── Gap detection + duplicados en secuencia D/R
 function AuditoriaView({orders, purchaseOrders}){
   const [filter,setFilter]=useState("90d");
@@ -5712,6 +6096,7 @@ export default function PrintFlow() {
   navs.push({id:"orders",i:"📋",l:"Todas"});
   navs.push({id:"archive",i:"🗂️",l:"Archivo"});
   if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
+  if(user==="admin")navs.push({id:"wip",i:"💰",l:"Dinero en Proceso"}); // v10.27.0
   if(user==="admin"||user==="karla")navs.push({id:"audit",i:"📑",l:"Auditoría"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",i:"📁",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
@@ -5787,6 +6172,7 @@ export default function PrintFlow() {
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · 🔍 "{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
+        {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
