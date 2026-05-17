@@ -5,6 +5,56 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.26.0 — Cola por máquina (eliminación del Planificador) — 17-may-2026
+
+Cambio mayor en cómo se modelan las órdenes asignadas a máquina. Antes: cualquier número de órdenes podía compartir la misma máquina simultáneamente (timer corriendo en todas) y el Planificador era una capa extra para ordenarlas. Ahora: cada máquina tiene una **cola posicional** donde solo `position=0` está ACTIVA (con `order_machine_log` abierto). El resto espera en `position=1,2,...`. Al sacar la activa, la siguiente se promueve automáticamente.
+
+### Por qué
+
+El modelo paralelo creaba ambigüedad: 3 órdenes "en la máquina al mismo tiempo" no reflejaba la realidad física (una sola impresora corre un solo trabajo). Los timers acumulaban horas espurias. El Planificador era una compensación: una cola alterna ordenada por Gerardo. Con el nuevo modelo, **la cola es el plan**, no hay capa extra.
+
+Disparado por las 3 órdenes de Roberto (P-3496/P-3497/P-3498) que llevaban días en `off_pm74` al mismo tiempo, sumando horas falsas y bloqueando reportes de productividad.
+
+### Cambios DB
+
+- **Nueva columna**: `orders.machine_queue_position INT DEFAULT NULL` (NULL = no asignada a máquina).
+- **Backfill**: órdenes activas con `current_machine` ya seteado migraron a posiciones contiguas por máquina (ordenadas por `created_at`).
+- **Pre-migración Roberto**: P-3496 → pos=0 (activa, log abierto preservado), P-3497 → pos=1, P-3498 → pos=2 (logs cerrados con minutes=0 para no inflar reportes).
+- **UNIQUE INDEX `idx_one_active_per_machine`**: índice parcial que impide >1 orden con `position=0` en la misma máquina real (excluye `vm_manual` y NULL). Garantía a nivel BD.
+- **RPC `move_order_in_queue(p_order_id TEXT, p_target_machine TEXT, p_target_position INT, p_actor TEXT)`**: SECURITY DEFINER. Una sola transacción con `pg_advisory_xact_lock` que maneja todos los casos: sacar de cola (shift hacia abajo), insertar en máquina nueva (shift hacia arriba), reordenar dentro de la misma máquina. Devuelve JSONB con `new_active_id` cuando alguien fue promovido (el caller debe abrir su `order_machine_log`).
+
+### Cambios App.jsx
+
+- **Helper `getMachineQueue(orders, machineId)`**: filtra y ordena por `machine_queue_position`.
+- **`db.moveOrderInQueue`**: wrapper del RPC.
+- **`dbCols`** incluye `machine_queue_position` en el whitelist de columnas persistibles.
+- **Kanban**: el render por máquina ahora muestra:
+  - **Tarjeta ACTIVA** (borde verde #34c759, label "🏭 ACTIVA", LiveTimer corriendo, botones 📦 Empaque + 🔄 Volver a Lista).
+  - **Cola en espera** (separador, drag&drop entre tarjetas para reordenar, botón "⏯️ Activar" para promover una a posición 0).
+- **PreprensaBoard**: mismo patrón para CTP y Procesadora (botones según rol admin/germán, "📋 Placas Listas" cuando está en `pp_proc`).
+- **`assignMachine`**: calcula `targetPos = currentQueue.length` para nueva asignación; ejecuta RPC; abre log solo si queda en pos=0; promueve siguiente si saca de cola anterior.
+- **`doAdv`, `sendMaquila`, `cancelOrder`, `return_to_ready`**: si la orden estaba en una cola, llaman al RPC para sacarla atómicamente. Si el RPC devuelve `new_active_id`, abren `order_machine_log` para esa orden y añaden timeline "⏯️ Auto-activada (cola promoción)".
+- **Nuevo handler `reorder_in_machine`** en `handleAction`: maneja drag&drop entre tarjetas de la misma máquina y botón "Activar". Cierra/abre logs según corresponda (si la activa pasa a cola, cierra su log; si una en cola pasa a activa, cierra la activa anterior y abre la nueva).
+
+### Eliminado
+
+- **Función `ProductionPlanner` completa** (569 líneas, comprende: tabla, drag&drop, sticky bar, prioridades manuales, etc.).
+- **Entrada de nav** "🗓️ Planificador" para produccion/admin.
+- **Render** `{view==="planner"&&...}` en el switch principal.
+
+### Migración para usuarios
+
+Las órdenes que estaban "en la máquina" siguen ahí. Lo que cambió es que ahora hay un orden explícito: solo la primera tiene el timer activo. Las demás esperan visualmente en una lista debajo. Producción puede:
+
+- **Arrastrar entre tarjetas** dentro de la misma máquina para reordenar.
+- **Click "⏯️ Activar"** en una en espera → cierra el log de la activa actual, abre el de la elegida.
+- Cuando termina la activa (📦 Empaque / 🔄 Volver a Lista / cancelar / maquila), **la siguiente se promueve automáticamente** y empieza su timer.
+
+### Invariante crítico
+
+Garantizado a 3 niveles: BD (UNIQUE INDEX), RPC (lock + shift atómico), App (handlers usan RPC para todos los movimientos). Imposible que dos órdenes tengan `position=0` en la misma máquina real simultáneamente.
+
+
 ## v10.25.2 — Pantones también en impresión modo Avanzado — 16-may-2026
 
 Bug reportado por Marcelo justo después de v10.25.1: los pantones SOLO se imprimían en órdenes en modo Sencillo. En Avanzado no aparecían.

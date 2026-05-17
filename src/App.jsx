@@ -20,6 +20,8 @@ const INT_FLOW=[{id:"draft",l:"📝 Validar",c:"#aeaeb2",who:"both"},{id:"design
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",c:"#32ade6",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",c:"#34c759",who:null}];
 const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",c:"#ff3b30",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
+// v10.26.0 — Devuelve órdenes de una máquina ordenadas por position (0=activa, 1+=cola)
+const getMachineQueue=(orders,machineId)=>orders.filter(o=>o.current_machine===machineId&&o.machine_queue_position!=null).sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));
 
 const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
 const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n||0);
@@ -209,7 +211,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -226,6 +228,17 @@ const db = {
   },
   async addMachineLog(orderId, machineId) {
     await supabase.from("order_machine_log").insert({ order_id: orderId, machine_id: machineId });
+  },
+  // v10.26.0 — RPC atómico para gestionar cola por máquina
+  async moveOrderInQueue(orderId, targetMachine, targetPosition, actor) {
+    const { data, error } = await supabase.rpc("move_order_in_queue", {
+      p_order_id: orderId,
+      p_target_machine: targetMachine,
+      p_target_position: targetPosition,
+      p_actor: actor
+    });
+    if (error) throw new Error(error.message);
+    return data; // { action, old_machine, old_position, new_machine, new_position, new_active_id }
   },
   async closeMachineLog(orderId) {
     const { data } = await supabase.from("order_machine_log").select("*").eq("order_id", orderId).is("ended_at", null);
@@ -3021,7 +3034,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             </div>
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
-                {ms.map(m=>{const mo=orders.filter(o=>o.stage==="in_production"&&o.current_machine===m.id);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
+                {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
                   return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
                     style={{background:inMaint?"#ff950008":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid #ff950040":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
@@ -3042,14 +3055,39 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                     :mo.length===0?<div style={{textAlign:"center",padding:"12px 0",color:isD?cc[type]:C.ph,fontSize:isD?12:10,fontWeight:isD?600:400,transition:"all .15s"}}>
                       {isD?"⬇ Soltar aquí":"Disponible"}
                     </div>
-                    :mo.map(o=><div key={o.id}>
-                      <DragCard o={o} borderColor={cc[type]}/>
-                      {/* v10.24.0 — Solo 2 botones: avanzar a Empaque, o devolver a Lista (sale de máquina) */}
-                      <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:6,paddingLeft:4}}>
-                        <button onClick={()=>onAction(o.id,"advance","packaging")} style={bs("#af52de")}>📦 Empaque</button>
-                        {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(o.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
-                      </div>
-                    </div>)}
+                    :<>
+                      {/* v10.26.0 — Activa (timer corriendo) */}
+                      {activa&&<div key={activa.id} style={{border:"2px solid #34c759",borderRadius:10,padding:6,marginBottom:6,background:"#34c75908"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
+                          <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
+                          {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+                        </div>
+                        <DragCard o={activa} borderColor={cc[type]}/>
+                        <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
+                          <button onClick={()=>onAction(activa.id,"advance","packaging")} style={bs("#af52de")}>📦 Empaque</button>
+                          {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                        </div>
+                      </div>}
+                      {/* v10.26.0 — Cola en espera */}
+                      {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
+                        <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
+                        {enEspera.map(o=><div key={o.id} draggable
+                            onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
+                            onDragOver={e=>{e.preventDefault();e.stopPropagation()}}
+                            onDrop={e=>{e.preventDefault();e.stopPropagation();const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+                            <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
+                            {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                          </div>
+                          <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
+                            <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
+                            <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
+                            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+                          </div>
+                        </div>)}
+                      </div>}
+                    </>}
                   </div>})}
               </div>
             </div>}
@@ -3148,7 +3186,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
 }
 
 // ─── PREPRENSA BOARD ──────────────────────────────
-function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[]}) {
+function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],role}) {
   const ctpOrders=orders.filter(o=>o.stage==="ctp");
   const readyCtp=ctpOrders.filter(o=>!o.current_machine).sort(prioSort);
   const assigned=ctpOrders.filter(o=>o.current_machine);
@@ -3181,7 +3219,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[]})
 
     {/* CTP & Procesadora machines */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
-      {ppMachines.map(m=>{const mo=assigned.filter(o=>o.current_machine===m.id);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
+      {ppMachines.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="ctp");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
         return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
           style={{background:inMaint?"#ff950008":isD?"#0891b212":C.bg,borderRadius:14,padding:16,border:inMaint?"2px solid #ff950040":isD?"2px solid #0891b2":hasWork?"1.5px solid #0891b240":"1.5px dashed "+C.bd,minHeight:120,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px #0891b215":"none",opacity:inMaint&&!hasWork?0.7:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
@@ -3198,18 +3236,44 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[]})
           :mo.length===0?<div style={{textAlign:"center",padding:"16px 0",color:isD?"#0891b2":C.ph,fontSize:isD?13:11,fontWeight:isD?600:400}}>
             {isD?"⬇ Soltar aquí":"Disponible"}
           </div>
-          :mo.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")}
-            style={{background:C.sf,borderRadius:10,padding:12,marginBottom:8,cursor:"grab",borderLeft:"3px solid "+(o.priority==="urgente"?C.dn:"#0891b2"),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:12,fontWeight:700}}>⠿ {o.client}</span>
-              {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
-            </div>
-            <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
-            <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6}}>
-              {o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bs("#06b6d4")}>📋 Placas Listas</button>}
-            </div>
-          </div>)}
+          :<>
+            {/* v10.26.0 — Activa (timer corriendo) */}
+            {activa&&<div key={activa.id} style={{border:"2px solid #34c759",borderRadius:10,padding:8,marginBottom:8,background:"#34c75908"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
+                {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+              </div>
+              <div draggable onDragStart={e=>e.dataTransfer.setData("orderId",activa.id)} onClick={()=>onAction(activa.id,"detail")}
+                style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",borderLeft:"3px solid "+(activa.priority==="urgente"?C.dn:"#0891b2")}}>
+                <span style={{fontSize:12,fontWeight:700}}>⠿ {activa.client}</span>
+                <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
+                {activa.due_date&&<div style={{fontSize:9,color:parseDate(activa.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(activa.due_date)}</div>}
+              </div>
+              <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6,paddingLeft:2}}>
+                {activa.current_machine==="pp_proc"&&<button onClick={()=>onAction(activa.id,"advance","placas_listas")} style={bs("#06b6d4")}>📋 Placas Listas</button>}
+                {(role==="admin"||role==="german")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+              </div>
+            </div>}
+            {/* v10.26.0 — Cola en espera */}
+            {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
+              <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
+              {enEspera.map(o=><div key={o.id} draggable
+                  onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
+                  onDragOver={e=>{e.preventDefault();e.stopPropagation()}}
+                  onDrop={e=>{e.preventDefault();e.stopPropagation();const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                  style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+                  <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
+                  {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
+                </div>
+                <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
+                  <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
+                  <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
+                  {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+                </div>
+              </div>)}
+            </div>}
+          </>}
         </div>})}
     </div>
 
@@ -4493,575 +4557,6 @@ function CreateOCModal({onCreate, onClose}){
   </div>;
 }
 
-// ─── PRODUCTION PLANNER (v10.8.0) ─── Cola única de planificación de Gerardo
-function ProductionPlanner({orders, role, userLogin, onAction, onReload, showToast, setConfirmModal}) {
-  const [planItems, setPlanItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [executingId, setExecutingId] = useState(null);
-  const [dragOver, setDragOver] = useState(null);
-  const [dragInProgress, setDragInProgress] = useState(false);
-  const lastLocalUpdateRef = useRef(0);
-
-  // Máquinas minimizadas — persistencia en localStorage
-  const STORAGE_KEY = "printflow_planner_minimized";
-  const [minimizedMachines, setMinimizedMachines] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return new Set(JSON.parse(saved));
-    } catch (e) { console.error("[Planner] Error reading minimized:", e); }
-    return new Set();
-  });
-
-  // Persistir cambios en localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(minimizedMachines)));
-    } catch (e) { console.error("[Planner] Error saving minimized:", e); }
-  }, [minimizedMachines]);
-
-  const toggleMinimize = (machineId) => {
-    setMinimizedMachines(prev => {
-      const next = new Set(prev);
-      if (next.has(machineId)) next.delete(machineId);
-      else next.add(machineId);
-      return next;
-    });
-  };
-
-  // Cargar plan al montar
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    db.loadPlans().then(items => {
-      if (!cancelled) {
-        setPlanItems(items);
-        setLoading(false);
-      }
-    }).catch(err => {
-      console.error("[Planner] Error cargando plan:", err);
-      if (!cancelled) {
-        setLoading(false);
-        showToast && showToast("❌ Error cargando plan: " + (err?.message || "error"), "error");
-      }
-    });
-    return () => { cancelled = true; };
-  }, [showToast]);
-
-  // Realtime: si otro usuario modifica el plan, sincroniza
-  useEffect(() => {
-    const channel = supabase.channel("production_plans_global")
-      .on("postgres_changes", {event: "*", schema: "public", table: "production_plans"}, 
-          () => {
-            if (Date.now() - lastLocalUpdateRef.current < 800) return;
-            db.loadPlans().then(setPlanItems).catch(err => console.error("[Planner] Realtime reload:", err));
-          })
-      .subscribe();
-    return () => {supabase.removeChannel(channel)};
-  }, []);
-
-  // Bandeja: órdenes validadas, sin máquina asignada, y NO en el plan
-  const inboxOrders = useMemo(() => {
-    const planOrderIds = new Set(planItems.map(p => p.order_id));
-    return orders.filter(o => 
-      o.validated_by_production && 
-      o.validated_by_preprensa && 
-      !planOrderIds.has(o.id) &&
-      !o.current_machine && // sin máquina asignada (no in_production / packaging / salidas)
-      !o.stage.includes("delivered") &&
-      !o.stage.includes("cancelled") &&
-      o.stage !== "web_pending" &&
-      o.stage !== "web_rejected" &&
-      o.stage !== "draft" &&
-      o.stage !== "design" &&
-      o.stage !== "proof_client" &&
-      o.stage !== "proof_printing"
-    ).sort((a, b) => {
-      if (a.priority === "urgente" && b.priority !== "urgente") return -1;
-      if (b.priority === "urgente" && a.priority !== "urgente") return 1;
-      const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-      const dbT = b.due_date ? new Date(b.due_date).getTime() : Infinity;
-      return da - dbT;
-    });
-  }, [orders, planItems]);
-
-  const orderById = useMemo(() => {
-    const m = {};
-    orders.forEach(o => m[o.id] = o);
-    return m;
-  }, [orders]);
-
-  const planByMachine = useMemo(() => {
-    const m = {};
-    // Filtrar items cuya orden ya esté en estado final (delivered/cancelled)
-    // o que ya no exista en orders (CASCADE delete)
-    const ordersMap = {};
-    orders.forEach(o => ordersMap[o.id] = o);
-    const validItems = planItems.filter(p => {
-      const o = ordersMap[p.order_id];
-      if (!o) return false; // orden borrada
-      if (o.stage.includes("delivered") || o.stage.includes("cancelled")) return false;
-      return true;
-    });
-    validItems.forEach(p => {
-      if (!m[p.machine_id]) m[p.machine_id] = [];
-      m[p.machine_id].push(p);
-    });
-    Object.keys(m).forEach(k => m[k].sort((a, b) => a.position - b.position));
-    return m;
-  }, [planItems, orders]);
-
-  const visibleMachines = useMemo(() => {
-    return MACHINES.filter(m => 
-      m.status === "active" && 
-      m.id !== "vm_manual" &&     // Empaque (manual)
-      m.id !== "pp_ctp" &&        // CTP (pre-prensa, lo maneja Germán)
-      m.id !== "pp_proc"          // Procesadora (pre-prensa)
-      // Nota: Epson P7570 (dig_epson) SÍ se incluye — Gerardo la usa para producción digital
-    );
-  }, []);
-
-  // Drag & drop handlers
-  const handleDragStart = (e, orderId, fromMachine = null) => {
-    e.dataTransfer.setData("orderId", orderId);
-    e.dataTransfer.setData("fromMachine", fromMachine || "");
-    e.dataTransfer.effectAllowed = "move";
-    setDragInProgress(true);
-  };
-
-  const handleDragEnd = () => {
-    setDragInProgress(false);
-    setDragOver(null);
-  };
-  
-  const handleDragOver = (e, machineId) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (dragOver !== machineId) setDragOver(machineId);
-  };
-
-  const handleDrop = async (e, machineId) => {
-    e.preventDefault();
-    setDragOver(null);
-    setDragInProgress(false);
-    const orderId = e.dataTransfer.getData("orderId");
-    const fromMachine = e.dataTransfer.getData("fromMachine");
-    if (!orderId) return;
-    if (fromMachine && fromMachine === machineId) return;
-    
-    const prevItems = planItems;
-    try {
-      const filtered = planItems.filter(p => p.order_id !== orderId);
-      const inMachine = filtered.filter(p => p.machine_id === machineId);
-      const nextPos = inMachine.length > 0 ? Math.max(...inMachine.map(p => p.position)) + 1 : 1;
-      const optimistic = [...filtered, {
-        id: "temp_" + Date.now(),
-        machine_id: machineId,
-        order_id: orderId,
-        position: nextPos
-      }];
-      setPlanItems(optimistic);
-      lastLocalUpdateRef.current = Date.now();
-      await db.addToPlan(machineId, orderId, role);
-      lastLocalUpdateRef.current = Date.now();
-    } catch (err) {
-      console.error("[Planner] Error en drop:", err);
-      setPlanItems(prevItems);
-      showToast && showToast("❌ No se pudo agregar al plan: " + (err?.message || "error"), "error");
-    }
-  };
-
-  const handleRemoveFromPlan = async (orderId) => {
-    const prevItems = planItems;
-    try {
-      setPlanItems(planItems.filter(p => p.order_id !== orderId));
-      lastLocalUpdateRef.current = Date.now();
-      await db.removeFromPlan(orderId);
-      // Recargar para reflejar la compactación
-      const fresh = await db.loadPlans();
-      setPlanItems(fresh);
-      lastLocalUpdateRef.current = Date.now();
-    } catch (err) {
-      console.error("[Planner] Error removing:", err);
-      setPlanItems(prevItems);
-      showToast && showToast("❌ No se pudo quitar del plan", "error");
-    }
-  };
-
-  const handleMoveUp = async (item) => {
-    const inMachine = planByMachine[item.machine_id] || [];
-    const idx = inMachine.findIndex(p => p.order_id === item.order_id);
-    if (idx <= 0) return;
-    const newOrder = [...inMachine];
-    [newOrder[idx-1], newOrder[idx]] = [newOrder[idx], newOrder[idx-1]];
-    const orderedIds = newOrder.map(p => p.order_id);
-    const prevItems = planItems;
-    const optimistic = planItems.map(p => {
-      if (p.machine_id !== item.machine_id) return p;
-      const newIdx = orderedIds.indexOf(p.order_id);
-      return newIdx >= 0 ? {...p, position: newIdx + 1} : p;
-    });
-    setPlanItems(optimistic);
-    lastLocalUpdateRef.current = Date.now();
-    try {
-      await db.reorderInMachine(item.machine_id, orderedIds);
-      lastLocalUpdateRef.current = Date.now();
-    } catch (err) {
-      console.error("[Planner] Error moveUp:", err);
-      setPlanItems(prevItems);
-      showToast && showToast("❌ No se pudo reordenar", "error");
-    }
-  };
-
-  const handleMoveDown = async (item) => {
-    const inMachine = planByMachine[item.machine_id] || [];
-    const idx = inMachine.findIndex(p => p.order_id === item.order_id);
-    if (idx < 0 || idx >= inMachine.length - 1) return;
-    const newOrder = [...inMachine];
-    [newOrder[idx], newOrder[idx+1]] = [newOrder[idx+1], newOrder[idx]];
-    const orderedIds = newOrder.map(p => p.order_id);
-    const prevItems = planItems;
-    const optimistic = planItems.map(p => {
-      if (p.machine_id !== item.machine_id) return p;
-      const newIdx = orderedIds.indexOf(p.order_id);
-      return newIdx >= 0 ? {...p, position: newIdx + 1} : p;
-    });
-    setPlanItems(optimistic);
-    lastLocalUpdateRef.current = Date.now();
-    try {
-      await db.reorderInMachine(item.machine_id, orderedIds);
-      lastLocalUpdateRef.current = Date.now();
-    } catch (err) {
-      console.error("[Planner] Error moveDown:", err);
-      setPlanItems(prevItems);
-      showToast && showToast("❌ No se pudo reordenar", "error");
-    }
-  };
-
-  // Pasar UNA orden #1 a producción (con confirmación)
-  const handleExecuteOrder = (item) => {
-    if (executingId) return; // ya hay una en proceso
-    if (item.position !== 1) return;
-    const o = orderById[item.order_id];
-    if (!o) return;
-    
-    const machine = MACHINES.find(m => m.id === item.machine_id);
-    const machineName = machine?.name || item.machine_id;
-    
-    setConfirmModal && setConfirmModal({
-      title: "▶ Pasar a producción",
-      message: "¿Pasar la orden " + (o.production_number || o.id) + " (" + (o.client || "") + ") a la máquina " + machineName + "?\n\nLa orden cambiará a 'En Producción' y se asignará a esa máquina. Las órdenes #2, #3... subirán de posición.",
-      confirmLabel: "Sí, pasar a producción",
-      confirmColor: C.ok,
-      onConfirm: async () => {
-        setConfirmModal && setConfirmModal(null);
-        setExecutingId(item.order_id);
-        // NOTA: usamos setPlanItems con función para tomar el state actual
-        // (puede haber cambiado mientras el modal estaba abierto)
-        let prevSnapshot = null;
-        try {
-          // Optimistic: quitar del plan y compactar
-          setPlanItems(currentItems => {
-            prevSnapshot = currentItems;
-            const filtered = currentItems.filter(p => p.order_id !== item.order_id);
-            // Compactar posiciones de la máquina afectada
-            const queueAfter = filtered
-              .filter(x => x.machine_id === item.machine_id)
-              .sort((a, b) => a.position - b.position);
-            return filtered.map(p => {
-              if (p.machine_id !== item.machine_id) return p;
-              const newIdx = queueAfter.findIndex(x => x.order_id === p.order_id);
-              return newIdx >= 0 ? {...p, position: newIdx + 1} : p;
-            });
-          });
-          lastLocalUpdateRef.current = Date.now();
-          
-          await db.executePlanOrder(item.order_id, role);
-          
-          // Recargar plan y órdenes
-          const fresh = await db.loadPlans();
-          setPlanItems(fresh);
-          lastLocalUpdateRef.current = Date.now();
-          onReload && onReload();
-          showToast && showToast("✅ " + (o.production_number || o.id) + " → " + machineName);
-        } catch (err) {
-          console.error("[Planner] Error ejecutando orden:", err);
-          if (prevSnapshot) setPlanItems(prevSnapshot);
-          showToast && showToast("❌ " + (err?.message || "Error al pasar a producción"), "error");
-        } finally {
-          setExecutingId(null);
-        }
-      }
-    });
-  };
-
-  // Limpiar plan completo
-  const handleClearPlan = () => {
-    if (planItems.length === 0) {
-      showToast && showToast("ℹ️ El plan ya está vacío", "error");
-      return;
-    }
-    setConfirmModal && setConfirmModal({
-      title: "🗑️ Limpiar plan completo",
-      message: "¿Vaciar TODA la cola del plan?\n\nSe eliminarán las " + planItems.length + " órdenes planificadas en todas las máquinas. Esta acción no se puede deshacer (las órdenes vuelven a la bandeja 'Por planificar').",
-      confirmLabel: "Sí, limpiar todo",
-      confirmColor: C.dn,
-      onConfirm: async () => {
-        setConfirmModal && setConfirmModal(null);
-        try {
-          await db.clearPlan(role);
-          setPlanItems([]);
-          lastLocalUpdateRef.current = Date.now();
-          showToast && showToast("✅ Plan limpiado");
-        } catch (err) {
-          console.error("[Planner] Error clearing:", err);
-          showToast && showToast("❌ No se pudo limpiar el plan", "error");
-        }
-      }
-    });
-  };
-
-  // Conteo de órdenes visibles (después de filtrado)
-  const totalVisible = Object.values(planByMachine).reduce((sum, q) => sum + q.length, 0);
-
-  return <div>
-    {/* Header */}
-    <div style={{display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 14}}>
-      <div>
-        <h2 style={{fontSize: 18, fontWeight: 800, margin: "0 0 4px", textTransform: "uppercase"}}>🗓️ Planificador</h2>
-        <p style={{fontSize: 11, color: C.t2, margin: 0}}>{totalVisible} órdenes en cola · arrastra para planificar</p>
-      </div>
-      {totalVisible > 0 && <button onClick={handleClearPlan} 
-        style={{...bs(C.bg, C.dn), padding: "6px 12px", fontSize: 11, border: "0.5px solid " + C.dn + "40"}}>
-        🗑️ Limpiar plan
-      </button>}
-    </div>
-
-    {/* Hint inicial */}
-    <FirstTimeHint role={role} hintKey="planner-intro" 
-      text="Arrastra órdenes desde 'Por planificar' hacia las máquinas. Reordena la cola con las flechas ↑↓. La primera orden (#1) tiene un botón ▶ para pasarla a producción cuando estés listo." 
-      color={C.ac}/>
-
-    {loading ? <div style={{textAlign: "center", padding: 40, color: C.t2}}>⏳ Cargando plan...</div> : 
-    <div style={{display: "grid", gridTemplateColumns: "240px 1fr", gap: 12}}>
-      
-      {/* INBOX: Por planificar */}
-      <div style={{background: C.bg, borderRadius: 14, border: "0.5px solid " + C.bd, padding: 12, alignSelf: "flex-start", position: "sticky", top: 12}}>
-        <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10}}>
-          <span style={{fontSize: 12, fontWeight: 700, color: C.t2, textTransform: "uppercase", letterSpacing: 0.5}}>Por planificar</span>
-          <span style={{fontSize: 10, background: C.sf, color: C.t2, padding: "2px 8px", borderRadius: 6, fontWeight: 600}}>{inboxOrders.length}</span>
-        </div>
-        {inboxOrders.length === 0 ? 
-          <div style={{textAlign: "center", padding: 20, color: C.t3, fontSize: 11}}>
-            <div style={{fontSize: 32, marginBottom: 8}}>✨</div>
-            <div>Todas las órdenes validadas ya están planificadas</div>
-          </div>
-          :
-          <div style={{maxHeight: 600, overflowY: "auto", marginRight: -4, paddingRight: 4}}>
-            {inboxOrders.map(o => 
-              <div key={o.id} 
-                draggable 
-                onDragStart={(e) => handleDragStart(e, o.id)}
-                onDragEnd={handleDragEnd}
-                style={{
-                  background: C.sf, 
-                  borderRadius: 8, 
-                  padding: "8px 10px", 
-                  marginBottom: 6, 
-                  cursor: "grab",
-                  borderLeft: "3px solid " + (o.priority === "urgente" ? C.dn : C.ok),
-                  fontSize: 11
-                }}>
-                <div style={{display: "flex", justifyContent: "space-between", alignItems: "flex-start"}}>
-                  <div style={{flex: 1, minWidth: 0}}>
-                    <div style={{fontWeight: 700, fontSize: 11}}>{o.production_number || o.id}</div>
-                    <div style={{fontSize: 11, color: C.tx, marginTop: 2}}>{o.client}</div>
-                    <div style={{fontSize: 10, color: C.t2, marginTop: 1}}>{o.product_type}{o.quantity ? " · " + Number(o.quantity).toLocaleString() : ""}</div>
-                  </div>
-                  <button onClick={(e) => {e.stopPropagation(); onAction(o.id, "detail")}}
-                    style={{...bs(C.bg, C.ac), padding: "2px 6px", fontSize: 10, marginLeft: 4, flexShrink: 0}}
-                    title="Ver detalle">👁</button>
-                </div>
-                {o.priority === "urgente" && 
-                  <div style={{fontSize: 9, color: C.dn, marginTop: 2, fontWeight: 600}}>🔴 URGENTE</div>}
-                {o.due_date && 
-                  <div style={{fontSize: 9, color: parseDate(o.due_date) < new Date() ? C.dn : C.t3, marginTop: 2}}>📅 {fD(o.due_date)}</div>}
-              </div>
-            )}
-          </div>
-        }
-      </div>
-
-      {/* MÁQUINAS — expandidas primero, minimizadas al final */}
-      <div style={{display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8, alignContent: "flex-start"}}>
-        {[...visibleMachines]
-          .sort((a, b) => {
-            // Expandidas primero, minimizadas al final
-            const aMin = minimizedMachines.has(a.id);
-            const bMin = minimizedMachines.has(b.id);
-            if (aMin === bMin) return 0;
-            return aMin ? 1 : -1;
-          })
-          .map(machine => {
-          const queue = planByMachine[machine.id] || [];
-          const isHighlighted = dragOver === machine.id && dragInProgress;
-          const isMinimized = minimizedMachines.has(machine.id);
-          const machineColors = {offset: "#007aff", digital: "#7c3aed", acabados: "#e67e22", preprensa: "#ec4899"};
-          const mColor = machineColors[machine.type] || C.t2;
-          
-          return <div key={machine.id}
-            onDragOver={(e) => {
-              // Si está minimizada, ignorar drag&drop completamente
-              if (isMinimized) return;
-              handleDragOver(e, machine.id);
-            }}
-            onDragLeave={(e) => {
-              if (isMinimized) return;
-              if (e.currentTarget.contains(e.relatedTarget)) return;
-              setDragOver(null);
-            }}
-            onDrop={(e) => {
-              // Si está minimizada, ignorar el drop
-              if (isMinimized) {
-                e.preventDefault();
-                return;
-              }
-              handleDrop(e, machine.id);
-            }}
-            style={{
-              background: C.bg,
-              borderRadius: 12,
-              border: "0.5px solid " + (isHighlighted ? mColor : C.bd),
-              padding: isMinimized ? "8px 10px" : 10,
-              minHeight: isMinimized ? "auto" : 180,
-              boxShadow: isHighlighted ? "0 0 0 2px " + mColor + "40" : "none",
-              transition: "box-shadow 0.15s, padding 0.15s",
-              opacity: isMinimized ? (dragInProgress ? 0.4 : 0.75) : 1,
-              cursor: isMinimized && dragInProgress ? "not-allowed" : "default",
-              gridColumn: isMinimized ? "span 1" : "auto"
-            }}>
-            {/* Header con botón minimizar/expandir */}
-            <div style={{
-              marginBottom: isMinimized ? 0 : 8,
-              paddingBottom: isMinimized ? 0 : 6,
-              borderBottom: isMinimized ? "none" : "0.5px solid " + C.bd
-            }}>
-              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6}}>
-                <div style={{flex: 1, minWidth: 0}}>
-                  <div style={{fontSize: 12, fontWeight: 700, color: mColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>{machine.name}</div>
-                  {!isMinimized && 
-                    <div style={{fontSize: 9, color: C.t3, marginTop: 1, display: "flex", justifyContent: "space-between"}}>
-                      <span>{machine.sub}</span>
-                      <span style={{fontWeight: 600, color: queue.length > 0 ? C.tx : C.t3}}>{queue.length} en cola</span>
-                    </div>
-                  }
-                  {isMinimized && queue.length > 0 && 
-                    <div style={{fontSize: 9, color: C.t2, marginTop: 1, fontWeight: 600}}>{queue.length} en cola</div>
-                  }
-                </div>
-                <button 
-                  onClick={(e) => {e.stopPropagation(); toggleMinimize(machine.id)}}
-                  style={{
-                    ...bs(C.sf, C.t2), 
-                    padding: "2px 7px", 
-                    fontSize: 12, 
-                    fontWeight: 700,
-                    flexShrink: 0,
-                    minWidth: 24,
-                    lineHeight: 1
-                  }}
-                  title={isMinimized ? "Expandir" : "Minimizar"}>
-                  {isMinimized ? "+" : "−"}
-                </button>
-              </div>
-            </div>
-            
-            {/* Cuerpo solo si está expandida */}
-            {!isMinimized && (queue.length === 0 ? 
-              <div style={{
-                border: "1.5px dashed " + (isHighlighted ? mColor : C.bd),
-                borderRadius: 8,
-                padding: 16,
-                textAlign: "center",
-                color: isHighlighted ? mColor : C.t3,
-                fontSize: 10,
-                fontWeight: isHighlighted ? 600 : 400
-              }}>
-                {isHighlighted ? "Soltar aquí" : "Vacía — arrastra una orden"}
-              </div>
-              :
-              <div>
-                {queue.map((item, idx) => {
-                  const o = orderById[item.order_id];
-                  if (!o) return null;
-                  const isUrgent = o.priority === "urgente";
-                  const isFirst = item.position === 1;
-                  const validStages = ["ready", "placas_listas", "in_production", "maquila_in", "packaging"];
-                  const isExecutable = validStages.includes(o.stage) && o.validated_by_production && o.validated_by_preprensa;
-                  const isExecuting = executingId === o.id;
-                  
-                  return <div key={item.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, o.id, machine.id)}
-                    onDragEnd={handleDragEnd}
-                    style={{
-                      background: isFirst ? (isExecutable ? C.ok + "15" : C.wn + "10") : C.sf,
-                      borderRadius: 8,
-                      padding: "6px 8px",
-                      marginBottom: 4,
-                      borderLeft: "3px solid " + (isUrgent ? C.dn : isFirst ? (isExecutable ? C.ok : C.wn) : mColor),
-                      position: "relative",
-                      cursor: "grab"
-                    }}>
-                    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2}}>
-                      <span style={{fontSize: 10, fontWeight: 700, color: isFirst ? (isExecutable ? C.ok : C.wn) : C.t2}}>#{item.position}{isFirst && !isExecutable ? " ⚠️" : ""}</span>
-                      <div style={{display: "flex", gap: 2}}>
-                        <button onClick={(e) => {e.stopPropagation(); handleMoveUp(item)}} disabled={idx === 0} 
-                          style={{...bs(C.sf, idx === 0 ? C.t3 : C.ac), padding: "1px 5px", fontSize: 10, opacity: idx === 0 ? 0.4 : 1}} 
-                          title="Subir">↑</button>
-                        <button onClick={(e) => {e.stopPropagation(); handleMoveDown(item)}} disabled={idx === queue.length - 1}
-                          style={{...bs(C.sf, idx === queue.length - 1 ? C.t3 : C.ac), padding: "1px 5px", fontSize: 10, opacity: idx === queue.length - 1 ? 0.4 : 1}}
-                          title="Bajar">↓</button>
-                        <button onClick={(e) => {e.stopPropagation(); onAction(o.id, "detail")}}
-                          style={{...bs(C.sf, C.ac), padding: "1px 5px", fontSize: 10}}
-                          title="Ver detalle">👁</button>
-                        <button onClick={(e) => {e.stopPropagation(); handleRemoveFromPlan(o.id)}}
-                          style={{...bs(C.sf, C.dn), padding: "1px 5px", fontSize: 10}}
-                          title="Quitar del plan">×</button>
-                      </div>
-                    </div>
-                    <div style={{fontSize: 10, fontWeight: 700, color: C.tx}}>{o.production_number || o.id}</div>
-                    <div style={{fontSize: 10, color: C.t2}}>{o.client}</div>
-                    <div style={{fontSize: 9, color: C.t3, marginTop: 1}}>{o.product_type}{o.quantity ? " · " + Number(o.quantity).toLocaleString() : ""}</div>
-                    {isFirst && !isExecutable && <div style={{fontSize: 9, color: C.wn, fontWeight: 600, marginTop: 2}}>⚠️ Stage: {SM[o.stage]?.l || o.stage}</div>}
-                    {isUrgent && <div style={{fontSize: 9, color: C.dn, fontWeight: 600, marginTop: 2}}>🔴</div>}
-                    
-                    {/* Botón "Pasar a producción" solo en #1 */}
-                    {isFirst && isExecutable && 
-                      <button onClick={(e) => {e.stopPropagation(); handleExecuteOrder(item)}} 
-                        disabled={isExecuting}
-                        style={{
-                          ...bt(C.ok), 
-                          marginTop: 6, 
-                          width: "100%", 
-                          justifyContent: "center", 
-                          fontSize: 10, 
-                          padding: "5px 8px",
-                          opacity: isExecuting ? 0.6 : 1,
-                          cursor: isExecuting ? "wait" : "pointer"
-                        }}>
-                        {isExecuting ? "⏳ Pasando..." : "▶ Pasar a producción"}
-                      </button>
-                    }
-                  </div>;
-                })}
-              </div>
-            )}
-          </div>;
-        })}
-      </div>
-    </div>}
-  </div>;
-}
 
 // ─── MAIN ──────────────────────────────────────────
 export default function PrintFlow() {
@@ -5558,15 +5053,21 @@ export default function PrintFlow() {
 
   const doAdv=useCallback(async(id,ns)=>{
     setActionLoading(id);
-    const machineStages=["in_production","packaging","ctp"];
-    // Capture order data BEFORE setOrders to avoid stale closure
+    // v10.26.0 — Si la orden sale de máquina real (no Empaque), debemos promover siguiente vía RPC
     const o=orders.find(x=>x.id===id);
-    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(o.current_machine&&!machineStages.includes(ns)){u.machine_log=closeML(o);u.current_machine=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual"}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
+    const wasInQueue=o?.machine_queue_position!=null&&o?.current_machine&&o?.current_machine!=="vm_manual";
+    const willClearMachine=ns!=="packaging";  // si va a Empaque, current_machine pasa a "vm_manual"; resto limpia
+    setOrders(p=>p.map(o=>{if(o.id!==id)return o;const u={...o,stage:ns,timeline:addTL(o,(SM[o.stage]?.l||"")+" → "+(SM[ns]?.l||""),{to:ns})};if(o.current_machine&&willClearMachine){u.machine_log=closeML(o);u.current_machine=null;u.machine_queue_position=null}if(ns==="packaging"){if(o.current_machine){u.machine_log=closeML(o)}const l=[...(u.machine_log||o.machine_log||[])];l.push({machine:"vm_manual",started:new Date().toISOString()});u.machine_log=l;u.current_machine="vm_manual";u.machine_queue_position=null}if(ns.includes("delivered")){u.deliveredAt=new Date().toISOString();u.delivered_at=u.deliveredAt}if(!ns.includes("delivered")&&o.stage.includes("delivered")){u.deliveredAt=null;u.delivered_at=null}if(ns==="draft"){u.validated_by_production=false;u.validated_by_preprensa=false}if(ns==="design"){u.proof_approved=null}return u}));
     try{
+    // v10.26.0 — Si estaba en cola de máquina real, sacarla via RPC (puede promover siguiente)
+    let queueResult=null;
+    if(wasInQueue){
+      queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
+    }
     // DB update — NO dependency on closure state for the update object
     const upd={stage:ns};
-    if(ns==="packaging")upd.current_machine="vm_manual";
-    else upd.current_machine=null;
+    if(ns==="packaging"){upd.current_machine="vm_manual";upd.machine_queue_position=null}
+    else if(willClearMachine){upd.current_machine=null;upd.machine_queue_position=null}
     if(ns.includes("delivered"))upd.delivered_at=new Date().toISOString();
     if(!ns.includes("delivered")&&o?.stage?.includes("delivered"))upd.delivered_at=null;
     if(ns==="draft"){upd.validated_by_production=false;upd.validated_by_preprensa=false}
@@ -5578,6 +5079,12 @@ export default function PrintFlow() {
     await db.closeMachineLog(id);
     // Start new machine log for packaging
     if(ns==="packaging")await db.addMachineLog(id,"vm_manual");
+    // v10.26.0 — Si había siguiente en cola de la máquina origen, promoverla (abrir log)
+    if(queueResult?.new_active_id){
+      await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
+      await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+      setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
+    }
     // Timeline and notifications (o captured above before setOrders)
     await db.addTimeline(id,(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||""),user,SM[ns]?.c);
     if(ns==="salidas"){await db.notifySecs(id,"salidas","📤 Orden de "+(o?.client||"")+" lista para entrega — "+(o?.product_type||""),null,user,o?.created_by);await db.addNotification("karla",id,"salidas","📄 Lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
@@ -5628,28 +5135,87 @@ export default function PrintFlow() {
     const stage=isManual?"packaging":isPreprensa?"ctp":"in_production";
     const label=isManual?"📦 Empaque":(mach?.name||mid);
     const stageColor=isManual?"#af52de":isPreprensa?"#0891b2":"#ff9500";
-    setOrders(p=>p.map(o=>{if(o.id!==oid)return o;const l=closeML(o);l.push({machine:mid,started:new Date().toISOString()});return{...o,stage,current_machine:mid,machine_log:l,timeline:addTL(o,"🏭 "+label,{to:stage})}}));
+    const o=orders.find(x=>x.id===oid);
+    const oldMachine=o?.current_machine;
+    const wasActiveOldMachine=o?.machine_queue_position===0;
     try{
-    const {error:amErr}=await supabase.from("orders").update({stage,current_machine:mid}).eq("id",oid);
-    if(amErr)throw new Error(amErr.message);
-    await db.closeMachineLog(oid);
-    await db.addMachineLog(oid,mid);
-    await db.addTimeline(oid,"🏭 "+label,user,stageColor);
-    showToast("🏭 Asignada a "+label);
+      // v10.26.0 — vm_manual (Empaque) NO usa cola, sigue modelo paralelo. Resto: cola.
+      if(isManual){
+        // Cerrar log si traía de otra máquina activa
+        if(oldMachine&&oldMachine!==mid&&wasActiveOldMachine)await db.closeMachineLog(oid);
+        // Si venía de cola en otra máquina, sacarla atómicamente (puede promover siguiente)
+        const queueResult=oldMachine&&oldMachine!==mid&&oldMachine!=="vm_manual"&&o?.machine_queue_position!=null
+          ?await db.moveOrderInQueue(oid,null,null,userLogin||user):null;
+        const {error:amErr}=await supabase.from("orders").update({stage,current_machine:mid,machine_queue_position:null}).eq("id",oid);
+        if(amErr)throw new Error(amErr.message);
+        await db.addMachineLog(oid,mid);
+        await db.addTimeline(oid,"🏭 "+label,user,stageColor);
+        setOrders(p=>p.map(x=>{if(x.id!==oid)return x;const l=closeML(x);l.push({machine:mid,started:new Date().toISOString()});return{...x,stage,current_machine:mid,machine_queue_position:null,machine_log:l,timeline:addTL(x,"🏭 "+label,{to:stage})}}));
+        // Si había siguiente en cola en oldMachine, promover (abrir log)
+        if(queueResult?.new_active_id){
+          await db.addMachineLog(queueResult.new_active_id,oldMachine);
+          await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+          setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0}:x));
+        }
+        showToast("🏭 "+label);
+        return;
+      }
+      // Máquina real (offset/digital/acabados/preprensa): cola por posición
+      const currentQueue=getMachineQueue(orders,mid);
+      const targetPos=oldMachine===mid?(o.machine_queue_position??currentQueue.length):currentQueue.length;
+      const willBeActive=targetPos===0;
+      // Si era activa en máquina diferente, cerrar log allí
+      if(oldMachine&&oldMachine!==mid&&wasActiveOldMachine)await db.closeMachineLog(oid);
+      // RPC atómico: mueve la orden y maneja shifts en máquina vieja y nueva
+      const result=await db.moveOrderInQueue(oid,mid,targetPos,userLogin||user);
+      // Update stage en orders (la RPC ya seteó current_machine y machine_queue_position)
+      const {error:stageErr}=await supabase.from("orders").update({stage}).eq("id",oid);
+      if(stageErr)throw new Error(stageErr.message);
+      // Abrir log si será activa
+      if(willBeActive)await db.addMachineLog(oid,mid);
+      await db.addTimeline(oid,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),user,stageColor);
+      // Update local
+      setOrders(p=>p.map(x=>{
+        if(x.id===oid){
+          const l=closeML(x);
+          if(willBeActive)l.push({machine:mid,started:new Date().toISOString()});
+          return{...x,stage,current_machine:mid,machine_queue_position:targetPos,machine_log:l,timeline:addTL(x,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),{to:stage})};
+        }
+        return x;
+      }));
+      // Si al sacarla de la máquina vieja se promovió otra a activa
+      if(result?.new_active_id&&result.new_active_id!==oid){
+        await db.addMachineLog(result.new_active_id,result.old_machine);
+        await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+        setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0}:x));
+      }
+      showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label);
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
-  },[user,showToast,reload]);
+  },[user,userLogin,orders,showToast,reload]);
 
   const sendMaquila=useCallback(async(oid,prov,phone,email,note)=>{
     const orig=orders.find(x=>x.id===oid); // capture before setOrders
-    setOrders(p=>p.map(o=>{if(o.id!==oid)return o;const l=closeML(o);return{...o,stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null,machine_log:l,timeline:addTL(o,"🚚 "+prov,{to:"maquila_out"}),comments:[...(o.comments||[]),{text:"🚚 "+prov+(phone?" | 📱"+phone:"")+(email?" | 📧"+email:"")+(note?" — "+note:""),by:"sistema",date:new Date().toISOString()}]}}));
+    const wasInQueue=orig?.machine_queue_position!=null&&orig?.current_machine&&orig?.current_machine!=="vm_manual";
+    setOrders(p=>p.map(o=>{if(o.id!==oid)return o;const l=closeML(o);return{...o,stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null,machine_queue_position:null,machine_log:l,timeline:addTL(o,"🚚 "+prov,{to:"maquila_out"}),comments:[...(o.comments||[]),{text:"🚚 "+prov+(phone?" | 📱"+phone:"")+(email?" | 📧"+email:"")+(note?" — "+note:""),by:"sistema",date:new Date().toISOString()}]}}));
     try{
-    const {error:smErr}=await supabase.from("orders").update({stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null}).eq("id",oid);
+    // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente)
+    let queueResult=null;
+    if(wasInQueue){
+      queueResult=await db.moveOrderInQueue(oid,null,null,user||"sistema");
+    }
+    const {error:smErr}=await supabase.from("orders").update({stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null,machine_queue_position:null}).eq("id",oid);
     if(smErr)throw new Error(smErr.message);
     await db.closeMachineLog(oid);
     await db.addTimeline(oid,"🚚 "+prov,user,"#e67e22");
     await db.addComment(oid,"🚚 "+prov+(phone?" | 📱"+phone:"")+(email?" | 📧"+email:"")+(note?" — "+note:""),"sistema");
     const maqMsg="🚚 Orden de "+(orig?.client||"")+" — "+(orig?.product_type||"")+" enviada a maquila: "+prov;
     await db.notifySecs(oid,"new_order",maqMsg,null,user,orig?.created_by);
+    // v10.26.0 — Si había siguiente en cola, promoverla
+    if(queueResult?.new_active_id){
+      await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
+      await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+      setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
+    }
     showToast("🚚 Enviada a maquila: "+prov);
     setMaqModal(null);
     }catch(e){console.error("[sendMaquila] Error:",e);showToast("❌ No se pudo enviar a maquila: "+(e?.message||"error desconocido"),"error");reload()}
@@ -5716,14 +5282,26 @@ export default function PrintFlow() {
     const o=orders.find(x=>x.id===id);if(!o)return;
     const ns=o.order_type==="maquila"?"maq_cancelled":"cancelled";
     const cancelMsg="❌ Orden cancelada: "+(o.client||"")+" — "+(o.product_type||"")+". Motivo: "+reason;
-    setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:ns,current_machine:null,machine_log:closeML(x),timeline:addTL(x,"❌ Cancelada: "+reason,{to:ns})}));
+    const wasInQueue=o.machine_queue_position!=null&&o.current_machine&&o.current_machine!=="vm_manual";
+    setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:ns,current_machine:null,machine_queue_position:null,machine_log:closeML(x),timeline:addTL(x,"❌ Cancelada: "+reason,{to:ns})}));
     try{
-      const upd={stage:ns,current_machine:null};
+      // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente)
+      let queueResult=null;
+      if(wasInQueue){
+        queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
+      }
+      const upd={stage:ns,current_machine:null,machine_queue_position:null};
       const {error}=await supabase.from("orders").update(upd).eq("id",id);
       if(error)throw new Error(error.message);
       await db.closeMachineLog(id);
       await db.addTimeline(id,"❌ Cancelada: "+reason,user,"#ff3b30");
       await db.addComment(id,"❌ Cancelada: "+reason,user);
+      // v10.26.0 — Promover siguiente si la cancelada era activa
+      if(queueResult?.new_active_id){
+        await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
+        await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+        setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
+      }
       // Notify admin + produccion
       if(user!=="admin")await db.addNotification("admin",id,"order_cancelled",cancelMsg,reason,user);
       if(user!=="produccion")await db.addNotification("produccion",id,"order_cancelled",cancelMsg,reason,user);
@@ -5891,39 +5469,78 @@ export default function PrintFlow() {
       const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
     }
     if(action==="duplicate")duplicate(id);
+    // v10.26.0 — Reordenar dentro de la misma máquina (drag&drop entre tarjetas o botón "Activar")
+    if(action==="reorder_in_machine"){
+      const {newPosition}=payload||{};
+      const o=orders.find(x=>x.id===id);
+      if(!o||!o.current_machine||o.machine_queue_position==null)return;
+      if(o.machine_queue_position===newPosition)return;
+      const wasActive=o.machine_queue_position===0;
+      const willBeActive=newPosition===0;
+      const mach=o.current_machine;
+      setActionLoading(id);
+      (async()=>{
+        try{
+          // 1. Cerrar log si era activa y deja de serlo
+          if(wasActive&&!willBeActive)await db.closeMachineLog(id);
+          // 2. Si será activa y antes había otra activa en esta máquina, cerrar su log primero
+          //    (la RPC sólo shiftea positions, no toca logs)
+          if(!wasActive&&willBeActive){
+            const prevActive=orders.find(x=>x.id!==id&&x.current_machine===mach&&x.machine_queue_position===0);
+            if(prevActive)await db.closeMachineLog(prevActive.id);
+          }
+          // 3. RPC atómico para reordenar
+          await db.moveOrderInQueue(id,mach,newPosition,userLogin||user);
+          // 4. Abrir log si ahora es activa
+          if(!wasActive&&willBeActive)await db.addMachineLog(id,mach);
+          await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida a cola #"+newPosition,userLogin||user,willBeActive?"#34c759":"#007aff");
+          showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida a cola #"+newPosition);
+          // Reload completo para sincronizar todas las positions afectadas
+          await reload();
+        }catch(e){console.error("[reorder_in_machine] Error:",e);showToast("❌ No se pudo reordenar: "+(e?.message||"error desconocido"),"error");reload()}
+        finally{setActionLoading(null)}
+      })();
+    }
     // v10.23.0 — Sacar orden de máquina y devolver a Lista. Solo admin/producción.
     // timeline y machine_log son tablas separadas (order_timeline / order_machine_log),
     // por eso usamos db.addTimeline y db.closeMachineLog en vez de incluirlos en el UPDATE.
     if(action==="return_to_ready"){
       const o=orders.find(x=>x.id===id);
       if(!o){return}
-      // 🔒 v10.24.1 — Hardstop centralizado (antes era check manual)
       if(!canExecuteAction("return_to_ready",o,user,userLogin)){showToast(actionDeniedToast("return_to_ready",o,user,userLogin),"error");return}
       setActionLoading(id);
       (async()=>{
         try{
           const fromMachine=o.current_machine||"máquina";
-          // 1. ORDERS UPDATE FIRST (race condition rule) — solo columnas reales
-          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",current_machine:null}).eq("id",id);
+          const wasActive=o.machine_queue_position===0;
+          // v10.26.0 — Sacar de cola atómicamente (también detecta si hay siguiente para promover)
+          const result=o.machine_queue_position!=null
+            ?await db.moveOrderInQueue(id,null,null,userLogin||user)
+            :null;
+          // Update stage en orders (la RPC ya seteó current_machine=null y position=null si aplicaba)
+          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",...(o.machine_queue_position==null?{current_machine:null}:{})}).eq("id",id);
           if(rtErr)throw new Error(rtErr.message);
-          // 2. Cerrar machine_logs abiertos (tabla order_machine_log)
-          await db.closeMachineLog(id);
-          // 3. Timeline entry (tabla order_timeline)
+          // Cerrar machine_log si era activa
+          if(wasActive)await db.closeMachineLog(id);
           await db.addTimeline(id,"🔄 Devuelta a Lista (desde "+fromMachine+")",userLogin||user,"#007aff");
-          // 4. State local — espejo de lo persistido para refresh visual inmediato
+          // State local
           const now=new Date();
           const ml=Array.isArray(o.machine_log)?o.machine_log.slice():[];
           ml.forEach((e,i)=>{
             if(e&&!e.ended){
-              // v10.24.1 — validar e.started para evitar NaN en minutes
               const s=e.started?new Date(e.started):null;
               const valid=s&&!isNaN(s.getTime());
               ml[i]={...e,ended:now.toISOString(),minutes:valid?Math.round((now-s)/60000):0};
             }
           });
           const newTL=[...(o.timeline||[]),{action:"🔄 Devuelta a Lista (desde "+fromMachine+")",date:now.toISOString(),by:userLogin||user,color:"#007aff"}];
-          setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_log:ml,timeline:newTL}:x));
-          // 5. Notif al trío + admin (filtro 2B Telegram para admin sigue aplicando)
+          setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_queue_position:null,machine_log:ml,timeline:newTL}:x));
+          // v10.26.0 — Si había siguiente en cola y ahora se promueve, abrir su log
+          if(result?.new_active_id){
+            await db.addMachineLog(result.new_active_id,result.old_machine);
+            await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+            setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:result.old_machine,started:now.toISOString()}]}:x));
+          }
           await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
           showToast("🔄 Devuelta a Lista");
         }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
@@ -6085,7 +5702,6 @@ export default function PrintFlow() {
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
   if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
   if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
-  if(user==="produccion"||user==="admin")navs.push({id:"planner",i:"🗓️",l:"Planificador"});
   navs.push({id:"calendar",i:"📅",l:"Entregas"});
   navs.push({id:"orders",i:"📋",l:"Todas"});
   navs.push({id:"archive",i:"🗂️",l:"Archivo"});
@@ -6158,10 +5774,9 @@ export default function PrintFlow() {
           {normalTasks.length===0&&staleTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{search?"Sin resultados":"¡Sin pendientes!"}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención"}</div></div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
-        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></div>}
-        {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance}/></>}</div>}
+        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
+        {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
-        {view==="planner"&&(user==="produccion"||user==="admin")&&<ProductionPlanner orders={orders} role={user} userLogin={userLogin} onAction={handleAction} onReload={reload} showToast={showToast} setConfirmModal={setConfirmModal}/>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · 🔍 "{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
