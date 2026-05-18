@@ -119,6 +119,7 @@ const ACTION_ROLES = {
   waste:           { allowed:["admin","produccion","german"], ownerBound:[] },
   devolver_design: { allowed:["admin","preprensa","german"], ownerBound:[] },
   return_to_ready: { allowed:["admin","produccion","german"], ownerBound:[] }, // v10.24.1 + v10.26.2 (german para CTP)
+  reorder_in_machine: { allowed:["admin","produccion","german"], ownerBound:[] }, // v10.28.1 — defensa en profundidad
 
   // ─── Phase 2 — pedidos web ───
   web_approve:     { allowed:["admin","secretaria"], ownerBound:[] },
@@ -574,8 +575,8 @@ function getTopPriority(activeOrders) {
   let topScore = -1, topOrder = null;
   activeOrders.forEach(o => {
     let score = 0;
-    if (o.due_date && new Date(o.due_date + "T12:00:00") < new Date()) score += 1000;
-    else if (o.due_date && new Date(o.due_date + "T12:00:00") <= new Date(Date.now() + 2*86400000)) score += 500;
+    if (o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date()) score += 1000;
+    else if (o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000)) score += 500;
     const st = getStale(o);
     if (st?.lv === "critical") score += 300;
     else if (st?.lv === "warning") score += 100;
@@ -590,7 +591,7 @@ function getIncompleteData(orders) {
   const active = orders.filter(o => !TERMINAL_STAGES.includes(o.stage));
   const fileStages = ["proof_printing","proof_client","ctp","placas_listas","ready","in_production","packaging","salidas"];
   return {
-    vencidas: active.filter(o => o.due_date && new Date(o.due_date + "T12:00:00") < new Date()),
+    vencidas: active.filter(o => o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date()),
     sinFecha: active.filter(o => !o.due_date),
     sinPrecio: active.filter(o => o.order_type === "maquila" ? (!o.maq_price || Number(o.maq_price) === 0) : (!o.price || Number(o.price) === 0)),
     sinCantidad: active.filter(o => !o.quantity || Number(o.quantity) === 0),
@@ -4305,8 +4306,10 @@ function WIPDashboard({ orders, role, onAction }) {
   const topClients = useMemo(() => {
     const map = {};
     active.forEach(o => {
-      const key = (o.client || "—").trim();
-      if (!map[key]) map[key] = { client: key, count: 0, money: 0, stages: new Set() };
+      const display = (o.client || "—").trim();
+      // v10.28.1 — agrupar por casing/espacios normalizados pero mostrar el primer nombre tal como se capturó
+      const key = display.toLowerCase().replace(/\s+/g, " ");
+      if (!map[key]) map[key] = { client: display, count: 0, money: 0, stages: new Set() };
       map[key].count += 1;
       map[key].money += orderMoney(o);
       map[key].stages.add(SM[o.stage]?.l || o.stage);
@@ -4582,7 +4585,7 @@ function StatCard({ label, value, subValue, color }) {
 }
 
 // ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
-function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload }) {
+function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
   const [expandedSection, setExpandedSection] = useState({});
 
   if (role !== "admin") return null;
@@ -4590,8 +4593,9 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
   const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage)), [orders]);
 
   const orderMoney = (o) => o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
-  const isVencida = (o) => o.due_date && new Date(o.due_date + "T12:00:00") < new Date();
-  const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(o.due_date + "T12:00:00") <= new Date(Date.now() + 2*86400000);
+  // v10.28.1 — slice(0,10) tolera due_date con timestamp legacy (e.g. "2026-05-17T00:00:00Z")
+  const isVencida = (o) => o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date();
+  const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000);
 
   const topPriority = useMemo(() => getTopPriority(active), [active]);
 
@@ -4611,8 +4615,9 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       r.orders.push(o);
       if (isVencida(o)) r.vencidas += 1;
       if (isUrgente(o)) r.urgentes += 1;
+      // v10.28.1 — fallback: si created_at también es null, tratar como muy estancada (999h) para no ocultar el problema
       const lastAct = o.timeline?.length > 0 ? o.timeline[o.timeline.length - 1].date : o.created_at;
-      const h = hoursAgo(lastAct);
+      const h = lastAct ? hoursAgo(lastAct) : 999;
       if (h > r.horasSinActividad) r.horasSinActividad = h;
     });
     return Object.values(map).sort((a, b) => b.vencidas - a.vencidas || b.urgentes - a.urgentes);
@@ -4711,6 +4716,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
             .eq("read", false);
           if (error) throw new Error(error.message);
           showToast("✅ " + unreadNotifs.length + " notificaciones marcadas como leídas");
+          // v10.28.1 — Realtime subscription solo escucha INSERT, no UPDATE → recargar manualmente
+          if (reloadNotifications) await reloadNotifications();
         } catch (e) {
           showToast("❌ No se pudieron marcar: " + (e?.message || "error"), "error");
         }
@@ -4745,7 +4752,7 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
           </div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
             {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
-            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(topPriority.due_date + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
+            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
             {isUrgente(topPriority) && <span style={{ color: "#ff9500", fontWeight: 600 }}>URGENTE · </span>}
             {SM[topPriority.stage]?.l || topPriority.stage} · {STAGE_RESPONSIBLE[topPriority.stage]?.name || "—"}
             {(() => {
@@ -5722,7 +5729,7 @@ export default function PrintFlow() {
   }, [loaded, user, orders]);
 
   const addTL=(o,action,extra={})=>[...(o.timeline||[]),{action,date:new Date().toISOString(),by:user||"sistema",color:SM[extra.to]?.c||C.t3,...extra}];
-  const closeML=o=>{const l=[...(o.machine_log||[])];const now=new Date();l.forEach((e,i)=>{if(!e.ended){const s=new Date(e.started);l[i]={...e,ended:now.toISOString(),minutes:Math.round((now-s)/60000)}}});return l};
+  const closeML=o=>{const l=[...(o.machine_log||[])];const now=new Date();l.forEach((e,i)=>{if(!e.ended){const s=e.started?new Date(e.started):null;const valid=s&&!isNaN(s.getTime());l[i]={...e,ended:now.toISOString(),minutes:valid?Math.round((now-s)/60000):0}}});return l}; // v10.28.1 — guard NaN si started inválido
 
   const create=useCallback(async f=>{
     const isMaq=f.order_type==="maquila";
@@ -5990,8 +5997,11 @@ export default function PrintFlow() {
     const label=isManual?"📦 Empaque":(mach?.name||mid);
     const stageColor=isManual?"#af52de":isPreprensa?"#0891b2":"#ff9500";
     const o=orders.find(x=>x.id===oid);
+    if(!o)return;
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
+    // v10.28.1 — Bloquear reintentos concurrentes (doble-drop) y aplicar UI optimista temprana
+    setActionLoading(oid);
     try{
       // v10.26.0 — vm_manual (Empaque) NO usa cola, sigue modelo paralelo. Resto: cola.
       if(isManual){
@@ -6045,6 +6055,7 @@ export default function PrintFlow() {
       }
       showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label);
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
+    finally{setActionLoading(null)}
   },[user,userLogin,orders,showToast,reload]);
 
   const sendMaquila=useCallback(async(oid,prov,phone,email,note)=>{
@@ -6160,8 +6171,8 @@ export default function PrintFlow() {
       if(user!=="admin")await db.addNotification("admin",id,"order_cancelled",cancelMsg,reason,user);
       if(user!=="produccion")await db.addNotification("produccion",id,"order_cancelled",cancelMsg,reason,user);
       showToast("❌ Orden cancelada","error");
-      setCancelModal(null);
     }catch(e){console.error("[cancelOrder] Error:",e);showToast("❌ No se pudo cancelar: "+(e?.message||"error desconocido"),"error");reload()}
+    finally{setCancelModal(null)} // v10.28.1 — cerrar modal aunque falle
   },[orders,user,showToast,reload]);
 
   const addComment=useCallback(async(oid,c)=>{
@@ -6328,6 +6339,8 @@ export default function PrintFlow() {
       const {newPosition}=payload||{};
       const o=orders.find(x=>x.id===id);
       if(!o||!o.current_machine||o.machine_queue_position==null)return;
+      // v10.28.1 — Defensa en profundidad: gate de rol (UI ya filtra pero el handler debe validar)
+      if(!canExecuteAction("reorder_in_machine",o,user,userLogin)){showToast(actionDeniedToast("reorder_in_machine",o,user,userLogin),"error");return}
       if(o.machine_queue_position===newPosition)return;
       const wasActive=o.machine_queue_position===0;
       const willBeActive=newPosition===0;
@@ -6371,8 +6384,8 @@ export default function PrintFlow() {
           const result=o.machine_queue_position!=null
             ?await db.moveOrderInQueue(id,null,null,userLogin||user)
             :null;
-          // Update stage en orders (la RPC ya seteó current_machine=null y position=null si aplicaba)
-          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",...(o.machine_queue_position==null?{current_machine:null}:{})}).eq("id",id);
+          // Update stage en orders. v10.28.1 — siempre setear current_machine y machine_queue_position a null (defensa en profundidad si la RPC no lo hizo)
+          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",current_machine:null,machine_queue_position:null}).eq("id",id);
           if(rtErr)throw new Error(rtErr.message);
           // Cerrar machine_log si era activa
           if(wasActive)await db.closeMachineLog(id);
@@ -6638,7 +6651,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&user==="admin"&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload}/>}
+        {view==="health"&&user==="admin"&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}

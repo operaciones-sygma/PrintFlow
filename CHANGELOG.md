@@ -5,6 +5,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.28.1 — Bug scan post-deploy v10.26-v10.28: fix bundle — 17-may-2026
+
+Scan completo de bugs encontrados después de deployar v10.26.0 (cola por máquina), v10.27.0 (Dinero en Proceso) y v10.28.0 (Salud Operativa). 9 fixes en un solo commit. Sin cambios DB.
+
+### 🔴 Críticos
+
+**1. `reorder_in_machine` SIN gate de permisos.** La UI gateaba por rol pero el handler no llamaba `canExecuteAction`. Cualquier usuario con DevTools (vendedor, secretaria) podía llamar `onAction(id,"reorder_in_machine",{newPosition:0})` y mover la cola productiva. Rompía el patrón de defensa en profundidad v10.12.0.2.
+**Fix:** agregado al whitelist `ACTION_ROLES: ["admin","produccion","german"]` + gate `canExecuteAction` en el handler.
+
+**2/3. `assignMachine` sin lock ni UI optimista.** A diferencia de `doAdv`/`cancelOrder`/`sendMaquila`, `assignMachine` no llamaba `setActionLoading(oid)`. Permitía drop rápido en 2 máquinas distintas → dos RPCs concurrentes leyendo el mismo `oldMachine`. Race condition de cola: `targetPos` se calculaba del closure stale.
+**Fix:** envuelto en `setActionLoading(oid)` + `finally{setActionLoading(null)}`. El cross-user race extremadamente raro queda cubierto por el UNIQUE INDEX `idx_one_active_per_machine` que aborta el segundo RPC.
+
+### 🟠 Altos
+
+**4. `cancelOrder`: modal queda fantasma si falla.** `setCancelModal(null)` estaba dentro del try, después de los awaits. Si la red fallaba, la orden se veía cancelada localmente PERO el modal de cancelación seguía abierto encima.
+**Fix:** movido a `finally{setCancelModal(null)}`.
+
+**5. `markAllNotifsRead` no recargaba notifs localmente.** La suscripción realtime solo escucha INSERT en `notifications` ([App.jsx:5555](src/App.jsx#L5555)), no UPDATE. Marcar 112 notifs leídas en BD funcionaba pero el contador quedaba en 112 hasta F5.
+**Fix:** nuevo prop `reloadNotifications` en `OperationalHealthView` que se llama tras éxito.
+
+**6. `closeML` generaba `minutes:NaN` con `started` inválido.** Si `e.started` era undefined, `new Date(undefined)` → Invalid Date → NaN. El render local mostraba "NaN".
+**Fix:** validar `s.getTime()` con `isNaN`, fallback a 0.
+
+**7. `return_to_ready` no forzaba `machine_queue_position:null` en UPDATE.** Dependía 100% de que la RPC lo hiciera. Defensa en profundidad débil.
+**Fix:** agregado `machine_queue_position:null` y `current_machine:null` explícitos al UPDATE de orders.
+
+### 🟡 Medios
+
+**8. `isVencida` en OperationalHealthView fallaba con due_date no-ISO-date.** Concatenar `"T12:00:00"` a un due_date que ya tenía timestamp (legacy) producía Invalid Date → órdenes con formato legacy NO aparecían como vencidas (oculto silenciosamente).
+**Fix:** `String(o.due_date).slice(0,10) + "T12:00:00"` en `isVencida`, `isUrgente`, `getTopPriority`, `getIncompleteData` y display "VENCIDA hace N días".
+
+**9. WIPDashboard `topClients` no normalizaba casing.** "Maderas SA" y "maderas sa" contaban como clientes distintos, mostrando duplicados en el top 5.
+**Fix:** key = `display.toLowerCase().replace(/\s+/g, " ")`, mantiene display original.
+
+**10. `responsiblePulse.horasSinActividad` trataba `null` como 0.** Si `created_at` también era null (raro), reportaba "0h máx sin actividad" → ocultaba el problema en lugar de exponerlo.
+**Fix:** fallback a 999h si no hay fecha de referencia para que sí se vea como alerta.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- RPC `move_order_in_queue` (intacta, solo el caller le pasa parámetros más defensivos)
+- Componentes nuevos de v10.27/v10.28 funcionalmente igual, solo con guards
+
+
 ## v10.28.0 — Dashboard "🩺 Salud Operativa" (admin) — 17-may-2026
 
 Segunda vista admin-only del nav "⋯ Más" después de v10.27.0. Mientras "💰 Dinero en Proceso" responde "¿cuánto dinero está atorado dónde?", esta vista responde "¿qué está mal hoy y quién debería arreglarlo?". Consolida en una sola pantalla la detección de problemas (datos incompletos, estancadas, mantenimientos, OCs huérfanas) que antes vivía dispersa en 5 vistas y 112+ notificaciones.
