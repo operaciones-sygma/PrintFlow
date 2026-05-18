@@ -5,6 +5,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.31.0 — Bug fix: no pedir folio si ya tiene + modal de entrega contextual — 18-may-2026
+
+Bug reportado por Karla: órdenes con **folio anticipado** al llegar a `salidas`/`maq_received` mostraban "📄 Asignar Folio y Entregar" como si nunca lo hubieran asignado. Si Karla intentaba reasignar, el RPC `assign_invoice` bloqueaba con `RAISE EXCEPTION 'ya tiene folio X asignado'` — funcional pero pésima UX.
+
+Esta versión hace la UI inteligente: si `invoice_folio` existe → botón cambia a "✅ Marcar como Entregada" + modal contextual según `payment_status`.
+
+### Caso real arreglado
+
+**P-3510 ANDRES MATA** (R-1185, en `salidas` con folio anticipado pre-v10.29.0, `payment_status=NULL`): antes Karla veía "Asignar Folio y Entregar" → error al confirmar. Ahora ve **"✅ Marcar como Entregada"** → modal con warning legacy + entrega directa sin tocar el folio existente.
+
+### Mapeo botón ↔ caso
+
+| Caso | invoice_folio | payment_status | Botón | Modal abierto |
+|---|---|---|---|---|
+| E (normal) | NULL | NULL | "📄 Asignar Folio y Entregar" | `InvoiceModal` (folio + pago + entrega) — sin cambio |
+| A (legacy) | tiene | NULL | "✅ Marcar como Entregada" | `DeliverOnlyModal` + warning "asumiré No pagada" |
+| B (unpaid) | tiene | unpaid | "✅ Marcar como Entregada" | `DeliverOnlyModal` + info "saldo en cobranza" |
+| C (paid) | tiene | paid | "✅ Marcar como Entregada" | `DeliverOnlyModal` + info "ya pagada" |
+| D (partial) | tiene | partial | "✅ Marcar como Entregada" | `DeliverOnlyModal` + split total/anticipo/saldo |
+
+### Implementación
+
+- **Componente nuevo `DeliverOnlyModal`** (~120 líneas) entre `PreInvoiceModal` y `CancelInvoicedModal`. Muestra folio anticipado prominente + bloque contextual con color según `payment_status` (amarillo / naranja / verde / morado).
+- **Handler nuevo `deliver_only`** en `handleAction` — valida que `invoice_folio` exista y abre el modal.
+- **Lógica condicional en OCard** ([App.jsx:2949](src/App.jsx#L2949) + [App.jsx:2953](src/App.jsx#L2953)): un botón por caso (`!invoice_folio` vs `invoice_folio`).
+- **Lógica condicional en Tablero Karla "Pendientes de Folio"** ([App.jsx:6778](src/App.jsx#L6778)): mismo split inline.
+- **Callback del modal:** UPDATE de `stage` + `delivered_at` (ORDERS FIRST contra race con Realtime), timeline, notif `db.notifySecs`. NO toca `invoice_folio`, `payment_*` ni la factura en CobranzaFlow.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Bridge SQL (`sync_invoice_from_orders` no se dispara — `invoice_folio` no cambió, solo `stage`)
+- RPC `assign_invoice` (intacta)
+- CobranzaFlow (la factura ya estaba creada desde el folio anticipado; no se duplica)
+- Flujo normal sin folio anticipado: idéntico
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Reemplazar botón según contexto (no agregar adicional) | UX limpia, no confunde a Karla |
+| D-2 | Caso paid: no preguntar pago, ir directo a entrega | Pago ya está completo, nada que hacer |
+| D-3 | Caso partial: saldo se gestiona en CobranzaFlow | Separación clara; Lucero/Karla aplican pago final allá |
+| D-4 | Caso legacy NULL: warning informativo + asumir 'unpaid' | Educa al usuario sin asustar |
+| D-5 | Cero cambios SQL | Toda la inteligencia en frontend |
+
+### Validación post-deploy
+
+- ✅ P-3510 (R-1185 ANDRES MATA, payment_status=NULL): botón cambia a "Marcar como Entregada", modal muestra warning legacy
+- ✅ P-3506 cuando llegue a maq_received: mismo comportamiento
+- ✅ Stage pasa a `delivered`/`maq_delivered`, `delivered_at` se setea
+- ✅ Notif a admin/Lupita preservada
+- ✅ CobranzaFlow no se duplica (R-1185 sigue intacta)
+- ✅ Flujo sin folio anticipado funciona igual que v10.30.0
+
+
 ## v10.30.0 — Pago parcial (anticipo) con split a CobranzaFlow — 18-may-2026
 
 Tercera opción en el selector de pago: **"🔶 Parcial"**. Karla captura el monto del anticipo recibido al asignar folio, y el bridge crea la factura en CobranzaFlow con `balance = total − anticipo` + un payment del anticipo. Lucero/Karla aplican pagos posteriores normalmente en CobranzaFlow hasta saldar.

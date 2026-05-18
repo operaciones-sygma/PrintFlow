@@ -1810,6 +1810,123 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   </div>;
 }
 
+// ─── DELIVER ONLY MODAL (v10.31.0) ─── Karla entrega orden que YA tiene folio anticipado
+// Detecta payment_status y muestra info contextual (legacy/unpaid/paid/partial)
+function DeliverOnlyModal({order, onConfirm, onClose}) {
+  useEscClose(onClose);
+  const [busy, setBusy] = useState(false);
+
+  const isFactura = order?.invoice_type === "factura";
+  const baseAmount = order?.order_type === "maquila"
+    ? Number(order?.maq_price) || 0
+    : Number(order?.price) || 0;
+  const totalDisplay = isFactura ? baseAmount * 1.16 : baseAmount;
+  const fmtMx = n => n.toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+  const paymentStatus = order?.payment_status;
+  const paymentMethod = order?.payment_method;
+  const paymentAmount = Number(order?.payment_amount) || 0;
+  const remaining = totalDisplay - paymentAmount;
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    try { await onConfirm(); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>✅ Marcar como Entregada</h3>
+        <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
+        <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}</p>
+
+        {/* Bloque: Folio ya asignado */}
+        <div style={{background:(isFactura?"#5856d6":"#34c759")+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+(isFactura?"#5856d6":"#34c759")+"40"}}>
+          <div style={{fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>
+            ⚡ Folio anticipado ya asignado
+          </div>
+          <div style={{fontSize:22,fontWeight:800,color:isFactura?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>
+            {isFactura?"📄":"📋"} {order?.invoice_folio}
+          </div>
+          {order?.invoice_reason && (
+            <div style={{fontSize:11,color:C.t2,marginTop:4,fontStyle:"italic"}}>
+              Razón: "{order.invoice_reason}"
+            </div>
+          )}
+          <div style={{fontSize:10,color:C.t3,marginTop:6}}>
+            Asignado por {order?.invoiced_by==="secretaria"?"Lupita":(order?.invoiced_by||"—")} · {order?.invoiced_at?fDT(order.invoiced_at):"—"}
+          </div>
+        </div>
+
+        {/* CASO A: payment_status NULL (legacy pre-v10.29) */}
+        {!paymentStatus && (
+          <div style={{background:"#ff950010",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #ff950040"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
+              ⚠️ Estado de pago no registrado
+            </div>
+            <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
+              Este folio se asignó antes del selector de pago (v10.29.0). El saldo de <strong>${fmtMx(totalDisplay)}</strong> queda pendiente en CobranzaFlow para cobro.
+            </div>
+            <div style={{fontSize:10,color:C.t3,marginTop:6,fontStyle:"italic"}}>
+              Si el cliente ya pagó, registra el pago directamente en CobranzaFlow después de marcar entregada.
+            </div>
+          </div>
+        )}
+
+        {/* CASO B: unpaid */}
+        {paymentStatus === "unpaid" && (
+          <div style={{background:"#ff950010",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #ff950040"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
+              ⏳ Estado de pago: No pagada
+            </div>
+            <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
+              Saldo de <strong>${fmtMx(totalDisplay)}</strong> pendiente en CobranzaFlow.
+            </div>
+          </div>
+        )}
+
+        {/* CASO C: paid */}
+        {paymentStatus === "paid" && (
+          <div style={{background:"#34c75910",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #34c75940"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#34c759",marginBottom:4}}>
+              ✅ Estado de pago: Pagada
+            </div>
+            <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
+              Esta orden ya está completamente pagada (<strong>${fmtMx(totalDisplay)} · {paymentMethod}</strong>) desde la asignación del folio. CobranzaFlow ya tiene el registro saldado.
+            </div>
+          </div>
+        )}
+
+        {/* CASO D: partial */}
+        {paymentStatus === "partial" && (
+          <div style={{background:"#5856d610",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #5856d640"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#5856d6",marginBottom:6}}>
+              🔶 Estado de pago: Parcial
+            </div>
+            <div style={{fontSize:11,color:C.t2,lineHeight:1.6}}>
+              <div>Total: <strong>${fmtMx(totalDisplay)}</strong></div>
+              <div>Anticipo recibido: <strong style={{color:"#34c759"}}>${fmtMx(paymentAmount)}</strong> · {paymentMethod}</div>
+              <div>Saldo pendiente: <strong style={{color:"#ff9500"}}>${fmtMx(remaining)}</strong></div>
+            </div>
+            <div style={{fontSize:10,color:C.t3,marginTop:8,fontStyle:"italic"}}>
+              El saldo restante se gestiona desde CobranzaFlow. Si el cliente paga al recoger, registra el pago directamente allá.
+            </div>
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:8,marginTop:16}}>
+          <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?0.6:1}}>
+            Cancelar
+          </button>
+          <button onClick={handleConfirm} disabled={busy} style={{...bt(C.ok),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>
+            {busy ? "⏳ Procesando..." : "✅ Confirmar Entrega"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── CANCEL INVOICED MODAL (v10.9.0) ─── Solo Marcelo cancela orden con folio (genera NC pendiente)
 function CancelInvoicedModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
@@ -2946,11 +3063,13 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
       {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button></>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}>⚙️ Proveedor Trabajando</button>}
       {o.stage==="maq_in_progress"&&<button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt("#32ade6")}>📥 Recibimos el Trabajo</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
         {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar">📋</button>}
@@ -5559,6 +5678,7 @@ export default function PrintFlow() {
   const [plateModal,setPlateModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
+  const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
   const [maintenance,setMaintenance]=useState([]);
   const [chemicals,setChemicals]=useState([]);
@@ -6427,6 +6547,11 @@ export default function PrintFlow() {
       if(!o.production_number){showToast("❌ La orden no tiene número de producción (P-XXXX). Asígnalo antes de entregar.","error");return}
       setInvoiceModal(o);
     }
+    // v10.31.0 — Orden con folio anticipado ya asignado: solo marcar entregada (sin re-pedir folio)
+    if(action==="deliver_only"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(!o.invoice_folio){console.error("[deliver_only] Orden sin invoice_folio, debería usar deliver_with_invoice");return}
+      setDeliverOnlyModal(o);
+    }
     // 🆕 v10.9.0 — Asignar folio anticipado (Karla/Admin desde DetailModal)
     if(action==="pre_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
       if(user!=="karla"&&user!=="admin"){showToast("❌ Solo Karla y Admin pueden asignar folio anticipado","error");return}
@@ -6775,7 +6900,7 @@ export default function PrintFlow() {
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>📄 Asignar Folio y Entregar</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?"✅ Marcar como Entregada":"📄 Asignar Folio y Entregar"}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · 🔍 "{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
@@ -6845,6 +6970,28 @@ export default function PrintFlow() {
           reload();
         }
       }} onClose={()=>setPreInvoiceModal(null)}/>}
+      {/* v10.31.0 — Modal de entrega simple para órdenes con folio anticipado ya asignado */}
+      {deliverOnlyModal&&<DeliverOnlyModal order={deliverOnlyModal} onConfirm={async()=>{
+        try{
+          const newStage=deliverOnlyModal.order_type==="maquila"?"maq_delivered":"delivered";
+          const now=new Date().toISOString();
+          const tlMsg="✅ Entregada (folio "+deliverOnlyModal.invoice_folio+" ya asignado)";
+          // ORDERS UPDATE FIRST (regla del proyecto contra race condition con Realtime)
+          const {error}=await supabase.from("orders").update({stage:newStage,delivered_at:now}).eq("id",deliverOnlyModal.id);
+          if(error)throw new Error(error.message);
+          await db.addTimeline(deliverOnlyModal.id,tlMsg,user,C.ok);
+          setOrders(p=>p.map(o=>o.id===deliverOnlyModal.id?{...o,stage:newStage,delivered_at:now,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+          // Notif a admin + Lupita + creador (vendedor) — mismo patrón que entrega normal
+          const notifMsg="✅ "+deliverOnlyModal.production_number+" entregada · "+(deliverOnlyModal.client||"")+" · folio "+deliverOnlyModal.invoice_folio+" (anticipado)";
+          await db.notifySecs(deliverOnlyModal.id,"delivery",notifMsg,null,user,deliverOnlyModal.created_by);
+          showToast("✅ Entregada");
+          setDeliverOnlyModal(null);
+        }catch(e){
+          console.error("[deliver_only] Error:",e);
+          showToast("❌ "+(e?.message||"No se pudo marcar entregada"),"error");
+          reload();
+        }
+      }} onClose={()=>setDeliverOnlyModal(null)}/>}
       {/* 🆕 v10.9.0 — Modal de cancelación con NC (solo Marcelo cuando hay folio) */}
       {cancelInvoicedModal&&<CancelInvoicedModal order={cancelInvoicedModal} onConfirm={async(reason)=>{
         try{
