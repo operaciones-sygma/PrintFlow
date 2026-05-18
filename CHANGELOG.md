@@ -5,6 +5,64 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.29.0 — Selector de pago obligatorio al asignar folio + auto-payment bridge — 18-may-2026
+
+Karla ahora marca obligatoriamente si la orden está pagada al asignar folio fiscal. Si pagada, elige método (efectivo, transferencia, tarjeta, otro) y el bridge crea automáticamente el registro en `cobranza.payments` con la factura ya marcada como pagada (balance=0). Antes todo iba pendiente de cobro a CobranzaFlow excepto pedidos web vía MP.
+
+### Backend (Supabase)
+
+- **CHECK constraint ampliado** en `cobranza.payments.payment_type`: agregados `'tarjeta'` (genérico, sin distinguir crédito/débito) y `'otro'`. Preserva los existentes (efectivo, transferencia, deposito, cheque, tarjeta_credito).
+- **Columnas nuevas en `public.orders`:** `payment_status` (NULL | unpaid | paid) y `payment_method` (efectivo | transferencia | tarjeta | otro). 3 CHECK constraints garantizan integridad (si `payment_status='paid'`, `payment_method` obligatorio).
+- **RPC `assign_invoice` ampliada** con 2 nuevos parámetros opcionales: `p_payment_status` y `p_payment_method`. La versión vieja de 6 params fue dropada para evitar ambigüedad. Los nuevos params tienen DEFAULT NULL → backward compatible si algún caller legacy llamara con 6 args.
+- **Trigger `sync_invoice_from_orders` actualizado** con nuevo bloque ELSIF que detecta pagos manuales: si `payment_status='paid'` y `payment_method` definido, crea fila en `cobranza.payments` con `applied_by` resuelto por username (`invoiced_by`) y marca invoice como pagada con `balance=0, status='pagada'`. El bloque MP existente queda intacto y mutuamente excluyente.
+
+### Bug fix incidental en bridge
+
+El trigger ahora calcula `v_base_amount` con condicional: `maq_price` para maquila, `price` para internas. Antes el bridge usaba siempre `NEW.price`, lo que dejaba `amount=NULL` o 0 para órdenes maquila en CobranzaFlow (bug latente solo visible al inspeccionar el monto en CobranzaFlow).
+
+### Frontend (App.jsx)
+
+- **Componente nuevo `PaymentStatusPicker`** — selector visual con 2 botones grandes (Pagada/No pagada) + 4 métodos (Efectivo, Transferencia, Tarjeta, Otro) cuando se elige Pagada. Reutilizable, multi-línea legible.
+- **`InvoiceModal` modificado** — agrega state `paymentStatus`/`paymentMethod`, validación `paymentValid` en `handleProceed`, picker en el render entre folio y botones, resumen en vista de confirmación con color según estado, params nuevos en `handleConfirm`.
+- **`PreInvoiceModal` modificado** — mismo patrón, picker aparece después de seleccionar razón.
+- **`db.assignInvoice` ampliada** con 2 nuevos parámetros opcionales (paymentStatus, paymentMethod).
+- **Callbacks en main** — `invoiceModal` y `preInvoiceModal` `onConfirm` reciben los nuevos params y los persisten en setOrders optimista + timeline message muestra el estado de pago.
+- **DetailModal** muestra `<Row l="Pago" v="✅ Pagada (método)" />` debajo del folio.
+- **OCard** muestra badge inline `✅ PAGADA · método` al lado del folio.
+- **`dbCols` whitelist** incluye `payment_status` y `payment_method` para que setOrders pase a BD correctamente.
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Enviar a CobranzaFlow CON pago aplicado (no skip) | Trazabilidad de TODOS los pagos, incluso caja |
+| D-2 | Métodos: Efectivo, Transferencia, Tarjeta, Otro | 99% de casos sin debate crédito/débito |
+| D-3 | Selector OBLIGATORIO siempre | Evita "se me olvidó marcar pagada" |
+| D-4 | Aplica a ambos flujos (normal + anticipado) | Consistencia |
+| D-5 | Ampliar CHECK constraint vs mapear | UI limpia |
+| D-6 | Auto-payment en bridge SQL | Atomicidad: 1 transacción |
+| D-7 | Resolver applied_by por username (no por role) | Refleja quién aplicó el pago realmente; fallback a primer cxc activo |
+| D-8 | Bug fix incidental: maq_price en bridge | Aprovechar la migración |
+
+### Numeración
+
+El brief proponía v10.28.1 que ya estaba tomado por el primer fix bundle (también v10.28.2 y v10.28.3). Numerado **v10.29.0** porque introduce funcionalidad nueva no-trivial + cambios SQL.
+
+### Sin cambios
+
+- Pedidos web Mercado Pago (mantienen su flujo automático intacto, bloque IF en trigger no fue modificado)
+- CobranzaFlow UI (los registros llegan ya pagados; el dashboard se actualiza solo)
+- Bridge de cancelaciones
+- OC compartidas con folios anticipados
+
+### Riesgos cubiertos
+
+- ✅ Backward compatible (params NULL = comportamiento legacy)
+- ✅ UNIQUE INDEX y CHECK constraints previenen estados inconsistentes
+- ✅ El nuevo bloque ELSIF es mutuamente excluyente con el bloque IF de MP — no hay riesgo de payment duplicado
+- ✅ Karla username verificado en cobranza.users con role='cxc'
+
+
 ## v10.28.3 — Hotfix: PreInvoiceModal valida precio ignorando maquila — 18-may-2026
 
 Bug detectado por Karla al intentar asignar folio anticipado a P-3506 (ELIZABETH ROCHA, maquila completa con CREATIVE, $1,390): el modal mostraba "⚠️ Datos incompletos · Precio" a pesar de que la orden tenía `maq_price=1390` correctamente capturado.
