@@ -5,6 +5,49 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.28.2 — Bug scan #2 fix bundle + remoción de dead code — 18-may-2026
+
+Segundo scan exhaustivo de bugs cubriendo áreas no auditadas en v10.28.1 (capa db, módulo OC, formularios, realtime, helpers globales). 8 fixes + remoción de ~70 líneas de dead code. Sin cambios DB.
+
+### 🔴 Críticos
+
+**1. `db.addTimeline`/`addComment`/`addWaste`/`addMachineLog`/`closeMachineLog`/`addNotification`/`addPlate`/`addChemical`/`startMaintenance`/`endMaintenance` swallow errors silenciosamente.** `supabase.insert()/update()` no lanzan — siempre destructuran `{data, error}`. Si RLS o schema mismatch fallaban, el insert nunca llegaba a BD pero la UI mostraba el cambio. Caso real: una orden avanzaba pero su entrada en `order_timeline` nunca se persistía → historia incompleta. `closeMachineLog` lo mismo: si el UPDATE fallaba, quedaban logs abiertos fantasma.
+**Fix:** todos los métodos ahora destructuran `{error}` y `throw new Error("<method>: " + error.message)`. Bonus: `closeMachineLog` además agregó guard `isNaN(started.getTime())` consistente con el fix de `closeML` en v10.28.1.
+
+**2. Auto-cleanup de archivos borraba por `created_at` cuando debería ser `delivered_at`/`cancelled_at`** ([App.jsx:5640](src/App.jsx#L5640)). El comentario decía "órdenes terminadas hace +30 días" pero filtraba por fecha de creación. Una orden creada hace 35 días y entregada ayer perdía sus archivos en menos de 24h en vez de a los 30 días post-entrega.
+**Fix:** dos queries paralelas, una por `delivered_at < cutoff` y otra por `cancelled_at < cutoff`, concatenadas.
+
+### 🟠 Altos
+
+**3. Realtime de notifications solo escuchaba INSERT** ([App.jsx:5562](src/App.jsx#L5562)). Dos pestañas admin nunca sincronizaban read/delete entre sí. El parche de v10.28.1 (`reloadNotifications`) cubrió el caso de "Marcar todas como leídas" en la misma sesión, pero no la sincronización cross-tab.
+**Fix:** cambiar a `event: "*"` en la suscripción.
+
+**4. `notifyResponsible` (Salud Operativa) bypaseaba `db.notify`** ([App.jsx:4683](src/App.jsx#L4683)). Insertaba directo en `notifications` sin pasar por el helper que añade copy al admin, ni capturar errores (que ahora con #1 son obligatorios).
+**Fix:** usar `db.notify(resp.role, order.id, "admin_attention", msg, null, "admin")`.
+
+**5. `PantoneInput` useEffect con deps `[arr.length]`** ([App.jsx:2302](src/App.jsx#L2302)). Si el usuario quitaba un pantone y agregaba otro distinto (misma longitud), el efecto no se disparaba → el chip nuevo quedaba con hex default.
+**Fix:** `[arr.join(",")]` igual que `PantoneChips`.
+
+**6. `LiveTimer` renderizaba "⏱ NaNm" si `started` era inválido** ([App.jsx:847](src/App.jsx#L847)). v10.28.1 fixed `closeML` para no producir NaN downstream, pero `LiveTimer` mismo no se defendía si llegaba un log con timestamp corrupto.
+**Fix:** `const t=new Date(started); if(isNaN(t.getTime())) return null;` antes del setInterval Y en el render.
+
+**7. `addProductToOC` no pre-llenaba `client_id`** ([App.jsx:5784](src/App.jsx#L5784)). Al agregar un 2° producto a una OC, `resolve_client_for_order` corría de nuevo y podía linkear el nuevo producto a un `client_id` distinto al de la OC original.
+**Fix:** agregar `client_id: oc.client_id||null` al objeto pre-llenado.
+
+**8. `OrderForm` useEffect con dep `[editOrder]` (referencia)** ([App.jsx:2410](src/App.jsx#L2410)). Si `editOrder` cambiaba referencia (e.g. via realtime), los cambios tipeados en progreso se perdían silenciosamente.
+**Fix:** dep `[editOrder?.id, editOrder?._fromOC]` para resetear solo cuando cambia la orden, no la referencia.
+
+### 🗑️ Dead code eliminado (~70 líneas)
+
+`db.loadPlans`, `db.addToPlan`, `db.removeFromPlan`, `db.reorderInMachine`, `db.executePlanOrder`, `db.clearPlan` — todos eran del `ProductionPlanner` deprecado en v10.26.0 con la cola por máquina. Quedaron huérfanos sin callsites en el codebase. La tabla `production_plans` en Supabase queda intacta (no se borró por seguridad, pero puede archivarse cuando se confirme que no la lee nadie más).
+
+### Sin cambios
+
+- DB schema (cero migración; `production_plans` table queda intocada por seguridad)
+- RPCs (`move_order_in_queue` igual; `execute_plan_order` y `clear_plan` en BD quedan huérfanas pero sin riesgo)
+- Otras vistas
+
+
 ## v10.28.1 — Bug scan post-deploy v10.26-v10.28: fix bundle — 17-may-2026
 
 Scan completo de bugs encontrados después de deployar v10.26.0 (cola por máquina), v10.27.0 (Dinero en Proceso) y v10.28.0 (Salud Operativa). 9 fixes en un solo commit. Sin cambios DB.

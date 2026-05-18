@@ -227,17 +227,22 @@ const db = {
     const {error}=await supabase.from("orders").upsert(dbRow);
     if(error)throw new Error(error.message);
   },
+  // v10.28.2 — Error handling consistente. supabase.insert() nunca lanza; hay que destructurar
   async addTimeline(orderId, action, byUser, color) {
-    await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color });
+    const {error}=await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color });
+    if(error)throw new Error("addTimeline: "+error.message);
   },
   async addComment(orderId, text, byUser) {
-    await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser });
+    const {error}=await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser });
+    if(error)throw new Error("addComment: "+error.message);
   },
   async addWaste(orderId, pliegos, qty, note) {
-    await supabase.from("order_waste").insert({ order_id: orderId, pliegos, qty, note });
+    const {error}=await supabase.from("order_waste").insert({ order_id: orderId, pliegos, qty, note });
+    if(error)throw new Error("addWaste: "+error.message);
   },
   async addMachineLog(orderId, machineId) {
-    await supabase.from("order_machine_log").insert({ order_id: orderId, machine_id: machineId });
+    const {error}=await supabase.from("order_machine_log").insert({ order_id: orderId, machine_id: machineId });
+    if(error)throw new Error("addMachineLog: "+error.message);
   },
   // v10.26.0 — RPC atómico para gestionar cola por máquina
   async moveOrderInQueue(orderId, targetMachine, targetPosition, actor) {
@@ -251,13 +256,16 @@ const db = {
     return data; // { action, old_machine, old_position, new_machine, new_position, new_active_id }
   },
   async closeMachineLog(orderId) {
-    const { data } = await supabase.from("order_machine_log").select("*").eq("order_id", orderId).is("ended_at", null);
+    const { data, error: selErr } = await supabase.from("order_machine_log").select("*").eq("order_id", orderId).is("ended_at", null);
+    if(selErr)throw new Error("closeMachineLog select: "+selErr.message);
     if (data && data.length > 0) {
       const ended = new Date();
       for (const row of data) {
         const started = new Date(row.started_at);
-        const minutes = Math.round((ended - started) / 60000);
-        await supabase.from("order_machine_log").update({ ended_at: ended.toISOString(), minutes }).eq("id", row.id);
+        const valid = !isNaN(started.getTime()); // v10.28.2 — guard NaN
+        const minutes = valid ? Math.round((ended - started) / 60000) : 0;
+        const {error}=await supabase.from("order_machine_log").update({ ended_at: ended.toISOString(), minutes }).eq("id", row.id);
+        if(error)throw new Error("closeMachineLog update: "+error.message);
       }
     }
   },
@@ -270,7 +278,8 @@ const db = {
     return data || [];
   },
   async addNotification(targetRole, orderId, type, message, reason, byUser) {
-    await supabase.from("notifications").insert({ target_role: targetRole, order_id: orderId, type, message, reason, by_user: byUser });
+    const {error}=await supabase.from("notifications").insert({ target_role: targetRole, order_id: orderId, type, message, reason, by_user: byUser });
+    if(error)throw new Error("addNotification: "+error.message);
   },
   async notify(targetRole, orderId, type, message, reason, byUser) {
     // Skip self-notification
@@ -292,14 +301,16 @@ const db = {
     await supabase.from("notifications").delete().eq("target_role", role);
   },
   async addPlate(orderId, plateSize, quantity, byUser) {
-    await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser });
+    const {error}=await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser });
+    if(error)throw new Error("addPlate: "+error.message);
   },
   async loadPlates() {
     const { data } = await supabase.from("plate_log").select("*").order("created_at", { ascending: false });
     return data || [];
   },
   async addChemical(chemicalType, actionType, tambos, notes, byUser) {
-    await supabase.from("chemical_log").insert({ chemical_type: chemicalType, action_type: actionType, tambos, notes, registered_by: byUser });
+    const {error}=await supabase.from("chemical_log").insert({ chemical_type: chemicalType, action_type: actionType, tambos, notes, registered_by: byUser });
+    if(error)throw new Error("addChemical: "+error.message);
   },
   async loadChemicals() {
     const { data } = await supabase.from("chemical_log").select("*").order("created_at", { ascending: false });
@@ -310,10 +321,12 @@ const db = {
     return data || [];
   },
   async startMaintenance(machineId, notes, byUser) {
-    await supabase.from("maintenance_log").insert({ machine_id: machineId, notes, started_by: byUser });
+    const {error}=await supabase.from("maintenance_log").insert({ machine_id: machineId, notes, started_by: byUser });
+    if(error)throw new Error("startMaintenance: "+error.message);
   },
   async endMaintenance(id, cost, byUser) {
-    await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: parseFloat(cost)||0, ended_by: byUser }).eq("id", id);
+    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: parseFloat(cost)||0, ended_by: byUser }).eq("id", id);
+    if(error)throw new Error("endMaintenance: "+error.message);
   },
   async addNote(orderId, text, byUser) {
     const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser});
@@ -460,76 +473,8 @@ const db = {
     const prefix = invoiceType==="factura" ? "D-" : "R-";
     return prefix + String(data.last_number + 1).padStart(4, "0");
   },
-  // 🆕 v10.8.0 — Production Planner: cola única de órdenes por máquina (sin fechas)
-  async loadPlans() {
-    const {data, error} = await supabase.from("production_plans")
-      .select("*")
-      .order("position", {ascending: true});
-    if(error){console.error("loadPlans error:",error);return []}
-    return data||[];
-  },
-  async addToPlan(machineId, orderId, byUser) {
-    // Calcula la siguiente posición disponible para esa máquina
-    const {data: existing} = await supabase.from("production_plans")
-      .select("position")
-      .eq("machine_id", machineId)
-      .order("position", {ascending: false})
-      .limit(1);
-    const nextPos = (existing && existing.length > 0) ? existing[0].position + 1 : 1;
-    // Si la orden ya está en otra máquina, primero la borramos (UNIQUE constraint)
-    await supabase.from("production_plans").delete()
-      .eq("order_id", orderId);
-    // Insertar en la nueva posición
-    const {data, error} = await supabase.from("production_plans").insert({
-      machine_id: machineId,
-      order_id: orderId,
-      position: nextPos,
-      created_by: byUser
-    }).select().single();
-    if(error){console.error("addToPlan error:",error);throw error}
-    return data;
-  },
-  async removeFromPlan(orderId) {
-    // Necesitamos saber la máquina para compactar después
-    const {data: planItem} = await supabase.from("production_plans")
-      .select("machine_id")
-      .eq("order_id", orderId)
-      .single();
-    const {error} = await supabase.from("production_plans").delete()
-      .eq("order_id", orderId);
-    if(error){console.error("removeFromPlan error:",error);throw error}
-    // Compactar las posiciones de la máquina
-    if(planItem?.machine_id) {
-      await supabase.rpc("compact_plan_positions", {p_machine_id: planItem.machine_id});
-    }
-    return true;
-  },
-  async reorderInMachine(machineId, orderedIds) {
-    // Actualiza las posiciones según el orden recibido
-    // orderedIds = ['order_1', 'order_2', 'order_3'] — sus posiciones serán 1, 2, 3
-    for(let i = 0; i < orderedIds.length; i++) {
-      await supabase.from("production_plans")
-        .update({position: i + 1, updated_at: new Date().toISOString()})
-        .eq("machine_id", machineId)
-        .eq("order_id", orderedIds[i]);
-    }
-    return true;
-  },
-  async executePlanOrder(orderId, byUser) {
-    const {data, error} = await supabase.rpc("execute_plan_order", {
-      p_order_id: orderId,
-      p_user: byUser
-    });
-    if(error){console.error("executePlanOrder error:",error);throw error}
-    return data; // devuelve machine_id donde se asignó
-  },
-  async clearPlan(byUser) {
-    const {data, error} = await supabase.rpc("clear_plan", {
-      p_user: byUser
-    });
-    if(error){console.error("clearPlan error:",error);throw error}
-    return data; // devuelve cantidad de items eliminados
-  },
+  // v10.28.2 — Eliminados db.loadPlans/addToPlan/removeFromPlan/reorderInMachine/executePlanOrder/clearPlan
+  // (eran de ProductionPlanner, deprecado en v10.26.0 con la cola por máquina).
   // Notify secretaria + the specific vendedor who created the order (if applicable)
   async notifySecs(orderId, type, message, reason, byUser, createdBy) {
     const stdRoles=["secretaria","produccion","preprensa","german","admin"];
@@ -831,8 +776,10 @@ function ProgressBar({order}) {
 }
 function LiveTimer({started}) {
   const [el,setEl]=useState(0);
-  useEffect(()=>{if(!started)return;const c=()=>Math.round((Date.now()-new Date(started).getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
+  // v10.28.2 — guard NaN si started es inválido; evita render "⏱ NaNm"
+  useEffect(()=>{if(!started)return;const t=new Date(started);if(isNaN(t.getTime()))return;const c=()=>Math.round((Date.now()-t.getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
   if(!started) return null;
+  const t=new Date(started);if(isNaN(t.getTime())) return null;
   return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6}}>⏱ {fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
@@ -2291,6 +2238,7 @@ function PantoneInput({label, value, onChange}) {
     return () => { if (debRef.current) clearTimeout(debRef.current); };
   }, [query]);
   // Resolver hexes de chips ya seleccionados (al cargar orden existente)
+  // v10.28.2 — deps por contenido (join) en lugar de longitud, para detectar swap (mismo length, distinto code)
   useEffect(() => {
     arr.forEach(async (code) => {
       if (hexCache[code]) return;
@@ -2298,7 +2246,7 @@ function PantoneInput({label, value, onChange}) {
       if (data && data[0]) setHexCache(prev => ({...prev, [code]: data[0].hex}));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arr.length]);
+  }, [arr.join(",")]);
   const addPantone = (code) => {
     if (arr.includes(code)) return;
     onChange([...arr, code]);
@@ -2390,7 +2338,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     return{lastPN:"P-"+String(max).padStart(4,"0"),nextPN:"P-"+String(next).padStart(4,"0")};
   },[orders]);
   const [advMode,setAdvMode]=useState(false);
-  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);setShowOtroFinish(fins.some(x=>!FINISHES.includes(x)&&x!=="Otro"));if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder]);
+  // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
+  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);setShowOtroFinish(fins.some(x=>!FINISHES.includes(x)&&x!=="Otro"));if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
   const pnSetRef=useRef(false);
   useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
   // 🆕 v10.14.0 — Folio P-XXXX editable para Lupita/Admin/Vendedor (NO Karla/Producción/etc)
@@ -4667,7 +4616,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       confirmColor: "#007aff",
       onConfirm: async () => {
         try {
-          await supabase.from("notifications").insert({ target_role: resp.role, order_id: order.id, type: "admin_attention", message: msg, by_user: "admin" });
+          // v10.28.2 — usar db.notify para que addNotification también deje copy en audit admin
+          await db.notify(resp.role, order.id, "admin_attention", msg, null, "admin");
           showToast("📣 Notificación enviada a " + resp.name);
         } catch (e) {
           showToast("❌ No se pudo notificar: " + (e?.message || "error"), "error");
@@ -5559,7 +5509,7 @@ export default function PrintFlow() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_comments" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_waste" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_machine_log" }, doReload)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications" }, () => { db.loadNotifications(notifKey).then(setNotifications); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => { db.loadNotifications(notifKey).then(setNotifications); }) // v10.28.2 — antes solo INSERT; perdía sync cross-tab de read/delete
       .on("postgres_changes", { event: "*", schema: "public", table: "maintenance_log" }, () => { db.loadMaintenance().then(setMaintenance); })
       .on("postgres_changes", { event: "*", schema: "public", table: "chemical_log" }, () => { setChemKey(k=>k+1); db.loadChemicals().then(setChemicals); })
       .on("postgres_changes", { event: "*", schema: "public", table: "plate_log" }, () => { setChemKey(k=>k+1); db.loadPlates().then(setPlates); })
@@ -5626,9 +5576,15 @@ export default function PrintFlow() {
     if (!loaded || !user) return;
     const cleanup = async () => {
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-      // Buscar órdenes terminadas hace +30 días con CUALQUIER archivo o imagen asociada
-      const { data: old } = await supabase.from("orders").select("id,file_url,file_name,image_url,image_url_2,stage").lt("created_at", cutoff).or("stage.eq.delivered,stage.eq.maq_delivered,stage.eq.cancelled,stage.eq.maq_cancelled");
-      if (!old || old.length === 0) return;
+      // v10.28.2 — filtrar por delivered_at / cancelled_at (NO created_at). Antes una orden
+      // creada hace 35 días y entregada ayer perdía archivos a las 24h en vez de los 30 días post-entrega.
+      const cols = "id,file_url,file_name,image_url,image_url_2,stage";
+      const [delQ, cancQ] = await Promise.all([
+        supabase.from("orders").select(cols).in("stage", ["delivered","maq_delivered"]).lt("delivered_at", cutoff),
+        supabase.from("orders").select(cols).in("stage", ["cancelled","maq_cancelled"]).lt("cancelled_at", cutoff)
+      ]);
+      const old = [...(delQ.data||[]), ...(cancQ.data||[])];
+      if (old.length === 0) return;
       for (const o of old) {
         if (!o.file_url && !o.image_url && !o.image_url_2) continue; // saltar órdenes sin nada que limpiar
         try {
@@ -5783,6 +5739,7 @@ export default function PrintFlow() {
     }
     setEditO({
       client: oc.client||"",
+      client_id: oc.client_id||null, // v10.28.2 — sin esto, resolve_client_for_order corre de nuevo y puede linkear a otro client_id
       client_email: oc.client_email||"",
       client_phone: oc.client_phone||"",
       client_rfc: oc.client_rfc||"",
