@@ -5,6 +5,69 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.30.0 — Pago parcial (anticipo) con split a CobranzaFlow — 18-may-2026
+
+Tercera opción en el selector de pago: **"🔶 Parcial"**. Karla captura el monto del anticipo recibido al asignar folio, y el bridge crea la factura en CobranzaFlow con `balance = total − anticipo` + un payment del anticipo. Lucero/Karla aplican pagos posteriores normalmente en CobranzaFlow hasta saldar.
+
+### Caso de uso real
+
+Cliente firma orden de $5,000 (sin IVA, factura D-XXXX) y entrega $1,500 en efectivo como anticipo. Antes Karla marcaba "No pagada" y luego iba a CobranzaFlow a aplicar el anticipo manualmente. Ahora marca "🔶 Parcial · $1,500 efectivo" y el bridge hace todo el split automáticamente: factura amount=$5,800, balance=$4,300, status='parcial', con un payment de $1,500.
+
+### Backend (Supabase)
+
+- **CHECK ampliado** `orders.payment_status` ahora acepta `paid` / `unpaid` / `partial`.
+- **Columna nueva** `orders.payment_amount NUMERIC(12,2)` para guardar el anticipo en moneda literal del cliente.
+- **2 constraints nuevos** para integridad: `payment_amount` obligatorio si partial / NULL si no partial.
+- **Constraint renombrado:** `orders_payment_method_required_if_paid_or_partial` (antes solo paid).
+- **RPC `assign_invoice` ampliada a 9 parámetros** con `p_payment_amount`. La versión 8-param de v10.29.0 fue dropada para evitar ambigüedad. Validaciones server-side: `0 < anticipo < total`, error claro si anticipo ≥ total ("usa payment_status=paid").
+- **Trigger `sync_invoice_from_orders` actualizado** con nuevo bloque ELSIF para partial:
+  - Invoice se inserta con `amount=total, balance=total−anticipo, status='parcial'`
+  - Payment con `amount=anticipo, payment_type=método elegido`
+  - Audit log nuevo: `bridge_apply_partial_payment` con detalle completo del split
+
+### Frontend (App.jsx)
+
+- **`PaymentStatusPicker` rediseñado:** 3 botones (No pagada / **🔶 Parcial** / Pagada) en grid `1fr 1fr 1fr`, color índigo `#5856d6` para parcial.
+- **Input numérico de anticipo** aparece solo si Parcial. Muestra total visible ("Total con IVA: $5,800.00" o "sin IVA" según tipo de folio) y calcula saldo pendiente en vivo conforme escribe.
+- **Validación inline:** `0 < anticipo < total`. Mensaje claro si anticipo ≥ total ("usa Pagada en su lugar"), borde rojo en input, botón Continuar disabled.
+- **Captura en moneda literal del cliente** — con IVA si factura D-XXXX, sin IVA si remisión R-XXXX. Sin matemática mental para Karla.
+- **`InvoiceModal` y `PreInvoiceModal`** integran nuevo state `paymentAmount`, validación `paymentValid` con caso partial, y paso del monto al callback.
+- **`db.assignInvoice`** acepta 9° parámetro opcional `paymentAmount`.
+- **Vista de confirmación** muestra "🔶 Parcial · $X.XX · método" + "Saldo pendiente a CobranzaFlow: $Y.YY".
+- **DetailModal** Row "Pago" muestra el split: "🔶 Parcial · $1,500.00 (efectivo)".
+- **OCard** badge inline al lado del folio: `🔶 PARCIAL · $1,500`.
+- **`dbCols` whitelist** incluye `payment_amount`.
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Captura en pesos (no porcentaje) | Karla evita matemática mental |
+| D-2 | Moneda literal del cliente | Lo que físicamente recibió, sin conversiones |
+| D-3 | Método de pago obligatorio | Trazabilidad |
+| D-4 | Validar `0 < anticipo < total` con error explícito | Educa al usuario; previene errores |
+| D-5 | Anticipo ≥ total bloquea con mensaje "usa Pagada" | Más explícito que auto-cambiar |
+| D-6 | Aplica a ambos flujos (normal + anticipado) | Consistencia con v10.29.0 |
+| D-7 | `cobranza.invoices.status='parcial'` ya nativo | Cero cambio en CobranzaFlow |
+| D-8 | `payment_amount` guardado en orders | Auditoría: reconstruir split si necesario |
+
+### Sin cambios
+
+- Pedidos web Mercado Pago (siguen auto-pagando completos como `tarjeta_credito`)
+- Bloque `bridge_apply_manual_payment` de v10.29.0 (paid completo, intacto)
+- CobranzaFlow UI (los registros llegan con `status='parcial'`, el dashboard los trata como cualquier otra factura parcial)
+- Bridge de cancelaciones
+
+### Validación post-deploy esperada
+
+- ✅ "Pagada"/"No pagada" funcionan igual que v10.29.0 (no regresión)
+- ✅ "Parcial + monto válido" → factura con `balance correcto`, payment del anticipo, audit log `bridge_apply_partial_payment`
+- ✅ Anticipo ≥ total → botón Continuar disabled + mensaje claro
+- ✅ Anticipo = 0 → botón disabled
+- ✅ Coherencia: `cobranza.invoices.amount = balance + cobranza.payments.amount` para parciales
+- ✅ Pedidos web MP siguen auto-aplicando como `tarjeta_credito`
+
+
 ## v10.29.0 — Selector de pago obligatorio al asignar folio + auto-payment bridge — 18-may-2026
 
 Karla ahora marca obligatoriamente si la orden está pagada al asignar folio fiscal. Si pagada, elige método (efectivo, transferencia, tarjeta, otro) y el bridge crea automáticamente el registro en `cobranza.payments` con la factura ya marcada como pagada (balance=0). Antes todo iba pendiente de cobro a CobranzaFlow excepto pedidos web vía MP.
