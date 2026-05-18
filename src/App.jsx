@@ -1496,7 +1496,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   if(!order?.client||!order.client.trim())missing.push("Cliente");
   if(!order?.product_type||!order.product_type.trim())missing.push("Tipo de producto");
   if(!order?.quantity||Number(order.quantity)<=0)missing.push("Cantidad");
-  if(!order?.price||Number(order.price)<=0)missing.push("Precio");
+  // v10.28.3 — maquila completa guarda precio en maq_price, no en price (que queda NULL)
+  const priceField=order?.order_type==="maquila"?order?.maq_price:order?.price;
+  if(!priceField||Number(priceField)<=0)missing.push("Precio");
   if(!order?.production_number||!order.production_number.trim())missing.push("Folio P-XXXX");
   const dataComplete=missing.length===0;
 

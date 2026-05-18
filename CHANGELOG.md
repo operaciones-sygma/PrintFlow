@@ -5,6 +5,48 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.28.3 — Hotfix: PreInvoiceModal valida precio ignorando maquila — 18-may-2026
+
+Bug detectado por Karla al intentar asignar folio anticipado a P-3506 (ELIZABETH ROCHA, maquila completa con CREATIVE, $1,390): el modal mostraba "⚠️ Datos incompletos · Precio" a pesar de que la orden tenía `maq_price=1390` correctamente capturado.
+
+### Causa
+
+`PreInvoiceModal` ([App.jsx:1499](src/App.jsx#L1499)) validaba contra `order.price` sin considerar que las órdenes maquila guardan el precio en `order.maq_price` (en estos casos `order.price` queda NULL correctamente). La validación siempre fallaba para maquilas, bloqueando el botón "⚡ Asignar Folio Anticipado".
+
+### Fix
+
+Validación condicional según `order_type`:
+
+```javascript
+const priceField = order?.order_type === "maquila" ? order?.maq_price : order?.price;
+if (!priceField || Number(priceField) <= 0) missing.push("Precio");
+```
+
+Mismo patrón usado en `WIPDashboard` y `OperationalHealthView`.
+
+### Alcance del bug
+
+- ❌ Solo afectaba "⚡ Asignar Folio Anticipado" (v10.9.0) en órdenes maquila
+- ✅ NO afectaba el flujo normal "📄 Asignar Folio y Entregar" (validación distinta, asume datos OK porque la orden ya llegó a salidas/maq_received)
+- ✅ NO afectaba captura/edición (`OrderForm` ya condiciona campo por `!isMaq`)
+
+### Sin cambios
+
+- SQL / schema
+- Resto del código
+- Comportamiento en órdenes internas (preservado idéntico)
+
+### Validación
+
+- ✅ P-3506 ahora puede recibir folio anticipado (`order_type=maquila, price=null, maq_price=1390` validado contra Supabase)
+- ✅ Órdenes internas sin precio siguen mostrando alerta correctamente
+- ✅ Órdenes maquila sin `maq_price` ahora detectadas (antes eran false-negative — el bug ocultaba este caso también)
+
+### Numeración
+
+El brief proponía v10.28.1 pero esa versión ya estaba tomada por el fix bundle del primer scan; éste va como v10.28.3 (siguiente después de v10.28.2).
+
+
 ## v10.28.2 — Bug scan #2 fix bundle + remoción de dead code — 18-may-2026
 
 Segundo scan exhaustivo de bugs cubriendo áreas no auditadas en v10.28.1 (capa db, módulo OC, formularios, realtime, helpers globales). 8 fixes + remoción de ~70 líneas de dead code. Sin cambios DB.
