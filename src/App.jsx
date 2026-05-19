@@ -5432,10 +5432,12 @@ function AuditoriaView({orders, purchaseOrders}){
 function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAssignFolio, onPreAssignFolio}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
   // 🌐 v10.12.0 Sub-fase C — Filtrar OCs visibles:
   //   - OCs simples siempre ocultas (v10.10.0)
   //   - OCs web ocultas hasta que ≥1 hija salga de web_pending (evita aparición prematura mientras Lupita revisa el carrito)
   // 🛒 v10.12.0.1 — Filtro por vendedor: si vendedor está en modo "Mis Órdenes", solo OCs donde es el vendedor asignado
+  // 📚 v10.32.3 — Filtro adicional por tab: Activas (open/in_progress) vs Histórico (completed/cancelled)
   const complexOCs = useMemo(() =>
     purchaseOrders.filter(po => {
       if(po.is_simple_oc)return false;
@@ -5444,11 +5446,36 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         if(children.length===0)return false;
         if(!children.some(o=>o.stage!=="web_pending"))return false;
       }
-      // Aislamiento de vendedor: ve solo OCs donde es el vendedor asignado cuando filtra "Mis Órdenes"
       if(role==="vendedor"&&orderFilter==="mine"&&po.vendedor!==userLogin)return false;
+      const isHistoric = po.status === "completed" || po.status === "cancelled";
+      if (historicoTab && !isHistoric) return false;
+      if (!historicoTab && isHistoric) return false;
       return true;
-    }).sort((a,b) => new Date(b.created_at) - new Date(a.created_at)),
-    [purchaseOrders, orders, role, userLogin, orderFilter]);
+    }).sort((a,b) => {
+      if (historicoTab) {
+        const dateA = a.completed_at || a.cancelled_at || a.created_at;
+        const dateB = b.completed_at || b.cancelled_at || b.created_at;
+        return new Date(dateB) - new Date(dateA);
+      }
+      return new Date(b.created_at) - new Date(a.created_at);
+    }),
+    [purchaseOrders, orders, role, userLogin, orderFilter, historicoTab]);
+  // v10.32.3 — Conteos para badges de tabs (independientes de qué tab está activo)
+  const tabCounts = useMemo(() => {
+    let activas = 0, historico = 0;
+    purchaseOrders.forEach(po => {
+      if(po.is_simple_oc) return;
+      if(po.is_web_oc){
+        const children=orders.filter(o=>o.purchase_order_id===po.id);
+        if(children.length===0)return;
+        if(!children.some(o=>o.stage!=="web_pending"))return;
+      }
+      if(role==="vendedor"&&orderFilter==="mine"&&po.vendedor!==userLogin)return;
+      const isHistoric = po.status === "completed" || po.status === "cancelled";
+      if(isHistoric) historico++; else activas++;
+    });
+    return {activas, historico};
+  }, [purchaseOrders, orders, role, userLogin, orderFilter]);
   // 🌐 v10.12.0 Sub-fase C — Obtiene el cart_folio (C-XXXX) del primer hijo web de una OC, fallback al id de la OC
   const getCartFolio = (po) => {
     const child = orders.find(o => o.purchase_order_id === po.id && o.cart_folio);
@@ -5546,9 +5573,18 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:4}}>
       <h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}>🛒 Órdenes de Compra</h2>
-      {canCreateOC && <button onClick={()=>setShowCreateModal(true)} style={{...bt(C.ac),fontSize:12,padding:"8px 14px"}}>+ Nueva OC</button>}
+      {canCreateOC && !historicoTab && <button onClick={()=>setShowCreateModal(true)} style={{...bt(C.ac),fontSize:12,padding:"8px 14px"}}>+ Nueva OC</button>}
     </div>
-    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{complexOCs.length} OC{complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño</p>
+    {/* v10.32.3 — Tabs Activas / Histórico */}
+    <div style={{display:"flex",gap:4,marginTop:8,marginBottom:14,borderBottom:"1px solid "+C.bd}}>
+      <button onClick={()=>setHistoricoTab(false)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:!historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(!historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer"}}>
+        📋 Activas ({tabCounts.activas})
+      </button>
+      <button onClick={()=>setHistoricoTab(true)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer"}}>
+        📚 Histórico ({tabCounts.historico})
+      </button>
+    </div>
+    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · Read-only` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño`}</p>
     {complexOCs.length === 0
       ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
           <div style={{fontSize:48}}>📋</div>
@@ -5584,6 +5620,16 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                 {po.delivery_date && <span>📅 {fD(po.delivery_date)}</span>}
                 {po.total > 0 && <span style={{color:C.ok,fontWeight:700}}>{fmt(po.total)}</span>}
               </div>
+              {/* v10.32.3 — Info adicional en cards históricas (completed/cancelled) */}
+              {historicoTab && po.status === "completed" && po.completed_at && (
+                <div style={{fontSize:10,color:C.t3,marginTop:6}}>✅ Completada {fDT(po.completed_at)}{po.completed_by?" · por "+po.completed_by:""}</div>
+              )}
+              {historicoTab && po.status === "cancelled" && po.cancelled_at && (
+                <div style={{fontSize:10,color:C.t3,marginTop:6}}>
+                  ❌ Cancelada {fDT(po.cancelled_at)}{po.cancelled_by?" · por "+po.cancelled_by:""}
+                  {po.cancellation_reason && <div style={{fontSize:9,fontStyle:"italic",marginTop:2,color:C.dn}}>"{po.cancellation_reason}"</div>}
+                </div>
+              )}
             </div>;
           })}
         </div>

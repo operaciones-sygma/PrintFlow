@@ -5,6 +5,96 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.32.3 — Pestaña Histórico de OCs + CHANGELOG retroactivo — 18-may-2026
+
+Complemento frontend del fix v10.32.2 (auto-complete OC). Las OCs cerradas (`completed` o `cancelled`) ahora aparecen en una pestaña separada "📚 Histórico" en lugar de contaminar la lista principal.
+
+### Frontend (App.jsx)
+
+- **Tabs en `OrdenesCompraView`** ([App.jsx:5567](src/App.jsx#L5567)): "📋 Activas" / "📚 Histórico" con conteo en cada tab (`tabCounts` useMemo independiente).
+- **Filtro `complexOCs` ampliado** ([App.jsx:5439](src/App.jsx#L5439)): excluye `completed` y `cancelled` del tab Activas; en Histórico sólo muestra esos dos status.
+- **Tab Histórico:** OCs ordenadas por `completed_at`/`cancelled_at` descendente (fallback `created_at`). Cards muestran timestamp y autor del cierre. Razón de cancelación visible si existe.
+- **OCs históricas en read-only:** las acciones ("+ Agregar producto", "Asignar folio") ya estaban bloqueadas por status checks existentes en el detalle de OC ([App.jsx:5487-5488](src/App.jsx#L5487)). Cero cambio necesario allá.
+- **Botón "+ Nueva OC"** oculto en tab Histórico ([App.jsx:5560](src/App.jsx#L5560)).
+- **Subtítulo dinámico** según tab.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- Backend / triggers / RPCs (los SQL de v10.32.1 y v10.32.2 ya estaban aplicados antes de este commit)
+
+### Estado al deploy
+
+3 OCs complex en BD: 1 abierta (Activas), 1 completada + 1 cancelada (Histórico = 2).
+
+
+## v10.32.2 — Hotfix: OCs fantasma + trigger auto-complete OC — 18-may-2026
+
+Bug reportado por Marcelo: OC-6 (VICTOR FONSECA PRECIADO) y otras seguían apareciendo en la lista de Karla como "En proceso" aunque todas sus órdenes ya estuvieran entregadas con folio asignado.
+
+### Causa
+
+Cuando una orden pasaba a `delivered`/`maq_delivered`, el `purchase_orders.status` no se actualizaba. No existía mecanismo automático para cerrar la OC al completarse todas sus órdenes.
+
+### Backend (Supabase, aplicado vía MCP de Claude.ai antes del commit)
+
+- **Columnas nuevas en `purchase_orders`:**
+  - `completed_at TIMESTAMP WITH TIME ZONE` — momento del cierre automático
+  - `completed_by TEXT` — usuario que cerró la última orden activa (resuelto desde `NEW.invoiced_by` o `NEW.cancelled_by`)
+- **Función nueva `auto_complete_purchase_order()`:** detecta cuándo una orden cambia a stage final (`delivered`, `maq_delivered`, `cancelled`, `maq_cancelled`); si la OC asociada ya no tiene órdenes activas, marca `status='completed'` con timestamp.
+- **Trigger nuevo `trg_auto_complete_oc`** AFTER UPDATE OF stage ON orders: invoca la función automáticamente.
+- **Limpieza retroactiva:** 4 OCs fantasma cerradas con `completed_by='system_cleanup_v10_32_2'` (OC-6, OC-11, OC-16, OC-17).
+
+### Aplicación
+
+Migration `v10_32_2_auto_complete_oc_when_all_orders_done` aplicada vía Claude.ai Supabase MCP. Documentación aplicada retroactivamente en v10.32.3.
+
+### Sin cambios
+
+- Frontend (esto se completa en v10.32.3)
+- RPCs existentes
+- Bridge a CobranzaFlow
+
+### Validación post-fix
+
+- ✅ 0 OCs fantasma restantes
+- ✅ Trigger creado y verificado
+- ✅ 4 OCs limpiadas con timestamps históricos correctos
+
+
+## v10.32.1 — Hotfix: idx_one_active_per_machine bloqueaba mover orden activa entre máquinas — 18-may-2026
+
+Bug reportado por Gerardo: al arrastrar una orden activa (`machine_queue_position = 0`) de una máquina a otra, PrintFlow rebotaba con error `duplicate key value violates unique constraint "idx_one_active_per_machine"`.
+
+### Causa
+
+La RPC `move_order_in_queue` (v10.26.0) hacía el shift de la máquina vieja ANTES de sacar la orden movida del índice parcial. Durante el shift, la orden vieja seguía con `position=0` mientras otra orden (la que estaba en posición 1) subía también a `position=0`, violando el UNIQUE INDEX que PostgreSQL evalúa al final de cada statement.
+
+### Fix
+
+Pre-paso al inicio del Caso 2 (MOVER) que setea `machine_queue_position = NULL` para la orden a mover, sacándola del índice parcial antes de cualquier shift. Los pasos existentes (2a, 2b, 2c, 2d) ahora ejecutan sin riesgo de duplicación temporal.
+
+### Backend (Supabase, aplicado vía MCP)
+
+Migration `v10_32_1_hotfix_move_order_in_queue_unique_violation` reemplaza la función `move_order_in_queue` con un pre-paso adicional. Firma idéntica (4 params, mismo retorno jsonb), backward compatible.
+
+### Validación
+
+- ✅ P-3503 movida exitosamente entre `ac_polar78` y `off_gto` (antes fallaba)
+- ✅ Reordenar dentro misma máquina: sin regresión
+- ✅ Sacar de cola (Caso 1): sin cambio
+- ✅ Mover orden no-activa (position >= 1): sin cambio
+
+### Aplicación
+
+Aplicado vía Claude.ai Supabase MCP. Documentación aplicada retroactivamente en v10.32.3.
+
+### Sin cambios
+
+- Frontend (la RPC es transparente al cliente)
+- Vercel deploy no requerido
+
+
 ## v10.32.0 — Salud Operativa habilitada para Lupita con scope limitado — 18-may-2026
 
 Lupita (secretaria) ahora puede acceder a la vista creada en v10.28.0 con título adaptado **"📝 Datos Pendientes"** y scope restringido a captura/datos sin acciones administrativas.
