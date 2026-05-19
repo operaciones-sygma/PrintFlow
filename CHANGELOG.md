@@ -5,6 +5,65 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.32.0 — Salud Operativa habilitada para Lupita con scope limitado — 18-may-2026
+
+Lupita (secretaria) ahora puede acceder a la vista creada en v10.28.0 con título adaptado **"📝 Datos Pendientes"** y scope restringido a captura/datos sin acciones administrativas.
+
+### Caso de uso
+
+Lupita necesita ver órdenes con datos incompletos para corregirlas (su trabajo es captura). La vista era admin-only desde v10.28.0; esta versión la habilita a secretaria.
+
+### Frontend (App.jsx)
+
+- **Gating ampliado** ([App.jsx:4835](src/App.jsx#L4835)): `OperationalHealthView` ahora acepta `role === "secretaria"` además de admin.
+- **Título dinámico** ([App.jsx:4977](src/App.jsx#L4977)):
+  - Secretaria → "📝 Datos Pendientes" / "Órdenes que requieren tu atención para completar datos."
+  - Admin → "🩺 Salud Operativa" / "Supervisión diaria del taller." (sin cambio)
+- **Tab en nav principal para Lupita** ([App.jsx:6837](src/App.jsx#L6837)): `{ id: "health", i: "📝", l: "Datos Pendientes" }` insertado entre "tasks" y "form" (flujo natural: tareas → datos pendientes → nueva orden). Cabe en los primeros 5 navs de Lupita; no va a "⋯ Más".
+- **Card propia destacada** en "Pulso por Responsable" ([App.jsx:5031](src/App.jsx#L5031)): cuando Lupita ve su card de secretaría, borde `2px solid #5856d6` + badge "👤 Tú" en esquina superior derecha.
+- **Renders condicionales admin-only:**
+  - Botón "📣 Notificar responsable" en Top Prioridad ([App.jsx:5014](src/App.jsx#L5014)) — escalación es decisión de Marcelo
+  - Sección completa "🧹 Limpieza Sugerida" ([App.jsx:5208](src/App.jsx#L5208)) — cancelar OCs huérfanas y marcar notifs leídas son acciones admin
+- **Switch guard ampliado** ([App.jsx:6924](src/App.jsx#L6924)): `view==="health" && (user==="admin"||user==="secretaria")`.
+- **Sin cambio para Lupita** en:
+  - Botón "✏️ Editar" en Datos Incompletos (es su trabajo capturar)
+  - Top Prioridad informativo (lectura, no acción)
+  - Estancadas, Datos Incompletos, Estado de Máquinas (5 secciones útiles)
+
+### Nota: Top 5 Clientes NO está en este componente
+
+El brief mencionaba ocultar "Top 5 Clientes con dinero atorado" para Lupita. Esa sección está en `WIPDashboard` (vista "💰 Dinero en Proceso", admin-only desde v10.27.0), no en `OperationalHealthView`. Lupita nunca la verá porque no tiene acceso a WIPDashboard.
+
+### Sin cambios
+
+- DB schema (cero migración)
+- SQL / RPCs / triggers
+- `OrderForm` y `handleAction` (permisos por role ya estaban correctos)
+- Vista para Marcelo (admin): sin regresión, todo igual que v10.31.1
+- Otros roles (Gerardo, Noemí, Germán, Karla, Genaro): no ven la tab
+
+### Decisiones de diseño
+
+| ID | Decisión | Rationale |
+|---|---|---|
+| D-1 | Lupita ve secciones 1-5, NO ve Limpieza | Acciones admin afuera |
+| D-2 | Card propia destacada con borde grueso + "👤 Tú" | Útil saber "esta soy yo" sin paternalismo |
+| D-3 | Botón "📣 Notificar" solo admin | Decisión de escalación es de Marcelo |
+| D-4 | Botón "✏️ Editar" sí lo ve Lupita | Es su trabajo capturar datos |
+| D-5 | Título adaptado por rol | Reflejar el uso real |
+| D-6 | Tab principal (insertado entre tasks/form) | Uso diario, visible sin overflow |
+| D-7 | Marcelo sin regresión | Cero impacto en flujo existente |
+
+### Validación post-deploy
+
+- ✅ Login Lupita → tab "📝 Datos Pendientes" en nav principal entre Pendientes y Nueva
+- ✅ Vista renderiza 5 secciones sin Limpieza ni botón Notificar
+- ✅ Card propia con borde morado + badge "👤 Tú"
+- ✅ Botón "✏️ Editar" en datos incompletos funciona
+- ✅ Marcelo ve la versión completa sin regresión
+- ✅ Otros roles (Gerardo/Noemí/Germán/Karla/Genaro) no ven la tab
+
+
 ## v10.31.1 — Bug scan #3 fix bundle (payment system + bridge defensa) — 18-may-2026
 
 Tercer scan exhaustivo, enfocado en código nuevo de v10.29-v10.31 (payment system, modales, trigger SQL, RPC). 6 fixes en un commit, con cambios SQL en backend y frontend.

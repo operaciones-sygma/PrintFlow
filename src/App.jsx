@@ -4831,7 +4831,8 @@ function StatCard({ label, value, subValue, color }) {
 function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
   const [expandedSection, setExpandedSection] = useState({});
 
-  if (role !== "admin") return null;
+  // v10.32.0 — admin (Salud Operativa completa) o secretaria (Datos Pendientes con scope limitado)
+  if (role !== "admin" && role !== "secretaria") return null;
 
   const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage)), [orders]);
 
@@ -4973,10 +4974,10 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
       <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
-        🩺 Salud Operativa
+        {role === "secretaria" ? "📝 Datos Pendientes" : "🩺 Salud Operativa"}
       </h2>
       <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
-        Supervisión diaria del taller. Última actualización: ahora.
+        {role === "secretaria" ? "Órdenes que requieren tu atención para completar datos." : "Supervisión diaria del taller. Última actualización: ahora."}
       </p>
 
       {/* SECCIÓN 1: Top Prioridad */}
@@ -5009,7 +5010,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
             <button onClick={() => onAction(topPriority.id, "detail")} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#007aff", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
               Ver orden
             </button>
-            {STAGE_RESPONSIBLE[topPriority.stage] && STAGE_RESPONSIBLE[topPriority.stage].role !== "both" && (
+            {/* v10.32.0 — Notificar responsable es decisión admin (escalación), Lupita no */}
+            {role === "admin" && STAGE_RESPONSIBLE[topPriority.stage] && STAGE_RESPONSIBLE[topPriority.stage].role !== "both" && (
               <button onClick={() => notifyResponsible(topPriority)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff", color: C.tx, border: "1px solid " + C.bd, borderRadius: 8, cursor: "pointer" }}>
                 📣 Notificar {STAGE_RESPONSIBLE[topPriority.stage].name}
               </button>
@@ -5024,14 +5026,23 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
         {responsiblePulse.length === 0 && (
           <div style={{ padding: 20, textAlign: "center", color: C.t3, fontSize: 12 }}>Sin órdenes activas</div>
         )}
-        {responsiblePulse.map(r => (
+        {responsiblePulse.map(r => {
+          // v10.32.0 — destacar card propia cuando Lupita ve su sección
+          const isMe = role === "secretaria" && r.role === "secretaria";
+          return (
           <div key={r.role} style={{
             background: "#fff",
-            border: "1px solid " + C.bd,
+            border: isMe ? "2px solid #5856d6" : "1px solid " + C.bd,
             borderLeft: "4px solid " + (r.vencidas > 0 ? "#ff3b30" : r.urgentes > 0 ? "#ff9500" : "#34c759"),
             borderRadius: 12,
-            padding: 14
+            padding: 14,
+            position: "relative"
           }}>
+            {isMe && (
+              <div style={{position:"absolute",top:-8,right:8,background:"#5856d6",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>
+                👤 Tú
+              </div>
+            )}
             <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
               {r.icon} {r.name}
             </div>
@@ -5061,7 +5072,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* SECCIÓN 3: Estancadas */}
@@ -5191,8 +5203,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
         )}
       </div>
 
-      {/* SECCIÓN 6: Limpieza Sugerida */}
-      {(orphanOCs.length > 0 || unreadNotifs.length > 10) && (
+      {/* SECCIÓN 6: Limpieza Sugerida — v10.32.0: admin-only (acciones administrativas no son scope de Lupita) */}
+      {role === "admin" && (orphanOCs.length > 0 || unreadNotifs.length > 10) && (
         <>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🧹 Limpieza Sugerida</h3>
           <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
@@ -6822,6 +6834,8 @@ export default function PrintFlow() {
   const rC={produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",secretaria:"#5856d6",vendedor:"#d97706",karla:"#a855f7",admin:C.ok};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
+  // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
+  if(user==="secretaria")navs.push({id:"health",i:"📝",l:"Datos Pendientes"});
   if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
   if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
@@ -6908,7 +6922,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&user==="admin"&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {view==="health"&&(user==="admin"||user==="secretaria")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
