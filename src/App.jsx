@@ -1363,7 +1363,8 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
     {id: "otro", l: "Otro", i: "📝"}
   ];
   // v10.30.0 — total en moneda literal del cliente (con IVA si factura D, sin IVA si remisión R)
-  const totalDisplay = invoiceType === "factura" ? (orderTotal || 0) * 1.16 : (orderTotal || 0);
+  // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16, 2) usando ints para evitar drift de float
+  const totalDisplay = invoiceType === "factura" ? Math.round((orderTotal || 0) * 116) / 100 : (orderTotal || 0);
   const amountNum = Number(amount) || 0;
   const amountValid = status !== "partial" || (amountNum > 0 && amountNum < totalDisplay);
   const amountTooHigh = status === "partial" && amountNum > 0 && amountNum >= totalDisplay;
@@ -1509,7 +1510,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
   // v10.29.0 + v10.30.0 — paymentStatus debe estar definido; si paid/partial también method; si partial monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
-  const totalDisplay=type==="factura"?orderBaseAmount*1.16:orderBaseAmount;
+  const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
   const amountNum=Number(paymentAmount)||0;
   const paymentValid=paymentStatus==="unpaid"
     ||(paymentStatus==="paid"&&paymentMethod)
@@ -1547,7 +1548,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const tBtn=(t,label,emoji,color,sug)=>{
     const sel=type===t;
     return <button
-      onClick={()=>{setType(t);setFolio("");setWarnLow(false)}}
+      onClick={()=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}}
       disabled={busy}
       style={{
         flex:1,
@@ -1687,7 +1688,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const reasonValid=finalReason.length>=3;
   // v10.29.0 + v10.30.0 — pago debe estar definido; partial requiere monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
-  const totalDisplay=type==="factura"?orderBaseAmount*1.16:orderBaseAmount;
+  const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
   const amountNum=Number(paymentAmount)||0;
   const paymentValid=paymentStatus==="unpaid"
     ||(paymentStatus==="paid"&&paymentMethod)
@@ -1745,8 +1746,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 
         <label style={lbl}>Tipo de comprobante</label>
         <div style={{display:"flex",gap:8,marginBottom:14}}>
-          <button onClick={()=>{setType("factura");setFolio("");setWarnLow(false)}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
-          <button onClick={()=>{setType("remision");setFolio("");setWarnLow(false)}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
+          <button onClick={()=>{setType("factura");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
+          <button onClick={()=>{setType("remision");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
         </div>
 
         {type&&<>
@@ -1820,7 +1821,8 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
   const baseAmount = order?.order_type === "maquila"
     ? Number(order?.maq_price) || 0
     : Number(order?.price) || 0;
-  const totalDisplay = isFactura ? baseAmount * 1.16 : baseAmount;
+  // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
+  const totalDisplay = isFactura ? Math.round(baseAmount * 116) / 100 : baseAmount;
   const fmtMx = n => n.toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
   const paymentStatus = order?.payment_status;
@@ -6976,9 +6978,10 @@ export default function PrintFlow() {
           const newStage=deliverOnlyModal.order_type==="maquila"?"maq_delivered":"delivered";
           const now=new Date().toISOString();
           const tlMsg="✅ Entregada (folio "+deliverOnlyModal.invoice_folio+" ya asignado)";
-          // ORDERS UPDATE FIRST (regla del proyecto contra race condition con Realtime)
-          const {error}=await supabase.from("orders").update({stage:newStage,delivered_at:now}).eq("id",deliverOnlyModal.id);
+          // v10.31.1 fix #5 — UPDATE atómico: requiere invoice_folio aún presente (race con cancel_with_nc en otro tab)
+          const {data,error}=await supabase.from("orders").update({stage:newStage,delivered_at:now}).eq("id",deliverOnlyModal.id).not("invoice_folio","is",null).select("id");
           if(error)throw new Error(error.message);
+          if(!data||data.length===0)throw new Error("La orden ya no tiene folio asignado (cancelada en otra sesión). Recarga la página.");
           await db.addTimeline(deliverOnlyModal.id,tlMsg,user,C.ok);
           setOrders(p=>p.map(o=>o.id===deliverOnlyModal.id?{...o,stage:newStage,delivered_at:now,timeline:addTL(o,tlMsg,{to:newStage})}:o));
           // Notif a admin + Lupita + creador (vendedor) — mismo patrón que entrega normal

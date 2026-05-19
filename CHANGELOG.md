@@ -5,6 +5,55 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.31.1 — Bug scan #3 fix bundle (payment system + bridge defensa) — 18-may-2026
+
+Tercer scan exhaustivo, enfocado en código nuevo de v10.29-v10.31 (payment system, modales, trigger SQL, RPC). 6 fixes en un commit, con cambios SQL en backend y frontend.
+
+### 🔴 Críticos
+
+**1. Trigger `sync_invoice_from_orders`: si no hay cxc user activo → invoice quedaba inconsistente.** El `IF v_cxc_user_id IS NOT NULL` saltaba silenciosamente el INSERT del payment cuando el SELECT no encontraba usuarios. El invoice quedaba ya creado con `balance=amount−payment_amount, status='parcial'` (para partial) o `status='pendiente'` con balance completo (para paid), pero sin payment record correspondiente. Hoy hay 1 cxc activo (karla), pero si alguien lo desactiva todas las facturas con pago manual quedarían inconsistentes.
+**Fix:** `RAISE EXCEPTION` explícita en las 3 ramas (web MP, paid, partial) si `v_cxc_user_id IS NULL`. Esto hace que el trigger lance error y plpgsql rollback automático: el invoice no se crea, el RPC falla, el frontend muestra error al usuario.
+
+**2. RPC `assign_invoice`: permitía asignar folio individual a orden cuya OC ya tenía `shared_invoice_folio`.** Caso: la orden parte de una OC con folio compartido, pero Karla asigna folio individual. La RPC actualizaba `payment_amount/status/method` en `orders` pero el trigger detectaba `v_oc_has_shared=true` y devolvía NEW sin crear invoice en cobranza. El dinero del anticipo se "perdía" — nunca llegaba a CobranzaFlow.
+**Fix:** la RPC ahora valida `shared_invoice_folio` ANTES del UPDATE y lanza `RAISE EXCEPTION 'OC % ya tiene folio compartido %. Usa el folio compartido en lugar de uno individual.'`.
+
+### 🟠 Altos
+
+**3. Trigger: pedido web MP con `payment_status='partial'` manual capturado por error → MP sobreescribía inconsistente.** Si Karla editaba un pedido web post-aprobación y le ponía estado parcial, el balance/status inicial se calculaban con la rama partial primero, luego el bloque MP los forzaba a `balance=0, status='pagada'` pero con payment registrado por el monto total, no por el anticipo. Inconsistencia entre `orders.payment_*` y `cobranza.invoices/payments`.
+**Fix:** nueva variable `v_effective_payment_status` que normaliza al inicio: si `source='web' AND mp_payment_id IS NOT NULL` → `paid_via_mp` y la rama partial nunca se ejecuta para órdenes web. Los IF/ELSIF se reordenaron para usar esta variable.
+
+**4. Frontend: cambiar tipo de comprobante NO reseteaba payment_*** ([App.jsx:1550](src/App.jsx#L1550), [App.jsx:1748-1749](src/App.jsx#L1748)). Usuario eligió Factura, capturó parcial $900, cambió a Remisión. El paymentAmount $900 seguía válido en state aunque el total cambió de $1,160 a $1,000.
+**Fix:** los tres botones de selector de tipo (InvoiceModal tBtn + PreInvoiceModal Factura + Remisión) ahora también llaman `setPaymentStatus(null); setPaymentMethod(null); setPaymentAmount("")`.
+
+**5. `deliver_only` callback: UPDATE de stage sin validar `invoice_folio` en BD** ([App.jsx:7065](src/App.jsx#L7065)). Race condition: si entre la apertura del modal y la confirmación, otro tab nulleaba el folio (cancelación con NC), la orden quedaba `delivered` sin folio.
+**Fix:** `.not("invoice_folio","is",null).select("id")` en el UPDATE y verificar que se actualizó 1 fila; si no, throw "La orden ya no tiene folio asignado (cancelada en otra sesión). Recarga la página."
+
+### 🟡 Medios
+
+**6. IVA rounding descalibrado frontend vs backend** ([App.jsx:1394](src/App.jsx#L1394), [App.jsx:1513](src/App.jsx#L1513), [App.jsx:1691](src/App.jsx#L1691), [App.jsx:1822](src/App.jsx#L1822)). Frontend: `orderBaseAmount * 1.16` (float). Backend: `ROUND(base * 1.16, 2)`. Para `price=87.069`: frontend mostraba $100.99... y permitía 100.99 pero el "total real" según backend era $101.00. Usuario podía teclear el total y el backend lo rechazaba al borde del céntimo.
+**Fix:** `totalDisplay = Math.round(orderBaseAmount * 116) / 100` (ints, sin drift) aplicado en `PaymentStatusPicker`, ambos modales y `DeliverOnlyModal`.
+
+### Falsos positivos descartados (verificados)
+
+- **plpgsql `EXCEPTION WHEN OTHERS` deja invoice sin payment:** se probó con SQL directo que plpgsql crea savepoint implícito en cada BEGIN/EXCEPTION block; el invoice INSERT SÍ se rollbackea si el payment INSERT falla. La preocupación real era de visibilidad (operador no ve el error) — cubierto parcialmente por fix #1.
+- **Optimistic update con NaN/string:** el flujo controla bien los casteos `Number(...)` y el constraint `orders_payment_amount_required_if_partial` ataja el caso degenerado.
+- **`saveOrder` upsert con constraint violation:** solo se llama desde `create`/`duplicate` para órdenes nuevas; sin riesgo real.
+
+### Sin cambios
+
+- DB schema (cero migración nueva)
+- Frontend de cobranza
+- Bloque MP del trigger (lógica intacta, solo se mueve a la rama `paid_via_mp`)
+- Otras vistas y flujos
+
+### Validación
+
+- ✅ Probado con SQL directo: si no hay cxc user activo, el trigger ahora lanza error claro y rollback funciona
+- ✅ Probado: asignar folio individual a OC con shared folio devuelve error explícito
+- ✅ Frontend: cambiar tipo Factura↔Remisión limpia el selector de pago
+- ✅ `deliver_only` race: el UPDATE retorna 0 filas y el callback lanza error claro
+
+
 ## v10.31.0 — Bug fix: no pedir folio si ya tiene + modal de entrega contextual — 18-may-2026
 
 Bug reportado por Karla: órdenes con **folio anticipado** al llegar a `salidas`/`maq_received` mostraban "📄 Asignar Folio y Entregar" como si nunca lo hubieran asignado. Si Karla intentaba reasignar, el RPC `assign_invoice` bloqueaba con `RAISE EXCEPTION 'ya tiene folio X asignado'` — funcional pero pésima UX.
