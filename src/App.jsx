@@ -15,7 +15,8 @@ const PTYPES=["Etiqueta colgante","Etiqueta adherible","Etiquetas","Lonas","Bann
 // v10.33.0 — Tamaños estándar de papelería MX (mutuamente excluyentes con width_cm/height_cm en UI)
 const STANDARD_SIZES=[{id:"pliego",label:"Pliego",w:70.0,h:95.0,group:"Imprenta"},{id:"medio_pliego",label:"Medio pliego",w:47.5,h:70.0,group:"Imprenta"},{id:"doble_oficio",label:"Doble oficio",w:33.02,h:43.18,group:"Imprenta"},{id:"doble_carta",label:"Doble carta / Tabloide",w:27.94,h:43.18,group:"Imprenta"},{id:"oficio",label:"Oficio",w:21.59,h:33.02,group:"Oficio"},{id:"media_oficio",label:"Media oficio",w:16.51,h:21.59,group:"Oficio"},{id:"cuarto_oficio",label:"1/4 de oficio",w:10.795,h:16.51,group:"Oficio"},{id:"octavo_oficio",label:"1/8 de oficio",w:8.255,h:10.795,group:"Oficio"},{id:"carta",label:"Carta",w:21.59,h:27.94,group:"Carta"},{id:"media_carta",label:"Media carta",w:13.97,h:21.59,group:"Carta"},{id:"cuarto_carta",label:"1/4 de carta",w:10.795,h:13.97,group:"Carta"},{id:"octavo_carta",label:"1/8 de carta",w:6.985,h:10.795,group:"Carta"},{id:"a3",label:"A3",w:29.7,h:42.0,group:"ISO (A)"},{id:"a4",label:"A4",w:21.0,h:29.7,group:"ISO (A)"},{id:"a5",label:"A5",w:14.8,h:21.0,group:"ISO (A)"},{id:"a6",label:"A6",w:10.5,h:14.8,group:"ISO (A)"},{id:"tarjeta_pres",label:"Tarjeta de presentación",w:9.0,h:5.5,group:"Tarjetas"}];
 const SS_BY_ID=Object.fromEntries(STANDARD_SIZES.map(sz=>[sz.id,sz]));
-const ssLabel=id=>SS_BY_ID[id]?.label||"";
+// v10.33.1 fix #3 — si el ID no existe en STANDARD_SIZES (legacy/corrupto), mostrar raw con icono de alerta
+const ssLabel=id=>SS_BY_ID[id]?.label||(id?"⚠️ "+id:"");
 const PRIOS=[{id:"urgente",l:"🔴 Urgente",c:"#ff3b30"},{id:"normal",l:"🟡 Normal",c:"#ff9500"},{id:"baja",l:"🟢 Baja",c:"#34c759"}];
 const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
 const AGENTS=["Manuel","Genaro","Marcelo"];
@@ -83,6 +84,8 @@ function fmtEditValue(field,v){
   if(field==="due_date")return fD(v);
   if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
   if(field==="file_url")return v?"(archivo cargado)":"(sin archivo)";
+  // v10.33.1 fix #1 — mostrar label legible ("Carta") en vez de ID raw ("carta") en notif Telegram
+  if(field==="standard_size")return ssLabel(v)||v;
   if(typeof v==="string"&&v.length>60)return v.substring(0,60)+"…";
   return String(v);
 }
@@ -6056,7 +6059,7 @@ export default function PrintFlow() {
       if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
       assignedPN=rpcPN;
     }catch(e){if(e?.message==="folio_failed")return;throw e}
-    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:toNum(f.width_cm,parseFloat),height_cm:toNum(f.height_cm,parseFloat),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:toNum(f.width_cm,parseFloat),height_cm:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
     await db.saveOrder(newOrder);
@@ -6182,6 +6185,8 @@ export default function PrintFlow() {
     if("paper_grammage" in safeUpdate)safeUpdate.paper_grammage=toNum(safeUpdate.paper_grammage,v=>parseInt(v,10));
     if("width_cm" in safeUpdate)safeUpdate.width_cm=toNum(safeUpdate.width_cm,parseFloat);
     if("height_cm" in safeUpdate)safeUpdate.height_cm=toNum(safeUpdate.height_cm,parseFloat);
+    // v10.33.1 fix #2 — standard_size: "" → null (preserva semántica "NOT NULL = sí tiene estándar")
+    if("standard_size" in safeUpdate&&safeUpdate.standard_size==="")safeUpdate.standard_size=null;
     if("due_date" in safeUpdate&&safeUpdate.due_date==="")safeUpdate.due_date=null;
     // 🆕 v10.9.0 — Si se edita una orden que ya tiene folio fiscal, marcar para auditoría
     const orderBefore=orders.find(x=>x.id===f.id);

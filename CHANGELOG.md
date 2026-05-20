@@ -5,6 +5,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.33.1 — Bug scan v10.33.0: 3 fixes (Telegram label + sanitize + fallback) — 19-may-2026
+
+Scan post-deploy de v10.33.0. 3 bugs reales corregidos en un solo commit. Sin cambios SQL.
+
+### 🟡 Fix #1 — Telegram mostraba ID en vez de label legible
+
+`fmtEditValue` ([App.jsx:86](src/App.jsx#L86)) para `standard_size` caía al fallback `String(v)` retornando `"carta"` en lugar de `"Carta"`. El mensaje de Telegram cuando alguien cambiaba el tamaño decía "Tamaño estándar: oficio → carta" — feo y confuso.
+**Fix:** caso explícito `if(field==="standard_size")return ssLabel(v)||v;` antes del fallback. Ahora muestra "Oficio → Carta" correctamente.
+
+### 🟡 Fix #2 — `standard_size=""` se persistía como string vacío en BD
+
+Ni `create` ([App.jsx:6059](src/App.jsx#L6059)) ni `update` ([App.jsx:6172](src/App.jsx#L6172)) sanitizaban el campo `standard_size`. Cuando el usuario hacía toggle de "Estándar" a "Medida en cm", el state quedaba con `standard_size=""` y se persistía literalmente como `""` (no NULL). Display funcionaba (`""` es falsy en el ternario) pero:
+- Queries SQL `WHERE standard_size IS NOT NULL` traerían filas con `""` (engañoso)
+- Viola la semántica documentada en el comment de la columna
+- CSV exportaría `""` como string vacío en vez de celda vacía
+**Fix:** sanitización `""` → `null` en ambos handlers (consistente con el patrón existente de `due_date`).
+
+### 🟡 Fix #3 — ID legacy/corrupto → display silenciosamente vacío
+
+Si la BD tenía un `standard_size="some_id_que_no_existe"` (legacy, futuro rename, o seteado manualmente vía API), `ssLabel()` retornaba `""`. El display ternario `o.standard_size?ssLabel(...):(o.width_cm?...)` evaluaba el primer condicional como truthy pero mostraba string vacío — y nunca caía al fallback de `width_cm`. Si `width_cm` también era NULL, la orden parecía no tener medidas aunque sí las tuviera.
+**Fix:** `ssLabel` ahora retorna `"⚠️ "+id` cuando el ID no se reconoce, en lugar de string vacío ([App.jsx:18](src/App.jsx#L18)). Aplica automáticamente a los 7 display points (DetailModal, 3 OCards, PrintOrder ×2, CSV) sin tocarlos.
+
+### Falsos positivos verificados / aceptables (no fix)
+
+- **`hasSpecs` incluye standard_size aunque resto esté vacío** — render con filas vacías es OK, ya pasa con otros campos.
+- **Toggle cm→estándar dispara 3 cambios en Telegram** (width_cm→null, height_cm→null, standard_size→carta) — ruidoso pero técnicamente correcto.
+- **Datos legacy con ambos seteados** — toggle prioriza estándar; comportamiento explícito al usuario.
+- **`select` con ID inválido** — visualmente muestra la primera option pero state preserva el valor. Solo ocurre si la BD tiene corrupción; el usuario puede simplemente reseleccionar.
+
+### Sin cambios
+
+- DB schema
+- Backend / RPCs / triggers / bridge
+- Funcionalidad de v10.33.0 (PTYPES extendido, toggle UI, 17 tamaños) intacta
+
+
 ## v10.33.0 — Productos extendidos + Tamaños estándar — 19-may-2026
 
 Solicitado por Lupita. Aplica a todos los que crean órdenes (Lupita, Genaro, Marcelo).
