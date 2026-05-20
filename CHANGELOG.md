@@ -5,6 +5,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.34.0 — Tipo de producto: combobox typeahead — 19-may-2026
+
+Pedido de Marcelo (post v10.33.0): el dropdown del campo "Tipo" en el formulario de orden ahora es un **combobox typeahead** — input de escritura libre que filtra las opciones de `PTYPES` mientras escribes, con "Otro" siempre visible al final del dropdown.
+
+### Comportamiento
+
+- **Input siempre editable** — escribe el tipo libremente (búsqueda + valor en uno).
+- **Al hacer focus** → dropdown abre y muestra todas las opciones de `PTYPES` (las 21 nuevas y existentes de v10.33.0).
+- **Al escribir** → dropdown filtra por substring case-insensitive (ej. escribir "fol" muestra "Folleto", "Folders").
+- **Click en una opción** → se selecciona y cierra el dropdown.
+- **"✏️ Otro (escribir libre)" siempre al final** del dropdown como recordatorio visual de que se puede capturar cualquier valor.
+- **Sin coincidencias** → muestra hint "Sin coincidencias en lista — se guardará como 'X'" + opción "Otro" sigue disponible.
+
+### Cambios
+
+- **State nuevo** `prodTypeOpen` ([App.jsx:2616](src/App.jsx#L2616)) — controla apertura del dropdown.
+- **Bloque `<select>+<input>`** ([App.jsx:2744](src/App.jsx#L2744)) reemplazado por combobox: input `value={f.product_type==="Otro"?"":f.product_type}` con `onFocus/onBlur` para abrir/cerrar dropdown y `onChange` para captura libre.
+- **`onBlur` con `setTimeout(200ms)`** para dar tiempo al `onMouseDown` de los items antes de cerrar.
+- **Indicador visual ▼/▲** a la derecha del input.
+
+### Compatibilidad
+
+- **Backward compatible:** órdenes existentes con cualquier `product_type` (de PTYPES o custom) se cargan sin problema.
+- **Sentinel "Otro" preservado** para órdenes legacy.
+- **El campo se sigue persistiendo igual** — un string que puede o no estar en PTYPES.
+
+### Sin cambios
+
+- DB schema
+- Backend / RPCs / triggers / bridge
+- `PTYPES` constante (21 opciones de v10.33.0)
+- Otras vistas (DetailModal, OCard, PrintOrder, CSV) — siguen mostrando `o.product_type` literal
+
+
 ## v10.33.1 — Bug scan v10.33.0: 3 fixes (Telegram label + sanitize + fallback) — 19-may-2026
 
 Scan post-deploy de v10.33.0. 3 bugs reales corregidos en un solo commit. Sin cambios SQL.
