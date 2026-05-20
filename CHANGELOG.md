@@ -5,6 +5,61 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.34.4 — Bug scan #6: críticos + medios fix bundle (8 fixes) — 19-may-2026
+
+Scan exhaustivo de áreas no auditadas previamente + edge cases de v10.34.3. 8 fixes en un commit. Sin cambios SQL.
+
+### 🟠 Altos
+
+**1. Calendar pintaba "Retrasada" al día de hoy en vista Mes** ([App.jsx:2277](src/App.jsx#L2277))
+`day=new Date(monthYear,monthIdx,d)` se crea a medianoche local; `today=new Date()` tiene hora actual. `day<today` siempre `true` para el día actual → celda de hoy aparecía con borde rojo todo el día. La vista semana no tenía el bug (preservaba la hora).
+**Fix:** `todayMid=new Date(t.getFullYear(),t.getMonth(),t.getDate())` y comparar contra eso.
+
+**2. Image upload race → imagen huérfana en storage** ([App.jsx:2616, 2826](src/App.jsx#L2616))
+Si Lupita subía imagen pesada y clicaba "Crear Orden" antes de que terminara el upload, `f.image_url` aún era null → la orden se guardaba sin imagen, la imagen quedaba en storage sin referencia (huérfano). `FileUpload` tenía este flag pero el image picker no.
+**Fix:** state `imgUploading` se setea durante compresión + upload; `canSubmit` lo incluye en su check; botón muestra "⏳ Subiendo imagen..." durante el upload.
+
+**3. `update()` no detectaba orden cancelada por realtime → sobreescribía silenciosamente** ([App.jsx:6275](src/App.jsx#L6275))
+Lupita editaba orden X. Marcelo la cancelaba en otro tab. Realtime actualizaba `orders` pero `editO` quedaba con versión vieja. Lupita guardaba → cambios se persistían sobre orden cancelada sin advertencia.
+**Fix:** antes del UPDATE, si `orderBefore.stage` está en `[cancelled, maq_cancelled, web_rejected]`, abortar con toast claro "La orden cambió de estado mientras editabas. Recarga y vuelve a intentar." Bandera `_toasted` evita doble notificación en el catch.
+
+**4. Analytics "vs mes anterior" calculaba -30 días, no mes calendario** ([App.jsx:4292](src/App.jsx#L4292))
+`new Date(Date.now()-30*86400000)` no es lo mismo que "mes anterior". Si hoy era 31-mar, -30d caía en marzo → `prevM=curM` → `revChange=0%` siempre.
+**Fix:** `new Date(); .setDate(1); .setMonth(-1);` para obtener inicio del mes calendario previo.
+
+**5. pnValidation race + regex laxo permitía folios fuera de convención** ([App.jsx:2681, 6123](src/App.jsx#L2681))
+Si Lupita tipeaba "P-3" y clicaba Save dentro de los 400ms del debounce, `pnValidation` seguía en `valid:true,message:null` (estado inicial) → guard del submit pasaba. El regex en create `/^P-\d+$/` aceptaba "P-3" → se persistía folio fuera de la convención de 4 dígitos.
+**Fix:**
+- Regex en create endurecido a `/^P-\d{4,}$/` (4 dígitos mínimo)
+- Submit ahora hace "flush" del debounce: si hay timer pendiente, ejecuta validación síncrona antes de seguir
+
+### 🟡 Medios
+
+**6. `approveCartComplete` sin actionLoading → doble-click disparaba 2 RPCs** ([App.jsx:6663](src/App.jsx#L6663))
+A diferencia de `webApprove`/`webReject`, no seteaba `actionLoading`. El `cartBusy` que calcula `WebCartCard` quedaba en false. Doble-click pasaba `confirm()` y disparaba 2 RPCs + 2 notifs (la 2ª RPC era idempotente pero las notifs se duplicaban).
+**Fix:** `setActionLoading(firstOrderId)` + `finally{setActionLoading(null)}`.
+
+**7. `nextPN` sugería P-0001 al rollover P-5000 (folio que ya existe)** ([App.jsx:2641](src/App.jsx#L2641))
+`next=max>=5000?1:max+1` proponía "P-0001" cuando max≥5000. Si P-0001 ya existía (de años atrás), el placeholder sugería un folio que `validate_production_number` rechazaba sin razón obvia.
+**Fix:** al hacer rollover, buscar el primer hueco libre entre 1 y 5000 con `while(used.has(next))next++;`. Si no hay hueco, fallback a `max+1` (overflow controlado). También simplifiqué el post-submit reset para que delegue al placeholder del useMemo.
+
+**8. StorageTab `list("",{limit:1000})` truncaba silenciosamente** ([App.jsx:3736](src/App.jsx#L3736))
+Con >1000 órdenes con archivo (cerca según `nextPN` rollover en 5000), folders más allá del 1000 nunca aparecían → cleanup nunca los detectaba como huérfanos, gauge de storage subestimado.
+**Fix:** paginar con `offset` hasta agotar (safety cap 50k folders).
+
+### Sin cambios
+
+- DB schema
+- Backend / RPCs / triggers / bridge
+- Funcionalidad de v10.34.x intacta
+
+### Lower priority bugs sin fix (cosméticos)
+
+- ChemicalPanel doble fetch al guardar (#9): redundante pero inocuo
+- WeeklyReport "atrasadas" oscila al mediodía (#10): edge cosmético
+- Submit doble feedback toast+alert (#11): minor UX
+
+
 ## v10.34.3 — Hotfix: respetar folio P-XXXX que el usuario escribió — 19-may-2026
 
 Bug reportado por Marcelo: Lupita guardó orden como **P-3523** pero se persistió como **P-3527** — el sistema ignoró lo que escribió.

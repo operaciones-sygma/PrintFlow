@@ -2256,6 +2256,8 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
   const canEditDate=o=>role!=="vendedor"||!o.created_by||o.created_by===userLogin;
   useEffect(()=>{if(!editOrder)return;const h=e=>{if(e.key==="Escape"&&e.target?.tagName!=="INPUT"&&e.target?.tagName!=="TEXTAREA"){setEditOrder(null);setNewDate("");setReason("")}};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[editOrder]);
   const today=new Date();const dow=today.getDay()||7;const sow=new Date(today);sow.setDate(today.getDate()-dow+1+wo*7);
+  // v10.34.4 fix #1 — midnight de hoy para comparar isLate (sin contaminar la celda actual)
+  const todayMid=new Date(today.getFullYear(),today.getMonth(),today.getDate());
   const dn=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
   const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const saveDate=()=>{if(editOrder&&newDate&&reason.trim()){onChangeDate(editOrder.id,newDate,reason.trim());setEditOrder(null);setNewDate("");setReason("")}else if(!reason.trim()){alert("Escribe el motivo del cambio de fecha")}};
@@ -2274,7 +2276,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
     const isT=day.toDateString()===today.toDateString();
     const pend=orders.filter(o=>o.due_date===ds&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled"));
     const done=orders.filter(o=>o.due_date===ds&&o.stage.includes("delivered"));
-    const isLate=day<today;
+    const isLate=day<todayMid; // v10.34.4 fix #1
     return <div style={{background:isT?C.ac+"08":C.bg,border:"0.5px solid "+(isT?C.ac+"30":C.bd),borderRadius:isWeekView?10:8,padding:isWeekView?8:5,minHeight:isWeekView?100:70}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isWeekView?6:3}}>
         {isWeekView&&<span style={{fontSize:9,color:C.t2,fontWeight:600}}>{dn[day.getDay()===0?6:day.getDay()-1]}</span>}
@@ -2615,7 +2617,7 @@ function PantoneChips({codes}) {
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
   const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[]};
-  const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0); // v10.34.2 — combobox typeahead con keyboard nav
+  const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   const prodTypeInputRef=useRef(null);
   // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
   const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -2631,14 +2633,23 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     if(!hideC&&!specsOnly&&!f.client_email?.trim()&&!f.client_phone?.trim())m.push("Contacto (Email o WhatsApp)");
     return m;
   },[f.client,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,hideC,specsOnly]);
-  const canSubmit=missing.length===0;
+  const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
   const errBorder=k=>tried&&!k?"1.5px solid "+C.dn+"60":"none";
   // Compute last and next production number
   const {lastPN,nextPN}=useMemo(()=>{
     const nums=orders.map(o=>{const m=(o.production_number||"").match(/^P-(\d+)$/);return m?parseInt(m[1],10):0}).filter(n=>n>0);
     if(nums.length===0)return{lastPN:null,nextPN:"P-0001"};
     const max=Math.max(...nums);
-    const next=max>=5000?1:max+1;
+    // v10.34.4 fix #7 — al hacer rollover en 5000, buscar primer hueco libre desde 1 (no sugerir P-0001 si existe)
+    let next;
+    if(max>=5000){
+      const used=new Set(nums);
+      next=1;while(used.has(next)&&next<5000)next++;
+      // si no hay hueco libre <5000, fallback a max+1 (overflow controlado, validate_production_number atajaría)
+      if(used.has(next))next=max+1;
+    }else{
+      next=max+1;
+    }
     return{lastPN:"P-"+String(max).padStart(4,"0"),nextPN:"P-"+String(next).padStart(4,"0")};
   },[orders]);
   const [advMode,setAdvMode]=useState(false);
@@ -2677,6 +2688,21 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
   const submit=async()=>{
     setTried(true);if(!canSubmit)return;
+    // v10.34.4 fix #5 — flush debounce: si hay validación pendiente, ejecutarla sincrónicamente antes de seguir
+    if(canEditProductionNumber&&pnValidateTimerRef.current){
+      clearTimeout(pnValidateTimerRef.current);pnValidateTimerRef.current=null;
+      const num=(f.production_number||"").trim();
+      if(num&&num!==nextPN){
+        try{
+          const {data}=await supabase.rpc("validate_production_number",{p_number:num,p_exclude_order_id:editOrder?.id||null});
+          if(!data?.valid){
+            alert("⚠️ Folio inválido: "+(data?.message||"")+(data?.existing_order_id?"\nOrden existente: "+data.existing_client:""));
+            setPnValidation({valid:false,message:data?.message||"Folio duplicado",existing:data?.existing_order_id?{id:data.existing_order_id,client:data.existing_client}:null});
+            return;
+          }
+        }catch{} // si falla validación, dejamos que UNIQUE INDEX sea la red final
+      }
+    }
     // 🆕 v10.14.0 — Bloquear submit si el folio P-XXXX está inválido (solo cuando es editable)
     if(canEditProductionNumber&&!pnValidation.valid&&pnValidation.message){
       alert("⚠️ Folio inválido: "+pnValidation.message+(pnValidation.existing?"\nOrden existente: "+pnValidation.existing.client:""));
@@ -2719,7 +2745,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         }
       }
       await onSubmit(clean);
-      if(!editOrder?.id){const usedNum=(f.production_number||"").match(/^P-(\d+)$/);const nxt=usedNum?parseInt(usedNum[1],10)+1:null;const nxtPN=nxt?"P-"+String(nxt>5000?1:nxt).padStart(4,"0"):"";setF({...empty,production_number:nxtPN});setAdvMode(false)}
+      if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false)} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
     }catch(e){alert(e?.message||"Error desconocido — revisa la consola (F12) para más detalles")}
     finally{setSaving(false)}
@@ -2816,12 +2842,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Poppins',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}♻️ Ya existe (reutilizar)</button>
     </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:10,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para Producción".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:10,color:"#0891b2",fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
     {/* v10.22.0 — Hasta 2 imágenes de referencia (compresión client-side via v10.16.0). */}
-    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><img src={val} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}>📷 {val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){alert("Imagen muy grande (máx 10MB)");return}try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+(idx+1)+"-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s(slot,urlData.publicUrl);if(idx===0)s("image",null)}catch(err){console.error("[image upload "+slot+"]",err);alert("Error al subir imagen: "+(err?.message||err))}}}/></label></div>})}</div></div>
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><img src={val} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}>📷 {val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){alert("Imagen muy grande (máx 10MB)");return}setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+(idx+1)+"-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s(slot,urlData.publicUrl);if(idx===0)s("image",null)}catch(err){console.error("[image upload "+slot+"]",err);alert("Error al subir imagen: "+(err?.message||err))}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
     {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={()=>{s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📝 Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:9,fontWeight:500}}>(USO INTERNO)</span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
     <div style={{padding:"12px 20px 16px"}}>
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600}}>⚠️ Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving} style={{...bt(saving?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:saving?"not-allowed":"pointer"}}>{saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} style={{...bt(saving||imgUploading?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"⏳ Subiendo imagen...":saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
     </div>
   </div>;
 }
@@ -3707,8 +3733,18 @@ function StorageTab({orders,onReload}) {
     (async()=>{
       setLoadingSize(true);
       try{
-        const{data}=await supabase.storage.from("order-files").list("",{limit:1000});
-        if(!data){setStorageUsed(0);setTopFiles([]);setOrphans([]);setLoadingSize(false);return}
+        // v10.34.4 fix #8 — paginar list para evitar truncado silencioso a 1000 folders (con >1000 órdenes los folders no listados nunca aparecen como huérfanos)
+        let data=[];
+        let offset=0;const pageSize=1000;
+        while(true){
+          const {data:page}=await supabase.storage.from("order-files").list("",{limit:pageSize,offset});
+          if(!page||page.length===0)break;
+          data=data.concat(page);
+          if(page.length<pageSize)break;
+          offset+=pageSize;
+          if(offset>50000)break; // safety: no más de 50k folders en una pasada
+        }
+        if(!data.length){setStorageUsed(0);setTopFiles([]);setOrphans([]);setLoadingSize(false);return}
         // Construir set de paths referenciados desde orders (file_url + image_url)
         const prodRefPaths=new Set();
         const imgRefPaths=new Set();
@@ -4285,7 +4321,10 @@ function Analytics({orders,onReload}) {
   const byMonth={};orders.forEach(o=>{const d=o.created_at?o.created_at.slice(0,7):"";if(!d)return;if(!byMonth[d])byMonth[d]={rev:0,cnt:0,del:0};byMonth[d].cnt++;if(o.stage.includes("delivered")){byMonth[d].rev+=(parseFloat(o.price)||parseFloat(o.maq_price)||0);byMonth[d].del++}});
   const months=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
   const maxMR=Math.max(...months.map(([,d])=>d.rev),1);
-  const curM=new Date().toISOString().slice(0,7);const prevM=new Date(Date.now()-30*86400000).toISOString().slice(0,7);
+  // v10.34.4 fix #4 — mes calendario real (antes -30d cae en mismo mes para días 28-31)
+  const curM=new Date().toISOString().slice(0,7);
+  const _prev=new Date();_prev.setDate(1);_prev.setMonth(_prev.getMonth()-1);
+  const prevM=_prev.toISOString().slice(0,7);
   const curRev=byMonth[curM]?.rev||0;const prevRev=byMonth[prevM]?.rev||0;
   const revChange=prevRev>0?Math.round(((curRev-prevRev)/prevRev)*100):0;
 
@@ -6114,7 +6153,8 @@ export default function PrintFlow() {
     // RPC next_production_number solo como fallback si el campo está vacío o con formato inválido.
     // El UNIQUE INDEX idx_orders_production_number_unique es la red atómica final contra colisiones.
     let assignedPN=(f.production_number||"").trim();
-    if(!assignedPN||!/^P-\d+$/.test(assignedPN)){
+    // v10.34.4 fix #5 — exigir 4+ dígitos (convención P-XXXX), no aceptar "P-3" o "P-99" como válido
+    if(!assignedPN||!/^P-\d{4,}$/.test(assignedPN)){
       try{
         const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
         if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
@@ -6269,6 +6309,11 @@ export default function PrintFlow() {
     if("due_date" in safeUpdate&&safeUpdate.due_date==="")safeUpdate.due_date=null;
     // 🆕 v10.9.0 — Si se edita una orden que ya tiene folio fiscal, marcar para auditoría
     const orderBefore=orders.find(x=>x.id===f.id);
+    // v10.34.4 fix #3 — abortar si la orden fue cancelada o rechazada en otra sesión (realtime trajo el cambio)
+    if(orderBefore&&["cancelled","maq_cancelled","web_rejected"].includes(orderBefore.stage)){
+      showToast("❌ La orden cambió de estado ("+SM[orderBefore.stage]?.l+") mientras editabas. Recarga y vuelve a intentar.","error");
+      const err=new Error("order_stage_changed");err._toasted=true;throw err;
+    }
     const willMarkPostEdit=orderBefore?.invoice_folio&&!orderBefore?.has_post_invoice_edits;
     if(willMarkPostEdit)safeUpdate.has_post_invoice_edits=true;
     setOrders(p=>p.map(o=>o.id===f.id?{...o,...safeUpdate,timeline:addTL(o,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada")}:o));
@@ -6307,7 +6352,7 @@ export default function PrintFlow() {
     }
     showToast(willMarkPostEdit?"💾 Orden actualizada (marcada como editada post-factura)":"💾 Orden actualizada");
     setEditO(null);setView("pipeline");
-    }catch(e){console.error("[update] Error al guardar:",e);showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
+    }catch(e){console.error("[update] Error al guardar:",e);if(!e?._toasted)showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
   },[user,orders,showToast,reload]);
 
   const doAdv=useCallback(async(id,ns)=>{
@@ -6636,6 +6681,8 @@ export default function PrintFlow() {
     const cartOrders=orders.filter(o=>o.cart_folio===cartFolio&&o.stage==="web_pending");
     const firstOrder=cartOrders[0];
     if(!firstOrder){showToast("❌ Carrito sin órdenes pendientes","error");return}
+    // v10.34.4 fix #6 — actionLoading bloquea doble-click (WebCartCard chequea cartBusy via actionLoading)
+    setActionLoading(firstOrder.id);
     try{
       const count=await db.approveWebCart(cartFolio,user);
       const msg="✅ Carrito "+cartFolio+" aprobado completo ("+count+" productos) — "+(firstOrder.client||"");
@@ -6644,6 +6691,7 @@ export default function PrintFlow() {
       showToast("✅ "+count+" pedidos aprobados");
       reload();
     }catch(e){console.error("[approveCartComplete] Error:",e);showToast("❌ No se pudo aprobar el carrito: "+(e?.message||"error desconocido"),"error");reload()}
+    finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
   const changeDate=useCallback(async(oid,newDate,reason)=>{
