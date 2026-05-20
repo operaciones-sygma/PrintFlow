@@ -928,6 +928,8 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 // ─── MODALS ────────────────────────────────────────
 function PrintOrder({order:o,onClose,role}) {
   useEscClose(onClose);
+  // v10.34.2 fix #9 — escape para interpolaciones de standard_size en HTML template (defensa contra IDs corruptos en BD)
+  const esc=s=>String(s||"").replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const pDate=o.created_at?new Date(o.created_at):new Date();
   const dDate=o.due_date?new Date(o.due_date+"T12:00:00"):null;
   const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
@@ -1000,13 +1002,13 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     }
 
     // ═══ DATOS DE LA FORMA ═══
-    const hasSpecs=!!(o.paper_type||o.ink_front||o.width_cm||o.standard_size);
+    const hasSpecs=!!(o.paper_type||o.ink_front||o.width_cm); // v10.34.2 fix #5 — standard_size solo no debe activar sección Impresión completa (queda casi vacía)
     const isAdvanced=!!(o.product&&!hasSpecs);
     h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos de la Forma</td></tr>
     <tr>
       <td style="width:15%"><div class="field-lbl">Cantidad</div><div class="field-val" style="font-size:16px;font-weight:800;color:#c00">${o.quantity?Number(o.quantity).toLocaleString():""}</div></td>
       <td style="width:35%"><div class="field-lbl">Tipo de Producto</div><div class="field-val" style="font-size:13px">${o.product_type||""}</div></td>
-      ${!isAdvanced?`<td style="width:30%"><div class="field-lbl">Tamaño Final</div><div class="field-val">${o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+" × "+o.height_cm+" cm":"")}</div></td>`:`<td style="width:30%"><div class="field-lbl">Modo</div><div class="field-val" style="font-size:10px;color:#8b5cf6;font-weight:700">📖 Datos técnicos en descripción</div></td>`}
+      ${!isAdvanced?`<td style="width:30%"><div class="field-lbl">Tamaño Final</div><div class="field-val">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm?o.width_cm+" × "+o.height_cm+" cm":"")}</div></td>`:`<td style="width:30%"><div class="field-lbl">Modo</div><div class="field-val" style="font-size:10px;color:#8b5cf6;font-weight:700">📖 Datos técnicos en descripción</div></td>`}
       <td style="width:20%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Interna"}</div></td>
     </tr>
     ${o.product?`<tr><td colspan="4"><div class="field-lbl">${isAdvanced?"Datos Técnicos Completos":"Descripción del Producto"}</div><div class="field-val" style="font-size:${isAdvanced?"12":"12"}px;line-height:1.6;white-space:pre-wrap;min-height:${isAdvanced?"40":"24"}px;${isAdvanced?"padding:4px 0;":""}${isAdvanced?"border-top:1px dashed #ccc;padding-top:6px;":""}">${o.product}</div></td></tr>`:""}
@@ -1017,7 +1019,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       h+=`<table class="imp-table" style="margin-top:-1px">
       <tr><td colspan="5" class="section-title">Impresión</td></tr>
       <tr class="hdr"><td class="hdr" style="width:28%">Tipo de Papel</td><td class="hdr" style="width:12%">Gramaje</td><td class="hdr" style="width:25%">Tintas Frente</td><td class="hdr" style="width:25%">Tintas Vuelta</td><td class="hdr" style="width:10%">Medidas</td></tr>
-      <tr><td style="font-weight:600">${o.paper_type||""}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${o.ink_front||o.colors||""}</td><td style="font-weight:600">${o.ink_back||""}</td><td style="text-align:center">${o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+" × "+o.height_cm:"")}</td></tr>
+      <tr><td style="font-weight:600">${o.paper_type||""}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${o.ink_front||o.colors||""}</td><td style="font-weight:600">${o.ink_back||""}</td><td style="text-align:center">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm?o.width_cm+" × "+o.height_cm:"")}</td></tr>
       </table>`;
     }
     // v10.25.2 — Pantones en bloque independiente (aparece en modo Sencillo Y Avanzado, mientras haya pantones capturados)
@@ -1236,7 +1238,7 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
   const allCo=orders.filter(o=>o.client===clientName).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const co=role==="vendedor"?allCo.filter(o=>!o.created_by||o.created_by===userLogin):allCo;
   const total=co.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
-  const byType={};co.forEach(o=>{byType[o.product_type]=(byType[o.product_type]||0)+1});
+  const byType={};co.forEach(o=>{const k=o.product_type||"?";byType[k]=(byType[k]||0)+1}); // v10.34.2 fix #7 — fallback consistente con línea 2391
   const hp=role==="produccion"||role==="preprensa"||role==="german";
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,margin:"0 0 4px"}}>👤 {clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:"#06b6d4",letterSpacing:0.3,marginBottom:1}}>🛒 {o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759",marginBottom:1}}>{o.invoice_type==="factura"?"📄":"📋"} {o.invoice_folio}</div>}<div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600}}>{SM[o.stage]?.l}</span></div>{!hp&&(o.price||o.maq_price)&&<div style={{fontSize:14,fontWeight:700}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
 }
@@ -2613,7 +2615,10 @@ function PantoneChips({codes}) {
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
   const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[]};
-  const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false); // v10.34.0 — combobox typeahead
+  const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0); // v10.34.2 — combobox typeahead con keyboard nav
+  const prodTypeInputRef=useRef(null);
+  // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
+  const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
   const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
   const specsOnly=editOrder?._specsOnly;
@@ -2742,32 +2747,61 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req>
-      {/* v10.34.0 — Combobox typeahead: input libre + dropdown filtrado de PTYPES (con "Otro" siempre al final) */}
-      <div style={{position:"relative"}}>
-        <input
-          style={{...inp,paddingRight:32}}
-          value={f.product_type==="Otro"?"":(f.product_type||"")}
-          onChange={e=>s("product_type",e.target.value)}
-          onFocus={()=>setProdTypeOpen(true)}
-          onBlur={()=>setTimeout(()=>setProdTypeOpen(false),200)}
-          placeholder="Escribe o busca un tipo..."
-          autoComplete="off"
-        />
-        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:10,color:C.t3,pointerEvents:"none"}}>{prodTypeOpen?"▲":"▼"}</span>
-        {prodTypeOpen&&(()=>{
-          const q=(f.product_type==="Otro"?"":(f.product_type||"")).toLowerCase().trim();
-          const list=PTYPES.filter(t=>t!=="Otro");
-          const matches=q?list.filter(t=>t.toLowerCase().includes(q)):list;
-          return <div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:"0 4px 12px rgba(0,0,0,0.08)"}}>
-            {matches.map(t=><div key={t} onMouseDown={e=>{e.preventDefault();s("product_type",t);setProdTypeOpen(false)}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"0.5px solid "+C.bd,background:f.product_type===t?C.ac+"10":"transparent"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>{e.currentTarget.style.background=f.product_type===t?C.ac+"10":"transparent"}}>{t}</div>)}
+      {/* v10.34.2 — Combobox typeahead con keyboard nav, accent-insensitive, focus en "Otro", normalize casing onBlur */}
+      {(()=>{
+        const isOtro=f.product_type==="Otro";
+        const q=isOtro?"":(f.product_type||"");
+        const qNorm=normForSearch(q.trim());
+        const list=PTYPES.filter(t=>t!=="Otro");
+        const matches=qNorm?list.filter(t=>normForSearch(t).includes(qNorm)):list;
+        const hl=Math.min(prodTypeHl,Math.max(0,matches.length-1));
+        return <div style={{position:"relative"}}>
+          <input
+            ref={prodTypeInputRef}
+            style={{...inp,paddingRight:32}}
+            value={isOtro?"":(f.product_type||"")}
+            onChange={e=>{s("product_type",e.target.value);setProdTypeHl(0)}}
+            onFocus={()=>{setProdTypeOpen(true);setProdTypeHl(0)}}
+            onBlur={()=>setTimeout(()=>{
+              setProdTypeOpen(false);
+              // v10.34.2 fix #6 — normalize casing: "folders" → "Folders" si matchea PTYPE exacto case-insensitive
+              const cur=f.product_type;
+              if(cur&&cur!=="Otro"){
+                const canonical=PTYPES.find(p=>p.toLowerCase()===cur.toLowerCase().trim());
+                if(canonical&&canonical!==cur)s("product_type",canonical);
+              }
+            },200)}
+            onKeyDown={e=>{
+              if(!prodTypeOpen)return;
+              if(e.key==="ArrowDown"){e.preventDefault();setProdTypeHl(h=>Math.min(matches.length,h+1))}
+              else if(e.key==="ArrowUp"){e.preventDefault();setProdTypeHl(h=>Math.max(0,h-1))}
+              else if(e.key==="Enter"){
+                e.preventDefault();
+                if(hl<matches.length){s("product_type",matches[hl]);setProdTypeOpen(false);prodTypeInputRef.current?.blur()}
+                else{s("product_type","Otro");setProdTypeOpen(false);prodTypeInputRef.current?.focus()}
+              }
+              else if(e.key==="Escape"){e.preventDefault();setProdTypeOpen(false);prodTypeInputRef.current?.blur()}
+            }}
+            placeholder={isOtro?"Escribe el tipo personalizado...":"Escribe o busca un tipo..."}
+            autoComplete="off"
+          />
+          <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:10,color:C.t3,pointerEvents:"none"}}>{prodTypeOpen?"▲":"▼"}</span>
+          {prodTypeOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:"0 4px 12px rgba(0,0,0,0.08)"}}>
+            {matches.map((t,i)=><div key={t} onMouseDown={e=>{e.preventDefault();s("product_type",t);setProdTypeOpen(false)}} onMouseEnter={()=>setProdTypeHl(i)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"0.5px solid "+C.bd,background:i===hl?C.ac+"15":(f.product_type===t?C.ac+"08":"transparent")}}>{t}</div>)}
             {matches.length===0&&q&&<div style={{padding:"8px 12px",fontSize:11,color:C.t3,fontStyle:"italic"}}>Sin coincidencias en lista — se guardará como "{f.product_type}"</div>}
-            <div onMouseDown={e=>{e.preventDefault();s("product_type","Otro");setProdTypeOpen(false)}} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:C.ac,background:C.ac+"08",borderTop:"1px solid "+C.bd}} onMouseEnter={e=>e.currentTarget.style.background=C.ac+"15"} onMouseLeave={e=>e.currentTarget.style.background=C.ac+"08"}>✏️ Otro (escribir libre)</div>
-          </div>;
-        })()}
-      </div>
+            <div onMouseDown={e=>{
+              e.preventDefault();
+              // v10.34.2 fix #4 — refocus input para que user vea claro que está en modo "Otro" y escriba
+              s("product_type","Otro");
+              setProdTypeOpen(false);
+              setTimeout(()=>prodTypeInputRef.current?.focus(),50);
+            }} onMouseEnter={()=>setProdTypeHl(matches.length)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:C.ac,background:matches.length===hl?C.ac+"15":C.ac+"08",borderTop:"1px solid "+C.bd}}>✏️ Otro (escribir libre)</div>
+          </div>}
+        </div>;
+      })()}
     </FC></div>
     {!isMaq&&!specsOnly&&<div style={{padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:11,fontWeight:700,color:advMode?"#8b5cf6":C.t2}}>{advMode?"📖 Modo Avanzado":"📋 Modo Sencillo"}</div><div style={{fontSize:9,color:C.t3,marginTop:1}}>{advMode?"Libros, cuadernos, calendarios — escribe todos los datos técnicos":"Etiquetas, flyers, volantes — descripción rápida del producto"}</div></div><button onClick={()=>setAdvMode(!advMode)} style={{position:"relative",width:44,height:24,borderRadius:12,border:"none",background:advMode?"#8b5cf6":"#d1d5db",cursor:"pointer",transition:"background .2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:advMode?22:2,width:20,height:20,borderRadius:10,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)",transition:"left .2s"}}/></button></div>}
-    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Medida final</label><div style={{display:"flex",gap:6,marginTop:4,marginBottom:8}}><button type="button" onClick={()=>{s("standard_size","")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(!f.standard_size?C.ac:C.bd),background:!f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:!f.standard_size?700:500,color:!f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>✏️ Medida en cm</button><button type="button" onClick={()=>{s("width_cm","");s("height_cm","");if(!f.standard_size)s("standard_size","carta")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(f.standard_size?C.ac:C.bd),background:f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:f.standard_size?700:500,color:f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>📐 Tamaño estándar</button></div>{f.standard_size?(()=>{const groups={};STANDARD_SIZES.forEach(sz=>{(groups[sz.group]=groups[sz.group]||[]).push(sz)});return <select style={inp} value={f.standard_size} onChange={e=>s("standard_size",e.target.value)}>{Object.entries(groups).map(([g,szs])=><optgroup key={g} label={g}>{szs.map(sz=><option key={sz.id} value={sz.id}>{sz.label} ({sz.w.toFixed(1)} × {sz.h.toFixed(1)} cm)</option>)}</optgroup>)}</select>})():<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Ancho cm</div><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></div><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Alto cm</div><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></div></div>}</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", ")} onChange={e=>{const std=(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>FINISHES.includes(x));const custom=e.target.value?e.target.value.split(",").map(s=>s.trim()).filter(Boolean):[];s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
+    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Medida final</label><div style={{display:"flex",gap:6,marginTop:4,marginBottom:8}}><button type="button" onClick={()=>{s("standard_size","")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(!f.standard_size?C.ac:C.bd),background:!f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:!f.standard_size?700:500,color:!f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>✏️ Medida en cm</button><button type="button" onClick={()=>{if(!f.standard_size)s("standard_size","carta")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(f.standard_size?C.ac:C.bd),background:f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:f.standard_size?700:500,color:f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>📐 Tamaño estándar</button></div>{f.standard_size?(()=>{const groups={};STANDARD_SIZES.forEach(sz=>{(groups[sz.group]=groups[sz.group]||[]).push(sz)});return <select style={inp} value={f.standard_size} onChange={e=>s("standard_size",e.target.value)}>{Object.entries(groups).map(([g,szs])=><optgroup key={g} label={g}>{szs.map(sz=><option key={sz.id} value={sz.id}>{sz.label} ({sz.w.toFixed(1)} × {sz.h.toFixed(1)} cm)</option>)}</optgroup>)}</select>})():<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Ancho cm</div><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></div><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Alto cm</div><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></div></div>}</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", ")} onChange={e=>{const std=(f.finishes||"").split(",").map(s=>s.trim()).filter(x=>FINISHES.includes(x));const custom=e.target.value?e.target.value.split(",").map(s=>s.trim()).filter(Boolean):[];s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
     {!specsOnly&&!advMode&&!isMaq&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="📝 Descripción del producto"><textarea style={{...inp,minHeight:90,resize:"vertical",lineHeight:1.6}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder="Ejemplo (escribe aquí) · Etiqueta adhesiva a 4 tintas en couché 150g, suaje redondo 5cm, barniz UV..."/></FC></div>}
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?"📝 Descripción del trabajo":"📖 Datos Técnicos Completos"}><div style={{background:(isMaq?"#e67e22":"#8b5cf6")+"08",borderRadius:12,padding:2}}><textarea style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:13}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:9,color:"#8b5cf6",marginTop:4,fontStyle:"italic"}}>💡 Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico</div>}</FC></div>}
     {/* v10.25.1 — Pantones también disponibles en modo Avanzado (no en Maquila por D-7) */}
@@ -6083,7 +6117,7 @@ export default function PrintFlow() {
       if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
       assignedPN=rpcPN;
     }catch(e){if(e?.message==="folio_failed")return;throw e}
-    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:toNum(f.width_cm,parseFloat),height_cm:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
     await db.saveOrder(newOrder);
@@ -6121,6 +6155,9 @@ export default function PrintFlow() {
       showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":"❌ Solo el vendedor asignado a esta OC puede agregar productos","error");
       return;
     }
+    // v10.34.2 fix #10 — hereda product_type de la última orden de la OC (común que sean del mismo tipo)
+    const ocOrders=orders.filter(x=>x.purchase_order_id===oc.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const inheritedType=ocOrders[0]?.product_type||"";
     setEditO({
       client: oc.client||"",
       client_id: oc.client_id||null, // v10.28.2 — sin esto, resolve_client_for_order corre de nuevo y puede linkear a otro client_id
@@ -6129,11 +6166,12 @@ export default function PrintFlow() {
       client_rfc: oc.client_rfc||"",
       agent: oc.vendedor||"",
       due_date: oc.delivery_date||"",
+      product_type: inheritedType,
       purchase_order_id: oc.id,
       _fromOC: true
     });
     setView("form");
-  },[user,userLogin,showToast]);
+  },[user,userLogin,showToast,orders]);
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
   const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
@@ -6211,6 +6249,8 @@ export default function PrintFlow() {
     if("height_cm" in safeUpdate)safeUpdate.height_cm=toNum(safeUpdate.height_cm,parseFloat);
     // v10.33.1 fix #2 — standard_size: "" → null (preserva semántica "NOT NULL = sí tiene estándar")
     if("standard_size" in safeUpdate&&safeUpdate.standard_size==="")safeUpdate.standard_size=null;
+    // v10.34.2 fix #8 — mutual exclusion: si standard_size definido, ignorar cm (toggle preserva ambos, save prioriza activo)
+    if(safeUpdate.standard_size){safeUpdate.width_cm=null;safeUpdate.height_cm=null;}
     if("due_date" in safeUpdate&&safeUpdate.due_date==="")safeUpdate.due_date=null;
     // 🆕 v10.9.0 — Si se edita una orden que ya tiene folio fiscal, marcar para auditoría
     const orderBefore=orders.find(x=>x.id===f.id);
@@ -6885,7 +6925,7 @@ export default function PrintFlow() {
   const hasFilter=isSec(user)||user==="admin";
   const viewOrders=useMemo(()=>{let list=orders;if(hasFilter&&orderFilter!=="all")list=list.filter(o=>!o.created_by||o.created_by===userLogin);return list},[orders,orderFilter,userLogin,hasFilter]);
 
-  const searchFilter=useCallback(o=>{if(!search)return true;const q=search.toLowerCase();return[o.client,o.product,o.id,o.product_type,o.maq_provider,o.maquila_provider,o.client_company,o.production_number,o.agent,o.notes,o.paper_type,o.finishes,o.client_phone,o.client_email,o.web_order_ref,o.cart_folio,o.web_folio,o.invoice_folio].some(x=>x?.toLowerCase().includes(q))},[search]);
+  const searchFilter=useCallback(o=>{if(!search)return true;const q=search.toLowerCase();return[o.client,o.product,o.id,o.product_type,o.maq_provider,o.maquila_provider,o.client_company,o.production_number,o.agent,o.notes,o.paper_type,o.finishes,o.client_phone,o.client_email,o.web_order_ref,o.cart_folio,o.web_folio,o.invoice_folio,o.standard_size,ssLabel(o.standard_size)].some(x=>x?.toLowerCase().includes(q))},[search]);
 
   // Global search filter applied on top of viewOrders
   const filteredOrders=useMemo(()=>search?viewOrders.filter(searchFilter):viewOrders,[viewOrders,search,searchFilter]);

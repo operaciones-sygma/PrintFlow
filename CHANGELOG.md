@@ -5,6 +5,63 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.34.2 — Bug scan v10.33/v10.34 fix bundle (10 fixes) — 19-may-2026
+
+Scan exhaustivo post-deploy de v10.33.0 (productos extendidos + tamaños estándar) y v10.34.0/v10.34.1 (combobox typeahead). 10 fixes en un solo commit. Sin cambios SQL.
+
+### 🟠 Altos
+
+**1. Búsqueda no encontraba órdenes por tamaño estándar** ([App.jsx:6924](src/App.jsx#L6924))
+`searchFilter` no incluía `o.standard_size` ni su label. Buscar "carta" no traía órdenes con `standard_size="carta"` aunque la UI mostrara "Carta" en todas las tarjetas.
+**Fix:** agregado `o.standard_size, ssLabel(o.standard_size)` al array de campos buscables.
+
+**2. Combobox sin navegación por teclado** ([App.jsx:2627-2680](src/App.jsx#L2627))
+El input no manejaba Enter/Arrows/Escape. Usuario escribía "fol" → solo aparecía "Folders" → Enter no hacía nada.
+**Fix:** state `prodTypeHl` + `onKeyDown` con ArrowUp/Down para mover índice resaltado, Enter para seleccionar match resaltado (o "Otro" si está al final), Escape para cerrar.
+
+**3. Filtro no accent-insensitive** ([App.jsx:2638](src/App.jsx#L2638))
+Escribir "diptico" no encontraba "Dípticos". Real para hispanohablantes que escriben sin tildes; terminaban guardando "diptico" custom.
+**Fix:** helper `normForSearch` con `.normalize("NFD").replace(/[combining-marks]/g,"")`. "Dípticos" matchea "diptico".
+
+**4. Sentinel "Otro" invisible confundía al usuario** ([App.jsx:2671, 2645](src/App.jsx#L2671))
+Click "Otro" sin escribir → state `"Otro"` pero input vacío con placeholder normal. Submit fallaba "Tipo faltante" sin pista visual.
+**Fix:** al hacer click en "Otro", refocus inmediato al input + placeholder dinámico "Escribe el tipo personalizado..." cuando `f.product_type==="Otro"`.
+
+### 🟡 Medios
+
+**5. PrintOrder con sección "Impresión" casi vacía si solo hay standard_size** ([App.jsx:1003](src/App.jsx#L1003))
+`hasSpecs` incluía `standard_size`, activando la tabla con celdas Papel/Gramaje/Tintas vacías y solo "Medidas" llena. Luce como error en PDF.
+**Fix:** `hasSpecs=!!(o.paper_type||o.ink_front||o.width_cm)` — excluye standard_size del trigger.
+
+**6. Casing inconsistente fragmentaba reportes** ([App.jsx:2653-2664](src/App.jsx#L2653))
+Usuario escribía "folders" sin click → se guardaba literal. Reportes por `product_type` veían "folders" y "Folders" como categorías separadas.
+**Fix:** en `onBlur` del combobox, si el texto matchea un PTYPE case-insensitive, normalizar a la versión canónica ("folders" → "Folders").
+
+**7. `byType` en ClientHistory no manejaba product_type vacío** ([App.jsx:1239](src/App.jsx#L1239))
+`byType[o.product_type]` con `product_type=""` o null generaba clave vacía y chip raro. Inconsistente con línea 2391 que ya tenía el patrón correcto.
+**Fix:** `const k=o.product_type||"?"` antes del increment.
+
+**8. Toggle medida perdía valores al alternar** ([App.jsx:2849](src/App.jsx#L2849))
+Click "📐 Tamaño estándar" limpiaba `width_cm/height_cm`. Si volvía a "✏️ Medida en cm", cm seguían vacíos — usuario reescribiendo.
+**Fix:** el toggle ya no limpia el campo opuesto (preserva ambos en state). Mutual exclusion enforced al guardar: en `create` y `update`, si `standard_size` truthy → `width_cm=null, height_cm=null`. BD queda limpia, usuario puede alternar libremente.
+
+### 🟢 Bajos
+
+**9. XSS potencial en PrintOrder via `standard_size` corrupto** ([App.jsx:932, 1011, 1022](src/App.jsx#L932))
+Si la BD tuviera `standard_size="<img src=x onerror=...>"` (requiere acceso directo a BD, no por UI), `ssLabel` lo concatenaba sin escape en el template HTML del popup de impresión, ejecutando script en esa ventana.
+**Fix:** helper `esc()` en PrintOrder que escapa `<>&"`. Aplicado a las 2 interpolaciones de `ssLabel(o.standard_size)`. Las demás interpolaciones de campos legacy (client, paper_type, etc.) tienen la misma vulnerabilidad pre-existente — fuera de scope.
+
+**10. `addProductToOC` no pre-llenaba `product_type`** ([App.jsx:6153](src/App.jsx#L6153))
+Antes de v10.34.1 había un default "Etiqueta colgante" útil. Ahora vacío. En OCs con múltiples productos del mismo tipo (e.g. 5 variantes de Etiquetas), Karla reseleccionaba cada vez.
+**Fix:** derivar `product_type` de la orden más reciente de la OC (`orders.filter(x=>x.purchase_order_id===oc.id).sort(...)[0]?.product_type||""`).
+
+### Sin cambios
+
+- DB schema
+- Backend / RPCs / triggers / bridge
+- Funcionalidad de v10.33.0/v10.34.0/v10.34.1 intacta
+
+
 ## v10.34.1 — Hotfix: campo Tipo inicia vacío en orden nueva — 19-may-2026
 
 Reportado por Marcelo inmediatamente tras v10.34.0: al abrir formulario de orden nueva, el campo "Tipo" tenía "Etiqueta colgante" precargado como default (heredado del antiguo `<select>` que necesitaba un valor inicial). Con el nuevo combobox typeahead, esto obligaba al usuario a borrar el valor antes de escribir/buscar lo que quería.
