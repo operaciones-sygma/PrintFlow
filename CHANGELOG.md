@@ -5,6 +5,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.35.1 — Fixes scan post-v10.35.0 — 20-may-2026
+
+Pasada de bugs sobre `PaymentStatusPicker` y datos de `orders.bank_reference`. Acompaña a CobranzaFlow v1.9.1.
+
+### 🔴 Crítico
+- **#4 `PaymentStatusPicker` defaulteaba método silenciosamente.** Al clickear "Parcial" o "Pagada" sin haber elegido método, `onChange` pasaba `method || "efectivo"` → se guardaba como efectivo aunque el usuario no eligió, perdiendo intent + bank_reference. Cambiado a `method || null`. La validación `paymentValid` ya requería método truthy para habilitar Confirm → ahora obliga al usuario a elegir.
+
+### 🟠 Alto
+- **#7 CHECK constraint en `orders.bank_reference`.** Defensa de DB contra futuros bugs que dejen persistir referencia bancaria con método no-bancario. Constraint `orders_bank_reference_method_check`: permite `bank_reference IS NULL` o `payment_method IN ('transferencia','tarjeta')`. Sin violaciones existentes (verificado pre-migration).
+
+### Backend (Supabase project `uvhardaeooaxjrrgdjwa`)
+
+- Migration `orders_bank_reference_check_constraint_v10_35_1` — agrega constraint validado.
+
+---
+
+
 ## v10.35.0 — bank_reference en bridge para conciliación automática 95% — 20-may-2026
 
 Hoy CobranzaFlow v1.9 LIVE introdujo conciliación bancaria automática contra TXT del banco (Scotiabank/Banorte) con 3 estrategias de match:

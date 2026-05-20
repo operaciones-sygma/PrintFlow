@@ -1397,7 +1397,7 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
           ⏳ No pagada
         </button>
         <button
-          onClick={() => onChange("partial", method || "efectivo", amount || "", bankReference || null)}
+          onClick={() => onChange("partial", method || null, amount || "", bankReference || null)}
           style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
             background: status === "partial" ? "#5856d6" : "#fff",
             color: status === "partial" ? "#fff" : C.tx,
@@ -1406,7 +1406,7 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
           🔶 Parcial
         </button>
         <button
-          onClick={() => onChange("paid", method || "efectivo", null, bankReference || null)}
+          onClick={() => onChange("paid", method || null, null, bankReference || null)}
           style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
             background: status === "paid" ? "#34c759" : "#fff",
             color: status === "paid" ? "#fff" : C.tx,
