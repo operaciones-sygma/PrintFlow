@@ -6110,13 +6110,17 @@ export default function PrintFlow() {
     // Convert empty strings to null for numeric/date columns (PostgREST rejects "" for NUMERIC/DATE types)
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     const toStr=v=>v===""||v==null?null:v;
-    // v10.20.0 — RPC atómico para folio (el preview de OrderForm es UX, el real lo asigna el backend)
-    let assignedPN=f.production_number;
-    try{
-      const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
-      if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
-      assignedPN=rpcPN;
-    }catch(e){if(e?.message==="folio_failed")return;throw e}
+    // v10.34.3 — Respetar el folio que el usuario escribió (validado en vivo por validate_production_number en OrderForm).
+    // RPC next_production_number solo como fallback si el campo está vacío o con formato inválido.
+    // El UNIQUE INDEX idx_orders_production_number_unique es la red atómica final contra colisiones.
+    let assignedPN=(f.production_number||"").trim();
+    if(!assignedPN||!/^P-\d+$/.test(assignedPN)){
+      try{
+        const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
+        if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
+        assignedPN=rpcPN;
+      }catch(e){if(e?.message==="folio_failed")return;throw e}
+    }
     const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
@@ -6135,7 +6139,18 @@ export default function PrintFlow() {
     const wasOC=!!f.purchase_order_id;
     setEditO(null);
     setView(wasOC?"oc":"pipeline");
-    }catch(e){console.error("[create] Error al crear orden:",e);showToast("❌ No se pudo crear: "+(e?.message||"error desconocido"),"error");reload();throw e}
+    }catch(e){
+      console.error("[create] Error al crear orden:",e);
+      // v10.34.3 — mensaje específico para violación de UNIQUE INDEX en production_number (race condition entre validación y insert)
+      const msg=String(e?.message||"");
+      if(msg.includes("idx_orders_production_number_unique")||msg.includes("duplicate key")){
+        showToast("❌ El folio "+assignedPN+" fue tomado por otra orden mientras guardabas. Cámbialo y vuelve a intentar.","error");
+      }else{
+        showToast("❌ No se pudo crear: "+(e?.message||"error desconocido"),"error");
+      }
+      reload();
+      throw e;
+    }
   },[user,userLogin,showToast,reload]);
 
   // 🛒 v10.10.0 — Crear OC explícita (compleja)

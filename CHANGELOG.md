@@ -5,6 +5,77 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.34.3 — Hotfix: respetar folio P-XXXX que el usuario escribió — 19-may-2026
+
+Bug reportado por Marcelo: Lupita guardó orden como **P-3523** pero se persistió como **P-3527** — el sistema ignoró lo que escribió.
+
+### Causa raíz
+
+En `create` ([App.jsx:6113](src/App.jsx#L6113)), el flujo era:
+
+```js
+let assignedPN = f.production_number;              // P-3523 escrito por Lupita
+const {data:rpcPN} = await supabase.rpc("next_production_number");
+assignedPN = rpcPN;                                // P-3527 — sobreescribe SIEMPRE
+```
+
+El RPC `next_production_number` se llamaba **incondicionalmente** y siempre sobreescribía el valor del usuario. La validación `validate_production_number` (debounced 400ms, muestra "✓ OK" en la UI) confirmaba que P-3523 estaba libre, pero el `create` ignoraba ese valor.
+
+**Diff de 4 explicado:** entre que Lupita abrió el form (preview "P-3523") y le dio Guardar, 4 órdenes más se crearon en el sistema (Genaro, pedidos web). El contador atómico del RPC incrementó a 3527.
+
+Comportamiento introducido en v10.20.0 para prevenir duplicados — pero hacía el input visualmente engañoso (parecía editable pero su valor se descartaba).
+
+### Fix (Marcelo eligió: "Respetar lo que escriba siempre")
+
+`create` ahora **respeta `f.production_number`** si tiene formato válido `P-\d+`. El RPC `next_production_number` queda como **fallback** solo si el campo está vacío o con formato inválido.
+
+```js
+let assignedPN = (f.production_number||"").trim();
+if (!assignedPN || !/^P-\d+$/.test(assignedPN)) {
+  // Fallback: RPC atómico si el usuario no escribió folio válido
+  const {data:rpcPN} = await supabase.rpc("next_production_number");
+  assignedPN = rpcPN;
+}
+// Si escribió uno válido, se usa directo. Validación + UNIQUE INDEX son las redes de seguridad.
+```
+
+### Defensa contra race conditions
+
+Dos capas siguen vigentes:
+
+1. **`validate_production_number` (debounced 400ms en UI)** — informa al usuario si el folio está tomado antes de guardar. Si Lupita ve "⚠️ Folio inválido", el submit ya retornaba early con alert (lógica existente intacta).
+
+2. **`idx_orders_production_number_unique` (UNIQUE INDEX parcial en BD)** — atrapa colisiones atómicas en el INSERT. Verificado en BD:
+   ```
+   CREATE UNIQUE INDEX idx_orders_production_number_unique ON public.orders
+   USING btree (production_number)
+   WHERE (production_number IS NOT NULL AND production_number <> '');
+   ```
+
+### Mejora del error message
+
+El `catch` del create ahora detecta violación de UNIQUE INDEX y muestra mensaje específico:
+
+> ❌ El folio P-3523 fue tomado por otra orden mientras guardabas. Cámbialo y vuelve a intentar.
+
+En lugar del genérico "❌ No se pudo crear: duplicate key value violates unique constraint...".
+
+### Casos cubiertos
+
+- ✅ Lupita escribe **P-3523** → se guarda como P-3523 (si libre)
+- ✅ Lupita escribe **P-9999** (folio adelantado) → se guarda como P-9999
+- ✅ Lupita deja vacío el campo → RPC asigna siguiente automáticamente (fallback)
+- ✅ Lupita escribe folio inválido como "ABC" → RPC asigna siguiente (fallback)
+- ✅ Race rara (2 usuarios escriben el mismo folio simultáneo) → UNIQUE INDEX rechaza el segundo, mensaje claro "fue tomado por otra orden"
+
+### Sin cambios
+
+- DB schema (el UNIQUE INDEX ya existía desde v10.20.0)
+- RPC `next_production_number` (sigue intacto, se usa como fallback)
+- RPC `validate_production_number` (sigue corriendo en UI mientras Lupita escribe)
+- Lógica de `duplicate` y `webApprove` (esas seguirán usando RPC porque no hay input de usuario)
+
+
 ## v10.34.2 — Bug scan v10.33/v10.34 fix bundle (10 fixes) — 19-may-2026
 
 Scan exhaustivo post-deploy de v10.33.0 (productos extendidos + tamaños estándar) y v10.34.0/v10.34.1 (combobox typeahead). 10 fixes en un solo commit. Sin cambios SQL.
