@@ -5,6 +5,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.34.1 — Hotfix: campo Tipo inicia vacío en orden nueva — 19-may-2026
+
+Reportado por Marcelo inmediatamente tras v10.34.0: al abrir formulario de orden nueva, el campo "Tipo" tenía "Etiqueta colgante" precargado como default (heredado del antiguo `<select>` que necesitaba un valor inicial). Con el nuevo combobox typeahead, esto obligaba al usuario a borrar el valor antes de escribir/buscar lo que quería.
+
+### Fix
+
+`empty` object ([App.jsx:2608](src/App.jsx#L2608)): `product_type:"Etiqueta colgante"` → `product_type:""`.
+
+Ahora al crear orden nueva:
+- Input "Tipo" inicia vacío
+- Placeholder visible: "Escribe o busca un tipo..."
+- Al hacer focus se abre el dropdown con las 21 opciones
+- Validación intacta: si se intenta enviar con campo vacío, marca "Tipo de Producto" como faltante
+
+### Sin cambios
+
+- DB schema, RPCs, triggers
+- Edición de órdenes existentes (siguen cargando su `product_type` real)
+- Funcionalidad del combobox v10.34.0
+
+
 ## v10.34.0 — Tipo de producto: combobox typeahead — 19-may-2026
 
 Pedido de Marcelo (post v10.33.0): el dropdown del campo "Tipo" en el formulario de orden ahora es un **combobox typeahead** — input de escritura libre que filtra las opciones de `PTYPES` mientras escribes, con "Otro" siempre visible al final del dropdown.
