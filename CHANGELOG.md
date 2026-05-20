@@ -5,6 +5,68 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.35.0 — bank_reference en bridge para conciliación automática 95% — 20-may-2026
+
+Hoy CobranzaFlow v1.9 LIVE introdujo conciliación bancaria automática contra TXT del banco (Scotiabank/Banorte) con 3 estrategias de match:
+- **E1 (95% confianza):** `bank_reference` exacto contra el concepto SPEI / clave de rastreo
+- **E2 (70% confianza):** monto exacto + fecha ±3 días
+- **E3 (50% confianza):** nombre cliente fuzzy + monto + fecha ±7 días
+
+**Problema previo:** los payments que crea el bridge desde PrintFlow al asignar folio con `payment_status='paid'` y método bancario llegaban **sin `bank_reference`** → solo matcheaban con E2 (70%). Más huérfanos para Lucero.
+
+**Solución v10.35.0:** Karla ahora captura la referencia bancaria opcional al asignar folio. El bridge la propaga a `cobranza.payments.bank_reference` para que CobranzaFlow concilie al 95% automáticamente.
+
+**Nota de numeración:** el brief decía v10.33.0 pero esa versión ya existe (PTYPES extendido). Aplicado como **v10.35.0** (siguiente disponible tras v10.34.4).
+
+### Backend (Supabase, aplicado vía MCP Claude.ai antes de este commit)
+
+- **Columna nueva** `public.orders.bank_reference TEXT NULLABLE`.
+- **RPC `assign_invoice` ampliada a 10 params** con `p_bank_reference text DEFAULT NULL`.
+- **Validaciones server-side:** rechaza con error legible si `bank_reference` está presente pero `payment_method` ∉ (transferencia, tarjeta) o `payment_status` ∉ (paid, partial).
+- **Trigger `sync_invoice_from_orders`** propaga `NEW.bank_reference` a `cobranza.payments.bank_reference` en los bloques manual paid y manual partial.
+
+### Frontend (App.jsx)
+
+- **`db.assignInvoice`** ([App.jsx:402](src/App.jsx#L402)): +10º parámetro `bankReference` → mapea a `p_bank_reference`.
+- **`dbCols` whitelist** ([App.jsx:227](src/App.jsx#L227)): incluye `bank_reference` para que el optimistic update persista bien.
+- **`PaymentStatusPicker`** ([App.jsx:1369](src/App.jsx#L1369)):
+  - Nuevo prop `bankReference`.
+  - `onChange` ahora recibe 4 valores: `(status, method, amount, bankReference)`.
+  - Campo "🔗 Referencia bancaria" visible **solo si** `status ∈ (paid, partial)` Y `method ∈ (transferencia, tarjeta)`.
+  - Placeholder contextual: "PAGO FACT D5775, clave rastreo SPEI" para transferencia, "autorización, últimos 4 dígitos" para tarjeta.
+  - **Auto-limpieza:** al cambiar a método no-bancario (efectivo/otro), el `bankReference` se setea a `null` automáticamente (evita rechazo del backend).
+  - Tip explicativo: "💡 Captura lo que el cliente puso en el SPEI o la clave de rastreo del banco. Esto permite que CobranzaFlow concilie el pago automáticamente al 95%."
+  - Confirmación visual: "Con ref para conciliación bancaria." aparece en los resúmenes de paid/partial cuando el campo está lleno.
+- **`InvoiceModal` y `PreInvoiceModal`** ([App.jsx:1523, 1683](src/App.jsx#L1523)):
+  - State nuevo `bankReference`.
+  - Reseteado al cambiar tipo de comprobante (Factura ↔ Remisión).
+  - `handleConfirm` trim()ea el valor y pasa `bankRefToSend` al callback (`null` si vacío).
+- **Callbacks en App** ([App.jsx:7155, 7178](src/App.jsx#L7155)):
+  - Reciben 6° (InvoiceModal) o 7° (PreInvoiceModal) argumento `bankReference`.
+  - Lo pasan a `db.assignInvoice`.
+  - Optimistic update incluye `bank_reference` para coherencia inmediata con el realtime.
+
+### Casos cubiertos
+
+- ✅ Karla escribe folio + Pagada + Transferencia + ref "D5775" → factura llega a cobranza pagada, payment con `bank_reference='D5775'`, conciliará al 95% cuando Lucero suba el TXT del banco con ese SPEI.
+- ✅ Karla escribe folio + Pagada + Efectivo → campo de ref bancaria NO aparece (efectivo no aplica).
+- ✅ Karla escribe folio + Pagada + Transferencia + ref → cambia método a Efectivo → ref se limpia automáticamente (no se envía).
+- ✅ Karla escribe folio + Parcial + monto + Tarjeta + ref → mismo flujo, payment del anticipo con bank_reference.
+- ✅ No pagada → ni método ni ref bancaria aparecen (campo unpaid).
+- ✅ Backend valida defensa en profundidad: si por alguna razón se envía bank_reference con efectivo/otro/unpaid, RPC arroja error legible.
+
+### Beneficio esperado
+
+Las facturas con pago manual bancario llegarán a CobranzaFlow listas para conciliarse al 95% (estrategia `exact_ref`) en lugar de 70% (`amount_date`). Menos movimientos huérfanos para Lucero, conciliación más confiable.
+
+### Sin cambios
+
+- Schema (backend ya estaba aplicado antes de este commit)
+- Pedidos web MP (siguen usando `mp_payment_id` como `bank_reference` automático; ese flujo no se toca — el bloque IF de MP en el trigger está intacto)
+- Vouchers de efectivo en CobranzaFlow (no aplica)
+- Funcionalidad de v10.29/v10.30/v10.31/v10.32/v10.33/v10.34 intacta
+
+
 ## v10.34.4 — Bug scan #6: críticos + medios fix bundle (8 fixes) — 19-may-2026
 
 Scan exhaustivo de áreas no auditadas previamente + edge cases de v10.34.3. 8 fixes en un commit. Sin cambios SQL.

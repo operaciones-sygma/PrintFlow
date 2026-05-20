@@ -228,7 +228,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -397,9 +397,10 @@ const db = {
   // 🆕 v10.9.0 — Asignación de folio con captura MANUAL.
   // Maneja tanto el flujo normal (al entregar) como el anticipado (antes de producir).
   // El folio lo escribe Karla; el sistema valida formato, unicidad y stage permitido.
-  async assignInvoice(orderId, invoiceType, folio, preAssigned, reason, byUser, paymentStatus, paymentMethod, paymentAmount) {
+  async assignInvoice(orderId, invoiceType, folio, preAssigned, reason, byUser, paymentStatus, paymentMethod, paymentAmount, bankReference) {
     // v10.29.0 — paymentStatus ('paid'|'unpaid'|'partial'|null), paymentMethod (efectivo|transferencia|tarjeta|otro|null)
     // v10.30.0 — paymentAmount: monto del anticipo si payment_status='partial' (en moneda literal con/sin IVA según invoiceType)
+    // v10.35.0 — bankReference: ref bancaria (folio SPEI, clave rastreo) si payment_method ∈ (transferencia,tarjeta). Permite conciliación automática 95% en CobranzaFlow.
     const {data, error} = await supabase.rpc("assign_invoice", {
       p_order_id: orderId,
       p_invoice_type: invoiceType,
@@ -409,7 +410,8 @@ const db = {
       p_user: byUser,
       p_payment_status: paymentStatus || null,
       p_payment_method: paymentMethod || null,
-      p_payment_amount: paymentAmount || null
+      p_payment_amount: paymentAmount || null,
+      p_bank_reference: bankReference || null
     });
     if(error) throw new Error(error.message);
     return data;
@@ -1364,7 +1366,7 @@ function PlateModal({order,machine,onConfirm,onClose}) {
 }
 
 // v10.29.0 + v10.30.0 — Selector de estado de pago al asignar folio (3 opciones: no pagada / parcial / pagada)
-function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, onChange}) {
+function PaymentStatusPicker({status, method, amount, bankReference, orderTotal, invoiceType, onChange}) {
   const METHODS = [
     {id: "efectivo", l: "Efectivo", i: "💵"},
     {id: "transferencia", l: "Transferencia", i: "🏦"},
@@ -1379,12 +1381,14 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
   const amountTooHigh = status === "partial" && amountNum > 0 && amountNum >= totalDisplay;
   const remaining = totalDisplay - amountNum;
   const fmtMx = n => n.toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  // v10.35.0 — campo bank_reference solo visible para pagos bancarios (transferencia/tarjeta) + paid/partial
+  const showBankRef = (status === "paid" || status === "partial") && (method === "transferencia" || method === "tarjeta");
   return (
     <div style={{marginTop: 14, marginBottom: 14, padding: 12, background: "#5856d610", borderRadius: 12, border: "1px solid #5856d630"}}>
       <label style={{...lbl, color: "#5856d6", fontWeight: 700}}>💰 Estado de pago *</label>
       <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12}}>
         <button
-          onClick={() => onChange("unpaid", null, null)}
+          onClick={() => onChange("unpaid", null, null, null)}
           style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
             background: status === "unpaid" ? "#ff9500" : "#fff",
             color: status === "unpaid" ? "#fff" : C.tx,
@@ -1393,7 +1397,7 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
           ⏳ No pagada
         </button>
         <button
-          onClick={() => onChange("partial", method || "efectivo", amount || "")}
+          onClick={() => onChange("partial", method || "efectivo", amount || "", bankReference || null)}
           style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
             background: status === "partial" ? "#5856d6" : "#fff",
             color: status === "partial" ? "#fff" : C.tx,
@@ -1402,7 +1406,7 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
           🔶 Parcial
         </button>
         <button
-          onClick={() => onChange("paid", method || "efectivo", null)}
+          onClick={() => onChange("paid", method || "efectivo", null, bankReference || null)}
           style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
             background: status === "paid" ? "#34c759" : "#fff",
             color: status === "paid" ? "#fff" : C.tx,
@@ -1423,7 +1427,7 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
             min="0"
             max={totalDisplay - 0.01}
             value={amount || ""}
-            onChange={e => onChange(status, method, e.target.value)}
+            onChange={e => onChange(status, method, e.target.value, bankReference)}
             placeholder="0.00"
             style={{...inp, fontFamily: "monospace", fontSize: 14, fontWeight: 700,
               border: "1.5px solid " + (amountTooHigh ? "#ff3b30" : (amountValid && amountNum > 0 ? "#5856d6" : C.bd))}}
@@ -1448,7 +1452,11 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
             {METHODS.map(m => (
               <button
                 key={m.id}
-                onClick={() => onChange(status, m.id, amount)}
+                onClick={() => {
+                  // v10.35.0 — si cambia a método no-bancario, limpiar bank_reference (backend lo rechaza si está presente)
+                  const newBankRef = (m.id === "transferencia" || m.id === "tarjeta") ? bankReference : null;
+                  onChange(status, m.id, amount, newBankRef);
+                }}
                 style={{padding: "8px", fontSize: 12, fontWeight: 600,
                   background: method === m.id ? (status === "paid" ? "#34c759" : "#5856d6") : "#fff",
                   color: method === m.id ? "#fff" : C.tx,
@@ -1461,6 +1469,25 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
           </div>
         </>
       )}
+      {/* v10.35.0 — Campo bank_reference visible solo para pagos bancarios (transferencia/tarjeta) */}
+      {showBankRef && (
+        <div style={{marginTop: 10, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid " + C.bd}}>
+          <label style={{...lbl, fontSize: 10, marginTop: 0, color: "#5856d6", fontWeight: 700}}>
+            🔗 Referencia bancaria (opcional, recomendada)
+          </label>
+          <input
+            type="text"
+            value={bankReference || ""}
+            onChange={e => onChange(status, method, amount, e.target.value)}
+            placeholder={method === "transferencia" ? "ej. PAGO FACT D5775, clave rastreo SPEI" : "ej. autorización, últimos 4 dígitos"}
+            maxLength={100}
+            style={{...inp, fontSize: 12, fontFamily: "monospace"}}
+          />
+          <div style={{fontSize: 10, color: C.t2, marginTop: 4, fontStyle: "italic"}}>
+            💡 Captura lo que el cliente puso en el SPEI o la clave de rastreo del banco. Esto permite que CobranzaFlow concilie el pago automáticamente al 95%.
+          </div>
+        </div>
+      )}
       {status === "unpaid" && (
         <div style={{fontSize: 10, color: C.t2, marginTop: 6, fontStyle: "italic"}}>
           ⏳ Esta factura/remisión irá a CobranzaFlow como pendiente de cobro.
@@ -1468,12 +1495,12 @@ function PaymentStatusPicker({status, method, amount, orderTotal, invoiceType, o
       )}
       {status === "paid" && method && (
         <div style={{fontSize: 10, color: "#34c759", marginTop: 6, fontWeight: 600}}>
-          ✅ Esta factura/remisión irá a CobranzaFlow ya marcada como pagada.
+          ✅ Esta factura/remisión irá a CobranzaFlow ya marcada como pagada.{showBankRef && bankReference && " Con ref para conciliación bancaria."}
         </div>
       )}
       {status === "partial" && method && amountValid && amountNum > 0 && (
         <div style={{fontSize: 10, color: "#5856d6", marginTop: 6, fontWeight: 600}}>
-          🔶 CobranzaFlow recibirá la factura con anticipo de ${fmtMx(amountNum)} aplicado y saldo pendiente de ${fmtMx(remaining)}.
+          🔶 CobranzaFlow recibirá la factura con anticipo de ${fmtMx(amountNum)} aplicado y saldo pendiente de ${fmtMx(remaining)}.{showBankRef && bankReference && " Con ref para conciliación bancaria."}
         </div>
       )}
     </div>
@@ -1493,6 +1520,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [paymentMethod,setPaymentMethod]=useState(null);
   const [paymentAmount,setPaymentAmount]=useState("");
+  const [bankReference,setBankReference]=useState(""); // v10.35.0
 
   // Cargar sugerencias al montar
   useEffect(()=>{
@@ -1544,7 +1572,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
-      await onConfirm(type,folio,paymentStatus,paymentMethod,amountToSend); // v10.30.0
+      const bankRefToSend=bankReference?.trim()||null; // v10.35.0
+      await onConfirm(type,folio,paymentStatus,paymentMethod,amountToSend,bankRefToSend);
     }finally{
       setBusy(false);
     }
@@ -1557,7 +1586,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const tBtn=(t,label,emoji,color,sug)=>{
     const sel=type===t;
     return <button
-      onClick={()=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}}
+      onClick={()=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}}
       disabled={busy}
       style={{
         flex:1,
@@ -1604,7 +1633,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>}
-        {type&&folioValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a)}}/>}
+        {type&&folioValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid} style={{...bt(type==="factura"?"#5856d6":(type==="remision"?"#34c759":C.t3)),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid)?0.4:1}}>Continuar →</button>
@@ -1651,6 +1680,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [paymentMethod,setPaymentMethod]=useState(null);
   const [paymentAmount,setPaymentAmount]=useState("");
+  const [bankReference,setBankReference]=useState(""); // v10.35.0
 
   // Validar datos completos de la orden ANTES de permitir asignar folio anticipado
   const missing=[];
@@ -1720,7 +1750,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
-      await onConfirm(type,folio,finalReason,paymentStatus,paymentMethod,amountToSend); // v10.30.0
+      const bankRefToSend=bankReference?.trim()||null; // v10.35.0
+      await onConfirm(type,folio,finalReason,paymentStatus,paymentMethod,amountToSend,bankRefToSend);
     }finally{
       setBusy(false);
     }
@@ -1755,8 +1786,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 
         <label style={lbl}>Tipo de comprobante</label>
         <div style={{display:"flex",gap:8,marginBottom:14}}>
-          <button onClick={()=>{setType("factura");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
-          <button onClick={()=>{setType("remision");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
+          <button onClick={()=>{setType("factura");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
+          <button onClick={()=>{setType("remision");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
         </div>
 
         {type&&<>
@@ -1786,7 +1817,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <div style={{background:"#ff950010",borderRadius:10,padding:10,marginTop:14,fontSize:11,color:"#ff9500",fontWeight:600}}>
             ⚠️ Una vez asignado el folio, esta orden NO podrá cancelarse normalmente. Solo Marcelo podrá cancelarla con motivo de Nota de Crédito.
           </div>
-          {reasonValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a)}}/>}
+          {reasonValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>}
         </>}
 
         <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -7121,15 +7152,16 @@ export default function PrintFlow() {
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
-      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount)=>{
+      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference)=>{
         try{
           // v10.30.0 — pasar payment_status, method y amount al RPC
-          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount);
+          // v10.35.0 — pasar bankReference para conciliación automática 95% en CobranzaFlow
+          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference);
           // Optimistic update
           const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
           const payLabel=paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro";
           const tlMsg="📄 Asignado folio "+folio+" ("+(invoiceType==="factura"?"Factura":"Remisión")+") · "+SM[newStage]?.l+payLabel;
-          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
+          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,bank_reference:bankReference,stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
           await db.addTimeline(invoiceModal.id,tlMsg,user,C.ok);
           // Notify admin + secretaria + vendedor creator
           const notifMsg="📄 "+folio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
@@ -7143,13 +7175,14 @@ export default function PrintFlow() {
         }
       }} onClose={()=>setInvoiceModal(null)}/>}
       {/* 🆕 v10.9.0 — Modal de folio anticipado (Karla asigna antes de producir) */}
-      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount)=>{
+      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference)=>{
         try{
           // v10.30.0 — pasar payment_status, method y amount al RPC
-          await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,user,paymentStatus,paymentMethod,paymentAmount);
+          // v10.35.0 — pasar bankReference para conciliación automática 95% en CobranzaFlow
+          await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,user,paymentStatus,paymentMethod,paymentAmount,bankReference);
           const payLabel=paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro";
           const tlMsg="⚡ Folio anticipado "+folio+" asignado ("+(invoiceType==="factura"?"Factura":"Remisión")+") · Razón: "+reason+payLabel;
-          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,timeline:addTL(o,tlMsg)}:o));
+          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,bank_reference:bankReference,timeline:addTL(o,tlMsg)}:o));
           await db.addTimeline(preInvoiceModal.id,tlMsg,user,"#ff9500");
           // Notificaciones a Lupita + Vendedor + Marcelo
           const notifMsg="⚡ Folio anticipado "+folio+" asignado a "+(preInvoiceModal.client||"")+" — "+(preInvoiceModal.product_type||"")+" · "+(preInvoiceModal.production_number||"");
