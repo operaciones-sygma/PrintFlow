@@ -5,6 +5,68 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.33.0 — Productos extendidos + Tamaños estándar — 19-may-2026
+
+Solicitado por Lupita. Aplica a todos los que crean órdenes (Lupita, Genaro, Marcelo).
+
+**Nota de numeración:** el brief proponía v10.13.0 (typo evidente — esa versión es de enero 2026); aplicado como v10.33.0 que es la siguiente en la secuencia post v10.32.3.
+
+### Nuevas funcionalidades (2)
+
+1. **11 productos nuevos en dropdown Tipo:** Lonas, Banners, Folders, Dípticos, Trípticos, Recetas, Hojas membretadas, Notas, Etiquetas (genérico) — además de los 12 existentes (Etiqueta colgante/adherible siguen como opciones distintas). Total 21 opciones.
+
+2. **Selector de Tamaño Estándar** — Toggle mutuamente excluyente en el formulario de orden:
+   - **✏️ Medida en cm** (modo actual con inputs Ancho/Alto)
+   - **📐 Tamaño estándar** (dropdown con 17 tamaños comunes de imprenta MX agrupados por familia)
+   - **17 tamaños** distribuidos en 5 grupos:
+     - **Imprenta:** Pliego (70×95cm), Medio pliego, Doble oficio, Doble carta / Tabloide
+     - **Oficio:** Oficio, Media oficio, 1/4 de oficio, 1/8 de oficio
+     - **Carta:** Carta, Media carta, 1/4 de carta, 1/8 de carta
+     - **ISO (A):** A3, A4, A5, A6
+     - **Tarjetas:** Tarjeta de presentación (9×5.5cm)
+   - Si se selecciona un estándar → `width_cm`/`height_cm` se limpian automáticamente (exclusión enforced en UI)
+   - Si se vuelve a "Medida en cm" → `standard_size` se limpia
+   - El **valor que se introdujo es el que se muestra** en DetailModal, OCard, orden impresa (literalmente "Carta" en lugar de "21.59 × 27.94 cm")
+
+### Backend (Supabase)
+
+- **Nueva columna** `orders.standard_size TEXT NULLABLE` — almacena el ID del tamaño elegido (`"carta"`, `"oficio"`, `"a4"`, etc).
+- **Sin migración de datos existentes:** las ~3,500 órdenes existentes quedan con `standard_size=NULL` y siguen mostrando su `width_cm/height_cm` como hoy.
+
+### Frontend (App.jsx)
+
+- **Constante `PTYPES`** extendida de 12 → 21 productos ([App.jsx:14](src/App.jsx#L14)).
+- **Constante nueva `STANDARD_SIZES`** ([App.jsx:15](src/App.jsx#L15)): 17 objetos `{id, label, w, h, group}` con dimensiones reales.
+- **Helpers** `SS_BY_ID` (lookup) y `ssLabel(id)` (resuelve ID → label legible).
+- **`TRACKED_EDIT_FIELDS`** ([App.jsx:56](src/App.jsx#L56)): agregado `standard_size:"Tamaño estándar"` — notifica vía Telegram cuando cambia.
+- **`dbCols` whitelist + `editableFields`** ambos extendidos con `"standard_size"`.
+- **`empty` form object** del OrderForm: `standard_size:""`.
+- **`OrderForm`** ([App.jsx:2739](src/App.jsx#L2739)): bloque Ancho/Alto cm reemplazado por toggle ✏️/📐 con renderizado condicional (select con `<optgroup>` si estándar, inputs cm si no).
+- **`DetailModal`** ([App.jsx:1155](src/App.jsx#L1155)): Row "Medidas" prioriza `standard_size` sobre `width_cm/height_cm`.
+- **`PrintOrder`** ([App.jsx:996,1002,1013](src/App.jsx#L996)): `hasSpecs` incluye `standard_size`; "Tamaño Final" y columna Medidas priorizan estándar.
+- **3 OCards de listado** ([App.jsx:3038](src/App.jsx#L3038), [4066](src/App.jsx#L4066), [4169](src/App.jsx#L4169)) actualizadas con misma lógica de prioridad.
+- **CSV export** ([App.jsx:6943](src/App.jsx#L6943)): nueva columna `TamañoEstándar` al final con label legible.
+
+### Aplicabilidad por rol
+
+El formulario `OrderForm` es compartido entre todos los roles que crean órdenes. Sin gates adicionales:
+- **Lupita** (secretaria) — crea órdenes desde +Nueva
+- **Genaro** (vendedor) — crea órdenes desde +Nueva
+- **Marcelo** (admin) — crea órdenes desde +Nueva o desde una OC existente
+
+### Compatibilidad
+
+- Órdenes con `width_cm/height_cm` previos siguen mostrándose como antes ("21.5 × 28 cm")
+- Órdenes nuevas pueden usar cualquiera de los dos modos (mutuo excluyente en UI)
+- Edición de orden existente con cm puede convertirse a estándar (limpia cm automáticamente) y viceversa
+
+### Sin cambios
+
+- RPCs, triggers, bridge a CobranzaFlow
+- Permisos por rol
+- Otras vistas / flujos
+
+
 ## v10.32.3 — Pestaña Histórico de OCs + CHANGELOG retroactivo — 18-may-2026
 
 Complemento frontend del fix v10.32.2 (auto-complete OC). Las OCs cerradas (`completed` o `cancelled`) ahora aparecen en una pestaña separada "📚 Histórico" en lugar de contaminar la lista principal.
