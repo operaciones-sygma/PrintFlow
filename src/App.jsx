@@ -398,9 +398,10 @@ const db = {
   // Maneja tanto el flujo normal (al entregar) como el anticipado (antes de producir).
   // El folio lo escribe Karla; el sistema valida formato, unicidad y stage permitido.
   async assignInvoice(orderId, invoiceType, folio, preAssigned, reason, byUser, paymentStatus, paymentMethod, paymentAmount, bankReference) {
-    // v10.29.0 — paymentStatus ('paid'|'unpaid'|'partial'|null), paymentMethod (efectivo|transferencia|tarjeta|otro|null)
+    // v10.29.0 — paymentStatus ('paid'|'unpaid'|'partial'|null)
     // v10.30.0 — paymentAmount: monto del anticipo si payment_status='partial' (en moneda literal con/sin IVA según invoiceType)
-    // v10.35.0 — bankReference: ref bancaria (folio SPEI, clave rastreo) si payment_method ∈ (transferencia,tarjeta). Permite conciliación automática 95% en CobranzaFlow.
+    // v10.36.0 — paymentMethod: 'transferencia'|'tarjeta'|'cheque'|'otro'|null (efectivo REMOVIDO; pasa exclusivamente por Tesorería vía vale en CobranzaFlow — Candado #3 del Manual)
+    // v10.36.0 — bankReference: OBLIGATORIO para transferencia/tarjeta/cheque cuando paid/partial. Backend (sync_invoice_from_orders) RAISE 'candado de seguridad' si vacío. Permite conciliación automática 95% en CobranzaFlow.
     const {data, error} = await supabase.rpc("assign_invoice", {
       p_order_id: orderId,
       p_invoice_type: invoiceType,
@@ -658,10 +659,32 @@ const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también 
 // ─── TOAST NOTIFICATION ───────────────────────────
 function Toast({message,type="success",onDone}) {
   const cb=useRef(onDone);cb.current=onDone;
-  useEffect(()=>{const dur=type==="error"?7000:3200;const t=setTimeout(()=>cb.current(),dur);return ()=>clearTimeout(t)},[type]);
+  // v10.36.1 #2 — duración extendida (15s) para mensajes de "candado de seguridad" del bridge,
+  // que llegan con texto explicativo largo del backend RAISE. Karla necesita tiempo para leer
+  // qué hacer (marcar No pagada, capturar ref, etc.) antes de que el toast desaparezca.
+  const isSecurityLock = type==="error" && typeof message==="string" && message.includes("candado de seguridad");
+  useEffect(()=>{
+    const dur = isSecurityLock ? 15000 : (type==="error"?7000:3200);
+    const t=setTimeout(()=>cb.current(),dur);
+    return ()=>clearTimeout(t);
+  },[type, isSecurityLock]);
   const bg={success:C.ok,error:C.dn,warning:C.wn,info:"#007aff"}[type]||C.ok;
   const icon={success:"✅",error:"❌",warning:"⚠️",info:"ℹ️"}[type]||"✅";
-  return <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:bg,color:"#fff",padding:"12px 24px",borderRadius:14,fontSize:13,fontWeight:600,fontFamily:"'Poppins',sans-serif",boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:9999,display:"flex",alignItems:"center",gap:8,animation:"toastIn .3s ease",maxWidth:"90%"}}>{icon} {message}</div>;
+  return <div style={{
+    position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
+    background:bg,color:"#fff",
+    padding:"12px 24px",borderRadius:14,
+    fontSize:13,fontWeight:600,fontFamily:"'Poppins',sans-serif",
+    boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:9999,
+    display:"flex",alignItems:"center",gap:8,
+    animation:"toastIn .3s ease",
+    // v10.36.1 #2 — mensajes largos del backend RAISE necesitan wrap/word-break
+    maxWidth: isSecurityLock ? 520 : "90%",
+    whiteSpace:"pre-wrap",
+    wordBreak:"break-word",
+    lineHeight:1.45,
+    textAlign: isSecurityLock ? "left" : "center",
+  }}>{icon} {message}</div>;
 }
 
 // ─── ESC CLOSE HOOK ───────────────────────────────
@@ -1460,9 +1483,11 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
               <button
                 key={m.id}
                 onClick={() => {
-                  // v10.36.0 — bancarios (transferencia/tarjeta/cheque) preservan bank_reference;
-                  // no-bancarios (otro) lo limpian para no enviar ref al backend.
-                  const newBankRef = ["transferencia", "tarjeta", "cheque"].includes(m.id) ? bankReference : null;
+                  // v10.36.1 #3 — preservar bankReference SOLO si el método no cambia.
+                  // Cambiar entre bancarios distintos (ej. transferencia→cheque) limpia la ref
+                  // para evitar guardar SPEI clave como número de cheque (data quality v2.7).
+                  // No-bancarios siempre limpian.
+                  const newBankRef = (m.id === method) ? bankReference : null;
                   onChange(status, m.id, amount, newBankRef);
                 }}
                 style={{padding: "8px", fontSize: 12, fontWeight: 600,
@@ -1608,7 +1633,10 @@ function InvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
-      const bankRefToSend=bankReference?.trim()||null; // v10.35.0
+      // v10.36.1 #9 — force null si el método no es bancario, evita enviar refs orphan
+      // (estado puede quedar con valor si el usuario nunca clickeó un botón de método tras escribirla).
+      const requiresBankRefHC = ["transferencia","tarjeta","cheque"].includes(paymentMethod);
+      const bankRefToSend = requiresBankRefHC ? (bankReference?.trim()||null) : null;
       await onConfirm(type,folio,paymentStatus,paymentMethod,amountToSend,bankRefToSend);
     }finally{
       setBusy(false);
@@ -1790,7 +1818,10 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
-      const bankRefToSend=bankReference?.trim()||null; // v10.35.0
+      // v10.36.1 #9 — force null si el método no es bancario, evita enviar refs orphan
+      // (estado puede quedar con valor si el usuario nunca clickeó un botón de método tras escribirla).
+      const requiresBankRefHC = ["transferencia","tarjeta","cheque"].includes(paymentMethod);
+      const bankRefToSend = requiresBankRefHC ? (bankReference?.trim()||null) : null;
       await onConfirm(type,folio,finalReason,paymentStatus,paymentMethod,amountToSend,bankRefToSend);
     }finally{
       setBusy(false);

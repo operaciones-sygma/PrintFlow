@@ -5,6 +5,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.36.1 — Fixes scan post-v10.36.0 — 21-may-2026
+
+Pasada de bugs sobre v10.36.0. 3 altos + 1 medio aplicados. El supuesto crítico "legacy orders un-editables" fue **falso positivo**: el trigger early-returns en UPDATEs que no cambian `invoice_folio` (líneas 21-22 de la migration), así que la validación solo dispara en la asignación inicial. Sin regresión sobre órdenes legacy.
+
+### 🟠 Altos
+- **#3 `bankReference` persistía entre métodos bancarios distintos.** Karla escribía SPEI clave en transferencia → cambiaba a cheque → SPEI clave quedaba guardado como número de cheque. Defeat el propósito del lock v10.36.0. **Fix:** cleanup handler ahora solo preserva ref si el método clickeado es igual al actual; cambiar entre bancarios (transferencia→cheque, tarjeta→transferencia, etc.) limpia para forzar re-entrada con el formato correcto.
+- **#9 `bank_reference` orphan cuando `method='otro'`.** Si Karla escribía ref y luego cambiaba a 'otro' sin click en button (ej. flujo de teclado), el state retenía la ref → `bankRefToSend` enviaba ref orphan al backend. **Fix:** en `handleConfirm` de ambos modales (InvoiceModal + PreInvoiceModal), `bankRefToSend = null` si `paymentMethod` no está en `['transferencia','tarjeta','cheque']`.
+- **#2 Toast no soportaba mensajes largos del backend RAISE.** Mensajes "candado de seguridad" del trigger (~180 chars) se cortaban/desaparecían en 7s, sin word-break ni line-height. Karla no alcanzaba a leer la guía. **Fix:** detección de mensajes con "candado de seguridad" → duración extendida a 15s + `maxWidth:520`, `whiteSpace:pre-wrap`, `wordBreak:break-word`, `lineHeight:1.45`, `textAlign:left` para legibilidad.
+
+### 🟡 Medio
+- **#5 Comentarios stale en `db.assignInvoice`** (líneas 401-403). Listaban `efectivo` (removido) y missing `cheque`. **Fix:** comentarios v10.29.0/v10.30.0/v10.35.0 actualizados con v10.36.0 — referencian Candado #3 + RAISE del backend.
+
+### Diferido a v10.37 / backlog
+- #6 `bankRefValid` acepta 1 char ("x" pasa) — tightening a `>= 4` con hint, UX trade-off
+- #8 Trigger usa `source != 'web'` sin COALESCE — NULL hole defensivo
+
+### Sin cambios
+- Schema, RPCs, trigger SQL.
+- Lógica de pago web Mercado Pago (`paid_via_mp`).
+- Flujo natural Lucero-genera-vale → invoice-se-paga.
+
+---
+
+
 ## v10.36.0 — Cierre de huecos de seguridad PrintFlow → CobranzaFlow — 21-may-2026
 
 Auditoría de seguridad del flujo bridge (post-junta 21-may) detectó que la opción "Karla marca paid+efectivo en PrintFlow" bypaseaba el **Candado #3** del Manual de Cobranza Padilla V2 (efectivo solo pasa por Tesorería). Adicionalmente, `bank_reference` era opcional para transferencia/tarjeta — impedía conciliación bancaria automática 95%.
