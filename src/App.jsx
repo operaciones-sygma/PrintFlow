@@ -1367,10 +1367,14 @@ function PlateModal({order,machine,onConfirm,onClose}) {
 
 // v10.29.0 + v10.30.0 — Selector de estado de pago al asignar folio (3 opciones: no pagada / parcial / pagada)
 function PaymentStatusPicker({status, method, amount, bankReference, orderTotal, invoiceType, onChange}) {
+  // v10.36.0 — 'efectivo' REMOVIDO: pagos en efectivo solo por Tesorería (vale VC-XXXX
+  // en CobranzaFlow). Si paga en efectivo, marca 'unpaid' y Lucero genera el vale;
+  // CobranzaFlow auto-aplica el payment al crear el vale ligado a este folio fiscal.
+  // 'cheque' AGREGADO: requiere bank_reference (banco + número de cheque).
   const METHODS = [
-    {id: "efectivo", l: "Efectivo", i: "💵"},
     {id: "transferencia", l: "Transferencia", i: "🏦"},
     {id: "tarjeta", l: "Tarjeta", i: "💳"},
+    {id: "cheque", l: "Cheque", i: "📃"},
     {id: "otro", l: "Otro", i: "📝"}
   ];
   // v10.30.0 — total en moneda literal del cliente (con IVA si factura D, sin IVA si remisión R)
@@ -1381,8 +1385,11 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
   const amountTooHigh = status === "partial" && amountNum > 0 && amountNum >= totalDisplay;
   const remaining = totalDisplay - amountNum;
   const fmtMx = n => n.toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  // v10.35.0 — campo bank_reference solo visible para pagos bancarios (transferencia/tarjeta) + paid/partial
-  const showBankRef = (status === "paid" || status === "partial") && (method === "transferencia" || method === "tarjeta");
+  // v10.36.0 — bank_reference OBLIGATORIO para todos los métodos bancarios (transferencia/tarjeta/cheque)
+  // cuando paid o partial. El backend (sync_invoice_from_orders) también valida y rechaza vía RAISE.
+  const showBankRef = (status === "paid" || status === "partial") &&
+    ["transferencia", "tarjeta", "cheque"].includes(method);
+  const bankRefMissing = showBankRef && (!bankReference || !bankReference.trim());
   return (
     <div style={{marginTop: 14, marginBottom: 14, padding: 12, background: "#5856d610", borderRadius: 12, border: "1px solid #5856d630"}}>
       <label style={{...lbl, color: "#5856d6", fontWeight: 700}}>💰 Estado de pago *</label>
@@ -1453,8 +1460,9 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
               <button
                 key={m.id}
                 onClick={() => {
-                  // v10.35.0 — si cambia a método no-bancario, limpiar bank_reference (backend lo rechaza si está presente)
-                  const newBankRef = (m.id === "transferencia" || m.id === "tarjeta") ? bankReference : null;
+                  // v10.36.0 — bancarios (transferencia/tarjeta/cheque) preservan bank_reference;
+                  // no-bancarios (otro) lo limpian para no enviar ref al backend.
+                  const newBankRef = ["transferencia", "tarjeta", "cheque"].includes(m.id) ? bankReference : null;
                   onChange(status, m.id, amount, newBankRef);
                 }}
                 style={{padding: "8px", fontSize: 12, fontWeight: 600,
@@ -1469,38 +1477,62 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
           </div>
         </>
       )}
-      {/* v10.35.0 — Campo bank_reference visible solo para pagos bancarios (transferencia/tarjeta) */}
+      {/* v10.36.0 — Campo bank_reference OBLIGATORIO para transferencia/tarjeta/cheque cuando paid/partial.
+          El backend (sync_invoice_from_orders) también valida — defensa en profundidad. */}
       {showBankRef && (
-        <div style={{marginTop: 10, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid " + C.bd}}>
-          <label style={{...lbl, fontSize: 10, marginTop: 0, color: "#5856d6", fontWeight: 700}}>
-            🔗 Referencia bancaria (opcional, recomendada)
+        <div style={{marginTop: 10, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid " + (bankRefMissing ? "#ef4444" : C.bd)}}>
+          <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? "#ef4444" : "#5856d6", fontWeight: 700}}>
+            🔗 Referencia bancaria * (obligatoria)
           </label>
           <input
             type="text"
             value={bankReference || ""}
             onChange={e => onChange(status, method, amount, e.target.value)}
-            placeholder={method === "transferencia" ? "ej. PAGO FACT D5775, clave rastreo SPEI" : "ej. autorización, últimos 4 dígitos"}
+            placeholder={
+              method === "transferencia" ? "Folio SPEI o clave de rastreo (obligatorio)" :
+              method === "tarjeta" ? "Folio del voucher de terminal (obligatorio)" :
+              method === "cheque" ? "Banco + número de cheque, ej: BANAMEX-1234567 (obligatorio)" :
+              "Referencia obligatoria"
+            }
             maxLength={100}
-            style={{...inp, fontSize: 12, fontFamily: "monospace"}}
+            required
+            style={{...inp, fontSize: 12, fontFamily: "monospace", border: bankRefMissing ? "1.5px solid #ef4444" : inp.border}}
           />
-          <div style={{fontSize: 10, color: C.t2, marginTop: 4, fontStyle: "italic"}}>
-            💡 Captura lo que el cliente puso en el SPEI o la clave de rastreo del banco. Esto permite que CobranzaFlow concilie el pago automáticamente al 95%.
-          </div>
+          {bankRefMissing ? (
+            <div style={{fontSize: 10, color: "#dc2626", marginTop: 4, lineHeight: 1.4, fontWeight: 600}}>
+              ⚠️ Referencia bancaria requerida. Si no la tienes en mano, marca la orden como "No pagada" y aplica el pago después desde CobranzaFlow.
+            </div>
+          ) : (
+            <div style={{fontSize: 10, color: C.t2, marginTop: 4, fontStyle: "italic"}}>
+              💡 Captura el folio SPEI, voucher de terminal o número de cheque. Permite conciliación bancaria automática al 95%.
+            </div>
+          )}
         </div>
       )}
       {status === "unpaid" && (
-        <div style={{fontSize: 10, color: C.t2, marginTop: 6, fontStyle: "italic"}}>
-          ⏳ Esta factura/remisión irá a CobranzaFlow como pendiente de cobro.
-        </div>
+        <>
+          <div style={{fontSize: 10, color: C.t2, marginTop: 6, fontStyle: "italic"}}>
+            ⏳ Esta factura/remisión irá a CobranzaFlow como pendiente de cobro.
+          </div>
+          {/* v10.36.0 — Banner informativo: efectivo va exclusivamente por Tesorería (Candado #3) */}
+          <div style={{
+            background: "#e0f2fe", border: "1px solid #0ea5e9",
+            borderRadius: 8, padding: "8px 12px", marginTop: 8,
+            fontSize: 11, color: "#075985", lineHeight: 1.5,
+          }}>
+            💡 <strong>Pago en efectivo:</strong> si el cliente va a pagar en efectivo, marca "No pagada" y entrega al cliente con el folio asignado. Tesorería (Lucero) generará el vale de caja y el sistema aplicará el pago automáticamente al crearse el vale.
+          </div>
+        </>
       )}
-      {status === "paid" && method && (
+      {/* v10.36.0 — mensajes de éxito solo cuando bank_reference (si requerida) esté válida */}
+      {status === "paid" && method && (!showBankRef || (bankReference && bankReference.trim())) && (
         <div style={{fontSize: 10, color: "#34c759", marginTop: 6, fontWeight: 600}}>
-          ✅ Esta factura/remisión irá a CobranzaFlow ya marcada como pagada.{showBankRef && bankReference && " Con ref para conciliación bancaria."}
+          ✅ Esta factura/remisión irá a CobranzaFlow ya marcada como pagada.{showBankRef && bankReference && ` Ref ${bankReference} permitirá conciliación bancaria automática.`}
         </div>
       )}
-      {status === "partial" && method && amountValid && amountNum > 0 && (
+      {status === "partial" && method && amountValid && amountNum > 0 && (!showBankRef || (bankReference && bankReference.trim())) && (
         <div style={{fontSize: 10, color: "#5856d6", marginTop: 6, fontWeight: 600}}>
-          🔶 CobranzaFlow recibirá la factura con anticipo de ${fmtMx(amountNum)} aplicado y saldo pendiente de ${fmtMx(remaining)}.{showBankRef && bankReference && " Con ref para conciliación bancaria."}
+          🔶 CobranzaFlow recibirá la factura con anticipo de ${fmtMx(amountNum)} aplicado y saldo pendiente de ${fmtMx(remaining)}.{showBankRef && bankReference && ` Ref ${bankReference} permitirá conciliación bancaria automática.`}
         </div>
       )}
     </div>
@@ -1549,9 +1581,13 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
   const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
   const amountNum=Number(paymentAmount)||0;
-  const paymentValid=paymentStatus==="unpaid"
-    ||(paymentStatus==="paid"&&paymentMethod)
-    ||(paymentStatus==="partial"&&paymentMethod&&amountNum>0&&amountNum<totalDisplay);
+  // v10.36.0 — exigir bank_reference para métodos bancarios cuando paid/partial.
+  // Defensa en profundidad: el backend (sync_invoice_from_orders) también valida y rechaza.
+  const requiresBankRef = ["transferencia", "tarjeta", "cheque"].includes(paymentMethod);
+  const bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0);
+  const paymentValid = paymentStatus === "unpaid"
+    || (paymentStatus === "paid" && paymentMethod && bankRefValid)
+    || (paymentStatus === "partial" && paymentMethod && amountNum > 0 && amountNum < totalDisplay && bankRefValid);
 
   const handleProceed=()=>{
     if(!folioValid){
@@ -1729,9 +1765,13 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
   const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
   const amountNum=Number(paymentAmount)||0;
-  const paymentValid=paymentStatus==="unpaid"
-    ||(paymentStatus==="paid"&&paymentMethod)
-    ||(paymentStatus==="partial"&&paymentMethod&&amountNum>0&&amountNum<totalDisplay);
+  // v10.36.0 — exigir bank_reference para métodos bancarios cuando paid/partial.
+  // Defensa en profundidad: el backend (sync_invoice_from_orders) también valida y rechaza.
+  const requiresBankRef = ["transferencia", "tarjeta", "cheque"].includes(paymentMethod);
+  const bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0);
+  const paymentValid = paymentStatus === "unpaid"
+    || (paymentStatus === "paid" && paymentMethod && bankRefValid)
+    || (paymentStatus === "partial" && paymentMethod && amountNum > 0 && amountNum < totalDisplay && bankRefValid);
 
   const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid;
 

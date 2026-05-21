@@ -5,6 +5,53 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.36.0 — Cierre de huecos de seguridad PrintFlow → CobranzaFlow — 21-may-2026
+
+Auditoría de seguridad del flujo bridge (post-junta 21-may) detectó que la opción "Karla marca paid+efectivo en PrintFlow" bypaseaba el **Candado #3** del Manual de Cobranza Padilla V2 (efectivo solo pasa por Tesorería). Adicionalmente, `bank_reference` era opcional para transferencia/tarjeta — impedía conciliación bancaria automática 95%.
+
+### Cambios
+
+**Backend SQL (`sync_invoice_from_orders`, migration `v36_bridge_security_validations`)**
+- Bloque nuevo de validaciones de seguridad al inicio del trigger (después del check `invoice_folio`).
+- **Bloquea `payment_method='efectivo'` con `paid` o `partial`:** RAISE EXCEPTION con mensaje explícito redirige al flujo de vale en CobranzaFlow.
+- **Bloquea `transferencia/tarjeta/tarjeta_credito/cheque` sin `bank_reference`:** mensaje guía indica qué hacer si no tiene la ref.
+- Validación solo aplica cuando `NEW.source != 'web'` (no afecta el flujo de MP web).
+- Errores con "candado de seguridad" se **re-RAISE** para que PrintFlow los muestre al usuario. Errores genéricos siguen comportamiento histórico (loguean, no propagan).
+- Bloques `paid` y `partial` ahora excluyen `efectivo` con `AND NEW.payment_method != 'efectivo'`.
+- Agregado `cheque` como método válido en el CASE del `v_payment_type_cobranza`.
+- `bank_reference` incluida en `v_payment_notes` para trazabilidad explícita.
+
+**Frontend (`PaymentStatusPicker`)**
+- Array `METHODS` actualizado: removido `efectivo`, agregado `cheque`. Métodos disponibles: Transferencia, Tarjeta, Cheque, Otro.
+- `showBankRef` incluye `cheque` (transferencia/tarjeta/cheque cuando paid/partial).
+- Nueva variable `bankRefMissing` flagea cuando la ref es obligatoria y está vacía.
+- Input `bank_reference`: atributo `required`, borde rojo + label ámbar cuando vacío, placeholder dinámico según método (SPEI, voucher terminal, banco+cheque).
+- Mensaje rojo de error visible debajo cuando `bankRefMissing`.
+- Banner azul informativo cuando `status='unpaid'`: explica el flujo de vale en CobranzaFlow para pagos en efectivo.
+- Cleanup handler de método: bancarios (transferencia/tarjeta/cheque) preservan `bankReference`, no-bancarios lo limpian.
+- Mensajes de éxito (paid/partial) ahora solo aparecen cuando `bankRefValid` (defensa visual contra mostrar "irá a CobranzaFlow como pagada" sin la ref).
+
+**`paymentValid` (ambos modales: `InvoiceModal` + `PreInvoiceModal`)**
+- Nueva constante `requiresBankRef = ['transferencia','tarjeta','cheque'].includes(paymentMethod)`.
+- Nueva constante `bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0)`.
+- `paymentValid` exige `bankRefValid` para paid/partial. Defensa en profundidad junto con el backend.
+
+### Sin cambios
+- Lógica de pago web Mercado Pago (`paid_via_mp`): sigue funcionando sin afectación (validación es `NEW.source != 'web'`).
+- Invoices históricas pagadas vía bridge: se conservan tal cual (sin migración de datos).
+- Schema `cash_vouchers`, `payments`, `invoices`, `orders`: sin cambios.
+- Flujo natural Lucero-genera-vale → invoice-se-paga en CobranzaFlow: sigue funcionando exactamente igual (v1.5+).
+
+### Impacto operativo para Karla
+- **Cliente paga en efectivo en mostrador:** Karla asigna folio fiscal y marca **"No pagada"**. Lucero genera vale de caja y el sistema aplica el pago automáticamente.
+- **Cliente paga por transferencia/tarjeta/cheque:** Karla **debe** capturar la referencia bancaria obligatoriamente (folio SPEI, voucher de terminal, banco+cheque). Si no la tiene, marca "No pagada" y aplica después desde CobranzaFlow.
+
+### Excepción operativa al Manual
+Este cambio **NO crea nueva excepción** al Manual de Cobranza Padilla V2 — al contrario, **RESTAURA** cumplimiento del Candado #3 que estaba siendo bypaseado. Ver `docs/EXCEPCION_OPERATIVA_v2.7.md` en repo `cobranzaflow` para documentación de la decisión.
+
+---
+
+
 ## v10.35.1 — Fixes scan post-v10.35.0 — 20-may-2026
 
 Pasada de bugs sobre `PaymentStatusPicker` y datos de `orders.bank_reference`. Acompaña a CobranzaFlow v1.9.1.
