@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.37.0 — Reordenar dashboard: Pipeline antes que MaquilaTracker — 21-may-2026
+
+Marcelo solicitó ver el dashboard de producción interna (Pipeline con sus etapas) **primero**, y el recuadro "En Maquila" (`MaquilaTracker`) **al final**. Antes el `MaquilaTracker` ocupaba la primera posición visible y dominaba el dashboard, escondiendo el Pipeline interno debajo.
+
+### Cambio
+
+`view==='pipeline'` (línea ~7184) — orden de los componentes:
+
+**ANTES:**
+1. `WeeklyReport` (admin/sec)
+2. `MaquilaTracker` (recuadro "En Maquila" 🚚 naranja)
+3. `Pipeline` (workflow interno por etapas)
+
+**AHORA:**
+1. `WeeklyReport` (admin/sec) — sin cambio
+2. `Pipeline` (workflow interno: captura → pre-prensa → producción → salida)
+3. `MaquilaTracker` (al final, como resumen suplementario por proveedor)
+
+### Sin cambios
+- Otros lugares donde se renderiza `MaquilaTracker` (vista `board` para producción/admin y para karla): mantienen su orden actual; este cambio afecta solo el Dashboard.
+- Otros componentes, lógica, schema, RPCs.
+
+---
+
+
 ## v10.36.1 — Fixes scan post-v10.36.0 — 21-may-2026
 
 Pasada de bugs sobre v10.36.0. 3 altos + 1 medio aplicados. El supuesto crítico "legacy orders un-editables" fue **falso positivo**: el trigger early-returns en UPDATEs que no cambian `invoice_folio` (líneas 21-22 de la migration), así que la validación solo dispara en la asignación inicial. Sin regresión sobre órdenes legacy.
