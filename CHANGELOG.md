@@ -5,6 +5,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.0 — Corona: Saldo a favor (anticipo abierto) — PrintFlow side — 22-may-2026
+
+Feature nueva para clientes con flujo de anticipo abierto (caso Corona). Cliente deposita un monto open-ended ($300k) → registramos saldo a favor en ledger. Cada factura de Corona consume el saldo en vez de generar CXC. La factura aparece en `cobranza.invoices` como pagada con `payment_type='saldo_a_favor'`, y NO entra al embudo de cobranza.
+
+**🚦 Toda la lógica está apagada por flag `corona_credit_bridge_enabled='false'` y NINGÚN cliente tiene `billing_mode='anticipo'` todavía** → la facturación de todos los clientes sigue 100% como hoy.
+
+### 🗄️ DB (migrations aplicadas, schema cobranza + RPCs en public)
+- Tabla `cobranza.client_credit_ledger` (DEPOSITO/CONSUMO/AJUSTE/REVERSO con `balance_despues` denormalizado, FK opcional a `cobranza.invoices`, índice único parcial anti-doble-consumo por folio). RLS espejando `cobranza.payments` (4 policies `auth_*`).
+- 5 RPCs `SECURITY DEFINER` con `pg_advisory_xact_lock` por cliente:
+  - `client_credit_balance(client_id)` lectura del último balance
+  - `credit_deposit(client_id, monto, ref, periodo, user, notas)` registra DEPOSITO
+  - `credit_consume(client_id, monto, source_invoice_id, ref, user)` permite saldo negativo + idempotente por `source_invoice_id`
+  - `credit_adjust(client_id, monto, motivo, user)` motivo ≥3 chars obligatorio
+  - `credit_reverse(client_id, source_invoice_id, user)` busca CONSUMO ligado y registra REVERSO (no-op si no existe; idempotente)
+- 3 RPCs auxiliares: `list_anticipo_clients()`, `get_client_billing_info(client_id)`, `load_credit_ledger(client_id?, limit?)`.
+- `cobranza.app_config('corona_credit_bridge_enabled', false)` — flag global.
+
+### 🔧 Bridge (inyección quirúrgica en 3 triggers)
+Las 3 funciones del bridge recibieron un bloque "RAMA CORONA" entre separadores visibles. La rama se ejecuta **solo si** `billing_mode='anticipo'` AND el flag está en `true` — si cualquiera falla, flujo idéntico al de hoy:
+- **`sync_invoice_from_orders`** (ruta individual): después del INSERT invoice → `credit_consume` + INSERT payment `payment_type='saldo_a_favor'` + UPDATE invoice `balance=0,status='pagada'` → `RETURN NEW` (skip candados v10.36 y auto-payment normal).
+- **`sync_invoice_from_oc`** (ruta OC con folio compartido): mismo patrón, **un solo CONSUMO por toda la OC** gracias a la idempotencia por `source_invoice_id`.
+- **`sync_cancellation_to_cobranza`**: captura `invoice_id` antes del UPDATE de cancelación; si el cliente es anticipo → `credit_reverse` que devuelve saldo. Idempotente.
+
+Para Corona, frontend manda `payment_status=NULL` así NO se topa con los candados v10.36 (efectivo + bank_ref) que validan al inicio del trigger.
+
+### 🎨 Frontend PrintFlow
+- **6 helpers nuevos en `db`**: `listAnticipoClients`, `getClientBillingInfo`, `creditBalance`, `creditDeposit`, `creditAdjust`, `loadCreditLedger`.
+- **`InvoiceModal` y `PreInvoiceModal`**: al montar, cargan `billing_mode` + `current_balance` del cliente. Si es anticipo → reemplazan `PaymentStatusPicker` por un **banner verde "💰 Cliente con saldo a favor"** que muestra saldo actual / factura / saldo después. Permite saldo negativo (descubierto) con warning naranja. `handleConfirm` manda `payment_status=null, method=null, amount=null, bank_reference=null` → el bridge resuelve.
+- **`CoronaModal`** nuevo (botón header `🎱` para admin/secretaria/karla): lista de clientes anticipo con saldo, vista de ledger por cliente (DEPOSITO/CONSUMO/AJUSTE/REVERSO con `balance_despues` corriente). Admin tiene `📊 Ajuste manual` que abre `CreditAdjustModal` con motivo obligatorio.
+- **Los depósitos los registra Lucero en CobranzaFlow**, no en PrintFlow (separación de responsabilidades).
+
+### ⚠️ Lo que falta para activar Corona en producción
+1. **CobranzaFlow side**: modal Lucero "Registrar depósito (saldo a favor)" → `credit_deposit`, vista de saldo a favor en Tesorería, ledger viewer. (Siguiente sprint).
+2. **E2E con flag**: probar flag off (bridge intacto) → flag on (rama Corona) → cancelación (credit_reverse).
+3. Activar Corona real: `UPDATE cobranza.clients SET billing_mode='anticipo' WHERE name LIKE '%CORONA%'`. Solo después de E2E completo.
+
+
 ## v10.42.2 — Ajustes Cuadra: precio total + rescate Karla — 22-may-2026
 
 Dos mejoras pedidas por Marcelo durante pruebas:

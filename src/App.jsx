@@ -633,6 +633,38 @@ const db = {
     if(error)throw new Error("loadStockMovements: "+error.message);
     return data||[];
   },
+  // ─── Corona: saldo a favor (v10.43.0) ───
+  async listAnticipoClients() {
+    const {data,error}=await supabase.rpc("list_anticipo_clients");
+    if(error)throw new Error("listAnticipoClients: "+error.message);
+    return data||[];
+  },
+  async getClientBillingInfo(clientId) {
+    if(!clientId)return{billing_mode:"normal",current_balance:0};
+    const {data,error}=await supabase.rpc("get_client_billing_info",{p_client_id:clientId});
+    if(error)throw new Error("getClientBillingInfo: "+error.message);
+    return Array.isArray(data)?data[0]:data;
+  },
+  async creditBalance(clientId) {
+    const {data,error}=await supabase.rpc("client_credit_balance",{p_client_id:clientId});
+    if(error)throw new Error("creditBalance: "+error.message);
+    return Number(data)||0;
+  },
+  async creditDeposit({client_id, monto, referencia=null, periodo=null, user=null, notas=null}) {
+    const {data,error}=await supabase.rpc("credit_deposit",{p_client_id:client_id,p_monto:monto,p_referencia:referencia,p_periodo:periodo,p_user:user,p_notas:notas});
+    if(error)throw new Error("creditDeposit: "+error.message);
+    return data;
+  },
+  async creditAdjust({client_id, monto, motivo, user=null}) {
+    const {data,error}=await supabase.rpc("credit_adjust",{p_client_id:client_id,p_monto:monto,p_motivo:motivo,p_user:user});
+    if(error)throw new Error("creditAdjust: "+error.message);
+    return data;
+  },
+  async loadCreditLedger(clientId=null, limit=100) {
+    const {data,error}=await supabase.rpc("load_credit_ledger",{p_client_id:clientId,p_limit:limit});
+    if(error)throw new Error("loadCreditLedger: "+error.message);
+    return data||[];
+  },
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
@@ -1736,6 +1768,154 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
   </div>;
 }
 
+// v10.43.0 — Apartado Corona (saldo a favor / anticipo abierto).
+// Lista clientes con billing_mode='anticipo', su saldo y el ledger de cada uno.
+// Karla/Admin/Secretaria pueden ver historial; los DEPOSITOS los registra Lucero en CobranzaFlow.
+function CoronaModal({onClose, user, userLogin, showToast}) {
+  useEscClose(onClose);
+  const [clients,setClients]=useState([]);
+  const [selectedId,setSelectedId]=useState(null);
+  const [ledger,setLedger]=useState([]);
+  const [loadingClients,setLoadingClients]=useState(true);
+  const [loadingLedger,setLoadingLedger]=useState(false);
+  const [adjusting,setAdjusting]=useState(false); // modal interno para AJUSTE manual (solo admin)
+
+  const reloadClients=async()=>{
+    setLoadingClients(true);
+    try{
+      const list=await db.listAnticipoClients();
+      setClients(list);
+      if(list.length>0&&!selectedId)setSelectedId(list[0].id);
+    }catch(e){console.error("[CoronaModal] clients:",e);showToast("❌ Error: "+e.message,"error")}
+    finally{setLoadingClients(false)}
+  };
+  useEffect(()=>{reloadClients()},[]);
+
+  useEffect(()=>{
+    if(!selectedId)return;
+    let alive=true;
+    setLoadingLedger(true);
+    db.loadCreditLedger(selectedId,200).then(l=>{if(alive)setLedger(l)}).catch(e=>{if(alive){console.error("[CoronaModal] ledger:",e);showToast("❌ "+e.message,"error")}}).finally(()=>{if(alive)setLoadingLedger(false)});
+    return ()=>{alive=false};
+  },[selectedId]);
+
+  const selected=clients.find(c=>c.id===selectedId);
+  const canAdjust=user==="admin";
+
+  const tipoColor=t=>t==="DEPOSITO"?"#10b981":t==="CONSUMO"?"#dc2626":t==="REVERSO"?"#0891b2":"#f59e0b";
+  const tipoIcon=t=>t==="DEPOSITO"?"💰":t==="CONSUMO"?"📤":t==="REVERSO"?"↩️":"📊";
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
+    <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} clientes con anticipo abierto</div>
+        </div>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+      </div>
+
+      {loadingClients?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
+       clients.length===0?<div style={{padding:40,textAlign:"center"}}>
+         <div style={{fontSize:36}}>💼</div>
+         <div style={{fontSize:13,fontWeight:600,marginTop:8}}>Sin clientes con saldo a favor todavía</div>
+         <div style={{fontSize:11,color:C.t2,marginTop:6,maxWidth:380,margin:"6px auto 0"}}>Para activar un cliente: <code>UPDATE cobranza.clients SET billing_mode='anticipo' WHERE id=…</code>. Los depósitos los registra Lucero en CobranzaFlow.</div>
+       </div>:
+       <div style={{display:"grid",gridTemplateColumns:"260px 1fr",flex:1,minHeight:0}}>
+         <div style={{borderRight:"0.5px solid "+C.bd,overflowY:"auto",padding:"10px 0"}}>
+           {clients.map(c=>{
+             const sel=c.id===selectedId;
+             const negative=Number(c.current_balance)<0;
+             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Poppins',sans-serif"}}>
+               <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+               <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
+               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+             </button>;
+           })}
+         </div>
+         <div style={{overflowY:"auto",padding:"14px 18px",display:"flex",flexDirection:"column"}}>
+           {selected?<>
+             <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:14}}>
+               <div>
+                 <h4 style={{fontSize:15,fontWeight:800,margin:0}}>{selected.name}</h4>
+                 <div style={{fontSize:11,color:C.t2,marginTop:2}}>{selected.rfc||"sin RFC"} · billing_mode=<b>{selected.billing_mode}</b></div>
+               </div>
+               <div style={{textAlign:"right"}}>
+                 <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div>
+                 <div style={{fontSize:20,fontWeight:800,color:Number(selected.current_balance)<0?C.dn:"#10b981"}}>${Number(selected.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+               </div>
+             </div>
+             <div style={{display:"flex",gap:8,marginBottom:12}}>
+               {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>📊 Ajuste manual</button>}
+               <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>🔄 Recargar</button>
+               <div style={{flex:1}}/>
+               <div style={{fontSize:10,color:C.t2,alignSelf:"center"}}>Los depósitos los registra Lucero en CobranzaFlow</div>
+             </div>
+             <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>Historial (últimos 200)</div>
+             {loadingLedger?<div style={{padding:20,textAlign:"center",color:C.t2}}>Cargando ledger…</div>:
+              ledger.length===0?<div style={{padding:20,textAlign:"center",color:C.t2,fontSize:12}}>Sin movimientos todavía</div>:
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {ledger.map(m=>{
+                  const color=tipoColor(m.tipo);
+                  return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color}}>{tipoIcon(m.tipo)} {m.tipo}</div>
+                      {m.referencia&&<div style={{fontSize:11,marginTop:2}}>{m.referencia}</div>}
+                      {m.notas&&<div style={{fontSize:10,color:C.t2,marginTop:2,fontStyle:"italic"}}>{m.notas}</div>}
+                      <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}{m.periodo?" · "+m.periodo:""}</div>
+                    </div>
+                    <div style={{textAlign:"right",marginLeft:10}}>
+                      <div style={{fontSize:14,fontWeight:800,color}}>{m.monto>0?"+":""}${Number(m.monto).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+                      <div style={{fontSize:9,color:C.t2}}>saldo: ${Number(m.balance_despues).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+                    </div>
+                  </div>;
+                })}
+              </div>
+             }
+           </>:<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Selecciona un cliente</div>}
+         </div>
+       </div>
+      }
+    </div>
+    {adjusting&&<CreditAdjustModal client={selected} userLogin={userLogin} onSave={async(monto,motivo)=>{
+      try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();const fresh=await db.loadCreditLedger(selected.id,200);setLedger(fresh)}
+      catch(e){showToast("❌ "+e.message,"error")}
+    }} onClose={()=>setAdjusting(false)}/>}
+  </div>;
+}
+
+function CreditAdjustModal({client, userLogin, onSave, onClose}) {
+  useEscClose(onClose);
+  const [monto,setMonto]=useState("");
+  const [motivo,setMotivo]=useState("");
+  const n=parseFloat(monto);
+  const valid=Number.isFinite(n)&&n!==0&&motivo.trim().length>=3;
+  const preview=valid?(Number(client.current_balance||0)+n):Number(client.current_balance||0);
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste manual de saldo</h3>
+      <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{client?.name}</div>
+      <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:16,fontWeight:800}}>${Number(client?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+        <div style={{fontSize:24,color:C.t2,alignSelf:"center"}}>→</div>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Después</div><div style={{fontSize:16,fontWeight:800,color:preview<0?C.dn:C.ok}}>${preview.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Monto (positivo suma, negativo resta) *</label>
+        <input style={inp} type="number" step="0.01" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="ej. +500 o -200" autoFocus/>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={lbl}>Motivo (obligatorio, mínimo 3 caracteres) *</label>
+        <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="ej. Reverso de cobro duplicado"/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!valid)return;onSave(n,motivo.trim())}} disabled={!valid} style={{...bt("#f59e0b"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>📊 Aplicar</button>
+      </div>
+    </div>
+  </div>;
+}
+
 // v10.41.0 — Chips redondos para filtrar "Mis Pendientes" con emoji + label + counter.
 // Multi-select OR: si N chips activos, muestra órdenes que matchean al menos uno.
 // Si 0 activos, muestra todos. Cuenta se calcula sobre las tasks PRE-filter para
@@ -2101,6 +2281,15 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [paymentMethod,setPaymentMethod]=useState(null);
   const [paymentAmount,setPaymentAmount]=useState("");
   const [bankReference,setBankReference]=useState(""); // v10.35.0
+  // v10.43.0 — Corona: detectar billing_mode del cliente al montar
+  const [coronaInfo,setCoronaInfo]=useState(null); // {billing_mode, current_balance} o null
+  useEffect(()=>{
+    let alive=true;
+    if(!order?.client_id){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
+    db.getClientBillingInfo(order.client_id).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[InvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
+    return ()=>{alive=false};
+  },[order?.client_id]);
+  const isCorona=coronaInfo?.billing_mode==="anticipo";
 
   // Cargar sugerencias al montar
   useEffect(()=>{
@@ -2133,7 +2322,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // Defensa en profundidad: el backend (sync_invoice_from_orders) también valida y rechaza.
   const requiresBankRef = ["transferencia", "tarjeta", "cheque"].includes(paymentMethod);
   const bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0);
-  const paymentValid = paymentStatus === "unpaid"
+  // v10.43.0 — Corona: bridge resuelve el payment automáticamente al detectar billing_mode='anticipo'
+  const paymentValid = isCorona
+    || paymentStatus === "unpaid"
     || (paymentStatus === "paid" && paymentMethod && bankRefValid)
     || (paymentStatus === "partial" && paymentMethod && amountNum > 0 && amountNum < totalDisplay && bankRefValid);
 
@@ -2155,6 +2346,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const handleConfirm=async()=>{
     setBusy(true);
     try{
+      // v10.43.0 — Corona: payment_status/method/amount/bank_reference son NULL,
+      // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
+      if(isCorona){
+        await onConfirm(type,folio,null,null,null,null);
+        return;
+      }
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
       // v10.36.1 #9 — force null si el método no es bancario, evita enviar refs orphan
       // (estado puede quedar con valor si el usuario nunca clickeó un botón de método tras escribirla).
@@ -2220,7 +2417,23 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>}
-        {type&&folioValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>}
+        {type&&folioValid&&(isCorona?
+          (()=>{
+            const newBalance=(coronaInfo.current_balance||0)-totalDisplay;
+            const negative=newBalance<0;
+            return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona)</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta factura</div><div style={{fontSize:14,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              </div>
+              {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Lucero deberá registrar el depósito faltante.</div>}
+              <div style={{fontSize:10,color:C.t2,marginTop:8}}>No se captura método ni referencia: el bridge aplica el saldo automáticamente y marca la factura como pagada.</div>
+            </div>;
+          })()
+          :<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>
+        )}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid} style={{...bt(type==="factura"?"#5856d6":(type==="remision"?"#34c759":C.t3)),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid)?0.4:1}}>Continuar →</button>
@@ -2268,6 +2481,15 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [paymentMethod,setPaymentMethod]=useState(null);
   const [paymentAmount,setPaymentAmount]=useState("");
   const [bankReference,setBankReference]=useState(""); // v10.35.0
+  // v10.43.0 — Corona: detectar billing_mode del cliente al montar
+  const [coronaInfo,setCoronaInfo]=useState(null);
+  useEffect(()=>{
+    let alive=true;
+    if(!order?.client_id){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
+    db.getClientBillingInfo(order.client_id).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[PreInvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
+    return ()=>{alive=false};
+  },[order?.client_id]);
+  const isCorona=coronaInfo?.billing_mode==="anticipo";
 
   // Validar datos completos de la orden ANTES de permitir asignar folio anticipado
   const missing=[];
@@ -2320,7 +2542,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   // Defensa en profundidad: el backend (sync_invoice_from_orders) también valida y rechaza.
   const requiresBankRef = ["transferencia", "tarjeta", "cheque"].includes(paymentMethod);
   const bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0);
-  const paymentValid = paymentStatus === "unpaid"
+  // v10.43.0 — Corona: bridge resuelve el payment al detectar billing_mode='anticipo'
+  const paymentValid = isCorona
+    || paymentStatus === "unpaid"
     || (paymentStatus === "paid" && paymentMethod && bankRefValid)
     || (paymentStatus === "partial" && paymentMethod && amountNum > 0 && amountNum < totalDisplay && bankRefValid);
 
@@ -2340,6 +2564,11 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const handleConfirm=async()=>{
     setBusy(true);
     try{
+      // v10.43.0 — Corona: bridge aplica saldo automáticamente
+      if(isCorona){
+        await onConfirm(type,folio,finalReason,null,null,null,null);
+        return;
+      }
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
       // v10.36.1 #9 — force null si el método no es bancario, evita enviar refs orphan
       // (estado puede quedar con valor si el usuario nunca clickeó un botón de método tras escribirla).
@@ -2411,7 +2640,23 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <div style={{background:"#ff950010",borderRadius:10,padding:10,marginTop:14,fontSize:11,color:"#ff9500",fontWeight:600}}>
             ⚠️ Una vez asignado el folio, esta orden NO podrá cancelarse normalmente. Solo Marcelo podrá cancelarla con motivo de Nota de Crédito.
           </div>
-          {reasonValid&&<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>}
+          {reasonValid&&(isCorona?
+            (()=>{
+              const newBalance=(coronaInfo.current_balance||0)-totalDisplay;
+              const negative=newBalance<0;
+              return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
+                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta factura</div><div style={{fontSize:14,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                </div>
+                {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo (descubierto permitido).</div>}
+                <div style={{fontSize:10,color:C.t2,marginTop:8}}>El bridge aplica el saldo automáticamente al asignar el folio.</div>
+              </div>;
+            })()
+            :<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>
+          )}
         </>}
 
         <div style={{display:"flex",gap:8,marginTop:16}}>
@@ -6633,7 +6878,7 @@ export default function PrintFlow() {
   const [taskFilters,setTaskFilters]=useState(new Set());
   // Admin: filtrar "Mis Pendientes" como si fuera otro rol (ver lo del calendario de Karla, etc.)
   const [adminRoleFilter,setAdminRoleFilter]=useState("");
-  const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);const [inventoryOpen,setInventoryOpen]=useState(false);
+  const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);const [inventoryOpen,setInventoryOpen]=useState(false);const [coronaOpen,setCoronaOpen]=useState(false);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
@@ -8144,6 +8389,7 @@ export default function PrintFlow() {
           <input style={{...inp,width:180,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="🔍 Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
           {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button onClick={()=>setInventoryOpen(true)} title="Inventario Cuadra (producción a stock + venta)" style={{...bs("#10b981"),padding:"5px 10px"}}>📦</button>}
+          {(user==="admin"||user==="secretaria"||user==="karla")&&<button onClick={()=>setCoronaOpen(true)} title="Apartado Corona (saldo a favor)" style={{...bs("#0891b2"),padding:"5px 10px"}}>🎱</button>}
           {(user==="admin"||isSec(user))&&<button onClick={()=>{const csvOrdersRaw=viewOrders;
         /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
@@ -8209,6 +8455,7 @@ export default function PrintFlow() {
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onClose={()=>{setInventoryOpen(false);reload()}}/>}
+      {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
