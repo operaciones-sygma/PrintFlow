@@ -28,6 +28,66 @@ const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 // v10.26.0 — Devuelve órdenes de una máquina ordenadas por position (0=activa, 1+=cola)
 const getMachineQueue=(orders,machineId)=>orders.filter(o=>o.current_machine===machineId&&o.machine_queue_position!=null).sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));
 // v10.27.0 — Zonas del workflow para WIPDashboard (Dinero en Proceso)
+// v10.40.0 — Secuencia lineal del workflow para "Regresar al stage anterior".
+// Maquila externa es ramificación lateral: maquila_out se considera fuera del flujo lineal;
+// si se devuelve algo desde maquila_in se trata como una orden recibida (handler especial).
+const STAGE_SEQUENCE=["draft","design","proof_printing","proof_client","ctp","placas_listas","ready","in_production","packaging","salidas","delivered"];
+
+// Áreas (stages que cada rol "controla"). Karla extendida: hasta 2 stages atrás desde salidas.
+const ROLE_AREAS={
+  preprensa:["design","proof_printing","proof_client"],
+  german:["ctp","placas_listas"],
+  produccion:["ready","in_production","packaging"],
+  karla:["salidas"],
+};
+
+// v10.40.0 — Calcular opciones de "Regresar" para un stage actual y rol.
+// Devuelve hasta 2 stages destino:
+//   1) Stage anterior inmediato (1 atrás en SEQUENCE)
+//   2) Stage justo antes del área del rol (último stage del área anterior)
+// Si coinciden, devuelve 1 sola opción.
+// Filtrado por permisos:
+//   - admin: todos los stages, incluido reversiones desde delivered
+//   - karla en salidas: permite hasta 2 stages atrás (caso especial confirmado)
+//   - otros roles: solo cuando el stage actual está EN su área
+//   - delivered → reverso solo admin
+function getRevertOptions(currentStage,role){
+  if(!currentStage)return [];
+  // Stages que nunca son revertibles desde UI
+  if(["cancelled","maq_cancelled","maq_delivered","web_pending","web_rejected"].includes(currentStage))return [];
+  // Maquila externa: ramificación lateral, no aplicar revert genérico
+  if(["maquila_out","maq_sent","maq_in_progress","maquila_in","maq_received","maq_created"].includes(currentStage))return [];
+  const idx=STAGE_SEQUENCE.indexOf(currentStage);
+  if(idx<=0)return [];
+  // delivered: solo admin
+  if(currentStage==="delivered"&&role!=="admin")return [];
+  // Verificación de área (admin pasa siempre)
+  if(role!=="admin"){
+    const area=ROLE_AREAS[role];
+    if(!area||!area.includes(currentStage))return [];
+  }
+  const prev=STAGE_SEQUENCE[idx-1];
+  let twoBefore=null;
+  if(role==="admin"){
+    // Admin: ofrecer también el anterior al anterior (2 atrás) si existe
+    twoBefore=idx>=2?STAGE_SEQUENCE[idx-2]:null;
+  }else if(role==="karla"){
+    // Karla en salidas: explícitamente 2 stages atrás (packaging y in_production)
+    twoBefore=idx>=2?STAGE_SEQUENCE[idx-2]:null;
+  }else{
+    // Otros roles: "1 proceso antes de su área" = stage anterior al primer stage del área
+    const area=ROLE_AREAS[role];
+    if(area&&area.length>0){
+      const firstAreaIdx=STAGE_SEQUENCE.indexOf(area[0]);
+      const beforeArea=firstAreaIdx>0?STAGE_SEQUENCE[firstAreaIdx-1]:null;
+      if(beforeArea&&beforeArea!==prev)twoBefore=beforeArea;
+    }
+  }
+  const opts=[prev];
+  if(twoBefore&&twoBefore!==prev)opts.push(twoBefore);
+  return opts;
+}
+
 const WORKFLOW_ZONES=[
   {id:"captura",label:"📝 Captura",color:"#aeaeb2",stages:["draft","maq_created"]},
   {id:"preprensa",label:"🎨 Pre-prensa",color:"#ec4899",stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
@@ -1337,6 +1397,64 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
       <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");onConfirm(reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar a CTP</button>
     </div>
   </div></div>;
+}
+
+// v10.40.0 — Modal unificado de "Regresar". Sustituye ReturnToCtpModal y DevolverModal.
+// Opciones: 1 o 2 stages destino. Captura razón obligatoria. Side effects por stage destino
+// se manejan en el handler revertOrder (no aquí).
+function RevertOrderModal({order,options,onConfirm,onClose}){
+  useEscClose(onClose);
+  // options = [{value: 'ctp', label: '💿 CTP'}, ...] preformateadas con label legible
+  const [target,setTarget]=useState(options?.[0]?.value||"");
+  const [reason,setReason]=useState("");
+  if(!options||options.length===0)return null;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%"}}>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar Orden</h3>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>Elige el stage destino y captura la razón. El área responsable del destino será notificada.</p>
+      <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
+        <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
+        <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
+        {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
+        <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: <strong>{SM[order?.stage]?.l||order?.stage}</strong></div>
+      </div>
+
+      {options.length===1?(
+        <div style={{marginBottom:14,padding:"10px 12px",background:"#0891b2"+"10",border:"1px solid #0891b2"+"30",borderRadius:8,fontSize:13}}>
+          La orden regresará a: <strong style={{color:"#0891b2"}}>{options[0].label}</strong>
+        </div>
+      ):(
+        <div style={{marginBottom:14}}>
+          <label style={lbl}>Stage destino *</label>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
+            {options.map(o=>(
+              <label key={o.value} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:target===o.value?"#0891b210":C.sf,border:"1.5px solid "+(target===o.value?"#0891b2":C.bd),borderRadius:8,cursor:"pointer",transition:"all .15s"}}>
+                <input type="radio" name="revert-target" value={o.value} checked={target===o.value} onChange={()=>setTarget(o.value)} style={{cursor:"pointer"}}/>
+                <span style={{fontSize:13,fontWeight:target===o.value?700:500,color:target===o.value?"#0891b2":C.tx}}>{o.label}</span>
+                {o.hint&&<span style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.hint}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{marginBottom:16}}>
+        <label style={lbl}>Razón del regreso *</label>
+        <textarea
+          style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:"#f59e0b"+"40")}}
+          value={reason}
+          onChange={e=>setReason(e.target.value)}
+          placeholder="Explica por qué se regresa (ej. placa rayada, archivo cambió, falta empaque, defecto detectado...)"
+          autoFocus
+        />
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");if(!target)return alert("Elige el stage destino");onConfirm(target,reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar Orden</button>
+      </div>
+    </div>
+  </div>;
 }
 
 function CancelOrderModal({order,onConfirm,onClose}) {
@@ -3417,11 +3535,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
       {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Recoger Placas → Lista</button>}
-      {/* v10.38.0 — Regresar a CTP desde placas_listas o ready (Gerardo: caso Hotel Hotsson) */}
-      {(o.stage==="placas_listas"||o.stage==="ready")&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"return_to_ctp")} style={bt("#0891b2")}>↩️ Regresar a CTP</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
-      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"devolver_design")} style={bt(C.dn)}>↩️ Devolver a Diseño</button>}</>}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button></>}
+      {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
+          Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
+      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt("#0891b2")}>↩️ Regresar</button>}
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
@@ -6113,8 +6232,11 @@ export default function PrintFlow() {
   const [folioOCModal,setFolioOCModal]=useState(null); // 📄 v10.11.0 Sub-fase B — Modal asignar folio a OC: {oc, ocOrders, preAssigned}
   const [webRejectModal,setWebRejectModal]=useState(null);
   const [plateModal,setPlateModal]=useState(null);
-  // v10.38.0 — Regresar orden a CTP desde 'ready' o 'placas_listas' (Gerardo): captura razón
+  // v10.38.0 — Regresar orden a CTP (legacy, reemplazado por revertModal en v10.40.0; conservado por compatibilidad)
   const [returnToCtpModal,setReturnToCtpModal]=useState(null);
+  // v10.40.0 — Modal genérico de "Regresar" (sustituye returnToCtpModal y devolverModal)
+  // Estructura del state: { order, options:[{value, label, hint}] }
+  const [revertModal,setRevertModal]=useState(null);
   // v10.39.0 — Agregar producto existente a OC: lista órdenes del mismo cliente sin folio
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
@@ -6786,6 +6908,74 @@ export default function PrintFlow() {
     }finally{setActionLoading(null)}
   },[orders,user,showToast,reload]);
 
+  // v10.40.0 — Regresar genérico a cualquier stage previo válido (sustituye returnToCtp y devolver_design)
+  // Side effects según el stage destino:
+  //   - target='ctp': invalida plates como v10.38.0
+  //   - cualquier reverso saliendo de in_production/packaging hacia atrás: limpia current_machine
+  //   - notif al rol responsable del stage destino + admin
+  const revertOrder=useCallback(async(id,targetStage,reason)=>{
+    const o=orders.find(x=>x.id===id);
+    if(!o){showToast("❌ Orden no encontrada","error");return}
+    if(!reason||!reason.trim()){showToast("❌ Captura la razón","warning");return}
+    if(!targetStage){showToast("❌ Sin stage destino","warning");return}
+    // Re-validar opción permitida (defensa en profundidad)
+    const opts=getRevertOptions(o.stage,user);
+    if(!opts.includes(targetStage)){showToast("❌ Stage destino no permitido para tu rol","error");return}
+    setActionLoading(id);
+    try{
+      const now=new Date().toISOString();
+      const fromLabel=SM[o.stage]?.l||o.stage;
+      const toLabel=SM[targetStage]?.l||targetStage;
+      const tlMsg="↩️ Regresada de "+fromLabel+" → "+toLabel+" · Razón: "+reason.trim();
+      // 1. Side effect: si destino es ctp, invalidar plates (preserva historial)
+      if(targetStage==="ctp"){
+        const {error:plErr}=await supabase.from("plate_log")
+          .update({voided_at:now,voided_reason:reason.trim(),voided_by:user})
+          .eq("order_id",id).is("voided_at",null);
+        if(plErr)console.warn("[revertOrder] plates void warn:",plErr.message);
+      }
+      // 2. UPDATE orden: stage destino, limpiar current_machine. Si veníamos de 'delivered',
+      // limpiar también delivered_at.
+      const updates={stage:targetStage,current_machine:null};
+      if(o.stage==="delivered")updates.delivered_at=null;
+      const {error:uErr}=await supabase.from("orders").update(updates).eq("id",id);
+      if(uErr)throw uErr;
+      // 3. Timeline (try/catch independiente — si falla no rompemos la operación principal)
+      try{await db.addTimeline(id,tlMsg,user,"#dc2626")}catch(tlErr){console.warn("[revertOrder] timeline warn:",tlErr.message)}
+      // 4. Notificar al rol responsable del stage destino + visibilidad
+      try{
+        // Mapeo stage→rol responsable
+        const stageOwner={
+          draft:"secretaria",
+          design:"preprensa",
+          proof_printing:"german",
+          proof_client:"secretaria",
+          ctp:"german",
+          placas_listas:"produccion",
+          ready:"produccion",
+          in_production:"produccion",
+          packaging:"produccion",
+          salidas:"karla",
+        }[targetStage];
+        const notifMsg="↩️ Orden regresó de "+fromLabel+" → "+toLabel+" — "+(o.client||"")+" · "+(o.product_type||"")+" · Razón: "+reason.trim();
+        if(stageOwner&&user!==stageOwner)await db.notify(stageOwner,id,"order_edit",notifMsg,null,user);
+        // Visibilidad cross-area: si destino es ctp/placas_listas/design, avisar Preprensa+Secretaria
+        if(["ctp","placas_listas","design","proof_printing"].includes(targetStage)){
+          if(user!=="preprensa"&&stageOwner!=="preprensa")await db.addNotification("preprensa",id,"order_edit",notifMsg,null,user);
+          if(user!=="secretaria"&&stageOwner!=="secretaria")await db.addNotification("secretaria",id,"order_edit",notifMsg,null,user);
+        }
+        if(user!=="admin")await db.addNotification("admin",id,"order_edit",notifMsg,null,user);
+      }catch(nErr){console.warn("[revertOrder] notify warn:",nErr.message)}
+      // 5. Optimistic local update
+      setOrders(p=>p.map(x=>x.id===id?{...x,stage:targetStage,current_machine:null,delivered_at:o.stage==="delivered"?null:x.delivered_at,timeline:addTL(x,tlMsg,{to:targetStage})}:x));
+      showToast("↩️ "+(o.client||"")+" regresada a "+toLabel,"success");
+    }catch(e){
+      console.error("[revertOrder]",e);
+      showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");
+      reload();
+    }finally{setActionLoading(null)}
+  },[orders,user,showToast,reload]);
+
   const approveProof=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);
     // 🔒 v10.12.0.4 Phase 3 — Hardstop: admin/sec/vendedor/preprensa/produccion (vendedor solo propias)
@@ -7148,13 +7338,31 @@ export default function PrintFlow() {
       if(wo&&!canExecuteAction("waste",wo,user,userLogin)){showToast(actionDeniedToast("waste",wo,user,userLogin),"error");return}
       setWasteModal(id);
     }
-    // v10.38.0 — Regresar orden a CTP (desde ready o placas_listas; produccion/admin)
+    // v10.40.0 — Regresar genérico (sustituye return_to_ctp y devolver_design)
+    // Calcula opciones de stage destino según rol y stage actual; abre modal si hay opciones.
+    if(action==="revert"){
+      const ro=orders.find(x=>x.id===id);
+      if(!ro)return;
+      const opts=getRevertOptions(ro.stage,user);
+      if(opts.length===0){
+        showToast("❌ No puedes regresar esta orden desde su stage actual ("+ro.stage+") con tu rol ("+user+")","error");
+        return;
+      }
+      const optsFormatted=opts.map(s=>({
+        value:s,
+        label:(SM[s]?.l||s),
+        hint:STAGE_SEQUENCE.indexOf(s)===STAGE_SEQUENCE.indexOf(ro.stage)-1?"(stage anterior)":"(antes de tu área)",
+      }));
+      setRevertModal({order:ro,options:optsFormatted});
+    }
+    // v10.38.0 legacy — return_to_ctp queda como pass-through al flujo nuevo (compat)
     if(action==="return_to_ctp"){
       const rco=orders.find(x=>x.id===id);
       if(!rco)return;
-      if(user!=="produccion"&&user!=="admin"){showToast("❌ Solo Producción o Admin pueden regresar órdenes a CTP","error");return}
-      if(!["ready","placas_listas"].includes(rco.stage)){showToast("❌ Solo se puede regresar a CTP desde Listas o Placas Listas (stage actual: "+rco.stage+")","error");return}
-      setReturnToCtpModal(rco);
+      const opts=getRevertOptions(rco.stage,user);
+      if(opts.length===0){showToast("❌ No autorizado","error");return}
+      const optsFormatted=opts.map(s=>({value:s,label:SM[s]?.l||s}));
+      setRevertModal({order:rco,options:optsFormatted});
     }
     if(action==="comment")addComment(id,payload);
     if(action==="quick_note"){
@@ -7495,8 +7703,10 @@ export default function PrintFlow() {
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
-      {/* v10.38.0 — Modal regresar orden a CTP (Gerardo) */}
+      {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
+      {/* v10.40.0 — Modal genérico Regresar (sustituye ReturnToCtp + Devolver Diseño) */}
+      {revertModal&&<RevertOrderModal order={revertModal.order} options={revertModal.options} onConfirm={async(targetStage,reason)=>{await revertOrder(revertModal.order.id,targetStage,reason);setRevertModal(null)}} onClose={()=>setRevertModal(null)}/>}
       {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}

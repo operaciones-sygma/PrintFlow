@@ -5,6 +5,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.40.0 — Botón "Regresar" unificado (sustituye CTP + Devolver Diseño) — 22-may-2026
+
+Marcelo solicitó generalizar el concepto de "Regresar a CTP" (v10.38.0) a cualquier área. Cada encargado puede regresar la orden a: (1) el stage anterior inmediato, o (2) el stage justo antes de su área. Karla en `salidas` puede ir hasta 2 stages atrás. Admin puede revertir desde `delivered`.
+
+### Cambios
+
+**Helpers nuevos (top-level)**
+- `STAGE_SEQUENCE`: array lineal del workflow (draft → ... → delivered).
+- `ROLE_AREAS`: stages que cada rol controla.
+  - preprensa: design, proof_printing, proof_client
+  - german: ctp, placas_listas
+  - produccion: ready, in_production, packaging
+  - karla: salidas
+- `getRevertOptions(currentStage, role)`: devuelve hasta 2 stages destino válidos. Filtra por área, excluye stages terminales y rama maquila externa.
+
+**Componente nuevo `RevertOrderModal`**
+- 1 o 2 opciones (radio buttons + hint "stage anterior" / "antes de tu área").
+- Si solo 1 opción → muestra label directo.
+- Razón obligatoria (textarea, auto-focus).
+- Color cyan `#0891b2` consistente con la versión específica anterior.
+
+**Handler `revertOrder(id, targetStage, reason)`**
+- Re-valida opción permitida (defensa en profundidad).
+- Side effects por destino:
+  - `targetStage='ctp'`: invalida `plate_log` (preserva historial con `voided_*`, como v10.38).
+  - Limpia `current_machine` siempre (orden vuelve a flujo controlado).
+  - Si veníamos de `delivered`: limpia `delivered_at`.
+- Notif al rol responsable del stage destino + Preprensa/Secretaria si destino ∈ {ctp, placas_listas, design, proof_printing} + admin (skip self).
+- Timeline + try/catch independientes para notif/timeline (no rompen la operación principal si fallan).
+- Optimistic local update.
+
+**UI en `OCard`**
+- Nuevo botón **"↩️ Regresar"** (color cyan) aparece cuando `getRevertOptions(stage, role).length > 0`. Reemplaza los botones específicos:
+  - ❌ Removido: `↩️ Regresar a CTP` (era v10.38.0, solo en placas_listas/ready)
+  - ❌ Removido: `↩️ Devolver a Diseño` (era de in_production)
+- Cada rol ve el botón solo en sus stages elegibles. Admin lo ve en todos los stages no-terminales.
+- handleAction case `revert` formatea las opciones y abre `RevertOrderModal`.
+
+**Compatibilidad**
+- `handleAction('return_to_ctp')` se mantiene como pass-through al nuevo flujo (`revert`) — no rompe llamadas antiguas.
+- `DevolverModal` y `returnToCtpModal`/`ReturnToCtpModal` quedan dormant (sin botones que los inicien) — no se removieron por seguridad; serán limpiados en una pasada futura si confirmamos cero uso.
+
+### Casos de uso resueltos
+- Gerardo (produccion) en `ready` o `placas_listas`: regresa a CTP para re-imprimir placas (Caso Hotel Hotsson).
+- Noemí (preprensa) en `proof_client`: regresa a `proof_printing` o `design` (rechazo cliente o cambio de archivo).
+- Karla (salidas): regresa a `packaging` o `in_production` (defecto descubierto al entregar).
+- Admin: puede revertir desde `delivered` (caso de error de entrega, similar al revert manual de P-3516/D-5824).
+
+### Sin cambios
+- Schema, RPCs, triggers.
+- Flujos de approve/reject (approveProof, devolver_design action) coexisten para el caso especial proof_client → design vía secretaria/vendedor.
+- Lógica de maquila externa (ramificación lateral, fuera del flujo lineal del revert).
+
+---
+
+
 ## v10.39.2 — Fixes scan post-v10.38/v10.39 — 22-may-2026
 
 Pasada de bugs sobre v10.38/v10.39. 3 altos + 1 medio aplicados. 0 críticos. Adicionalmente, ventana de notificaciones de celular extendida de 09:00 a 18:59 (lun-vie) vía migration en `is_business_hours()`.
