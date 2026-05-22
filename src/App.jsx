@@ -3013,11 +3013,14 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
     const ocClientName = (oc?.client||"").trim().toLowerCase();
     if (!ocClientId && !ocClientName) return [];
     let list = (orders||[]).filter(o => {
-      // Match por UUID (preferido cuando ambos lo tienen)
-      const matchById = ocClientId && o.client_id && o.client_id === ocClientId;
-      // Match por nombre normalizado (fallback para órdenes sin client_id)
-      const matchByName = ocClientName && (o.client||"").trim().toLowerCase() === ocClientName;
-      if (!matchById && !matchByName) return false;
+      // v10.39.2 #2 — ID-strict cuando ambos tienen client_id; nombre solo como fallback
+      // para órdenes legacy sin client_id. Evita mezclar entidades fiscales distintas
+      // con razón social parecida (ej. dos sucursales "Hotel Hotsson" con UUIDs distintos).
+      const bothHaveId = ocClientId && o.client_id;
+      const match = bothHaveId
+        ? o.client_id === ocClientId
+        : (ocClientName && (o.client||"").trim().toLowerCase() === ocClientName);
+      if (!match) return false;
       return !o.invoice_folio && !TERMINAL.includes(o.stage) && o.purchase_order_id !== oc.id;
     });
     if (search.trim()) {
@@ -6519,17 +6522,24 @@ export default function PrintFlow() {
   },[user,userLogin,showToast]);
 
   // 📦 v10.39.0 — Confirmar agregación múltiple: itera moveOrderToOC por cada orderId
+  // v10.39.2 #4 — gate de permisos por orden (mismo que el moveOrderToOC individual)
   const confirmAddExisting=useCallback(async(oc,orderIds)=>{
     if(!orderIds||orderIds.length===0)return;
+    if(!canExecuteAction("moveOrderToOC",null,user,userLogin)){
+      showToast(actionDeniedToast("moveOrderToOC",null,user,userLogin),"error");
+      return;
+    }
     let ok=0,fail=0;
     for(const oid of orderIds){
+      // v10.39.2 #1 — capturar fromId ANTES del RPC (sino realtime puede actualizar
+      // el orders state antes del find → notif mostraba "De: OC-NUEVO → A: OC-NUEVO")
+      const o=orders.find(x=>x.id===oid);
+      const fromId=o?.purchase_order_id;
       try{
         await db.moveOrderToOC(oid,oc.id,userLogin||user);
         ok++;
         // Notif al trío + admin (consistente con moveOrderToOC individual)
         try{
-          const o=orders.find(x=>x.id===oid);
-          const fromId=o?.purchase_order_id;
           const userName=userDisplayName(user);
           const folioStr=o?.production_number?" ("+o.production_number+")":"";
           const notifMsg="📦 "+userName+" agregó orden de "+(o?.client||"")+folioStr+"\n\nDe: "+(fromId||"sin OC")+"\nA: "+oc.id+" (vía Agregar Producto Existente)";
@@ -6759,8 +6769,13 @@ export default function PrintFlow() {
       if(uErr)throw uErr;
       // 3. Timeline
       await db.addTimeline(id,tlMsg,user,"#0891b2");
-      // 4. Notificación in-app a Germán
-      await db.notify("german",id,"order_edit","↩️ Orden regresó a CTP — "+(o.client||"")+" · "+(o.product_type||"")+" · Razón: "+reason.trim(),null,user);
+      // 4. Notificación in-app a Germán + visibilidad a Preprensa/Secretaria
+      // v10.39.2 #3 — Preprensa puede tener archivos relevantes del retrabajo; Secretaria
+      // debe enterarse del re-trabajo para coordinación. Admin copia ya la hace db.notify.
+      const notifMsg="↩️ Orden regresó a CTP — "+(o.client||"")+" · "+(o.product_type||"")+" · Razón: "+reason.trim();
+      await db.notify("german",id,"order_edit",notifMsg,null,user);
+      if(user!=="preprensa")await db.addNotification("preprensa",id,"order_edit",notifMsg,null,user);
+      if(user!=="secretaria")await db.addNotification("secretaria",id,"order_edit",notifMsg,null,user);
       // 5. Optimistic local update
       setOrders(p=>p.map(x=>x.id===id?{...x,stage:"ctp",current_machine:null,timeline:addTL(x,tlMsg,{to:"ctp"})}:x));
       showToast("↩️ "+(o.client||"")+" regresada a CTP. Germán notificado.","success");

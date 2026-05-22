@@ -5,6 +5,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.39.2 — Fixes scan post-v10.38/v10.39 — 22-may-2026
+
+Pasada de bugs sobre v10.38/v10.39. 3 altos + 1 medio aplicados. 0 críticos. Adicionalmente, ventana de notificaciones de celular extendida de 09:00 a 18:59 (lun-vie) vía migration en `is_business_hours()`.
+
+### 🟠 Altos
+- **#2 Matching híbrido podía mezclar clientes homónimos.** v10.39.1 hizo el fallback por nombre como un OR no-estricto, lo que permitía que orden con `client_id=DEF` y nombre "Hotel Hotsson" matcheara con OC `client_id=ABC` también llamada "Hotel Hotsson" (dos sucursales fiscalmente distintas). **Fix:** ID-strict cuando ambos lo tienen; nombre solo como fallback cuando la orden NO tiene `client_id`. Evita conflación entre entidades fiscales.
+- **#1 `confirmAddExisting` calculaba `fromId` DESPUÉS del RPC.** En redes rápidas, realtime actualizaba `orders` entre el `moveOrderToOC` y el `find` → notif al trío mostraba "De: OC-NUEVA → A: OC-NUEVA". **Fix:** capturar `o` y `fromId` ANTES del RPC dentro del loop.
+- **#3 `returnToCtp` notificaba solo a Germán.** Preprensa puede tener archivos relevantes del retrabajo, Secretaria coordina; ambos quedaban sin enterarse. **Fix:** notificar también a `preprensa` y `secretaria` (skip si el usuario es uno de ellos).
+
+### 🟡 Medio
+- **#4 `confirmAddExisting` sin gate de permiso por orden.** El RPC `moveOrderToOC` individual valida `canExecuteAction("moveOrderToOC")` (admin/secretaria/karla); el flujo batch no lo hacía → vendedor podría disparar movimientos via el modal aunque no esté en `allowed`. **Fix:** mismo gate al inicio del loop. Backend ya validaría también, pero ahora frontend reporta correctamente y muestra `actionDeniedToast`.
+
+### Backend (migration `is_business_hours_9am_to_7pm`)
+- Actualizada función `public.is_business_hours()` para que la ventana activa sea **lun-vie 09:00 a 18:59** (antes era lun-vie con bordes en vie≥20 + lun<9). Notificaciones in-app y Telegram (via cadena BEFORE → AFTER triggers en `public.notifications`) se silencian fuera de esa ventana.
+- Equipo ahora no recibirá notifs de celular en su casa después de las 7pm.
+
+### Diferido a backlog
+- #5 (excluir `draft` de TERMINAL en candidates)
+- #6 (usar o eliminar `ocById` map)
+- #7 (consolidar notifs por batch — N×4 hoy)
+- #9, #12, #13 (edge cases UX)
+
+### Sin cambios
+- Schema `orders`/`plate_log`/`purchase_orders`/`notifications`.
+- RPC `move_order_to_oc`.
+- Lógica de Telegram (sigue siendo fire-and-forget vía n8n).
+
+---
+
+
 ## v10.39.1 — Hotfix: matching híbrido en Agregar Producto Existente — 22-may-2026
 
 Marcelo reportó: el modal "Agregar Producto Existente" en OC-0048 (BEATRIZ) decía "Sin órdenes elegibles" pero sí existían 2 órdenes activas del mismo cliente (P-3515 y P-3516).
