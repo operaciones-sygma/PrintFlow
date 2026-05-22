@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.39.1 — Hotfix: matching híbrido en Agregar Producto Existente — 22-may-2026
+
+Marcelo reportó: el modal "Agregar Producto Existente" en OC-0048 (BEATRIZ) decía "Sin órdenes elegibles" pero sí existían 2 órdenes activas del mismo cliente (P-3515 y P-3516).
+
+**Causa:** mi filtro v10.39.0 hacía match estricto por `client_id` (UUID). Pero muchas órdenes legacy tienen `client_id = NULL` y solo guardan el campo text `client`. La OC sí tiene `client_id` (porque se crearon con el flujo moderno), así que las órdenes legacy nunca matcheaban.
+
+Ejemplo del bug:
+- OC-0048: `client="BEATRIZ"`, `client_id=741c9fde-...` ✓
+- P-3515: `client="BEATRIZ "` (con espacio), `client_id=null` ❌ no matcheaba
+- P-3516: `client="BEATRIZ"`, `client_id=null` ❌ no matcheaba
+
+**Fix:** matching híbrido en `AddExistingProductsModal.candidates`:
+1. **Preferido:** match por `client_id` cuando ambos (orden y OC) lo tienen.
+2. **Fallback:** match por nombre normalizado (`client.trim().toLowerCase()`) cuando alguno no tiene client_id.
+
+También relajado el guard inicial en `addExistingToOC` para aceptar OCs sin `client_id` siempre que tengan `client` (el modal hace fallback por nombre).
+
+### Sin cambios
+- Resto del feature v10.39.0 funciona igual.
+- Lógica de `moveOrderToOC` (RPC backend).
+- Permisos, otros filtros (sin folio, no terminal, no ya en esta OC).
+
+---
+
+
 ## v10.39.0 — Agregar Producto Existente a OC — 22-may-2026
 
 Solicitado por Marcelo: en la ventana de detalle de una OC, permitir agregar órdenes de producción YA EXISTENTES del mismo cliente (no solo crear órdenes nuevas). Caso de uso: Karla quiere juntar 2 órdenes de producción en una sola OC para asignarles un `shared_invoice_folio`.

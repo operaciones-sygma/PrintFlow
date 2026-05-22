@@ -3005,16 +3005,21 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
   // Stages terminales que se excluyen (orden ya entregada, cancelada o pre-web)
   const TERMINAL = ["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected"];
 
-  // Filtro: mismo client_id, sin invoice_folio, no terminal, no ya en esta OC
+  // v10.39.1 fix — matching híbrido: client_id si ambos lo tienen, o client name normalizado.
+  // Razón: muchas órdenes legacy tienen client_id=null pero sí tienen el campo text `client`.
+  // Antes el filtro estricto por UUID dejaba esas órdenes fuera, aunque obviamente son del mismo cliente.
   const candidates = useMemo(() => {
     const ocClientId = oc?.client_id;
-    if (!ocClientId) return [];
-    let list = (orders||[]).filter(o =>
-      o.client_id === ocClientId &&
-      !o.invoice_folio &&
-      !TERMINAL.includes(o.stage) &&
-      o.purchase_order_id !== oc.id
-    );
+    const ocClientName = (oc?.client||"").trim().toLowerCase();
+    if (!ocClientId && !ocClientName) return [];
+    let list = (orders||[]).filter(o => {
+      // Match por UUID (preferido cuando ambos lo tienen)
+      const matchById = ocClientId && o.client_id && o.client_id === ocClientId;
+      // Match por nombre normalizado (fallback para órdenes sin client_id)
+      const matchByName = ocClientName && (o.client||"").trim().toLowerCase() === ocClientName;
+      if (!matchById && !matchByName) return false;
+      return !o.invoice_folio && !TERMINAL.includes(o.stage) && o.purchase_order_id !== oc.id;
+    });
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(o =>
@@ -3024,7 +3029,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
       );
     }
     return list.sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
-  }, [orders, oc?.client_id, oc?.id, search]);
+  }, [orders, oc?.client_id, oc?.client, oc?.id, search]);
 
   const toggle = (id) => {
     setSelectedIds(prev => {
@@ -6504,8 +6509,10 @@ export default function PrintFlow() {
       showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":"❌ Solo el vendedor asignado a esta OC puede agregar productos","error");
       return;
     }
-    if(!oc?.client_id){
-      showToast("❌ Esta OC no tiene client_id; no se puede filtrar por cliente. Edítala primero.","error");
+    // v10.39.1 — relajado: permitir si tiene client_id O client name. El modal hace
+    // matching híbrido (UUID preciso o nombre normalizado como fallback para órdenes legacy).
+    if(!oc?.client_id && !oc?.client){
+      showToast("❌ Esta OC no tiene cliente asignado; edítala primero.","error");
       return;
     }
     setAddExistingModal(oc);
