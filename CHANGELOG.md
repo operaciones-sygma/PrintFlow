@@ -5,6 +5,17 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.42.2 — Ajustes Cuadra: precio total + rescate Karla — 22-may-2026
+
+Dos mejoras pedidas por Marcelo durante pruebas:
+
+### #1 — Toggle precio en venta desde stock
+`SellFromStockModal` ahora tiene un toggle "💰 Monto total" / "📐 Precio unitario". Default = monto total (la captura natural para Karla y Lupita: "se vendieron 500 pzas por $1,250"). El otro modo se mantiene para quien prefiera capturar unitario. El total y el unitario se calculan en vivo cruzados, y se envía siempre `unit_price` resuelto al RPC `sell_from_stock` (sin cambio de contrato backend).
+
+### #2 — Rescate desde Salidas
+Si Gerardo manda por accidente una orden de Cuadra a Salidas (en lugar de Cargar a Stock), Karla (y admin) ven el botón **`📦 Cargar a Stock (corrección)`** en la card. Solo aparece para órdenes con `stock_role='production'` y `stock_loaded=false` — invisible para órdenes normales. El handler `loadStock` ya funcionaba desde cualquier stage no-final, solo faltaba exponer el botón.
+
+
 ## v10.42.1 — Hotfix: dropdown cliente stock vacío — 22-may-2026
 
 Bug encontrado en pruebas: `ProductFormModal` y `InventoryModal` filtraban el array `clients` por `billing_mode==='stock'`, pero ese array se construye de `orders` (no de `cobranza.clients`) y no incluye `id` ni `billing_mode` — el dropdown siempre salía vacío.

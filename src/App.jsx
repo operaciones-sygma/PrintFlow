@@ -1673,23 +1673,49 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
 function SellFromStockModal({product, userLogin, onSell, onClose}) {
   useEscClose(onClose);
   const [qty,setQty]=useState("");
+  // v10.42.2 — Toggle precio: "total" (default, captura monto total de la venta) o "unit" (precio unitario)
+  const [priceMode,setPriceMode]=useState("total");
   const [unitPrice,setUnitPrice]=useState(product.unit_price?String(product.unit_price):"");
+  const [totalAmount,setTotalAmount]=useState("");
   const [priority,setPriority]=useState("normal");
   const [dueDate,setDueDate]=useState("");
   const [notes,setNotes]=useState("");
   const n=parseInt(qty,10);
-  const valid=Number.isFinite(n)&&n>0&&n<=product.stock_actual;
-  const total=valid&&unitPrice?(n*parseFloat(unitPrice)).toFixed(2):"0.00";
+  const validQty=Number.isFinite(n)&&n>0&&n<=product.stock_actual;
+  // Resuelve los dos valores según el modo activo
+  const computedUnit=priceMode==="unit"
+    ?(unitPrice?parseFloat(unitPrice):NaN)
+    :(validQty&&totalAmount?parseFloat(totalAmount)/n:NaN);
+  const computedTotal=priceMode==="total"
+    ?(totalAmount?parseFloat(totalAmount):NaN)
+    :(validQty&&unitPrice?n*parseFloat(unitPrice):NaN);
+  const showUnit=Number.isFinite(computedUnit)?computedUnit.toFixed(2):"—";
+  const showTotal=Number.isFinite(computedTotal)?computedTotal.toFixed(2):"0.00";
+  const valid=validQty;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🛒 Vender desde Stock</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:"#10b981",fontSize:14}}>{product.stock_actual}</b></div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>Cantidad *</label><input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/></div>
-        <div><label style={lbl}>Precio unitario</label><input style={inp} type="number" step="0.01" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="0.00"/></div>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Cantidad *</label>
+        <input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/>
       </div>
-      <div style={{background:"#16a34a10",borderRadius:8,padding:8,marginBottom:10,textAlign:"right",fontSize:13,fontWeight:700,color:"#16a34a"}}>Total: ${total}</div>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Modo de precio</label>
+        <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,marginBottom:8}}>
+          {[{id:"total",l:"💰 Monto total"},{id:"unit",l:"📐 Precio unitario"}].map(m=>
+            <button key={m.id} onClick={()=>setPriceMode(m.id)} style={{flex:1,padding:"8px 12px",border:"none",background:priceMode===m.id?"#16a34a":"transparent",color:priceMode===m.id?"#fff":C.t2,cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Poppins',sans-serif"}}>{m.l}</button>
+          )}
+        </div>
+        {priceMode==="total"
+          ?<><input style={inp} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00"/>
+            <div style={{fontSize:10,color:C.t2,marginTop:4}}>Precio unitario calculado: <b>${showUnit}</b>{validQty&&totalAmount?" · "+n+" pzas × $"+showUnit:""}</div></>
+          :<><input style={inp} type="number" step="0.01" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="0.00"/>
+            <div style={{fontSize:10,color:C.t2,marginTop:4}}>Total calculado: <b>${showTotal}</b>{validQty&&unitPrice?" · "+n+" pzas × $"+unitPrice:""}</div></>
+        }
+      </div>
+      <div style={{background:"#16a34a10",borderRadius:8,padding:8,marginBottom:10,textAlign:"right",fontSize:13,fontWeight:700,color:"#16a34a"}}>Total venta: ${showTotal}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><label style={lbl}>Prioridad</label>
           <select style={inp} value={priority} onChange={e=>setPriority(e.target.value)}>
@@ -1704,7 +1730,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:unitPrice?parseFloat(unitPrice):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
+        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:Number.isFinite(computedUnit)?Number(computedUnit.toFixed(2)):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
       </div>
     </div>
   </div>;
@@ -3921,6 +3947,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
       {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="No entrega al cliente; ingresa al inventario interno">📦 Cargar a Stock</button>}</>}
+      {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
+      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Esta orden iba a inventario, no a entrega al cliente. Click para corregir.">📦 Cargar a Stock (corrección)</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
