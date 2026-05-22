@@ -5,6 +5,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.40.1 — Fix: ConfirmModal queda visible durante side effects largos — 22-may-2026
+
+Marcelo reportó: al borrar una orden, el popup "Sí, borrar / No, cancelar" se mantenía visible aunque ya había clickeado "Sí" — daba la sensación de que el botón no respondía.
+
+**Causa:** 5 call sites de `setConfirmModal` ponían `setConfirmModal(null)` **después** de los `await`. Para el delete de orden son 8 DELETEs secuenciales (~2-3s) — el modal quedaba pegado todo ese tiempo aunque el click ya se había procesado.
+
+**Fix:** `setConfirmModal(null)` se llama **primero** en el `onConfirm`, antes de cualquier `await`. Side effects continúan en background; el modal cierra instantáneamente al click. Optimistic update local ya maneja la UI.
+
+### Call sites corregidos
+1. `deleteOrder` (App handleAction) — 8 DELETEs en cadena, era el más visible.
+2. `revert` admin handler (línea 7538 area) — await doAdv + notifs.
+3. `notify` resp en OperationalHealthView.
+4. `cancelOrphanOC` en OperationalHealthView.
+5. `markAllNotifsRead` en OperationalHealthView.
+
+### Sin cambios
+- Lógica de cada operación intacta — solo se reordenó el `setConfirmModal(null)` al inicio del callback.
+- `ConfirmModal` component no se tocó (sigue genérico).
+
+---
+
+
 ## v10.40.0 — Botón "Regresar" unificado (sustituye CTP + Devolver Diseño) — 22-may-2026
 
 Marcelo solicitó generalizar el concepto de "Regresar a CTP" (v10.38.0) a cualquier área. Cada encargado puede regresar la orden a: (1) el stage anterior inmediato, o (2) el stage justo antes de su área. Karla en `salidas` puede ir hasta 2 stages atrás. Admin puede revertir desde `delivered`.

@@ -5403,6 +5403,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       confirmLabel: "Enviar notificación",
       confirmColor: "#007aff",
       onConfirm: async () => {
+        // v10.40.1 — cerrar modal inmediatamente, side effects en background
+        setConfirmModal(null);
         try {
           // v10.28.2 — usar db.notify para que addNotification también deje copy en audit admin
           await db.notify(resp.role, order.id, "admin_attention", msg, null, "admin");
@@ -5410,7 +5412,6 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
         } catch (e) {
           showToast("❌ No se pudo notificar: " + (e?.message || "error"), "error");
         }
-        setConfirmModal(null);
       }
     });
   };
@@ -5422,6 +5423,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       confirmLabel: "Sí, cancelar OC",
       confirmColor: "#ff3b30",
       onConfirm: async () => {
+        // v10.40.1 — cerrar modal inmediatamente, side effects en background
+        setConfirmModal(null);
         try {
           const { error } = await supabase.from("purchase_orders").update({
             status: "cancelled",
@@ -5435,7 +5438,6 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
         } catch (e) {
           showToast("❌ No se pudo cancelar OC: " + (e?.message || "error"), "error");
         }
-        setConfirmModal(null);
       }
     });
   };
@@ -5447,6 +5449,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       confirmLabel: "Sí, marcar todas",
       confirmColor: "#5856d6",
       onConfirm: async () => {
+        // v10.40.1 — cerrar modal inmediatamente, side effects en background
+        setConfirmModal(null);
         try {
           const { error } = await supabase.from("notifications")
             .update({ read: true })
@@ -5459,7 +5463,6 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
         } catch (e) {
           showToast("❌ No se pudieron marcar: " + (e?.message || "error"), "error");
         }
-        setConfirmModal(null);
       }
     });
   };
@@ -7128,6 +7131,9 @@ export default function PrintFlow() {
       return;
     }
     setConfirmModal({title:"🗑️ Borrar Orden",message:"¿Borrar \""+o.client+" — "+(o.product_type||"")+"\"?\n\nSe eliminará permanentemente con todo su historial. Esta acción NO se puede deshacer.",confirmLabel:"Sí, borrar",confirmColor:C.dn,onConfirm:async()=>{
+      // v10.40.1 — cerrar el modal INMEDIATAMENTE al click; los DELETEs continúan en background.
+      // Antes el modal quedaba visible ~2-3s mientras corrían 8 DELETE secuenciales — parecía colgado.
+      setConfirmModal(null);
       setOrders(p=>p.filter(x=>x.id!==id));
       try{
       // Delete file from storage if exists
@@ -7143,7 +7149,6 @@ export default function PrintFlow() {
       await supabase.from("orders").delete().eq("id",id);
       showToast("🗑️ Orden borrada","error");
       }catch(e){console.error("[deleteOrder] Error:",e);showToast("❌ No se pudo borrar: "+(e?.message||"error desconocido"),"error");reload()}
-      setConfirmModal(null);
     }});
   },[orders,showToast,reload]);
 
@@ -7535,12 +7540,15 @@ export default function PrintFlow() {
       }
       // Fallback to linear flow if timeline parsing fails
       if(!prevId){const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const ci=flow.findIndex(s=>s.id===o.stage);if(ci>0)prevId=flow[ci-1].id}
-      if(prevId){setConfirmModal({title:"↩️ Regresar",message:"¿A \""+SM[prevId]?.l+"\"?",confirmLabel:"Sí",confirmColor:C.wn,onConfirm:async()=>{try{await doAdv(id,prevId);
+      if(prevId){setConfirmModal({title:"↩️ Regresar",message:"¿A \""+SM[prevId]?.l+"\"?",confirmLabel:"Sí",confirmColor:C.wn,onConfirm:async()=>{
+        // v10.40.1 — cerrar modal inmediatamente al click, side effects en background
+        setConfirmModal(null);
+        try{await doAdv(id,prevId);
         // Notify the responsible role about the revert
         const targetWho=SM[prevId]?.who;const revertMsg="↩️ Admin regresó orden de "+(o?.client||"")+" — "+(o?.product_type||"")+" a "+SM[prevId]?.l;
         if(targetWho==="both"){await db.addNotification("produccion",id,"order_edit",revertMsg,null,"admin");await db.addNotification("preprensa",id,"order_edit",revertMsg,null,"admin")}
         else if(targetWho&&targetWho!=="admin")await db.notify(targetWho,id,"order_edit",revertMsg,null,"admin");
-        }catch(e){console.error("[revert] Error:",e);showToast("❌ No se pudo revertir: "+(e?.message||"error desconocido"),"error")}setConfirmModal(null)}})}}
+        }catch(e){console.error("[revert] Error:",e);showToast("❌ No se pudo revertir: "+(e?.message||"error desconocido"),"error")}}})}}
     if(action==="cancel_order"){const o=orders.find(x=>x.id===id);if(!o)return;
       // 🆕 v10.7.0 — Bloquear cancelación si la orden tiene folio fiscal asignado
       if(o.invoice_folio){
