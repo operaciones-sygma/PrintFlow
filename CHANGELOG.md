@@ -5,6 +5,65 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.41.0 — Filtros chip en "Mis Pendientes" + admin "ver como otro rol" — 22-may-2026
+
+Marcelo solicitó: chips redondos para filtrar Mis Pendientes; para admin, también poder filtrar viendo los pendientes de otro rol.
+
+### Cambios
+
+**Helpers nuevos top-level**
+- `getTaskFilters(role)`: configs de filtros por rol. Cada filter tiene `{key, emoji, label, color, predicate}`.
+  - **Base (todos los roles):**
+    - 🔥 Urgentes — `priority === 'Urgente'`
+    - ⏰ Retrasos — `due_date` pasado
+    - 🐢 Estancadas — `getStale(o)` (reutiliza lógica existente de >24h sin avance)
+    - 💰 Sin precio — `!price || Number(price)===0`
+  - **Karla (sobre la base):**
+    - 📥 Maquila recibida (`stage='maq_received'`)
+    - 📋 OC pendiente folio (`purchase_order_id` y `!invoice_folio` en `salidas`)
+    - 🔒 Pre-asignados (`invoice_pre_assigned`)
+  - **Producción (sobre la base):**
+    - 🖱️ Sin máquina (`stage='ready'` y `!current_machine`)
+    - 📦 Empaque pendiente (`stage='packaging'`)
+  - **Preprensa (sobre la base):**
+    - 👤 Esperando cliente (`stage='proof_client'`)
+  - **Admin (sobre la base):**
+    - 🚚 Maquila externa (stages de cadena maquila)
+
+**Componente `TaskFilterChips`**
+- Chips redondos con `emoji + label + (count)`. Count en vivo derivado de `tasks` (pre-filtros), siempre visible.
+- Active state: borde y fondo del color del filtro.
+- Multi-select OR: si N chips activos, muestra órdenes que matchean al menos uno. Si 0, muestra todo.
+- Hover/title tooltip con el conteo.
+- Opacity reducido si count=0 e inactivo.
+
+**Admin: "Ver como otro rol"**
+- Barra adicional para admin: 7 botones-pill (Admin/Karla/Gerardo/Noémí/Germán/Lupita/Vendedor).
+- Al seleccionar un rol, `myTasks` se recomputa con los stages de ese rol y los filtros chip cambian a los específicos de ese rol.
+- Al cambiar de rol se limpian los chip filters activos (evita confusión).
+
+**State y derived**
+- `taskFilters: Set<string>` — keys activas.
+- `adminRoleFilter: string` — rol "vista como" para admin.
+- `taskFilterConfigs` (useMemo): configs según `effectiveRole`.
+- `filteredMyTasks` (useMemo): `myTasks` filtrado con OR de predicates.
+
+**UI en `view==='tasks'`**
+- Subtítulo muestra count filtrado + total + indicador de filtro/búsqueda/rol activo.
+- Barra admin "Ver como rol" (solo admin).
+- Chips de filtro.
+- Lista de tasks ahora usa `filteredMyTasks` en lugar de `myTasks`.
+- `staleTasks` ahora se intersecta con `filteredMyTasks` (no se muestran estancadas que el filtro chip excluyó).
+- Empty state mejorado: si hay chips activos y 0 resultados, muestra "Sin resultados con esos filtros" + botón "✕ Limpiar filtros".
+
+### Sin cambios
+- Schema, RPCs, lógica de `myTasks` base por rol.
+- `staleTasks` cálculo (solo se intersecta para display).
+- Nav bar contador `Pendientes (N)` muestra `myTasks.length` (respeta admin role filter pero no los chips).
+
+---
+
+
 ## v10.40.2 — Polish post-scan v10.40 — 22-may-2026
 
 Polish menor sobre v10.40.0. Solo 1 alto educativo + 1 medio cosmético. v10.40.0/v10.40.1 verificados SOUND.

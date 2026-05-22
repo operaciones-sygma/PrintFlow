@@ -88,6 +88,34 @@ function getRevertOptions(currentStage,role){
   return opts;
 }
 
+// v10.41.0 — Filtros tipo chip para "Mis Pendientes" con counts en vivo.
+// `predicate(o, ctx)` recibe la orden y un ctx con utilidades comunes (hoy, etc.).
+// Para admin, los filtros base están disponibles + filtro por rol (separado).
+function getTaskFilters(role){
+  const base=[
+    {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="Urgente"},
+    {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(o.due_date+"T23:59:59");return due<new Date()}},
+    {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>getStale(o)},
+    {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0},
+  ];
+  if(role==="karla")return[...base,
+    {key:"maq_received",emoji:"📥",label:"Maquila recibida",color:"#32ade6",predicate:o=>o.stage==="maq_received"},
+    {key:"oc_pending",emoji:"📋",label:"OC pendiente folio",color:"#8b5cf6",predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
+    {key:"pre_assigned",emoji:"🔒",label:"Pre-asignados",color:"#06b6d4",predicate:o=>!!o.invoice_pre_assigned},
+  ];
+  if(role==="produccion")return[...base,
+    {key:"no_machine",emoji:"🖱️",label:"Sin máquina",color:"#007aff",predicate:o=>o.stage==="ready"&&!o.current_machine},
+    {key:"packaging",emoji:"📦",label:"Empaque pendiente",color:"#af52de",predicate:o=>o.stage==="packaging"},
+  ];
+  if(role==="preprensa")return[...base,
+    {key:"waiting_client",emoji:"👤",label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+  ];
+  if(role==="admin")return[...base,
+    {key:"maquila_ext",emoji:"🚚",label:"Maquila externa",color:"#e67e22",predicate:o=>["maquila_out","maq_sent","maq_in_progress","maquila_in"].includes(o.stage)},
+  ];
+  return base;
+}
+
 const WORKFLOW_ZONES=[
   {id:"captura",label:"📝 Captura",color:"#aeaeb2",stages:["draft","maq_created"]},
   {id:"preprensa",label:"🎨 Pre-prensa",color:"#ec4899",stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
@@ -1397,6 +1425,43 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
       <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");onConfirm(reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar a CTP</button>
     </div>
   </div></div>;
+}
+
+// v10.41.0 — Chips redondos para filtrar "Mis Pendientes" con emoji + label + counter.
+// Multi-select OR: si N chips activos, muestra órdenes que matchean al menos uno.
+// Si 0 activos, muestra todos. Cuenta se calcula sobre las tasks PRE-filter para
+// que el usuario siempre vea cuántas hay potencialmente en cada categoría.
+function TaskFilterChips({filters,tasks,activeFilters,onToggle}){
+  if(!filters||filters.length===0)return null;
+  return <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+    {filters.map(f=>{
+      const count=tasks.filter(o=>{try{return f.predicate(o)}catch{return false}}).length;
+      const isActive=activeFilters.has(f.key);
+      return <button key={f.key} onClick={()=>onToggle(f.key)}
+        style={{
+          display:"inline-flex",alignItems:"center",gap:6,
+          padding:"6px 14px",borderRadius:999,
+          border:"1.5px solid "+(isActive?f.color:C.bd),
+          background:isActive?f.color+"15":C.bg,
+          color:isActive?f.color:C.t2,
+          fontSize:12,fontWeight:isActive?700:500,
+          cursor:"pointer",fontFamily:"'Poppins',sans-serif",
+          transition:"all .15s ease",
+          opacity:count===0&&!isActive?.5:1,
+        }}
+        title={count===0?"Sin órdenes en esta categoría":f.label+" — "+count+" orden"+(count!==1?"es":"")}>
+        <span style={{fontSize:14}}>{f.emoji}</span>
+        <span>{f.label}</span>
+        <span style={{
+          background:isActive?f.color:C.bd+"60",
+          color:isActive?"#fff":C.t2,
+          padding:"1px 7px",borderRadius:999,
+          fontSize:10,fontWeight:700,
+          minWidth:18,textAlign:"center",
+        }}>{count}</span>
+      </button>;
+    })}
+  </div>;
 }
 
 // v10.40.0 — Modal unificado de "Regresar". Sustituye ReturnToCtpModal y DevolverModal.
@@ -6225,6 +6290,10 @@ export default function PrintFlow() {
   const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
   const [purchaseOrders,setPurchaseOrders]=useState([]); // 🛒 v10.10.0
   const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
+  // v10.41.0 — Filtros chip en "Mis Pendientes". Set de keys activos (multi-select OR).
+  const [taskFilters,setTaskFilters]=useState(new Set());
+  // Admin: filtrar "Mis Pendientes" como si fuera otro rol (ver lo del calendario de Karla, etc.)
+  const [adminRoleFilter,setAdminRoleFilter]=useState("");
   const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
@@ -7597,7 +7666,30 @@ export default function PrintFlow() {
   // Global search filter applied on top of viewOrders
   const filteredOrders=useMemo(()=>search?viewOrders.filter(searchFilter):viewOrders,[viewOrders,search,searchFilter]);
 
-  const myTasks=useMemo(()=>{const srt=l=>l.sort(prioSort);const isFinal=s=>s.includes("delivered")||s.includes("cancelled")||s==="web_pending"||s==="web_rejected";if(user==="admin")return srt(filteredOrders.filter(o=>!isFinal(o.stage)));if(user==="produccion")return srt(filteredOrders.filter(o=>["draft","ready","in_production","maquila_out","maquila_in","packaging","placas_listas"].includes(o.stage)));if(user==="preprensa")return srt(filteredOrders.filter(o=>["draft","design","proof_client"].includes(o.stage)));if(user==="german")return srt(filteredOrders.filter(o=>["proof_printing","ctp"].includes(o.stage)));if(user==="karla")return srt(filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)));if(isSec(user))return srt(filteredOrders.filter(o=>["draft","proof_client","maq_created","maq_sent","maq_in_progress"].includes(o.stage)));return []},[filteredOrders,user]);
+  const myTasks=useMemo(()=>{const srt=l=>l.sort(prioSort);const isFinal=s=>s.includes("delivered")||s.includes("cancelled")||s==="web_pending"||s==="web_rejected";
+    // v10.41.0 — Admin puede filtrar como otro rol. effectiveRole determina los stages relevantes.
+    const effectiveRole=(user==="admin"&&adminRoleFilter)?adminRoleFilter:user;
+    if(effectiveRole==="admin")return srt(filteredOrders.filter(o=>!isFinal(o.stage)));
+    if(effectiveRole==="produccion")return srt(filteredOrders.filter(o=>["draft","ready","in_production","maquila_out","maquila_in","packaging","placas_listas"].includes(o.stage)));
+    if(effectiveRole==="preprensa")return srt(filteredOrders.filter(o=>["draft","design","proof_client"].includes(o.stage)));
+    if(effectiveRole==="german")return srt(filteredOrders.filter(o=>["proof_printing","ctp"].includes(o.stage)));
+    if(effectiveRole==="karla")return srt(filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)));
+    if(isSec(effectiveRole)||effectiveRole==="secretaria"||effectiveRole==="vendedor")return srt(filteredOrders.filter(o=>["draft","proof_client","maq_created","maq_sent","maq_in_progress"].includes(o.stage)));
+    return [];
+  },[filteredOrders,user,adminRoleFilter]);
+
+  // v10.41.0 — Aplicar chip filters (OR semantics) sobre myTasks.
+  // Si activeFilters vacío → todas. Si N marcados → orden matchea si pasa AL MENOS uno.
+  const taskFilterConfigs=useMemo(()=>{
+    const effectiveRole=(user==="admin"&&adminRoleFilter)?adminRoleFilter:user;
+    return getTaskFilters(effectiveRole);
+  },[user,adminRoleFilter]);
+  const filteredMyTasks=useMemo(()=>{
+    if(taskFilters.size===0)return myTasks;
+    const activePredicates=taskFilterConfigs.filter(f=>taskFilters.has(f.key)).map(f=>f.predicate);
+    if(activePredicates.length===0)return myTasks;
+    return myTasks.filter(o=>activePredicates.some(p=>{try{return p(o)}catch{return false}}));
+  },[myTasks,taskFilters,taskFilterConfigs]);
 
   // Stale alerts use unfiltered viewOrders so they always show regardless of search
   const staleTasks=useMemo(()=>{const isFinal=s=>s.includes("delivered")||s.includes("cancelled")||s==="web_pending"||s==="web_rejected";let pool=filteredOrders;if(user==="produccion")pool=pool.filter(o=>["draft","ready","in_production","maquila_in","packaging","placas_listas"].includes(o.stage));else if(user==="preprensa")pool=pool.filter(o=>["draft","design"].includes(o.stage));else if(user==="german")pool=pool.filter(o=>["proof_printing","ctp"].includes(o.stage));else if(user==="karla")pool=pool.filter(o=>["salidas","maq_received"].includes(o.stage));else if(isSec(user))pool=pool.filter(o=>["draft","maq_created"].includes(o.stage));else if(user==="admin")pool=pool.filter(o=>!isFinal(o.stage));return pool.filter(o=>getStale(o)).sort((a,b)=>hoursAgo(b.timeline?.length>0?b.timeline[b.timeline.length-1].date:b.created_at)-hoursAgo(a.timeline?.length>0?a.timeline[a.timeline.length-1].date:a.created_at))},[filteredOrders,user]);
@@ -7684,20 +7776,37 @@ export default function PrintFlow() {
 
       <div style={{maxWidth:1300,margin:"0 auto",padding:"14px 16px"}}>
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?" · 🔍 \""+search+"\"":""}</p>{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
-        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{myTasks.length} pendiente{myTasks.length!==1?"s":""}{search?" · 🔍 \""+search+"\"":""}</p>
+        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{filteredMyTasks.length} pendiente{filteredMyTasks.length!==1?"s":""}{taskFilters.size>0?" · filtrado de "+myTasks.length:""}{search?" · 🔍 \""+search+"\"":""}{user==="admin"&&adminRoleFilter?" · 👤 vista de "+rL[adminRoleFilter]:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color="#007aff"/>}
           {user==="preprensa"&&<FirstTimeHint role={user} hintKey="tasks-prep" text="Aquí verás órdenes para validar, diseñar y aprobar pruebas. Prepara archivos en Diseño, súbelos y envía a Prueba de Color para Germán." color="#ec4899"/>}
           {user==="german"&&<FirstTimeHint role={user} hintKey="tasks-german" text="Aquí verás pruebas para imprimir y órdenes para CTP. Imprime en el Epson, y usa tu Tablero para mover órdenes por CTP y Procesadora." color="#0891b2"/>}
           {isSec(user)&&<FirstTimeHint role={user} hintKey="tasks-sec" text="Aquí verás órdenes pendientes de aprobación del cliente y maquilas en proceso. Cuando una orden vaya a Salidas, Karla la cerrará con folio fiscal." color="#5856d6"/>}
           {user==="karla"&&<FirstTimeHint role={user} hintKey="tasks-karla" text="Aquí verás órdenes listas para entrega (Salidas y Maquila Recibida). Click '📄 Asignar Folio y Entregar' para elegir Factura (D-) o Remisión (R-) y cerrar la orden." color="#a855f7"/>}
-          {(()=>{const staleIds=new Set(staleTasks.map(o=>o.id));const normalTasks=myTasks.filter(o=>!staleIds.has(o.id));return <>{staleTasks.length>0&&<div style={{background:C.dn+"08",border:"1.5px solid "+C.dn+"25",borderRadius:14,padding:14,marginBottom:14}}>
+          {/* v10.41.0 — Admin: dropdown para "ver pendientes como otro rol" */}
+          {user==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:C.t2,fontWeight:600}}>👤 Ver como rol:</span>
+            {[{v:"",l:"Admin (todo)"},{v:"karla",l:"🟣 Karla"},{v:"produccion",l:"🔵 Gerardo"},{v:"preprensa",l:"🩷 Noémí"},{v:"german",l:"🩵 Germán"},{v:"secretaria",l:"🟪 Lupita"},{v:"vendedor",l:"🟠 Vendedor"}].map(opt=>(
+              <button key={opt.v} onClick={()=>{setAdminRoleFilter(opt.v);setTaskFilters(new Set())}}
+                style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                {opt.l}
+              </button>
+            ))}
+          </div>}
+          {/* v10.41.0 — Chips redondos de filtro */}
+          <TaskFilterChips
+            filters={taskFilterConfigs}
+            tasks={myTasks}
+            activeFilters={taskFilters}
+            onToggle={key=>setTaskFilters(prev=>{const next=new Set(prev);if(next.has(key))next.delete(key);else next.add(key);return next})}
+          />
+          {(()=>{const staleIds=new Set(staleTasks.map(o=>o.id));const normalTasks=filteredMyTasks.filter(o=>!staleIds.has(o.id));const visibleStale=staleTasks.filter(o=>filteredMyTasks.some(ft=>ft.id===o.id));return <>{visibleStale.length>0&&<div style={{background:C.dn+"08",border:"1.5px solid "+C.dn+"25",borderRadius:14,padding:14,marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-              <div style={{background:C.dn,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{staleTasks.length}</div>
+              <div style={{background:C.dn,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{visibleStale.length}</div>
               <div><div style={{fontSize:13,fontWeight:700,color:C.dn}}>⚠️ Órdenes Estancadas</div><div style={{fontSize:10,color:C.t2}}>Llevan más de 24h sin avance — requieren tu atención</div></div>
             </div>
-            {staleTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
+            {visibleStale.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
           </div>}
-          {normalTasks.length===0&&staleTasks.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>✅</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{search?"Sin resultados":"¡Sin pendientes!"}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención"}</div></div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
+          {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{fontSize:48}}>{taskFilters.size>0?"🔍":"✅"}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":"¡Sin pendientes!")}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":"Las órdenes aparecerán aquí cuando necesiten tu atención")}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}>✕ Limpiar filtros</button>}</div>:normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
