@@ -5,6 +5,13 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.42.1 — Hotfix: dropdown cliente stock vacío — 22-may-2026
+
+Bug encontrado en pruebas: `ProductFormModal` y `InventoryModal` filtraban el array `clients` por `billing_mode==='stock'`, pero ese array se construye de `orders` (no de `cobranza.clients`) y no incluye `id` ni `billing_mode` — el dropdown siempre salía vacío.
+
+**Fix:** nuevo RPC `public.list_stock_clients()` que devuelve `(id, name, rfc, billing_mode)` de `cobranza.clients` con `billing_mode='stock'`. Los dos modales ahora cargan la lista directamente vía RPC en vez de filtrar el array local. Patrón: schema `cobranza` no está expuesto a PostgREST, todo se hace vía RPC SECURITY DEFINER (consistente con `search_clients_typeahead`, `get_last_contact_for_client`, etc).
+
+
 ## v10.42.0 — Cuadra: Producción a Stock + Inventario interno — 22-may-2026
 
 Feature nueva para clientes con flujo de inventario (caso Cuadra). Cliente fabrica a stock y luego vende desde stock; solo lo vendido va a CXC. Las órdenes de producción-a-stock terminan en stage terminal `stocked` que **NO** setea `delivered_at` → no contamina los KPIs de revenue.

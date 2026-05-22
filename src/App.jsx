@@ -1477,6 +1477,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
   useEscClose(onClose);
   const [products,setProducts]=useState([]);
   const [movements,setMovements]=useState([]);
+  const [stockClients,setStockClients]=useState([]); // v10.42.1
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState("products"); // products | movements
   const [editing,setEditing]=useState(null); // {mode:"new"|"adjust"|"sell", product?}
@@ -1485,14 +1486,19 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
   const reload=async()=>{
     setLoading(true);
     try{
-      const [prods,movs]=await Promise.all([db.loadClientProducts(),db.loadStockMovements(null,80)]);
-      setProducts(prods);setMovements(movs);
+      // v10.42.1 — RPC list_stock_clients evita exponer schema cobranza vía PostgREST
+      const [prods,movs,scsRes]=await Promise.all([
+        db.loadClientProducts(),
+        db.loadStockMovements(null,80),
+        supabase.rpc("list_stock_clients")
+      ]);
+      setProducts(prods);setMovements(movs);setStockClients(scsRes.data||[]);
     }catch(e){console.error("[InventoryModal] load:",e);showToast("❌ Error cargando inventario: "+e.message,"error")}
     finally{setLoading(false)}
   };
   useEffect(()=>{reload()},[]);
 
-  const clientName=cid=>{const c=clients.find(x=>x.id===cid);return c?.name||"—"};
+  const clientName=cid=>{const c=stockClients.find(x=>x.id===cid);return c?.name||"—"};
   const filtered=products.filter(p=>{
     if(!filter.trim())return true;
     const q=filter.toLowerCase();
@@ -1587,18 +1593,33 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
   const [name,setName]=useState("");
   const [sku,setSku]=useState("");
   const [unitPrice,setUnitPrice]=useState("");
-  const stockClients=(clients||[]).filter(c=>c.billing_mode==="stock");
+  // v10.42.1 — `clients` del App se deriva de las órdenes (no incluye id ni billing_mode).
+  // Cargamos los clientes stock vía RPC list_stock_clients (schema cobranza no expuesto a PostgREST).
+  const [stockClients,setStockClients]=useState([]);
+  const [loadingClients,setLoadingClients]=useState(true);
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        const {data,error}=await supabase.rpc("list_stock_clients");
+        if(!alive)return;
+        if(error){console.warn("[ProductFormModal] stock clients:",error.message);setStockClients([])}
+        else setStockClients(data||[]);
+      }finally{if(alive)setLoadingClients(false)}
+    })();
+    return ()=>{alive=false};
+  },[]);
   const canSave=clientId&&name.trim();
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 14px"}}>➕ Nuevo Producto al Catálogo</h3>
       <div style={{marginBottom:10}}>
         <label style={lbl}>Cliente (stock) *</label>
-        <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)}>
-          <option value="">Selecciona cliente…</option>
+        <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
+          <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes stock —":"Selecciona cliente…")}</option>
           {stockClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        {stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock todavía</div>}
+        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock. Márcalo desde DB: UPDATE cobranza.clients SET billing_mode='stock' WHERE id=...</div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><label style={lbl}>Nombre *</label><input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="ej. Tarjeta Presentación A"/></div>
