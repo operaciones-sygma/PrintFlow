@@ -5,6 +5,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.42.0 — Cuadra: Producción a Stock + Inventario interno — 22-may-2026
+
+Feature nueva para clientes con flujo de inventario (caso Cuadra). Cliente fabrica a stock y luego vende desde stock; solo lo vendido va a CXC. Las órdenes de producción-a-stock terminan en stage terminal `stocked` que **NO** setea `delivered_at` → no contamina los KPIs de revenue.
+
+### 🗄️ DB (migrations aplicadas)
+- `cobranza.clients.billing_mode` — text NOT NULL DEFAULT 'normal' CHECK ('normal'|'stock'|'anticipo'). Discriminador del flujo por cliente. No se marca ningún cliente real todavía — la activación de Cuadra requiere validar UI + carga inicial vs conteo Gerardo.
+- `public.client_products` — catálogo por cliente: sku, name, specs jsonb, unit_price, `stock_actual` denormalizado. RLS `allow_all` (espejea `orders`/`purchase_orders`).
+- `public.stock_movements` — bitácora inmutable: kind in `('PRODUCED','SOLD','ADJUST')`, qty signed, `balance_after`, FK a `orders` y `client_products`. Índice único parcial `(order_id, kind)` previene doble carga.
+- `orders` columnas nuevas: `stock_role` (`'production'|'sale'|null`), `client_product_id` → FK, `stock_loaded` boolean.
+- RPC `record_stock_movement(p_client_product_id, p_kind, p_qty, p_order_id?, p_notes?, p_created_by?)` — `pg_advisory_xact_lock` por producto + valida saldo ≥ 0 + actualiza `stock_actual` denormalizado en la misma TX.
+- RPC `sell_from_stock(...)` — crea orden truncada en `salidas` con `stock_role='sale'`, `stock_loaded=true`, llama internamente a `record_stock_movement(SOLD)` (atómico).
+- `search_clients_typeahead` extendido para devolver `billing_mode` (sin tocar el resto del comportamiento).
+
+### 🎨 Frontend
+- **Botón header `📦`** (admin/secretaria/produccion/karla) abre `InventoryModal` con dos pestañas: Productos (lista del catálogo + acciones Ajustar / Vender) y Movimientos (bitácora últimos 80).
+- **Stage nuevo `stocked`** en `ALL_S` y `SM`; excluido de `getStale`, retorna 100% en `getProgress`, incluido en `finalStages`.
+- **OrderForm**: cuando el cliente seleccionado tiene `billing_mode='stock'`, aparece panel verde "📦 Cliente con Inventario" con toggle "Producción a stock" + selector de producto del catálogo. Al seleccionar cliente, `selC` propaga `billing_mode`.
+- **OCard en stage `packaging`** con `stock_role='production'`: botón `📦 Cargar a Stock` (handler `loadStock`) que dispara movimiento `PRODUCED` + transiciona a `stocked` + marca `stock_loaded=true`. No setea `delivered_at`.
+- **Badges en OCard**: `📦 a Stock` (producción) y `🛒 desde Stock` (venta).
+- **Modales**: `ProductFormModal` (alta de SKU), `AdjustStockModal` (ADJUST positivo/negativo con preview de saldo), `SellFromStockModal` (venta desde catálogo con cantidad validada vs `stock_actual`, precio, prioridad, due_date).
+- **Guard de cantidad**: `update()` rechaza cambiar `quantity` cuando `stock_loaded=true` (desincronizaría el saldo). Toast contextual.
+- **`duplicate()`** resetea `stock_role`, `client_product_id`, `stock_loaded` para no arrastrar a duplicados.
+- **`saveOrder` dbCols whitelist** ampliada con las 3 columnas nuevas.
+
+### 🔒 Roles
+- `load_stock`: admin, secretaria, produccion, karla.
+- `sell_from_stock`: admin, secretaria, vendedor (ownerBound), karla.
+
+### ⚙️ Operación (siguiente paso para Marcelo)
+1. Validar UI con cliente de prueba (no Cuadra).
+2. Cargar catálogo real de Cuadra (productos) y ADJUST inicial vs conteo de Gerardo.
+3. **Cuando todo cuadre**: marcar `cobranza.clients.billing_mode='stock'` para Cuadra. Hasta entonces el panel "Cliente con Inventario" no aparece para ellos.
+
+
 ## v10.41.1 — Fixes scan post-v10.41.0 — 22-may-2026
 
 Pasada de bugs sobre v10.41.0. 3 altos + 2 medios + 1 cosmético aplicados. v10.41.0 verificado sound en general; estos son polish + 1 bug funcional real (#2).

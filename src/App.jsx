@@ -23,7 +23,7 @@ const AGENTS=["Manuel","Genaro","Marcelo"];
 const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Barniz Máquina","Doblez","Intercalado","Grapado","Perforado","Plastificado","Suajado","Botado","Forma Suelta","Blocks","Engomado Superior","Engomado Lateral"];
 const INT_FLOW=[{id:"draft",l:"📝 Validar",c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",c:"#ec4899",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",c:"#8b5cf6",who:"german"},{id:"proof_client",l:"👤 Aprobación",c:"#f59e0b",who:"preprensa"},{id:"ctp",l:"💿 CTP",c:"#0891b2",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",c:"#06b6d4",who:"produccion"},{id:"ready",l:"✅ Lista",c:"#34c759",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",c:"#ff9500",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",c:"#e67e22",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",c:"#32ade6",who:"produccion"},{id:"packaging",l:"📦 Empaque",c:"#af52de",who:"produccion"},{id:"salidas",l:"📤 Salidas",c:"#16a34a",who:"karla"},{id:"delivered",l:"✅ Entregada",c:"#34c759",who:null}];
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",c:"#32ade6",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",c:"#34c759",who:null}];
-const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",c:"#ff3b30",who:null}];
+const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",c:"#ff3b30",who:null},{id:"stocked",l:"📦 En Stock",c:"#10b981",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 // v10.26.0 — Devuelve órdenes de una máquina ordenadas por position (0=activa, 1+=cola)
 const getMachineQueue=(orders,machineId)=>orders.filter(o=>o.current_machine===machineId&&o.machine_queue_position!=null).sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));
@@ -232,6 +232,9 @@ const ACTION_ROLES = {
   approve_proof:    { allowed:["admin","secretaria","vendedor","preprensa","produccion"], ownerBound:["vendedor"] },
   web_request_file: { allowed:["admin","secretaria","preprensa"], ownerBound:[] },
   edit_specs:       { allowed:["admin","preprensa","produccion"], ownerBound:[] },
+  // ─── Cuadra: producción a stock + venta desde stock (v10.42.0) ───
+  load_stock:       { allowed:["admin","secretaria","produccion","karla"], ownerBound:[] },
+  sell_from_stock:  { allowed:["admin","secretaria","vendedor","karla"], ownerBound:["vendedor"] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
@@ -293,7 +296,7 @@ const db = {
     if (orders.length === 0) return [];
     // Only load related data (timeline, comments, etc) for target orders
     // When relatedOnly=true, skip delivered/cancelled to speed up initial load
-    const finalStages=["delivered","maq_delivered","cancelled","maq_cancelled"];
+    const finalStages=["delivered","maq_delivered","cancelled","maq_cancelled","stocked"];
     const target=relatedOnly?orders.filter(o=>!finalStages.includes(o.stage)):orders;
     const ids = target.map(o => o.id);
     const idSet = new Set(ids);
@@ -318,7 +321,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -592,12 +595,50 @@ const db = {
     // Copy to admin
     if(byUser!=="admin") await this.addNotification("admin", orderId, type, message, reason, byUser);
   },
+  // ─── Cuadra: stock helpers (v10.42.0) ───
+  async loadClientProducts(clientId) {
+    let q=supabase.from("client_products").select("*").eq("active",true).order("name");
+    if(clientId)q=q.eq("client_id",clientId);
+    const {data,error}=await q;
+    if(error)throw new Error("loadClientProducts: "+error.message);
+    return data||[];
+  },
+  async saveClientProduct(p) {
+    const {error}=await supabase.from("client_products").upsert(p);
+    if(error)throw new Error("saveClientProduct: "+error.message);
+  },
+  async recordStockMovement({client_product_id, kind, qty, order_id=null, notes=null, created_by=null}) {
+    const {data,error}=await supabase.rpc("record_stock_movement",{p_client_product_id:client_product_id,p_kind:kind,p_qty:qty,p_order_id:order_id,p_notes:notes,p_created_by:created_by});
+    if(error)throw new Error("recordStockMovement: "+error.message);
+    return data;
+  },
+  async sellFromStock(args) {
+    const {data,error}=await supabase.rpc("sell_from_stock",{
+      p_client_product_id:args.client_product_id,
+      p_qty:args.qty,
+      p_unit_price:args.unit_price??null,
+      p_priority:args.priority||"normal",
+      p_due_date:args.due_date||null,
+      p_agent:args.agent||null,
+      p_notes:args.notes||null,
+      p_created_by:args.created_by||null
+    });
+    if(error)throw new Error("sellFromStock: "+error.message);
+    return data;
+  },
+  async loadStockMovements(productId=null, limit=50) {
+    let q=supabase.from("stock_movements").select("*").order("created_at",{ascending:false}).limit(limit);
+    if(productId)q=q.eq("client_product_id",productId);
+    const {data,error}=await q;
+    if(error)throw new Error("loadStockMovements: "+error.message);
+    return data||[];
+  },
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
 const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]??1)-(p[b.priority]??1)};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||WAIT_STAGES.includes(o.stage))return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
 
 // v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
 const STAGE_RESPONSIBLE = {
@@ -660,7 +701,7 @@ function getOrphanOCs(purchaseOrders, orders) {
     !orders.some(o => o.purchase_order_id === po.id && !["cancelled","maq_cancelled"].includes(o.stage))
   );
 }
-const getProgress=o=>{const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const idx=flow.findIndex(s=>s.id===o.stage);return{cur:idx+1,tot:flow.length,pct:Math.round(((idx+1)/flow.length)*100)}};
+const getProgress=o=>{if(o.stage==="stocked"){const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;return{cur:flow.length,tot:flow.length,pct:100}}const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const idx=flow.findIndex(s=>s.id===o.stage);return{cur:idx+1,tot:flow.length,pct:Math.round(((idx+1)/flow.length)*100)}};
 
 // Calcula fecha de entrega para pedidos web según reglas de negocio.
 // Reglas: Digital=4d hábiles · Offset=8d · Acabados (cualquiera) +3d
@@ -1427,6 +1468,225 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
       <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");onConfirm(reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar a CTP</button>
     </div>
   </div></div>;
+}
+
+// v10.42.0 — Inventario Cuadra (producción a stock + venta desde stock).
+// Lista client_products con stock_actual, permite ADJUST (semilla / corrección),
+// venta directa desde stock (RPC sell_from_stock) y agregar producto nuevo al catálogo.
+function InventoryModal({onClose, user, userLogin, clients, showToast}) {
+  useEscClose(onClose);
+  const [products,setProducts]=useState([]);
+  const [movements,setMovements]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [tab,setTab]=useState("products"); // products | movements
+  const [editing,setEditing]=useState(null); // {mode:"new"|"adjust"|"sell", product?}
+  const [filter,setFilter]=useState("");
+
+  const reload=async()=>{
+    setLoading(true);
+    try{
+      const [prods,movs]=await Promise.all([db.loadClientProducts(),db.loadStockMovements(null,80)]);
+      setProducts(prods);setMovements(movs);
+    }catch(e){console.error("[InventoryModal] load:",e);showToast("❌ Error cargando inventario: "+e.message,"error")}
+    finally{setLoading(false)}
+  };
+  useEffect(()=>{reload()},[]);
+
+  const clientName=cid=>{const c=clients.find(x=>x.id===cid);return c?.name||"—"};
+  const filtered=products.filter(p=>{
+    if(!filter.trim())return true;
+    const q=filter.toLowerCase();
+    return (p.name||"").toLowerCase().includes(q)||(p.sku||"").toLowerCase().includes(q)||clientName(p.client_id).toLowerCase().includes(q);
+  });
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
+    <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"94%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>📦 Inventario Cuadra</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Productos en stock · {products.length} SKUs</div>
+        </div>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+      </div>
+      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>
+        {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"}].map(t=>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Poppins',sans-serif"}}>{t.l}</button>
+        )}
+        <div style={{flex:1}}/>
+        {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}>➕ Nuevo Producto</button>}
+      </div>
+      {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
+        <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
+          {tab==="products"&&<>
+            <input style={{...inp,marginBottom:10}} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="🔍 Filtrar por nombre, SKU o cliente"/>
+            {filtered.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>{products.length===0?"Sin productos en catálogo todavía":"Sin coincidencias"}</div>:
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {filtered.map(p=>
+                  <div key={p.id} style={{padding:"12px 14px",borderRadius:12,background:C.sf,border:"0.5px solid "+C.bd}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{clientName(p.client_id)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?"#10b981":C.dn}}>{p.stock_actual}</div>
+                        <div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>en stock</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:10}}>
+                      <button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>
+                      <button onClick={()=>setEditing({mode:"sell",product:p})} disabled={p.stock_actual<=0} style={{...bt("#16a34a"),flex:1,justifyContent:"center",padding:"6px 10px",fontSize:11,opacity:p.stock_actual<=0?.4:1,cursor:p.stock_actual<=0?"not-allowed":"pointer"}}>🛒 Vender</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            }
+          </>}
+          {tab==="movements"&&(movements.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin movimientos registrados</div>:
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {movements.map(m=>{
+                const prod=products.find(p=>p.id===m.client_product_id);
+                const color=m.kind==="PRODUCED"?"#10b981":m.kind==="SOLD"?"#16a34a":"#f59e0b";
+                const icon=m.kind==="PRODUCED"?"📥":m.kind==="SOLD"?"📤":"📊";
+                return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:700,color}}>{icon} {m.kind}</div>
+                    <div style={{fontSize:11,marginTop:2}}>{prod?.name||"(producto)"}</div>
+                    {m.notes&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{m.notes}</div>}
+                    <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}</div>
+                  </div>
+                  <div style={{textAlign:"right",marginLeft:10}}>
+                    <div style={{fontSize:14,fontWeight:800,color}}>{m.qty>0?"+":""}{m.qty}</div>
+                    <div style={{fontSize:9,color:C.t2}}>saldo: {m.balance_after}</div>
+                  </div>
+                </div>;
+              })}
+            </div>
+          )}
+        </div>
+      }
+    </div>
+    {editing?.mode==="new"&&<ProductFormModal clients={clients} userLogin={userLogin} onSave={async row=>{
+      try{await db.saveClientProduct(row);showToast("✅ Producto agregado al catálogo");setEditing(null);await reload()}
+      catch(e){showToast("❌ "+e.message,"error")}
+    }} onClose={()=>setEditing(null)}/>}
+    {editing?.mode==="adjust"&&<AdjustStockModal product={editing.product} userLogin={userLogin} onSave={async(qty,notes)=>{
+      try{await db.recordStockMovement({client_product_id:editing.product.id,kind:"ADJUST",qty,notes,created_by:userLogin||user});showToast("✅ Ajuste registrado");setEditing(null);await reload()}
+      catch(e){showToast("❌ "+e.message,"error")}
+    }} onClose={()=>setEditing(null)}/>}
+    {editing?.mode==="sell"&&<SellFromStockModal product={editing.product} userLogin={userLogin} onSell={async args=>{
+      try{await db.sellFromStock({...args,client_product_id:editing.product.id,created_by:userLogin||user});showToast("✅ Venta creada — orden en Salidas");setEditing(null);await reload()}
+      catch(e){showToast("❌ "+e.message,"error")}
+    }} onClose={()=>setEditing(null)}/>}
+  </div>;
+}
+
+function ProductFormModal({clients, userLogin, onSave, onClose}) {
+  useEscClose(onClose);
+  const [clientId,setClientId]=useState("");
+  const [name,setName]=useState("");
+  const [sku,setSku]=useState("");
+  const [unitPrice,setUnitPrice]=useState("");
+  const stockClients=(clients||[]).filter(c=>c.billing_mode==="stock");
+  const canSave=clientId&&name.trim();
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 14px"}}>➕ Nuevo Producto al Catálogo</h3>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Cliente (stock) *</label>
+        <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)}>
+          <option value="">Selecciona cliente…</option>
+          {stockClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        {stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock todavía</div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={lbl}>Nombre *</label><input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="ej. Tarjeta Presentación A"/></div>
+        <div><label style={lbl}>SKU</label><input style={inp} value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} placeholder="CUA-001"/></div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={lbl}>Precio unitario (opcional)</label>
+        <input style={inp} type="number" step="0.01" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="0.00"/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!canSave)return;onSave({client_id:clientId,name:name.trim(),sku:sku.trim()||null,unit_price:unitPrice?parseFloat(unitPrice):null,created_by:userLogin||null})}} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function AdjustStockModal({product, userLogin, onSave, onClose}) {
+  useEscClose(onClose);
+  const [qty,setQty]=useState("");
+  const [notes,setNotes]=useState("");
+  const n=parseInt(qty,10);
+  const valid=Number.isFinite(n)&&n!==0;
+  const preview=valid?(product.stock_actual+n):product.stock_actual;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:420,width:"94%"}}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste de Stock</h3>
+      <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{product.name}</div>
+      <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:18,fontWeight:800}}>{product.stock_actual}</div></div>
+        <div style={{fontSize:24,color:C.t2,alignSelf:"center"}}>→</div>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Nuevo saldo</div><div style={{fontSize:18,fontWeight:800,color:preview<0?C.dn:C.ok}}>{preview}</div></div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Cantidad (positiva o negativa) *</label>
+        <input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus/>
+        <div style={{fontSize:10,color:C.t2,marginTop:3}}>Positiva: sumar inventario · Negativa: restar (merma, error)</div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={lbl}>Motivo (recomendado)</label>
+        <input style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="ej. Carga inicial vs conteo Gerardo"/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!valid)return;if(preview<0)return alert("El saldo nuevo sería negativo");onSave(n,notes.trim()||null)}} disabled={!valid||preview<0} style={{...bt("#f59e0b"),flex:1,justifyContent:"center",opacity:(valid&&preview>=0)?1:.4,cursor:(valid&&preview>=0)?"pointer":"not-allowed"}}>📊 Aplicar</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function SellFromStockModal({product, userLogin, onSell, onClose}) {
+  useEscClose(onClose);
+  const [qty,setQty]=useState("");
+  const [unitPrice,setUnitPrice]=useState(product.unit_price?String(product.unit_price):"");
+  const [priority,setPriority]=useState("normal");
+  const [dueDate,setDueDate]=useState("");
+  const [notes,setNotes]=useState("");
+  const n=parseInt(qty,10);
+  const valid=Number.isFinite(n)&&n>0&&n<=product.stock_actual;
+  const total=valid&&unitPrice?(n*parseFloat(unitPrice)).toFixed(2):"0.00";
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🛒 Vender desde Stock</h3>
+      <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
+      <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:"#10b981",fontSize:14}}>{product.stock_actual}</b></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={lbl}>Cantidad *</label><input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/></div>
+        <div><label style={lbl}>Precio unitario</label><input style={inp} type="number" step="0.01" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="0.00"/></div>
+      </div>
+      <div style={{background:"#16a34a10",borderRadius:8,padding:8,marginBottom:10,textAlign:"right",fontSize:13,fontWeight:700,color:"#16a34a"}}>Total: ${total}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={lbl}>Prioridad</label>
+          <select style={inp} value={priority} onChange={e=>setPriority(e.target.value)}>
+            {PRIOS.map(p=><option key={p.id} value={p.id}>{p.l}</option>)}
+          </select>
+        </div>
+        <div><label style={lbl}>Fecha entrega</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={lbl}>Notas</label>
+        <input style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Instrucciones de entrega…"/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:unitPrice?parseFloat(unitPrice):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
+      </div>
+    </div>
+  </div>;
 }
 
 // v10.41.0 — Chips redondos para filtrar "Mis Pendientes" con emoji + label + counter.
@@ -2934,8 +3194,16 @@ function PantoneChips({codes}) {
 
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[]};
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
+  // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
+  const [stockProducts,setStockProducts]=useState([]);
+  useEffect(()=>{
+    if(f.billing_mode!=="stock"||!f.client_id){setStockProducts([]);return}
+    let alive=true;
+    db.loadClientProducts(f.client_id).then(list=>{if(alive)setStockProducts(list)}).catch(e=>console.warn("[OrderForm] stock products:",e));
+    return ()=>{alive=false};
+  },[f.client_id,f.billing_mode]);
   const prodTypeInputRef=useRef(null);
   // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
   const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -3070,7 +3338,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   };
   // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
   const selC=async c=>{
-    setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||""}));
+    setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||"",billing_mode:c.billing_mode||"normal"}));
     if(!c.email||!c.whatsapp){
       try{
         const {data,error}=await supabase.rpc("get_last_contact_for_client",{p_client_id:c.id});
@@ -3089,6 +3357,24 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
     {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {/* v10.42.0 — Panel stock: visible si el cliente tiene billing_mode=stock (ej. Cuadra) */}
+    {f.billing_mode==="stock"&&!specsOnly&&<div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase"}}>📦 Cliente con Inventario</div>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,cursor:"pointer"}}>
+          <input type="checkbox" checked={f.stock_role==="production"} onChange={e=>s("stock_role",e.target.checked?"production":null)} disabled={!!editOrder?.stock_loaded}/>
+          <span>Producción a stock</span>
+        </label>
+      </div>
+      {f.stock_role==="production"&&<>
+        <label style={lbl}>Producto de catálogo {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
+        <select style={inp} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
+          <option value="">— Sin asignar (puedes vincular después) —</option>
+          {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
+        </select>
+        <div style={{fontSize:10,color:C.t2,marginTop:6}}>Al terminar la producción, en Empaque verás un botón <b style={{color:"#10b981"}}>📦 Cargar a Stock</b> que ingresa las piezas al inventario sin marcarlas como entregadas.</div>
+      </>}
+    </div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req>
       {/* v10.34.2 — Combobox typeahead con keyboard nav, accent-insensitive, focus en "Otro", normalize casing onBlur */}
@@ -3564,6 +3850,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600}}>{st?.l}</span>
           {o.source==="web"&&<span style={{background:"#06b6d412",color:"#06b6d4",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}>🌐 Web</span>}
+          {o.stock_role==="production"&&<span style={{background:"#10b98112",color:"#10b981",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno">📦 a Stock</span>}
+          {o.stock_role==="sale"&&<span style={{background:"#16a34a12",color:"#16a34a",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Venta desde stock — sale del inventario para entregar al cliente">🛒 desde Stock</span>}
           {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700}}>{PM[o.priority].l}</span>}
           {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}>⚠️ RETRASO</span>}
@@ -3611,7 +3899,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button></>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="No entrega al cliente; ingresa al inventario interno">📦 Cargar a Stock</button>}</>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
@@ -6296,7 +6584,7 @@ export default function PrintFlow() {
   const [taskFilters,setTaskFilters]=useState(new Set());
   // Admin: filtrar "Mis Pendientes" como si fuera otro rol (ver lo del calendario de Karla, etc.)
   const [adminRoleFilter,setAdminRoleFilter]=useState("");
-  const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);
+  const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);const [inventoryOpen,setInventoryOpen]=useState(false);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
@@ -6822,6 +7110,13 @@ export default function PrintFlow() {
     // Only update form-editable fields — never overwrite stage, validation, machine state
     const editableFields=["order_type","priority","production_number","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
+    // v10.42.0 — Bloqueo: si la orden ya tiene movimientos de stock (stock_loaded), no se puede cambiar la cantidad
+    // porque desincronizaría el saldo del inventario respecto al movimiento PRODUCED ya registrado.
+    const _prevForGuard=orders.find(x=>x.id===f.id);
+    if(_prevForGuard?.stock_loaded&&"quantity" in safeUpdate&&Number(safeUpdate.quantity)!==Number(_prevForGuard.quantity)){
+      showToast("❌ No se puede cambiar la cantidad: la orden ya cargó "+_prevForGuard.quantity+" pzas al stock. Si necesitas ajustar, usa el módulo de Inventario.","error");
+      const err=new Error("quantity_locked_by_stock");err._toasted=true;throw err;
+    }
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     if("price" in safeUpdate)safeUpdate.price=toNum(safeUpdate.price,parseFloat);
     if("quantity" in safeUpdate)safeUpdate.quantity=toNum(safeUpdate.quantity,v=>parseInt(v,10));
@@ -7182,13 +7477,41 @@ export default function PrintFlow() {
     // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:"#5856d6"}]};
     setOrders(p=>[dup,...p]);
     try{
     await db.saveOrder(dup);
     await db.addTimeline(dup.id,"📋 Duplicada de "+origLabel,user,"#5856d6");
     showToast("📋 Orden duplicada como "+dupFolio);
     }catch(e){console.error("[duplicate] Error:",e);showToast("❌ No se pudo duplicar: "+(e?.message||"error desconocido"),"error");reload()}
+  },[orders,user,userLogin,showToast,reload]);
+
+  // v10.42.0 — Carga orden a stock: stage→stocked, NO setea delivered_at (no contamina revenue),
+  // registra movimiento PRODUCED en stock_movements (denormaliza stock_actual via RPC).
+  const loadStock=useCallback(async id=>{
+    const o=orders.find(x=>x.id===id);
+    if(!o){showToast("❌ Orden no encontrada","error");return}
+    if(!canExecuteAction("load_stock",o,user,userLogin)){showToast(actionDeniedToast("load_stock",o,user,userLogin),"error");return}
+    if(o.stock_role!=="production"){showToast("❌ Solo órdenes de producción-a-stock pueden cargarse","error");return}
+    if(!o.client_product_id){showToast("❌ La orden no tiene producto de catálogo asignado","error");return}
+    if(o.stock_loaded){showToast("ℹ️ Esta orden ya fue cargada a stock","warning");return}
+    const qty=parseInt(o.quantity,10);
+    if(!Number.isFinite(qty)||qty<=0){showToast("❌ Cantidad inválida en la orden","error");return}
+    setActionLoading(id);
+    try{
+      // 1) Registra movimiento PRODUCED (también actualiza stock_actual denormalizado)
+      await db.recordStockMovement({client_product_id:o.client_product_id,kind:"PRODUCED",qty,order_id:id,notes:"Producción "+ (o.production_number||""),created_by:userLogin||user});
+      // 2) Update orders después del movimiento (Realtime fluye al final)
+      const {error:uErr}=await supabase.from("orders").update({stage:"stocked",stock_loaded:true}).eq("id",id);
+      if(uErr)throw new Error(uErr.message);
+      await db.addTimeline(id,"📦 Cargada a stock ("+qty+" pzas)",userLogin||user,"#10b981");
+      setOrders(p=>p.map(x=>x.id===id?{...x,stage:"stocked",stock_loaded:true,timeline:[...(x.timeline||[]),{action:"📦 Cargada a stock ("+qty+" pzas)",date:new Date().toISOString(),by:userLogin||user,color:"#10b981"}]}:x));
+      showToast("📦 Cargada a stock — "+qty+" pzas ingresadas al inventario","success");
+    }catch(e){
+      console.error("[loadStock] Error:",e);
+      showToast("❌ No se pudo cargar a stock: "+(e?.message||"error desconocido"),"error");
+      reload();
+    }finally{setActionLoading(null)}
   },[orders,user,userLogin,showToast,reload]);
 
   const deleteOrder=useCallback(async id=>{
@@ -7457,6 +7780,7 @@ export default function PrintFlow() {
       const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
     }
     if(action==="duplicate")duplicate(id);
+    if(action==="load_stock")loadStock(id);
     // v10.26.0 — Reordenar dentro de la misma máquina (drag&drop entre tarjetas o botón "Activar")
     if(action==="reorder_in_machine"){
       const {newPosition}=payload||{};
@@ -7770,6 +8094,7 @@ export default function PrintFlow() {
           {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap"}}>👤 Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap"}}>📋 Todas</button></div>}
           <input style={{...inp,width:180,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="🔍 Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
+          {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button onClick={()=>setInventoryOpen(true)} title="Inventario Cuadra (producción a stock + venta)" style={{...bs("#10b981"),padding:"5px 10px"}}>📦</button>}
           {(user==="admin"||isSec(user))&&<button onClick={()=>{const csvOrdersRaw=viewOrders;
         /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
@@ -7834,6 +8159,7 @@ export default function PrintFlow() {
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
+      {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
