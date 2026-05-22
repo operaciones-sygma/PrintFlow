@@ -4123,7 +4123,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
         <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
         <input style={{...inp,fontFamily:"monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
         {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
-        {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestion}). Verifica con AlphaERP — la RPC rechazará si está por debajo del último usado.</div>}
+        {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestion}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
       </div>
 
       {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>

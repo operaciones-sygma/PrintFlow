@@ -5,6 +5,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.3 — Fix urgente: folio OC menor al sugerido permitido — 22-may-2026
+
+Karla necesita asignar folios menores al recomendado a OCs (caso real: corregir huecos retroactivos contra AlphaERP). El RPC `assign_folio_to_oc` los rechazaba con `RAISE EXCEPTION 'Folio inicial no puede ser <= último folio usado'`.
+
+### 🔴 Fix DB — `assign_folio_to_oc`
+- **Removido:** el check estricto contra `invoice_counters.last_number`. Ahora se permite cualquier folio numérico positivo del formato correcto.
+- **Mantenido + reforzado:** detección de duplicados. Antes solo verificaba implícitamente; ahora chequea EXPLÍCITAMENTE:
+  - Contra todos los `orders.invoice_folio` (modo shared y consecutive).
+  - Contra `purchase_orders.shared_invoice_folio` de OTRAS OCs.
+  - Si encuentra duplicado, lanza error con el folio específico que causa conflicto.
+- **Counter solo avanza:** `UPDATE invoice_counters SET last_number = GREATEST(last_number, v_final_number)` para no retroceder y no afectar sugerencias futuras.
+- **Lock del counter:** `SELECT FROM invoice_counters FOR UPDATE` para serializar contra `assign_invoice`.
+
+### 🎨 Fix UI — `AssignOCFolioModal`
+- Mensaje warning actualizado: ya no dice "la RPC rechazará si está por debajo del último usado". Ahora dice "se permite siempre que NO esté ya asignado a otra orden u OC".
+
+
 ## v10.43.2 — Segundo bug scan fixes — 22-may-2026
 
 Un alto + dos medios encontrados en segundo scan. Tres bajos quedan para después del demo.
