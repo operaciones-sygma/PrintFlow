@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.8 — Karla puede crear OC y mover existentes (sin crear órdenes nuevas) — 22-may-2026
+
+Marcelo: "Dale a Karla permisos para crear órdenes de compra igual que a Lupita, y ya puede mover las existentes dentro. **No le des permisos de crear órdenes de producción.**"
+
+### 🔒 Permisos actualizados
+- `ACTION_ROLES.createOCAndMove`: `["admin","secretaria","karla"]` (antes solo admin+secretaria).
+- `canCreateOC` (header "+ Nueva OC"): incluye karla.
+- Nuevo `canMoveExisting`: permite a Karla (y demás roles permitidos) **MOVER órdenes existentes a OC**, pero NO crear nuevas órdenes en la OC. Separado de `canAddProductHere` que sigue restringiendo "+ Agregar Producto Nuevo" a admin/secretaria/vendedor.
+
+### Botones que Karla ve en la vista OC (3 nuevos + 2 ya tenía)
+| Botón | Antes Karla | Ahora Karla |
+|---|---|---|
+| `+ Nueva OC` (header) | ❌ | ✅ |
+| `+ Agregar Producto Nuevo` (crea orden de producción) | ❌ | ❌ (intencional) |
+| `📦 Agregar Producto Existente` | ❌ | ✅ |
+| `📄 Asignar folio` | ✅ | ✅ |
+| `🔒 Pre-asignar folio` | ✅ | ✅ |
+| `↔️ Cambiar OC` por card | ✅ | ✅ |
+
+Total: Karla ve **3 botones nuevos** (Nueva OC, Agregar Existente) + los que ya tenía (Asignar folio, Pre-asignar folio, Cambiar OC en cards). Sigue sin poder crear órdenes de producción nuevas (lo cual es por diseño — eso lo hacen Lupita y vendedores).
+
+### Hint en empty state
+El mensaje cuando una OC está vacía ahora se adapta al rol: Lupita ve la guía completa; Karla solo ve la opción de "Agregar Producto Existente".
+
+
 ## v10.43.7 — Fix urgente: folio compartido en OC funciona — 22-may-2026
 
 **Bug raíz encontrado y corregido.** Karla intentaba asignar D-5824 (modo "Un folio compartido") a una OC con 2 órdenes pendientes y obtenía `duplicate key value violates unique constraint "idx_orders_invoice_folio_unique"`.

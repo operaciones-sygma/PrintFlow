@@ -225,7 +225,7 @@ const ACTION_ROLES = {
   print:           { allowed:["admin","secretaria","vendedor","produccion","preprensa","german","karla"], ownerBound:["vendedor"] },
   // ─── Phase 2 — OCs (v10.10.0 + v10.11.0 + v10.12.0) ───
   moveOrderToOC:       { allowed:["admin","secretaria","karla"], ownerBound:[] },
-  createOCAndMove:     { allowed:["admin","secretaria"], ownerBound:[] },
+  createOCAndMove:     { allowed:["admin","secretaria","karla"], ownerBound:[] },
   assignFolioToOC:     { allowed:["admin","karla"], ownerBound:[] },
   approveCartComplete: { allowed:["admin","secretaria"], ownerBound:[] },
   // ─── Phase 3 (v10.12.0.4) — handlers descubiertos durante Phase 2 ───
@@ -6673,7 +6673,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   const ocOrders = useMemo(() =>
     selectedOCId ? orders.filter(o => o.purchase_order_id === selectedOCId).sort(prioSort) : [],
     [selectedOCId, orders]);
-  const canCreateOC = isSec(role) || role === "admin";
+  const canCreateOC = isSec(role) || role === "admin" || role === "karla";
   const statusBadge = (st) => {
     const map = {
       open: {color: C.ok, icon: "🟢", label: "Abierta"},
@@ -6698,6 +6698,9 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     // 🛒 v10.12.0.1 — Usar canAddProductToOC para gating por rol+ownership; status/locked se gatean adicionalmente
     const canAddProductHere = canAddProductToOC(selectedOC, role, userLogin);
     const canAddProduct = canAddProductHere && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
+    // v10.43.8 — Karla puede MOVER órdenes existentes a una OC pero NO crear órdenes de producción nuevas.
+    const canMoveExistingHere = (role === "admin" || isSec(role) || role === "karla" || (role === "vendedor" && selectedOC?.vendedor === userLogin)) && !selectedOC?.is_web_oc;
+    const canMoveExisting = canMoveExistingHere && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
     const canAssignFolio = (role === "admin" || role === "karla") && pendingOrders.length > 0 && !hasShared && !isLocked && selectedOC.status !== "cancelled";
     // 📄 Solo permitir asignar folio inmediato si TODAS las pendientes están listas para entrega (stages 'salidas'/'maq_received'),
     // consistente con el flujo individual del botón "📄 Asignar Folio y Entregar" en cada OCard.
@@ -6742,7 +6745,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {/* v10.39.0 — botón renombrado: "Agregar producto" → "Agregar Producto Nuevo" */}
           {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar Producto Nuevo</button>}
           {/* v10.39.0 — botón nuevo: agregar orden de producción existente del mismo cliente a esta OC */}
-          {canAddProductHere && <button onClick={canAddProduct?()=>onAddExisting(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canAddProduct?"#16a34a":"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>📦 Agregar Producto Existente</button>}
+          {/* v10.43.8 — Karla incluida vía canMoveExisting (puede mover existentes pero no crear nuevas) */}
+          {canMoveExistingHere && <button onClick={canMoveExisting?()=>onAddExisting(selectedOC):undefined} disabled={!canMoveExisting} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canMoveExisting?"#16a34a":"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canMoveExisting?"pointer":"not-allowed"}}>📦 Agregar Producto Existente</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
         </div>
@@ -6752,7 +6756,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
             <div style={{fontSize:36}}>📋</div>
             <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:8}}>Esta OC no tiene productos todavía</div>
-            {canAddProduct && <div style={{fontSize:11,color:C.t2,marginTop:4}}>Click en "+ Agregar Producto Nuevo" para crear el primero, o en "📦 Agregar Producto Existente" para mover una orden del cliente que ya esté en el sistema.</div>}
+            {(canAddProduct||canMoveExisting) && <div style={{fontSize:11,color:C.t2,marginTop:4}}>{canAddProduct?'Click en "+ Agregar Producto Nuevo" para crear el primero, o en ':'Click en '}"📦 Agregar Producto Existente" para mover una orden del cliente que ya esté en el sistema.</div>}
           </div>
         : ocOrders.map(o => <OCard key={o.id} o={o} role={role} onAction={onAction} busy={false} noDragHint userLogin={userLogin} inOCView={true}/>)
       }
