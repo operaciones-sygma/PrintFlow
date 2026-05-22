@@ -5,6 +5,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.41.1 — Fixes scan post-v10.41.0 — 22-may-2026
+
+Pasada de bugs sobre v10.41.0. 3 altos + 2 medios + 1 cosmético aplicados. v10.41.0 verificado sound en general; estos son polish + 1 bug funcional real (#2).
+
+### 🟠 Altos
+- **#1 Logout no limpiaba `taskFilters` y `adminRoleFilter`.** El componente PrintFlow permanece montado durante logout → Login → re-login. State persistía entre sesiones (Lupita podía heredar el "Ver como Karla" de Marcelo + chips activos). **Fix:** handler de "Salir" ahora resetea ambos Set/string.
+- **#2 Chip `Pre-asignados` (Karla) era inservible.** Karla pre-asigna folio a una orden en `in_production` → `o.invoice_pre_assigned=true` pero `o.stage='in_production'`. El `myTasks` de Karla solo incluía `[salidas, maq_received]` → chip contaba 0 aunque hubiera pre-asignados en otros stages. **Fix:** `myTasks` para Karla ahora incluye también `o.invoice_pre_assigned===true` (en cualquier stage no-terminal).
+- **#3 Casing "Noémí" inconsistente.** Pill admin "🩷 Noémí" vs resto de app "Noemí" (acento solo en i final). **Fix:** 1 char.
+
+### 🟡 Medios
+- **#5 Predicate `late` no defensivo con due_date que traiga hora.** Si `o.due_date = "2026-05-21T08:00:00"` (importación externa), `due_date + "T23:59:59"` producía Invalid Date → predicate silently false. **Fix:** `String(o.due_date).slice(0,10) + "T23:59:59"` + check `!isNaN(due.getTime())` (patrón usado en `fD`/`fDT`).
+- **#6 Subtítulo "filtrado de N" sin filtros realmente activos.** Si `taskFilters` contenía keys de un rol previo que no aplicaban al rol actual, el subtítulo mostraba "filtrado" sin filtro real. **Fix:** verificar `taskFilterConfigs.some(f=>taskFilters.has(f.key))` en lugar de solo `.size`.
+
+### 🟢 Cosmético
+- **#8 Predicate `stale` retornaba objeto en vez de boolean.** `getStale(o)` retorna `{lv, lb}` o null. Funcionaba por truthy/falsy en `.filter()`, pero el contrato del predicate es bool. **Fix:** `!!getStale(o)` para consistencia.
+
+### Diferido a backlog
+- #4 `staleTasks` no usa `effectiveRole` — funciona por coincidencia (admin pool ⊃ Karla pool), no urgente.
+- #7 redundancia `isSec(role)||role==='secretaria'||role==='vendedor'`.
+- #9 Chip count=0 sigue clickeable (atenuado pero no disabled).
+
+### Sin cambios
+- Lógica de getTaskFilters, TaskFilterChips component, OR semantics.
+
+---
+
+
 ## v10.41.0 — Filtros chip en "Mis Pendientes" + admin "ver como otro rol" — 22-may-2026
 
 Marcelo solicitó: chips redondos para filtrar Mis Pendientes; para admin, también poder filtrar viendo los pendientes de otro rol.

@@ -94,8 +94,10 @@ function getRevertOptions(currentStage,role){
 function getTaskFilters(role){
   const base=[
     {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="Urgente"},
-    {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(o.due_date+"T23:59:59");return due<new Date()}},
-    {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>getStale(o)},
+    // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
+    {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
+    // v10.41.1 #8 — boolean explícito (getStale retorna objeto truthy o null)
+    {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)},
     {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0},
   ];
   if(role==="karla")return[...base,
@@ -7673,7 +7675,10 @@ export default function PrintFlow() {
     if(effectiveRole==="produccion")return srt(filteredOrders.filter(o=>["draft","ready","in_production","maquila_out","maquila_in","packaging","placas_listas"].includes(o.stage)));
     if(effectiveRole==="preprensa")return srt(filteredOrders.filter(o=>["draft","design","proof_client"].includes(o.stage)));
     if(effectiveRole==="german")return srt(filteredOrders.filter(o=>["proof_printing","ctp"].includes(o.stage)));
-    if(effectiveRole==="karla")return srt(filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)));
+    // v10.41.1 #2 — Karla también ve órdenes con folio pre-asignado en CUALQUIER stage activo
+    // (sin esto, el chip 'Pre-asignados' siempre contaba 0 porque salidas/maq_received raramente
+    // coincidían con invoice_pre_assigned=true). Excluye stages terminales.
+    if(effectiveRole==="karla")return srt(filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)||(o.invoice_pre_assigned&&!isFinal(o.stage))));
     if(isSec(effectiveRole)||effectiveRole==="secretaria"||effectiveRole==="vendedor")return srt(filteredOrders.filter(o=>["draft","proof_client","maq_created","maq_sent","maq_in_progress"].includes(o.stage)));
     return [];
   },[filteredOrders,user,adminRoleFilter]);
@@ -7770,13 +7775,14 @@ export default function PrintFlow() {
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
         const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio","TamañoEstándar"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||"",o.standard_size?ssLabel(o.standard_size):""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={bs(C.ac)}>📥 CSV</button>}
           <div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600}}>{rL[user]}</div>
-          <button onClick={()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
+          {/* v10.41.1 #1 — limpiar también taskFilters y adminRoleFilter para evitar state stale entre sesiones */}
+          <button onClick={()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("")}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Salir</button>
         </div>
       </div>
 
       <div style={{maxWidth:1300,margin:"0 auto",padding:"14px 16px"}}>
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?" · 🔍 \""+search+"\"":""}</p>{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
-        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{filteredMyTasks.length} pendiente{filteredMyTasks.length!==1?"s":""}{taskFilters.size>0?" · filtrado de "+myTasks.length:""}{search?" · 🔍 \""+search+"\"":""}{user==="admin"&&adminRoleFilter?" · 👤 vista de "+rL[adminRoleFilter]:""}</p>
+        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{filteredMyTasks.length} pendiente{filteredMyTasks.length!==1?"s":""}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?" · 🔍 \""+search+"\"":""}{user==="admin"&&adminRoleFilter?" · 👤 vista de "+rL[adminRoleFilter]:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color="#007aff"/>}
           {user==="preprensa"&&<FirstTimeHint role={user} hintKey="tasks-prep" text="Aquí verás órdenes para validar, diseñar y aprobar pruebas. Prepara archivos en Diseño, súbelos y envía a Prueba de Color para Germán." color="#ec4899"/>}
           {user==="german"&&<FirstTimeHint role={user} hintKey="tasks-german" text="Aquí verás pruebas para imprimir y órdenes para CTP. Imprime en el Epson, y usa tu Tablero para mover órdenes por CTP y Procesadora." color="#0891b2"/>}
@@ -7785,7 +7791,7 @@ export default function PrintFlow() {
           {/* v10.41.0 — Admin: dropdown para "ver pendientes como otro rol" */}
           {user==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
             <span style={{fontSize:11,color:C.t2,fontWeight:600}}>👤 Ver como rol:</span>
-            {[{v:"",l:"Admin (todo)"},{v:"karla",l:"🟣 Karla"},{v:"produccion",l:"🔵 Gerardo"},{v:"preprensa",l:"🩷 Noémí"},{v:"german",l:"🩵 Germán"},{v:"secretaria",l:"🟪 Lupita"},{v:"vendedor",l:"🟠 Vendedor"}].map(opt=>(
+            {[{v:"",l:"Admin (todo)"},{v:"karla",l:"🟣 Karla"},{v:"produccion",l:"🔵 Gerardo"},{v:"preprensa",l:"🩷 Noemí"},{v:"german",l:"🩵 Germán"},{v:"secretaria",l:"🟪 Lupita"},{v:"vendedor",l:"🟠 Vendedor"}].map(opt=>(
               <button key={opt.v} onClick={()=>{setAdminRoleFilter(opt.v);setTaskFilters(new Set())}}
                 style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
                 {opt.l}
