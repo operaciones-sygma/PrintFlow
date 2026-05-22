@@ -5,6 +5,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.2 — Segundo bug scan fixes — 22-may-2026
+
+Un alto + dos medios encontrados en segundo scan. Tres bajos quedan para después del demo.
+
+### 🔴 A4 — `selC` resetea campos stock al cambiar de cliente
+**Bug:** Si el usuario selecciona primero un cliente Cuadra (stock), marca "Producción a stock" y elige producto, y luego cambia a otro cliente, los campos `stock_role`/`client_product_id` mantenían los valores del cliente anterior → orden inconsistente apuntando a un producto que pertenece a OTRO cliente.
+
+**Fix:** `selC()` resetea `stock_role:null, client_product_id:null, stock_loaded:false` al pick de un cliente nuevo (excepto si la orden ya tiene `stock_loaded=true`, modo edición). El `onChange` de `ClientInput` (cuando se escribe a mano y se desvincula `client_id`) también resetea `billing_mode='normal'` y limpia los campos stock.
+
+### 🟡 M5 — `humanizeStockError` extendido
+**Bug:** Doble-click rápido en "Cargar a Stock" topaba con `UNIQUE INDEX stock_movements_order_kind_uniq` → toast mostraba "duplicate key value violates unique constraint…" (técnico, alarma al usuario).
+
+**Fix:** helper extendido con traducciones para:
+- `stock_movements_order_kind_uniq` → "ℹ️ Esta orden ya tuvo este movimiento. Recarga."
+- `credit_ledger_consumo_uniq` → "ℹ️ El saldo de esta factura ya se aplicó previamente."
+- `duplicate key value` (genérico) → "ℹ️ Movimiento duplicado detectado. Recarga."
+
+### 🟡 M7-b — Refresh saldo Corona pre-confirm
+**Bug:** `InvoiceModal`/`PreInvoiceModal` cargaban saldo una sola vez al montar. Si Lucero registraba un depósito mientras Karla tenía el modal abierto, ella veía saldo stale → confirmaba creyendo que el saldo era el viejo (negativo cuando ya no debía serlo, o viceversa).
+
+**Fix:** `handleConfirm()` en ambos modales hace `db.getClientBillingInfo()` justo antes de llamar `onConfirm` cuando `isCorona`. Si el saldo cambió, actualiza `coronaInfo` (refleja en el siguiente render). La operación procede con el saldo más reciente.
+
+### 🟢 No-fix (bajos, esperar feedback demo)
+- **B4** Clientes Corona inactivos con saldo huérfanos en UI
+- **B5** Edición de orden con stock_loaded cuyo cliente ya no es stock — panel oculto pero datos vigentes
+- **B6** Bridge OC captura `invoiced_by` con `LIMIT 1` sin ORDER determinístico
+
+
 ## v10.43.1 — Bug scan fixes (Cuadra + Corona) — 22-may-2026
 
 Tres altos + un medio encontrados en scan exhaustivo post-v10.43.0 / v2.8.1. Todos aplicados.

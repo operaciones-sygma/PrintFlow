@@ -668,13 +668,17 @@ const db = {
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 // v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
+// v10.43.2 FIX M5 — Cobertura de UNIQUE constraints (doble click).
 const humanizeStockError=err=>{
   const m=err?.message||String(err||"");
+  if(/stock_movements_order_kind_uniq/.test(m))return"ℹ️ Esta orden ya tuvo este movimiento de stock (puede que otro usuario o tab lo haya disparado simultáneamente). Recarga.";
+  if(/credit_ledger_consumo_uniq/.test(m))return"ℹ️ El saldo de esta factura ya se aplicó previamente (idempotencia). Sin cambios.";
   const mStock=m.match(/stock insuficiente:\s*actual=(-?\d+)\s*intento=(-?\d+)/);
   if(mStock)return"❌ Stock insuficiente. Saldo actual: "+mStock[1]+" pzas, intentaste mover "+Math.abs(parseInt(mStock[2],10))+" pzas.";
   if(/client_product no existe/i.test(m))return"❌ El producto del catálogo ya no existe. Recarga la lista y vuelve a intentar.";
   if(/qty debe ser > 0/i.test(m))return"❌ La cantidad debe ser mayor a 0.";
   if(/kind invalido/i.test(m))return"❌ Tipo de movimiento inválido (bug interno). Avisa a Marcelo.";
+  if(/duplicate key value/i.test(m))return"ℹ️ Movimiento duplicado detectado (otro proceso lo registró ya). Recarga para ver el estado actual.";
   return"❌ "+m;
 };
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
@@ -2359,6 +2363,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
       // v10.43.0 — Corona: payment_status/method/amount/bank_reference son NULL,
       // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
       if(isCorona){
+        // v10.43.2 FIX M7-b — Refrescar saldo justo antes de confirmar para evitar stale state
+        // (Lucero pudo haber registrado un depósito mientras Karla tenía el modal abierto).
+        try{
+          const fresh=await db.getClientBillingInfo(order.client_id);
+          if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
+        }catch(e){console.warn("[InvoiceModal] refresh saldo:",e)}
         await onConfirm(type,folio,null,null,null,null);
         return;
       }
@@ -2576,6 +2586,11 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     try{
       // v10.43.0 — Corona: bridge aplica saldo automáticamente
       if(isCorona){
+        // v10.43.2 FIX M7-b — refresh saldo pre-confirm
+        try{
+          const fresh=await db.getClientBillingInfo(order.client_id);
+          if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
+        }catch(e){console.warn("[PreInvoiceModal] refresh saldo:",e)}
         await onConfirm(type,folio,finalReason,null,null,null,null);
         return;
       }
@@ -3640,7 +3655,13 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   };
   // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
   const selC=async c=>{
-    setF(p=>({...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||"",billing_mode:c.billing_mode||"normal"}));
+    // v10.43.2 FIX A4 — Al cambiar de cliente, resetear campos stock para evitar inconsistencias
+    // (orden con stock_role/client_product_id de un cliente apuntando a otro).
+    // Excepción: si la orden YA tiene stock_loaded=true (edición de orden ya cargada), no tocar.
+    setF(p=>{
+      const stockReset=p.stock_loaded?{}:{stock_role:null,client_product_id:null,stock_loaded:false};
+      return{...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||"",billing_mode:c.billing_mode||"normal",...stockReset};
+    });
     if(!c.email||!c.whatsapp){
       try{
         const {data,error}=await supabase.rpc("get_last_contact_for_client",{p_client_id:c.id});
@@ -3658,7 +3679,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     {/* v10.42.0 — Panel stock: visible si el cliente tiene billing_mode=stock (ej. Cuadra) */}
     {f.billing_mode==="stock"&&!specsOnly&&<div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -6838,7 +6859,7 @@ function CreateOCModal({onCreate, onClose}){
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Cliente *</label>
-          <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id)s("client_id",null)}} onSelect={selC} clients={[]}/>
+          <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}}}} onSelect={selC} clients={[]}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
