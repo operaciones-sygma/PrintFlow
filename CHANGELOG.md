@@ -5,6 +5,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.7 — Fix urgente: folio compartido en OC funciona — 22-may-2026
+
+**Bug raíz encontrado y corregido.** Karla intentaba asignar D-5824 (modo "Un folio compartido") a una OC con 2 órdenes pendientes y obtenía `duplicate key value violates unique constraint "idx_orders_invoice_folio_unique"`.
+
+### El problema
+El `UNIQUE INDEX idx_orders_invoice_folio_unique` prohibía duplicados absolutos en `orders.invoice_folio`. Esto rompía el modo "Un folio compartido" porque setear el mismo folio a 2+ orders viola el constraint. Verificado: **NUNCA** ha existido en producción una OC con `shared_invoice_folio` funcionando porque el constraint siempre lo bloqueó silenciosamente. El modo shared era código aspiracional pero no funcional.
+
+### El fix (DB)
+- **Removido:** `idx_orders_invoice_folio_unique` (UNIQUE INDEX rígido).
+- **Agregado:** `idx_orders_invoice_folio` (índice no-unique para performance).
+- **Agregado:** trigger `trg_orders_validate_invoice_folio_uniq` que valida:
+  - Misma OC → permitido compartir folio ✅
+  - Otra OC distinta → bloquear
+  - Una con OC y otra individual → bloquear
+- **Agregado:** trigger `trg_po_validate_shared_folio_uniq` en `purchase_orders` que valida `shared_invoice_folio`:
+  - Otra OC con mismo shared → bloquear
+  - Existe ya como folio individual de orden fuera de esta OC → bloquear
+
+### Resultado
+- Karla puede asignar D-5824 a OC-0048 con sus 2 órdenes pendientes → ambas reciben el folio compartido sin conflicto.
+- Sigue prohibido reutilizar D-5824 en otra OC o como folio individual.
+- Mensajes de error explícitos en lugar del raw `duplicate key value`.
+
+
 ## v10.43.6 — Tercer bug scan fixes — 22-may-2026
 
 Un alto + dos medios encontrados sobre v10.43.5.
