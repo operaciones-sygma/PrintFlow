@@ -2986,6 +2986,133 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
 }
 
 // ─── MOVE ORDER TO OC MODAL (v10.11.0 Sub-fase A) ───
+// v10.39.0 — Modal para agregar órdenes de producción EXISTENTES a una OC.
+// Lista órdenes del mismo client_id que la OC, sin folio fiscal y en stages no-terminales.
+// Multi-select. Cada selección dispara moveOrderToOC (RPC atómica con limpieza de OC origen).
+function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClose}) {
+  useEscClose(onClose);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Lista de OCs por id para mostrar "Actualmente en OC-XXX"
+  const ocById = useMemo(() => {
+    const m = {};
+    (purchaseOrders||[]).forEach(p => { m[p.id] = p; });
+    return m;
+  }, [purchaseOrders]);
+
+  // Stages terminales que se excluyen (orden ya entregada, cancelada o pre-web)
+  const TERMINAL = ["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected"];
+
+  // Filtro: mismo client_id, sin invoice_folio, no terminal, no ya en esta OC
+  const candidates = useMemo(() => {
+    const ocClientId = oc?.client_id;
+    if (!ocClientId) return [];
+    let list = (orders||[]).filter(o =>
+      o.client_id === ocClientId &&
+      !o.invoice_folio &&
+      !TERMINAL.includes(o.stage) &&
+      o.purchase_order_id !== oc.id
+    );
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(o =>
+        (o.production_number||"").toLowerCase().includes(q) ||
+        (o.product_type||"").toLowerCase().includes(q) ||
+        (o.id||"").toLowerCase().includes(q)
+      );
+    }
+    return list.sort((a,b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+  }, [orders, oc?.client_id, oc?.id, search]);
+
+  const toggle = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleConfirm = async () => {
+    if (selectedIds.size === 0) return;
+    setSaving(true);
+    try {
+      await onConfirm(Array.from(selectedIds));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:640,width:"100%",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}>📦 Agregar Producto Existente</h3>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>
+        Órdenes de producción del cliente <strong>{oc?.client||"—"}</strong> que aún no tienen folio fiscal. Las órdenes seleccionadas se moverán a esta OC ({oc?.id}). Si están en otra OC, se mueven (y la OC origen se limpia automáticamente si queda vacía).
+      </p>
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Buscar por P-XXXX, tipo o ID..."
+        style={{...inp,fontSize:12,marginBottom:10}}
+      />
+      <div style={{flex:1,overflowY:"auto",border:"1px solid "+C.bd,borderRadius:10,marginBottom:12,minHeight:120}}>
+        {candidates.length === 0 ? (
+          <div style={{textAlign:"center",padding:"30px 20px",color:C.t3}}>
+            <div style={{fontSize:32}}>🔍</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin órdenes elegibles</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:4,lineHeight:1.5}}>
+              No hay órdenes activas de <strong>{oc?.client||"este cliente"}</strong> sin folio fiscal.<br/>
+              Si esperabas ver alguna, verifica que: (1) sea del mismo cliente, (2) no tenga folio asignado, (3) no esté entregada/cancelada.
+            </div>
+          </div>
+        ) : candidates.map(o => {
+          const isSelected = selectedIds.has(o.id);
+          const inOtherOC = o.purchase_order_id && o.purchase_order_id !== oc.id;
+          return (
+            <div key={o.id}
+              onClick={() => toggle(o.id)}
+              style={{
+                padding:"10px 12px",
+                borderBottom:"1px solid "+C.bd,
+                cursor:"pointer",
+                background: isSelected ? C.ac+"10" : "transparent",
+                display:"flex",alignItems:"center",gap:10,
+              }}>
+              <input type="checkbox" checked={isSelected} onChange={() => toggle(o.id)} onClick={e => e.stopPropagation()} style={{cursor:"pointer"}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  {o.production_number && <span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:5,fontSize:10,fontWeight:700}}>#{o.production_number}</span>}
+                  <span style={{fontWeight:700,fontSize:13}}>{o.product_type||"(sin tipo)"}</span>
+                  {o.quantity && <span style={{fontSize:11,color:C.t2}}>· {Number(o.quantity).toLocaleString()} pzas</span>}
+                </div>
+                <div style={{fontSize:10,color:C.t2,marginTop:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  <span>Stage: <strong>{SM[o.stage]?.l||o.stage}</strong></span>
+                  {o.due_date && <span>· 📅 {fD(o.due_date)}</span>}
+                  {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}}>Actualmente en {o.purchase_order_id}</span>}
+                  {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t3,padding:"1px 6px",borderRadius:4,fontSize:9}}>Sin OC</span>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <div style={{fontSize:11,color:C.t2}}>
+          {selectedIds.size > 0 ? <><strong style={{color:C.ac}}>{selectedIds.size}</strong> seleccionada{selectedIds.size!==1?"s":""}</> : "Selecciona al menos una orden"}
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
+          <button onClick={handleConfirm} disabled={saving||selectedIds.size===0} style={{...bt(selectedIds.size>0?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:saving||selectedIds.size===0?"default":"pointer",opacity:saving?.6:1}}>
+            {saving ? "Moviendo..." : `📦 Agregar ${selectedIds.size>0?selectedIds.size+" ":""}orden${selectedIds.size!==1?"es":""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose}) {
   useEscClose(onClose);
   const [mode, setMode] = useState("existing"); // "existing" | "new"
@@ -5668,7 +5795,7 @@ function AuditoriaView({orders, purchaseOrders}){
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAssignFolio, onPreAssignFolio}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
@@ -5792,7 +5919,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"0 0 10px",flexWrap:"wrap",gap:8}}>
         <h3 style={{fontSize:14,fontWeight:800,margin:0,textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar producto</button>}
+          {/* v10.39.0 — botón renombrado: "Agregar producto" → "Agregar Producto Nuevo" */}
+          {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar Producto Nuevo</button>}
+          {/* v10.39.0 — botón nuevo: agregar orden de producción existente del mismo cliente a esta OC */}
+          {canAddProductHere && <button onClick={canAddProduct?()=>onAddExisting(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canAddProduct?"#16a34a":"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>📦 Agregar Producto Existente</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
         </div>
@@ -5802,7 +5932,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
             <div style={{fontSize:36}}>📋</div>
             <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:8}}>Esta OC no tiene productos todavía</div>
-            {canAddProduct && <div style={{fontSize:11,color:C.t2,marginTop:4}}>Click en "+ Agregar producto" para crear el primero</div>}
+            {canAddProduct && <div style={{fontSize:11,color:C.t2,marginTop:4}}>Click en "+ Agregar Producto Nuevo" para crear el primero, o en "📦 Agregar Producto Existente" para mover una orden del cliente que ya esté en el sistema.</div>}
           </div>
         : ocOrders.map(o => <OCard key={o.id} o={o} role={role} onAction={onAction} busy={false} noDragHint userLogin={userLogin} inOCView={true}/>)
       }
@@ -5977,6 +6107,8 @@ export default function PrintFlow() {
   const [plateModal,setPlateModal]=useState(null);
   // v10.38.0 — Regresar orden a CTP desde 'ready' o 'placas_listas' (Gerardo): captura razón
   const [returnToCtpModal,setReturnToCtpModal]=useState(null);
+  // v10.39.0 — Agregar producto existente a OC: lista órdenes del mismo cliente sin folio
+  const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
@@ -6364,6 +6496,53 @@ export default function PrintFlow() {
     });
     setView("form");
   },[user,userLogin,showToast,orders]);
+
+  // 📦 v10.39.0 — Abre modal para agregar órdenes EXISTENTES del mismo cliente a la OC
+  // Usa mismos permisos que addProductToOC (canAddProductToOC).
+  const addExistingToOC=useCallback(oc=>{
+    if(!canAddProductToOC(oc,user,userLogin)){
+      showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":"❌ Solo el vendedor asignado a esta OC puede agregar productos","error");
+      return;
+    }
+    if(!oc?.client_id){
+      showToast("❌ Esta OC no tiene client_id; no se puede filtrar por cliente. Edítala primero.","error");
+      return;
+    }
+    setAddExistingModal(oc);
+  },[user,userLogin,showToast]);
+
+  // 📦 v10.39.0 — Confirmar agregación múltiple: itera moveOrderToOC por cada orderId
+  const confirmAddExisting=useCallback(async(oc,orderIds)=>{
+    if(!orderIds||orderIds.length===0)return;
+    let ok=0,fail=0;
+    for(const oid of orderIds){
+      try{
+        await db.moveOrderToOC(oid,oc.id,userLogin||user);
+        ok++;
+        // Notif al trío + admin (consistente con moveOrderToOC individual)
+        try{
+          const o=orders.find(x=>x.id===oid);
+          const fromId=o?.purchase_order_id;
+          const userName=userDisplayName(user);
+          const folioStr=o?.production_number?" ("+o.production_number+")":"";
+          const notifMsg="📦 "+userName+" agregó orden de "+(o?.client||"")+folioStr+"\n\nDe: "+(fromId||"sin OC")+"\nA: "+oc.id+" (vía Agregar Producto Existente)";
+          const trio=["secretaria","preprensa","produccion"];
+          for(const targetRole of trio){
+            if(user!==targetRole)await db.addNotification(targetRole,oid,"oc_change",notifMsg,null,user);
+          }
+          if(user!=="admin")await db.addNotification("admin",oid,"oc_change",notifMsg,null,user);
+        }catch(e){console.error("[addExisting notif]",e)}
+      }catch(e){
+        console.error("[confirmAddExisting]",oid,e);
+        fail++;
+      }
+    }
+    setAddExistingModal(null);
+    if(ok>0&&fail===0)showToast("📦 "+ok+" orden"+(ok!==1?"es":"")+" agregada"+(ok!==1?"s":"")+" a "+oc.id);
+    else if(ok>0&&fail>0)showToast("⚠️ "+ok+" agregada"+(ok!==1?"s":"")+", "+fail+" fall"+(fail!==1?"aron":"ó"),"warning");
+    else showToast("❌ No se pudo agregar ninguna orden","error");
+    reload();
+  },[orders,user,userLogin,showToast,reload]);
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
   const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
@@ -7284,7 +7463,7 @@ export default function PrintFlow() {
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
@@ -7296,6 +7475,8 @@ export default function PrintFlow() {
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (Gerardo) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
+      {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
+      {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}

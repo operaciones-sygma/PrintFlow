@@ -5,6 +5,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.39.0 — Agregar Producto Existente a OC — 22-may-2026
+
+Solicitado por Marcelo: en la ventana de detalle de una OC, permitir agregar órdenes de producción YA EXISTENTES del mismo cliente (no solo crear órdenes nuevas). Caso de uso: Karla quiere juntar 2 órdenes de producción en una sola OC para asignarles un `shared_invoice_folio`.
+
+### Cambios
+
+**Frontend (`src/App.jsx`)**
+- Botón existente **"+ Agregar producto"** renombrado a **"+ Agregar Producto Nuevo"** (sin cambio funcional — sigue creando órdenes desde cero vía `addProductToOC`).
+- Botón nuevo **"📦 Agregar Producto Existente"** (color success/verde) junto al anterior. Mismos gates de permiso (`canAddProductToOC`).
+- Nuevo componente `AddExistingProductsModal`:
+  - Lista órdenes filtradas por `client_id` de la OC.
+  - Filtros defensivos: excluye órdenes con `invoice_folio`, stages terminales (delivered/maq_delivered/cancelled/maq_cancelled/web_pending/web_rejected) y órdenes ya en esta OC.
+  - **Multi-select** con checkboxes.
+  - Badge "Actualmente en OC-XXX" cuando la orden ya está en otra OC (el move desde otra OC es válido y limpia la origen automáticamente vía RPC `move_order_to_oc`).
+  - Badge "Sin OC" para órdenes huérfanas.
+  - Search box por production_number, product_type o ID.
+  - Empty state explicativo con causas posibles cuando no hay candidatos.
+- Handler `addExistingToOC(oc)`:
+  - Valida permisos (mismo gate que `addProductToOC`) y que la OC tenga `client_id` (sino no se puede filtrar).
+  - Abre el modal.
+- Handler `confirmAddExisting(oc, orderIds)`:
+  - Loop sobre `db.moveOrderToOC(orderId, oc.id, user)` para cada ID seleccionado.
+  - Notif al trío (secretaria/preprensa/produccion) + admin por cada orden movida.
+  - Toast con resumen (ok/fallidos) y `reload()`.
+- State `addExistingModal` agregado al árbol del App.
+- Prop `onAddExisting` añadida a `OrdenesCompraView`.
+- Hint del empty state actualizado para mencionar ambos botones.
+
+### Permisos
+- Misma gate que el botón actual: vendedor dueño / Karla / admin / secretaria. No-vendedor de la OC: bloqueado con toast.
+- OCs web: bloqueadas igual que el botón actual.
+
+### Sin cambios
+- RPC `move_order_to_oc` reusado tal cual (atómico, ya hace cleanup de OC origen si queda vacía).
+- Schema de `orders` y `purchase_orders`.
+- Lógica de OC web, pre-assign folio, asignar folio compartido.
+- Botón "+ Agregar Producto Nuevo" se comporta idéntico al anterior.
+
+---
+
+
 ## v10.38.0 — Regresar orden a CTP (re-imprimir placas) — 21-may-2026
 
 Gerardo (Producción) solicitó poder regresar una orden de `ready` o `placas_listas` de vuelta a `ctp` cuando se detecta que las placas necesitan re-imprimirse. Caso de uso: Hotel Hotsson — órdenes estaban en máquina, se quitaron, ahora están en Listas pero necesitan nuevas placas.
