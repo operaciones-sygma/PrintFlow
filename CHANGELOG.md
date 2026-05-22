@@ -5,6 +5,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.5 — Captura de cliente al crear orden persiste en cobranza — 22-may-2026
+
+**Pain real de Lupita y vendedores:** capturaban datos completos de un cliente nuevo en una orden (nombre, RFC, email, whatsapp) pero al crear la siguiente orden del mismo cliente, el typeahead no lo encontraba y tenían que reescribir todo. Razón técnica: `resolve_client` solo se disparaba en el bridge al asignar folio fiscal, y solo guardaba el nombre.
+
+### 🔧 Fix DB — RPC nuevo `upsert_client_from_order`
+- **Match en cascada:**
+  1. Por RFC normalizado (UPPER+TRIM) si está presente.
+  2. Sino, por nombre case-insensitive.
+- **Política:** **completar huecos, NUNCA sobrescribir.** Si el cliente ya tenía email "x@y.com", no se sobreescribe. Si tenía email NULL y la orden trae uno, se llena.
+- **Crea nuevo si no encuentra match**, con todos los datos provistos + nota "Capturado desde PrintFlow al crear orden".
+- **Resuelve `assigned_seller`** vía `cobranza.resolve_seller(agent)` para vincular automáticamente al vendedor.
+- **Audit log:** `client_data_enriched` (cuando completa huecos) o `auto_create_client_from_order` (cuando crea nuevo) con detalle de qué campos se llenaron.
+
+### 🎨 Frontend
+- **`dbCols` whitelist incluye `client_id`** ahora — el id se persiste en la orden para que el bridge y typeahead lo encuentren.
+- **`create()`** llama a `db.upsertClientFromOrder(...)` ANTES de `saveOrder` si `f.client_id` es NULL pero `f.client` está poblado.
+- **Falla no bloqueante:** si la RPC falla, la orden se crea igual (sin client_id) y el bridge la resolverá al facturar.
+- Para órdenes desde typeahead (con `client_id` ya resuelto), no se llama el upsert.
+
+### Resultado para Lupita / vendedores
+1. Captura "Juan Pérez" + RFC + email + WhatsApp en una orden nueva → orden se guarda + cliente se crea/enriquece en cobranza.
+2. Siguiente orden, escribe "Juan" → typeahead encuentra "Juan Pérez" con todos sus datos → click → `selC` autocompleta.
+
+### 🔒 Consideraciones
+- **Solo en `create()`**, no en `update()`. La edición de datos del cliente en una orden existente NO se propaga (decisión: minimizar side-effects).
+- **Match por RFC > nombre.** Dos clientes con el mismo nombre pero distinto RFC quedarán como dos registros distintos en cobranza (correcto).
+- **No sobrescribe datos previos.** Si admin corrigió manualmente un email en cobranza, una orden no lo va a "des-corregir".
+
+
 ## v10.43.4 — Edición de precio post-factura propaga a CobranzaFlow — 22-may-2026
 
 **Caso real:** Karla facturó una orden con D-XXXX pero la orden tenía precio $0 (no se había capturado). Editar el precio en PrintFlow ahora **propaga automáticamente** a `cobranza.invoices` (antes solo creaba una discrepancy informativa).

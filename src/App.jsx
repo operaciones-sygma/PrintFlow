@@ -321,7 +321,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -664,6 +664,16 @@ const db = {
     const {data,error}=await supabase.rpc("load_credit_ledger",{p_client_id:clientId,p_limit:limit});
     if(error)throw new Error("loadCreditLedger: "+error.message);
     return data||[];
+  },
+  // v10.43.5 — Crea/actualiza cliente en cobranza desde captura de orden
+  async upsertClientFromOrder({name, rfc=null, email=null, whatsapp=null, lada=null, agent=null, created_by=null}) {
+    if(!name||!name.trim())return null;
+    const {data,error}=await supabase.rpc("upsert_client_from_order",{
+      p_name:name.trim(),p_rfc:rfc||null,p_email:email||null,p_whatsapp:whatsapp||null,
+      p_lada:lada||null,p_agent:agent||null,p_created_by:created_by||null
+    });
+    if(error)throw new Error("upsertClientFromOrder: "+error.message);
+    return data; // uuid
   },
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
@@ -7247,7 +7257,18 @@ export default function PrintFlow() {
         assignedPN=rpcPN;
       }catch(e){if(e?.message==="folio_failed")return;throw e}
     }
-    const newOrder={...f,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    // v10.43.5 — Si el cliente no viene del typeahead (client_id NULL), crearlo/encontrarlo en cobranza
+    // para que la próxima búsqueda lo encuentre con sus datos. Match por RFC primero, luego nombre.
+    let resolvedClientId=f.client_id||null;
+    if(!resolvedClientId&&(f.client||"").trim()){
+      try{
+        resolvedClientId=await db.upsertClientFromOrder({
+          name:f.client,rfc:f.client_rfc,email:f.client_email,whatsapp:f.client_phone,
+          lada:f.client_lada,agent:f.agent||userLogin,created_by:userLogin||user
+        });
+      }catch(e){console.warn("[create] upsertClient falló (no bloqueante):",e?.message)}
+    }
+    const newOrder={...f,client_id:resolvedClientId,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
     await db.saveOrder(newOrder);
