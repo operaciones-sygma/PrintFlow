@@ -7353,11 +7353,20 @@ export default function PrintFlow() {
         showToast("❌ No puedes regresar esta orden desde su stage actual ("+ro.stage+") con tu rol ("+user+")","error");
         return;
       }
-      const optsFormatted=opts.map(s=>({
-        value:s,
-        label:(SM[s]?.l||s),
-        hint:STAGE_SEQUENCE.indexOf(s)===STAGE_SEQUENCE.indexOf(ro.stage)-1?"(stage anterior)":"(antes de tu área)",
-      }));
+      // v10.40.2 #3 — admin/karla no tienen "área" tradicional; su 2da opción es "2 stages atrás"
+      const useStagesHint=(user==="admin"||user==="karla");
+      const optsFormatted=opts.map(s=>{
+        const isImmediatePrev=STAGE_SEQUENCE.indexOf(s)===STAGE_SEQUENCE.indexOf(ro.stage)-1;
+        return {
+          value:s,
+          label:(SM[s]?.l||s),
+          hint:isImmediatePrev?"(stage anterior)":(useStagesHint?"(2 stages atrás)":"(antes de tu área)"),
+        };
+      });
+      // v10.40.2 #1 — toast informativo cuando admin revierte desde delivered (cobranza no se modifica)
+      if(ro.stage==="delivered"&&user==="admin"){
+        showToast("ℹ️ La invoice fiscal en CobranzaFlow no se modifica. Si vas a cambiar el folio, revierte primero la invoice.","warning");
+      }
       setRevertModal({order:ro,options:optsFormatted});
     }
     // v10.38.0 legacy — return_to_ctp queda como pass-through al flujo nuevo (compat)

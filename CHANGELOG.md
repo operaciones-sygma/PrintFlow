@@ -5,6 +5,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.40.2 — Polish post-scan v10.40 — 22-may-2026
+
+Polish menor sobre v10.40.0. Solo 1 alto educativo + 1 medio cosmético. v10.40.0/v10.40.1 verificados SOUND.
+
+### 🟠 Educativo
+- **#1 Toast informativo cuando admin revierte desde `delivered`.** El `revertOrder` cambia `stage='salidas'` y limpia `delivered_at`, pero **no toca `invoice_folio`** ni la invoice en `cobranza.invoices`. Si admin va a reasignar folio nuevo, podría quedar invoice fantasma en cobranza (caso P-3516/D-5824 que tuvimos que limpiar manualmente). **Fix:** toast warning al abrir el modal *"La invoice fiscal en CobranzaFlow no se modifica. Si vas a cambiar el folio, revierte primero la invoice."* Solo educativo, no destructivo.
+
+### 🟡 Cosmético
+- **#3 Hint "antes de tu área" incorrecto para admin/karla.** Esos roles tienen como 2da opción literalmente "2 stages atrás" (no "antes del área del rol", que no aplica a admin/karla). **Fix:** detectar role admin/karla → hint "(2 stages atrás)".
+
+### Diferido a backlog
+- #2 memoization de `getRevertOptions` (~50ms con 100 órdenes, no urgente)
+- #4 decisión de producto: ¿preprensa puede saltar de `proof_client` a `draft`?
+- #5-#10 cosmético/edge cases
+
+---
+
+
 ## v10.40.1 — Fix: ConfirmModal queda visible durante side effects largos — 22-may-2026
 
 Marcelo reportó: al borrar una orden, el popup "Sí, borrar / No, cancelar" se mantenía visible aunque ya había clickeado "Sí" — daba la sensación de que el botón no respondía.
