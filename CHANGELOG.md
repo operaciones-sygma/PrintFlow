@@ -5,6 +5,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.6 — Tercer bug scan fixes — 22-may-2026
+
+Un alto + dos medios encontrados sobre v10.43.5.
+
+### 🔴 A5 — `update()` actualiza `client_id` al editar cliente
+**Bug:** `editableFields` no incluía `client_id`. Si admin editaba una orden cambiando el nombre del cliente, los campos `client*` se actualizaban pero `client_id` quedaba apuntando al cliente anterior → al facturar, el bridge usaba el cliente equivocado.
+
+**Fix:**
+- `editableFields` ahora incluye `client_id` (se persiste en UPDATE).
+- `update()` llama `upsertClientFromOrder` si `client_id` queda NULL pero hay `client.trim()`, igual que `create()`. Resuelve el id correcto y lo guarda. No bloqueante.
+
+### 🟡 M8 — Race condition en `upsert_client_from_order`
+**Bug:** Dos vendedores creando órdenes simultáneas con el mismo cliente nuevo podían generar duplicados en `cobranza.clients` porque el RPC no tenía advisory lock y la tabla no tiene UNIQUE en (name) o (rfc).
+
+**Fix:** `pg_advisory_xact_lock(hashtext('upsert_client:'||(rfc or lower(name))))` al inicio del bloque de búsqueda/insert. Serializa concurrentes con el mismo identificador. Mismo patrón que `record_stock_movement` y `credit_consume`.
+
+### 🟡 M9 — Formato de WhatsApp inconsistente
+**Bug:** El RPC guardaba whatsapp como `"+52 4771234567"` (con lada). Los clientes existentes lo tienen como `"4771234567"` o `"477 120 5353"` (sin lada). Mezclar ambos formatos rompía el typeahead+selC: al re-cargar un cliente con formato nuevo, el lada se duplicaría.
+
+**Fix:** el RPC guarda **solo el número sin lada**, consistente con el resto de la BD. `p_lada` se recibe por compat pero se ignora (el lada se preserva aparte en `orders.client_lada`).
+
+### 🟢 Quedan como mejoras post-demo
+- **B7** Notas en payment Corona se concatenan sin límite
+- **B8** `assigned_seller` por fuzzy match en cada upsert
+- **B9** Audit log puede ser ruidoso si solo se llena `seller`
+
+
 ## v10.43.5 — Captura de cliente al crear orden persiste en cobranza — 22-may-2026
 
 **Pain real de Lupita y vendedores:** capturaban datos completos de un cliente nuevo en una orden (nombre, RFC, email, whatsapp) pero al crear la siguiente orden del mismo cliente, el typeahead no lo encontraba y tenían que reescribir todo. Razón técnica: `resolve_client` solo se disparaba en el bridge al asignar folio fiscal, y solo guardaba el nombre.

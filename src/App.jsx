@@ -7454,8 +7454,21 @@ export default function PrintFlow() {
 
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
-    const editableFields=["order_type","priority","production_number","client","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
+    const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
+    // v10.43.6 FIX A5 — Si al editar el cliente quedó sin client_id (escrito a mano) pero
+    // tiene nombre, intentar upsert para mantener vínculo correcto con cobranza.clients.
+    // No-bloqueante: si falla, se guarda sin client_id (queda como antes).
+    if(("client" in safeUpdate)&&(safeUpdate.client||"").trim()&&!safeUpdate.client_id){
+      try{
+        const resolved=await db.upsertClientFromOrder({
+          name:safeUpdate.client,rfc:safeUpdate.client_rfc,email:safeUpdate.client_email,
+          whatsapp:safeUpdate.client_phone,lada:safeUpdate.client_lada,
+          agent:safeUpdate.agent||userLogin,created_by:userLogin||user
+        });
+        if(resolved)safeUpdate.client_id=resolved;
+      }catch(e){console.warn("[update] upsertClient falló (no bloqueante):",e?.message)}
+    }
     // v10.42.0 — Bloqueo: si la orden ya tiene movimientos de stock (stock_loaded), no se puede cambiar la cantidad
     // porque desincronizaría el saldo del inventario respecto al movimiento PRODUCED ya registrado.
     const _prevForGuard=orders.find(x=>x.id===f.id);
