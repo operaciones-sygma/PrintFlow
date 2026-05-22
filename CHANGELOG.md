@@ -5,6 +5,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.1 — Bug scan fixes (Cuadra + Corona) — 22-may-2026
+
+Tres altos + un medio encontrados en scan exhaustivo post-v10.43.0 / v2.8.1. Todos aplicados.
+
+### 🔴 A1 — Bridge: `sync_cancellation_to_cobranza` revierte saldo Corona independiente del flag
+**Bug:** Si el flag `corona_credit_bridge_enabled` se apagaba después de haber consumido saldo en una factura Corona, cancelar esa factura NO disparaba `credit_reverse` → el saldo del cliente quedaba descuadrado (el dinero no se le devolvía).
+
+**Fix:** la rama de reverso ahora chequea si existe un CONSUMO ligado a la invoice (`source_invoice_id`) sin depender del flag ni del `billing_mode` actual del cliente. La RPC `credit_reverse` ya era idempotente; ahora se invoca correctamente en todos los casos de cancelación.
+
+### 🔴 A2 — `cancelOrder` con stock_loaded: guard
+**Bug:** Cancelar una orden Cuadra con `stock_loaded=true` (ya cargada al inventario) marcaba la orden como cancelada pero el saldo del producto en `client_products.stock_actual` seguía inflado/reducido — inventario fantasma.
+
+**Fix:** `cancelOrder()` ahora rechaza la operación si `stock_loaded=true` con mensaje claro: *"Primero ajusta el stock manualmente desde el módulo Inventario, después cancela"*. Paralelo al guard existente de `invoice_folio`.
+
+### 🔴 A3 — `deleteOrder` con stock_loaded: guard
+**Bug:** Borrar una orden con `stock_loaded=true` dejaba registros huérfanos en `stock_movements` (FK con `ON DELETE SET NULL`) y el saldo del producto sin corregir.
+
+**Fix:** mismo guard en `deleteOrder()`. Mensaje explícito con el ajuste manual previo necesario.
+
+### 🟡 M4 — Toast translation: errores de saldo insuficiente
+**Bug:** Cuando una RPC de stock (`record_stock_movement` o `sell_from_stock`) rechazaba por saldo insuficiente, el toast mostraba el `RAISE EXCEPTION` raw: `"stock insuficiente: actual=300 intento=-500"`.
+
+**Fix:** helper `humanizeStockError()` traduce a *"❌ Stock insuficiente. Saldo actual: 300 pzas, intentaste mover 500 pzas."* y cubre otros errores comunes (`client_product no existe`, `qty debe ser > 0`, etc).
+
+### 🟢 No-fix (queda como mejora futura)
+- M2: `payment_type='saldo_a_favor'` se muestra como string literal (cosmético)
+- M3: `reloadLedger` sin `alive` flag en CobranzaFlow (race condition leve)
+- B1/B2/B3: indicadores UX y alertas de umbral
+
+### ⚠️ Operación importante post-fix A2/A3
+Si por error se cancela/borra una orden con stock_loaded ANTES de este fix, los saldos quedan inconsistentes. Para corregir, hacer ADJUST manual en el módulo Inventario con el delta correspondiente.
+
+
 ## v10.43.0 — Corona: Saldo a favor (anticipo abierto) — PrintFlow side — 22-may-2026
 
 Feature nueva para clientes con flujo de anticipo abierto (caso Corona). Cliente deposita un monto open-ended ($300k) → registramos saldo a favor en ledger. Cada factura de Corona consume el saldo en vez de generar CXC. La factura aparece en `cobranza.invoices` como pagada con `payment_type='saldo_a_favor'`, y NO entra al embudo de cobranza.

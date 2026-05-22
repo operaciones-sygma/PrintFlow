@@ -667,6 +667,16 @@ const db = {
   },
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
+// v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
+const humanizeStockError=err=>{
+  const m=err?.message||String(err||"");
+  const mStock=m.match(/stock insuficiente:\s*actual=(-?\d+)\s*intento=(-?\d+)/);
+  if(mStock)return"❌ Stock insuficiente. Saldo actual: "+mStock[1]+" pzas, intentaste mover "+Math.abs(parseInt(mStock[2],10))+" pzas.";
+  if(/client_product no existe/i.test(m))return"❌ El producto del catálogo ya no existe. Recarga la lista y vuelve a intentar.";
+  if(/qty debe ser > 0/i.test(m))return"❌ La cantidad debe ser mayor a 0.";
+  if(/kind invalido/i.test(m))return"❌ Tipo de movimiento inválido (bug interno). Avisa a Marcelo.";
+  return"❌ "+m;
+};
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
 const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]??1)-(p[b.priority]??1)};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
@@ -1610,11 +1620,11 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
     }} onClose={()=>setEditing(null)}/>}
     {editing?.mode==="adjust"&&<AdjustStockModal product={editing.product} userLogin={userLogin} onSave={async(qty,notes)=>{
       try{await db.recordStockMovement({client_product_id:editing.product.id,kind:"ADJUST",qty,notes,created_by:userLogin||user});showToast("✅ Ajuste registrado");setEditing(null);await reload()}
-      catch(e){showToast("❌ "+e.message,"error")}
+      catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
     {editing?.mode==="sell"&&<SellFromStockModal product={editing.product} userLogin={userLogin} onSell={async args=>{
       try{await db.sellFromStock({...args,client_product_id:editing.product.id,created_by:userLogin||user});showToast("✅ Venta creada — orden en Salidas");setEditing(null);await reload()}
-      catch(e){showToast("❌ "+e.message,"error")}
+      catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
   </div>;
 }
@@ -7803,7 +7813,7 @@ export default function PrintFlow() {
       showToast("📦 Cargada a stock — "+qty+" pzas ingresadas al inventario","success");
     }catch(e){
       console.error("[loadStock] Error:",e);
-      showToast("❌ No se pudo cargar a stock: "+(e?.message||"error desconocido"),"error");
+      showToast(humanizeStockError(e),"error");
       reload();
     }finally{setActionLoading(null)}
   },[orders,user,userLogin,showToast,reload]);
@@ -7816,6 +7826,14 @@ export default function PrintFlow() {
     // Esto preserva la integridad de la serie D-XXXX/R-XXXX (no quedan huecos)
     if(o.invoice_folio){
       showToast("❌ No se puede borrar: la orden tiene folio "+o.invoice_folio+" asignado. Borrar dejaría un hueco en la serie fiscal.","error");
+      return;
+    }
+    // v10.43.1 FIX A3 — Bloquear borrado si la orden ya cargó/sacó stock.
+    // Borrar dejaría stock_movements huérfanos (order_id→NULL via FK) y el saldo del producto desincronizado.
+    // Para corregir: primero hacer ADJUST manual en Inventario, luego borrar.
+    if(o.stock_loaded){
+      const direction=o.stock_role==="production"?"ingresó al":(o.stock_role==="sale"?"se descontó del":"movió el");
+      showToast("❌ No se puede borrar: esta orden "+direction+" inventario ("+o.quantity+" pzas). Primero ajusta el stock manualmente desde el módulo Inventario, luego borra.","error");
       return;
     }
     setConfirmModal({title:"🗑️ Borrar Orden",message:"¿Borrar \""+o.client+" — "+(o.product_type||"")+"\"?\n\nSe eliminará permanentemente con todo su historial. Esta acción NO se puede deshacer.",confirmLabel:"Sí, borrar",confirmColor:C.dn,onConfirm:async()=>{
@@ -7842,6 +7860,14 @@ export default function PrintFlow() {
 
   const cancelOrder=useCallback(async(id,reason)=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
+    // v10.43.1 FIX A2 — Bloquear cancelación si la orden ya cargó/sacó stock.
+    // El saldo del producto quedaría desincronizado (sigue inflado/reducido respecto a la realidad).
+    // Para revertir: primero AJUSTE manual desde el módulo Inventario, después cancelar.
+    if(o.stock_loaded){
+      const direction=o.stock_role==="production"?"ingresó +"+o.quantity+" al":(o.stock_role==="sale"?"sacó -"+o.quantity+" del":"movió "+o.quantity+" en el");
+      showToast("❌ No se puede cancelar: esta orden "+direction+" inventario. Primero ajusta el stock manualmente (Inventario → Ajustar) y luego cancela.","error");
+      return;
+    }
     const ns=o.order_type==="maquila"?"maq_cancelled":"cancelled";
     const cancelMsg="❌ Orden cancelada: "+(o.client||"")+" — "+(o.product_type||"")+". Motivo: "+reason;
     const wasInQueue=o.machine_queue_position!=null&&o.current_machine&&o.current_machine!=="vm_manual";
