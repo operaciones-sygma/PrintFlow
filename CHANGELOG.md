@@ -5,6 +5,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.38.0 — Regresar orden a CTP (re-imprimir placas) — 21-may-2026
+
+Gerardo (Producción) solicitó poder regresar una orden de `ready` o `placas_listas` de vuelta a `ctp` cuando se detecta que las placas necesitan re-imprimirse. Caso de uso: Hotel Hotsson — órdenes estaban en máquina, se quitaron, ahora están en Listas pero necesitan nuevas placas.
+
+### Cambios
+
+**DB (migration `v10_38_plate_log_void_columns`)**
+- Agregadas columnas a `public.plate_log`: `voided_at`, `voided_reason`, `voided_by`. Permiten marcar placas como inválidas conservando el historial (no se borran).
+
+**Frontend (`src/App.jsx`)**
+- Nuevo botón **"↩️ Regresar a CTP"** color cyan en `OCard`, visible cuando `stage ∈ {placas_listas, ready}` Y `role ∈ {produccion, admin}`.
+- Nuevo componente `ReturnToCtpModal`: captura razón obligatoria (textarea) con auto-focus + ejemplo en placeholder.
+- Handler `action==='return_to_ctp'` en `handleAction`: valida rol + stage, abre modal.
+- Función `returnToCtp(id, reason)`:
+  - UPDATE `plate_log` SET voided_at/voided_reason/voided_by (solo plates que estén `voided_at IS NULL`).
+  - UPDATE `orders` SET `stage='ctp'`, `current_machine=null` (va a Germán otra vez).
+  - `db.addTimeline` con razón + quién + cuándo.
+  - `db.notify('german', ...)` para que Germán reciba notificación in-app.
+  - Optimistic local update de orders.
+- State `returnToCtpModal` agregado al árbol del App.
+
+### Permisos
+- Solo `produccion` (Gerardo + equipo de máquinas) y `admin` (Marcelo) pueden disparar el regreso.
+- Otros roles: el botón no se renderiza.
+
+### Trazabilidad
+- Placas viejas conservan registro (`voided_at` flagea invalidación).
+- Timeline de la orden registra el regreso con razón.
+- Audit: Germán recibe notif inmediata con el motivo.
+
+### Sin cambios
+- Lógica de avance normal del workflow (`advance`/`doAdv` intactos).
+- Schema de `orders`.
+- Otras transiciones de stage.
+
+---
+
+
 ## v10.37.0 — Reordenar dashboard: Pipeline antes que MaquilaTracker — 21-may-2026
 
 Marcelo solicitó ver el dashboard de producción interna (Pipeline con sus etapas) **primero**, y el recuadro "En Maquila" (`MaquilaTracker`) **al final**. Antes el `MaquilaTracker` ocupaba la primera posición visible y dominaba el dashboard, escondiendo el Pipeline interno debajo.

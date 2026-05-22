@@ -1308,6 +1308,37 @@ function DevolverModal({onConfirm,onClose}) {
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>↩️ Devolver a Diseño</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Describe el fallo o motivo por el cual se regresa esta orden a Noemí (Diseño)</p><div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical"}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Describe el problema..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(!reason.trim())return alert("Escribe el motivo");onConfirm(reason.trim())}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>↩️ Devolver</button></div></div></div>;
 }
 
+// v10.38.0 — Modal para regresar orden a CTP (capturar razón).
+// Las plates existentes se marcan como void (no se borran) — historial preservado.
+function ReturnToCtpModal({order,onConfirm,onClose}) {
+  useEscClose(onClose);
+  const [reason,setReason]=useState("");
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"90%"}}>
+    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar a CTP</h3>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>La orden volverá a Germán para re-imprimir placas. Las placas existentes se marcarán como inválidas (se conserva el historial).</p>
+    <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
+      <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
+      <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
+      {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
+      <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: {SM[order?.stage]?.l||order?.stage}</div>
+    </div>
+    <div style={{marginBottom:16}}>
+      <label style={lbl}>Razón del regreso (obligatorio)</label>
+      <textarea
+        style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:"#f59e0b"+"40")}}
+        value={reason}
+        onChange={e=>setReason(e.target.value)}
+        placeholder="ej. placa rayada, color incorrecto, archivo cambió..."
+        autoFocus
+      />
+    </div>
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+      <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");onConfirm(reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar a CTP</button>
+    </div>
+  </div></div>;
+}
+
 function CancelOrderModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
@@ -3251,6 +3282,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
       {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Recoger Placas → Lista</button>}
+      {/* v10.38.0 — Regresar a CTP desde placas_listas o ready (Gerardo: caso Hotel Hotsson) */}
+      {(o.stage==="placas_listas"||o.stage==="ready")&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"return_to_ctp")} style={bt("#0891b2")}>↩️ Regresar a CTP</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
       {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"devolver_design")} style={bt(C.dn)}>↩️ Devolver a Diseño</button>}</>}
@@ -5942,6 +5975,8 @@ export default function PrintFlow() {
   const [folioOCModal,setFolioOCModal]=useState(null); // 📄 v10.11.0 Sub-fase B — Modal asignar folio a OC: {oc, ocOrders, preAssigned}
   const [webRejectModal,setWebRejectModal]=useState(null);
   const [plateModal,setPlateModal]=useState(null);
+  // v10.38.0 — Regresar orden a CTP desde 'ready' o 'placas_listas' (Gerardo): captura razón
+  const [returnToCtpModal,setReturnToCtpModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
@@ -6517,6 +6552,39 @@ export default function PrintFlow() {
     if(["delivered","maq_delivered","salidas"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:"#16a34a",onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)
   },[orders,user,userLogin,showToast,doAdv]);
 
+  // v10.38.0 — Regresa orden a CTP desde ready/placas_listas, invalida plates existentes,
+  // captura razón, notifica a Germán y deja entry en timeline. Solicitado por Gerardo.
+  const returnToCtp=useCallback(async(id,reason)=>{
+    const o=orders.find(x=>x.id===id);
+    if(!o){showToast("❌ Orden no encontrada","error");return}
+    if(!reason||!reason.trim()){showToast("❌ Captura la razón del regreso","warning");return}
+    setActionLoading(id);
+    try{
+      const now=new Date().toISOString();
+      const tlMsg="↩️ Regresada a CTP — Razón: "+reason.trim();
+      // 1. Invalidar plates existentes (no se borran, solo marca void)
+      const {error:plErr}=await supabase.from("plate_log")
+        .update({voided_at:now,voided_reason:reason.trim(),voided_by:user})
+        .eq("order_id",id).is("voided_at",null);
+      if(plErr)console.warn("[returnToCtp] No se pudieron invalidar plates:",plErr.message);
+      // 2. Update order: stage='ctp', limpiar current_machine (va a Germán otra vez)
+      const updates={stage:"ctp",current_machine:null};
+      const {error:uErr}=await supabase.from("orders").update(updates).eq("id",id);
+      if(uErr)throw uErr;
+      // 3. Timeline
+      await db.addTimeline(id,tlMsg,user,"#0891b2");
+      // 4. Notificación in-app a Germán
+      await db.notify("german",id,"order_edit","↩️ Orden regresó a CTP — "+(o.client||"")+" · "+(o.product_type||"")+" · Razón: "+reason.trim(),null,user);
+      // 5. Optimistic local update
+      setOrders(p=>p.map(x=>x.id===id?{...x,stage:"ctp",current_machine:null,timeline:addTL(x,tlMsg,{to:"ctp"})}:x));
+      showToast("↩️ "+(o.client||"")+" regresada a CTP. Germán notificado.","success");
+    }catch(e){
+      console.error("[returnToCtp] Error:",e);
+      showToast("❌ No se pudo regresar a CTP: "+(e?.message||"error desconocido"),"error");
+      reload();
+    }finally{setActionLoading(null)}
+  },[orders,user,showToast,reload]);
+
   const approveProof=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);
     // 🔒 v10.12.0.4 Phase 3 — Hardstop: admin/sec/vendedor/preprensa/produccion (vendedor solo propias)
@@ -6879,6 +6947,14 @@ export default function PrintFlow() {
       if(wo&&!canExecuteAction("waste",wo,user,userLogin)){showToast(actionDeniedToast("waste",wo,user,userLogin),"error");return}
       setWasteModal(id);
     }
+    // v10.38.0 — Regresar orden a CTP (desde ready o placas_listas; produccion/admin)
+    if(action==="return_to_ctp"){
+      const rco=orders.find(x=>x.id===id);
+      if(!rco)return;
+      if(user!=="produccion"&&user!=="admin"){showToast("❌ Solo Producción o Admin pueden regresar órdenes a CTP","error");return}
+      if(!["ready","placas_listas"].includes(rco.stage)){showToast("❌ Solo se puede regresar a CTP desde Listas o Placas Listas (stage actual: "+rco.stage+")","error");return}
+      setReturnToCtpModal(rco);
+    }
     if(action==="comment")addComment(id,payload);
     if(action==="quick_note"){
       // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no agrega notas a órdenes ajenas
@@ -7218,6 +7294,8 @@ export default function PrintFlow() {
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
+      {/* v10.38.0 — Modal regresar orden a CTP (Gerardo) */}
+      {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
