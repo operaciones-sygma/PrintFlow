@@ -5,6 +5,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.4 — Edición de precio post-factura propaga a CobranzaFlow — 22-may-2026
+
+**Caso real:** Karla facturó una orden con D-XXXX pero la orden tenía precio $0 (no se había capturado). Editar el precio en PrintFlow ahora **propaga automáticamente** a `cobranza.invoices` (antes solo creaba una discrepancy informativa).
+
+### 🔧 Fix DB — `sync_post_invoice_edit` ampliado
+- **Antes:** solo creaba `audit_discrepancy` ("revisar monto fiscal").
+- **Ahora:** además **UPDATE `cobranza.invoices.amount` + recalcula `balance`** preservando lo ya pagado (`paid = old_amount - old_balance` → `new_balance = max(0, new_amount - paid)`). Status se recalcula: `pagada` / `parcial` / `pendiente` según corresponda.
+
+### Casos manejados
+| Caso | Comportamiento |
+|---|---|
+| Invoice **pendiente** (sin pagos) | Actualiza `amount` y `balance` al nuevo monto |
+| Invoice **parcial** (con pagos) | Mantiene lo pagado; ajusta `balance` (puede subir o bajar) |
+| Invoice **pagada total** | Si baja el precio, `balance=0` se mantiene; si sube, queda con saldo pendiente |
+| **OC con `shared_invoice_folio`** | Recalcula `SUM(price)` de TODAS las orders activas de la OC (no solo la editada) |
+| **Cliente Corona** (`billing_mode='anticipo'`) | Hace `credit_adjust` por la diferencia (consumo adicional si sube; devolución si baja). Actualiza también el payment `saldo_a_favor`. Garantiza `balance=0, status='pagada'`. |
+| Invoice **cancelada** | Skip — no se toca. Auditado en log. |
+
+### Auditoría
+- `cobranza.audit_log`: `bridge_post_invoice_edit_applied` con detalle completo (old/new amount, paid, status, si era Corona, si era OC compartida).
+- `cobranza.audit_discrepancies`: entrada con `status='resuelta'` (porque el auto-update YA lo arregló).
+- `EXCEPTION WHEN OTHERS` heredado — un fallo se loguea pero no rompe la edición en PrintFlow.
+
+### 🔒 Permisos
+La edición de orders con `invoice_folio` ya estaba restringida en frontend a admin (Marcelo). El nuevo bridge respeta ese gate — solo dispara cuando se hace un UPDATE legítimo a `price`.
+
+
 ## v10.43.3 — Fix urgente: folio OC menor al sugerido permitido — 22-may-2026
 
 Karla necesita asignar folios menores al recomendado a OCs (caso real: corregir huecos retroactivos contra AlphaERP). El RPC `assign_folio_to_oc` los rechazaba con `RAISE EXCEPTION 'Folio inicial no puede ser <= último folio usado'`.
