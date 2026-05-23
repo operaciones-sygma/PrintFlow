@@ -665,6 +665,12 @@ const db = {
     if(error)throw new Error("loadCreditLedger: "+error.message);
     return data||[];
   },
+  // v10.43.10 — Aplica saldo Corona a una orden de producción SIN folio fiscal
+  async applyCreditNoFolio(orderId, user, notes=null) {
+    const {data,error}=await supabase.rpc("apply_credit_no_folio",{p_order_id:orderId,p_user:user,p_notes:notes});
+    if(error)throw new Error("applyCreditNoFolio: "+error.message);
+    return data;
+  },
   // v10.43.5 — Crea/actualiza cliente en cobranza desde captura de orden
   async upsertClientFromOrder({name, rfc=null, email=null, whatsapp=null, lada=null, agent=null, created_by=null}) {
     if(!name||!name.trim())return null;
@@ -2331,16 +2337,19 @@ function InvoiceModal({order,onConfirm,onClose}) {
   },[]);
 
   // Validación del folio escrito
+  // v10.43.10 — type 'no_folio' (Corona) salta toda la lógica de folio fiscal
+  const isNoFolio=type==="no_folio";
   const folioRegex=type==="factura"?/^D-\d+$/:/^R-\d+$/;
   const folioPrefix=type==="factura"?"D-":"R-";
-  const folioValid=folio&&folioRegex.test(folio);
-  const folioNum=folioValid?parseInt(folio.split("-")[1],10):0;
-  const suggestedNum=suggestion[type]?parseInt(suggestion[type].split("-")[1],10):0;
-  const folioIsLower=folioValid&&suggestedNum>0&&folioNum<suggestedNum;
+  const folioValid=isNoFolio?true:(folio&&folioRegex.test(folio));
+  const folioNum=(!isNoFolio&&folioValid)?parseInt(folio.split("-")[1],10):0;
+  const suggestedNum=(!isNoFolio&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
+  const folioIsLower=(!isNoFolio)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
 
   // v10.29.0 + v10.30.0 — paymentStatus debe estar definido; si paid/partial también method; si partial monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
-  const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16,2)
+  // v10.43.10 — Corona 'no_folio' también descuenta CON IVA (consistente con apply_credit_no_folio).
+  const totalDisplay=(type==="factura"||type==="no_folio")?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8
   const amountNum=Number(paymentAmount)||0;
   // v10.36.0 — exigir bank_reference para métodos bancarios cuando paid/partial.
   // Defensa en profundidad: el backend (sync_invoice_from_orders) también valida y rechaza.
@@ -2374,12 +2383,18 @@ function InvoiceModal({order,onConfirm,onClose}) {
       // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
       if(isCorona){
         // v10.43.2 FIX M7-b — Refrescar saldo justo antes de confirmar para evitar stale state
-        // (Lucero pudo haber registrado un depósito mientras Karla tenía el modal abierto).
         try{
           const fresh=await db.getClientBillingInfo(order.client_id);
           if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
         }catch(e){console.warn("[InvoiceModal] refresh saldo:",e)}
-        await onConfirm(type,folio,null,null,null,null);
+        // v10.43.10 — Tres caminos para Corona:
+        //   - factura/remision: assign_invoice normal, bridge consume saldo
+        //   - no_folio: apply_credit_no_folio (sin folio fiscal, descuento directo del ledger)
+        if(isNoFolio){
+          await onConfirm("no_folio",null,null,null,null,null);
+        }else{
+          await onConfirm(type,folio,null,null,null,null);
+        }
         return;
       }
       const amountToSend=paymentStatus==="partial"?Number(paymentAmount):null;
@@ -2428,11 +2443,21 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
       {!confirming ? <>
         <p style={{fontSize:12,color:C.tx,margin:"0 0 12px"}}>Selecciona el tipo de comprobante:</p>
-        <div style={{display:"flex",gap:10,marginBottom:18}}>
+        <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
           {tBtn("factura","Factura","📄","#5856d6",suggestion.factura)}
           {tBtn("remision","Remisión","📋","#34c759",suggestion.remision)}
+          {/* v10.43.10 — Tercer botón Corona: descontar saldo sin folio fiscal */}
+          {isCorona&&(()=>{
+            const sel=type==="no_folio";
+            return <button onClick={()=>{setType("no_folio");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Poppins',sans-serif",transition:"all .15s"}}>
+              <div style={{fontSize:32,marginBottom:6}}>💰</div>
+              <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Aplicar saldo</div>
+              <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>sin folio fiscal</div>
+            </button>;
+          })()}
         </div>
-        {type&&<>
+        {/* v10.43.10 — Input de folio solo si NO es 'no_folio' */}
+        {type&&!isNoFolio&&<>
           <label style={{...lbl,marginTop:4}}>Folio del {type==="factura"?"CFDI":"comprobante"} (escribe o usa sugerido):</label>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <input
@@ -8555,6 +8580,17 @@ export default function PrintFlow() {
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference)=>{
         try{
+          // v10.43.10 — Corona "no_folio": descontar saldo sin asignar folio fiscal
+          if(invoiceType==="no_folio"){
+            const result=await db.applyCreditNoFolio(invoiceModal.id,userLogin||user);
+            const newStage=result?.new_stage||(invoiceModal.order_type==="maquila"?"maq_delivered":"delivered");
+            const tlMsg="💰 Saldo Corona aplicado (sin folio fiscal) · −$"+Number(result?.amount_with_iva||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" · saldo después: $"+Number(result?.new_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2});
+            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),invoiced_at:new Date().toISOString(),invoiced_by:user,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+            await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
+            showToast("💰 Saldo aplicado — orden entregada sin folio fiscal");
+            setInvoiceModal(null);
+            return;
+          }
           // v10.30.0 — pasar payment_status, method y amount al RPC
           // v10.35.0 — pasar bankReference para conciliación automática 95% en CobranzaFlow
           await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference);

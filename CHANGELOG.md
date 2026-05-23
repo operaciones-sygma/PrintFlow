@@ -5,6 +5,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.10 — Corona rework: OC a Crédito con folio fiscal + sin folio en órdenes — 22-may-2026
+
+**Cambio de modelo importante** tras aclaración de Marcelo sobre el flujo real de Corona.
+
+### El modelo correcto
+Corona NO deposita dinero al banco anticipadamente. En su lugar:
+1. Corona envía una **OC a Crédito** con su propio número de referencia (ej. `MC-2026-0042`). Karla tiene acceso a ese número.
+2. Sygma **factura inmediatamente** esa OC → **factura D-XXXX por monto + IVA** se emite. Va a CXC de cobranza con `due_date` futuro (típicamente 6 meses).
+3. Las órdenes de producción individuales de Corona **NO llevan folio fiscal propio** (caso normal) — solo se descuentan del saldo disponible.
+4. Caso especial: Karla puede facturar una orden individual con D-/R- si Corona lo pide (variable, ella decide).
+5. 6+ meses después, Corona deposita el pago → aplica a la factura D-XXXX en cobranza.
+
+### Cambios técnicos
+
+**DB:**
+- Nueva columna `cobranza.invoices.external_po_ref` para el número PO Corona.
+- Nueva columna `cobranza.client_credit_ledger.source_order_id` para idempotencia de CONSUMOs sin folio.
+- **`credit_deposit` rediseñada**: ahora recibe `(client_id, external_po_ref, folio_fiscal, subtotal_no_iva, due_date, user, notas)`. Crea factura en cobranza con folio + monto con IVA + due_date. Crea DEPOSITO en ledger ligado a esa factura.
+- **`apply_credit_no_folio` actualizada**: monto = `precio × 1.16` (con IVA, antes era sin IVA). YA NO crea pseudo-invoice SF-NNNN; solo registra CONSUMO en ledger. Idempotente por `source_order_id`.
+- Counter `consumo_directo` eliminado (ya no se usa).
+- `load_credit_ledger` ampliado para devolver `external_po_ref`, `folio_fiscal`, `due_date`.
+
+**Frontend PrintFlow:**
+- `InvoiceModal` ahora muestra **3 botones** cuando el cliente es Corona:
+  - 📄 Factura (D-)
+  - 📋 Remisión (R-)
+  - 💰 **Aplicar saldo (sin folio fiscal)** ← nuevo, llama `apply_credit_no_folio`
+- El banner verde de saldo se calcula con IVA en los 3 casos.
+- Karla decide caso por caso según pida Corona.
+
+**Frontend CobranzaFlow:**
+- `CreditDepositModal` rediseñado como **"Registrar OC a Crédito Corona"** con campos:
+  - Cliente, PO Corona, folio fiscal, subtotal sin IVA, fecha programada de pago, notas
+  - Preview en vivo: monto facturado con IVA + fecha de vencimiento
+- `CreditView` muestra PO Corona y folio fiscal en cada fila del ledger (badges visuales).
+- Botones renombrados a "🎱 Registrar OC a Crédito" y "🎱 Nueva OC a Crédito".
+
+
 ## v10.43.8 — Karla puede crear OC y mover existentes (sin crear órdenes nuevas) — 22-may-2026
 
 Marcelo: "Dale a Karla permisos para crear órdenes de compra igual que a Lupita, y ya puede mover las existentes dentro. **No le des permisos de crear órdenes de producción.**"
