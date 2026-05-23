@@ -1927,11 +1927,11 @@ function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
   const [clientId,setClientId]=useState("");
   const [externalPoRef,setExternalPoRef]=useState("");
   const [folioFiscal,setFolioFiscal]=useState("");
-  const [subtotal,setSubtotal]=useState("");
+  const [amount,setAmount]=useState(""); // v10.43.12 — monto con IVA incluido directo
   const [dueDate,setDueDate]=useState("");
   const [notas,setNotas]=useState("");
   const [busy,setBusy]=useState(false);
-  const [stockClients,setStockClients]=useState([]); // todos los clientes anticipo
+  const [stockClients,setStockClients]=useState([]);
   const [loadingClients,setLoadingClients]=useState(true);
   useEffect(()=>{
     let alive=true;
@@ -1939,14 +1939,13 @@ function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
     return ()=>{alive=false};
   },[]);
 
-  const subtotalNum=parseFloat(subtotal);
+  const amountNum=parseFloat(amount);
   const folioClean=folioFiscal.trim().toUpperCase();
   const isFactura=folioClean.startsWith("D-");
   const isRemision=folioClean.startsWith("R-");
   const folioValid=(isFactura||isRemision)&&/^[DR]-\d+$/.test(folioClean);
   const dueDateValid=dueDate&&new Date(dueDate+"T12:00:00")>new Date();
-  const amountWithIVA=(Number.isFinite(subtotalNum)&&subtotalNum>0)?(isFactura?Math.round(subtotalNum*1.16*100)/100:subtotalNum):0;
-  const valid=clientId&&externalPoRef.trim()&&folioValid&&Number.isFinite(subtotalNum)&&subtotalNum>0&&dueDateValid;
+  const valid=clientId&&externalPoRef.trim()&&folioValid&&Number.isFinite(amountNum)&&amountNum>0&&dueDateValid;
 
   const submit=async()=>{
     if(!valid||busy)return;
@@ -1954,7 +1953,7 @@ function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
     try{
       const {data,error}=await supabase.rpc("credit_deposit",{
         p_client_id:clientId,p_external_po_ref:externalPoRef.trim(),p_folio_fiscal:folioClean,
-        p_subtotal_no_iva:subtotalNum,p_due_date:dueDate,p_user:userLogin||user,p_notas:notas.trim()||null
+        p_amount_with_iva:amountNum,p_due_date:dueDate,p_user:userLogin||user,p_notas:notas.trim()||null
       });
       if(error)throw new Error(error.message);
       if(onSaved)await onSaved();
@@ -1980,21 +1979,21 @@ function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>PO Corona (ref del cliente) *</label><input style={inp} value={externalPoRef} onChange={e=>setExternalPoRef(e.target.value)} placeholder="ej. MC-2026-0042"/></div>
+        <div><label style={lbl}>PO Corona (ref del cliente) *</label><input style={inp} value={externalPoRef} onChange={e=>setExternalPoRef(e.target.value)} placeholder="ej. 1234567890 (10 dígitos)"/></div>
         <div><label style={lbl}>Folio fiscal emitido *</label><input style={{...inp,fontFamily:"monospace",fontWeight:700,textTransform:"uppercase"}} value={folioFiscal} onChange={e=>setFolioFiscal(e.target.value.toUpperCase())} placeholder="D-XXXX o R-XXXX"/></div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>Subtotal SIN IVA *</label><input style={inp} type="number" step="0.01" value={subtotal} onChange={e=>setSubtotal(e.target.value)} placeholder="300000.00"/></div>
+        <div><label style={lbl}>Monto total CON IVA *</label><input style={inp} type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="348000.00 (IVA ya incluido)"/></div>
         <div><label style={lbl}>Fecha programada de pago *</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
       </div>
 
-      {folioValid&&Number.isFinite(subtotalNum)&&subtotalNum>0&&<div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
+      {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&<div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#10b981"}}>Monto facturado {isFactura?"(con IVA)":"(remisión sin IVA)"}</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#10b981"}}>${amountWithIVA.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+          <div style={{fontSize:12,fontWeight:700,color:"#10b981"}}>Monto facturado (con IVA incluido)</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#10b981"}}>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
         </div>
-        <div style={{fontSize:10,color:C.t2}}>Se crea factura <b>{folioClean}</b> en cobranza con balance ${amountWithIVA.toLocaleString("es-MX",{minimumFractionDigits:2})} y vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
+        <div style={{fontSize:10,color:C.t2}}>Se crea factura <b>{folioClean}</b> en cobranza con balance ${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})} y vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
       </div>}
 
       {!dueDateValid&&dueDate&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ La fecha de pago debe ser futura.</div>}

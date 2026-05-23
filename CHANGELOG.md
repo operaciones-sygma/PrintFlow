@@ -5,6 +5,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.12 — Corona OC: monto con IVA directo + PO 10 dígitos — 22-may-2026
+
+Aclaración Marcelo:
+- "El folio de Corona usualmente son 10 números XXXXXXXXXX" → es el número PO del cliente (referencia interna que ellos mandan).
+- "La OC a crédito se debe registrar con IVA incluido" → el monto que captura Karla/Lucero YA incluye IVA. Sin cálculo `*1.16` en el RPC.
+- "Cuando la orden se pasa con 'Aplicar saldo (sin folio)' se debe calcular el IVA y se pasa a cobranzaFlow" → ya implementado en v10.43.10: `apply_credit_no_folio` calcula `precio × 1.16` y el CONSUMO va al ledger (visible en CobranzaFlow).
+
+### Cambios DB
+- `credit_deposit` ya no calcula IVA. Parámetro renombrado: `p_subtotal_no_iva` → `p_amount_with_iva`. Se inserta tal cual en `cobranza.invoices.amount/balance` y en el ledger.
+
+### Frontend (PrintFlow + CobranzaFlow)
+- Modal "Registrar OC a Crédito": campo cambió de "Subtotal sin IVA" → "Monto total CON IVA" con placeholder *"348000.00 (IVA ya incluido)"*.
+- Placeholder PO Corona ahora indica formato: *"ej. 1234567890 (10 dígitos)"* (no se valida estricto el conteo — Karla puede capturar el formato que llegue).
+
+### Nota operativa
+**FELIPE CORONA ALONSO NO es CORONA / Modelo.** Es otro cliente distinto que casualmente tiene "Corona" en su nombre. Solo `GRUPO MODELO` y `CERVECERIA MODELO DE MEXICO` son del grupo Corona/Modelo elegibles para `billing_mode='anticipo'`.
+
+
 ## v10.43.11 — Karla/Lupita pueden registrar OC a Crédito desde PrintFlow — 22-may-2026
 
 Marcelo: "¿Que Karlita pueda registrar OC a crédito también, ventana en PrintFlow?". Sí, recomendable: Karla es quien tiene el folio fiscal emitido y la PO Corona.
