@@ -5,6 +5,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.13 — Scan post-Corona-rework: A6 + M10 + M12 — 22-may-2026
+
+Tres fixes del scan exhaustivo sobre v10.43.10–12.
+
+### 🔴 A6 — Cancelar orden Corona con saldo aplicado NO revertía el ledger
+**Bug:** Si Karla aplicó "💰 Aplicar saldo (sin folio)" a una orden y después se canceló, el CONSUMO en `client_credit_ledger` quedaba sin reversar. El saldo del cliente quedaba descontado erróneamente.
+
+**Causa:** `sync_cancellation_to_cobranza` solo manejaba el caso con `invoice_folio`. Para órdenes sin folio (caso Corona aplicar-saldo) hacía `RETURN NEW` sin tocar el ledger.
+
+**Fix:**
+- Nueva RPC `credit_reverse_by_order(client_id, source_order_id, user)` — idempotente, busca CONSUMO ligado a la orden y lo revierte.
+- UNIQUE INDEX ampliado: `credit_ledger_order_tipo_uniq` por `(source_order_id, tipo)` — cubre CONSUMO y REVERSO sin duplicados.
+- `sync_cancellation_to_cobranza` extendido: si la orden cancelada no tiene folio pero SÍ tiene CONSUMO ligado por `source_order_id`, llama `credit_reverse_by_order` y registra audit_log `bridge_reverse_credit_by_order`.
+
+### 🟡 M10 — `RegisterCoronaPOModal` usaba `alert()` nativo
+**Fix:** ahora recibe `showToast` como prop y lo usa para errores. Consistente con el resto de la UI.
+
+### 🟡 M12 — `db.creditDeposit` helper con firma vieja
+Quedó desactualizado después del rework v10.43.10. Si alguien lo invocara, fallaría.
+
+**Fix:** firma actualizada a `{client_id, external_po_ref, folio_fiscal, amount_with_iva, due_date, user, notas}`. `RegisterCoronaPOModal` ahora usa el helper en lugar de `supabase.rpc` directo (consistencia).
+
+### 🟢 Quedan como mejoras post-demo
+- **B10** parseFloat con comas (`"348,000"` → 348)
+- **B11** sin UI para cancelar OC a Crédito registrada por error
+- **B12** saldo no se actualiza en realtime
+
+
 ## v10.43.12 — Corona OC: monto con IVA directo + PO 10 dígitos — 22-may-2026
 
 Aclaración Marcelo:

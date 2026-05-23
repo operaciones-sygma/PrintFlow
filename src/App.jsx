@@ -650,8 +650,17 @@ const db = {
     if(error)throw new Error("creditBalance: "+error.message);
     return Number(data)||0;
   },
-  async creditDeposit({client_id, monto, referencia=null, periodo=null, user=null, notas=null}) {
-    const {data,error}=await supabase.rpc("credit_deposit",{p_client_id:client_id,p_monto:monto,p_referencia:referencia,p_periodo:periodo,p_user:user,p_notas:notas});
+  // v10.43.13 FIX M12 — Firma actualizada al modelo v10.43.10 (OC a Crédito con folio + due_date).
+  async creditDeposit({client_id, external_po_ref, folio_fiscal, amount_with_iva, due_date, user=null, notas=null}) {
+    const {data,error}=await supabase.rpc("credit_deposit",{
+      p_client_id:client_id,
+      p_external_po_ref:external_po_ref,
+      p_folio_fiscal:folio_fiscal,
+      p_amount_with_iva:amount_with_iva,
+      p_due_date:due_date,
+      p_user:user,
+      p_notas:notas
+    });
     if(error)throw new Error("creditDeposit: "+error.message);
     return data;
   },
@@ -1916,13 +1925,13 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();const fresh=await db.loadCreditLedger(selected.id,200);setLedger(fresh)}
       catch(e){showToast("❌ "+e.message,"error")}
     }} onClose={()=>setAdjusting(false)}/>}
-    {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} onClose={()=>setRegistering(false)} onSaved={async()=>{setRegistering(false);showToast("✅ OC a Crédito registrada · Tesorería notificada");await reloadClients();}}/>}
+    {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setRegistering(false)} onSaved={async()=>{setRegistering(false);showToast("✅ OC a Crédito registrada · Tesorería notificada");await reloadClients();}}/>}
   </div>;
 }
 
 // v10.43.11 — Sub-modal para que Karla/Lupita/admin registren OCs a Crédito desde PrintFlow.
 // Mismo RPC credit_deposit que CobranzaFlow; notifica a tesoreria automáticamente vía la RPC.
-function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
+function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   useEscClose(onClose);
   const [clientId,setClientId]=useState("");
   const [externalPoRef,setExternalPoRef]=useState("");
@@ -1951,15 +1960,16 @@ function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
     if(!valid||busy)return;
     setBusy(true);
     try{
-      const {data,error}=await supabase.rpc("credit_deposit",{
-        p_client_id:clientId,p_external_po_ref:externalPoRef.trim(),p_folio_fiscal:folioClean,
-        p_amount_with_iva:amountNum,p_due_date:dueDate,p_user:userLogin||user,p_notas:notas.trim()||null
+      // v10.43.13 FIX M12 — usa helper db.creditDeposit con la nueva firma
+      await db.creditDeposit({
+        client_id:clientId,external_po_ref:externalPoRef.trim(),folio_fiscal:folioClean,
+        amount_with_iva:amountNum,due_date:dueDate,user:userLogin||user,notas:notas.trim()||null
       });
-      if(error)throw new Error(error.message);
       if(onSaved)await onSaved();
     }catch(e){
       console.error("[RegisterCoronaPOModal] Error:",e);
-      alert("❌ No se pudo registrar: "+(e?.message||"error desconocido"));
+      // v10.43.13 FIX M10 — showToast en lugar de alert nativo
+      if(showToast)showToast("❌ "+(e?.message||"No se pudo registrar"),"error");
       setBusy(false);
     }
   };
