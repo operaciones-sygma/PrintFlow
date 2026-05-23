@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.11 — Karla/Lupita pueden registrar OC a Crédito desde PrintFlow — 22-may-2026
+
+Marcelo: "¿Que Karlita pueda registrar OC a crédito también, ventana en PrintFlow?". Sí, recomendable: Karla es quien tiene el folio fiscal emitido y la PO Corona.
+
+### Frontend PrintFlow
+- En el `CoronaModal` (botón header 🎱), nuevo botón **"🎱 + Nueva OC a Crédito"** visible para admin, karla y secretaria.
+- Sub-modal `RegisterCoronaPOModal` con mismos campos que en CobranzaFlow:
+  - Cliente (anticipo activo)
+  - PO Corona (ref interna del cliente)
+  - Folio fiscal D- o R- (emitido)
+  - Subtotal sin IVA + preview en vivo con IVA
+  - Fecha programada de pago (debe ser futura)
+  - Notas
+
+### DB — `credit_deposit` notifica a tesorería
+La RPC ahora inserta automáticamente notificación en `cobranza.notifications` con `target_role='tesoreria'` cada vez que se registra una OC (sin importar desde qué app). Mensaje: *"🎱 Nueva OC a Crédito registrada · {cliente} · PO {ref} · {folio} · ${monto} · vence {fecha}"*.
+
+Lucero verá la notif al refrescar CobranzaFlow. Mantiene a tesorería informada sin requerir que aprueben.
+
+### Por qué es recomendable
+- Karla tiene el folio + PO Corona primero (ella factura).
+- Mismo RPC, mismo dato: la OC se ve igual en ambas apps.
+- Cero duplicación; notificación cierra el loop con tesorería.
+
+
 ## v10.43.10 — Corona rework: OC a Crédito con folio fiscal + sin folio en órdenes — 22-may-2026
 
 **Cambio de modelo importante** tras aclaración de Marcelo sobre el flujo real de Corona.

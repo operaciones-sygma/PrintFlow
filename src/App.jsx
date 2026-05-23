@@ -1809,6 +1809,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   const [loadingClients,setLoadingClients]=useState(true);
   const [loadingLedger,setLoadingLedger]=useState(false);
   const [adjusting,setAdjusting]=useState(false); // modal interno para AJUSTE manual (solo admin)
+  const [registering,setRegistering]=useState(false); // v10.43.11 — modal nuevo: registrar OC a crédito Corona
 
   const reloadClients=async()=>{
     setLoadingClients(true);
@@ -1837,12 +1838,16 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
-      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
           <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} clientes con anticipo abierto</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
+          {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt("#10b981"),padding:"7px 12px",fontSize:12}}>🎱 + Nueva OC a Crédito</button>}
+          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        </div>
       </div>
 
       {loadingClients?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
@@ -1911,6 +1916,99 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();const fresh=await db.loadCreditLedger(selected.id,200);setLedger(fresh)}
       catch(e){showToast("❌ "+e.message,"error")}
     }} onClose={()=>setAdjusting(false)}/>}
+    {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} onClose={()=>setRegistering(false)} onSaved={async()=>{setRegistering(false);showToast("✅ OC a Crédito registrada · Tesorería notificada");await reloadClients();}}/>}
+  </div>;
+}
+
+// v10.43.11 — Sub-modal para que Karla/Lupita/admin registren OCs a Crédito desde PrintFlow.
+// Mismo RPC credit_deposit que CobranzaFlow; notifica a tesoreria automáticamente vía la RPC.
+function RegisterCoronaPOModal({user, userLogin, onClose, onSaved}) {
+  useEscClose(onClose);
+  const [clientId,setClientId]=useState("");
+  const [externalPoRef,setExternalPoRef]=useState("");
+  const [folioFiscal,setFolioFiscal]=useState("");
+  const [subtotal,setSubtotal]=useState("");
+  const [dueDate,setDueDate]=useState("");
+  const [notas,setNotas]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [stockClients,setStockClients]=useState([]); // todos los clientes anticipo
+  const [loadingClients,setLoadingClients]=useState(true);
+  useEffect(()=>{
+    let alive=true;
+    db.listAnticipoClients().then(list=>{if(alive)setStockClients(list||[])}).catch(e=>console.warn("[RegisterCoronaPOModal]",e)).finally(()=>{if(alive)setLoadingClients(false)});
+    return ()=>{alive=false};
+  },[]);
+
+  const subtotalNum=parseFloat(subtotal);
+  const folioClean=folioFiscal.trim().toUpperCase();
+  const isFactura=folioClean.startsWith("D-");
+  const isRemision=folioClean.startsWith("R-");
+  const folioValid=(isFactura||isRemision)&&/^[DR]-\d+$/.test(folioClean);
+  const dueDateValid=dueDate&&new Date(dueDate+"T12:00:00")>new Date();
+  const amountWithIVA=(Number.isFinite(subtotalNum)&&subtotalNum>0)?(isFactura?Math.round(subtotalNum*1.16*100)/100:subtotalNum):0;
+  const valid=clientId&&externalPoRef.trim()&&folioValid&&Number.isFinite(subtotalNum)&&subtotalNum>0&&dueDateValid;
+
+  const submit=async()=>{
+    if(!valid||busy)return;
+    setBusy(true);
+    try{
+      const {data,error}=await supabase.rpc("credit_deposit",{
+        p_client_id:clientId,p_external_po_ref:externalPoRef.trim(),p_folio_fiscal:folioClean,
+        p_subtotal_no_iva:subtotalNum,p_due_date:dueDate,p_user:userLogin||user,p_notas:notas.trim()||null
+      });
+      if(error)throw new Error(error.message);
+      if(onSaved)await onSaved();
+    }catch(e){
+      console.error("[RegisterCoronaPOModal] Error:",e);
+      alert("❌ No se pudo registrar: "+(e?.message||"error desconocido"));
+      setBusy(false);
+    }
+  };
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:560,width:"96%",maxHeight:"90vh",overflowY:"auto"}}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🎱 Registrar OC a Crédito Corona</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Captura una nueva OC a crédito con su folio fiscal ya emitido. Tesorería será notificada automáticamente.</p>
+
+      <div style={{marginBottom:12}}>
+        <label style={lbl}>Cliente *</label>
+        <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
+          <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes anticipo —":"Selecciona…")}</option>
+          {stockClients.map(c=><option key={c.id} value={c.id}>🎱 {c.name} · saldo: ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
+        </select>
+        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes con billing_mode='anticipo'. Marcelo debe activarlo.</div>}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={lbl}>PO Corona (ref del cliente) *</label><input style={inp} value={externalPoRef} onChange={e=>setExternalPoRef(e.target.value)} placeholder="ej. MC-2026-0042"/></div>
+        <div><label style={lbl}>Folio fiscal emitido *</label><input style={{...inp,fontFamily:"monospace",fontWeight:700,textTransform:"uppercase"}} value={folioFiscal} onChange={e=>setFolioFiscal(e.target.value.toUpperCase())} placeholder="D-XXXX o R-XXXX"/></div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={lbl}>Subtotal SIN IVA *</label><input style={inp} type="number" step="0.01" value={subtotal} onChange={e=>setSubtotal(e.target.value)} placeholder="300000.00"/></div>
+        <div><label style={lbl}>Fecha programada de pago *</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
+      </div>
+
+      {folioValid&&Number.isFinite(subtotalNum)&&subtotalNum>0&&<div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#10b981"}}>Monto facturado {isFactura?"(con IVA)":"(remisión sin IVA)"}</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#10b981"}}>${amountWithIVA.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+        </div>
+        <div style={{fontSize:10,color:C.t2}}>Se crea factura <b>{folioClean}</b> en cobranza con balance ${amountWithIVA.toLocaleString("es-MX",{minimumFractionDigits:2})} y vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
+      </div>}
+
+      {!dueDateValid&&dueDate&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ La fecha de pago debe ser futura.</div>}
+
+      <div style={{marginBottom:14}}>
+        <label style={lbl}>Notas (opcional)</label>
+        <input style={inp} value={notas} onChange={e=>setNotas(e.target.value)} placeholder="Observaciones de la OC"/>
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={submit} disabled={!valid||busy} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:(valid&&!busy)?1:.4,cursor:(valid&&!busy)?"pointer":"not-allowed"}}>{busy?"Guardando…":"💾 Registrar OC a Crédito"}</button>
+      </div>
+    </div>
   </div>;
 }
 
