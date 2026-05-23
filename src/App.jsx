@@ -1925,7 +1925,13 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();const fresh=await db.loadCreditLedger(selected.id,200);setLedger(fresh)}
       catch(e){showToast("❌ "+e.message,"error")}
     }} onClose={()=>setAdjusting(false)}/>}
-    {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setRegistering(false)} onSaved={async()=>{setRegistering(false);showToast("✅ OC a Crédito registrada · Tesorería notificada");await reloadClients();}}/>}
+    {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setRegistering(false)} onSaved={async()=>{
+      setRegistering(false);
+      showToast("✅ OC a Crédito registrada · Tesorería notificada");
+      await reloadClients();
+      // v10.43.14 FIX M13 — refrescar ledger del cliente seleccionado si lo había
+      if(selectedId){try{const fresh=await db.loadCreditLedger(selectedId,200);setLedger(fresh)}catch(e){console.warn("[CoronaModal] refresh ledger:",e)}}
+    }}/>}
   </div>;
 }
 
@@ -2601,26 +2607,44 @@ function InvoiceModal({order,onConfirm,onClose}) {
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid} style={{...bt(type==="factura"?"#5856d6":(type==="remision"?"#34c759":C.t3)),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid)?0.4:1}}>Continuar →</button>
         </div>
       </> : <>
-        <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
-          <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar:</div>
-          <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>{folio}</div>
-          <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"})</div>
-        </div>
-        <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
-          <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
-          <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
-            {paymentStatus==="paid"&&"✅ Pagada · "+paymentMethod}
-            {paymentStatus==="partial"&&"🔶 Parcial · $"+Number(paymentAmount).toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+paymentMethod}
-            {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+        {/* v10.43.14 FIX M14 — Branch específico de preview para Corona 'aplicar saldo' */}
+        {isNoFolio ? <>
+          <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
+            <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a aplicar:</div>
+            <div style={{fontSize:24,fontWeight:800,color:"#10b981"}}>💰 Saldo a favor (Corona)</div>
+            <div style={{fontSize:12,color:C.t2,marginTop:4}}>Sin folio fiscal · solo descuento del saldo</div>
           </div>
-          {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
-            Saldo pendiente a CobranzaFlow: ${(totalDisplay-Number(paymentAmount)).toLocaleString("es-MX",{minimumFractionDigits:2})}
-          </div>}
-        </div>
-        <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará marcada como <strong style={{color:C.ok}}>Entregada</strong> automáticamente. Esta acción no se puede deshacer.</p>
+          <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11,textAlign:"center"}}>
+              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:13,fontWeight:800,color:"#10b981"}}>${(coronaInfo?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Descuento (con IVA)</div><div style={{fontSize:13,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:13,fontWeight:800,color:((coronaInfo?.current_balance||0)-totalDisplay)<0?C.dn:"#10b981"}}>${((coronaInfo?.current_balance||0)-totalDisplay).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+            </div>
+          </div>
+          <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.ok}}>Entregada</strong> sin folio fiscal individual. El monto se descuenta del saldo Corona inmediatamente.</p>
+        </> : <>
+          <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
+            <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar:</div>
+            <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>{folio}</div>
+            <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"})</div>
+          </div>
+          <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
+            <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
+            <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
+              {paymentStatus==="paid"&&"✅ Pagada · "+paymentMethod}
+              {paymentStatus==="partial"&&"🔶 Parcial · $"+Number(paymentAmount).toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+paymentMethod}
+              {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+              {isCorona&&!paymentStatus&&"💰 Saldo a favor Corona (bridge)"}
+            </div>
+            {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
+              Saldo pendiente a CobranzaFlow: ${(totalDisplay-Number(paymentAmount)).toLocaleString("es-MX",{minimumFractionDigits:2})}
+            </div>}
+          </div>
+          <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará marcada como <strong style={{color:C.ok}}>Entregada</strong> automáticamente. Esta acción no se puede deshacer.</p>
+        </>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>← Atrás</button>
-          <button onClick={handleConfirm} disabled={busy} style={{...bt(type==="factura"?"#5856d6":"#34c759"),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Procesando...":"✅ Confirmar"}</button>
+          <button onClick={handleConfirm} disabled={busy} style={{...bt(isNoFolio?"#10b981":(type==="factura"?"#5856d6":"#34c759")),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Procesando...":"✅ Confirmar"}</button>
         </div>
       </>}
     </div>

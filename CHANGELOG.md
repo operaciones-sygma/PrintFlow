@@ -5,6 +5,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.14 — Scan post-fixes: doble cobro Corona + UX confirming — 22-may-2026
+
+Cuatro fixes del scan exhaustivo sobre v10.43.13.
+
+### 🔴 A7 — Doble cobro si admin revierte stage + factura individual
+**Escenario:** Karla aplica "Aplicar saldo (sin folio)" → CONSUMO por order_id. Admin revierte stage a `salidas`. Karla factura individualmente con D-YYYY → bridge crea OTRO CONSUMO por invoice_id. Cliente con doble cargo.
+
+**Fix DB:** `sync_invoice_from_orders` rama Corona detecta CONSUMO previo por `source_order_id` y llama `credit_reverse_by_order` ANTES de hacer el nuevo `credit_consume` por `source_invoice_id`. Audit log `bridge_corona_revert_prev_consume`.
+
+### 🔴 A8 — OC compartida refacturaba orders Corona ya entregadas con saldo
+**Escenario:** Karla aplica saldo a una orden Corona dentro de OC-XXXX. Más tarde asigna folio compartido a OC-XXXX → `assign_folio_to_oc` incluía esa orden delivered (sin folio) en "pendientes" → segundo cobro vía `sync_invoice_from_oc`.
+
+**Fix DB:** `assign_folio_to_oc` ahora excluye orders en stages `delivered`, `maq_delivered`, `stocked` (además de `cancelled`/`maq_cancelled`). Solo procesa orders aún sin entregar.
+
+### 🟡 M13 — CoronaModal no refrescaba ledger al registrar nueva OC
+Si Lucero/Karla tenían un cliente seleccionado y registraban una OC, el saldo en la lista se actualizaba pero el ledger del cliente seleccionado seguía mostrando lo viejo.
+
+**Fix:** `RegisterCoronaPOModal.onSaved` ahora también llama `db.loadCreditLedger(selectedId, 200)` y actualiza `setLedger`.
+
+### 🟡 M14 — Confirming view engañoso para `type='no_folio'`
+El preview de confirmación mostraba "Vas a asignar:" + folio vacío + "(Remisión)" para órdenes Corona aplicar-saldo. Confuso.
+
+**Fix:** branch dedicado de confirming view cuando `isNoFolio` muestra: *"💰 Vas a aplicar: Saldo a favor (Corona)"* con desglose saldo actual / descuento con IVA / saldo después.
+
+### 🟢 Queda como mejora post-demo
+- **B10** parseFloat con comas
+- **B11** UI para cancelar OC a Crédito registrada por error
+- **B12** saldo en realtime
+- **B13** notif a tesorería cuando saldo cruza a negativo
+
+
 ## v10.43.13 — Scan post-Corona-rework: A6 + M10 + M12 — 22-may-2026
 
 Tres fixes del scan exhaustivo sobre v10.43.10–12.
