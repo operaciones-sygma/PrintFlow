@@ -5,6 +5,26 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.23 — Fix header desfasado para admin (2da fila) — 25-may-2026
+
+Marcelo (admin): "la UI se desfasó, ciertos elementos están en una segunda fila". Antes todo cabía en una fila; recientemente las acciones (Mis Órdenes/Todas + search + 🔔 + 📦 + 🎱 + CSV + Admin + Salir ≈ 670px) se envolvían debajo de la nav.
+
+**Causa**: el outer `<div>` del header usaba `flexWrap:"wrap"`. Para admin, total horizontal ≈ 1452px. En monitores con scaling de Windows 125-150% (efectivo 1280-1536px), el espacio no alcanza y el browser envuelve la sección de acciones a una segunda fila — el "desfase" que Marcelo reportó. Causado por el crecimiento acumulado: 📦 (Cuadra v10.42.x) + 🎱 (Corona v10.43.x) sumaron ~72px que tiraron el layout para admin.
+
+**Fix**: comprimir + forzar single-line:
+
+| Cambio | Ahorro |
+|---|---|
+| nav buttons padding `8×14` → `7×11` | ~30px (6 botones) |
+| search width `180` → `160` + `minWidth:90, flexShrink:1` | 20-90px (se comprime bajo presión) |
+| 📦 / 🎱 padding `5×10` → `5×8` | ~8px |
+| CSV `📥 CSV` → icono `📥` con `title="Exportar CSV"` | ~40px |
+| outer `flexWrap:wrap` → `nowrap` + `minWidth:0` | fuerza single-line |
+| actions section `minWidth:0, flexShrink:1` | input se comprime en vez de envolver |
+
+Total liberado: ~100-200px. Resultado: admin vuelve a tener una sola fila aunque su scaling sea agresivo. Si la ventana es demasiado angosta, el input de búsqueda se comprime hasta 90px (sigue siendo funcional) en vez de tirar las acciones abajo.
+
+
 ## v10.43.22 — HOTFIX build · JSX expression no cerrada en pestaña Producción — 25-may-2026
 
 ### 🚨 Por qué Marcelo no veía los cambios desde v10.43.18
