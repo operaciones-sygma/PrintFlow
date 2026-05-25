@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.15 — Auditoría: consecutivo de Órdenes de Producción (P-XXXX) — 25-may-2026
+
+Marcelo: "agregar un apartado en auditoría donde pueda ver el consecutivo de órdenes de producción · click muestra detalles, en qué folio se convirtió".
+
+### Frontend — nueva sección en `AuditoriaView`
+Después de la sección actual de folios fiscales (D-/R-), se agrega una sección dedicada:
+
+**📋 Consecutivo de Órdenes de Producción**
+- **Stats**: total P-XXXX, gaps detectados, con folio fiscal, canceladas, rango (P-min → P-max).
+- **Lista clicable**: cada P-XXXX como fila compacta con badges (cliente, stage, folio fiscal asignado, canceladas, maquila, web, stock Corona, etc).
+- **Gaps**: filas en rojo con "FALTANTE" (órdenes borradas).
+- **Reusa el filtro de fecha** de la auditoría (90d / mes actual / mes pasado / todo).
+- **Filtra automáticamente** el marcador interno `[SISTEMA]`.
+
+### Modal de detalle al click
+Nuevo componente `ProductionOrderDetailModal` que muestra info completa de la orden:
+- Cliente (nombre/empresa/RFC/email/whatsapp)
+- Producto + cantidad + especs
+- Importes (precio sin IVA, maquila costo/precio, payment_status)
+- **Folio fiscal en que se convirtió** (D-/R-, tipo, pre-asignado, asignado por quién/cuándo) o nota "Sin folio fiscal asignado"
+- Fechas (creada, entregada, cancelada con motivo)
+- Asociaciones (OC interna, cart web, MP payment)
+- Identificadores internos
+
+
 ## v10.43.14 — Scan post-fixes: doble cobro Corona + UX confirming — 22-may-2026
 
 Cuatro fixes del scan exhaustivo sobre v10.43.13.

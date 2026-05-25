@@ -6592,6 +6592,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
 function AuditoriaView({orders, purchaseOrders}){
   const [filter,setFilter]=useState("90d");
   const [type,setType]=useState("factura");
+  // v10.43.15 — Sección consecutivo de Órdenes de Producción (P-XXXX)
+  const [selectedProdOrder,setSelectedProdOrder]=useState(null);
   const cutoffs=useMemo(()=>{
     const now=new Date();
     if(filter==="all")return {start:null,end:null};
@@ -6766,6 +6768,185 @@ function AuditoriaView({orders, purchaseOrders}){
     </div>}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
       <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
+    </div>
+
+    {/* ════════════════════════════════════════════════════════════════ */}
+    {/* v10.43.15 — Consecutivo de Órdenes de Producción (P-XXXX)         */}
+    {/* ════════════════════════════════════════════════════════════════ */}
+    {(()=>{
+      const parsePN=p=>{const m=String(p||"").match(/P-(\d+)/);return m?parseInt(m[1],10):null};
+      const filteredOrders=orders.filter(o=>{
+        if(!o.production_number||!o.production_number.startsWith("P-"))return false;
+        if(o.client && o.client.startsWith("[SISTEMA]"))return false; // ocultar marcador
+        if(!o.created_at)return cutoffs.start===null;
+        const dt=new Date(o.created_at);
+        if(cutoffs.start&&dt<cutoffs.start)return false;
+        if(cutoffs.end&&dt>=cutoffs.end)return false;
+        return true;
+      });
+      const byNum={};
+      filteredOrders.forEach(o=>{const n=parsePN(o.production_number);if(n!==null){if(!byNum[n])byNum[n]=[];byNum[n].push(o)}});
+      const nums=Object.keys(byNum).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
+      if(nums.length===0)return <div style={{marginTop:24,padding:"20px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,textAlign:"center",color:C.t3}}>
+        <h3 style={{fontSize:14,fontWeight:800,margin:"0 0 8px",textTransform:"uppercase",color:C.tx}}>📋 Consecutivo de Órdenes de Producción</h3>
+        Sin órdenes de producción en este periodo.
+      </div>;
+      const min=nums[0],max=nums[nums.length-1];
+      const pnSeq=[];const pnGaps=[];
+      for(let i=min;i<=max;i++){
+        if(byNum[i])pnSeq.push({n:i,orders:byNum[i]});
+        else{pnSeq.push({n:i,orders:[],gap:true});pnGaps.push(i)}
+      }
+      const totalPN=nums.length;
+      const cancelledCount=filteredOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
+      const invoicedCount=filteredOrders.filter(o=>o.invoice_folio).length;
+      return <div style={{marginTop:24}}>
+        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📋 Consecutivo de Órdenes de Producción</h3>
+        <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Serie P-XXXX en el periodo seleccionado · Click en una orden para ver detalles y folio fiscal asignado</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.ac,border:"1px solid "+C.bd}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total P-XXXX</div>
+            <div style={{fontSize:22,fontWeight:800,color:C.ac}}>{totalPN}</div>
+          </div>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+(pnGaps.length?C.dn:C.ok),border:"1px solid "+C.bd}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
+            <div style={{fontSize:22,fontWeight:800,color:pnGaps.length?C.dn:C.ok}}>{pnGaps.length}</div>
+          </div>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid #5856d6",border:"1px solid "+C.bd}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#5856d6"}}>{invoicedCount}</div>
+          </div>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.dn,border:"1px solid "+C.bd}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div>
+            <div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCount}</div>
+          </div>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.t3,border:"1px solid "+C.bd}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
+            <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
+          </div>
+        </div>
+        <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:520,overflowY:"auto"}}>
+          {pnSeq.map(item=>{
+            if(item.gap){
+              return <div key={"pgap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{fontSize:14,fontWeight:800,color:C.dn,minWidth:90}}>⚠️ P-{item.n}</div>
+                <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
+              </div>;
+            }
+            return item.orders.map((o,i)=>{
+              const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
+              const stClr=SM[o.stage]?.c||C.t3;
+              return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
+                style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
+                onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent")}}>
+                <div style={{fontSize:14,fontWeight:800,color:C.ac,minWidth:90}}>📋 P-{item.n}</div>
+                {o.order_type==="maquila"&&<div style={{fontSize:9,color:"#e67e22",fontWeight:700,background:"#e67e2215",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
+                <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
+                {o.invoice_folio&&<div style={{fontSize:10,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?"📄 ":"📋 "}{o.invoice_folio}</div>}
+                {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
+                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4}}>{SM[o.stage]?.l||o.stage}</div>}
+                <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
+              </div>;
+            });
+          })}
+        </div>
+        <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
+          <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Click en cualquier orden para ver detalles completos.
+        </div>
+      </div>;
+    })()}
+
+    {selectedProdOrder&&<ProductionOrderDetailModal order={selectedProdOrder} purchaseOrders={purchaseOrders} onClose={()=>setSelectedProdOrder(null)}/>}
+  </div>;
+}
+
+// v10.43.15 — Modal de detalle para una orden de producción desde Auditoría.
+function ProductionOrderDetailModal({order, purchaseOrders, onClose}){
+  useEscClose(onClose);
+  const isCancelled=order.cancelled_at||order.stage?.includes("cancelled");
+  const oc=order.purchase_order_id?(purchaseOrders||[]).find(p=>p.id===order.purchase_order_id):null;
+  const stClr=SM[order.stage]?.c||C.t3;
+  const Row=({label,value,color})=>value?<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:12,gap:10}}>
+    <span style={{color:C.t2}}>{label}</span>
+    <span style={{color:color||C.tx,fontWeight:600,textAlign:"right",overflow:"hidden",textOverflow:"ellipsis"}}>{value}</span>
+  </div>:null;
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:560,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <h3 style={{fontSize:18,fontWeight:800,margin:0,color:C.ac}}>📋 {order.production_number}</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order.order_type==="maquila"?"🚚 Maquila completa":"🏭 Producción interna"}</div>
+        </div>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+      </div>
+      <div style={{padding:"14px 22px",overflowY:"auto",flex:1}}>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+          {isCancelled?<span style={{fontSize:11,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"4px 10px",borderRadius:6}}>❌ CANCELADA{order.nc_emitted?" · NC emitida":""}</span>
+          :<span style={{fontSize:11,color:stClr,fontWeight:700,background:stClr+"15",padding:"4px 10px",borderRadius:6}}>{SM[order.stage]?.l||order.stage}</span>}
+          {order.priority&&order.priority!=="normal"&&<span style={{fontSize:11,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"4px 10px",borderRadius:6}}>{order.priority.toUpperCase()}</span>}
+          {order.invoice_folio&&<span style={{fontSize:11,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"4px 10px",borderRadius:6}}>{order.invoice_type==="factura"?"📄":"📋"} {order.invoice_folio}{order.invoice_pre_assigned?" ⚡":""}</span>}
+          {order.source==="web"&&<span style={{fontSize:11,color:"#06b6d4",fontWeight:700,background:"#06b6d415",padding:"4px 10px",borderRadius:6}}>🌐 Web</span>}
+          {order.stock_role&&<span style={{fontSize:11,color:"#10b981",fontWeight:700,background:"#10b98115",padding:"4px 10px",borderRadius:6}}>{order.stock_role==="production"?"📦 a Stock":"🛒 desde Stock"}</span>}
+        </div>
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
+        <Row label="Nombre" value={order.client}/>
+        <Row label="Empresa" value={order.client_company}/>
+        <Row label="RFC" value={order.client_rfc}/>
+        <Row label="Email" value={order.client_email}/>
+        <Row label="WhatsApp" value={order.client_phone?(order.client_lada||"+52")+" "+order.client_phone:null}/>
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Producto</div>
+        <Row label="Tipo" value={order.product_type}/>
+        <Row label="Cantidad" value={order.quantity?Number(order.quantity).toLocaleString():null}/>
+        <Row label="Especificaciones" value={[order.standard_size,order.colors,order.paper_type].filter(Boolean).join(" · ")||null}/>
+        <Row label="Acabados" value={order.finishes}/>
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Importes</div>
+        <Row label="Precio (sin IVA)" value={order.price?"$"+Number(order.price).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
+        <Row label="Maquila costo" value={order.maq_cost?"$"+Number(order.maq_cost).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
+        <Row label="Maquila precio" value={order.maq_price?"$"+Number(order.maq_price).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
+        <Row label="Pagada al facturar" value={order.payment_status?(order.payment_status==="paid"?"✅ Pagada · "+(order.payment_method||""):(order.payment_status==="partial"?"🔶 Parcial $"+Number(order.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2}):"⏳ No pagada (CXC)")):null}/>
+        <Row label="Bank reference" value={order.bank_reference}/>
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Folio fiscal</div>
+        {order.invoice_folio
+          ?<>
+            <Row label="Folio" value={order.invoice_folio} color="#5856d6"/>
+            <Row label="Tipo" value={order.invoice_type==="factura"?"Factura (CFDI)":"Remisión"}/>
+            <Row label="Pre-asignado" value={order.invoice_pre_assigned?"⚡ Sí · "+(order.invoice_reason||""):"No"}/>
+            <Row label="Asignado" value={order.invoiced_at?fDT(order.invoiced_at):null}/>
+            <Row label="Por" value={order.invoiced_by==="secretaria"?"Lupita":(order.invoiced_by||null)}/>
+          </>
+          :<div style={{fontSize:12,color:C.t3,padding:"6px 0",fontStyle:"italic"}}>Sin folio fiscal asignado{order.stage==="delivered"?" (entregada con saldo Corona u otro flujo sin folio)":""}.</div>
+        }
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Fechas</div>
+        <Row label="Creada" value={order.created_at?fDT(order.created_at):null}/>
+        <Row label="Creada por" value={order.created_by}/>
+        <Row label="Entregada" value={order.delivered_at?fDT(order.delivered_at):(order.deliveredAt?fDT(order.deliveredAt):null)}/>
+        {isCancelled&&<>
+          <Row label="Cancelada" value={order.cancelled_at?fDT(order.cancelled_at):null} color={C.dn}/>
+          <Row label="Cancelada por" value={order.cancelled_by} color={C.dn}/>
+          <Row label="Motivo cancelación" value={order.cancellation_reason} color={C.dn}/>
+        </>}
+
+        {(oc||order.cart_folio||order.web_folio)&&<>
+          <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Asociaciones</div>
+          {oc&&<Row label="OC interna" value={oc.id+(oc.shared_invoice_folio?" · folio compartido "+oc.shared_invoice_folio:"")}/>}
+          <Row label="Cart web" value={order.cart_folio}/>
+          <Row label="Web folio" value={order.web_folio}/>
+          <Row label="MP payment" value={order.mp_payment_id}/>
+        </>}
+
+        <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Identificadores internos</div>
+        <Row label="ID interno" value={order.id}/>
+        <Row label="Source" value={order.source}/>
+      </div>
+      <div style={{padding:"12px 22px",borderTop:"0.5px solid "+C.bd}}>
+        <button onClick={onClose} style={{...bt(C.sf,C.tx),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
+      </div>
     </div>
   </div>;
 }
