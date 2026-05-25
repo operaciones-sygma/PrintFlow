@@ -670,9 +670,11 @@ const db = {
     if(error)throw new Error("listAnticipoClients: "+error.message);
     return data||[];
   },
-  async getClientBillingInfo(clientId) {
-    if(!clientId)return{billing_mode:"normal",current_balance:0};
-    const {data,error}=await supabase.rpc("get_client_billing_info",{p_client_id:clientId});
+  // v10.43.24 — acepta clientName como fallback para órdenes preexistentes sin client_id.
+  // El RPC ahora hace match por TRIM(UPPER(name)) si client_id no resuelve.
+  async getClientBillingInfo(clientId, clientName=null) {
+    if(!clientId && !clientName)return{billing_mode:"normal",current_balance:0};
+    const {data,error}=await supabase.rpc("get_client_billing_info",{p_client_id:clientId||null,p_client_name:clientName||null});
     if(error)throw new Error("getClientBillingInfo: "+error.message);
     return Array.isArray(data)?data[0]:data;
   },
@@ -2459,10 +2461,11 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [coronaInfo,setCoronaInfo]=useState(null); // {billing_mode, current_balance} o null
   useEffect(()=>{
     let alive=true;
-    if(!order?.client_id){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
-    db.getClientBillingInfo(order.client_id).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[InvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
+    // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
+    if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
+    db.getClientBillingInfo(order.client_id,order.client).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[InvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
     return ()=>{alive=false};
-  },[order?.client_id]);
+  },[order?.client_id,order?.client]);
   const isCorona=coronaInfo?.billing_mode==="anticipo";
 
   // Cargar sugerencias al montar
@@ -2527,8 +2530,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
       // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
       if(isCorona){
         // v10.43.2 FIX M7-b — Refrescar saldo justo antes de confirmar para evitar stale state
+        // v10.43.24 — fallback por nombre
         try{
-          const fresh=await db.getClientBillingInfo(order.client_id);
+          const fresh=await db.getClientBillingInfo(order.client_id,order.client);
           if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
         }catch(e){console.warn("[InvoiceModal] refresh saldo:",e)}
         // v10.43.10 — Tres caminos para Corona:
@@ -2702,10 +2706,11 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [coronaInfo,setCoronaInfo]=useState(null);
   useEffect(()=>{
     let alive=true;
-    if(!order?.client_id){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
-    db.getClientBillingInfo(order.client_id).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[PreInvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
+    // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
+    if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
+    db.getClientBillingInfo(order.client_id,order.client).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[PreInvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
     return ()=>{alive=false};
-  },[order?.client_id]);
+  },[order?.client_id,order?.client]);
   const isCorona=coronaInfo?.billing_mode==="anticipo";
 
   // Validar datos completos de la orden ANTES de permitir asignar folio anticipado
@@ -2784,8 +2789,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
       // v10.43.0 — Corona: bridge aplica saldo automáticamente
       if(isCorona){
         // v10.43.2 FIX M7-b — refresh saldo pre-confirm
+        // v10.43.24 — fallback por nombre
         try{
-          const fresh=await db.getClientBillingInfo(order.client_id);
+          const fresh=await db.getClientBillingInfo(order.client_id,order.client);
           if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
         }catch(e){console.warn("[PreInvoiceModal] refresh saldo:",e)}
         await onConfirm(type,folio,finalReason,null,null,null,null);

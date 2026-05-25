@@ -5,6 +5,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.24 — Fix botón "Aplicar saldo" oculto en órdenes preexistentes Corona — 25-may-2026
+
+Marcelo registró OC a Crédito de Grupo Modelo ($300k). Al intentar facturar P-3508 (Grupo Modelo, $150,010, creada el 15-may), el modal "Asignar Folio Fiscal y Entregar" solo mostraba **Factura** y **Remisión** — faltaba la 3ra opción 💰 **Aplicar saldo**.
+
+**Causa**: P-3508 tiene `client_id=NULL` porque fue creada antes de v10.43.5 (auto-upsert de cliente). El `useEffect` en InvoiceModal/PreInvoiceModal hacía early return si `!order?.client_id` → `coronaInfo` quedaba en `{billing_mode:'normal'}` por default → `isCorona=false` → 3er botón no se renderiza.
+
+**Fix sistémico** (DB + frontend):
+
+1. **DB**: `get_client_billing_info(p_client_id uuid, p_client_name text DEFAULT NULL)` — ahora acepta fallback por nombre. Si `client_id` no resuelve, hace match por `TRIM(UPPER(name))` (tolera trailing spaces — caso real: "GRUPO MODELO " con espacio al final).
+
+2. **Frontend**: `db.getClientBillingInfo(clientId, clientName)` pasa el nombre como 2do parámetro. `InvoiceModal` y `PreInvoiceModal` llaman con `(order.client_id, order.client)`. El useEffect también dispara cuando cambia `order.client`.
+
+Backfill puntual: P-3508 ya fue enlazada a Grupo Modelo (`client_id` actualizado en BD). Cualquier otra orden Corona preexistente que aparezca en el futuro funcionará gracias al fallback por nombre — no requiere intervención manual.
+
+**Por qué no auto-link**: el RPC NO actualiza `orders.client_id`. Eso sigue siendo responsabilidad de `upsert_client_from_order` (canónico). Mantenemos separación de concerns: este RPC solo lee, no escribe.
+
+
 ## v10.43.23 — Fix header desfasado para admin (2da fila) — 25-may-2026
 
 Marcelo (admin): "la UI se desfasó, ciertos elementos están en una segunda fila". Antes todo cabía en una fila; recientemente las acciones (Mis Órdenes/Todas + search + 🔔 + 📦 + 🎱 + CSV + Admin + Salir ≈ 670px) se envolvían debajo de la nav.
