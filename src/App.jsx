@@ -6594,6 +6594,8 @@ function AuditoriaView({orders, purchaseOrders}){
   const [type,setType]=useState("factura");
   // v10.43.15 — Sección consecutivo de Órdenes de Producción (P-XXXX)
   const [selectedProdOrder,setSelectedProdOrder]=useState(null);
+  // v10.43.16 — Tabs: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX)
+  const [tab,setTab]=useState("folios"); // 'folios' | 'production'
   const cutoffs=useMemo(()=>{
     const now=new Date();
     if(filter==="all")return {start:null,end:null};
@@ -6692,19 +6694,31 @@ function AuditoriaView({orders, purchaseOrders}){
   const tIcon=type==="factura"?"📄":"📋";
   const prefix=type==="factura"?"D":"R";
   return <div>
-    <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2>
-    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados en la secuencia fiscal · Read-only</p>
-    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?"#5856d6":"#34c759"):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?"#5856d6":"#34c759"):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t==="factura"?"📄 Facturas (D-XXXX)":"📋 Remisiones (R-XXXX)"}</button>)}
+    <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📑 Auditoría</h2>
+    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados · Read-only</p>
+    {/* v10.43.16 — Tabs principales: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX) */}
+    <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
+      {[{id:"folios",l:"📄 Folios Fiscales (D- / R-)"},{id:"production",l:"📋 Órdenes de Producción (P-XXXX)"}].map(t=>
+        <button key={t.id} onClick={()=>setTab(t.id)}
+          style={{background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
+          {t.l}
+        </button>
+      )}
     </div>
+    {/* Filtro de fecha compartido por ambos tabs */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,color:C.t2,fontWeight:600}}>Periodo:</span>
       <select value={filter} onChange={e=>setFilter(e.target.value)} style={{padding:"6px 10px",borderRadius:6,border:"1px solid "+C.bd,fontSize:12,background:C.bg,color:C.tx}}>
         <option value="90d">Últimos 90 días</option>
         <option value="tm">Este mes</option>
         <option value="lm">Mes pasado</option>
         <option value="all">Todo el historial</option>
       </select>
-      <button onClick={exportCSV} disabled={total===0} style={{...bt(C.ac),fontSize:11,padding:"6px 12px",opacity:total===0?0.4:1,cursor:total===0?"not-allowed":"pointer"}}>📥 Exportar CSV</button>
+    </div>
+    {tab==="folios"&&<>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+      {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?"#5856d6":"#34c759"):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?"#5856d6":"#34c759"):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t==="factura"?"📄 Facturas (D-XXXX)":"📋 Remisiones (R-XXXX)"}</button>)}
+      <button onClick={exportCSV} disabled={total===0} style={{...bt(C.ac),fontSize:11,padding:"6px 12px",opacity:total===0?0.4:1,cursor:total===0?"not-allowed":"pointer",marginLeft:"auto"}}>📥 Exportar CSV</button>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
       <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+tColor,border:"1px solid "+C.bd}}>
@@ -6769,11 +6783,9 @@ function AuditoriaView({orders, purchaseOrders}){
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
       <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
+    </>}
 
-    {/* ════════════════════════════════════════════════════════════════ */}
-    {/* v10.43.15 — Consecutivo de Órdenes de Producción (P-XXXX)         */}
-    {/* ════════════════════════════════════════════════════════════════ */}
-    {(()=>{
+    {tab==="production"&&(()=>{
       const parsePN=p=>{const m=String(p||"").match(/P-(\d+)/);return m?parseInt(m[1],10):null};
       const filteredOrders=orders.filter(o=>{
         if(!o.production_number||!o.production_number.startsWith("P-"))return false;

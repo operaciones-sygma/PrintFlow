@@ -5,6 +5,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.16 — Auditoría: tabs (Folios Fiscales | Órdenes Producción) — 25-may-2026
+
+Marcelo: "que el consecutivo de órdenes de producción sea una sub-ventana dentro de la ventana de Auditoría, no hasta abajo".
+
+### Cambio
+- Las dos secciones (Folios Fiscales D-/R- y Órdenes de Producción P-XXXX) ahora son **tabs** con underline activo en color azul.
+- Solo se muestra una sección a la vez.
+- **Filtro de periodo compartido** entre ambos tabs (se sacó fuera para que aplique a los dos).
+- Toggle factura/remisión y botón Exportar CSV quedan solo dentro del tab de Folios Fiscales (donde aplican).
+- Tab default: Folios Fiscales (igual que antes).
+
+
 ## v10.43.15 — Auditoría: consecutivo de Órdenes de Producción (P-XXXX) — 25-may-2026
 
 Marcelo: "agregar un apartado en auditoría donde pueda ver el consecutivo de órdenes de producción · click muestra detalles, en qué folio se convirtió".
