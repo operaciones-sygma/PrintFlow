@@ -5,6 +5,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.19 — Chips de filtro por stage para todos los roles — 25-may-2026
+
+Marcelo: "que todos los roles puedan filtrar sus pendientes por etapas".
+
+Antes los chips por stage solo existían para Karla, Producción, Preprensa y Admin. Lupita, Germán y vendedores solo tenían los 4 base (urgentes, retrasos, estancadas, sin precio). Ahora cada rol tiene hasta 8 chips (4 base + hasta 4 específicos).
+
+### Nuevos chips por rol
+
+**Secretaria (Lupita)** — antes solo 4 base, ahora 7:
+- 📝 Borradores (draft + maq_created)
+- 🎯 Prueba cliente (proof_client)
+- 📤 En salida (salidas)
+
+**Preprensa (Noemí)** — antes 5, ahora 7:
+- 📝 Drafts (draft)
+- 🎨 En diseño (design)
+- 👤 Esperando cliente (proof_client) — ya estaba
+
+**Germán** — antes solo 4 base, ahora 7:
+- 🖨️ Imprimir prueba (proof_printing)
+- 🛠️ CTP pendiente (ctp)
+- ✅ Placas listas (placas_listas)
+
+**Producción (Gerardo)** — antes 6, ahora 8 (máximo):
+- 🖱️ Sin máquina · ⚙️ En máquina · 📥 Maquila regresó · 📦 Empaque pendiente
+
+**Karla** — antes 7, ahora 8:
+- 📤 Salidas (nuevo, además de los 3 que ya tenía)
+
+**Vendedor** — antes solo 4 base, ahora 7 (por estado agrupado de sus órdenes):
+- 🎨 En diseño (todo el bloque de preprensa)
+- ⚙️ En producción (ready + in_production)
+- 📤 Lista entrega (packaging + salidas)
+
+**Admin** — antes 5, ahora 8:
+- 🚚 Maquila externa (ya estaba)
+- 🎯 Esperando cliente · ⚙️ En máquina · 📤 Salidas (nuevos)
+
+Todos respetan el límite de 8 chips para evitar ruido visual. La lógica del filtro es OR entre chips activos (consistente con v10.41.0).
+
+
 ## v10.43.18 — Auditoría: 4 quick wins (búsqueda, chips, cross-link) — 25-may-2026
 
 Cuatro mejoras de alto valor / bajo esfuerzo en la vista Auditoría.

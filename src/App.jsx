@@ -101,19 +101,45 @@ function getTaskFilters(role){
     {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0},
   ];
   if(role==="karla")return[...base,
+    {key:"salidas",emoji:"📤",label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
     {key:"maq_received",emoji:"📥",label:"Maquila recibida",color:"#32ade6",predicate:o=>o.stage==="maq_received"},
     {key:"oc_pending",emoji:"📋",label:"OC pendiente folio",color:"#8b5cf6",predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
     {key:"pre_assigned",emoji:"🔒",label:"Pre-asignados",color:"#06b6d4",predicate:o=>!!o.invoice_pre_assigned},
   ];
   if(role==="produccion")return[...base,
     {key:"no_machine",emoji:"🖱️",label:"Sin máquina",color:"#007aff",predicate:o=>o.stage==="ready"&&!o.current_machine},
+    {key:"in_production",emoji:"⚙️",label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
+    {key:"maquila_in",emoji:"📥",label:"Maquila regresó",color:"#32ade6",predicate:o=>o.stage==="maquila_in"},
     {key:"packaging",emoji:"📦",label:"Empaque pendiente",color:"#af52de",predicate:o=>o.stage==="packaging"},
   ];
   if(role==="preprensa")return[...base,
+    {key:"drafts",emoji:"📝",label:"Drafts",color:"#aeaeb2",predicate:o=>o.stage==="draft"},
+    {key:"design",emoji:"🎨",label:"En diseño",color:"#ec4899",predicate:o=>o.stage==="design"},
     {key:"waiting_client",emoji:"👤",label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+  ];
+  // v10.43.19 — Germán: chips de su flujo CTP/placas
+  if(role==="german")return[...base,
+    {key:"proof_printing",emoji:"🖨️",label:"Imprimir prueba",color:"#5856d6",predicate:o=>o.stage==="proof_printing"},
+    {key:"ctp",emoji:"🛠️",label:"CTP pendiente",color:"#0891b2",predicate:o=>o.stage==="ctp"},
+    {key:"placas",emoji:"✅",label:"Placas listas",color:"#34c759",predicate:o=>o.stage==="placas_listas"},
+  ];
+  // v10.43.19 — Secretaria (Lupita): captura + esperar cliente + salida
+  if(isSec(role))return[...base,
+    {key:"drafts",emoji:"📝",label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"||o.stage==="maq_created"},
+    {key:"proof_client",emoji:"🎯",label:"Prueba cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+    {key:"salidas",emoji:"📤",label:"En salida",color:"#16a34a",predicate:o=>o.stage==="salidas"},
+  ];
+  // v10.43.19 — Vendedor: por estado agrupado de sus órdenes
+  if(role==="vendedor")return[...base,
+    {key:"design_zone",emoji:"🎨",label:"En diseño",color:"#ec4899",predicate:o=>["design","proof_printing","proof_client","ctp","placas_listas"].includes(o.stage)},
+    {key:"production_zone",emoji:"⚙️",label:"En producción",color:"#ff9500",predicate:o=>["ready","in_production"].includes(o.stage)},
+    {key:"delivery_zone",emoji:"📤",label:"Lista entrega",color:"#16a34a",predicate:o=>["packaging","salidas"].includes(o.stage)},
   ];
   if(role==="admin")return[...base,
     {key:"maquila_ext",emoji:"🚚",label:"Maquila externa",color:"#e67e22",predicate:o=>["maquila_out","maq_sent","maq_in_progress","maquila_in"].includes(o.stage)},
+    {key:"proof_client",emoji:"🎯",label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+    {key:"in_production",emoji:"⚙️",label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
+    {key:"salidas",emoji:"📤",label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
   ];
   return base;
 }
