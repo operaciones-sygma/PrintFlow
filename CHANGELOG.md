@@ -5,6 +5,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.21 — Chip "Sin precio" oculto para roles operativos — 25-may-2026
+
+Marcelo: "Gerardo tiene el filtro de Sin precio, hay roles que no deben tener ciertos filtros".
+
+El chip 💰 Sin precio aplica a quienes manejan precios (capturan o facturan). Los roles operativos de taller no necesitan ese chip — el precio no es su responsabilidad.
+
+| Rol | Antes | Ahora |
+|---|---|---|
+| Producción (Gerardo) | Veía 💰 Sin precio | ❌ Oculto |
+| Preprensa (Noemí) | Veía 💰 Sin precio | ❌ Oculto |
+| Germán | Veía 💰 Sin precio | ❌ Oculto |
+| Secretaria, Vendedor, Karla, Admin | Veían 💰 Sin precio | ✅ Sigue visible |
+
+Los chips 🔥 Urgentes, ⏰ Retrasos, 🐢 Estancadas siguen disponibles para todos (todos los roles se benefician de priorizar urgentes y estar atentos a retrasos/estancadas).
+
+
 ## v10.43.20 — Fix A9 (chip Urgentes) + M15 (reset tabs Auditoría) — 25-may-2026
 
 ### 🔴 A9 — Chip "🔥 Urgentes" NUNCA filtraba (bug pre-existente desde v10.41.0)

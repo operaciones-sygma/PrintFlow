@@ -92,12 +92,17 @@ function getRevertOptions(currentStage,role){
 // `predicate(o, ctx)` recibe la orden y un ctx con utilidades comunes (hoy, etc.).
 // Para admin, los filtros base están disponibles + filtro por rol (separado).
 function getTaskFilters(role){
-  const base=[
+  // v10.43.21 — Chips comunes para todos los roles
+  const common=[
     {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
     // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
     {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
     // v10.41.1 #8 — boolean explícito (getStale retorna objeto truthy o null)
     {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)},
+  ];
+  // v10.43.21 — "Sin precio" SOLO para roles administrativos. Gerardo/Noemí/Germán no manejan precios.
+  const isOperative=role==="produccion"||role==="preprensa"||role==="german";
+  const base=isOperative?common:[...common,
     {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0},
   ];
   if(role==="karla")return[...base,
