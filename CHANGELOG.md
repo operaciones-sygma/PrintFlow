@@ -5,6 +5,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.25 — Fusión GRUPO MODELO ↔ CERVECERIA MODELO DE MEXICO — 25-may-2026
+
+Marcelo: "son lo mismo". Karla necesita poder meter órdenes de Grupo Modelo en OCs de Cervecería y viceversa. Solución elegida: fusionar a un solo cliente canónico (Cervecería Modelo, tiene RFC AMH080702RMA). Grupo Modelo queda como alias permanente.
+
+### Mecanismo: columna `merged_into`
+
+Nueva columna en `cobranza.clients`:
+```sql
+ALTER TABLE cobranza.clients
+  ADD COLUMN merged_into UUID REFERENCES cobranza.clients(id);
+```
+
+Si está set, el cliente es alias del referenciado. Los RPCs siguen el puntero automáticamente. Los selectores (typeahead, listas) lo excluyen. El cliente NO se borra — preserva historial y captura redirecciones futuras.
+
+### Migración de datos (todo en una transacción)
+
+| Tabla | Cambio | Filas |
+|---|---|---|
+| `public.orders` | `client_id` + `client` text → Cervecería | 1 (P-3508) |
+| `public.purchase_orders` | `client_id` + `client` text → Cervecería | 3 (OC-15, OC-5, OC-1) |
+| `cobranza.invoices` | `client_id` → Cervecería | 1 (D-5833) |
+| `cobranza.client_credit_ledger` | `client_id` → Cervecería | 1 entrada DEPOSITO |
+| `cobranza.client_credit_ledger` | recalcular `balance_despues` cronológicamente | 2 entradas |
+| `cobranza.clients` | Grupo Modelo: `merged_into` set + `billing_mode='normal'` | 1 |
+| `cobranza.audit_log` | entry `client_merged` con detalle de fusión | 1 |
+
+Saldo consolidado: $600,000 al momento de la fusión (después subió a $750k con una OC adicional registrada post-fusión).
+
+### RPCs actualizados (siguen `merged_into`)
+
+| RPC | Cambio |
+|---|---|
+| `get_client_billing_info(uuid, text)` | Si el match (por id o nombre) tiene `merged_into`, sigue al canónico antes de devolver billing_mode + balance. También: DROP de firma vieja `(uuid)` que quedó duplicada después de v10.43.24 → causaba "function not unique" |
+| `list_anticipo_clients()` | `WHERE merged_into IS NULL` — no lista clientes fusionados |
+| `upsert_client_from_order(p_name, ...)` | Si Lupita escribe "Grupo Modelo", el match resuelve al canónico Cervecería. Audit log marca `resolved_via_merge: true` |
+| `search_clients_typeahead(p_query)` | `WHERE merged_into IS NULL` — typeahead no sugiere fusionados |
+
+### Verificación end-to-end
+
+- Typeahead "grupo modelo" → 0 resultados ✓ (fusionado, no aparece)
+- Typeahead "modelo" → solo Cervecería ✓
+- `get_client_billing_info(grupo_modelo_uuid, NULL)` → redirige a Cervecería, devuelve saldo consolidado ✓
+- `get_client_billing_info(NULL, 'GRUPO MODELO')` → idem por fallback de nombre ✓
+- `list_anticipo_clients()` → solo Cervecería con $750k ✓
+
+### Sin cambios de frontend
+
+Todo el redireccionamiento sucede en DB. El frontend ya pasaba `(client_id, client_name)` desde v10.43.24 y los selectores usan los RPCs actualizados sin cambios.
+
+**Para Karla**: P-3508 ahora muestra "CERVECERIA MODELO DE MEXICO" en lugar de "GRUPO MODELO" (consistencia post-fusión). Cualquier OC de cualquier "Modelo" comparte el mismo saldo y RFC.
+
+
 ## v10.43.24 — Fix botón "Aplicar saldo" oculto en órdenes preexistentes Corona — 25-may-2026
 
 Marcelo registró OC a Crédito de Grupo Modelo ($300k). Al intentar facturar P-3508 (Grupo Modelo, $150,010, creada el 15-may), el modal "Asignar Folio Fiscal y Entregar" solo mostraba **Factura** y **Remisión** — faltaba la 3ra opción 💰 **Aplicar saldo**.
