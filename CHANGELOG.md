@@ -5,6 +5,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.18 — Auditoría: 4 quick wins (búsqueda, chips, cross-link) — 25-may-2026
+
+Cuatro mejoras de alto valor / bajo esfuerzo en la vista Auditoría.
+
+### QW1 — Búsqueda en vivo por folio o cliente
+Input arriba de cada tab que filtra la lista en vivo. Funciona en ambos tabs:
+- Tab Folios Fiscales: busca por folio (D-XXXX/R-XXXX), nombre del cliente o número de producción.
+- Tab Producción: busca por P-XXXX, cliente o folio fiscal asignado.
+
+Busca accent-insensitive y case-insensitive. Botón ✕ para limpiar.
+
+### QW2 — Chips de filtro por status
+Chips redondos arriba de la lista para enfocar la auditoría:
+
+**Tab Folios Fiscales:** Todos · ⚠️ Solo gaps · Duplicados · Canceladas · ⚡ Pre-asignados.
+**Tab Producción:** Todos · ⚠️ Solo gaps · Canceladas · 📄 Con folio fiscal · 💰 Sin folio (saldo Corona).
+
+Búsqueda y chips se combinan (filtro AND).
+
+### QW3 — Click en OC asociada → saltar a vista OC
+En el modal de detalle, el ID de OC interna (`OC-XXX`) ahora es un botón clicable. Al click:
+- Cierra el modal.
+- Navega al tab "OC" automáticamente.
+- Pre-selecciona esa OC.
+- Si la OC está completada/cancelada, también switch al sub-tab "Histórico".
+
+Refactor leve en `OrdenesCompraView` para aceptar prop `pendingOCId` y consumirla en useEffect.
+
+### QW4 — Botón "Ver en pipeline" en el modal de detalle
+Footer del modal ahora tiene 2 botones:
+- **📊 Ver en pipeline** → cierra modal, navega a pipeline, abre el detail modal de la orden.
+- **Cerrar** → solo cierra el modal de auditoría.
+
+Útil cuando Marcelo audita y necesita tomar acción (cancelar, editar, mover de OC) en la orden sin perder contexto.
+
+
 ## v10.43.17 — Auditoría: folios fiscales también clicables — 25-may-2026
 
 Marcelo: "aplicar lo mismo a la vista de D/R — click muestra detalle de la orden".

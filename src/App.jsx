@@ -6589,13 +6589,18 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
 }
 
 // ─── AUDITORIA DE FOLIOS (v10.9.1) ─── Gap detection + duplicados en secuencia D/R
-function AuditoriaView({orders, purchaseOrders}){
+function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrder}){
   const [filter,setFilter]=useState("90d");
   const [type,setType]=useState("factura");
   // v10.43.15 — Sección consecutivo de Órdenes de Producción (P-XXXX)
   const [selectedProdOrder,setSelectedProdOrder]=useState(null);
   // v10.43.16 — Tabs: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX)
-  const [tab,setTab]=useState("folios"); // 'folios' | 'production'
+  const [tab,setTab]=useState("folios");
+  // v10.43.18 — QuickWins: búsqueda + chips de status
+  const [search,setSearch]=useState("");
+  const [statusChip,setStatusChip]=useState("all"); // 'all'|'gap'|'duplicate'|'cancelled'|'preassigned' (folios) | 'all'|'gap'|'cancelled'|'invoiced'|'no_folio' (production)
+  const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
     const now=new Date();
     if(filter==="all")return {start:null,end:null};
@@ -6720,6 +6725,17 @@ function AuditoriaView({orders, purchaseOrders}){
       {["factura","remision"].map(t=><button key={t} onClick={()=>setType(t)} style={{background:type===t?(t==="factura"?"#5856d6":"#34c759"):C.bg,color:type===t?"#fff":C.tx,border:"1px solid "+(type===t?(t==="factura"?"#5856d6":"#34c759"):C.bd),borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t==="factura"?"📄 Facturas (D-XXXX)":"📋 Remisiones (R-XXXX)"}</button>)}
       <button onClick={exportCSV} disabled={total===0} style={{...bt(C.ac),fontSize:11,padding:"6px 12px",opacity:total===0?0.4:1,cursor:total===0?"not-allowed":"pointer",marginLeft:"auto"}}>📥 Exportar CSV</button>
     </div>
+    {/* v10.43.18 QW1 — Búsqueda por folio o cliente */}
+    <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+      <input style={{...inp,flex:1,minWidth:200,padding:"7px 12px",fontSize:12}} placeholder="🔍 Buscar por folio o cliente..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      {search&&<button onClick={()=>setSearch("")} style={{...bt(C.sf,C.t2),padding:"6px 10px",fontSize:11,border:"0.5px solid "+C.bd}}>✕ Limpiar</button>}
+    </div>
+    {/* v10.43.18 QW2 — Chips de filtro por status */}
+    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:"⚠️ Solo gaps",c:C.dn},{id:"duplicate",l:"Duplicados",c:C.wn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"preassigned",l:"⚡ Pre-asignados",c:C.wn}].map(chip=>
+        <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>{chip.l}</button>
+      )}
+    </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
       <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+tColor,border:"1px solid "+C.bd}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total emitidos</div>
@@ -6754,12 +6770,36 @@ function AuditoriaView({orders, purchaseOrders}){
         </div>)}
       </div>
     </div>}
-    {sequence.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
-      <div style={{fontSize:48}}>{tIcon}</div>
-      <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin folios en este periodo</div>
-      <div style={{fontSize:11,color:C.t2,marginTop:4}}>Ajusta el filtro o carga el archivo histórico para ver más</div>
-    </div>:<div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd}}>
-      {sequence.map(item=>{
+    {(()=>{
+      // v10.43.18 — aplicar search + chips al sequence
+      const matchesChip=(item)=>{
+        if(statusChip==="all")return true;
+        if(statusChip==="gap")return item.status==="gap";
+        if(statusChip==="duplicate")return item.status==="duplicate";
+        if(statusChip==="cancelled")return item.orders?.some(o=>o.cancelled_at);
+        if(statusChip==="preassigned")return item.orders?.some(o=>o.invoice_pre_assigned);
+        return true;
+      };
+      const matchesSearch=(item)=>{
+        if(!sq)return true;
+        const folio=prefix+"-"+item.n;
+        if(normSearch(folio).includes(sq))return true;
+        if(item.orders?.some(o=>normSearch(o.client||"").includes(sq) || normSearch(o.production_number||"").includes(sq)))return true;
+        return false;
+      };
+      const filteredSeq=sequence.filter(it=>matchesChip(it)&&matchesSearch(it));
+      if(sequence.length===0)return <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+        <div style={{fontSize:48}}>{tIcon}</div>
+        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin folios en este periodo</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:4}}>Ajusta el filtro o carga el archivo histórico para ver más</div>
+      </div>;
+      if(filteredSeq.length===0)return <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+        <div style={{fontSize:32}}>🔍</div>
+        <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
+        <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
+      </div>;
+      return <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd}}>
+      {filteredSeq.map(item=>{
         if(item.status==="gap"){
           return <div key={"gap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <div style={{fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}>⚠️ {prefix}-{item.n}</div>
@@ -6785,7 +6825,8 @@ function AuditoriaView({orders, purchaseOrders}){
           </div>;
         });
       })}
-    </div>}
+      </div>;
+    })()}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
       <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
@@ -6818,9 +6859,37 @@ function AuditoriaView({orders, purchaseOrders}){
       const totalPN=nums.length;
       const cancelledCount=filteredOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
       const invoicedCount=filteredOrders.filter(o=>o.invoice_folio).length;
+      // v10.43.18 — aplicar search + chips al pnSeq
+      const matchesPnChip=(item)=>{
+        if(statusChip==="all")return true;
+        if(statusChip==="gap")return !!item.gap;
+        if(statusChip==="cancelled")return item.orders?.some(o=>o.cancelled_at||o.stage?.includes("cancelled"));
+        if(statusChip==="invoiced")return item.orders?.some(o=>o.invoice_folio);
+        if(statusChip==="no_folio")return item.orders?.some(o=>!o.invoice_folio&&!(o.cancelled_at||o.stage?.includes("cancelled")));
+        return true;
+      };
+      const matchesPnSearch=(item)=>{
+        if(!sq)return true;
+        const pn="P-"+item.n;
+        if(normSearch(pn).includes(sq))return true;
+        if(item.orders?.some(o=>normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;
+        return false;
+      };
+      const filteredPnSeq=pnSeq.filter(it=>matchesPnChip(it)&&matchesPnSearch(it));
       return <div style={{marginTop:24}}>
         <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📋 Consecutivo de Órdenes de Producción</h3>
         <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Serie P-XXXX en el periodo seleccionado · Click en una orden para ver detalles y folio fiscal asignado</p>
+        {/* QW1 búsqueda */}
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+          <input style={{...inp,flex:1,minWidth:200,padding:"7px 12px",fontSize:12}} placeholder="🔍 Buscar por P-XXXX, cliente o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          {search&&<button onClick={()=>setSearch("")} style={{...bt(C.sf,C.t2),padding:"6px 10px",fontSize:11,border:"0.5px solid "+C.bd}}>✕ Limpiar</button>}
+        </div>
+        {/* QW2 chips */}
+        <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+          {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:"⚠️ Solo gaps",c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:"📄 Con folio fiscal",c:"#5856d6"},{id:"no_folio",l:"💰 Sin folio (saldo Corona)",c:"#10b981"}].map(chip=>
+            <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>{chip.l}</button>
+          )}
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
           <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.ac,border:"1px solid "+C.bd}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total P-XXXX</div>
@@ -6843,8 +6912,12 @@ function AuditoriaView({orders, purchaseOrders}){
             <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
           </div>
         </div>
-        <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:520,overflowY:"auto"}}>
-          {pnSeq.map(item=>{
+        {filteredPnSeq.length===0?<div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+          <div style={{fontSize:32}}>🔍</div>
+          <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
+          <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
+        </div>:<div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:520,overflowY:"auto"}}>
+          {filteredPnSeq.map(item=>{
             if(item.gap){
               return <div key={"pgap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10}}>
                 <div style={{fontSize:14,fontWeight:800,color:C.dn,minWidth:90}}>⚠️ P-{item.n}</div>
@@ -6875,12 +6948,13 @@ function AuditoriaView({orders, purchaseOrders}){
       </div>;
     })()}
 
-    {selectedProdOrder&&<ProductionOrderDetailModal order={selectedProdOrder} purchaseOrders={purchaseOrders} onClose={()=>setSelectedProdOrder(null)}/>}
+    {selectedProdOrder&&<ProductionOrderDetailModal order={selectedProdOrder} purchaseOrders={purchaseOrders} onNavigateToOC={onNavigateToOC} onNavigateToOrder={onNavigateToOrder} onClose={()=>setSelectedProdOrder(null)}/>}
   </div>;
 }
 
 // v10.43.15 — Modal de detalle para una orden de producción desde Auditoría.
-function ProductionOrderDetailModal({order, purchaseOrders, onClose}){
+// v10.43.18 — props onNavigateToOC / onNavigateToOrder para cross-link
+function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNavigateToOrder, onClose}){
   useEscClose(onClose);
   const isCancelled=order.cancelled_at||order.stage?.includes("cancelled");
   const oc=order.purchase_order_id?(purchaseOrders||[]).find(p=>p.id===order.purchase_order_id):null;
@@ -6952,7 +7026,14 @@ function ProductionOrderDetailModal({order, purchaseOrders, onClose}){
 
         {(oc||order.cart_folio||order.web_folio)&&<>
           <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Asociaciones</div>
-          {oc&&<Row label="OC interna" value={oc.id+(oc.shared_invoice_folio?" · folio compartido "+oc.shared_invoice_folio:"")}/>}
+          {/* v10.43.18 QW3 — OC clicable para saltar a la vista OC */}
+          {oc&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:12,gap:10}}>
+            <span style={{color:C.t2}}>OC interna</span>
+            <span style={{textAlign:"right"}}>
+              {onNavigateToOC?<button onClick={()=>{onNavigateToOC(oc.id);onClose();}} style={{...bt(C.acL,C.ac),padding:"3px 10px",fontSize:11,border:"0.5px solid "+C.ac+"40"}}>{oc.id} →</button>:<span style={{color:C.tx,fontWeight:600}}>{oc.id}</span>}
+              {oc.shared_invoice_folio&&<span style={{fontSize:10,color:C.t3,marginLeft:6}}>· folio compartido {oc.shared_invoice_folio}</span>}
+            </span>
+          </div>}
           <Row label="Cart web" value={order.cart_folio}/>
           <Row label="Web folio" value={order.web_folio}/>
           <Row label="MP payment" value={order.mp_payment_id}/>
@@ -6962,18 +7043,32 @@ function ProductionOrderDetailModal({order, purchaseOrders, onClose}){
         <Row label="ID interno" value={order.id}/>
         <Row label="Source" value={order.source}/>
       </div>
-      <div style={{padding:"12px 22px",borderTop:"0.5px solid "+C.bd}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.tx),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
+      <div style={{padding:"12px 22px",borderTop:"0.5px solid "+C.bd,display:"flex",gap:8}}>
+        {/* v10.43.18 QW4 — saltar a la orden en pipeline */}
+        {onNavigateToOrder&&<button onClick={()=>{onNavigateToOrder(order.id);onClose();}} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>📊 Ver en pipeline</button>}
+        <button onClick={onClose} style={{...bt(C.sf,C.tx),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
       </div>
     </div>
   </div>;
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, pendingOCId, onConsumedPendingOC}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
+  // v10.43.18 — Si Auditoría navegó hacia acá con un OC objetivo, preseleccionarlo.
+  // Si la OC está cancelada/completada, switch al tab Histórico para que se vea.
+  useEffect(()=>{
+    if(!pendingOCId)return;
+    const target=(purchaseOrders||[]).find(p=>p.id===pendingOCId);
+    if(target){
+      if(target.status==="completed"||target.status==="cancelled")setHistoricoTab(true);
+      else setHistoricoTab(false);
+      setSelectedOCId(pendingOCId);
+    }
+    onConsumedPendingOC&&onConsumedPendingOC();
+  },[pendingOCId,purchaseOrders]);
   // 🌐 v10.12.0 Sub-fase C — Filtrar OCs visibles:
   //   - OCs simples siempre ocultas (v10.10.0)
   //   - OCs web ocultas hasta que ≥1 hija salga de web_pending (evita aparición prematura mientras Lupita revisa el carrito)
@@ -7279,6 +7374,8 @@ export default function PrintFlow() {
   // Admin: filtrar "Mis Pendientes" como si fuera otro rol (ver lo del calendario de Karla, etc.)
   const [adminRoleFilter,setAdminRoleFilter]=useState("");
   const [clients,setClients]=useState([]);const [maqModal,setMaqModal]=useState(null);const [wasteModal,setWasteModal]=useState(null);const [inventoryOpen,setInventoryOpen]=useState(false);const [coronaOpen,setCoronaOpen]=useState(false);
+  // v10.43.18 — navegación cross-view desde Auditoría
+  const [pendingOCNavId,setPendingOCNavId]=useState(null);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
@@ -8884,8 +8981,8 @@ export default function PrintFlow() {
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
-        {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})}/>}
+        {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
