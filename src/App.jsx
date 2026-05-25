@@ -6767,17 +6767,23 @@ function AuditoriaView({orders, purchaseOrders}){
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>Verificar en AlphaERP</div>
           </div>;
         }
-        return item.orders.map((o,i)=><div key={item.n+"-"+i} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent"),display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-          <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}>{tIcon} {o.invoice_folio}</div>
-          {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
-          {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4}}>📄 COMPARTIDO · {item.orders.length} órdenes</div>}
-          {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
-          {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>⚡ ANTICIPADO</div>}
-          {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
-          <div style={{fontSize:12,color:C.tx,fontWeight:600}}>{o.client}</div>
-          {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
-          <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
-        </div>);
+        return item.orders.map((o,i)=>{
+          const baseBg=item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent");
+          return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
+            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:"pointer",transition:"background 0.12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
+            onMouseLeave={e=>{e.currentTarget.style.background=baseBg}}>
+            <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}>{tIcon} {o.invoice_folio}</div>
+            {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
+            {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4}}>📄 COMPARTIDO · {item.orders.length} órdenes</div>}
+            {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
+            {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>⚡ ANTICIPADO</div>}
+            {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
+            <div style={{fontSize:12,color:C.tx,fontWeight:600}}>{o.client}</div>
+            {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
+            <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
+          </div>;
+        });
       })}
     </div>}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>

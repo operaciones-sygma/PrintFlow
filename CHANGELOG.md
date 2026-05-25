@@ -5,6 +5,17 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.17 — Auditoría: folios fiscales también clicables — 25-may-2026
+
+Marcelo: "aplicar lo mismo a la vista de D/R — click muestra detalle de la orden".
+
+Cada fila de folio fiscal (D-/R-) en el tab "Folios Fiscales" ahora es clicable. Reusa el mismo `ProductionOrderDetailModal` que ya existía para P-XXXX → muestra todos los detalles de la orden: cliente, producto, importes, folio fiscal, fechas, asociaciones (OC interna, cart web, MP payment), IDs internos.
+
+- Hover muestra fondo en color `C.sf` (consistencia con el tab P-XXXX).
+- En **folios compartidos** (mismo folio en N órdenes de una OC), cada fila es clicable y abre el detalle de SU orden específica.
+- Filas **gap** (folios faltantes) NO son clicables (no hay orden que mostrar).
+
+
 ## v10.43.16 — Auditoría: tabs (Folios Fiscales | Órdenes Producción) — 25-may-2026
 
 Marcelo: "que el consecutivo de órdenes de producción sea una sub-ventana dentro de la ventana de Auditoría, no hasta abajo".
