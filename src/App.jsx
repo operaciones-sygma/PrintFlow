@@ -93,7 +93,7 @@ function getRevertOptions(currentStage,role){
 // Para admin, los filtros base están disponibles + filtro por rol (separado).
 function getTaskFilters(role){
   const base=[
-    {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="Urgente"},
+    {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
     // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
     {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
     // v10.41.1 #8 — boolean explícito (getStale retorna objeto truthy o null)
@@ -6728,9 +6728,10 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📑 Auditoría</h2>
     <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados · Read-only</p>
     {/* v10.43.16 — Tabs principales: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX) */}
+    {/* v10.43.20 FIX M15 — reset search y statusChip al cambiar de tab (los chips son distintos por tab) */}
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
       {[{id:"folios",l:"📄 Folios Fiscales (D- / R-)"},{id:"production",l:"📋 Órdenes de Producción (P-XXXX)"}].map(t=>
-        <button key={t.id} onClick={()=>setTab(t.id)}
+        <button key={t.id} onClick={()=>{if(tab!==t.id){setTab(t.id);setSearch("");setStatusChip("all")}}}
           style={{background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
           {t.l}
         </button>

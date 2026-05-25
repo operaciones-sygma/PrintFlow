@@ -5,6 +5,19 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.20 — Fix A9 (chip Urgentes) + M15 (reset tabs Auditoría) — 25-may-2026
+
+### 🔴 A9 — Chip "🔥 Urgentes" NUNCA filtraba (bug pre-existente desde v10.41.0)
+El predicate comparaba con `"Urgente"` (capitalizado) pero la BD/PRIOS guarda `"urgente"` (lowercase). Resultado: el chip "Urgentes" en "Mis Pendientes" nunca matcheaba ninguna orden, aunque hubiera órdenes urgentes en la BD (hoy hay 9). El equipo probablemente lo notó pero no se reportó hasta el scan exhaustivo.
+
+**Fix**: `o.priority==="urgente"` (1 carácter de cambio, ahora alineado con `PRIOS` y la columna en BD).
+
+### 🟡 M15 — Reset de búsqueda y chip de status al cambiar de tab en Auditoría
+Si el usuario activa un chip que solo existe en un tab (ej. "Duplicados" solo en Folios Fiscales) y cambia al otro tab, el chip seguía mostrándose activo pero no filtraba nada (el predicate caía al default `return true`). Confuso.
+
+**Fix**: al cambiar de tab, reset de `search=""` y `statusChip="all"`. La búsqueda y el chip se aplican fresh por tab.
+
+
 ## v10.43.19 — Chips de filtro por stage para todos los roles — 25-may-2026
 
 Marcelo: "que todos los roles puedan filtrar sus pendientes por etapas".
