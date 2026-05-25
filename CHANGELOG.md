@@ -5,6 +5,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.22 — HOTFIX build · JSX expression no cerrada en pestaña Producción — 25-may-2026
+
+### 🚨 Por qué Marcelo no veía los cambios desde v10.43.18
+
+**Síntoma**: Marcelo abría Auditoría y no veía los chips, ni la búsqueda, ni los fixes de v10.43.19/20/21. Hard refresh no ayudaba.
+
+**Causa**: El build de Vercel estaba en estado `ERROR` desde v10.43.18 (commit 5d21e65). Vercel sirvió el último deploy válido (v10.43.17) durante 4 versiones. Todo lo que se pusheó después nunca llegó al usuario.
+
+**Error de esbuild** (deploy `dpl_8hErTDafsMUrrZyHwFXzzEQfS15h`):
+```
+/vercel/path0/src/App.jsx:6945:13: ERROR: Expected "}" but found "style"
+6943|            })}
+6944|          </div>
+6945|          <div style={{marginTop:10,...
+```
+
+**Bug**: en `AuditoriaView` → pestaña **Producción** (la sección agregada en v10.43.18 con QW1 búsqueda + QW2 chips), la expresión JSX ternaria que renderiza `filteredPnSeq` quedó sin su `}` de cierre antes de la nota "Cómo interpretar":
+
+```jsx
+{filteredPnSeq.length===0?<div>...</div>:<div>...
+  {filteredPnSeq.map(...)}
+</div>           ← faltaba } aquí
+<div>Cómo interpretar...</div>
+```
+
+**Fix**: cerrar la expresión con `</div>}` (1 carácter — el clásico). Sin esto, el parser leía el siguiente `<div style=...` como continuación del JSX previo y reventaba en el atributo `style`.
+
+### 📌 Aprendizajes para futuros checks
+
+Mi validador de braces detectó `brace_diff` cambió de `+3` a `+4` en v10.43.18 — lo descarté como "ruido del stripper de JSX". **No era ruido**: era el bug real. En adelante, cualquier delta del brace_diff es señal de mirar el diff con lupa, no de descartar.
+
+También: aunque no haya `npm` local, el feedback de Vercel build logs vía MCP (`get_deployment_build_logs`) es accesible y rapidísimo — usar siempre que un deploy falle, no solo cuando el usuario reporta el síntoma.
+
+
 ## v10.43.21 — Chip "Sin precio" oculto para roles operativos — 25-may-2026
 
 Marcelo: "Gerardo tiene el filtro de Sin precio, hay roles que no deben tener ciertos filtros".
