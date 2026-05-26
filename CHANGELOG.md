@@ -5,6 +5,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.29 — Handler global onWheel-blur para TODOS los inputs numéricos — 25-may-2026
+
+Marcelo: "asegúrate de que no haya ninguno scroll-sensitive, hay en crear orden de producción y posiblemente en más lados".
+
+En vez de ir agregando `onWheel={e=>e.target.blur()}` a cada uno de los 19 inputs `type="number"` (precio, cantidad, ancho, alto, gramaje, peso, etc.), agregué un único handler global en el componente raíz `PrintFlow`:
+
+```js
+useEffect(() => {
+  const onWheel = (e) => {
+    const el = document.activeElement;
+    if (el && el.tagName === "INPUT" && el.type === "number") el.blur();
+  };
+  document.addEventListener("wheel", onWheel, { passive: true });
+  return () => document.removeEventListener("wheel", onWheel);
+}, []);
+```
+
+### Cómo funciona
+
+Cualquier `<input type="number">` que esté enfocado pierde el foco al instante que el usuario rola la rueda del mouse → el browser no incrementa/decrementa el valor. La página sigue scrolleándose normalmente.
+
+### Inputs cubiertos automáticamente (19 totales en PrintFlow)
+
+Crear/editar orden: precio, cantidad, ancho, alto, gramaje, horas estimadas, costo maquila, precio maquila · `MaqModal`: monto maquila · `WasteModal`: pliegos merma · `MaintModal`: monto · `InvoiceModal/PreInvoiceModal`: monto parcial · `RegisterCoronaPOModal`: subtotal · etc.
+
+Cero código por input. Cualquier `<input type="number">` futuro también queda cubierto sin tocar nada.
+
+
 ## v10.43.28 — RegisterCoronaPOModal: sugerencia de folio + scroll-blur en subtotal — 25-may-2026
 
 Karla pidió dos mejoras al modal "🎱 Registrar OC a Crédito":

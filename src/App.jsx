@@ -7527,6 +7527,18 @@ export default function PrintFlow() {
 
   useEffect(() => { if (user) reload(); }, [user, reload]);
 
+  // v10.43.29 — Global: cualquier <input type="number"> pierde foco al hacer scroll del mouse.
+  // Evita errores humanos comunes (cambiar precio/cantidad sin querer al rolar la rueda).
+  // Un solo handler para toda la app — cubre inputs actuales y futuros.
+  useEffect(() => {
+    const onWheel = (e) => {
+      const el = document.activeElement;
+      if (el && el.tagName === "INPUT" && el.type === "number") el.blur();
+    };
+    document.addEventListener("wheel", onWheel, { passive: true });
+    return () => document.removeEventListener("wheel", onWheel);
+  }, []);
+
   // For vendedor, notifications are per-username (not per-role)
   // v10.17.0 — Restaurar sesión al montar la app (persistencia en localStorage).
   // Si hay sesión guardada, re-verifica contra DB que el usuario sigue activo y restaura el state.
