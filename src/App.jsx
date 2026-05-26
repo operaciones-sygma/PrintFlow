@@ -6689,8 +6689,25 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     if(filter==="lm")return {start:new Date(now.getFullYear(),now.getMonth()-1,1),end:new Date(now.getFullYear(),now.getMonth(),1)};
     const d=new Date();d.setDate(d.getDate()-90);return {start:d,end:null};
   },[filter]);
+  // v10.43.30 — Cargar OC a Crédito Corona (cobranza.invoices source='corona_oc_credit')
+  // que NO viven en public.orders. Sin esto, esos folios aparecen como GAPS falsos.
+  const [coronaOCInvoices,setCoronaOCInvoices]=useState([]);
+  useEffect(()=>{
+    let alive=true;
+    const startDate=cutoffs.start?cutoffs.start.toISOString().slice(0,10):null;
+    const endDate=cutoffs.end?cutoffs.end.toISOString().slice(0,10):null;
+    supabase.rpc("list_corona_oc_invoices",{p_doc_type:type,p_start_date:startDate,p_end_date:endDate})
+      .then(({data,error})=>{
+        if(!alive)return;
+        if(error){console.warn("[AuditoriaView] list_corona_oc_invoices:",error);setCoronaOCInvoices([]);return}
+        setCoronaOCInvoices(data||[]);
+      });
+    return ()=>{alive=false};
+  },[type,cutoffs]);
+
   const folioOrders=useMemo(()=>{
-    return orders.filter(o=>{
+    // Órdenes con folio en public.orders (flujo normal)
+    const fromOrders=orders.filter(o=>{
       if(!o.invoice_folio||!o.invoice_type)return false;
       if(o.invoice_type!==type)return false;
       if(!o.invoiced_at)return cutoffs.start===null;
@@ -6699,7 +6716,28 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       if(cutoffs.end&&dt>=cutoffs.end)return false;
       return true;
     });
-  },[orders,type,cutoffs]);
+    // v10.43.30 — Pseudo-órdenes desde Corona OC para que cuenten en la secuencia
+    // Mismo shape que orders para reusar la lógica de gap/duplicate detection
+    const fromCorona=(coronaOCInvoices||[]).map(oc=>({
+      id:"CORONA-"+oc.invoice_id,
+      invoice_folio:oc.doc_number,
+      invoice_type:oc.doc_type,
+      invoiced_at:oc.issued_date?oc.issued_date+"T12:00:00":null,
+      client:oc.client_name||"—",
+      production_number:null,
+      purchase_order_id:null,
+      invoiced_by:oc.created_by,
+      invoice_pre_assigned:false,
+      cancelled_at:oc.status==='cancelada'?(oc.issued_date+"T12:00:00"):null,
+      nc_emitted:false,
+      // Tags para distinción visual
+      isCoronaOC:true,
+      coronaPoRef:oc.external_po_ref,
+      coronaAmountWithIva:oc.amount_with_iva,
+      coronaInvoiceId:oc.invoice_id
+    }));
+    return [...fromOrders,...fromCorona];
+  },[orders,type,cutoffs,coronaOCInvoices]);
   const parseFolio=f=>{const m=String(f||"").match(/[DRC]-(\d+)/);return m?parseInt(m[1],10):null};
   // 📄 v10.11.0 Sub-fase B — Reclasifica duplicados que son folios compartidos legítimos
   // Un grupo de órdenes con el mismo folio se considera "shared" (no duplicado) si:
@@ -6764,10 +6802,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   },[purchaseOrders,folioOrders,type]);
   const exportCSV=()=>{
     const prefix=type==="factura"?"D":"R";
-    const rows=[["Folio","Status","Cliente","Producción","OrdenID","Asignado","Por","Anticipado","Cancelada"]];
+    // v10.43.30 — Columnas extras para Corona OC
+    const rows=[["Folio","Status","Origen","Cliente","Producción/PO Corona","OrdenID","Asignado","Por","Anticipado","Cancelada","Monto c/IVA"]];
     sequence.forEach(item=>{
-      if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","",""])}
-      else{item.orders.forEach(o=>{rows.push([o.invoice_folio,item.status==="duplicate"?"DUPLICADO":(item.status==="shared"?"COMPARTIDO":"OK"),o.client||"",o.production_number||"",o.id,o.invoiced_at?fDT(o.invoiced_at):"",o.invoiced_by==="secretaria"?"Lupita":(o.invoiced_by||""),o.invoice_pre_assigned?"SI":"NO",o.cancelled_at?"SI":"NO"])})}
+      if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","","","",""])}
+      else{item.orders.forEach(o=>{
+        const origen=o.isCoronaOC?"OC Crédito Corona":"Orden producción";
+        const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
+        const monto=o.isCoronaOC?(o.coronaAmountWithIva||""):"";
+        rows.push([o.invoice_folio,item.status==="duplicate"?"DUPLICADO":(item.status==="shared"?"COMPARTIDO":"OK"),origen,o.client||"",refProd,o.id,o.invoiced_at?fDT(o.invoiced_at):"",o.invoiced_by==="secretaria"?"Lupita":(o.invoiced_by||""),o.invoice_pre_assigned?"SI":"NO",o.cancelled_at?"SI":"NO",monto]);
+      })}
     });
     const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");
     const b=new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -6866,7 +6910,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         if(!sq)return true;
         const folio=prefix+"-"+item.n;
         if(normSearch(folio).includes(sq))return true;
-        if(item.orders?.some(o=>normSearch(o.client||"").includes(sq) || normSearch(o.production_number||"").includes(sq)))return true;
+        // v10.43.30 — buscar también por PO Corona (campo coronaPoRef)
+        if(item.orders?.some(o=>normSearch(o.client||"").includes(sq) || normSearch(o.production_number||"").includes(sq) || normSearch(o.coronaPoRef||"").includes(sq)))return true;
         return false;
       };
       const filteredSeq=sequence.filter(it=>matchesChip(it)&&matchesSearch(it));
@@ -6890,12 +6935,15 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           </div>;
         }
         return item.orders.map((o,i)=>{
-          const baseBg=item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent");
-          return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
-            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:"pointer",transition:"background 0.12s"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
-            onMouseLeave={e=>{e.currentTarget.style.background=baseBg}}>
+          // v10.43.30 — Corona OC: fondo verdoso + badge + no click navega (no es orden)
+          const isCorona=o.isCoronaOC;
+          const baseBg=isCorona?"#10b98108":(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent"));
+          return <div key={item.n+"-"+i} onClick={isCorona?undefined:()=>setSelectedProdOrder(o)}
+            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:isCorona?"default":"pointer",transition:"background 0.12s"}}
+            onMouseEnter={e=>{if(!isCorona)e.currentTarget.style.background=C.sf}}
+            onMouseLeave={e=>{if(!isCorona)e.currentTarget.style.background=baseBg}}>
             <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}>{tIcon} {o.invoice_folio}</div>
+            {isCorona&&<div style={{fontSize:10,color:"#10b981",fontWeight:700,background:"#10b98120",padding:"2px 6px",borderRadius:4}}>🎱 OC CRÉDITO CORONA</div>}
             {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
             {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4}}>📄 COMPARTIDO · {item.orders.length} órdenes</div>}
             {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
@@ -6903,6 +6951,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
             <div style={{fontSize:12,color:C.tx,fontWeight:600}}>{o.client}</div>
             {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
+            {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"monospace"}}>PO: {o.coronaPoRef}</div>}
+            {isCorona&&o.coronaAmountWithIva&&<div style={{fontSize:10,color:"#10b981",fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</div>}
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
           </div>;
         });
@@ -6910,7 +6960,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>;
     })()}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
-      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
+      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:"#10b981"}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
     </>}
 

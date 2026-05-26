@@ -5,6 +5,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.30 — Auditoría incluye OCs a Crédito Corona (fix gap falsos) — 25-may-2026
+
+Marcelo: "¿las OCs a Crédito Corona se guardan también en auditoría y en todos los apartados donde deben ir?".
+
+Scan completo de visibilidad de folios D-/R-XXXX en ambas apps:
+
+| Vista | Veía Corona OC? |
+|---|---|
+| 🔴 PrintFlow `AuditoriaView` (folios fiscales) | **NO** — falsos gaps |
+| ✅ CobranzaFlow `DashboardView` | Sí (lee `cobranza.invoices` directo) |
+| ✅ CobranzaFlow `InvoicesView` | Sí |
+| ✅ CobranzaFlow `AgingDetailModal` | Sí |
+| ✅ CobranzaFlow `VouchersAuditView` | N/A (es para VC-, no D-/R-) |
+
+### Causa raíz
+
+`AuditoriaView` solo leía `public.orders.invoice_folio`. Las OC a Crédito Corona se registran vía `credit_deposit` → entran a `cobranza.invoices` con `source='corona_oc_credit'` pero **NO crean entrada en `public.orders`**. Resultado: cualquier folio D-/R- de OC a Crédito aparecía como **GAP falso** en la secuencia, provocando alertas de incumplimiento.
+
+### Fix DB
+
+Nueva RPC `list_corona_oc_invoices(p_doc_type, p_start_date, p_end_date)` que retorna las invoices `corona_oc_credit` en un formato apto para mergear con `orders`:
+- `invoice_id`, `doc_number`, `doc_type`, `amount_with_iva`, `external_po_ref`, `client_name`, `client_id`, `issued_date`, `due_date`, `status`, `created_by` (resuelto desde `audit_log`)
+
+### Fix Frontend
+
+`AuditoriaView` ahora:
+1. Carga Corona OC en un `useEffect` aparte (depende de `type` y `cutoffs`)
+2. Convierte cada Corona OC en una **pseudo-orden** con el shape de `orders` (campos extras: `isCoronaOC`, `coronaPoRef`, `coronaAmountWithIva`, `coronaInvoiceId`)
+3. Mergea con las orders reales en `folioOrders` → la lógica de gap/duplicate detection funciona sin cambios
+4. UI distingue Corona OC con:
+   - Fondo verdoso `#10b98108`
+   - Badge **🎱 OC CRÉDITO CORONA**
+   - PO Corona en monospace
+   - Monto con IVA en verde
+   - Cursor `default` (no click — no abre detail modal porque no es orden)
+5. Search incluye `coronaPoRef` (Karla puede buscar por PO Corona)
+6. CSV export incluye columnas **Origen** ("OC Crédito Corona" / "Orden producción") y **Monto c/IVA**
+7. Nota "Cómo interpretar" actualizada con explicación del badge
+
+### Verificación
+- ✅ Las OCs activas de Cervecería (cuando se vuelvan a registrar) aparecerán como entradas normales con badge — NO como gaps
+- ✅ Si Karla emite D-5852 (orden normal) y D-5853 (OC Crédito), ambos cuentan en la secuencia → cero gaps falsos
+- ✅ Si se duplica un folio (orden normal + Corona OC con mismo D-XXXX), el detector de duplicados lo señala (no debería suceder por trigger, pero defensivo)
+
+
 ## v10.43.29 — Handler global onWheel-blur para TODOS los inputs numéricos — 25-may-2026
 
 Marcelo: "asegúrate de que no haya ninguno scroll-sensitive, hay en crear orden de producción y posiblemente en más lados".
