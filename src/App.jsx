@@ -1982,9 +1982,14 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const [busy,setBusy]=useState(false);
   const [stockClients,setStockClients]=useState([]);
   const [loadingClients,setLoadingClients]=useState(true);
+  // v10.43.28 — sugerencias del siguiente folio fiscal (mismo patrón que InvoiceModal)
+  const [suggestion,setSuggestion]=useState({factura:null,remision:null});
   useEffect(()=>{
     let alive=true;
     db.listAnticipoClients().then(list=>{if(alive)setStockClients(list||[])}).catch(e=>console.warn("[RegisterCoronaPOModal]",e)).finally(()=>{if(alive)setLoadingClients(false)});
+    Promise.all([db.getNextFolioSuggestion("factura"),db.getNextFolioSuggestion("remision")])
+      .then(([f,r])=>{if(alive)setSuggestion({factura:f,remision:r})})
+      .catch(e=>console.warn("[RegisterCoronaPOModal] suggestions:",e));
     return ()=>{alive=false};
   },[]);
 
@@ -1993,6 +1998,13 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const isFactura=folioClean.startsWith("D-");
   const isRemision=folioClean.startsWith("R-");
   const folioValid=(isFactura||isRemision)&&/^[DR]-\d+$/.test(folioClean);
+  // v10.43.28 — determinar qué sugerencia mostrar (default D- si aún no escribió nada)
+  const suggestedType=isRemision?"remision":"factura";
+  const suggestedFolio=suggestion[suggestedType];
+  // Avisar si el folio es menor al sugerido (caso huecos retroactivos)
+  const folioNum=folioValid?parseInt(folioClean.split("-")[1],10):0;
+  const suggestedNum=suggestedFolio?parseInt(suggestedFolio.split("-")[1],10):0;
+  const folioIsLower=folioValid&&suggestedNum>0&&folioNum<suggestedNum;
   const dueDateValid=dueDate&&new Date(dueDate+"T12:00:00")>new Date();
   const valid=clientId&&externalPoRef.trim()&&folioValid&&Number.isFinite(amountNum)&&amountNum>0&&dueDateValid;
 
@@ -2028,13 +2040,33 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
         {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes con billing_mode='anticipo'. Marcelo debe activarlo.</div>}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>PO Corona (ref del cliente) *</label><input style={inp} value={externalPoRef} onChange={e=>setExternalPoRef(e.target.value)} placeholder="ej. 1234567890 (10 dígitos)"/></div>
-        <div><label style={lbl}>Folio fiscal emitido *</label><input style={{...inp,fontFamily:"monospace",fontWeight:700,textTransform:"uppercase"}} value={folioFiscal} onChange={e=>setFolioFiscal(e.target.value.toUpperCase())} placeholder="D-XXXX o R-XXXX"/></div>
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>PO Corona (ref del cliente) *</label>
+        <input style={inp} value={externalPoRef} onChange={e=>setExternalPoRef(e.target.value)} placeholder="ej. 1234567890 (10 dígitos)"/>
+      </div>
+
+      {/* v10.43.28 — Folio fiscal con sugerencia + botón "Usar" (mismo patrón que InvoiceModal) */}
+      <div style={{marginBottom:10}}>
+        <label style={lbl}>Folio fiscal emitido *</label>
+        <div style={{display:"flex",gap:6}}>
+          <input
+            style={{...inp,fontFamily:"monospace",fontWeight:700,textTransform:"uppercase",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioFiscal&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
+            value={folioFiscal}
+            onChange={e=>setFolioFiscal(e.target.value.toUpperCase().trim())}
+            placeholder={(suggestedFolio||"D-XXXX").replace(/\d+$/,"XXXX")+" o R-XXXX"}
+          />
+          <button type="button" onClick={()=>{if(suggestedFolio)setFolioFiscal(suggestedFolio)}} disabled={!suggestedFolio} style={{...bt(C.sf,C.tx),padding:"0 14px",border:"0.5px solid "+C.bd,whiteSpace:"nowrap",opacity:suggestedFolio?1:0.5,cursor:suggestedFolio?"pointer":"not-allowed"}}>→ Usar {suggestedFolio||"…"}</button>
+        </div>
+        {folioFiscal&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginTop:4}}>⚠️ Formato inválido. Esperado: D-XXXX o R-XXXX</div>}
+        {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginTop:4,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestedFolio}). Continuará válido si está realmente emitido.</div>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>Subtotal SIN IVA *</label><input style={inp} type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="300000.00 (el sistema agrega IVA)"/></div>
+        <div>
+          <label style={lbl}>Subtotal SIN IVA *</label>
+          {/* v10.43.28 — onWheel=blur evita cambios accidentales por scroll del mouse */}
+          <input style={inp} type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} onWheel={e=>e.target.blur()} placeholder="300000.00 (el sistema agrega IVA)"/>
+        </div>
         <div><label style={lbl}>Fecha programada de pago *</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
       </div>
 

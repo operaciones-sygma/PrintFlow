@@ -5,6 +5,17 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.28 — RegisterCoronaPOModal: sugerencia de folio + scroll-blur en subtotal — 25-may-2026
+
+Karla pidió dos mejoras al modal "🎱 Registrar OC a Crédito":
+
+1. **Folio fiscal con sugerencia**: ahora muestra botón "→ Usar D-XXXX" (mismo patrón que `InvoiceModal` al asignar folio en órdenes). Carga sugerencia de `invoice_counters` al montar. Si Karla escribe un folio menor al sugerido, aparece warning ámbar "⚠️ Este folio es menor al último registrado" (no bloquea — permite registrar folios menores en huecos retroactivos).
+
+2. **Subtotal sin scroll-sensitive**: `<input type="number">` aceptaba cambios al hacer scroll con la rueda del mouse (error humano frecuente). Ahora `onWheel={e=>e.target.blur()}` desenfoca el campo al scrollear, evitando cambios accidentales.
+
+Sin cambio de lógica de submit ni RPC.
+
+
 ## v10.43.27 — Scan exhaustivo post-v10.43.26: 1 🔴 DB + 1 🔴 + 2 🟠 + 3 🟡 frontend — 25-may-2026
 
 Hallazgos del scan post-migración sin-IVA. Todos arreglados.
