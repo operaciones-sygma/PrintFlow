@@ -5,6 +5,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.45.1 — Fixes post-scan exhaustivo de v10.45.0 — 26-may-2026
+
+Scan inmediato post-deploy detectó 1 🔴 + 3 🟠 reales en `ReplicateFromOrderModal`. Aplicados.
+
+### 🔴 #1 — Comodines LIKE sin escapar en query por nombre
+
+`.ilike("client", clientName.trim() + "%")` sin escapar `%`, `_`, `\`. Si un cliente se llama `"ABC%Corp"` o `"VENTA_FACTURA"`, el LIKE produce matches inesperados (ABCXYZCorp, VENTAFACTURA, etc.).
+
+**Fix**: escapar antes de concatenar:
+```js
+const escaped = clientName.trim().replace(/[%_\\]/g, m => "\\" + m);
+q = q.ilike("client", escaped + "%");
+```
+
+### 🟠 #2 — DOM manipulation pelea con React
+
+El `onError` del thumbnail manipulaba `parentElement.innerHTML` directamente — anti-patrón que puede pelear con re-renders y no soporta inline styles bien.
+
+**Fix**: estado React `failedImgs:Set<orderId>`. Al fallar imagen, se agrega al set; render condicional muestra emoji 📋 fallback. Sin manipulación de DOM.
+
+### 🟠 #3 — Replicación inconsistente de stock_role a cliente normal
+
+Si Lupita replicaba una orden de Cuadra (`stock_role='production'`, `client_product_id=X`) a un cliente NO-Cuadra, los campos quedaban set en el form pero el panel verde "Cliente con Inventario" no aparecía (porque billing_mode del cliente actual es 'normal'). Estado fantasma — la orden se guardaba con `stock_role` válido pero el cliente no podía soportarlo.
+
+**Fix**: `stock_role` y `client_product_id` solo se replican si **el cliente actual tiene `billing_mode='stock'`**. Si el source tiene `stock_role='sale'` (venta desde stock), tampoco se replica (caso especial que no se quiere copiar).
+
+### 🟠 #4 — Double-click duplicaba acción
+
+Si Lupita hacía doble click rápido en una card, `onReplicate` se llamaba 2 veces — doble setF + doble toast.
+
+**Fix**: flag `replicating` en el modal. Al primer click bloquea siguientes hasta que el modal cierre. Cards muestran `cursor:wait` + `opacity:0.6` mientras se procesa.
+
+### Mejora menor
+
+- Limit de query subido de 60 a **100 órdenes** para clientes con mucho histórico (Cuadra recurrentes podrían tener más de 60 en el tiempo).
+
+
 ## v10.45.0 — "Replicar de orden anterior" — modal con thumbnail + detalles — 26-may-2026
 
 Marcelo: "que se abra un modal donde se pueda escoger una orden pasada, con imágenes y detalles para distinguir". Útil para clientes recurrentes (Cuadra y otros) — no tener que volver a capturar specs cada vez.

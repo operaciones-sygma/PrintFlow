@@ -1849,13 +1849,22 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
   const [orders,setOrders]=useState([]);
   const [loading,setLoading]=useState(true);
   const [search,setSearch]=useState("");
+  // v10.45.1 — track imágenes fallidas en state (evita DOM manipulation que pelea con React)
+  const [failedImgs,setFailedImgs]=useState(new Set());
+  // v10.45.1 — prevenir double-click rápido en cards (evita doble setF y doble toast)
+  const [replicating,setReplicating]=useState(false);
+  const handleSelect=(o)=>{if(replicating)return;setReplicating(true);onReplicate(o)};
   useEffect(()=>{
     let alive=true;
     (async()=>{
       try{
-        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, created_at, invoice_folio").order("created_at",{ascending:false}).limit(60);
+        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, created_at, invoice_folio").order("created_at",{ascending:false}).limit(100);
         if(clientId)q=q.eq("client_id",clientId);
-        else if(clientName?.trim())q=q.ilike("client",clientName.trim()+"%");
+        else if(clientName?.trim()){
+          // v10.45.1 FIX: escapar comodines % _ \ en LIKE para evitar matches inesperados con nombres tipo "ABC%Corp"
+          const escaped=clientName.trim().replace(/[%_\\]/g,m=>"\\"+m);
+          q=q.ilike("client",escaped+"%");
+        }
         const {data,error}=await q;
         if(!alive)return;
         if(error){console.warn("[ReplicateModal]",error.message);setOrders([])}
@@ -1902,12 +1911,13 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
           const isCancelled=o.stage?.includes("cancelled");
           const isDelivered=o.stage?.includes("delivered")||o.stock_loaded;
           const isCorona=o.stock_role==="production"||o.stock_role==="sale";
-          return <div key={o.id} onClick={()=>onReplicate(o)} style={{display:"flex",gap:10,padding:10,borderRadius:12,border:"1px solid "+C.bd,background:C.sf,cursor:"pointer",transition:"background 0.12s, border-color 0.12s"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=C.ac+"08";e.currentTarget.style.borderColor=C.ac+"40"}}
-            onMouseLeave={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.borderColor=C.bd}}>
-            {/* Thumbnail */}
+          const imgFailed=failedImgs.has(o.id);
+          return <div key={o.id} onClick={()=>handleSelect(o)} style={{display:"flex",gap:10,padding:10,borderRadius:12,border:"1px solid "+C.bd,background:C.sf,cursor:replicating?"wait":"pointer",opacity:replicating?0.6:1,transition:"background 0.12s, border-color 0.12s"}}
+            onMouseEnter={e=>{if(!replicating){e.currentTarget.style.background=C.ac+"08";e.currentTarget.style.borderColor=C.ac+"40"}}}
+            onMouseLeave={e=>{if(!replicating){e.currentTarget.style.background=C.sf;e.currentTarget.style.borderColor=C.bd}}}>
+            {/* Thumbnail — v10.45.1: fallback via React state (no DOM manipulation) */}
             <div style={{width:72,height:72,borderRadius:8,background:C.bg,border:"0.5px solid "+C.bd,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.style.display='none';e.currentTarget.parentElement.innerHTML='<div style="font-size:28">📋</div>'}}/>:<div style={{fontSize:28}}>📋</div>}
+              {img&&!imgFailed?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={()=>setFailedImgs(prev=>{const n=new Set(prev);n.add(o.id);return n})}/>:<div style={{fontSize:28}}>📋</div>}
             </div>
             {/* Detalles */}
             <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
@@ -3882,7 +3892,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [replicateOpen,setReplicateOpen]=useState(false);
   const applyReplicate=(src)=>{
     // Replica specs del producto. NO toca: cliente, production_number, due_date, stage, image actual, billing_mode.
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","image_url","image_url_2","image","stock_role","client_product_id"];
+    // v10.45.1 — `stock_role` y `client_product_id` solo se replican si el CLIENTE ACTUAL es stock (Cuadra).
+    // Si replicamos de una orden Cuadra a un cliente normal, esos campos NO se aplican (form quedaría inconsistente).
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","image_url","image_url_2","image"];
     setF(prev=>{
       const next={...prev};
       replicaFields.forEach(k=>{
@@ -3890,6 +3902,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
         if(!isEmpty)next[k]=v;
       });
+      // stock_role / client_product_id solo si cliente actual es Cuadra Y la fuente era production
+      // (no replicamos stock_role='sale' porque eso es venta desde stock — caso especial)
+      if(prev.billing_mode==="stock"&&src.stock_role==="production"){
+        next.stock_role="production";
+        if(src.client_product_id)next.client_product_id=src.client_product_id;
+      }
       return next;
     });
     setReplicateOpen(false);
