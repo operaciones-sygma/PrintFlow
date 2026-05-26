@@ -5,6 +5,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.44.0 — Hardening de seguridad: limpieza de backups + RLS telegram_log — 26-may-2026
+
+El advisor de seguridad de Supabase detectó 6 ERRORES reales (+ 2 intencionales). Esta versión cierra los 6 reales.
+
+### Cambios (solo BD, sin frontend)
+
+**Migración `v44_drop_pre_cleanup_backups`**
+- Borradas 5 tablas de respaldo `*_pre_cleanup_2026_05_12` (orders, purchase_orders, order_timeline, order_comments, notifications) que quedaron en `public` sin RLS tras el cleanup del 12-may.
+- Verificación defensiva previa: confirma que las tablas reales tienen datos antes de borrar.
+
+Counts pre-DROP (real vs backup):
+| Tabla | Real | Backup |
+|---|---|---|
+| orders | 78 | 15 |
+| purchase_orders | 75 | 9 |
+| order_timeline | 757 | 30 |
+| order_comments | 18 | 1 |
+| notifications | 1063 | 69 |
+
+Las reales tienen más datos → operación normal continuó sana 2 semanas → backups ya no aportan.
+
+**Migración `v44_telegram_log_rls`**
+- RLS activado en `public.telegram_log` (contenía `chat_id` del equipo sin protección).
+- Política `USING(false)`: sin acceso directo vía PostgREST. El trigger `trigger_telegram_notify` (SECURITY DEFINER verificado vía `pg_proc.prosecdef=true`) sigue insertando sin problema.
+
+### Sin tocar (intencional)
+
+- Views `cobranza.payments_report_v` y `cobranza.vouchers_audit_v` (SECURITY DEFINER a propósito para cruce cross-schema). El advisor los marca como ERROR pero es el patrón diseñado.
+
+### Resultado
+
+Advisor de seguridad: **8 ERRORES → 2 ERRORES** (los 2 restantes son intencionales y documentados).
+
+### Test funcional pendiente
+
+Disparar una notificación Telegram desde PrintFlow (ej. crear orden de prueba o cambiar stage) y confirmar que el mensaje llega al bot `@SygmaPrintFlowBot`. Si llega → RLS no rompió nada. Si no → revertir `v44_telegram_log_rls`.
+
+
 ## v10.43.32 — Defensive guards post-scan exhaustivo — 26-may-2026
 
 Scan exhaustivo post-v10.43.31 encontró 3 hallazgos del agente Explore — verificación profunda determinó que los 3 son **falsos positivos** (las protecciones ya existían). Aun así, aplico 2 guards explícitos por buena práctica y claridad de intent:
