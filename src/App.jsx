@@ -1840,6 +1840,109 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
   </div>;
 }
 
+// v10.45.0 — Modal "Replicar de orden anterior".
+// Lupita o admin pueden escoger una orden pasada del mismo cliente como plantilla.
+// Lista las últimas 60 órdenes del cliente con thumbnail (si tiene imagen),
+// detalles del producto y specs. Click → replica en el form actual (no toca cliente).
+function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
+  useEscClose(onClose);
+  const [orders,setOrders]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState("");
+  useEffect(()=>{
+    let alive=true;
+    (async()=>{
+      try{
+        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, created_at, invoice_folio").order("created_at",{ascending:false}).limit(60);
+        if(clientId)q=q.eq("client_id",clientId);
+        else if(clientName?.trim())q=q.ilike("client",clientName.trim()+"%");
+        const {data,error}=await q;
+        if(!alive)return;
+        if(error){console.warn("[ReplicateModal]",error.message);setOrders([])}
+        else setOrders(data||[]);
+      }finally{if(alive)setLoading(false)}
+    })();
+    return ()=>{alive=false};
+  },[clientId,clientName]);
+  const normS=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const sq=normS(search.trim());
+  const filtered=sq?orders.filter(o=>
+    normS(o.production_number||"").includes(sq)||
+    normS(o.product||"").includes(sq)||
+    normS(o.product_type||"").includes(sq)||
+    normS(o.invoice_folio||"").includes(sq)||
+    normS(o.paper_type||"").includes(sq)
+  ):orders;
+  const fmtN=n=>n===null||n===undefined||n===""?"":Number(n).toLocaleString("es-MX");
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"96%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🔁 Replicar de orden anterior</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clientName||"—"} · {orders.length} órdenes históricas</div>
+        </div>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+      </div>
+      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd}}>
+        <input style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="🔍 Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      </div>
+      {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>⏳ Cargando órdenes…</div>
+      :orders.length===0?<div style={{padding:"40px 20px",textAlign:"center",color:C.t2,fontSize:12}}>
+        <div style={{fontSize:40,marginBottom:10}}>📭</div>
+        <div style={{fontWeight:700,color:C.tx,marginBottom:4,fontSize:13}}>Sin órdenes previas para este cliente</div>
+        <div>Cuando captures órdenes para <b>{clientName||"este cliente"}</b>, aparecerán aquí como plantillas.</div>
+      </div>
+      :filtered.length===0?<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>
+        <div style={{fontSize:28,marginBottom:6}}>🔍</div>
+        Sin resultados con "{search}"
+      </div>
+      :<div style={{overflowY:"auto",padding:"14px 22px",flex:1,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
+        {filtered.map(o=>{
+          const img=o.image_url||o.image_url_2||o.image||o.file_url||null;
+          const isCancelled=o.stage?.includes("cancelled");
+          const isDelivered=o.stage?.includes("delivered")||o.stock_loaded;
+          const isCorona=o.stock_role==="production"||o.stock_role==="sale";
+          return <div key={o.id} onClick={()=>onReplicate(o)} style={{display:"flex",gap:10,padding:10,borderRadius:12,border:"1px solid "+C.bd,background:C.sf,cursor:"pointer",transition:"background 0.12s, border-color 0.12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=C.ac+"08";e.currentTarget.style.borderColor=C.ac+"40"}}
+            onMouseLeave={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.borderColor=C.bd}}>
+            {/* Thumbnail */}
+            <div style={{width:72,height:72,borderRadius:8,background:C.bg,border:"0.5px solid "+C.bd,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+              {img?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.style.display='none';e.currentTarget.parentElement.innerHTML='<div style="font-size:28">📋</div>'}}/>:<div style={{fontSize:28}}>📋</div>}
+            </div>
+            {/* Detalles */}
+            <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,fontWeight:800,color:C.ac}}>{o.production_number||"sin P-#"}</span>
+                {o.invoice_folio&&<span style={{fontSize:9,fontWeight:700,color:"#5856d6",background:"#5856d615",padding:"1px 6px",borderRadius:4}}>{o.invoice_folio}</span>}
+                {isCorona&&<span style={{fontSize:9,fontWeight:700,color:"#10b981",background:"#10b98115",padding:"1px 6px",borderRadius:4}}>📦 stock</span>}
+                {isCancelled&&<span style={{fontSize:9,fontWeight:700,color:C.dn,background:C.dn+"15",padding:"1px 6px",borderRadius:4}}>CANCELADA</span>}
+                {!isCancelled&&isDelivered&&<span style={{fontSize:9,fontWeight:700,color:C.ok,background:C.ok+"15",padding:"1px 6px",borderRadius:4}}>✓ entregada</span>}
+              </div>
+              <div style={{fontSize:13,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.product||"(sin nombre de producto)"}</div>
+              <div style={{fontSize:11,color:C.t2,display:"flex",flexWrap:"wrap",gap:6}}>
+                {o.product_type&&<span><b>{o.product_type}</b></span>}
+                {o.quantity&&<span>· {fmtN(o.quantity)} pzas</span>}
+              </div>
+              <div style={{fontSize:10,color:C.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {o.paper_type?o.paper_type+(o.paper_grammage?" "+o.paper_grammage+"g":""):""}
+                {o.width_cm&&o.height_cm?(o.paper_type?" · ":"")+o.width_cm+"×"+o.height_cm+"cm":""}
+                {o.colors?" · "+o.colors+" tintas":""}
+              </div>
+              <div style={{fontSize:10,color:C.t3,marginTop:2}}>
+                {o.price?<span style={{color:C.ok,fontWeight:700}}>${fmtN(o.price)}</span>:""}
+                {o.created_at?<span> · {fDT(o.created_at)}</span>:""}
+              </div>
+            </div>
+          </div>;
+        })}
+      </div>}
+      <div style={{padding:"10px 22px",borderTop:"0.5px solid "+C.bd,fontSize:10,color:C.t2,background:C.sf,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span>💡 Al hacer click en una orden, sus datos (producto, papel, medidas, tintas, acabados, precio) se copian al formulario. <b>Los datos del cliente no se tocan</b>.</span>
+      </div>
+    </div>
+  </div>;
+}
+
 // v10.43.0 — Apartado Corona (saldo a favor / anticipo abierto).
 // Lista clientes con billing_mode='anticipo', su saldo y el ledger de cada uno.
 // Karla/Admin/Secretaria pueden ver historial; los DEPOSITOS los registra Lucero en CobranzaFlow.
@@ -3775,6 +3878,23 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
   const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  // v10.45.0 — Replicar orden anterior (modal con thumbnail + detalles)
+  const [replicateOpen,setReplicateOpen]=useState(false);
+  const applyReplicate=(src)=>{
+    // Replica specs del producto. NO toca: cliente, production_number, due_date, stage, image actual, billing_mode.
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","image_url","image_url_2","image","stock_role","client_product_id"];
+    setF(prev=>{
+      const next={...prev};
+      replicaFields.forEach(k=>{
+        const v=src[k];
+        const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
+        if(!isEmpty)next[k]=v;
+      });
+      return next;
+    });
+    setReplicateOpen(false);
+    showToast?.("✅ Datos replicados de "+(src.production_number||"orden anterior"));
+  };
   const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
   const specsOnly=editOrder?._specsOnly;
   // Compute missing required fields
@@ -3930,6 +4050,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
     {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
+    {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:"#0891b210",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+      <div style={{fontSize:11,color:C.t2}}>💡 ¿Pedido recurrente? Usa una orden anterior como plantilla.</div>
+      <button type="button" onClick={()=>setReplicateOpen(true)} style={{...bt("#0891b2"),fontSize:11,padding:"6px 12px",fontWeight:700}}>🔁 Replicar de orden anterior</button>
+    </div>}
     {/* v10.42.0 — Panel stock: visible si el cliente tiene billing_mode=stock (ej. Cuadra) */}
     {f.billing_mode==="stock"&&!specsOnly&&<div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -4026,6 +4151,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600}}>⚠️ Campos obligatorios faltantes: {missing.join(", ")}</div>}
       <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} style={{...bt(saving||imgUploading?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"⏳ Subiendo imagen...":saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
     </div>
+    {/* v10.45.0 — Modal replicar orden anterior */}
+    {replicateOpen&&<ReplicateFromOrderModal clientId={f.client_id} clientName={f.client} onReplicate={applyReplicate} onClose={()=>setReplicateOpen(false)}/>}
   </div>;
 }
 

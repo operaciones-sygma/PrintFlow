@@ -5,6 +5,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.45.0 — "Replicar de orden anterior" — modal con thumbnail + detalles — 26-may-2026
+
+Marcelo: "que se abra un modal donde se pueda escoger una orden pasada, con imágenes y detalles para distinguir". Útil para clientes recurrentes (Cuadra y otros) — no tener que volver a capturar specs cada vez.
+
+### UX
+
+- Al crear una nueva orden, después de escribir/seleccionar cliente, aparece un banner azul claro: *"💡 ¿Pedido recurrente? Usa una orden anterior como plantilla."* con botón **"🔁 Replicar de orden anterior"**.
+- Click → abre modal con la lista de las últimas 60 órdenes del mismo cliente.
+- Cada orden se muestra como card grid 2-col con:
+  - **Thumbnail** (imagen del producto si tiene `image_url`/`image_url_2`/`image`/`file_url`), fallback emoji 📋
+  - P-XXXX + folio fiscal (si tiene) + badges (📦 stock / CANCELADA / ✓ entregada)
+  - **Nombre del producto** en negro
+  - Tipo de producto · cantidad
+  - Papel + gramaje · medidas · tintas
+  - Precio + fecha de creación
+- Búsqueda en vivo: P-XXXX, producto, tipo, papel, folio fiscal (accent-insensitive)
+- Click en card → replica datos + cierra modal
+
+### Qué se replica
+
+Producto, tipo, cantidad, papel, gramaje, medidas (ancho × alto), tamaño estándar, tintas (front + back), acabados, precio, horas estimadas, maquila (proveedor/costo/precio), pantones, notas, imágenes, stock_role, producto del catálogo (si aplica).
+
+### Qué NO se replica
+
+- Datos del cliente (ya estaban capturados antes)
+- Production number P-XXXX (se asigna al guardar nueva)
+- Fecha de entrega (se debe capturar nueva)
+- Stage / status
+- billing_mode (heredado del cliente actual)
+
+### Alcance
+
+- Universal — funciona para CUALQUIER cliente, no solo Cuadra
+- Solo en modo "crear nueva orden" (no en edit)
+- Oculto para roles operativos (preprensa, producción, germán)
+- Si el cliente no tiene órdenes pasadas: el modal muestra mensaje amigable explicando
+
+### Implementación
+
+- Nuevo componente `ReplicateFromOrderModal` (función ~L1847)
+- Query directa a `public.orders` filtrada por `client_id` (o `client` name si no hay id) con `limit 60` ordenadas por `created_at DESC`
+- `applyReplicate` setea el state del form con `setF(prev => ...)` solo en campos no vacíos
+- Pasa por el handler global onWheel-blur (v10.43.29) en cualquier input numérico del modal
+
+
 ## v10.44.0 — Hardening de seguridad: limpieza de backups + RLS telegram_log — 26-may-2026
 
 El advisor de seguridad de Supabase detectó 6 ERRORES reales (+ 2 intencionales). Esta versión cierra los 6 reales.
