@@ -683,13 +683,13 @@ const db = {
     if(error)throw new Error("creditBalance: "+error.message);
     return Number(data)||0;
   },
-  // v10.43.13 FIX M12 — Firma actualizada al modelo v10.43.10 (OC a Crédito con folio + due_date).
-  async creditDeposit({client_id, external_po_ref, folio_fiscal, amount_with_iva, due_date, user=null, notas=null}) {
+  // v10.43.26 — Ledger sin IVA. Param renombrado a subtotal_no_iva; el RPC multiplica × 1.16 internamente para cobranza.invoices, pero el ledger guarda el subtotal.
+  async creditDeposit({client_id, external_po_ref, folio_fiscal, subtotal_no_iva, due_date, user=null, notas=null}) {
     const {data,error}=await supabase.rpc("credit_deposit",{
       p_client_id:client_id,
       p_external_po_ref:external_po_ref,
       p_folio_fiscal:folio_fiscal,
-      p_amount_with_iva:amount_with_iva,
+      p_subtotal_no_iva:subtotal_no_iva,
       p_due_date:due_date,
       p_user:user,
       p_notas:notas
@@ -1975,7 +1975,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const [clientId,setClientId]=useState("");
   const [externalPoRef,setExternalPoRef]=useState("");
   const [folioFiscal,setFolioFiscal]=useState("");
-  const [amount,setAmount]=useState(""); // v10.43.12 — monto con IVA incluido directo
+  const [amount,setAmount]=useState(""); // v10.43.26 — SUBTOTAL sin IVA (sistema multiplica × 1.16 para cobranza)
   const [dueDate,setDueDate]=useState("");
   const [notas,setNotas]=useState("");
   const [busy,setBusy]=useState(false);
@@ -1999,10 +1999,10 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
     if(!valid||busy)return;
     setBusy(true);
     try{
-      // v10.43.13 FIX M12 — usa helper db.creditDeposit con la nueva firma
+      // v10.43.26 — Ledger SIN IVA. Captura subtotal, RPC calcula × 1.16 para la invoice en cobranza.
       await db.creditDeposit({
         client_id:clientId,external_po_ref:externalPoRef.trim(),folio_fiscal:folioClean,
-        amount_with_iva:amountNum,due_date:dueDate,user:userLogin||user,notas:notas.trim()||null
+        subtotal_no_iva:amountNum,due_date:dueDate,user:userLogin||user,notas:notas.trim()||null
       });
       if(onSaved)await onSaved();
     }catch(e){
@@ -2033,17 +2033,22 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>Monto total CON IVA *</label><input style={inp} type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="348000.00 (IVA ya incluido)"/></div>
+        <div><label style={lbl}>Subtotal SIN IVA *</label><input style={inp} type="number" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="300000.00 (el sistema agrega IVA)"/></div>
         <div><label style={lbl}>Fecha programada de pago *</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
       </div>
 
-      {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&<div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#10b981"}}>Monto facturado (con IVA incluido)</div>
-          <div style={{fontSize:16,fontWeight:800,color:"#10b981"}}>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+      {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&(()=>{
+        const ivaPortion=Math.round(amountNum*0.16*100)/100;
+        const withIva=Math.round(amountNum*1.16*100)/100;
+        return <div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
+          <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Subtotal (ledger)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+          <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>+ IVA 16%</div><div style={{fontSize:14,fontWeight:700,color:C.t2}}>${ivaPortion.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+          <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Total cobranza</div><div style={{fontSize:14,fontWeight:800,color:C.ac}}>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
         </div>
-        <div style={{fontSize:10,color:C.t2}}>Se crea factura <b>{folioClean}</b> en cobranza con balance ${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})} y vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
-      </div>}
+        <div style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Se crea factura <b>{folioClean}</b> en cobranza por <b>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> con IVA (lo que Cervecería paga). El saldo a favor interno se lleva en subtotal: <b>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
+      </div>;
+      })()}
 
       {!dueDateValid&&dueDate&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ La fecha de pago debe ser futura.</div>}
 

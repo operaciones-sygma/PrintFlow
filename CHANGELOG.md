@@ -5,6 +5,63 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.26 — Ledger Corona en SIN IVA (semántica de subtotal) — 25-may-2026
+
+Karla pidió que el saldo a favor interno se lleve en subtotal sin IVA, porque ese es el número que negocian con Cervecería en las POs. La cobranza.invoices sigue con IVA (lo que se cobra). v10.43.12 había forzado captura CON IVA — esto reactiva el modelo sin-IVA original con conversión automática.
+
+### Modelo de datos
+
+| Lugar | Unidad | Quién lo ve |
+|---|---|---|
+| `client_credit_ledger.monto` y `balance_despues` | **sin IVA** | Karla, Marcelo, modal Corona |
+| `cobranza.invoices.amount` (OC a Crédito) | **con IVA** (subtotal × 1.16) | Lucero / Tesorería cobra esto |
+| `cobranza.payments.amount` (saldo a favor aplicado) | **con IVA** | Cuadra con cobranza.invoices |
+
+### RPCs migrados
+
+**`credit_deposit(client, po_ref, folio, subtotal_no_iva, due_date, user, notas)`**
+- Param renombrado: `p_amount_with_iva` → `p_subtotal_no_iva`
+- Calcula internamente `amount_with_iva = ROUND(subtotal × 1.16, 2)` para insertar en cobranza.invoices
+- Ledger guarda el subtotal sin IVA
+- Notificación a tesorería muestra ambos: "subtotal $X (con IVA $X×1.16)"
+
+**`apply_credit_no_folio(order_id, user, notes)`**
+- Descuenta `price` (subtotal sin IVA) del ledger, no `price × 1.16`
+- Audit incluye ambos montos para trazabilidad
+- Sin cambios para el cliente: la orden sigue marcándose `delivered` sin folio fiscal
+
+**`sync_invoice_from_orders` rama Corona** (folio individual D-XXXX a una orden)
+- `cobranza.invoices.amount` = subtotal × 1.16 (sin cambio — lo que se cobra)
+- `cobranza.payments.amount` = subtotal × 1.16 (sin cambio — lo que se "paga" con saldo)
+- `credit_consume.p_monto` = subtotal sin IVA (cambio: antes pasaba el con-IVA)
+- Cuadra contablemente: $X subtotal se descuenta del saldo a favor (sin IVA), $X×1.16 se "paga" en cobranza
+
+**`sync_invoice_from_oc` rama Corona** (folio compartido en una OC)
+- Mismo patrón: consume subtotal del ledger, paga total con IVA en cobranza
+
+### Frontend
+
+**PrintFlow `RegisterCoronaPOModal`** (`🎱 + Nueva OC a Crédito`)
+- Label: "Monto total CON IVA" → **"Subtotal SIN IVA"**
+- Placeholder: "348000.00 (IVA ya incluido)" → "300000.00 (el sistema agrega IVA)"
+- Preview: ahora muestra 3 columnas → **Subtotal (ledger)** · **+ IVA 16%** · **Total cobranza**
+- `db.creditDeposit` pasa `subtotal_no_iva` en lugar de `amount_with_iva`
+
+**CobranzaFlow `CreditDepositModal`**
+- Mismo cambio de label/placeholder/preview
+- `sb.rpc('credit_deposit')` pasa `p_subtotal_no_iva` en lugar de `p_amount_with_iva`
+- Toast muestra ambos montos: subtotal + total con IVA
+
+### Migración de datos
+
+- Cervecería Modelo: AJUSTE +$185,925.26 (con IVA, aplicado en v10.43.25) → reemplazado por AJUSTE +$160,280.40 (sin IVA)
+- Después de aplicar P-3508 ($150,010 subtotal) → saldo final esperado: **$10,270.40** (lo que Karla pidió)
+
+### Por qué importa
+
+Ahora cuando Karla capture una OC de Corona de "$300k subtotal", verá $300k en el saldo y Lucero verá $348k en cobranza — los dos números familiares para cada uno, sin conversiones mentales.
+
+
 ## v10.43.25 — Fusión GRUPO MODELO ↔ CERVECERIA MODELO DE MEXICO — 25-may-2026
 
 Marcelo: "son lo mismo". Karla necesita poder meter órdenes de Grupo Modelo en OCs de Cervecería y viceversa. Solución elegida: fusionar a un solo cliente canónico (Cervecería Modelo, tiene RFC AMH080702RMA). Grupo Modelo queda como alias permanente.
