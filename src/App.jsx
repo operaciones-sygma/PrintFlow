@@ -6762,6 +6762,9 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     const numbers=Object.keys(map).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
     const isSharedGroup=(group)=>{
       if(group.length<2)return false;
+      // v10.43.32 — Corona OC nunca son "shared folio". Si alguna fila del grupo es Corona OC,
+      // el folio se considera duplicate (alerta correcta) en vez de shared (legítimo).
+      if(group.some(g=>g.isCoronaOC))return false;
       const folio=group[0].invoice_folio;
       if(!sharedFolioStrings.has(folio))return false;
       const ocIds=new Set(group.map(o=>o.purchase_order_id));
@@ -8677,6 +8680,12 @@ export default function PrintFlow() {
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // v10.43.32 — Guards defensivos explícitos (mismo set de validaciones que el RPC y la UI).
+      // El botón "Asignar Folio y Entregar" en OCard ya está condicionado a stage in (salidas, maq_received)
+      // y !invoice_folio, pero protegemos también el action handler por si se invoca por otro path
+      // (atajo de teclado, click programático, etc).
+      if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+      if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Esta orden no está en stage de salida (actual: "+o.stage+").","error");return}
       // Validar production_number antes de abrir modal (regla de negocio)
       if(!o.production_number){showToast("❌ La orden no tiene número de producción (P-XXXX). Asígnalo antes de entregar.","error");return}
       setInvoiceModal(o);

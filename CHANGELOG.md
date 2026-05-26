@@ -5,6 +5,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.32 — Defensive guards post-scan exhaustivo — 26-may-2026
+
+Scan exhaustivo post-v10.43.31 encontró 3 hallazgos del agente Explore — verificación profunda determinó que los 3 son **falsos positivos** (las protecciones ya existían). Aun así, aplico 2 guards explícitos por buena práctica y claridad de intent:
+
+### Fix 1 — Action handler `deliver_with_invoice` con guards explícitos
+
+Antes solo validaba `production_number`. La protección real de stage/folio venía del botón en `OCard` (L4478/L4483 condicionado a `stage in (salidas, maq_received) && !invoice_folio`). Ahora el handler también valida explícitamente:
+
+```js
+if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Esta orden no está en stage de salida...","error");return}
+```
+
+Defensa contra invocaciones programáticas, atajos de teclado o cualquier path que bypassee el botón.
+
+### Fix 2 — `isSharedGroup` excluye Corona OC explícitamente
+
+Si una Corona OC (`isCoronaOC=true`) aparece en un grupo de folios duplicados, el código original ya rechazaba "shared" porque la Corona tiene `purchase_order_id=null`. Pero hacerlo explícito clarifica la intención:
+
+```js
+if(group.some(g=>g.isCoronaOC))return false;  // Corona OC nunca es "shared folio"
+```
+
+### Skip — `cancelled_at` cosmético
+
+El agente reportó que las Corona OC canceladas mostraban fecha de emisión en lugar de cancelación. Verificación: el campo solo se usa como **boolean truthy** para mostrar el badge "CANCELADA". La fecha visible al usuario es `invoiced_at` (correcta). No es bug funcional.
+
+### Verificación final de integridad DB (vía MCP Supabase)
+
+| Check | Resultado |
+|---|---|
+| Duplicados de folio (orders ↔ Corona OC) | 0 ✅ |
+| Ledger entries huérfanos | 0 ✅ |
+| Invoices Corona sin DEPOSITO | 0 ✅ |
+| Órdenes Corona delivered sin CONSUMO | 0 ✅ |
+| Counters consistentes (factura=5851, remisión=1205, oc=81) | ✅ |
+| Saldo Cervecería (post-P-3508) | $10,270 sin IVA ✅ |
+
+Cero bugs reales en flow Corona end-to-end.
+
+
 ## v10.43.31 — Fix UX: modales sin scroll cuando contenido excede viewport — 26-may-2026
 
 Marcelo reportó: al asignar folio fiscal, seleccionar "pagada" + "transferencia" expande el PaymentStatusPicker con el campo de referencia bancaria. El botón "Continuar" queda fuera de pantalla y el modal NO scrollea — tuvo que hacer Ctrl+− para verlo.
