@@ -5,6 +5,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.27 — Scan exhaustivo post-v10.43.26: 1 🔴 DB + 1 🔴 + 2 🟠 + 3 🟡 frontend — 25-may-2026
+
+Hallazgos del scan post-migración sin-IVA. Todos arreglados.
+
+### 🔴 A1 — `sync_post_invoice_edit` rama Corona ajustaba ledger CON IVA
+
+Si admin editaba el precio de una orden Corona ya facturada, el trigger calculaba `v_diff = v_new_amount - v_old_amount` (con IVA) y aplicaba `credit_adjust(-v_diff)` al ledger — desfasando el saldo en 16% por cada edición.
+
+**Fix DB**: nueva variable `v_ledger_diff = v_base_amount - v_old_base_amount` (subtotal sin IVA). `credit_adjust` se llama con `-v_ledger_diff`. La invoice y el payment en cobranza siguen actualizándose con el monto con IVA (`v_diff`). Audit log distingue `amount_diff_with_iva` vs `ledger_diff_no_iva`.
+
+### 🔴 A2 — Toast "Aplicar saldo" mostraba siempre $0
+
+Tras v10.43.26 el RPC `apply_credit_no_folio` retorna `subtotal_no_iva` + `equivalent_with_iva`, no `amount_with_iva`. El toast en App.jsx:9060 leía `result?.amount_with_iva` → undefined → fallback `||0` → siempre $0. Karla no veía el monto descontado.
+
+**Fix**: usar `result.subtotal_no_iva` + sufijo "sin IVA" en el mensaje del timeline.
+
+### 🟠 A3 / A4 — Previews "Saldo después" en InvoiceModal/PreInvoiceModal desfasaban 16%
+
+El cálculo era `current_balance - totalDisplay` (con IVA), pero el bridge descuenta `orderBaseAmount` (sin IVA) desde v10.43.26. Usuario veía un saldo final 16% más bajo del real. Falsa alarma de descubierto.
+
+**Fix**: cambiar a `current_balance - orderBaseAmount`. Labels actualizados: "Saldo actual (sin IVA)", "Esta orden (subtotal)", "Saldo después". Línea informativa adicional con monto en cobranza: "Cobranza: factura D-XXXX por $Y con IVA — automáticamente pagada con saldo".
+
+### 🟡 A5 — Labels ambiguos en CoronaModal y RegisterCoronaPOModal
+
+"Saldo actual: $X" sin indicar unidad post-migración. Añadido sufijo "(sin IVA)" + línea pequeña "≈ $Y con IVA" para mostrar equivalencia.
+
+### Verificado sin bug
+- ✅ `credit_reverse` / `credit_reverse_by_order`: el opuesto del CONSUMO (ya en sin IVA) → reversa correcta
+- ✅ `client_credit_balance`: agrega SUM del ledger → siempre sin IVA post-migración
+- ✅ `sync_cancellation_to_cobranza`: cancela invoice + dispara reverse correcto
+- ✅ Bridges normales (no-Corona): intactos
+
+
 ## v10.43.26 — Ledger Corona en SIN IVA (semántica de subtotal) — 25-may-2026
 
 Karla pidió que el saldo a favor interno se lleve en subtotal sin IVA, porque ese es el número que negocian con Cervecería en las POs. La cobranza.invoices sigue con IVA (lo que se cobra). v10.43.12 había forzado captura CON IVA — esto reactiva el modelo sin-IVA original con conversión automática.

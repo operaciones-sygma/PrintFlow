@@ -1918,8 +1918,9 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                  <div style={{fontSize:11,color:C.t2,marginTop:2}}>{selected.rfc||"sin RFC"} · billing_mode=<b>{selected.billing_mode}</b></div>
                </div>
                <div style={{textAlign:"right"}}>
-                 <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div>
+                 <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div>
                  <div style={{fontSize:20,fontWeight:800,color:Number(selected.current_balance)<0?C.dn:"#10b981"}}>${Number(selected.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+                 <div style={{fontSize:9,color:C.t3,marginTop:2}}>≈ ${(Number(selected.current_balance||0)*1.16).toLocaleString("es-MX",{minimumFractionDigits:2})} con IVA</div>
                </div>
              </div>
              <div style={{display:"flex",gap:8,marginBottom:12}}>
@@ -2022,7 +2023,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
         <label style={lbl}>Cliente *</label>
         <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes anticipo —":"Selecciona…")}</option>
-          {stockClients.map(c=><option key={c.id} value={c.id}>🎱 {c.name} · saldo: ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
+          {stockClients.map(c=><option key={c.id} value={c.id}>🎱 {c.name} · saldo (sin IVA): ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
         </select>
         {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes con billing_mode='anticipo'. Marcelo debe activarlo.</div>}
       </div>
@@ -2627,17 +2628,21 @@ function InvoiceModal({order,onConfirm,onClose}) {
         </>}
         {type&&folioValid&&(isCorona?
           (()=>{
-            const newBalance=(coronaInfo.current_balance||0)-totalDisplay;
+            // v10.43.27 FIX A3 — El ledger se descuenta por orderBaseAmount (sin IVA, post v10.43.26),
+            // no por totalDisplay (con IVA). Preview ahora coincide con lo que el bridge hará.
+            const ledgerDeduct=orderBaseAmount; // sin IVA — lo que realmente baja del saldo
+            const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
             const negative=newBalance<0;
             return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona)</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona) · ledger en sin IVA</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
-                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta factura</div><div style={{fontSize:14,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
               </div>
               {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Lucero deberá registrar el depósito faltante.</div>}
-              <div style={{fontSize:10,color:C.t2,marginTop:8}}>No se captura método ni referencia: el bridge aplica el saldo automáticamente y marca la factura como pagada.</div>
+              {!isNoFolio&&<div style={{fontSize:10,color:C.t2,marginTop:6}}>Cobranza: factura <b>{folio}</b> por <b>${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> {type==="factura"?"con IVA":"sin IVA"} — automáticamente pagada con saldo.</div>}
+              <div style={{fontSize:10,color:C.t2,marginTop:6}}>No se captura método ni referencia: el bridge aplica el saldo automáticamente y marca la factura como pagada.</div>
             </div>;
           })()
           :<PaymentStatusPicker status={paymentStatus} method={paymentMethod} amount={paymentAmount} bankReference={bankReference} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,m,a,b)=>{setPaymentStatus(s);setPaymentMethod(m);setPaymentAmount(a===null?"":a);setBankReference(b||"")}}/>
@@ -2875,13 +2880,15 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           </div>
           {reasonValid&&(isCorona?
             (()=>{
-              const newBalance=(coronaInfo.current_balance||0)-totalDisplay;
+              // v10.43.27 FIX A4 — ledger descuenta orderBaseAmount sin IVA (no totalDisplay con IVA)
+              const ledgerDeduct=orderBaseAmount; // sin IVA
+              const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
               const negative=newBalance<0;
               return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona)</div>
+                <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona) · ledger en sin IVA</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
-                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta factura</div><div style={{fontSize:14,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                   <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 </div>
                 {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo (descubierto permitido).</div>}
@@ -9057,7 +9064,10 @@ export default function PrintFlow() {
           if(invoiceType==="no_folio"){
             const result=await db.applyCreditNoFolio(invoiceModal.id,userLogin||user);
             const newStage=result?.new_stage||(invoiceModal.order_type==="maquila"?"maq_delivered":"delivered");
-            const tlMsg="💰 Saldo Corona aplicado (sin folio fiscal) · −$"+Number(result?.amount_with_iva||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" · saldo después: $"+Number(result?.new_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2});
+            // v10.43.27 FIX A2 — RPC ahora retorna subtotal_no_iva (el monto descontado del ledger en sin IVA) y equivalent_with_iva.
+            const subtotal=Number(result?.subtotal_no_iva||0);
+            const newBal=Number(result?.new_balance||0);
+            const tlMsg="💰 Saldo Corona aplicado (sin folio fiscal) · −$"+subtotal.toLocaleString("es-MX",{minimumFractionDigits:2})+" sin IVA · saldo después: $"+newBal.toLocaleString("es-MX",{minimumFractionDigits:2})+" sin IVA";
             setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),invoiced_at:new Date().toISOString(),invoiced_by:user,timeline:addTL(o,tlMsg,{to:newStage})}:o));
             await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
             showToast("💰 Saldo aplicado — orden entregada sin folio fiscal");
