@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.43.31 — Fix UX: modales sin scroll cuando contenido excede viewport — 26-may-2026
+
+Marcelo reportó: al asignar folio fiscal, seleccionar "pagada" + "transferencia" expande el PaymentStatusPicker con el campo de referencia bancaria. El botón "Continuar" queda fuera de pantalla y el modal NO scrollea — tuvo que hacer Ctrl+− para verlo.
+
+### Causa
+
+PrintFlow no tiene un componente `<Modal>` compartido (a diferencia de CobranzaFlow). Cada modal es un `<div>` inline. Los contenedores internos usan `padding:24,maxWidth:NNN,width:"X%"}` sin `maxHeight` ni `overflowY` → cuando el contenido excede ~90vh, el contenido inferior queda inaccesible.
+
+### Fix
+
+Reemplazo masivo defensivo: a todos los modales con el patrón `borderRadius:20,padding:24,maxWidth:NNN,width:"X%"}` les agrego `maxHeight:"90vh",overflowY:"auto"`. Cubre **15+ modales**:
+
+- ✅ `InvoiceModal` (reportado por Marcelo)
+- ✅ `CancelInvoicedModal` (NC con razones)
+- ✅ `PreInvoiceModal` warning incompleto
+- ✅ `RevertModal`, `WebRejectModal`, calendar edit modal
+- ✅ Confirmaciones, toasts, picker modals
+
+El overflow:auto no afecta visualmente los modales pequeños (solo se activa si el contenido excede 90vh). Los modales que ya tenían `maxHeight` no se tocan.
+
+### CobranzaFlow
+
+Sin cambios — usa `<Modal>` genérico (~L456) que YA aplica `maxHeight:'85vh',overflowY:'auto'` por default a todos los modales. Ya estaba protegido.
+
+
 ## v10.43.30 — Auditoría incluye OCs a Crédito Corona (fix gap falsos) — 25-may-2026
 
 Marcelo: "¿las OCs a Crédito Corona se guardan también en auditoría y en todos los apartados donde deben ir?".

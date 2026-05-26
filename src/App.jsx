@@ -1362,7 +1362,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   const canChoose=isSec(role)||role==="admin";
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",textAlign:"center"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto",textAlign:"center"}}>
       <div style={{fontSize:28,fontWeight:800,marginBottom:4}}>{o.production_number||o.id}</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:4}}>{o.client} · {o.product_type}</div>
       {isMaq&&<div style={{fontSize:10,color:"#e67e22",fontWeight:600,marginBottom:4}}>🚚 Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
@@ -1511,7 +1511,7 @@ function MaqModal({onSend,onClose,providers=[]}) {
   const [p,setP]=useState("");const [ph,setPh]=useState("");const [em,setEm]=useState("");const [n,setN]=useState("");const [showAC,setShowAC]=useState(false);
   const matches=(p||"").length>=2?providers.filter(x=>x.name?.toLowerCase().includes(p.toLowerCase())).slice(0,5):[];
   const selProv=pv=>{setP(pv.name);setPh(pv.phone||"");setEm(pv.email||"");setShowAC(false)};
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 14px"}}>🚚 Enviar a Maquila</h3>
     <div style={{marginBottom:10,position:"relative"}}>
       <label style={lbl}>Proveedor *</label>
@@ -1535,12 +1535,12 @@ function MaqModal({onSend,onClose,providers=[]}) {
 function WasteModal({onSave,onClose}) {
   useEscClose(onClose);
   const [pl,setPl]=useState("");const [pz,setPz]=useState("");const [n,setN]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>🗑️ Registrar Merma</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>¿Cuánto material se echó a perder?</p><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><div><label style={lbl}>📄 Pliegos (Impresión)</label><input style={inp} type="number" value={pl} onChange={e=>setPl(e.target.value)} placeholder="0"/></div><div><label style={lbl}>📦 Piezas (Acabados)</label><input style={inp} type="number" value={pz} onChange={e=>setPz(e.target.value)} placeholder="0"/></div></div><div style={{marginBottom:16}}><label style={lbl}>¿Qué pasó?</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Motivo..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>onSave(parseInt(pz,10)||0,parseInt(pl,10)||0,n)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}>Guardar</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>🗑️ Registrar Merma</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>¿Cuánto material se echó a perder?</p><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><div><label style={lbl}>📄 Pliegos (Impresión)</label><input style={inp} type="number" value={pl} onChange={e=>setPl(e.target.value)} placeholder="0"/></div><div><label style={lbl}>📦 Piezas (Acabados)</label><input style={inp} type="number" value={pz} onChange={e=>setPz(e.target.value)} placeholder="0"/></div></div><div style={{marginBottom:16}}><label style={lbl}>¿Qué pasó?</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Motivo..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>onSave(parseInt(pz,10)||0,parseInt(pl,10)||0,n)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}>Guardar</button></div></div></div>;
 }
 function DevolverModal({onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>↩️ Devolver a Diseño</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Describe el fallo o motivo por el cual se regresa esta orden a Noemí (Diseño)</p><div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical"}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Describe el problema..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(!reason.trim())return alert("Escribe el motivo");onConfirm(reason.trim())}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>↩️ Devolver</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>↩️ Devolver a Diseño</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Describe el fallo o motivo por el cual se regresa esta orden a Noemí (Diseño)</p><div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical"}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Describe el problema..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(!reason.trim())return alert("Escribe el motivo");onConfirm(reason.trim())}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>↩️ Devolver</button></div></div></div>;
 }
 
 // v10.38.0 — Modal para regresar orden a CTP (capturar razón).
@@ -1548,7 +1548,7 @@ function DevolverModal({onConfirm,onClose}) {
 function ReturnToCtpModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"90%"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar a CTP</h3>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>La orden volverá a Germán para re-imprimir placas. Las placas existentes se marcarán como inválidas (se conserva el historial).</p>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
@@ -2177,7 +2177,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
   const [reason,setReason]=useState("");
   if(!options||options.length===0)return null;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar Orden</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>Elige el stage destino y captura la razón. El área responsable del destino será notificada.</p>
       <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
@@ -2228,7 +2228,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
 function CancelOrderModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn}}>❌ Cancelar Orden</h3>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
@@ -2246,7 +2246,7 @@ function StartMaintenanceModal({machine,onConfirm,onClose}) {
   useEscClose(onClose);
   const [notes,setNotes]=useState("");
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>🔧 Mantenimiento — {machine?.name}</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La máquina dejará de aceptar órdenes hasta que se repare</p>
       <div style={{marginBottom:16}}><label style={lbl}>¿Qué problema tiene? (opcional)</label><textarea style={{...inp,minHeight:60,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Describe la falla..."/></div>
@@ -2263,7 +2263,7 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
   const started=record?.started_at?new Date(record.started_at):null;
   const elapsed=started?Math.round((Date.now()-started.getTime())/3600000):0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>✅ Quitar Mantenimiento — {machine?.name}</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>En mantenimiento desde: {started?fDT(record.started_at):"-"}</p>
       <p style={{fontSize:12,color:C.wn,margin:"0 0 4px",fontWeight:600}}>⏱ {elapsed<24?elapsed+"h":Math.floor(elapsed/24)+"d "+elapsed%24+"h"} fuera de servicio</p>
@@ -2282,7 +2282,7 @@ function PlateModal({order,machine,onConfirm,onClose}) {
   useEscClose(onClose);
   const [size,setSize]=useState("");const [qty,setQty]=useState("");
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px"}}>💿 Registrar Placas — CTP</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>→ {machine?.name||"CTP"}</p>
@@ -2621,8 +2621,10 @@ function InvoiceModal({order,onConfirm,onClose}) {
     </button>;
   };
 
+  // v10.43.31 FIX — maxHeight + overflowY para que el modal scrollee internamente cuando crece
+  // (caso reportado: paid + transferencia + ref bancaria + payment picker → botón Continuar fuera de vista)
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%"}} onClick={e=>e.stopPropagation()}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📄 Asignar Folio Fiscal y Entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.cart_folio?" · 🛒 "+order.cart_folio:""}{order?.web_folio?" · "+order.web_folio:""}</p>
@@ -2854,7 +2856,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 
   if(!dataComplete){
     return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
-      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"100%"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
         <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",color:"#ff9500"}}>⚠️ Datos incompletos</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Para asignar folio anticipado, la orden debe tener todos los datos fiscales completos:</p>
         <ul style={{margin:"0 0 18px",paddingLeft:20,fontSize:12,lineHeight:1.7}}>
@@ -3104,8 +3106,9 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
     }
   };
 
+  // v10.43.31 FIX — maxHeight + overflowY para evitar contenido fuera de vista cuando crece
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%"}} onClick={e=>e.stopPropagation()}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.dn}}>❌ Cancelar con Nota de Crédito</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{order?.client} · {order?.product_type}</p>
 
@@ -3479,7 +3482,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
     </div>}
 
     {editOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%"}}>
+      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
         <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 12px"}}>📅 Cambiar Fecha de Entrega</h3>
         <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -5459,7 +5462,7 @@ function Archive({orders,role,onAction,userLogin}) {
 function WebRejectModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn}}>❌ Rechazar Pedido Web</h3>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
