@@ -2902,17 +2902,19 @@ function InvoiceModal({order,onConfirm,onClose}) {
         {isStockLoad&&<div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cargar a inventario Cuadra</div>
           {cuadraProducts.length===0?<div style={{fontSize:11,color:C.dn,padding:"8px 10px",background:C.dn+"08",borderRadius:8}}>⚠️ Este cliente Cuadra no tiene productos en catálogo todavía. Crea uno desde el modal 📦 Inventario antes de cargar a stock.</div>:<>
-            <label style={{...lbl,marginTop:0}}>Producto del catálogo *</label>
-            <select style={inp} value={cuadraSKU} onChange={e=>setCuadraSKU(e.target.value)}>
+            <label style={{...lbl,marginTop:0}} htmlFor="cuadra-sku-select">Producto del catálogo *</label>
+            <select id="cuadra-sku-select" aria-label="Producto del catálogo Cuadra para cargar a stock" style={inp} value={cuadraSKU} onChange={e=>setCuadraSKU(e.target.value)}>
               <option value="">— Selecciona producto del catálogo —</option>
               {cuadraProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · stock actual: {p.stock_actual}</option>)}
             </select>
             {cuadraSKU&&(()=>{
               const prod=cuadraProducts.find(p=>p.id===cuadraSKU);
               const qty=Number(order?.quantity)||0;
-              const newStock=(prod?.stock_actual||0)+qty;
+              // v10.46.4 — Number() defense por si backend retorna stock_actual como string
+              const stockActual=Number(prod?.stock_actual)||0;
+              const newStock=stockActual+qty;
               return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:10,fontSize:11}}>
-                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{prod?.stock_actual||0}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{stockActual}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>+{qty}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Stock después</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>{newStock}</div></div>
               </div>;
@@ -2966,7 +2968,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
         {isStockLoad ? (()=>{
           const prod=cuadraProducts.find(p=>p.id===cuadraSKU);
           const qty=Number(order?.quantity)||0;
-          const newStock=(prod?.stock_actual||0)+qty;
+          // v10.46.4 — Number() defense
+          const stockActual=Number(prod?.stock_actual)||0;
+          const newStock=stockActual+qty;
           return <>
             <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
               <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a cargar a stock:</div>
@@ -2976,7 +2980,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
             </div>
             <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11,textAlign:"center"}}>
-                <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{prod?.stock_actual||0}</div></div>
+                <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{stockActual}</div></div>
                 <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Esta orden</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>+{qty}</div></div>
                 <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Stock después</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>{newStock}</div></div>
               </div>
@@ -4228,8 +4232,16 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.43.2 FIX A4 — Al cambiar de cliente, resetear campos stock para evitar inconsistencias
     // (orden con stock_role/client_product_id de un cliente apuntando a otro).
     // Excepción: si la orden YA tiene stock_loaded=true (edición de orden ya cargada), no tocar.
+    // v10.46.4 — Excepción 2: editar orden legacy (pre-v10.46) con stock_role='production' setteado
+    // y nuevo cliente también Cuadra: preservar stock_role (ya no hay checkbox para re-marcarlo).
+    // client_product_id sí se limpia porque pertenece al cliente anterior.
     setF(p=>{
-      const stockReset=p.stock_loaded?{}:{stock_role:null,client_product_id:null,stock_loaded:false};
+      const isLegacyStock=editOrder?.stock_role==="production"&&!p.stock_loaded&&c.billing_mode==="stock";
+      const stockReset=p.stock_loaded
+        ? {}
+        : isLegacyStock
+          ? {client_product_id:null}
+          : {stock_role:null,client_product_id:null,stock_loaded:false};
       return{...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||"",billing_mode:c.billing_mode||"normal",...stockReset};
     });
     if(!c.email||!c.whatsapp){
@@ -4249,7 +4261,13 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){
+  // v10.46.4 — preservar stock_role si la orden legacy lo tenía (no hay checkbox para re-marcarlo);
+  // client_product_id sí se limpia porque pertenece al cliente anterior.
+  const isLegacyStock=editOrder?.stock_role==="production";
+  if(!isLegacyStock)s("stock_role",null);
+  s("client_product_id",null);
+}}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
     {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:"#0891b210",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
       <div style={{fontSize:11,color:C.t2}}>💡 ¿Pedido recurrente? Usa una orden anterior como plantilla.</div>
@@ -4793,9 +4811,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
       {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
       {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="No entrega al cliente; ingresa al inventario interno">📦 Cargar a Stock</button>}</>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio.">📦 Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
-      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Esta orden iba a inventario, no a entrega al cliente. Click para corregir.">📦 Cargar a Stock (corrección)</button>}
+      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio.">📦 Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}

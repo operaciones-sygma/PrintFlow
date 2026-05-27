@@ -5,6 +5,15 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.4 — Fixes 🟡 menores pendientes — 26-may-2026
+
+- **Botón legacy "📦 Cargar a Stock"** ahora muestra etiqueta `(legacy)` y tooltip explicando que es para órdenes pre-v10.46. Para órdenes nuevas, Karla usa la 3ra opción en Asignar Folio.
+- **Number() defense** en `prod.stock_actual` en InvoiceModal preview (selector y confirming view), por si backend retorna como string.
+- **`aria-label`** en el `<select>` del catálogo de stock_load.
+- **OrderForm**: preservar `stock_role='production'` al editar orden legacy + cambio de cliente. Antes se reseteaba sin manera de re-marcar (ya no hay checkbox); ahora si la orden tenía `stock_role` y el nuevo cliente es también Cuadra, se preserva. `client_product_id` sí se limpia (pertenece al cliente anterior).
+- Aclarado en código por qué el insert al frente de `setOrders` post-sell_from_stock es correcto (created_at=now → más reciente).
+
+
 ## v10.46.3 — Bridge venta-desde-stock verificado + sell_from_stock setea client_id — 26-may-2026
 
 Marcelo pidió corroborar que el bridge PrintFlow → CobranzaFlow funcione cuando se asigna folio fiscal (D-XXXX / R-XXXX) a una venta desde stock.
