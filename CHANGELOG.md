@@ -5,6 +5,48 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.9 — Fixes 🔴 post-scan exhaustivo v10.46.5-8 — 26-may-2026
+
+Tercer scan exhaustivo (3 agentes paralelos cubriendo frontend + DB + integración). 6 críticos detectados — atacados todos.
+
+### Frontend
+
+**F1 — `ClientInput.onChange` borraba `stock_role` al primer keystroke post-selección**: bug REAL introducido por v10.46.5 A3. Lupita selecciona Cuadra del autocomplete (`selC` setea client_id + billing_mode + stock_role legacy) → primer keystroke → `onChange` con `f.client_id` existente entraba al reset → ¡borra todo lo recién seteado por selC!
+
+**Fix**: comparar el nombre nuevo vs el actual; solo limpiar si REALMENTE cambió:
+```js
+const nameChanged=(v||"").trim()!==(f.client||"").trim();
+if(f.client_id && nameChanged){ /* reset */ }
+```
+
+**F2 — Banner SKU eliminado vs select bloqueado contradecía UI**: si `stock_loaded=true` Y `linkedMissing=true`, el banner decía "revincula o desasigna" pero el select estaba disabled. Ahora distingue:
+- `stock_loaded`: "vínculo histórico se conserva por auditoría" (no actionable)
+- Editable: "Selecciona otro o 'Sin asignar'" (actionable)
+
+**F3 — Race `setInvoiceModal(merged)` vs `setOrders` updater**: React 18 puede batchear el updater; `merged` podía leerse antes del flush. Ahora `setInvoiceModal` se defiere con `Promise.resolve().then(...)` para garantizar que el updater de orders ejecutó primero.
+
+### Backend
+
+**B1 — `assign_invoice` SET search_path** (omitido en v10.46.5): defensa anti-search-path-injection en la función crítica de facturación.
+
+**B1 — `assign_folio_to_oc` valida price>0 + SET search_path**: otro path que asignaba folio bypassing las validaciones de `assign_invoice` (escenario I1). Si alguna orden de la OC tenía `price NULL/<=0`, el bridge fallaba con `bridge_error` silencioso para esa orden quedando folio huérfano. Ahora rechaza upfront con lista de órdenes inválidas.
+
+**B2 — `sync_post_invoice_edit` retroactivo endurecido**:
+- Guardia anti-duplicado: `SELECT COUNT(*) FROM cobranza.invoices WHERE doc_type+doc_number` antes del INSERT (evita duplicados por race/reentrada)
+- Validar `client_id` resuelto antes del INSERT (skip con audit_log si null)
+- `audit_log` ahora también captura SQLSTATE para diagnóstico
+
+**I1 — Bloqueo defensivo en `sync_invoice_from_orders` para amount inválido**: agregado guard `IF v_base_amount <= 0 THEN RAISE EXCEPTION` ANTES del INSERT. Captura cualquier path (assign_invoice, assign_folio_to_oc, UPDATE directo del frontend, legacy) que intente setear `invoice_folio` sin precio válido. La excepción se propaga al UPDATE de orders → rollback completo → no queda folio huérfano. El `WHEN OTHERS` final ahora distingue candados (re-RAISE) vs errores genéricos (audit + RETURN).
+
+### Métricas saludables
+
+- 23× `bridge_create_invoice` exitosos en 7 días
+- 79/79 OCs con `client_id`
+- 0 OCs con discrepancia de total
+- 0 órdenes `stock_loaded` sin `stocked_at`
+- `payments_status_check` admite 'cancelado'
+
+
 ## v10.46.8 — Fixes 🟡 menores + semántica stocked_at — 26-may-2026
 
 ### Backend

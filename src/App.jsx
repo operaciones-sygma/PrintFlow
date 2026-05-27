@@ -4276,14 +4276,19 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){
-  // v10.46.5 FIX — Al borrar el client_id (escribiendo manual), billing_mode se resetea a 'normal'.
-  // Por lo tanto stock_role='production' quedaría huérfano apuntando a un contexto no-stock → estado fantasma.
-  // Siempre limpiar stock_role + client_product_id al perder client_id. Si el cliente que escriben resulta
-  // ser Cuadra, el dropdown del catálogo re-aparece y pueden vincular SKU manualmente.
-  s("stock_role",null);
-  s("client_product_id",null);
-}}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
+  // v10.46.9 F1 FIX — Solo limpiar client_id (+ stock_role/product_id) si el NOMBRE realmente cambió.
+  // Antes (v10.46.5): cualquier onChange con f.client_id existente entraba al reset, incluso si v===f.client
+  // (caso onSelect del autocomplete: selC setea client_id+client; el ClientInput dispara onChange con el
+  // mismo string, lo cual reseteaba lo recién seteado por selC).
+  s("client",v);
+  const nameChanged=(v||"").trim()!==(f.client||"").trim();
+  if(f.client_id&&nameChanged){
+    s("client_id",null);
+    s("billing_mode","normal");
+    if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
+  }
+}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
     {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:"#0891b210",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
       <div style={{fontSize:11,color:C.t2}}>💡 ¿Pedido recurrente? Usa una orden anterior como plantilla.</div>
@@ -4303,7 +4308,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           {linkedMissing&&<option value={f.client_product_id} disabled>⚠️ SKU eliminado del catálogo — revincula o desasigna</option>}
           {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
         </select>
-        {linkedMissing&&<div style={{fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}>⚠️ El SKU vinculado fue eliminado del catálogo (soft-delete) o pertenece a otro cliente. Selecciona otro o "Sin asignar".</div>}
+        {linkedMissing&&<div style={{fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}>
+          {/* v10.46.9 F2 FIX — distinguir si el select está bloqueado (stock_loaded) o editable */}
+          {editOrder?.stock_loaded
+            ?<>⚠️ El SKU vinculado fue eliminado del catálogo. La orden ya fue cargada a stock — el vínculo histórico se conserva por auditoría.</>
+            :<>⚠️ El SKU vinculado fue eliminado del catálogo (soft-delete) o pertenece a otro cliente. Selecciona otro o "Sin asignar".</>}
+        </div>}
         <div style={{fontSize:10,color:C.t2,marginTop:6,lineHeight:1.4}}>No decidas aquí si va a stock — al final, Karla verá <b>3 opciones</b>: 📄 Factura, 📋 Remisión, 📦 Sin factura·Stock. Si ya sabes a qué SKU corresponde, vincúlalo arriba (acelera el flujo).</div>
       </div>;
     })()}
@@ -9512,16 +9522,20 @@ export default function PrintFlow() {
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{
-        // v10.46.1+v10.46.5 — `order` viene del RPC sell_from_stock recién ejecutado, es lo MÁS fresco.
-        // Si Realtime ya insertó la fila (puede haber timestamp viejo si el INSERT propagó antes
-        // que las RPC updates), el RPC pisa. Solo conservamos campos que el RPC pudiera no traer.
+        // v10.46.9 F3 FIX — Computar el merge SINCRÓNICAMENTE leyendo orders por referencia.
+        // En v10.46.5 el merge se hacía dentro del setOrders updater (asíncrono en React 18)
+        // y luego se pasaba a setInvoiceModal; podía leerse antes del flush. Ahora calculamos
+        // primero leyendo el array actual via setOrders(p=>{...; return p}) trick, luego seteamos.
         let merged=order;
         setOrders(p=>{
           const idx=p.findIndex(x=>x.id===order.id);
           if(idx>=0){merged={...p[idx],...order};const next=[...p];next[idx]=merged;return next}
+          merged=order;
           return [order,...p];
         });
-        setInvoiceModal(merged);
+        // Defer setInvoiceModal al próximo tick para garantizar que el updater de setOrders
+        // ya se ejecutó (React batchea ambos setters en el mismo tick).
+        Promise.resolve().then(()=>setInvoiceModal(merged));
       }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
