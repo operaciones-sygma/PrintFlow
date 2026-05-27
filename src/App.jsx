@@ -2701,6 +2701,11 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // Catálogo del cliente Cuadra (para que Karla escoja SKU al cargar a stock)
   const [cuadraProducts,setCuadraProducts]=useState([]);
   const [cuadraSKU,setCuadraSKU]=useState(order?.client_product_id||"");
+  // v10.46.1 FIX — sincronizar cuadraSKU si order.client_product_id cambia tras montar
+  // (caso: Lupita asignó SKU y la orden se hidrata después del primer render).
+  useEffect(()=>{
+    if(order?.client_product_id)setCuadraSKU(order.client_product_id);
+  },[order?.client_product_id]);
   useEffect(()=>{
     if(!isCuadra||!order?.client_id){setCuadraProducts([]);return}
     let alive=true;
@@ -9443,7 +9448,16 @@ export default function PrintFlow() {
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
-      {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{setOrders(p=>{const exists=p.find(x=>x.id===order.id);return exists?p:[order,...p]});setInvoiceModal(order)}} onClose={()=>{setInventoryOpen(false);reload()}}/>}
+      {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{
+        // v10.46.1 FIX — merge si Realtime ya insertó la orden (puede traer stage actualizado);
+        // sino, agregar al frente. Para abrir InvoiceModal usamos la versión más reciente del state.
+        setOrders(p=>{
+          const idx=p.findIndex(x=>x.id===order.id);
+          if(idx>=0){const next=[...p];next[idx]={...order,...next[idx]};return next}
+          return [order,...p];
+        });
+        setInvoiceModal(order);
+      }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}

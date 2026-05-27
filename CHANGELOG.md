@@ -5,6 +5,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.1 — Fixes 🔴 post-scan exhaustivo v10.46.0 — 26-may-2026
+
+Scan inmediato detectó 3 críticos. Atacados.
+
+### 🔴 #1 — Trigger `auto_complete_purchase_order` cerraba OC al cargar a stock
+
+Bug preexistente (desde v10.42) pero ahora crítico porque carga-a-stock es el flujo default de Cuadra. Cuando una OC tenía múltiples órdenes y al menos una se cargaba a stock (stage=`delivered`, `stock_loaded=true`, sin `invoice_folio`), si las demás se entregaban realmente la OC se marcaba `completed` incluyendo la stock — pero esa orden no se entregó al cliente, se desvió a inventario.
+
+**Fix (migración DB)**: dos guards en `auto_complete_purchase_order`:
+1. Si la orden actual es `stock_loaded=true` y sin folio → return early (no procesar cierre).
+2. Antes de cerrar la OC, validar que al menos UNA orden de la OC haya sido **entrega real** (delivered/maq_delivered con folio O sin `stock_loaded=true`). Si todas las "terminales" son stock o canceladas, la OC sigue abierta.
+
+Auditoría histórica: **0 OCs afectadas** retroactivamente (la combinación no se había producido aún en órdenes existentes).
+
+### 🔴 #2 — `cuadraSKU` no sincronizaba con updates de `order.client_product_id`
+
+`useState(order?.client_product_id||"")` solo se evalúa al montar. Si Lupita pre-asignó SKU en OrderForm y la orden se hidrataba después del primer render del InvoiceModal (caso: Realtime trayendo el campo), el SKU pre-asignado se perdía y Karla tenía que re-seleccionarlo.
+
+**Fix**: `useEffect` sincroniza cuando `order.client_product_id` cambia.
+
+### 🟠 #3 — Race `setOrders` insert vs Realtime al vender desde stock
+
+`onOpenInvoice` hacía `[order,...p]` solo si la orden no existía; si Realtime ya la había insertado, descartaba la versión RPC. El `setInvoiceModal(order)` siguiente usaba la versión RPC stale aunque el state tuviera una más fresca.
+
+**Fix**: si existe en el array, hacer merge `{...order, ...exists}` (datos del array tienen prioridad porque incluyen actualizaciones de Realtime). Si no, agregar al frente.
+
+### Pendientes (no críticos)
+
+- `sell_from_stock` defensa: validar `billing_mode='stock'` server-side
+- `stockLoadValid` debe verificar que `cuadraSKU` exista en `cuadraProducts` actual
+- Stock_load permite `quantity=0` (movimiento PRODUCED con 0 piezas)
+- Historial: filtro `.toLowerCase().includes()` sin `.normalize("NFD")` (no encuentra acentos)
+- FK `stock_movements.client_product_id` es RESTRICT → botón 🗑️ falla con productos que tuvieron movimientos (UX confusa)
+- InvoiceModal Cuadra no refresca billing_mode pre-confirm (defensa)
+
+Estos van en v10.46.2 si se priorizan.
+
+
 ## v10.46.0 — Cuadra: 5 mejoras de flujo (3ra opción en InvoiceModal, inventario flexible, historial) — 26-may-2026
 
 Marcelo: "modal de venta no es muy intuitivo; quiero más flexible que Lupita no decida si va a stock, que Karla siempre vea las 3 opciones al final, similar al patrón Corona/Modelo".
