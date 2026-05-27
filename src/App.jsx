@@ -1769,11 +1769,13 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         const order=await db.sellFromStock({...args,client_product_id:editing.product.id,created_by:userLogin||user});
         showToast("✅ Venta creada — selecciona Factura o Remisión");
         setEditing(null);
-        await reload();
+        // v10.46.7 C6 — abrir InvoiceModal ANTES del reload(): si reload() falla por red,
+        // Karla aún ve el modal para asignar folio. reload() se hace después en best-effort.
         if(order&&onOpenInvoice){
           onOpenInvoice(order);
-          onClose(); // cierra InventoryModal para no bloquear el InvoiceModal
+          onClose();
         }
+        reload().catch(e=>console.warn("[InventoryModal] post-sell reload:",e));
       }
       catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
@@ -2707,6 +2709,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // si la orden ya es una VENTA desde stock (stock_role='sale'), no permitimos volverla a stock.
   const isCuadra=coronaInfo?.billing_mode==="stock"&&order?.stock_role!=="sale"&&!order?.stock_loaded;
   const isStockLoad=type==="stock_load";
+  // v10.46.7 C2 — Mientras coronaInfo carga, los botones tBtn están deshabilitados (evita
+  // que Karla escoja Factura/Remisión sin ver el 3er botón Corona/Cuadra que aparecería luego).
+  const coronaInfoLoading=coronaInfo===null;
   // Catálogo del cliente Cuadra (para que Karla escoja SKU al cargar a stock)
   const [cuadraProducts,setCuadraProducts]=useState([]);
   const [cuadraSKU,setCuadraSKU]=useState(order?.client_product_id||"");
@@ -2799,9 +2804,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
       //   Si el cliente cambió de stock→normal/anticipo entre montar el modal y confirmar,
       //   la RPC rechazaría con error feo; mejor avisar y bloquear UX antes.
       if(isStockLoad){
+        // v10.46.7 C3 — Solo bloquea si tenemos info DEFINITIVA de que cambió a no-stock.
+        // Si fresh es null/undefined o billing_mode null (RPC error), dejar pasar — el RPC
+        // load_order_to_stock valida server-side de todos modos.
         try{
           const fresh=await db.getClientBillingInfo(order.client_id,order.client);
-          if(fresh && fresh.billing_mode!=="stock"){
+          if(fresh&&fresh.billing_mode&&fresh.billing_mode!=="stock"){
             alert("⚠️ El cliente ya no está en modo stock (cambió a "+fresh.billing_mode+"). No se puede cargar a inventario. Cierra y vuelve a abrir el modal.");
             return;
           }
@@ -2845,17 +2853,19 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
   const tBtn=(t,label,emoji,color,sug)=>{
     const sel=type===t;
+    // v10.46.7 C2 — disabled mientras coronaInfo carga (evita seleccionar antes de ver 3er botón)
+    const disabled=busy||coronaInfoLoading;
     return <button
       onClick={()=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}}
-      disabled={busy}
+      disabled={disabled}
       style={{
         flex:1,
         padding:"20px 12px",
         borderRadius:14,
         border:"2px solid "+(sel?color:C.bd),
         background:sel?color+"15":C.bg,
-        cursor:busy?"not-allowed":"pointer",
-        opacity:busy?0.6:1,
+        cursor:disabled?"not-allowed":"pointer",
+        opacity:disabled?0.5:1,
         fontFamily:"'Poppins',sans-serif",
         transition:"all .15s"
       }}>
@@ -2876,6 +2886,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
       {!confirming ? <>
         <p style={{fontSize:12,color:C.tx,margin:"0 0 12px"}}>Selecciona el tipo de comprobante:</p>
+        {coronaInfoLoading&&<div style={{fontSize:11,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8,textAlign:"center"}}>⏳ Cargando datos del cliente…</div>}
         <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
           {tBtn("factura","Factura","📄","#5856d6",suggestion.factura)}
           {tBtn("remision","Remisión","📋","#34c759",suggestion.remision)}
@@ -4279,15 +4290,21 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {/* v10.46.0 — Panel stock simplificado: SIN checkbox "Producción a stock".
         El catálogo siempre aparece para clientes Cuadra (opcional pre-link).
         Karla decide al final en InvoiceModal: Factura · Remisión · Sin factura·Stock. */}
-    {f.billing_mode==="stock"&&!specsOnly&&<div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
-      <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cliente Cuadra · Catálogo opcional</div>
-      <label style={lbl}>Producto de catálogo (opcional) {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
-      <select style={inp} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
-        <option value="">— Sin asignar (Karla puede vincular al cargar a stock) —</option>
-        {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
-      </select>
-      <div style={{fontSize:10,color:C.t2,marginTop:6,lineHeight:1.4}}>No decidas aquí si va a stock — al final, Karla verá <b>3 opciones</b>: 📄 Factura, 📋 Remisión, 📦 Sin factura·Stock. Si ya sabes a qué SKU corresponde, vincúlalo arriba (acelera el flujo).</div>
-    </div>}
+    {f.billing_mode==="stock"&&!specsOnly&&(()=>{
+      // v10.46.7 C1 — Detectar SKU vinculado pero ya no en catálogo (soft-deleted o cambió de cliente).
+      const linkedMissing=f.client_product_id&&!stockProducts.some(p=>p.id===f.client_product_id);
+      return <div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cliente Cuadra · Catálogo opcional</div>
+        <label style={lbl}>Producto de catálogo (opcional) {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
+        <select style={{...inp,border:linkedMissing?"1.5px solid "+C.dn+"60":inp.border}} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
+          <option value="">— Sin asignar (Karla puede vincular al cargar a stock) —</option>
+          {linkedMissing&&<option value={f.client_product_id} disabled>⚠️ SKU eliminado del catálogo — revincula o desasigna</option>}
+          {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
+        </select>
+        {linkedMissing&&<div style={{fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}>⚠️ El SKU vinculado fue eliminado del catálogo (soft-delete) o pertenece a otro cliente. Selecciona otro o "Sin asignar".</div>}
+        <div style={{fontSize:10,color:C.t2,marginTop:6,lineHeight:1.4}}>No decidas aquí si va a stock — al final, Karla verá <b>3 opciones</b>: 📄 Factura, 📋 Remisión, 📦 Sin factura·Stock. Si ya sabes a qué SKU corresponde, vincúlalo arriba (acelera el flujo).</div>
+      </div>;
+    })()}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req>
       {/* v10.34.2 — Combobox typeahead con keyboard nav, accent-insensitive, focus en "Otro", normalize casing onBlur */}

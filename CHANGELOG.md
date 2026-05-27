@@ -5,6 +5,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.7 — Fixes 🟠 restantes del scan exhaustivo — 26-may-2026
+
+5 mayores que quedaban en backlog post-v10.46.5. Atacados todos.
+
+### Frontend
+
+**C1 — Soft-deleted SKU vinculado a orden EXISTENTE**: si Lupita editaba una orden Cuadra que tenía `client_product_id=X` y X había sido eliminado del catálogo (soft-delete), el select mostraba "" silenciosamente — el vínculo se perdía en UI sin que el usuario lo supiera. Ahora detecta el caso y muestra:
+- Opción extra `disabled`: `⚠️ SKU eliminado del catálogo — revincula o desasigna`
+- Banner rojo: `⚠️ El SKU vinculado fue eliminado del catálogo (soft-delete) o pertenece a otro cliente. Selecciona otro o "Sin asignar"`
+- Border rojo en el select
+
+**C2 — InvoiceModal flicker durante carga de `coronaInfo`**: los botones Factura/Remisión aparecían inmediatamente; si Karla los clickeaba antes de que `coronaInfo` resolviera, no vería el 3er botón Corona ("Aplicar saldo") o Cuadra ("Sin factura · Stock") que aparecería después. Ahora:
+- Mensaje `⏳ Cargando datos del cliente…` mientras `coronaInfo===null`
+- Botones Factura/Remisión deshabilitados (opacity 0.5) hasta que llegue la info
+- Cuando carga, el 3er botón (si aplica) se monta junto con la habilitación de los 2 primeros
+
+**C3 — `getClientBillingInfo` undefined billing_mode**: el refresh pre-confirm de stock_load bloqueaba con "cambió a undefined" si la RPC retornaba `{billing_mode: null}`. Ahora solo bloquea si tenemos info DEFINITIVA de cambio: `fresh && fresh.billing_mode && fresh.billing_mode !== "stock"`. El RPC `load_order_to_stock` valida server-side de todas formas.
+
+**C6 — Race InventoryModal cierre + InvoiceModal apertura**: si `reload()` post-venta fallaba por red, `onOpenInvoice` no se ejecutaba — la venta quedaba en backend pero Karla no veía el modal para asignar folio. Ahora `onOpenInvoice` se llama ANTES del reload; reload se hace después en best-effort (`.catch(...console.warn)`).
+
+### Backend
+
+**C4 — `recalculate_oc_total` no excluía órdenes stock-loaded sin folio**: el total de la OC incluía las órdenes desviadas a stock (que NO se entregaron al cliente real, sino al inventario interno), creando mismatch financiero. Ahora la SUM excluye `stock_loaded IS TRUE AND invoice_folio IS NULL`. Consistente con el fix de `auto_complete_purchase_order` de v10.46.1.
+
+Incluye **backfill**: recalcula totales de OCs existentes que tengan órdenes stock-loaded.
+
+
 ## v10.46.6 — sync_post_invoice_edit crea invoice retroactivamente si era huérfana — 26-may-2026
 
 Marcelo: "luego les asignaré precio por PrintFlow, ¿al editar la orden con folio se pasa a CobranzaFlow?"
