@@ -5,6 +5,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.8 — Fixes 🟡 menores + semántica stocked_at — 26-may-2026
+
+### Backend
+
+**m5 — Separar `stocked_at` de `invoiced_at`**: antes `load_order_to_stock` seteaba `invoiced_at=now()` aunque la orden NO tenía folio fiscal — semánticamente engañoso. Reportería que filtra por `invoiced_at IS NOT NULL` traía órdenes cargadas a stock mezcladas con facturas reales.
+
+- ADD COLUMN `orders.stocked_at timestamptz` (con COMMENT documentando semántica)
+- `load_order_to_stock` ahora setea `stocked_at` (no `invoiced_at`)
+- Backfill: copiar `invoiced_at → stocked_at` + limpiar `invoiced_at` para órdenes con `stock_loaded=true AND invoice_folio IS NULL`
+- Frontend optimistic update post-stock_load actualiza `stocked_at` (no `invoiced_at`)
+
+**m2 — Documentar FK design intencional**: comentarios en constraints para que sea claro al próximo lector:
+- `orders.client_product_id` → `ON DELETE SET NULL` (orden no se pierde si SKU eliminado)
+- `stock_movements.client_product_id` → `ON DELETE RESTRICT` (auditoría inmutable; usar soft-delete para SKUs)
+
+### Frontend
+
+**Filtros independientes por tab en InventoryModal**: antes `filter` era compartido entre tabs `products`/`history` — cambiar de tab preservaba el texto y confundía al usuario. Ahora `filterProducts` y `filterHistory` son state separado, cada tab arranca limpio o conserva su propio filtro.
+
+**aria-labels** en SellFromStockModal y AdjustStockModal: labels `htmlFor` + `aria-label` en inputs y selects para mejor accesibilidad (consistente con InvoiceModal stock_load de v10.46.4).
+
+
 ## v10.46.7 — Fixes 🟠 restantes del scan exhaustivo — 26-may-2026
 
 5 mayores que quedaban en backlog post-v10.46.5. Atacados todos.

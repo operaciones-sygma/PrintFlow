@@ -1615,7 +1615,9 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
   const [loading,setLoading]=useState(true);
   const [tab,setTab]=useState("products"); // products | movements | history (v10.46.0)
   const [editing,setEditing]=useState(null); // {mode:"new"|"adjust"|"sell", product?}
-  const [filter,setFilter]=useState("");
+  // v10.46.8 — filtros independientes por tab (antes era uno solo y confundía al cambiar tab)
+  const [filterProducts,setFilterProducts]=useState("");
+  const [filterHistory,setFilterHistory]=useState("");
 
   const reload=async()=>{
     setLoading(true);
@@ -1637,8 +1639,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
 
   const clientName=cid=>{const c=stockClients.find(x=>x.id===cid);return c?.name||"—"};
   const filtered=products.filter(p=>{
-    if(!filter.trim())return true;
-    const q=filter.toLowerCase();
+    if(!filterProducts.trim())return true;
+    const q=filterProducts.toLowerCase();
     return (p.name||"").toLowerCase().includes(q)||(p.sku||"").toLowerCase().includes(q)||clientName(p.client_id).toLowerCase().includes(q);
   });
 
@@ -1661,7 +1663,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
       {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
           {tab==="products"&&<>
-            <input style={{...inp,marginBottom:10}} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="🔍 Filtrar por nombre, SKU o cliente"/>
+            <input style={{...inp,marginBottom:10}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="🔍 Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
             {filtered.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>{products.length===0?"Sin productos en catálogo todavía":"Sin coincidencias"}</div>:
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(p=>
@@ -1714,11 +1716,11 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           )}
           {/* v10.46.0 — Tab Historial: órdenes Cuadra (production + sale), filtrables por cliente + búsqueda */}
           {tab==="history"&&<>
-            <input style={{...inp,marginBottom:10}} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="🔍 Filtrar por cliente, P-folio o producto"/>
+            <input style={{...inp,marginBottom:10}} value={filterHistory} onChange={e=>setFilterHistory(e.target.value)} placeholder="🔍 Filtrar por cliente, P-folio o producto" aria-label="Filtrar historial de órdenes Cuadra"/>
             {history.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin órdenes Cuadra registradas todavía</div>:(()=>{
               // v10.46.2 FIX — accent-insensitive (Dipticos == Dípticos), consistente con OrderForm.normForSearch
               const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
-              const q=norm(filter.trim());
+              const q=norm(filterHistory.trim());
               const filt=q?history.filter(o=>norm(o.client).includes(q)||norm(o.production_number).includes(q)||norm(o.product).includes(q)):history;
               if(filt.length===0)return <div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>;
               return <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -1845,13 +1847,13 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
         <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Nuevo saldo</div><div style={{fontSize:18,fontWeight:800,color:preview<0?C.dn:C.ok}}>{preview}</div></div>
       </div>
       <div style={{marginBottom:10}}>
-        <label style={lbl}>Cantidad (positiva o negativa) *</label>
-        <input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus/>
+        <label style={lbl} htmlFor="adjust-qty">Cantidad (positiva o negativa) *</label>
+        <input id="adjust-qty" aria-label="Cantidad de ajuste (positiva suma, negativa resta)" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus/>
         <div style={{fontSize:10,color:C.t2,marginTop:3}}>Positiva: sumar inventario · Negativa: restar (merma, error)</div>
       </div>
       <div style={{marginBottom:16}}>
-        <label style={lbl}>Motivo (recomendado)</label>
-        <input style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="ej. Carga inicial vs conteo Gerardo"/>
+        <label style={lbl} htmlFor="adjust-notes">Motivo (recomendado)</label>
+        <input id="adjust-notes" aria-label="Motivo del ajuste" style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="ej. Carga inicial vs conteo Gerardo"/>
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
@@ -1889,8 +1891,8 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:"#10b981",fontSize:14}}>{product.stock_actual}</b></div>
       <div style={{marginBottom:10}}>
-        <label style={lbl}>Cantidad *</label>
-        <input style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/>
+        <label style={lbl} htmlFor="sell-qty">Cantidad *</label>
+        <input id="sell-qty" aria-label="Cantidad a vender desde stock" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/>
       </div>
       <div style={{marginBottom:10}}>
         <label style={lbl}>Modo de precio</label>
@@ -1908,12 +1910,12 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       </div>
       <div style={{background:"#16a34a10",borderRadius:8,padding:8,marginBottom:10,textAlign:"right",fontSize:13,fontWeight:700,color:"#16a34a"}}>Total venta: ${showTotal}</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div><label style={lbl}>Prioridad</label>
-          <select style={inp} value={priority} onChange={e=>setPriority(e.target.value)}>
+        <div><label style={lbl} htmlFor="sell-priority">Prioridad</label>
+          <select id="sell-priority" aria-label="Prioridad de la venta" style={inp} value={priority} onChange={e=>setPriority(e.target.value)}>
             {PRIOS.map(p=><option key={p.id} value={p.id}>{p.l}</option>)}
           </select>
         </div>
-        <div><label style={lbl}>Fecha entrega</label><input style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
+        <div><label style={lbl} htmlFor="sell-due">Fecha entrega</label><input id="sell-due" aria-label="Fecha de entrega" style={inp} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
       </div>
       <div style={{marginBottom:16}}>
         <label style={lbl}>Notas</label>
@@ -9548,7 +9550,8 @@ export default function PrintFlow() {
             const prodName=result?.product_name||"";
             const tlMsg="📦 Cargado a stock Cuadra"+(prodName?" · "+prodName:"")+" · +"+qty+" pzas · stock después: "+newBal;
             const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
-            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),invoiced_at:new Date().toISOString(),invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+            // v10.46.8 — usar stocked_at (no invoiced_at) — la orden NO fue facturada
+            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),stocked_at:new Date().toISOString(),invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
             await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
             showToast("📦 Orden cargada a inventario Cuadra (+"+qty+" pzas)");
             setInvoiceModal(null);
