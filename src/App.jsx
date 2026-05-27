@@ -638,6 +638,30 @@ const db = {
     const {error}=await supabase.from("client_products").upsert(p);
     if(error)throw new Error("saveClientProduct: "+error.message);
   },
+  // v10.46.0 — eliminar producto de catálogo (solo si stock=0)
+  async deleteClientProduct(productId) {
+    const {error}=await supabase.from("client_products").delete().eq("id",productId);
+    if(error)throw new Error("deleteClientProduct: "+error.message);
+  },
+  // v10.46.0 — Karla carga orden a stock desde InvoiceModal (3ra opción Cuadra)
+  async loadOrderToStock({order_id, client_product_id, user}) {
+    const {data,error}=await supabase.rpc("load_order_to_stock",{
+      p_order_id:order_id, p_client_product_id:client_product_id, p_user:user
+    });
+    if(error)throw new Error("loadOrderToStock: "+error.message);
+    return data;
+  },
+  // v10.46.0 — Historial órdenes Cuadra (a stock + ventas) para tab Historial
+  async loadCuadraOrdersHistory(limit=80) {
+    // Lista órdenes con stock_role IN ('production','sale') ordenadas por created_at
+    const {data,error}=await supabase.from("orders")
+      .select("id, production_number, client, client_id, product, quantity, price, due_date, stage, stock_role, stock_loaded, client_product_id, invoice_folio, invoice_type, invoice_reason, invoiced_at, invoiced_by, cancelled_at, created_at")
+      .in("stock_role",["production","sale"])
+      .order("created_at",{ascending:false})
+      .limit(limit);
+    if(error)throw new Error("loadCuadraOrdersHistory: "+error.message);
+    return data||[];
+  },
   async recordStockMovement({client_product_id, kind, qty, order_id=null, notes=null, created_by=null}) {
     const {data,error}=await supabase.rpc("record_stock_movement",{p_client_product_id:client_product_id,p_kind:kind,p_qty:qty,p_order_id:order_id,p_notes:notes,p_created_by:created_by});
     if(error)throw new Error("recordStockMovement: "+error.message);
@@ -1577,13 +1601,14 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
 // v10.42.0 — Inventario Cuadra (producción a stock + venta desde stock).
 // Lista client_products con stock_actual, permite ADJUST (semilla / corrección),
 // venta directa desde stock (RPC sell_from_stock) y agregar producto nuevo al catálogo.
-function InventoryModal({onClose, user, userLogin, clients, showToast}) {
+function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInvoice}) {
   useEscClose(onClose);
   const [products,setProducts]=useState([]);
   const [movements,setMovements]=useState([]);
+  const [history,setHistory]=useState([]); // v10.46.0 — historial órdenes Cuadra
   const [stockClients,setStockClients]=useState([]); // v10.42.1
   const [loading,setLoading]=useState(true);
-  const [tab,setTab]=useState("products"); // products | movements
+  const [tab,setTab]=useState("products"); // products | movements | history (v10.46.0)
   const [editing,setEditing]=useState(null); // {mode:"new"|"adjust"|"sell", product?}
   const [filter,setFilter]=useState("");
 
@@ -1591,12 +1616,14 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
     setLoading(true);
     try{
       // v10.42.1 — RPC list_stock_clients evita exponer schema cobranza vía PostgREST
-      const [prods,movs,scsRes]=await Promise.all([
+      // v10.46.0 — Cargar historial de órdenes Cuadra (production + sale)
+      const [prods,movs,scsRes,hist]=await Promise.all([
         db.loadClientProducts(),
         db.loadStockMovements(null,80),
-        supabase.rpc("list_stock_clients")
+        supabase.rpc("list_stock_clients"),
+        db.loadCuadraOrdersHistory(80).catch(e=>{console.warn("[InventoryModal] history:",e);return []})
       ]);
-      setProducts(prods);setMovements(movs);setStockClients(scsRes.data||[]);
+      setProducts(prods);setMovements(movs);setStockClients(scsRes.data||[]);setHistory(hist||[]);
     }catch(e){console.error("[InventoryModal] load:",e);showToast("❌ Error cargando inventario: "+e.message,"error")}
     finally{setLoading(false)}
   };
@@ -1619,7 +1646,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
         <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>
-        {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"}].map(t=>
+        {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"},{id:"history",l:"📚 Historial"}].map(t=>
           <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Poppins',sans-serif"}}>{t.l}</button>
         )}
         <div style={{flex:1}}/>
@@ -1646,6 +1673,12 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
                     <div style={{display:"flex",gap:6,marginTop:10}}>
                       <button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>
                       <button onClick={()=>setEditing({mode:"sell",product:p})} disabled={p.stock_actual<=0} style={{...bt("#16a34a"),flex:1,justifyContent:"center",padding:"6px 10px",fontSize:11,opacity:p.stock_actual<=0?.4:1,cursor:p.stock_actual<=0?"not-allowed":"pointer"}}>🛒 Vender</button>
+                      {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
+                      {p.stock_actual===0&&<button onClick={async()=>{
+                        if(!confirm("¿Eliminar producto \""+p.name+"\" del catálogo?\n\nSolo se permite porque stock=0. Esta acción no se puede deshacer."))return;
+                        try{await db.deleteClientProduct(p.id);showToast("🗑️ Producto eliminado");await reload()}
+                        catch(e){showToast("❌ No se pudo eliminar: "+e.message,"error")}
+                      }} title="Eliminar producto (solo si stock=0)" style={{...bt(C.dn+"15",C.dn),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}>🗑️</button>}
                     </div>
                   </div>
                 )}
@@ -1673,6 +1706,42 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
               })}
             </div>
           )}
+          {/* v10.46.0 — Tab Historial: órdenes Cuadra (production + sale), filtrables por cliente + búsqueda */}
+          {tab==="history"&&<>
+            <input style={{...inp,marginBottom:10}} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="🔍 Filtrar por cliente, P-folio o producto"/>
+            {history.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin órdenes Cuadra registradas todavía</div>:(()=>{
+              const q=filter.trim().toLowerCase();
+              const filt=q?history.filter(o=>(o.client||"").toLowerCase().includes(q)||(o.production_number||"").toLowerCase().includes(q)||(o.product||"").toLowerCase().includes(q)):history;
+              if(filt.length===0)return <div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>;
+              return <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {filt.map(o=>{
+                  const isProd=o.stock_role==="production";
+                  const isSale=o.stock_role==="sale";
+                  const color=isProd?"#10b981":isSale?"#16a34a":C.t2;
+                  const icon=isProd?"📦":isSale?"🛒":"·";
+                  const label=isProd?(o.stock_loaded?"a Stock":"a Stock (pendiente)"):(isSale?"desde Stock":"—");
+                  const stageLabel=SM[o.stage]?.l||o.stage;
+                  return <div key={o.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <span style={{fontSize:12,fontWeight:700,color}}>{icon} {label}</span>
+                          <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"monospace"}}>{o.production_number||"—"}</span>
+                          {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759"}}>{o.invoice_folio}</span>}
+                        </div>
+                        <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
+                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
+                        <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
+                      </div>
+                      {o.price&&<div style={{textAlign:"right",marginLeft:8}}>
+                        <div style={{fontSize:13,fontWeight:800}}>${Number(o.price).toLocaleString("es-MX",{minimumFractionDigits:0})}</div>
+                      </div>}
+                    </div>
+                  </div>;
+                })}
+              </div>;
+            })()}
+          </>}
         </div>
       }
     </div>
@@ -1685,7 +1754,18 @@ function InventoryModal({onClose, user, userLogin, clients, showToast}) {
       catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
     {editing?.mode==="sell"&&<SellFromStockModal product={editing.product} userLogin={userLogin} onSell={async args=>{
-      try{await db.sellFromStock({...args,client_product_id:editing.product.id,created_by:userLogin||user});showToast("✅ Venta creada — orden en Salidas");setEditing(null);await reload()}
+      try{
+        // v10.46.0 — sell_from_stock RETURNS orders (la orden creada).
+        // Auto-abrir InvoiceModal para que Karla asigne Factura/Remisión inmediatamente.
+        const order=await db.sellFromStock({...args,client_product_id:editing.product.id,created_by:userLogin||user});
+        showToast("✅ Venta creada — selecciona Factura o Remisión");
+        setEditing(null);
+        await reload();
+        if(order&&onOpenInvoice){
+          onOpenInvoice(order);
+          onClose(); // cierra InventoryModal para no bloquear el InvoiceModal
+        }
+      }
       catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
   </div>;
@@ -1696,7 +1776,7 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
   const [clientId,setClientId]=useState("");
   const [name,setName]=useState("");
   const [sku,setSku]=useState("");
-  const [unitPrice,setUnitPrice]=useState("");
+  // v10.46.0 — Quitado campo "Precio unitario" del form (poco usado, lo captura SellFromStockModal).
   // v10.42.1 — `clients` del App se deriva de las órdenes (no incluye id ni billing_mode).
   // Cargamos los clientes stock vía RPC list_stock_clients (schema cobranza no expuesto a PostgREST).
   const [stockClients,setStockClients]=useState([]);
@@ -1725,17 +1805,13 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
         </select>
         {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock. Márcalo desde DB: UPDATE cobranza.clients SET billing_mode='stock' WHERE id=...</div>}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         <div><label style={lbl}>Nombre *</label><input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="ej. Tarjeta Presentación A"/></div>
         <div><label style={lbl}>SKU</label><input style={inp} value={sku} onChange={e=>setSku(e.target.value.toUpperCase())} placeholder="CUA-001"/></div>
       </div>
-      <div style={{marginBottom:16}}>
-        <label style={lbl}>Precio unitario (opcional)</label>
-        <input style={inp} type="number" step="0.01" value={unitPrice} onChange={e=>setUnitPrice(e.target.value)} placeholder="0.00"/>
-      </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!canSave)return;onSave({client_id:clientId,name:name.trim(),sku:sku.trim()||null,unit_price:unitPrice?parseFloat(unitPrice):null,created_by:userLogin||null})}} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
+        <button onClick={()=>{if(!canSave)return;onSave({client_id:clientId,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null})}} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
       </div>
     </div>
   </div>;
@@ -2618,6 +2694,24 @@ function InvoiceModal({order,onConfirm,onClose}) {
     return ()=>{alive=false};
   },[order?.client_id,order?.client]);
   const isCorona=coronaInfo?.billing_mode==="anticipo";
+  // v10.46.0 — Cuadra: 3ra opción "Sin factura · Stock". Solo aplica a producciones (nuevas);
+  // si la orden ya es una VENTA desde stock (stock_role='sale'), no permitimos volverla a stock.
+  const isCuadra=coronaInfo?.billing_mode==="stock"&&order?.stock_role!=="sale"&&!order?.stock_loaded;
+  const isStockLoad=type==="stock_load";
+  // Catálogo del cliente Cuadra (para que Karla escoja SKU al cargar a stock)
+  const [cuadraProducts,setCuadraProducts]=useState([]);
+  const [cuadraSKU,setCuadraSKU]=useState(order?.client_product_id||"");
+  useEffect(()=>{
+    if(!isCuadra||!order?.client_id){setCuadraProducts([]);return}
+    let alive=true;
+    db.loadClientProducts(order.client_id).then(list=>{
+      if(!alive)return;
+      setCuadraProducts(list||[]);
+      // Auto-seleccionar si solo hay 1 producto y nada pre-seleccionado
+      if(!order?.client_product_id&&list?.length===1)setCuadraSKU(list[0].id);
+    }).catch(e=>console.warn("[InvoiceModal] cuadra products:",e));
+    return ()=>{alive=false};
+  },[isCuadra,order?.client_id,order?.client_product_id]);
 
   // Cargar sugerencias al montar
   useEffect(()=>{
@@ -2636,13 +2730,16 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
   // Validación del folio escrito
   // v10.43.10 — type 'no_folio' (Corona) salta toda la lógica de folio fiscal
+  // v10.46.0 — type 'stock_load' (Cuadra) también salta lógica de folio
   const isNoFolio=type==="no_folio";
   const folioRegex=type==="factura"?/^D-\d+$/:/^R-\d+$/;
   const folioPrefix=type==="factura"?"D-":"R-";
-  const folioValid=isNoFolio?true:(folio&&folioRegex.test(folio));
-  const folioNum=(!isNoFolio&&folioValid)?parseInt(folio.split("-")[1],10):0;
-  const suggestedNum=(!isNoFolio&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
-  const folioIsLower=(!isNoFolio)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
+  const folioValid=(isNoFolio||isStockLoad)?true:(folio&&folioRegex.test(folio));
+  const folioNum=(!isNoFolio&&!isStockLoad&&folioValid)?parseInt(folio.split("-")[1],10):0;
+  const suggestedNum=(!isNoFolio&&!isStockLoad&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
+  const folioIsLower=(!isNoFolio&&!isStockLoad)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
+  // v10.46.0 — stockLoadValid: necesita SKU seleccionado del catálogo
+  const stockLoadValid=isStockLoad?!!cuadraSKU:true;
 
   // v10.29.0 + v10.30.0 — paymentStatus debe estar definido; si paid/partial también method; si partial monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
@@ -2654,7 +2751,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const requiresBankRef = ["transferencia", "tarjeta", "cheque"].includes(paymentMethod);
   const bankRefValid = !requiresBankRef || (bankReference && bankReference.trim().length > 0);
   // v10.43.0 — Corona: bridge resuelve el payment automáticamente al detectar billing_mode='anticipo'
+  // v10.46.0 — Cuadra stock_load: no aplica payment (es ingreso a inventario, no facturación)
   const paymentValid = isCorona
+    || isStockLoad
     || paymentStatus === "unpaid"
     || (paymentStatus === "paid" && paymentMethod && bankRefValid)
     || (paymentStatus === "partial" && paymentMethod && amountNum > 0 && amountNum < totalDisplay && bankRefValid);
@@ -2677,6 +2776,11 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const handleConfirm=async()=>{
     setBusy(true);
     try{
+      // v10.46.0 — Cuadra stock_load: 3ra opción "Sin factura · Stock". Pasa client_product_id en 7mo arg.
+      if(isStockLoad){
+        await onConfirm("stock_load",null,null,null,null,null,cuadraSKU);
+        return;
+      }
       // v10.43.0 — Corona: payment_status/method/amount/bank_reference son NULL,
       // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
       if(isCorona){
@@ -2756,9 +2860,40 @@ function InvoiceModal({order,onConfirm,onClose}) {
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>sin folio fiscal</div>
             </button>;
           })()}
+          {/* v10.46.0 — Tercer botón Cuadra: cargar a stock sin folio fiscal */}
+          {isCuadra&&(()=>{
+            const sel=type==="stock_load";
+            return <button onClick={()=>{setType("stock_load");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("")}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Poppins',sans-serif",transition:"all .15s"}}>
+              <div style={{fontSize:32,marginBottom:6}}>📦</div>
+              <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Sin factura · Stock</div>
+              <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>va a inventario Cuadra</div>
+            </button>;
+          })()}
         </div>
-        {/* v10.43.10 — Input de folio solo si NO es 'no_folio' */}
-        {type&&!isNoFolio&&<>
+        {/* v10.46.0 — Selector de SKU para cargar a stock (Cuadra) */}
+        {isStockLoad&&<div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cargar a inventario Cuadra</div>
+          {cuadraProducts.length===0?<div style={{fontSize:11,color:C.dn,padding:"8px 10px",background:C.dn+"08",borderRadius:8}}>⚠️ Este cliente Cuadra no tiene productos en catálogo todavía. Crea uno desde el modal 📦 Inventario antes de cargar a stock.</div>:<>
+            <label style={{...lbl,marginTop:0}}>Producto del catálogo *</label>
+            <select style={inp} value={cuadraSKU} onChange={e=>setCuadraSKU(e.target.value)}>
+              <option value="">— Selecciona producto del catálogo —</option>
+              {cuadraProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · stock actual: {p.stock_actual}</option>)}
+            </select>
+            {cuadraSKU&&(()=>{
+              const prod=cuadraProducts.find(p=>p.id===cuadraSKU);
+              const qty=Number(order?.quantity)||0;
+              const newStock=(prod?.stock_actual||0)+qty;
+              return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:10,fontSize:11}}>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{prod?.stock_actual||0}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>+{qty}</div></div>
+                <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Stock después</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>{newStock}</div></div>
+              </div>;
+            })()}
+            <div style={{fontSize:10,color:C.t2,marginTop:8,lineHeight:1.4}}>La orden quedará entregada <b>sin folio fiscal</b>. Las piezas entran al inventario del cliente Cuadra. Cuando Cuadra pida, se venderán desde stock con factura/remisión normal.</div>
+          </>}
+        </div>}
+        {/* v10.43.10 — Input de folio solo si NO es 'no_folio' ni 'stock_load' */}
+        {type&&!isNoFolio&&!isStockLoad&&<>
           <label style={{...lbl,marginTop:4}}>Folio del {type==="factura"?"CFDI":"comprobante"} (escribe o usa sugerido):</label>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <input
@@ -2773,7 +2908,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>}
-        {type&&folioValid&&(isCorona?
+        {type&&folioValid&&!isStockLoad&&(isCorona?
           (()=>{
             // v10.43.27 FIX A3 — El ledger se descuenta por orderBaseAmount (sin IVA, post v10.43.26),
             // no por totalDisplay (con IVA). Preview ahora coincide con lo que el bridge hará.
@@ -2796,11 +2931,31 @@ function InvoiceModal({order,onConfirm,onClose}) {
         )}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid} style={{...bt(type==="factura"?"#5856d6":(type==="remision"?"#34c759":C.t3)),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid)?0.4:1}}>Continuar →</button>
+          <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid} style={{...bt(type==="factura"?"#5856d6":(type==="remision"?"#34c759":(isStockLoad?"#10b981":C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid)?0.4:1}}>Continuar →</button>
         </div>
       </> : <>
-        {/* v10.43.14 FIX M14 — Branch específico de preview para Corona 'aplicar saldo' */}
-        {isNoFolio ? <>
+        {/* v10.46.0 — Branch específico de preview para Cuadra 'stock_load' */}
+        {isStockLoad ? (()=>{
+          const prod=cuadraProducts.find(p=>p.id===cuadraSKU);
+          const qty=Number(order?.quantity)||0;
+          const newStock=(prod?.stock_actual||0)+qty;
+          return <>
+            <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
+              <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a cargar a stock:</div>
+              <div style={{fontSize:22,fontWeight:800,color:"#10b981"}}>📦 {prod?.name||"—"}</div>
+              {prod?.sku&&<div style={{fontSize:11,color:C.t2,fontFamily:"monospace",marginTop:2}}>SKU: {prod.sku}</div>}
+              <div style={{fontSize:12,color:C.t2,marginTop:6}}>Sin folio fiscal · va a inventario Cuadra</div>
+            </div>
+            <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11,textAlign:"center"}}>
+                <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Stock actual</div><div style={{fontSize:14,fontWeight:800}}>{prod?.stock_actual||0}</div></div>
+                <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Esta orden</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>+{qty}</div></div>
+                <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Stock después</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>{newStock}</div></div>
+              </div>
+            </div>
+            <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.ok}}>Entregada</strong> sin folio fiscal. Cuando Cuadra pida estas piezas, Karla las vende desde el inventario con factura/remisión normal.</p>
+          </>;
+        })() : isNoFolio ? <>
           <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a aplicar:</div>
             <div style={{fontSize:24,fontWeight:800,color:"#10b981"}}>💰 Saldo a favor (Corona)</div>
@@ -2836,7 +2991,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         </>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>← Atrás</button>
-          <button onClick={handleConfirm} disabled={busy} style={{...bt(isNoFolio?"#10b981":(type==="factura"?"#5856d6":"#34c759")),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Procesando...":"✅ Confirmar"}</button>
+          <button onClick={handleConfirm} disabled={busy} style={{...bt((isNoFolio||isStockLoad)?"#10b981":(type==="factura"?"#5856d6":"#34c759")),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Procesando...":"✅ Confirmar"}</button>
         </div>
       </>}
     </div>
@@ -3902,11 +4057,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
         if(!isEmpty)next[k]=v;
       });
-      // stock_role / client_product_id solo si cliente actual es Cuadra Y la fuente era production
-      // (no replicamos stock_role='sale' porque eso es venta desde stock — caso especial)
-      if(prev.billing_mode==="stock"&&src.stock_role==="production"){
-        next.stock_role="production";
-        if(src.client_product_id)next.client_product_id=src.client_product_id;
+      // v10.46.0 — Ya no replicamos stock_role (Karla decide al final en InvoiceModal).
+      // Solo client_product_id si el cliente actual es Cuadra (pre-link opcional del SKU).
+      if(prev.billing_mode==="stock"&&src.client_product_id){
+        next.client_product_id=src.client_product_id;
       }
       return next;
     });
@@ -4073,23 +4227,17 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       <div style={{fontSize:11,color:C.t2}}>💡 ¿Pedido recurrente? Usa una orden anterior como plantilla.</div>
       <button type="button" onClick={()=>setReplicateOpen(true)} style={{...bt("#0891b2"),fontSize:11,padding:"6px 12px",fontWeight:700}}>🔁 Replicar de orden anterior</button>
     </div>}
-    {/* v10.42.0 — Panel stock: visible si el cliente tiene billing_mode=stock (ej. Cuadra) */}
+    {/* v10.46.0 — Panel stock simplificado: SIN checkbox "Producción a stock".
+        El catálogo siempre aparece para clientes Cuadra (opcional pre-link).
+        Karla decide al final en InvoiceModal: Factura · Remisión · Sin factura·Stock. */}
     {f.billing_mode==="stock"&&!specsOnly&&<div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase"}}>📦 Cliente con Inventario</div>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,cursor:"pointer"}}>
-          <input type="checkbox" checked={f.stock_role==="production"} onChange={e=>s("stock_role",e.target.checked?"production":null)} disabled={!!editOrder?.stock_loaded}/>
-          <span>Producción a stock</span>
-        </label>
-      </div>
-      {f.stock_role==="production"&&<>
-        <label style={lbl}>Producto de catálogo {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
-        <select style={inp} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
-          <option value="">— Sin asignar (puedes vincular después) —</option>
-          {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
-        </select>
-        <div style={{fontSize:10,color:C.t2,marginTop:6}}>Al terminar la producción, en Empaque verás un botón <b style={{color:"#10b981"}}>📦 Cargar a Stock</b> que ingresa las piezas al inventario sin marcarlas como entregadas.</div>
-      </>}
+      <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cliente Cuadra · Catálogo opcional</div>
+      <label style={lbl}>Producto de catálogo (opcional) {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
+      <select style={inp} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
+        <option value="">— Sin asignar (Karla puede vincular al cargar a stock) —</option>
+        {stockProducts.map(p=><option key={p.id} value={p.id}>{p.name}{p.sku?" · "+p.sku:""} · Stock: {p.stock_actual}</option>)}
+      </select>
+      <div style={{fontSize:10,color:C.t2,marginTop:6,lineHeight:1.4}}>No decidas aquí si va a stock — al final, Karla verá <b>3 opciones</b>: 📄 Factura, 📋 Remisión, 📦 Sin factura·Stock. Si ya sabes a qué SKU corresponde, vincúlalo arriba (acelera el flujo).</div>
     </div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Producto</div>
     <div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req>
@@ -9295,7 +9443,7 @@ export default function PrintFlow() {
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
-      {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onClose={()=>{setInventoryOpen(false);reload()}}/>}
+      {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{setOrders(p=>{const exists=p.find(x=>x.id===order.id);return exists?p:[order,...p]});setInvoiceModal(order)}} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
@@ -9309,8 +9457,26 @@ export default function PrintFlow() {
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
-      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference)=>{
+      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId)=>{
         try{
+          // v10.46.0 — Cuadra "stock_load": cargar a inventario sin folio fiscal
+          if(invoiceType==="stock_load"){
+            if(!cuadraProductId){
+              showToast("❌ Selecciona un producto del catálogo Cuadra","error");
+              return;
+            }
+            const result=await db.loadOrderToStock({order_id:invoiceModal.id,client_product_id:cuadraProductId,user:userLogin||user});
+            const qty=Number(result?.qty_loaded||invoiceModal.quantity)||0;
+            const newBal=Number(result?.new_stock||0);
+            const prodName=result?.product_name||"";
+            const tlMsg="📦 Cargado a stock Cuadra"+(prodName?" · "+prodName:"")+" · +"+qty+" pzas · stock después: "+newBal;
+            const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
+            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),invoiced_at:new Date().toISOString(),invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+            await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
+            showToast("📦 Orden cargada a inventario Cuadra (+"+qty+" pzas)");
+            setInvoiceModal(null);
+            return;
+          }
           // v10.43.10 — Corona "no_folio": descontar saldo sin asignar folio fiscal
           if(invoiceType==="no_folio"){
             const result=await db.applyCreditNoFolio(invoiceModal.id,userLogin||user);

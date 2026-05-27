@@ -5,6 +5,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.0 — Cuadra: 5 mejoras de flujo (3ra opción en InvoiceModal, inventario flexible, historial) — 26-may-2026
+
+Marcelo: "modal de venta no es muy intuitivo; quiero más flexible que Lupita no decida si va a stock, que Karla siempre vea las 3 opciones al final, similar al patrón Corona/Modelo".
+
+### 1. Modal venta auto-abre InvoiceModal
+
+Cuando Karla vende desde el InventoryModal (📦 → 🛒 Vender), `sell_from_stock` retorna la orden completa. Ahora, en lugar de solo mostrar toast y cerrar, se **abre automáticamente el InvoiceModal** sobre esa orden para que Karla elija Factura/Remisión sin tener que ir al kanban y abrirlo manualmente.
+
+### 2. InvoiceModal con 3ra opción "📦 Sin factura · Stock" (Cuadra)
+
+Patrón consistente con Corona (que tiene 3er botón "💰 Aplicar saldo"). Para clientes con `billing_mode='stock'`:
+
+- **📄 Factura** — flujo normal
+- **📋 Remisión** — flujo normal
+- **📦 Sin factura · Stock** — *nueva*: marca orden entregada sin folio fiscal y suma `quantity` al inventario del cliente Cuadra (SKU seleccionado)
+
+Al elegir "Sin factura · Stock", aparece selector del catálogo del cliente + preview de stock actual / +qty / stock después. Confirmar dispara la nueva RPC `load_order_to_stock` (security definer, FOR UPDATE en orden, idempotente, valida que sea cliente stock y que el SKU pertenezca al mismo cliente; rechaza órdenes con `stock_role='sale'`).
+
+### 3. OrderForm: quitado checkbox "Producción a stock"
+
+Lupita ya no decide al crear la orden si va a stock o no. El panel de Cuadra muestra solo un **dropdown opcional** de catálogo (pre-link de SKU si lo sabe). Toda la decisión se difiere a Karla al final, en InvoiceModal.
+
+- Texto explicativo: *"No decidas aquí — Karla verá 3 opciones al final"*
+- Replicar de orden anterior ya NO copia `stock_role` (solo `client_product_id` si el cliente actual es Cuadra)
+- Botón legacy "📦 Cargar a Stock" en Empaque/Salidas sigue visible solo para órdenes legacy que ya tienen `stock_role='production'` (no se mostrará en órdenes nuevas porque ya no se setea)
+
+### 4. ProductFormModal: quitado campo "Precio unitario"
+
+Casi no se usaba. El precio real se captura en SellFromStockModal (donde sí es relevante por venta).
+
+### 5. InventoryModal: eliminar productos vacíos + tab Historial
+
+- Botón 🗑️ en cards de producto **solo si `stock_actual===0`** (no se permite eliminar producto con stock). Confirm + `db.deleteClientProduct`. Útil para limpiar productos creados por error.
+- Nuevo tab **📚 Historial** con últimas 80 órdenes Cuadra (`stock_role IN ('production','sale')`), búsqueda por cliente/folio/producto, badges visuales para distinguir producción↔venta.
+
+### Backend
+
+- `load_order_to_stock(p_order_id, p_client_product_id, p_user)` — RPC nueva, SECURITY DEFINER, en `public`. Idempotente, valida billing_mode='stock', rechaza `stock_role='sale'` (no se puede re-cargar venta). Registra movimiento PRODUCED.
+- Sin cambios de schema; solo nueva RPC.
+
+### Archivos
+
+- `src/App.jsx`: `db.loadOrderToStock`, `db.deleteClientProduct`, `db.loadCuadraOrdersHistory`; `InvoiceModal` (3er botón + selector + preview + confirming view); App raíz (onConfirm para stock_load + `onOpenInvoice` callback en InventoryModal); `OrderForm` (quitado checkbox, simplificado replicate); `ProductFormModal` (quitado unit_price input); `InventoryModal` (delete button + history tab + auto-open invoice).
+
+
 ## v10.45.1 — Fixes post-scan exhaustivo de v10.45.0 — 26-may-2026
 
 Scan inmediato post-deploy detectó 1 🔴 + 3 🟠 reales en `ReplicateFromOrderModal`. Aplicados.
