@@ -5,6 +5,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.5 — Fixes 🔴 críticos post-scan exhaustivo — 26-may-2026
+
+Scan exhaustivo con 3 agentes en paralelo (frontend, DB/RPCs, integración cobranza) detectó 11 bugs reales — 3 introducidos por v10.46.x y 6 preexistentes amplificados por los nuevos flujos. Atacados los relevantes; documentada deuda técnica para B3/B5.
+
+### Introducidos por v10.46.x — corregidos
+
+**A1 — `onOpenInvoice` merge invertido**: el merge `{...order, ...next[idx]}` daba prioridad al state (posiblemente Realtime stale) cuando `order` es lo más fresco del RPC. Además `setInvoiceModal(order)` abría el modal con la versión NO mergeada. Ahora el merge es `{...next[idx], ...order}` (RPC pisa) y se abre el modal con la versión mergeada explícita.
+
+**A2 — `applyReplicate` cross-cliente Cuadra**: si replicabas de Botas Cuadra a Tiendas Cuadra (ambos billing_mode='stock'), el `client_product_id` se copiaba pero pertenece al primero. RPC rechazaba en backend pero form quedaba en estado fantasma. Ahora solo se replica si `prev.client_id===src.client_id`.
+
+**A3 — `ClientInput.onChange` estado fantasma**: al borrar el nombre del cliente, `f.client_id` se reseteaba a null y `billing_mode` a 'normal' pero `stock_role='production'` (legacy) se preservaba. Ahora se limpia siempre al perder `client_id` (si el nuevo cliente resulta Cuadra, el dropdown reaparece para revincular).
+
+### Preexistentes amplificados — corregidos
+
+**B1 — `assign_invoice` valida `price > 0`**: bug histórico, **6 órdenes con folio fiscal asignado pero SIN invoice en CobranzaFlow** (D-5822, D-5836, D-5839, D-5840, D-5851, R-1190). El bridge fallaba con `invoices_amount_check` (price NULL o ≤0), capturaba el error con `WHEN OTHERS`, dejaba audit_log y la orden con folio huérfano. Karla creía facturó, CxC nunca lo vio. Ahora la RPC `assign_invoice` rechaza con mensaje claro si `price`/`maq_price` no es positivo.
+
+**B4 — `ensure_purchase_order` setea `client_id`**: bug histórico, 52+ OCs simples creadas en 7 días con `purchase_orders.client_id=NULL`. Rompía joins por client_id en reportería/CxC. Aplicado fix + **backfill: 79 OCs históricas rellenas vía resolve_client**.
+
+**B6 — `sync_cancellation_to_cobranza` cancela payments**: si Karla cancelaba factura ya pagada (no-Corona), la invoice quedaba 'cancelada' pero los payments seguían 'aplicado' → payments zombies que distorsionaban reportes. Ahora al cancelar la invoice, también marca payments como 'cancelado' + audit_log explica que la devolución/saldo-a-favor la gestiona equipo manual. Ampliado CHECK constraint de `payments.status` para permitir 'cancelado'.
+
+**C5 — `SET search_path` en 3 SECURITY DEFINER restantes**: `auto_complete_purchase_order`, `recalculate_oc_total`, `sync_invoice_from_orders` pineados (defensa anti-search-path-injection).
+
+### 6 órdenes huérfanas históricas — requieren decisión manual
+
+Estas tienen folio fiscal asignado en PrintFlow pero NO en CobranzaFlow porque el bridge falló:
+
+| Folio | Orden (P-) | Cliente | Monto |
+|---|---|---|---|
+| D-5822 | P-3514 | ALEJANDRA RODRIGUEZ | price NULL |
+| D-5836 | P-3528 | ALEJANDRA RODRIGUEZ | price -0.01 |
+| D-5839 | P-3530 | MIKE | price NULL |
+| D-5840 | P-3543 | MIKE | price NULL |
+| D-5851 | P-3518 | CHEMA | price NULL |
+| R-1190 | P-3506 | ELIZABETH ROCHA | maq_price 1390 (bug bridge antiguo) |
+
+**Decisión pendiente**: si el negocio realmente facturó esos montos al SAT, hay que capturar manualmente en CobranzaFlow. Si fueron tests/errores, liberar el folio.
+
+### Deuda técnica documentada (NO atacada en v10.46.5)
+
+- **B3 — RLS allow_all en orders/client_products/stock_movements/purchase_orders**: las policies actuales (`qual=true, with_check=true`) permiten UPDATE/DELETE directo a cualquier user con anon key, bypassing RPCs. El frontend tiene 25+ `supabase.from("orders").update()` directos → refactor masivo para encerrar todo via RPCs. Riesgo de seguridad real pero requiere proyecto separado.
+- **B5 — EXECUTE GRANT abierto en stock RPCs**: `record_stock_movement` puede ser llamada directamente por anon (inyectar stock arbitrario). Frontend depende de la llamada directa para AdjustStockModal.
+
+Ambos requieren v10.47.x o mayor con refactor a "Postgres functions all the way".
+
+
 ## v10.46.4 — Fixes 🟡 menores pendientes — 26-may-2026
 
 - **Botón legacy "📦 Cargar a Stock"** ahora muestra etiqueta `(legacy)` y tooltip explicando que es para órdenes pre-v10.46. Para órdenes nuevas, Karla usa la 3ra opción en Asignar Folio.

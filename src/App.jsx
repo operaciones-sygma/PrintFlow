@@ -4090,8 +4090,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         if(!isEmpty)next[k]=v;
       });
       // v10.46.0 — Ya no replicamos stock_role (Karla decide al final en InvoiceModal).
-      // Solo client_product_id si el cliente actual es Cuadra (pre-link opcional del SKU).
-      if(prev.billing_mode==="stock"&&src.client_product_id){
+      // v10.46.5 FIX — Solo replicar client_product_id si AMBOS clientes (current + source) son el MISMO.
+      // Cuadra tiene 4 clientes (Botas, Sombreros, Tiendas, Calzados); un SKU pertenece a UNO solo y
+      // load_order_to_stock rechaza en backend si no coincide. Mejor no contaminar el form.
+      if(prev.billing_mode==="stock"&&src.client_product_id&&src.client_id&&prev.client_id===src.client_id){
         next.client_product_id=src.client_product_id;
       }
       return next;
@@ -4262,10 +4264,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
     {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){
-  // v10.46.4 — preservar stock_role si la orden legacy lo tenía (no hay checkbox para re-marcarlo);
-  // client_product_id sí se limpia porque pertenece al cliente anterior.
-  const isLegacyStock=editOrder?.stock_role==="production";
-  if(!isLegacyStock)s("stock_role",null);
+  // v10.46.5 FIX — Al borrar el client_id (escribiendo manual), billing_mode se resetea a 'normal'.
+  // Por lo tanto stock_role='production' quedaría huérfano apuntando a un contexto no-stock → estado fantasma.
+  // Siempre limpiar stock_role + client_product_id al perder client_id. Si el cliente que escriben resulta
+  // ser Cuadra, el dropdown del catálogo re-aparece y pueden vincular SKU manualmente.
+  s("stock_role",null);
   s("client_product_id",null);
 }}}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
@@ -9490,14 +9493,16 @@ export default function PrintFlow() {
       {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{
-        // v10.46.1 FIX — merge si Realtime ya insertó la orden (puede traer stage actualizado);
-        // sino, agregar al frente. Para abrir InvoiceModal usamos la versión más reciente del state.
+        // v10.46.1+v10.46.5 — `order` viene del RPC sell_from_stock recién ejecutado, es lo MÁS fresco.
+        // Si Realtime ya insertó la fila (puede haber timestamp viejo si el INSERT propagó antes
+        // que las RPC updates), el RPC pisa. Solo conservamos campos que el RPC pudiera no traer.
+        let merged=order;
         setOrders(p=>{
           const idx=p.findIndex(x=>x.id===order.id);
-          if(idx>=0){const next=[...p];next[idx]={...order,...next[idx]};return next}
+          if(idx>=0){merged={...p[idx],...order};const next=[...p];next[idx]=merged;return next}
           return [order,...p];
         });
-        setInvoiceModal(order);
+        setInvoiceModal(merged);
       }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
       {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
