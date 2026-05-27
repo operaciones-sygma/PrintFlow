@@ -5,6 +5,53 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.47.1 — ROLLBACK del REVOKE UPDATE (incidente Lupita) — 27-may-2026
+
+**Incidente**: Lupita estaba creando una orden nueva, capturó datos, dio Guardar → error `permission denied for table orders`. Se asustó pensando que perdería el form.
+
+**Causa raíz**: `supabase.from("orders").upsert(dbRow)` (línea 358 — `db.saveOrder`) genera SQL `INSERT ... ON CONFLICT DO UPDATE`. Postgres valida los permisos del branch `DO UPDATE` **antes de ejecutar**, aunque la fila no exista. El REVOKE UPDATE table-level de v10.47.0 lo bloqueó.
+
+**Resolución inmediata**:
+```sql
+GRANT UPDATE ON public.orders TO anon, authenticated;
+```
+
+Lupita pudo guardar sin perder datos del form (no refrescó el navegador).
+
+### Qué se mantiene de v10.47.0
+
+- ✅ Trigger `auto_mark_post_invoice_edits` BEFORE UPDATE — sigue activo (idempotente, sin daño aunque la lógica también esté en el frontend optimistic)
+- ✅ Frontend simplificado: ya no setea `has_post_invoice_edits` manualmente al `safeUpdate`
+
+### Qué se revierte
+
+- ❌ REVOKE UPDATE en columnas fiscales — REVERTIDO. Las columnas críticas (`invoice_folio`, `invoiced_at`, `payment_status`, etc.) vuelven a ser actualizables directamente desde el frontend.
+
+### Defensa que sigue activa
+
+El sistema NO queda desprotegido. Las RPCs SECURITY DEFINER de v10.46.5 y v10.46.9 siguen validando server-side:
+- `assign_invoice`/`assign_folio_to_oc` rechazan `price≤0`
+- `load_order_to_stock` valida `billing_mode='stock'` y SKU del mismo cliente
+- `sell_from_stock` valida `billing_mode='stock'`
+- Bridge `sync_invoice_from_orders` bloquea con `RAISE EXCEPTION` si amount inválido (v10.46.9 I1)
+- Trigger `auto_complete_purchase_order` excluye stock_loaded sin folio
+
+El riesgo restante es: usuario con anon key + conocimiento técnico podría hacer UPDATE directo. **Aceptable hasta v10.47.x con Auth real**.
+
+### Plan correcto para v10.47.x
+
+Cuando se implemente Supabase Auth JWT:
+1. Refactorizar `db.saveOrder` a RPC `save_order(p_data jsonb)` SECURITY DEFINER
+2. Validación JWT real (`auth.jwt()->>'role'`) en lugar de `p_user` string
+3. Re-aplicar REVOKE UPDATE con confianza (ya no hay `.upsert()` directo)
+
+### Lecciones aprendidas
+
+1. **Probar UPSERT/INSERT, no solo UPDATE**: el test pre-deploy validó UPDATE directo pero no upsert (que internamente requiere UPDATE permission).
+2. **Cambios de permisos en DB requieren staging real**: el test transaccional con `SET ROLE` no captura el comportamiento del cliente Supabase (que usa upsert).
+3. **Mantener rollback SQL inline en CHANGELOG**: pagó rápido aquí — el GRANT inverso estaba listo.
+
+
 ## v10.47.0 — Hardening Fase 1: REVOKE UPDATE en columnas fiscales — 26-may-2026
 
 Primera fase del refactor de seguridad. **Defensa real en DB** contra UPDATE directo de campos fiscales/financieros desde frontend (anon/authenticated). Ya no es posible modificar folios, fechas de facturación, payments, etc. sin pasar por las RPCs `SECURITY DEFINER` que tienen las validaciones del negocio.
