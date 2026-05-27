@@ -5,6 +5,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.2 — Fixes 🟠 post-scan exhaustivo v10.46.0 — 26-may-2026
+
+Atacados los 6 🟠 mayores y 2 🟡 menores que quedaron pendientes después de v10.46.1.
+
+### Backend
+
+- **`sell_from_stock` valida `billing_mode='stock'`** (defensa en profundidad, consistente con `load_order_to_stock`). Si un cliente cambia de stock→normal/anticipo con productos pendientes en catálogo, la RPC lo rechaza con mensaje claro en lugar de crear una venta-desde-stock huérfana.
+- **`record_stock_movement` y `sell_from_stock` pinean `SET search_path`** → cierra los advisor warnings `function_search_path_mutable` (defensa anti-search-path-injection en `SECURITY DEFINER`).
+
+### Frontend — InvoiceModal stock_load
+
+- **`stockLoadValid` ahora verifica que `cuadraSKU` siga existiendo en `cuadraProducts`** y que `quantity > 0`. Si el catálogo se refrescó después de seleccionar SKU y el SKU ya no está, el botón Continuar se deshabilita en lugar de fallar en backend.
+- **Refresh de `billing_mode` antes de confirmar stock_load** (consistente con Corona). Si el cliente cambió de modo entre montar el modal y confirmar, muestra alerta y bloquea — UX mejor que el error feo de la RPC.
+
+### Frontend — InventoryModal
+
+- **Historial: filtro accent-insensitive** (`norm()` con NFD + lowercase). Buscar "Dipticos" ahora encuentra "Dípticos". Consistente con `OrderForm.normForSearch`.
+- **Historial: error de carga visible**. `loadCuadraOrdersHistory().catch` ya no silencia: muestra `showToast` de error. Antes el tab se veía vacío sin pista del fallo.
+- **`o.price !== null` en cards de Historial** permite mostrar ventas de $0 (regalos/cortesía/muestras). Antes `o.price &&` ocultaba $0 truthy-falsy.
+
+### Frontend — Catálogo (soft-delete)
+
+- **`deleteClientProduct` ahora es soft-delete** (`UPDATE active=false`) en lugar de DELETE. El FK `stock_movements.client_product_id` es `ON DELETE RESTRICT` (correctamente, preserva auditoría), así que DELETE fallaba para cualquier producto que tuvo movimientos pasados aunque `stock=0` hoy. El soft-delete oculta el SKU del catálogo y de selectores (porque `loadClientProducts` filtra `.eq("active",true)`) sin destruir el histórico de movimientos.
+
+### Pendientes / aceptados
+
+- 🟡 Botón legacy "📦 Cargar a Stock" en Empaque/Salidas: sigue funcionando solo para órdenes legacy con `stock_role='production'`; órdenes nuevas no lo necesitan. No requiere fix.
+- 🟡 Editar orden Cuadra legacy + cambio de cliente resetea `stock_role` sin manera de re-marcar (preexistente, edge case raro).
+- 🟡 `setOrders` insert al frente puede desordenar lista brevemente — el reload restablece. Aceptable.
+
+
 ## v10.46.1 — Fixes 🔴 post-scan exhaustivo v10.46.0 — 26-may-2026
 
 Scan inmediato detectó 3 críticos. Atacados.

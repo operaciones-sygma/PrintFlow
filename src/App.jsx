@@ -639,8 +639,13 @@ const db = {
     if(error)throw new Error("saveClientProduct: "+error.message);
   },
   // v10.46.0 — eliminar producto de catálogo (solo si stock=0)
+  // v10.46.2 FIX — soft-delete (active=false) en lugar de DELETE.
+  // El FK stock_movements.client_product_id es ON DELETE RESTRICT (correctamente, preserva
+  // historial). DELETE fallaba para cualquier producto que tuvo movimientos pasados aunque
+  // stock=0 hoy. El soft-delete oculta el SKU del catálogo y evita que aparezca en selectores
+  // sin destruir el histórico.
   async deleteClientProduct(productId) {
-    const {error}=await supabase.from("client_products").delete().eq("id",productId);
+    const {error}=await supabase.from("client_products").update({active:false,updated_at:new Date().toISOString()}).eq("id",productId);
     if(error)throw new Error("deleteClientProduct: "+error.message);
   },
   // v10.46.0 — Karla carga orden a stock desde InvoiceModal (3ra opción Cuadra)
@@ -1617,11 +1622,12 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
     try{
       // v10.42.1 — RPC list_stock_clients evita exponer schema cobranza vía PostgREST
       // v10.46.0 — Cargar historial de órdenes Cuadra (production + sale)
+      // v10.46.2 FIX — Si historial falla, avisamos al usuario en lugar de silenciar (tab quedaba vacío sin explicación).
       const [prods,movs,scsRes,hist]=await Promise.all([
         db.loadClientProducts(),
         db.loadStockMovements(null,80),
         supabase.rpc("list_stock_clients"),
-        db.loadCuadraOrdersHistory(80).catch(e=>{console.warn("[InventoryModal] history:",e);return []})
+        db.loadCuadraOrdersHistory(80).catch(e=>{console.warn("[InventoryModal] history:",e);showToast("⚠️ No se pudo cargar el historial Cuadra: "+e.message,"error");return null})
       ]);
       setProducts(prods);setMovements(movs);setStockClients(scsRes.data||[]);setHistory(hist||[]);
     }catch(e){console.error("[InventoryModal] load:",e);showToast("❌ Error cargando inventario: "+e.message,"error")}
@@ -1710,8 +1716,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           {tab==="history"&&<>
             <input style={{...inp,marginBottom:10}} value={filter} onChange={e=>setFilter(e.target.value)} placeholder="🔍 Filtrar por cliente, P-folio o producto"/>
             {history.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin órdenes Cuadra registradas todavía</div>:(()=>{
-              const q=filter.trim().toLowerCase();
-              const filt=q?history.filter(o=>(o.client||"").toLowerCase().includes(q)||(o.production_number||"").toLowerCase().includes(q)||(o.product||"").toLowerCase().includes(q)):history;
+              // v10.46.2 FIX — accent-insensitive (Dipticos == Dípticos), consistente con OrderForm.normForSearch
+              const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+              const q=norm(filter.trim());
+              const filt=q?history.filter(o=>norm(o.client).includes(q)||norm(o.production_number).includes(q)||norm(o.product).includes(q)):history;
               if(filt.length===0)return <div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>;
               return <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {filt.map(o=>{
@@ -1733,7 +1741,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                         <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
                         <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
-                      {o.price&&<div style={{textAlign:"right",marginLeft:8}}>
+                      {/* v10.46.2 FIX — null check explícito permite mostrar ventas $0 (regalos/cortesía) */}
+                      {o.price!==null&&o.price!==undefined&&<div style={{textAlign:"right",marginLeft:8}}>
                         <div style={{fontSize:13,fontWeight:800}}>${Number(o.price).toLocaleString("es-MX",{minimumFractionDigits:0})}</div>
                       </div>}
                     </div>
@@ -2744,7 +2753,11 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const suggestedNum=(!isNoFolio&&!isStockLoad&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
   const folioIsLower=(!isNoFolio&&!isStockLoad)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
   // v10.46.0 — stockLoadValid: necesita SKU seleccionado del catálogo
-  const stockLoadValid=isStockLoad?!!cuadraSKU:true;
+  // v10.46.2 FIX — además el SKU debe seguir existiendo en la lista cargada (no stale)
+  // y la cantidad debe ser > 0 (movimiento PRODUCED de 0 piezas es inválido).
+  const stockLoadValid=isStockLoad
+    ? (!!cuadraSKU && cuadraProducts.some(p=>p.id===cuadraSKU) && Number(order?.quantity)>0)
+    : true;
 
   // v10.29.0 + v10.30.0 — paymentStatus debe estar definido; si paid/partial también method; si partial monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
@@ -2782,7 +2795,17 @@ function InvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       // v10.46.0 — Cuadra stock_load: 3ra opción "Sin factura · Stock". Pasa client_product_id en 7mo arg.
+      // v10.46.2 FIX — Refrescar billing_mode pre-confirm (consistente con Corona).
+      //   Si el cliente cambió de stock→normal/anticipo entre montar el modal y confirmar,
+      //   la RPC rechazaría con error feo; mejor avisar y bloquear UX antes.
       if(isStockLoad){
+        try{
+          const fresh=await db.getClientBillingInfo(order.client_id,order.client);
+          if(fresh && fresh.billing_mode!=="stock"){
+            alert("⚠️ El cliente ya no está en modo stock (cambió a "+fresh.billing_mode+"). No se puede cargar a inventario. Cierra y vuelve a abrir el modal.");
+            return;
+          }
+        }catch(e){console.warn("[InvoiceModal] refresh billing_mode stock_load:",e)}
         await onConfirm("stock_load",null,null,null,null,null,cuadraSKU);
         return;
       }
