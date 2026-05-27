@@ -5,6 +5,32 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.3 — Bridge venta-desde-stock verificado + sell_from_stock setea client_id — 26-may-2026
+
+Marcelo pidió corroborar que el bridge PrintFlow → CobranzaFlow funcione cuando se asigna folio fiscal (D-XXXX / R-XXXX) a una venta desde stock.
+
+### Test end-to-end (transaccional + cleanup)
+
+Probado con 3 escenarios reales contra Manufacturera de Botas Cuadra:
+- **Factura D-99997** ($500 subtotal → $580 con IVA) → `cobranza.invoices` con `amount=580`, `balance=580`, `status='pendiente'`, `source='printflow_bridge'`, `source_order_id` linkado, `client_id` resuelto a Cuadra ✓
+- **Remisión R-99997** ($600 subtotal sin IVA) → invoice con `amount=600` (sin IVA aplicado) ✓
+- **client_id en orden**: ANTES quedaba NULL (el bridge dependía de `cobranza.resolve_client(NEW.client)` por nombre). DESPUÉS del fix: la orden ya viene con `client_id` correcto.
+
+Todos los datos de test borrados (queda solo audit_log que es append-only por diseño).
+
+### Fix
+
+- **`sell_from_stock` ahora setea `client_id` en la orden** (defensa en profundidad). El bridge ya tenía fallback `resolve_client(NEW.client)` que funciona, pero era frágil: si el nombre del cliente cambiaba en `cobranza.clients` entre la venta y la asignación de folio, el bridge habría buscado por un nombre que ya no coincide. Con `client_id` explícito el bridge nunca tiene que adivinar.
+
+### Confirmado funcionando
+
+- ✅ Cliente Cuadra (`billing_mode='stock'`) NO entra rama Corona (es para `'anticipo'`)
+- ✅ IVA aplicado correctamente: factura SÍ, remisión NO
+- ✅ `auto_complete_purchase_order` cierra la OC cuando la venta-desde-stock recibe folio (es entrega real con factura/remisión, distinto del caso `load_order_to_stock` que el guard de v10.46.1 protege)
+- ✅ `cobranza.audit_log` registra `bridge_create_invoice` con detalles del bridge
+- ✅ Status='pendiente' con balance completo si Karla deja `payment_status='unpaid'` (Cuadra paga después por su flujo normal de cobranza)
+
+
 ## v10.46.2 — Fixes 🟠 post-scan exhaustivo v10.46.0 — 26-may-2026
 
 Atacados los 6 🟠 mayores y 2 🟡 menores que quedaron pendientes después de v10.46.1.
