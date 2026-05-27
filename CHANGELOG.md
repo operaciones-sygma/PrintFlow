@@ -5,6 +5,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.6 — sync_post_invoice_edit crea invoice retroactivamente si era huérfana — 26-may-2026
+
+Marcelo: "luego les asignaré precio por PrintFlow, ¿al editar la orden con folio se pasa a CobranzaFlow?"
+
+**Antes**: `sync_post_invoice_edit` solo ACTUALIZABA invoices existentes en cobranza. Si la invoice nunca se creó (caso huérfano de las 6 órdenes históricas con price NULL), el trigger salía sin hacer nada — Marcelo asignaba precio post-factura, frontend marcaba `has_post_invoice_edits=true`, pero CobranzaFlow seguía sin verla.
+
+**Ahora**: el trigger detecta el caso huérfano (invoice_folio asignado + invoice NO existe en cobranza + base_amount > 0 + no cancelada + no OC shared) y **crea la invoice retroactivamente** con la misma lógica del bridge original (resolve client_id + seller_id, calcula IVA según tipo de folio, status='pendiente'). Audit_log registra como `bridge_post_edit_create_orphan` para trazabilidad.
+
+**Cómo usarlo**: Marcelo edita cualquiera de las 6 órdenes huérfanas (D-5822, D-5836, D-5839, D-5840, D-5851, R-1190), captura el precio real correcto, guarda. Al guardar:
+1. Frontend marca `has_post_invoice_edits=true`
+2. Trigger detecta caso huérfano
+3. Crea invoice en `cobranza.invoices` con `source='printflow_bridge'` y `source_order_id` linkado
+4. CobranzaFlow ya la ve
+
+Aplica solo a órdenes con `cancelled_at IS NULL`. Si la orden fue cancelada antes de capturar precio, sigue requiriendo intervención manual.
+
+Limitación: para órdenes en OC compartida con folio shared, el flujo es vía `assign_folio_to_oc` — no aplica esta ruta.
+
+
 ## v10.46.5 — Fixes 🔴 críticos post-scan exhaustivo — 26-may-2026
 
 Scan exhaustivo con 3 agentes en paralelo (frontend, DB/RPCs, integración cobranza) detectó 11 bugs reales — 3 introducidos por v10.46.x y 6 preexistentes amplificados por los nuevos flujos. Atacados los relevantes; documentada deuda técnica para B3/B5.
