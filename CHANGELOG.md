@@ -5,6 +5,67 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.47.0 — Hardening Fase 1: REVOKE UPDATE en columnas fiscales — 26-may-2026
+
+Primera fase del refactor de seguridad. **Defensa real en DB** contra UPDATE directo de campos fiscales/financieros desde frontend (anon/authenticated). Ya no es posible modificar folios, fechas de facturación, payments, etc. sin pasar por las RPCs `SECURITY DEFINER` que tienen las validaciones del negocio.
+
+### Backup pre-cambios
+- 84 orders | 33 con folio | 1 credit_applied | 0 stocked_at | 0 cancelled | 0 post_invoice_edits
+- Snapshot verificado intacto post-cambios.
+
+### Cambios
+
+**1. Trigger BEFORE UPDATE `auto_mark_post_invoice_edits`**
+
+Antes el frontend seteaba `has_post_invoice_edits=true` manualmente al editar una orden con folio. Como esa columna se va a revocar, la lógica se migra a un trigger BEFORE UPDATE que detecta cambios en campos editables (price, maq_price, specs, cliente, etc.) y marca automáticamente cuando OLD.invoice_folio existe.
+
+Frontend simplificado: ya no añade `has_post_invoice_edits` al `safeUpdate` (lo conserva solo en el optimistic UI predicting el valor del trigger).
+
+**2. REVOKE UPDATE table-level + GRANT column-level explícito**
+
+El primer intento (REVOKE column-level) NO surtió efecto porque el GRANT table-level lo supersedía. Patrón correcto:
+```sql
+REVOKE UPDATE ON public.orders FROM anon, authenticated;
+GRANT UPDATE (col1, col2, ...) ON public.orders TO anon, authenticated;
+```
+
+**Columnas BLOQUEADAS** (solo via RPCs SECURITY DEFINER):
+- `invoice_type`, `invoice_folio`, `invoiced_at`, `invoiced_by`, `invoice_pre_assigned`, `invoice_reason`
+- `has_post_invoice_edits`
+- `cancellation_reason`, `cancelled_at`, `cancelled_by`, `nc_emitted`
+- `payment_status`, `payment_method`, `payment_amount`, `bank_reference`
+- `stocked_at`, `credit_applied_at`
+
+**Columnas ABIERTAS** (frontend sigue actualizando directo): order_type, stage, priority, production_number, datos del cliente, specs del producto, price, maq_price, notes, due_date, current_machine, file_url, agent, validaciones, stock_role, client_product_id, stock_loaded, etc.
+
+### Tests ejecutados
+
+```sql
+SET ROLE authenticated;
+UPDATE orders SET invoice_folio='D-HACK' WHERE id=...;
+-- ERROR 42501: permission denied for table orders ✅
+
+UPDATE orders SET price=99999 WHERE id=...;
+-- OK ✅ (price es columna segura)
+```
+
+### Lo que el plan A NO arregla
+
+- Cualquiera con anon key puede seguir llamando RPCs (`assign_invoice`, etc.) pasando `p_user="admin"` falsificado. Defensa real requiere Supabase Auth JWT con role verificado.
+- Frontend SIGUE pudiendo UPDATE columnas operativas (price, stage, notes) → empleado con login mal-intencionado puede aún modificar esos campos.
+- INSERT y DELETE en `orders` siguen abiertos (deuda técnica Fase 2/3).
+
+### Rollback
+
+Si algo se rompe en producción:
+```sql
+GRANT UPDATE ON public.orders TO anon, authenticated;
+DROP TRIGGER trg_auto_mark_post_invoice_edits ON public.orders;
+```
+
+Y revertir el commit del frontend.
+
+
 ## v10.46.10 — Fixes 🟠 restantes + separación credit_applied_at — 26-may-2026
 
 5 mayores + 1 documentación. Estado: scan exhaustivo cerrado, 0 críticos pendientes.

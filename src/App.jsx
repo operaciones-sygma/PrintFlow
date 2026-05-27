@@ -8500,8 +8500,9 @@ export default function PrintFlow() {
       const err=new Error("order_stage_changed");err._toasted=true;throw err;
     }
     const willMarkPostEdit=orderBefore?.invoice_folio&&!orderBefore?.has_post_invoice_edits;
-    if(willMarkPostEdit)safeUpdate.has_post_invoice_edits=true;
-    setOrders(p=>p.map(o=>o.id===f.id?{...o,...safeUpdate,timeline:addTL(o,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada")}:o));
+    // v10.47.0 — has_post_invoice_edits ahora lo setea el trigger BEFORE UPDATE auto_mark_post_invoice_edits.
+    // Frontend solo predice el valor para optimistic UI; el backend (trigger SECURITY DEFINER) lo confirma.
+    setOrders(p=>p.map(o=>o.id===f.id?{...o,...safeUpdate,...(willMarkPostEdit?{has_post_invoice_edits:true}:{}),timeline:addTL(o,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada")}:o));
     try{
     const {error}=await supabase.from("orders").update(safeUpdate).eq("id",f.id);
     if(error)throw new Error(error.message);
