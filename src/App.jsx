@@ -1772,12 +1772,16 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         showToast("✅ Venta creada — selecciona Factura o Remisión");
         setEditing(null);
         // v10.46.7 C6 — abrir InvoiceModal ANTES del reload(): si reload() falla por red,
-        // Karla aún ve el modal para asignar folio. reload() se hace después en best-effort.
+        // Karla aún ve el modal para asignar folio.
+        // v10.46.10 M3 — el reload interno solo si el modal sigue abierto (sin onOpenInvoice).
+        // Cuando hay onOpenInvoice, se desmonta el InventoryModal y el padre (App) hace su
+        // propio reload de orders al setInventoryOpen(false) — evita reload doble.
         if(order&&onOpenInvoice){
           onOpenInvoice(order);
           onClose();
+        }else{
+          reload().catch(e=>console.warn("[InventoryModal] post-sell reload:",e));
         }
-        reload().catch(e=>console.warn("[InventoryModal] post-sell reload:",e));
       }
       catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
@@ -2703,8 +2707,18 @@ function InvoiceModal({order,onConfirm,onClose}) {
     let alive=true;
     // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
     if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
-    db.getClientBillingInfo(order.client_id,order.client).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[InvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
-    return ()=>{alive=false};
+    // v10.46.10 M5 — timeout 5s con fallback a billing_mode='normal' si la red queda colgada.
+    // Evita que botones del modal queden deshabilitados indefinidamente esperando coronaInfo.
+    const timeoutId=setTimeout(()=>{
+      if(alive&&!coronaInfo){console.warn("[InvoiceModal] billing info timeout 5s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0})}
+    },5000);
+    db.getClientBillingInfo(order.client_id,order.client).then(info=>{
+      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}
+    }).catch(e=>{
+      console.warn("[InvoiceModal] billing info:",e);
+      if(alive){clearTimeout(timeoutId);setCoronaInfo({billing_mode:"normal",current_balance:0})}
+    });
+    return ()=>{alive=false;clearTimeout(timeoutId)};
   },[order?.client_id,order?.client]);
   const isCorona=coronaInfo?.billing_mode==="anticipo";
   // v10.46.0 — Cuadra: 3ra opción "Sin factura · Stock". Solo aplica a producciones (nuevas);
@@ -3065,8 +3079,17 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     let alive=true;
     // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
     if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
-    db.getClientBillingInfo(order.client_id,order.client).then(info=>{if(alive)setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}).catch(e=>{console.warn("[PreInvoiceModal] billing info:",e);if(alive)setCoronaInfo({billing_mode:"normal",current_balance:0})});
-    return ()=>{alive=false};
+    // v10.46.10 M5 — timeout 5s con fallback (mismo patrón que InvoiceModal)
+    const timeoutId=setTimeout(()=>{
+      if(alive&&!coronaInfo){console.warn("[PreInvoiceModal] billing info timeout 5s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0})}
+    },5000);
+    db.getClientBillingInfo(order.client_id,order.client).then(info=>{
+      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}
+    }).catch(e=>{
+      console.warn("[PreInvoiceModal] billing info:",e);
+      if(alive){clearTimeout(timeoutId);setCoronaInfo({billing_mode:"normal",current_balance:0})}
+    });
+    return ()=>{alive=false;clearTimeout(timeoutId)};
   },[order?.client_id,order?.client]);
   const isCorona=coronaInfo?.billing_mode==="anticipo";
 
@@ -4095,6 +4118,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.45.1 — `stock_role` y `client_product_id` solo se replican si el CLIENTE ACTUAL es stock (Cuadra).
     // Si replicamos de una orden Cuadra a un cliente normal, esos campos NO se aplican (form quedaría inconsistente).
     const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","image_url","image_url_2","image"];
+    // v10.46.10 M2 — detectar si el source tiene SKU pero NO se va a replicar (cross-cliente),
+    // para informar al usuario en lugar de copiar/omitir silenciosamente.
+    let skuOmitted=false;
     setF(prev=>{
       const next={...prev};
       replicaFields.forEach(k=>{
@@ -4102,17 +4128,16 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
         if(!isEmpty)next[k]=v;
       });
-      // v10.46.0 — Ya no replicamos stock_role (Karla decide al final en InvoiceModal).
-      // v10.46.5 FIX — Solo replicar client_product_id si AMBOS clientes (current + source) son el MISMO.
-      // Cuadra tiene 4 clientes (Botas, Sombreros, Tiendas, Calzados); un SKU pertenece a UNO solo y
-      // load_order_to_stock rechaza en backend si no coincide. Mejor no contaminar el form.
       if(prev.billing_mode==="stock"&&src.client_product_id&&src.client_id&&prev.client_id===src.client_id){
         next.client_product_id=src.client_product_id;
+      }else if(src.client_product_id&&(prev.billing_mode!=="stock"||prev.client_id!==src.client_id)){
+        skuOmitted=true;
       }
       return next;
     });
     setReplicateOpen(false);
-    showToast?.("✅ Datos replicados de "+(src.production_number||"orden anterior"));
+    const baseMsg="✅ Datos replicados de "+(src.production_number||"orden anterior");
+    showToast?.(skuOmitted?baseMsg+" (SKU del catálogo omitido — pertenece a otro cliente)":baseMsg);
   };
   const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
   const specsOnly=editOrder?._specsOnly;
@@ -9565,7 +9590,8 @@ export default function PrintFlow() {
             const tlMsg="📦 Cargado a stock Cuadra"+(prodName?" · "+prodName:"")+" · +"+qty+" pzas · stock después: "+newBal;
             const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
             // v10.46.8 — usar stocked_at (no invoiced_at) — la orden NO fue facturada
-            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),stocked_at:new Date().toISOString(),invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+            // v10.46.10 M4 — limpiar invoiced_at explícitamente (backend lo deja NULL en load_order_to_stock)
+            setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),stocked_at:new Date().toISOString(),invoiced_at:null,invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
             await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
             showToast("📦 Orden cargada a inventario Cuadra (+"+qty+" pzas)");
             setInvoiceModal(null);

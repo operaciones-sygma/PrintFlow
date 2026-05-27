@@ -5,6 +5,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.46.10 — Fixes 🟠 restantes + separación credit_applied_at — 26-may-2026
+
+5 mayores + 1 documentación. Estado: scan exhaustivo cerrado, 0 críticos pendientes.
+
+### Frontend
+
+**M2 — `applyReplicate` toast informativo**: si el SKU del source pertenece a otro cliente (no se replica), el toast ahora dice: `✅ Datos replicados de P-XXXX (SKU del catálogo omitido — pertenece a otro cliente)`. Antes se omitía silenciosamente.
+
+**M3 — Race reload doble post-venta-desde-stock**: el `InventoryModal` hacía reload interno DESPUÉS de cerrarse via `onClose()`, y el padre (App) también hacía reload al `setInventoryOpen(false)`. Ahora el reload interno solo corre si NO hay `onOpenInvoice` (modal sigue abierto). Cuando hay `onOpenInvoice`, el padre se encarga.
+
+**M4 — Optimistic update post-stock_load limpia `invoiced_at`**: backend ya lo dejaba NULL via load_order_to_stock; el optimistic ahora también para consistencia exacta.
+
+**M5 — Timeout 5s en `getClientBillingInfo` con fallback `billing_mode='normal'`**: aplica a InvoiceModal + PreInvoiceModal. Si la red queda colgada, los botones no quedan disabled indefinidamente — caen a flow normal después de 5s con `console.warn`.
+
+### Backend
+
+**Agent3 H2 — Separar `credit_applied_at` de `invoiced_at`**: `apply_credit_no_folio` (Corona "aplicar saldo sin folio") seteaba `invoiced_at` aunque la orden NO tenía folio fiscal — engañoso para reportería. Mismo patrón que v10.46.8 (`stocked_at`):
+- ADD COLUMN `orders.credit_applied_at timestamptz` con COMMENT
+- `apply_credit_no_folio` setea `credit_applied_at` (no `invoiced_at`)
+- Backfill: 1 orden Modelo migrada (`invoiced_at → credit_applied_at` + limpio invoiced_at)
+- Resultado: **0 órdenes orphan** con `invoiced_at` sin folio
+
+Ahora 3 timestamps separados con semántica clara:
+- `invoiced_at` → orden con folio fiscal asignado
+- `stocked_at` → orden cargada a inventario Cuadra
+- `credit_applied_at` → orden con saldo Corona aplicado sin folio
+
+**Documentación trigger order**: COMMENT ON TRIGGER en `trg_sync_*` documenta que el orden es alfabético (riesgo conocido: UPDATE simultáneo de `invoice_folio` + `cancelled_at` ejecuta cancel antes que sync — hoy benigno, audit_log lo refleja).
+
+### Cierre
+
+**0 críticos pendientes**. Backlog total v10.46.x:
+
+| Severidad | Atacados |
+|---|---|
+| 🔴 v10.46.5 (A1-A3, B1, B2, B4, B6) | 7 |
+| 🔴 v10.46.9 (F1-F3, B1, B2, I1) | 6 |
+| 🟠 v10.46.7 (C1-C6) | 5 |
+| 🟠 v10.46.10 (M2-M5 + H2) | 5 |
+| 🟡 v10.46.4/v10.46.8 | 8 |
+| **Total** | **31 bugs** |
+
+Deuda técnica para v10.47.x: RLS allow_all + EXECUTE GRANT abierto (refactor mayor).
+
+
 ## v10.46.9 — Fixes 🔴 post-scan exhaustivo v10.46.5-8 — 26-may-2026
 
 Tercer scan exhaustivo (3 agentes paralelos cubriendo frontend + DB + integración). 6 críticos detectados — atacados todos.
