@@ -1,7 +1,21 @@
-/* Tailwind v4 — UTILITIES ONLY (sin preflight).
-   PrintFlow ya tiene su propio CSS reset universal en App.jsx. Importar
-   solo theme + utilities mantiene el comportamiento existente intacto
-   y agrega las clases de Tailwind como utility opcional. */
+/* ─── Premium fonts (cargados antes de Tailwind para evitar FOUT) ───
+   - Geist (Vercel)  → Google Fonts. Sans grotesk para body/UI.
+   - Geist Mono      → para datos numéricos / código.
+   - Editorial New   → Fontshare (licencia Personal & Commercial Use Free).
+     Serif editorial para display/eyebrow/hero numbers.
+   Disponibles para usar cuando se quiera modernizar UI. DM Sans actual
+   sigue activo en App.jsx hasta que se decida migrar. */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
+@import url('https://api.fontshare.com/v2/css?f%5B%5D=editorial-new@200,300,400,500,700,800&display=swap');
+
+/* ─── Tailwind v4 — UTILITIES ONLY (sin preflight) ─── */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
+
+/* ─── Theme override: registrar fonts como utilities de Tailwind ─── */
+@theme {
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'JetBrains Mono', monospace;
+  --font-display: 'Editorial New', 'PP Editorial New', Georgia, serif;
+}
