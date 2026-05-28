@@ -1,0 +1,7 @@
+/* Tailwind v4 — UTILITIES ONLY (sin preflight).
+   PrintFlow ya tiene su propio CSS reset universal en App.jsx. Importar
+   solo theme + utilities mantiene el comportamiento existente intacto
+   y agrega las clases de Tailwind como utility opcional. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);

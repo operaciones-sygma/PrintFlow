@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './index.css'   // Tailwind v4 utilities-only (sin preflight)
 import PrintFlow from './App.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
