@@ -1945,11 +1945,14 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       {/* v10.48.0 — Dropdown obligatorio cliente destino para productos pooled */}
       {isPooled&&<div style={{marginBottom:10,padding:10,background:"#10b98108",borderRadius:10,border:"1px solid #10b98130"}}>
         <label style={{...lbl,marginTop:0}} htmlFor="sell-dest-client">Cliente que recibe la venta *</label>
-        <select id="sell-dest-client" aria-label="Cliente destino de la venta" style={inp} value={destClientId} onChange={e=>setDestClientId(e.target.value)}>
-          <option value="">— Selecciona cliente del pool —</option>
+        <select id="sell-dest-client" aria-label="Cliente destino de la venta" style={inp} value={destClientId} onChange={e=>setDestClientId(e.target.value)} disabled={poolClients.length===0}>
+          <option value="">{poolClients.length===0?"— Sin clientes activos en el pool —":"— Selecciona cliente del pool —"}</option>
           {poolClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <div style={{fontSize:10,color:C.t2,marginTop:4,lineHeight:1.4}}>📦 Este producto es del pool compartido. La orden creada quedará a nombre del cliente seleccionado pero descontará del inventario común.</div>
+        {/* v10.48.1 F3 — mensaje claro cuando pool no tiene clientes activos */}
+        {poolClients.length===0
+          ?<div style={{fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}>⚠️ No hay clientes activos en este pool. Contacta admin para activar al menos uno antes de vender.</div>
+          :<div style={{fontSize:10,color:C.t2,marginTop:4,lineHeight:1.4}}>📦 Este producto es del pool compartido. La orden creada quedará a nombre del cliente seleccionado pero descontará del inventario común.</div>}
       </div>}
       <div style={{marginBottom:10}}>
         <label style={lbl} htmlFor="sell-qty">Cantidad *</label>
@@ -2987,7 +2990,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
         {/* v10.46.0 — Selector de SKU para cargar a stock (Cuadra) */}
         {isStockLoad&&<div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:14}}>
           <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cargar a inventario Cuadra</div>
-          {cuadraProducts.length===0?<div style={{fontSize:11,color:C.dn,padding:"8px 10px",background:C.dn+"08",borderRadius:8}}>⚠️ Este cliente Cuadra no tiene productos en catálogo todavía. Crea uno desde el modal 📦 Inventario antes de cargar a stock.</div>:<>
+          {cuadraProducts.length===0?<div style={{fontSize:11,color:C.dn,padding:"8px 10px",background:C.dn+"08",borderRadius:8,lineHeight:1.5}}>
+            {/* v10.48.1 F2 — Distinguir cliente individual sin SKU vs cliente con billing_mode='stock' sin pool asignado */}
+            {coronaInfo?.stock_pool_id
+              ?<>⚠️ El pool de este cliente Cuadra no tiene productos en catálogo todavía. Créalos desde el modal 📦 Inventario.</>
+              :<>⚠️ Cliente con billing_mode='stock' pero sin pool asignado. Contacta admin para asignar pool, o este cliente debería ser billing_mode='normal'.</>}
+          </div>:<>
             <label style={{...lbl,marginTop:0}} htmlFor="cuadra-sku-select">Producto del catálogo *</label>
             <select id="cuadra-sku-select" aria-label="Producto del catálogo Cuadra para cargar a stock" style={inp} value={cuadraSKU} onChange={e=>setCuadraSKU(e.target.value)}>
               <option value="">— Selecciona producto del catálogo —</option>
@@ -4162,7 +4170,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [stockProducts,setStockProducts]=useState([]);
   const [stockPoolId,setStockPoolId]=useState(null);
   // v10.48.0 — Si el cliente tiene stock_pool_id, cargar productos del pool (compartido).
-  // Resolvemos el pool via get_client_billing_info para tener client_id + pool_id en un solo round-trip.
+  // v10.48.1 F1 FIX — chequear `alive` ANTES de cada setX después de los awaits.
+  // El doble-await (getClientBillingInfo → loadClientProducts) puede tener race si
+  // f.client_id cambia mid-flight; un setStockPoolId(poolId del cliente viejo) entre los
+  // dos awaits contaminaría el state. Ahora cada setX está condicionado a alive.
   useEffect(()=>{
     if(f.billing_mode!=="stock"||!f.client_id){setStockProducts([]);setStockPoolId(null);return}
     let alive=true;
@@ -4171,9 +4182,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const info=await db.getClientBillingInfo(f.client_id,f.client);
         if(!alive)return;
         const poolId=info?.stock_pool_id||null;
-        setStockPoolId(poolId);
         const list=await db.loadClientProducts(poolId?{poolId}:f.client_id);
-        if(alive)setStockProducts(list);
+        if(!alive)return;
+        // Aplicar ambos en el mismo render (evita estado intermedio inconsistente)
+        setStockPoolId(poolId);
+        setStockProducts(list);
       }catch(e){console.warn("[OrderForm] stock products:",e)}
     })();
     return ()=>{alive=false};

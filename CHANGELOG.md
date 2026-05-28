@@ -5,6 +5,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.48.1 — Fixes post-scan exhaustivo v10.48.0 (4 🔴 + 5 🟠 + 2 🟡) — 27-may-2026
+
+Scan inmediato post-v10.48.0 con 3 agentes en paralelo detectó 4 críticos + 5 mayores + 3 menores. Atacados todos los relevantes.
+
+### Backend
+
+**B1 — RLS en `stock_pools`**: tabla creada sin RLS habilitado (advisor ERROR). Cualquier anon/authenticated podía SELECT/INSERT/UPDATE/DELETE → renombrar/borrar pools, desvincular clientes en cascada.
+```sql
+ALTER TABLE public.stock_pools ENABLE ROW LEVEL SECURITY;
+CREATE POLICY stock_pools_read ON public.stock_pools FOR SELECT TO anon, authenticated USING (true);
+REVOKE INSERT, UPDATE, DELETE ON public.stock_pools FROM anon, authenticated;
+```
+
+**B2 + B3 — `sell_from_stock` cleanup**:
+- DROP overload legacy 8 args (`p_client_id` agregado en v10.48.0; quedaba ambigüedad si caller usaba la firma vieja).
+- Removido fallback silencioso "primer cliente del pool" cuando `p_client_id IS NULL`. Riesgo financiero real: si frontend olvidaba pasar el client_id, facturaba al cliente equivocado SIN error. Ahora `RAISE EXCEPTION 'p_client_id es obligatorio para productos en pool'`.
+
+**B4 — `sell_from_stock` `FOR SHARE` en validación cliente↔pool**: previene race condition donde admin re-asigne `stock_pool_id` del cliente entre la validación y el INSERT de la orden.
+
+**B5 — `assign_invoice` valida coherencia pool↔cliente**: si la orden tiene `client_product_id` con `stock_pool_id`, valida que el cliente actual de la orden siga perteneciendo al mismo pool. Defiende contra: venta creada → admin cambia stock_pool_id del cliente → folio asignado a cliente fuera del pool.
+
+**B6 — Constraint `clients_merged_no_pool_check`**: clientes fusionados (`merged_into IS NOT NULL`) no pueden tener `stock_pool_id` propio (debe seguir al canónico via `get_client_billing_info`). NOT VALID (no afecta data existente, solo previene nuevos).
+
+**m1 — Índices FK**:
+- `idx_client_products_stock_pool_id` (parcial WHERE NOT NULL)
+- `idx_clients_stock_pool_id` (parcial WHERE NOT NULL)
+
+**m2 — `auto_complete_purchase_order` skip OC simple por venta-desde-stock**: las OCs auto-generadas por `ensure_purchase_order` para órdenes `stock_role='sale'` son ruido administrativo (no aportan valor de agrupación). Ahora NO se cierran automáticamente, evitan eventos innecesarios en reportería.
+
+### Frontend
+
+**F1 — Race en OrderForm useEffect doble-await**: `getClientBillingInfo` + `loadClientProducts` consecutivos. Si `f.client_id` cambia mid-flight, el `setStockPoolId(poolId del cliente viejo)` entre awaits contaminaba state. Fix: `setStockPoolId` y `setStockProducts` ahora se aplican JUNTOS al final, ambos condicionados a `alive`.
+
+**F2 — Aviso cliente stock sin pool en InvoiceModal**: si `coronaInfo.stock_pool_id=null` con `billing_mode='stock'` (cliente Cuadra mal configurado), el catálogo viene vacío. Antes mensaje genérico; ahora distingue:
+- Con pool, sin productos: "Pool no tiene productos. Crea desde Inventario."
+- Sin pool: "Cliente sin pool asignado. Contacta admin o cambiar a billing_mode='normal'."
+
+**F3 — SellFromStockModal mensaje cuando pool sin clientes activos**: si todos los clientes del pool están `active=false`, el dropdown queda vacío y el botón disabled sin razón visible. Ahora muestra: "⚠️ No hay clientes activos en este pool. Contacta admin." Select también disabled visualmente.
+
+### m3 — `productOwner` fallback
+
+Aceptado el fallback "Pool compartido" sin nombre como suficiente. La búsqueda actual (`stockClients.find(c=>c.stock_pool_id===p.stock_pool_id&&c.pool_name)`) funciona en 99% casos; el fallback solo aparece si `list_stock_clients` RPC falló parcialmente.
+
+### Confirmado OK (verificado por agentes, sin cambio)
+
+- Constraint XOR `client_id` vs `stock_pool_id`: 0 violaciones
+- Reconciliación stock vs movimientos: sin discrepancias
+- Pool Cuadra: 6/6 clientes, 8/8 productos, 168,500 unidades
+- Idempotencia de load_order_to_stock
+- Bridge cobranza para venta pool: invoice correcta con IVA
+- apply_credit_no_folio rechaza pool (es para anticipo)
+- sync_post_invoice_edit funciona idéntico con pool
+
+
 ## v10.48.0 — Stock Pool Compartido (Cuadra 6 clientes / 1 inventario) — 27-may-2026
 
 Cambio arquitectónico: múltiples clientes pueden compartir el mismo inventario. Implementado para el caso Cuadra: 6 clientes (Manufacturera de Botas, Sombreros, Tiendas, Calzados Finos Italianos, Fábrica de Alta Calidad, Isabel de los Ángeles Quiroz) comparten un único pool de 168,500 unidades distribuidas en 8 productos.
