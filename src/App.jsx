@@ -627,9 +627,16 @@ const db = {
     if(byUser!=="admin") await this.addNotification("admin", orderId, type, message, reason, byUser);
   },
   // ─── Cuadra: stock helpers (v10.42.0) ───
-  async loadClientProducts(clientId) {
+  // v10.48.0 — Soporta poolId opcional (clientes con stock_pool_id comparten catálogo).
+  // Si se pasa { poolId }, filtra por stock_pool_id. Si se pasa clientId (string), filtra por client_id.
+  // Sin argumentos: todos los productos activos.
+  async loadClientProducts(arg) {
     let q=supabase.from("client_products").select("*").eq("active",true).order("name");
-    if(clientId)q=q.eq("client_id",clientId);
+    if(arg && typeof arg === "object" && arg.poolId){
+      q=q.eq("stock_pool_id", arg.poolId);
+    } else if(typeof arg === "string" && arg){
+      q=q.eq("client_id", arg);
+    }
     const {data,error}=await q;
     if(error)throw new Error("loadClientProducts: "+error.message);
     return data||[];
@@ -673,6 +680,7 @@ const db = {
     return data;
   },
   async sellFromStock(args) {
+    // v10.48.0 — dest_client_id obligatorio si el SKU es pooled
     const {data,error}=await supabase.rpc("sell_from_stock",{
       p_client_product_id:args.client_product_id,
       p_qty:args.qty,
@@ -681,7 +689,8 @@ const db = {
       p_due_date:args.due_date||null,
       p_agent:args.agent||null,
       p_notes:args.notes||null,
-      p_created_by:args.created_by||null
+      p_created_by:args.created_by||null,
+      p_client_id:args.dest_client_id||null
     });
     if(error)throw new Error("sellFromStock: "+error.message);
     return data;
@@ -1637,11 +1646,20 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
   };
   useEffect(()=>{reload()},[]);
 
+  // v10.48.0 — para productos pooled, mostrar nombre del pool en lugar de cliente individual.
   const clientName=cid=>{const c=stockClients.find(x=>x.id===cid);return c?.name||"—"};
+  const productOwner=p=>{
+    if(p.stock_pool_id){
+      // Buscar pool_name desde stockClients (cualquier cliente del pool tiene pool_name)
+      const memberWithName=stockClients.find(x=>x.stock_pool_id===p.stock_pool_id&&x.pool_name);
+      return "📦 Pool "+(memberWithName?.pool_name||"compartido");
+    }
+    return clientName(p.client_id);
+  };
   const filtered=products.filter(p=>{
     if(!filterProducts.trim())return true;
     const q=filterProducts.toLowerCase();
-    return (p.name||"").toLowerCase().includes(q)||(p.sku||"").toLowerCase().includes(q)||clientName(p.client_id).toLowerCase().includes(q);
+    return (p.name||"").toLowerCase().includes(q)||(p.sku||"").toLowerCase().includes(q)||productOwner(p).toLowerCase().includes(q);
   });
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
@@ -1671,7 +1689,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{clientName(p.client_id)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
+                        <div style={{fontSize:10,color:p.stock_pool_id?"#10b981":C.t2,marginTop:2,fontWeight:p.stock_pool_id?600:400}}>{productOwner(p)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?"#10b981":C.dn}}>{p.stock_actual}</div>
@@ -1818,9 +1836,14 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
         <label style={lbl}>Cliente (stock) *</label>
         <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes stock —":"Selecciona cliente…")}</option>
-          {stockClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          {stockClients.map(c=><option key={c.id} value={c.id}>{c.name}{c.pool_name?" · pool "+c.pool_name:""}</option>)}
         </select>
-        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock. Márcalo desde DB: UPDATE cobranza.clients SET billing_mode='stock' WHERE id=...</div>}
+        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock.</div>}
+        {/* v10.48.0 — Aviso si el cliente seleccionado comparte stock con otros del mismo pool */}
+        {(()=>{const sel=stockClients.find(c=>c.id===clientId);if(!sel?.stock_pool_id)return null;
+          const others=stockClients.filter(c=>c.stock_pool_id===sel.stock_pool_id&&c.id!==sel.id);
+          return <div style={{fontSize:10,color:"#10b981",marginTop:4,padding:"4px 8px",background:"#10b98108",borderRadius:6,lineHeight:1.4}}>📦 Producto compartido con pool <b>{sel.pool_name}</b> · {others.length} clientes más usan este stock</div>;
+        })()}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         <div><label style={lbl}>Nombre *</label><input style={inp} value={name} onChange={e=>setName(e.target.value)} placeholder="ej. Tarjeta Presentación A"/></div>
@@ -1828,7 +1851,16 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!canSave)return;onSave({client_id:clientId,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null})}} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
+        <button onClick={()=>{
+          if(!canSave)return;
+          // v10.48.0 — Si el cliente seleccionado pertenece a un pool, crear el SKU en el pool
+          // (client_id queda NULL). Si no, crear con client_id directo (modelo legacy individual).
+          const sel=stockClients.find(c=>c.id===clientId);
+          const payload=sel?.stock_pool_id
+            ? {client_id:null,stock_pool_id:sel.stock_pool_id,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null}
+            : {client_id:clientId,stock_pool_id:null,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null};
+          onSave(payload);
+        }} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
       </div>
     </div>
   </div>;
@@ -1877,8 +1909,24 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
   const [priority,setPriority]=useState("normal");
   const [dueDate,setDueDate]=useState("");
   const [notes,setNotes]=useState("");
+  // v10.48.0 — Si el producto pertenece a un pool compartido, Karla debe elegir qué cliente del pool recibe.
+  const [poolClients,setPoolClients]=useState([]);
+  const [destClientId,setDestClientId]=useState("");
+  const isPooled=!!product.stock_pool_id;
+  useEffect(()=>{
+    if(!isPooled)return;
+    let alive=true;
+    supabase.rpc("list_stock_clients").then(({data,error})=>{
+      if(!alive||error)return;
+      const list=(data||[]).filter(c=>c.stock_pool_id===product.stock_pool_id);
+      setPoolClients(list);
+      if(list.length===1)setDestClientId(list[0].id);
+    }).catch(e=>console.warn("[SellFromStockModal] pool clients:",e));
+    return ()=>{alive=false};
+  },[isPooled,product.stock_pool_id]);
   const n=parseInt(qty,10);
   const validQty=Number.isFinite(n)&&n>0&&n<=product.stock_actual;
+  const validDestClient=!isPooled||!!destClientId;
   // Resuelve los dos valores según el modo activo
   const computedUnit=priceMode==="unit"
     ?(unitPrice?parseFloat(unitPrice):NaN)
@@ -1888,12 +1936,21 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
     :(validQty&&unitPrice?n*parseFloat(unitPrice):NaN);
   const showUnit=Number.isFinite(computedUnit)?computedUnit.toFixed(2):"—";
   const showTotal=Number.isFinite(computedTotal)?computedTotal.toFixed(2):"0.00";
-  const valid=validQty;
+  const valid=validQty&&validDestClient;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🛒 Vender desde Stock</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:"#10b981",fontSize:14}}>{product.stock_actual}</b></div>
+      {/* v10.48.0 — Dropdown obligatorio cliente destino para productos pooled */}
+      {isPooled&&<div style={{marginBottom:10,padding:10,background:"#10b98108",borderRadius:10,border:"1px solid #10b98130"}}>
+        <label style={{...lbl,marginTop:0}} htmlFor="sell-dest-client">Cliente que recibe la venta *</label>
+        <select id="sell-dest-client" aria-label="Cliente destino de la venta" style={inp} value={destClientId} onChange={e=>setDestClientId(e.target.value)}>
+          <option value="">— Selecciona cliente del pool —</option>
+          {poolClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <div style={{fontSize:10,color:C.t2,marginTop:4,lineHeight:1.4}}>📦 Este producto es del pool compartido. La orden creada quedará a nombre del cliente seleccionado pero descontará del inventario común.</div>
+      </div>}
       <div style={{marginBottom:10}}>
         <label style={lbl} htmlFor="sell-qty">Cantidad *</label>
         <input id="sell-qty" aria-label="Cantidad a vender desde stock" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder={"1 a "+product.stock_actual} autoFocus/>
@@ -1927,7 +1984,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:Number.isFinite(computedUnit)?Number(computedUnit.toFixed(2)):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
+        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:Number.isFinite(computedUnit)?Number(computedUnit.toFixed(2)):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null,dest_client_id:isPooled?destClientId:null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
       </div>
     </div>
   </div>;
@@ -2739,14 +2796,16 @@ function InvoiceModal({order,onConfirm,onClose}) {
   useEffect(()=>{
     if(!isCuadra||!order?.client_id){setCuadraProducts([]);return}
     let alive=true;
-    db.loadClientProducts(order.client_id).then(list=>{
+    // v10.48.0 — Si el cliente tiene stock_pool_id (Cuadra pool compartido), cargar SKUs del pool.
+    // Si no, fallback a client_id directo (legacy individual).
+    const arg=coronaInfo?.stock_pool_id?{poolId:coronaInfo.stock_pool_id}:order.client_id;
+    db.loadClientProducts(arg).then(list=>{
       if(!alive)return;
       setCuadraProducts(list||[]);
-      // Auto-seleccionar si solo hay 1 producto y nada pre-seleccionado
       if(!order?.client_product_id&&list?.length===1)setCuadraSKU(list[0].id);
     }).catch(e=>console.warn("[InvoiceModal] cuadra products:",e));
     return ()=>{alive=false};
-  },[isCuadra,order?.client_id,order?.client_product_id]);
+  },[isCuadra,order?.client_id,order?.client_product_id,coronaInfo?.stock_pool_id]);
 
   // Cargar sugerencias al montar
   useEffect(()=>{
@@ -4101,12 +4160,24 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
   const [stockProducts,setStockProducts]=useState([]);
+  const [stockPoolId,setStockPoolId]=useState(null);
+  // v10.48.0 — Si el cliente tiene stock_pool_id, cargar productos del pool (compartido).
+  // Resolvemos el pool via get_client_billing_info para tener client_id + pool_id en un solo round-trip.
   useEffect(()=>{
-    if(f.billing_mode!=="stock"||!f.client_id){setStockProducts([]);return}
+    if(f.billing_mode!=="stock"||!f.client_id){setStockProducts([]);setStockPoolId(null);return}
     let alive=true;
-    db.loadClientProducts(f.client_id).then(list=>{if(alive)setStockProducts(list)}).catch(e=>console.warn("[OrderForm] stock products:",e));
+    (async()=>{
+      try{
+        const info=await db.getClientBillingInfo(f.client_id,f.client);
+        if(!alive)return;
+        const poolId=info?.stock_pool_id||null;
+        setStockPoolId(poolId);
+        const list=await db.loadClientProducts(poolId?{poolId}:f.client_id);
+        if(alive)setStockProducts(list);
+      }catch(e){console.warn("[OrderForm] stock products:",e)}
+    })();
     return ()=>{alive=false};
-  },[f.client_id,f.billing_mode]);
+  },[f.client_id,f.billing_mode,f.client]);
   const prodTypeInputRef=useRef(null);
   // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
   const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -4326,7 +4397,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       // v10.46.7 C1 — Detectar SKU vinculado pero ya no en catálogo (soft-deleted o cambió de cliente).
       const linkedMissing=f.client_product_id&&!stockProducts.some(p=>p.id===f.client_product_id);
       return <div style={{padding:"12px 20px",background:"#10b98108",borderBottom:"0.5px solid "+C.bd}}>
-        <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cliente Cuadra · Catálogo opcional</div>
+        <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cliente Cuadra · Catálogo opcional {stockPoolId?<span style={{fontWeight:600,textTransform:"none"}}>(pool compartido)</span>:null}</div>
         <label style={lbl}>Producto de catálogo (opcional) {stockProducts.length===0?<span style={{color:C.t3}}>(catálogo vacío — créalo en 📦 Inventario)</span>:null}</label>
         <select style={{...inp,border:linkedMissing?"1.5px solid "+C.dn+"60":inp.border}} value={f.client_product_id||""} onChange={e=>s("client_product_id",e.target.value||null)} disabled={!!editOrder?.stock_loaded}>
           <option value="">— Sin asignar (Karla puede vincular al cargar a stock) —</option>

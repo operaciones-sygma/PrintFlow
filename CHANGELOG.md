@@ -5,6 +5,83 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.48.0 — Stock Pool Compartido (Cuadra 6 clientes / 1 inventario) — 27-may-2026
+
+Cambio arquitectónico: múltiples clientes pueden compartir el mismo inventario. Implementado para el caso Cuadra: 6 clientes (Manufacturera de Botas, Sombreros, Tiendas, Calzados Finos Italianos, Fábrica de Alta Calidad, Isabel de los Ángeles Quiroz) comparten un único pool de 168,500 unidades distribuidas en 8 productos.
+
+### Schema DB
+
+```sql
+CREATE TABLE public.stock_pools (id, name, description, active, created_at);
+ALTER TABLE cobranza.clients ADD COLUMN stock_pool_id uuid;
+ALTER TABLE public.client_products ADD COLUMN stock_pool_id uuid;
+ALTER TABLE public.client_products ALTER COLUMN client_id DROP NOT NULL;
+ALTER TABLE public.client_products ADD CONSTRAINT client_products_owner_xor_check
+  CHECK ((client_id IS NOT NULL AND stock_pool_id IS NULL) OR (client_id IS NULL AND stock_pool_id IS NOT NULL));
+```
+
+Cada producto pertenece O a un cliente individual O a un pool, nunca ambos. Backward compatible: clientes existentes (Pepito S.A., otros sin pool) siguen funcionando con `client_id` directo.
+
+### Pool Cuadra creado
+
+| SKU | Nombre | Stock |
+|---|---|---|
+| SOP-3-25 | Soporte 3-25 (grande) | 19,500 |
+| SOP-CH-25 | Soporte CH-25 (mediano) | 25,000 |
+| SOP-NO-2 | Soporte No 2 (chico) | 18,000 |
+| TARJ-BILL | Tarjeta de billetera | 18,000 |
+| ETIQ-COLG | Etiqueta colgante | 20,000 |
+| CHIN-IMP | China impreso | 13,000 |
+| CHIN-BLA | China blanco (relleno) | 25,000 |
+| ETIQ-NEG | Etiqueta negra colgante interna | 30,000 |
+| **Total** | | **168,500** |
+
+**6 clientes asignados** al pool con `billing_mode='stock'`:
+- Manufacturera de Botas Cuadra (ya era stock)
+- Sombreros Cuadra (ya era stock)
+- Tiendas Cuadra (ya era stock)
+- Calzados Finos Italianos (ya era stock)
+- **Fábrica de Alta Calidad** (cambiado de `normal` → `stock`)
+- **Isabel de los Ángeles Quiroz** (cambiado de `normal` → `stock`)
+
+### RPCs actualizadas
+
+**`load_order_to_stock`**: validación dual — si el cliente tiene `stock_pool_id`, el SKU debe pertenecer al MISMO pool. Si es cliente individual (legacy), el SKU debe pertenecer al `client_id` como antes.
+
+**`sell_from_stock`**: nuevo parámetro `p_client_id` (qué cliente del pool recibe). Para productos pooled es obligatorio (fallback al primer cliente del pool si NULL); para productos individuales se ignora.
+
+**`list_stock_clients`**: ahora retorna `stock_pool_id` + `pool_name` para que el frontend agrupe.
+
+**`get_client_billing_info`**: ahora retorna `stock_pool_id` para que el frontend cargue catálogo del pool.
+
+### Frontend
+
+- **`db.loadClientProducts(arg)`**: acepta `{poolId}` u string `clientId`. Carga del pool si se le pasa pool.
+- **`ProductFormModal`**: al crear SKU, si el cliente tiene pool, lo asigna al pool (no a client_id). Muestra aviso "📦 Producto compartido con pool X · N clientes más usan este stock".
+- **`InvoiceModal`** (3ra opción Cuadra): selector SKU carga del pool del cliente.
+- **`SellFromStockModal`**: nuevo dropdown obligatorio "Cliente que recibe la venta" para productos pooled. Lista los clientes del mismo pool.
+- **`OrderForm`** (panel Cuadra): catálogo dropdown muestra productos del pool. Header muestra "(pool compartido)" cuando aplica.
+- **`InventoryModal`**: cards muestran "📦 Pool Cuadra" en verde para productos pooled. Filtro busca también por nombre del pool.
+
+### Tests ejecutados (todos OK)
+
+```sql
+-- Test 1: Fábrica vende 100 SOP-3-25 → stock pool: 19500 → 19400 ✓
+-- Test 2: Manufacturera vende 50 + Fábrica vende 30 del MISMO SKU → ambas órdenes correctas ✓
+-- Test 3: OMAR QUIROZ (fuera del pool) intenta vender → "El cliente no pertenece al pool" ✓
+```
+
+### Notas operativas
+
+- Cuando Karla venda desde Inventario un producto del pool, **DEBE elegir** explícitamente cuál de los 6 clientes recibe la orden (dropdown obligatorio).
+- Cuando Lupita cree una orden Cuadra y vincule SKU del catálogo, el dropdown muestra los 8 productos del pool independientemente de cuál de los 6 clientes haya seleccionado.
+- Las órdenes existentes de clientes Cuadra (no cargadas a stock todavía) NO requieren migración — simplemente vinculan al pool en su próxima asignación de SKU.
+
+### Cleanup colateral
+
+- `invoice_counters.oc` resincronizado a 90 (MAX real de purchase_orders) — el cleanup de tests previo lo había bajado a 86, causando colisión `OC-87 duplicate key`. Ahora alineado.
+
+
 ## v10.47.1 — ROLLBACK del REVOKE UPDATE (incidente Lupita) — 27-may-2026
 
 **Incidente**: Lupita estaba creando una orden nueva, capturó datos, dio Guardar → error `permission denied for table orders`. Se asustó pensando que perdería el form.
