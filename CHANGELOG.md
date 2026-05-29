@@ -5,6 +5,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.49.1 — Puntos 2 + 3: contacto obligatorio cliente nuevo + maquila precio/costo bloqueo — 27-may-2026
+
+### Punto 2 — Cliente nuevo: contacto obligatorio MÁS visible
+
+**Problema reportado**: Lupita podía saltar contacto al crear orden con cliente nuevo porque la validación solo se mostraba después de dar click (border rojo se activaba con `tried`).
+
+**Fix**:
+- **Banner naranja persistente** arriba de Email/WhatsApp cuando cliente es nuevo (sin `client_id`) y ambos vacíos:
+  ```
+  ⚠️ Cliente nuevo: captura al menos un Email o WhatsApp para crearlo en CobranzaFlow.
+  Sin contacto no podremos avisarle del estado de su orden.
+  ```
+- **Border rojo DESDE EL PRIMER RENDER** en inputs email/whatsapp (no espera `tried`). Lógica `showContactWarn` separada de la lógica `tried` global.
+- **Tooltip en botón "Crear Orden"**: si `missing.length > 0`, hover muestra "Faltan: Cliente, Contacto (Email o WhatsApp)..."
+
+### Punto 3 — Maquila precio + costo OBLIGATORIO al "Recibimos el Trabajo"
+
+**Problema reportado**: el botón "📥 Recibimos el Trabajo" avanzaba la maquila a `maq_received` sin validar nada. Al llegar a Karla con precio/costo vacíos, no podía facturar correctamente.
+
+**Fix**:
+- **Validación en `advance()` handler**: antes de transicionar `maq_in_progress → maq_received`, valida que `maq_price > 0 AND maq_cost > 0`. Si falta alguno, alert claro:
+  ```
+  ⚠️ Para recibir esta maquila faltan: 💰 Precio cliente · 💸 Costo proveedor.
+  Edita la orden y captúralos antes de continuar.
+  ```
+- **Badge naranja visible** en la card cuando `maq_in_progress` tiene precio/costo incompleto. Muestra qué falta. Botón "📥 Recibimos el Trabajo" queda **disabled** con tooltip.
+
+### Verificación crítica recordada
+
+✅ `maq_price` (precio cliente) es lo que se pasa a CobranzaFlow. **`maq_cost` NUNCA entra en cálculo de amount**. Solo se usa para:
+- Detectar ediciones post-factura (auto_mark_post_invoice_edits)
+- Reporting interno de margen
+
+CobranzaFlow recibe siempre lo que se cobra al cliente.
+
+
 ## v10.49.0 — Punto 1: Karla captura precio al Entregar (pop-up) — 27-may-2026
 
 Marcelo: "dar permiso a Karla para poner precio a órdenes en salidas + pop-up al dar Entregar si la orden no tiene precio, con opción 'no tengo precio, luego se agregará'".

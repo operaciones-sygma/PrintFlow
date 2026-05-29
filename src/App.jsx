@@ -4283,6 +4283,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   },[f.client,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,hideC,specsOnly]);
   const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
   const errBorder=k=>tried&&!k?"1.5px solid "+C.dn+"60":"none";
+  // v10.49.1 punto 2 — Cliente nuevo (sin client_id) requiere email o whatsapp.
+  // Mostrar alerta + border rojo SIN esperar a `tried` (más visible para Lupita).
+  const isNewClient=!editOrder&&!f.client_id&&(f.client||"").trim().length>0;
+  const showContactWarn=isNewClient&&!hideC&&!specsOnly&&!f.client_email?.trim()&&!f.client_phone?.trim();
+  const contactBorder=(val)=>(showContactWarn||(tried&&!val))?"1.5px solid "+C.dn+"60":"none";
   // Compute last and next production number
   const {lastPN,nextPN}=useMemo(()=>{
     const nums=orders.map(o=>{const m=(o.production_number||"").match(/^P-(\d+)$/);return m?parseInt(m[1],10):0}).filter(n=>n>0);
@@ -4444,7 +4449,15 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     s("billing_mode","normal");
     if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
   }
-}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:errBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div>
+    {/* v10.49.1 punto 2 — Banner naranja visible cuando se está creando un cliente nuevo SIN contacto */}
+    {showContactWarn&&<div style={{padding:"10px 20px",background:"#ff950015",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"start",gap:10}}>
+      <div style={{fontSize:18,lineHeight:1}}>⚠️</div>
+      <div style={{flex:1,fontSize:11,color:"#ff9500",lineHeight:1.5}}>
+        <b>Cliente nuevo:</b> captura al menos un Email o WhatsApp para crearlo en CobranzaFlow. Sin contacto no podremos avisarle del estado de su orden.
+      </div>
+    </div>}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={"📧 Email"+(f.client_phone?.trim()?"":" *")} br><input style={{...inp,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={"📱 WhatsApp"+(f.client_email?.trim()?"":" *")} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:11}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
     {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:"#0891b210",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
       <div style={{fontSize:11,color:C.t2}}>💡 ¿Pedido recurrente? Usa una orden anterior como plantilla.</div>
@@ -4549,7 +4562,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📝 Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:9,fontWeight:500}}>(USO INTERNO)</span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
     <div style={{padding:"12px 20px 16px"}}>
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600}}>⚠️ Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} style={{...bt(saving||imgUploading?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"⏳ Subiendo imagen...":saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"⏳ Subiendo imagen...":saving?"⏳...":editOrder?"💾 Guardar":"📝 Crear Orden"}</button></div>
     </div>
     {/* v10.45.0 — Modal replicar orden anterior */}
     {replicateOpen&&<ReplicateFromOrderModal clientId={f.client_id} clientName={f.client} onReplicate={applyReplicate} onClose={()=>setReplicateOpen(false)}/>}
@@ -5006,7 +5019,17 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}>⚙️ Proveedor Trabajando</button>}
-      {o.stage==="maq_in_progress"&&<button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt("#32ade6")}>📥 Recibimos el Trabajo</button>}
+      {o.stage==="maq_in_progress"&&(()=>{
+        // v10.49.1 punto 3 — Mostrar badge naranja si faltan precio cliente o costo proveedor.
+        // El advance() los valida y bloquea, pero el badge avisa antes para que se complete antes de click.
+        const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
+        const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
+        const incomplete=noPrice||noCost;
+        return <>
+          {incomplete&&<span title={"Faltan: "+[noPrice?"precio":"",noCost?"costo":""].filter(Boolean).join(" + ")} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:"#ff9500",background:"#ff950015",padding:"6px 10px",borderRadius:8,border:"1px solid #ff950040"}}>⚠️ Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio":"costo")}</span>}
+          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?"#d1d1d6":"#32ade6")} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}>📥 Recibimos el Trabajo</button>
+        </>;
+      })()}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
@@ -8731,6 +8754,17 @@ export default function PrintFlow() {
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: roles operativos solo en sus stages; vendedor solo en órdenes propias. (No tocamos doAdv para no afectar revert/drag)
     const o=orders.find(x=>x.id===id);
     if(o&&!canExecuteAction("advance",o,user,userLogin)){showToast(actionDeniedToast("advance",o,user,userLogin),"error");return}
+    // v10.49.1 punto 3 — Al recibir maquila ("📥 Recibimos el Trabajo": maq_in_progress → maq_received),
+    // precio cliente Y costo proveedor son OBLIGATORIOS. Sin ellos no puede facturarse correctamente.
+    if(ns==="maq_received"&&o?.order_type==="maquila"){
+      const faltan=[];
+      if(!Number(o.maq_price)||Number(o.maq_price)<=0)faltan.push("💰 Precio cliente (maq_price)");
+      if(!Number(o.maq_cost)||Number(o.maq_cost)<=0)faltan.push("💸 Costo proveedor (maq_cost)");
+      if(faltan.length>0){
+        showToast("⚠️ Para recibir esta maquila faltan: "+faltan.join(" · ")+". Edita la orden y captúralos antes de continuar.","error");
+        return;
+      }
+    }
     if(["delivered","maq_delivered","salidas"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:"#16a34a",onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)
   },[orders,user,userLogin,showToast,doAdv]);
 
