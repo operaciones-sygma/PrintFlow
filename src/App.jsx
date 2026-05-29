@@ -2777,7 +2777,14 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!validPrice||busy)return;setBusy(true);onCapture(numPrice)}}
+        <button onClick={async()=>{
+          // v10.49.2 fix#4 — try/finally resetea busy si onCapture lanza (red, RLS, etc.)
+          if(!validPrice||busy)return;
+          setBusy(true);
+          try{await onCapture(numPrice)}
+          catch(e){console.error("[PriceCaptureModal onCapture]:",e)}
+          finally{setBusy(false)}
+        }}
           disabled={!validPrice||busy}
           style={{...bt(C.ok),flex:2,justifyContent:"center",opacity:(!validPrice||busy)?0.5:1,cursor:(!validPrice||busy)?"not-allowed":"pointer"}}>
           {busy?"⏳":"💰 Capturar y continuar"}
@@ -2785,10 +2792,17 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
       </div>
 
       <div style={{marginTop:14,paddingTop:14,borderTop:"0.5px solid "+C.bd}}>
-        <button onClick={()=>{if(busy)return;setBusy(true);onSkip()}} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Poppins',sans-serif"}}>
-          💤 Sin precio, asignar folio igual <span style={{fontSize:10,opacity:0.7}}>(se agregará después)</span>
+        <button onClick={async()=>{
+          if(busy)return;
+          setBusy(true);
+          try{await onSkip()}
+          catch(e){console.error("[PriceCaptureModal onSkip]:",e)}
+          finally{setBusy(false)}
+        }} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Poppins',sans-serif"}}>
+          💤 Sin precio, continuar a asignar folio <span style={{fontSize:10,opacity:0.7}}>(precio se agregará después)</span>
         </button>
-        <div style={{fontSize:10,color:C.wn,marginTop:6,lineHeight:1.4}}>⚠️ Si eliges esta opción, la orden quedará pendiente de aparecer en CobranzaFlow hasta que captures el precio. El folio sí se asigna ahora.</div>
+        {/* v10.49.2 fix#5 — texto preciso: el folio se asigna en el siguiente paso (InvoiceModal), no aquí */}
+        <div style={{fontSize:10,color:C.wn,marginTop:6,lineHeight:1.4}}>⚠️ Al continuar sin precio, podrás asignar el folio en el siguiente paso. La factura se creará en CobranzaFlow automáticamente cuando captures el precio después.</div>
       </div>
     </div>
   </div>;
@@ -8698,6 +8712,18 @@ export default function PrintFlow() {
   },[user,orders,showToast,reload]);
 
   const doAdv=useCallback(async(id,ns)=>{
+    // v10.49.2 fix#3 — Guard maquila también en doAdv (cubre DnD, no solo botón).
+    // El guard en advance() (v10.49.1) no cubre el drag-and-drop que va directo a doAdv.
+    const oGuard=orders.find(x=>x.id===id);
+    if(ns==="maq_received"&&oGuard?.order_type==="maquila"){
+      const faltan=[];
+      if(!Number(oGuard.maq_price)||Number(oGuard.maq_price)<=0)faltan.push("💰 Precio cliente");
+      if(!Number(oGuard.maq_cost)||Number(oGuard.maq_cost)<=0)faltan.push("💸 Costo proveedor");
+      if(faltan.length>0){
+        showToast("⚠️ Para recibir esta maquila faltan: "+faltan.join(" · ")+". Edita la orden y captúralos antes.","error");
+        return;
+      }
+    }
     setActionLoading(id);
     // v10.26.0 — Si la orden sale de máquina real (no Empaque), debemos promover siguiente vía RPC
     const o=orders.find(x=>x.id===id);
@@ -9823,8 +9849,13 @@ export default function PrintFlow() {
           // Notify admin + secretaria + vendedor creator
           const notifMsg="📄 "+folio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
           await db.notifySecs(invoiceModal.id,"delivery",notifMsg,null,user,invoiceModal.created_by);
-          showToast("✅ Folio "+folio+" asignado y orden entregada");
-          setInvoiceModal(null);
+          // v10.49.2 fix#2 — Notificar si quedó huérfana (Karla eligió "sin precio")
+          if(skipPrice){
+            showToast("✅ Folio "+folio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea");
+          }else{
+            showToast("✅ Folio "+folio+" asignado y orden entregada");
+          }
+          setInvoiceModal(null);setAllowNoPriceForOrder(null);
         }catch(e){
           console.error("[assignInvoice] Error:",e);
           showToast("❌ "+(e?.message||"No se pudo asignar folio"),"error");

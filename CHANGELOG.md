@@ -5,6 +5,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.49.2 — Fixes post-scan exhaustivo v10.49.0-1 (1 🔴 + 3 🟠 + 1 🟡) — 27-may-2026
+
+Scan inmediato post-v10.49.1 detectó 5 bugs reales. Atacados todos.
+
+### 🔴 Fix#1 — DROP overload viejo `assign_invoice` (10 args)
+
+Existían DOS firmas: 10 args (sin `p_allow_no_price`) + 11 args (con flag). PostgREST resolvía por matching de nombres, pero el riesgo era que el cache de schema cayera al 10-args silenciosamente → el flag se ignoraba → Karla elegía "Sin precio" y la RPC rechazaba con error de validación. **DROP del 10-args** elimina la ambigüedad.
+
+### 🟠 Fix#2 — `allowNoPriceForOrder` no se limpiaba en path exitoso factura/remisión
+
+El handler de InvoiceModal limpiaba el flag en stock_load y no_folio, pero NO en el path exitoso de factura/remisión normal. Ahora se limpia siempre + agregado toast diferenciado:
+- Normal: "✅ Folio X asignado y orden entregada"
+- Sin precio: "✅ Folio X asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea"
+
+### 🟠 Fix#3 — Guard maquila movido de `advance()` a `doAdv()` (cubre DnD)
+
+El guard de v10.49.1 punto 3 estaba solo en `advance()` (botón). El **drag-and-drop** en Kanban llama directo a `doAdv()` y bypassaba la validación → Lupita podía arrastrar maquila sin precio/costo a `maq_received`. Ahora `doAdv()` también valida.
+
+### 🟠 Fix#4 — `PriceCaptureModal` busy stuck si UPDATE falla
+
+`setBusy(true)` se hacía antes de `onCapture` pero NO se reseteaba en error. Si UPDATE orders fallaba (red, RLS), el modal quedaba con botones "⏳" permanente. Ahora usa `try/finally` para garantizar `setBusy(false)` siempre.
+
+### 🟡 Fix#5 — Texto pop-up menos engañoso
+
+Antes: "El folio sí se asigna ahora" — engañoso porque el folio realmente se asigna en el InvoiceModal siguiente.
+Ahora: "Al continuar sin precio, podrás asignar el folio en el siguiente paso. La factura se creará en CobranzaFlow automáticamente cuando captures el precio después."
+
+Botón también más preciso: "💤 Sin precio, continuar a asignar folio".
+
+### Confirmado OK (sin cambio)
+
+- Verificación CobranzaFlow: 8 funciones usan `maq_price` (no `maq_cost`) ✓
+- `sync_post_invoice_edit` retroactivo funciona con caso huérfano ✓
+- `isNewClient` flag se calcula correctamente con `selC` async ✓
+- Edge cases (price=0, maquila parcial, etc.) bloquean correctamente ✓
+
+
 ## v10.49.1 — Puntos 2 + 3: contacto obligatorio cliente nuevo + maquila precio/costo bloqueo — 27-may-2026
 
 ### Punto 2 — Cliente nuevo: contacto obligatorio MÁS visible
