@@ -5,6 +5,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.49.0 — Punto 1: Karla captura precio al Entregar (pop-up) — 27-may-2026
+
+Marcelo: "dar permiso a Karla para poner precio a órdenes en salidas + pop-up al dar Entregar si la orden no tiene precio, con opción 'no tengo precio, luego se agregará'".
+
+### Verificación CRÍTICA pre-implementación
+
+Auditadas las 8 funciones DB que tocan amount/price para CobranzaFlow: **TODAS usan `maq_price` (precio cobrado al cliente), NINGUNA usa `maq_cost`**. Confirmado:
+```sql
+v_base_amount := COALESCE(CASE WHEN NEW.order_type = 'maquila' THEN NEW.maq_price ELSE NEW.price END, 0);
+```
+CobranzaFlow recibe siempre el precio al cliente, nunca un cálculo precio-costo.
+
+### Cambios
+
+**Backend**:
+- `assign_invoice` nuevo parámetro `p_allow_no_price boolean DEFAULT false`. Si true, omite la validación `price>0` (revertida controlada de v10.46.5).
+- `sync_invoice_from_orders` ya NO hace `RAISE EXCEPTION` si `amount<=0`. Ahora registra audit_log `bridge_skip_no_price` y `RETURN NEW` silencioso. Permite asignar folio sin precio sin que la transacción aborte.
+- `sync_post_invoice_edit` v10.46.6 (sin cambios) detecta caso huérfano cuando se captura el precio después → CREA invoice retroactivamente en CobranzaFlow. Flow end-to-end probado y confirmado.
+
+**Frontend — `PriceCaptureModal`** nuevo:
+- Aparece automáticamente al dar "📄 Asignar Folio y Entregar" si `order.price` (o `maq_price`) está vacío
+- Input de precio + 2 botones:
+  - **"💰 Capturar y continuar"** → UPDATE precio en orden + abre InvoiceModal flow normal
+  - **"💤 Sin precio, asignar folio igual"** → marca orden con flag `_allowNoPriceForOrder` + abre InvoiceModal con `p_allow_no_price=true`
+- Warning visible: "Si eliges sin precio, la orden quedará pendiente en CobranzaFlow hasta que captures el precio luego"
+
+**Frontend — `db.assignInvoice`** acepta 11º arg opcional `allowNoPrice` boolean.
+
+**Frontend — handler `deliver_with_invoice`** intercepta antes de abrir InvoiceModal:
+- Si la orden no tiene precio → setea `priceCaptureModal` (PriceCaptureModal aparece)
+- Si tiene precio → abre `invoiceModal` directo (sin cambio)
+
+### Flow probado end-to-end
+
+```
+1. assign_invoice('TEST', 'factura', 'D-99989', allow_no_price=true)
+   → orden con folio + price=NULL
+   → 0 invoices en CobranzaFlow
+   → audit_log: bridge_skip_no_price ✓
+
+2. UPDATE orders SET price=5000 WHERE id='TEST'
+   → trigger auto_mark_post_invoice_edits setea has_post_invoice_edits=true
+   → trigger sync_post_invoice_edit detecta caso huérfano
+   → INSERT cobranza.invoices con amount=5800 (5000×1.16 IVA)
+   → audit_log: bridge_post_edit_create_orphan ✓
+```
+
+### Por hacer en próximas versiones (planeadas por Marcelo)
+- v10.49.1: Punto 2 — cliente nuevo con contacto obligatorio MÁS visible
+- v10.49.2: Punto 3 — maquila precio+costo obligatorio al "Recibimos el Trabajo"
+
+
 ## v10.48.1 — Fixes post-scan exhaustivo v10.48.0 (4 🔴 + 5 🟠 + 2 🟡) — 27-may-2026
 
 Scan inmediato post-v10.48.0 con 3 agentes en paralelo detectó 4 críticos + 5 mayores + 3 menores. Atacados todos los relevantes.

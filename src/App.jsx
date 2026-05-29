@@ -521,11 +521,9 @@ const db = {
   // 🆕 v10.9.0 — Asignación de folio con captura MANUAL.
   // Maneja tanto el flujo normal (al entregar) como el anticipado (antes de producir).
   // El folio lo escribe Karla; el sistema valida formato, unicidad y stage permitido.
-  async assignInvoice(orderId, invoiceType, folio, preAssigned, reason, byUser, paymentStatus, paymentMethod, paymentAmount, bankReference) {
-    // v10.29.0 — paymentStatus ('paid'|'unpaid'|'partial'|null)
-    // v10.30.0 — paymentAmount: monto del anticipo si payment_status='partial' (en moneda literal con/sin IVA según invoiceType)
-    // v10.36.0 — paymentMethod: 'transferencia'|'tarjeta'|'cheque'|'otro'|null (efectivo REMOVIDO; pasa exclusivamente por Tesorería vía vale en CobranzaFlow — Candado #3 del Manual)
-    // v10.36.0 — bankReference: OBLIGATORIO para transferencia/tarjeta/cheque cuando paid/partial. Backend (sync_invoice_from_orders) RAISE 'candado de seguridad' si vacío. Permite conciliación automática 95% en CobranzaFlow.
+  async assignInvoice(orderId, invoiceType, folio, preAssigned, reason, byUser, paymentStatus, paymentMethod, paymentAmount, bankReference, allowNoPrice) {
+    // v10.49.0 — allowNoPrice (boolean default false): si true, RPC permite price=NULL/0.
+    // La orden queda con folio asignado pero el bridge SKIP silencioso hasta capturar precio.
     const {data, error} = await supabase.rpc("assign_invoice", {
       p_order_id: orderId,
       p_invoice_type: invoiceType,
@@ -536,7 +534,8 @@ const db = {
       p_payment_status: paymentStatus || null,
       p_payment_method: paymentMethod || null,
       p_payment_amount: paymentAmount || null,
-      p_bank_reference: bankReference || null
+      p_bank_reference: bankReference || null,
+      p_allow_no_price: !!allowNoPrice
     });
     if(error) throw new Error(error.message);
     return data;
@@ -2745,6 +2744,54 @@ function PaymentStatusPicker({status, method, amount, bankReference, orderTotal,
       )}
     </div>
   );
+}
+
+// ─── PRICE CAPTURE MODAL (v10.49.0) ─── Karla captura precio o salta al dar Entregar
+// Aparece ANTES de InvoiceModal si la orden no tiene precio.
+// 2 opciones:
+//   - Capturar precio + Continuar a InvoiceModal (flow normal)
+//   - "💤 Sin precio, asignar folio igual" — continúa al InvoiceModal con flag allow_no_price.
+//     La orden quedará huérfana en CobranzaFlow hasta que se capture el precio después
+//     (sync_post_invoice_edit v10.46.6 la crea retroactivamente).
+function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
+  useEscClose(onClose);
+  const isMaq=order?.order_type==="maquila";
+  const [price,setPrice]=useState("");
+  const [busy,setBusy]=useState(false);
+  const numPrice=parseFloat(price);
+  const validPrice=Number.isFinite(numPrice)&&numPrice>0;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>💰 Capturar precio antes de entregar</h3>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product||order?.product_type||""}</p>
+      <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>{order?.production_number||""} · {order?.quantity||0} pzas</p>
+
+      <div style={{background:"#ff950010",border:"1px solid #ff950040",borderRadius:10,padding:12,marginBottom:16}}>
+        <div style={{fontSize:12,color:"#ff9500",fontWeight:700,marginBottom:4}}>⚠️ Esta orden no tiene precio capturado</div>
+        <div style={{fontSize:11,color:C.t2,lineHeight:1.4}}>Captura el precio que se le cobra al cliente para que CobranzaFlow la vea correctamente.</div>
+      </div>
+
+      <label style={{...lbl,marginTop:4}}>{isMaq?"💰 Precio al cliente (maquila)":"💰 Precio"} (MXN)</label>
+      <input style={{...inp,fontSize:16,fontWeight:700}} type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} placeholder="0.00" autoFocus disabled={busy}/>
+      {validPrice && <div style={{fontSize:11,color:C.ok,marginTop:6}}>✓ ${numPrice.toLocaleString("es-MX",{minimumFractionDigits:2})}{isMaq?" (precio cliente)":""}</div>}
+
+      <div style={{display:"flex",gap:8,marginTop:18}}>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={()=>{if(!validPrice||busy)return;setBusy(true);onCapture(numPrice)}}
+          disabled={!validPrice||busy}
+          style={{...bt(C.ok),flex:2,justifyContent:"center",opacity:(!validPrice||busy)?0.5:1,cursor:(!validPrice||busy)?"not-allowed":"pointer"}}>
+          {busy?"⏳":"💰 Capturar y continuar"}
+        </button>
+      </div>
+
+      <div style={{marginTop:14,paddingTop:14,borderTop:"0.5px solid "+C.bd}}>
+        <button onClick={()=>{if(busy)return;setBusy(true);onSkip()}} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Poppins',sans-serif"}}>
+          💤 Sin precio, asignar folio igual <span style={{fontSize:10,opacity:0.7}}>(se agregará después)</span>
+        </button>
+        <div style={{fontSize:10,color:C.wn,marginTop:6,lineHeight:1.4}}>⚠️ Si eliges esta opción, la orden quedará pendiente de aparecer en CobranzaFlow hasta que captures el precio. El folio sí se asigna ahora.</div>
+      </div>
+    </div>
+  </div>;
 }
 
 // ─── INVOICE MODAL (v10.7.0) ─── Karla asigna folio fiscal D-XXXX o R-XXXX
@@ -8012,6 +8059,8 @@ export default function PrintFlow() {
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
+  const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
+  const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
   const [maintenance,setMaintenance]=useState([]);
@@ -9162,13 +9211,16 @@ export default function PrintFlow() {
     if(action==="advance")advance(id,payload);
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
       // v10.43.32 — Guards defensivos explícitos (mismo set de validaciones que el RPC y la UI).
-      // El botón "Asignar Folio y Entregar" en OCard ya está condicionado a stage in (salidas, maq_received)
-      // y !invoice_folio, pero protegemos también el action handler por si se invoca por otro path
-      // (atajo de teclado, click programático, etc).
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
       if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Esta orden no está en stage de salida (actual: "+o.stage+").","error");return}
-      // Validar production_number antes de abrir modal (regla de negocio)
       if(!o.production_number){showToast("❌ La orden no tiene número de producción (P-XXXX). Asígnalo antes de entregar.","error");return}
+      // v10.49.0 punto 1 — Si la orden no tiene precio capturado, mostrar PriceCaptureModal ANTES de InvoiceModal.
+      // Karla puede capturar el precio o saltar (la orden quedará huérfana hasta que se capture luego).
+      const priceField=o.order_type==="maquila"?o.maq_price:o.price;
+      if(priceField===null||priceField===undefined||Number(priceField)<=0){
+        setPriceCaptureModal(o);
+        return;
+      }
       setInvoiceModal(o);
     }
     // v10.31.0 — Orden con folio anticipado ya asignado: solo marcar entregada (sin re-pedir folio)
@@ -9660,6 +9712,33 @@ export default function PrintFlow() {
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
+      {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio */}
+      {priceCaptureModal&&<PriceCaptureModal order={priceCaptureModal}
+        onCapture={async newPrice=>{
+          // Capturar precio: UPDATE directo en orders + abrir InvoiceModal
+          const isMaq=priceCaptureModal.order_type==="maquila";
+          const updField=isMaq?{maq_price:newPrice}:{price:newPrice};
+          try{
+            const {error}=await supabase.from("orders").update(updField).eq("id",priceCaptureModal.id);
+            if(error)throw new Error(error.message);
+            const updatedOrder={...priceCaptureModal,...updField};
+            setOrders(p=>p.map(o=>o.id===priceCaptureModal.id?{...o,...updField}:o));
+            const tlMsg="💰 Precio capturado al entregar: $"+Number(newPrice).toLocaleString("es-MX",{minimumFractionDigits:2})+(isMaq?" (maquila)":"");
+            await db.addTimeline(priceCaptureModal.id,tlMsg,user,C.ok);
+            showToast("✅ Precio guardado · abriendo asignación de folio");
+            setPriceCaptureModal(null);
+            setInvoiceModal(updatedOrder);
+          }catch(e){console.error("[PriceCaptureModal capture]:",e);showToast("❌ No se pudo guardar precio: "+(e?.message||"error"),"error")}
+        }}
+        onSkip={()=>{
+          // Sin precio: marcar order como "permitido sin precio" + abrir InvoiceModal
+          setAllowNoPriceForOrder(priceCaptureModal.id);
+          const target=priceCaptureModal;
+          setPriceCaptureModal(null);
+          setInvoiceModal(target);
+        }}
+        onClose={()=>setPriceCaptureModal(null)}/>}
+
       {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId)=>{
         try{
           // v10.46.0 — Cuadra "stock_load": cargar a inventario sin folio fiscal
@@ -9679,7 +9758,7 @@ export default function PrintFlow() {
             setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),stocked_at:new Date().toISOString(),invoiced_at:null,invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
             await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
             showToast("📦 Orden cargada a inventario Cuadra (+"+qty+" pzas)");
-            setInvoiceModal(null);
+            setInvoiceModal(null);setAllowNoPriceForOrder(null);
             return;
           }
           // v10.43.10 — Corona "no_folio": descontar saldo sin asignar folio fiscal
@@ -9693,12 +9772,14 @@ export default function PrintFlow() {
             setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),invoiced_at:new Date().toISOString(),invoiced_by:user,timeline:addTL(o,tlMsg,{to:newStage})}:o));
             await db.addTimeline(invoiceModal.id,tlMsg,user,"#10b981");
             showToast("💰 Saldo aplicado — orden entregada sin folio fiscal");
-            setInvoiceModal(null);
+            setInvoiceModal(null);setAllowNoPriceForOrder(null);
             return;
           }
           // v10.30.0 — pasar payment_status, method y amount al RPC
           // v10.35.0 — pasar bankReference para conciliación automática 95% en CobranzaFlow
-          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference);
+          // v10.49.0 — si Karla eligió "sin precio luego" para esta orden, pasar flag allow_no_price
+          const skipPrice=allowNoPriceForOrder===invoiceModal.id;
+          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice);
           // Optimistic update
           const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
           const payLabel=paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro";
@@ -9715,7 +9796,7 @@ export default function PrintFlow() {
           showToast("❌ "+(e?.message||"No se pudo asignar folio"),"error");
           reload();
         }
-      }} onClose={()=>setInvoiceModal(null)}/>}
+      }} onClose={()=>{setInvoiceModal(null);setAllowNoPriceForOrder(null)}}/>}
       {/* 🆕 v10.9.0 — Modal de folio anticipado (Karla asigna antes de producir) */}
       {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference)=>{
         try{
