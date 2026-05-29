@@ -779,7 +779,10 @@ const humanizeStockError=err=>{
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
 const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]??1)-(p[b.priority]??1)};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+// v10.49.4 — Si la orden está EN MÁQUINA (current_machine NOT NULL), NO se considera estancada.
+// Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
+// aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina).
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
 
 // v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
 const STAGE_RESPONSIBLE = {

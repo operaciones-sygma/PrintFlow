@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.49.4 — Estancamiento ignora órdenes EN MÁQUINA — 27-may-2026
+
+Marcelo: "quita las notificaciones de estancamiento cuando una orden está en máquina".
+
+### Fix
+
+`getStale()` (línea 782) ahora retorna `null` si `o.current_machine` está seteado. Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina sin generar entradas en timeline).
+
+### Lugares afectados (todos automáticamente)
+
+Un solo cambio en `getStale` se propaga a:
+- 🟠 Tab "Estancadas" en lista (filtro `predicate`)
+- 🟠 Banner "Órdenes Estancadas" en home
+- 🟠 Badge en card de orden
+- 🟠 Salud Operativa "X órdenes sin avance"
+- 🟠 Sección Estancadas en reportes
+- 🟠 **Notificación admin `stale_alert`** (cada 30 min) — ya no se dispara para órdenes en máquina
+
+### Condiciones que retornan `null` (no estancada)
+
+1. Stage en `delivered/cancelled/web_pending/web_rejected/stocked`
+2. Stage en `WAIT_STAGES` (estados de espera externa)
+3. **`current_machine` no null** (incluye `vm_manual` para packaging manual) ← NUEVO
+
+
 ## v10.49.3 — Fixes post-scan EXHAUSTIVO completo (3 🔴 + 1 🟠 + 2 🟡) — 27-may-2026
 
 Tras v10.49.2, lancé scan dedicado en 2 ángulos (frontend + backend). Encontró 3 críticos NUEVOS que el primer scan no detectó. Atacados todos antes que el equipo testee.
