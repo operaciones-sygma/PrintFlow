@@ -5,6 +5,53 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.49.3 — Fixes post-scan EXHAUSTIVO completo (3 🔴 + 1 🟠 + 2 🟡) — 27-may-2026
+
+Tras v10.49.2, lancé scan dedicado en 2 ángulos (frontend + backend). Encontró 3 críticos NUEVOS que el primer scan no detectó. Atacados todos antes que el equipo testee.
+
+### 🔴 C1 — Pago parcial fantasma (riesgo financiero real)
+
+**Backend.** Si Karla elegía "Sin precio luego" + marcaba payment_status='partial' + capturaba un anticipo (ej. $500 con bank_reference), la orden quedaba con `payment_amount=500` registrado en `orders` PERO **no se creaba invoice en cobranza** (bridge skip silencioso). Cuando luego se capturaba el precio, `sync_post_invoice_edit` creaba la invoice con `balance=full` y **el pago de $500 quedaba HUÉRFANO**. Cliente "pagó" → no aparece en CobranzaFlow → discrepancia financiera real.
+
+**Fix**: `assign_invoice` ahora rechaza con `ERROR 22023` si `p_allow_no_price=true AND p_payment_status NOT NULL`:
+```
+No se puede registrar pago al asignar folio sin precio.
+Captura el precio primero o deja el folio sin pago (payment_status=null).
+```
+
+### 🔴 C2 — Cancelación huérfana sin audit fiscal
+
+**Backend.** Si se cancelaba una orden con folio + sin invoice (caso huérfano por v10.49.0), `sync_cancellation_to_cobranza` hacía UPDATE de 0 filas en `cobranza.invoices` y **NO insertaba audit_log**. El folio quedaba "quemado" (no se puede reasignar) pero **sin trazabilidad fiscal**.
+
+**Fix**: emitir audit_log `bridge_cancel_orphan_folio` cuando hay folio pero no invoice. El folio sigue quemado pero ahora con trazabilidad completa para auditoría externa.
+
+### 🔴 F1 — ESC durante onCapture → InvoiceModal "fantasma"
+
+**Frontend.** Si Karla presionaba ESC mientras `onCapture` estaba awaiting el UPDATE, el modal se desmontaba pero el handler externo seguía: `setOrders` + `db.addTimeline` + `setInvoiceModal(updatedOrder)`. **El InvoiceModal aparecía sobre OTRA orden** que Karla pudo abrir mientras tanto + el precio ya quedaba UPDATEado.
+
+**Fix**: snapshot del target en una closure local + `setPriceCaptureModal(prev=>{...})` checa `prev?.id===target.id` antes de abrir InvoiceModal. Si el modal fue cerrado, se aplica el UPDATE silenciosamente con toast warning ("Precio guardado pero cerraste el modal").
+
+### 🟠 F2 — `setAllowNoPriceForOrder(null)` defensa en `onCapture`
+
+**Frontend.** Defensa en profundidad: limpiar también en path exitoso de captura. Prevenir herencia silenciosa entre flows distintos.
+
+### 🟡 Y1 — `cancel_invoiced_order SET search_path`
+
+**Backend.** Pinear search_path para cierre del advisor `function_search_path_mutable`.
+
+### 🟡 F6 — Banner cliente nuevo con `role="alert"`
+
+**Frontend.** WCAG SC 4.1.3 Status Messages — banner naranja ahora se anuncia a screen readers (`role="alert" aria-live="polite"`).
+
+### Test transaccional confirmado (C1)
+
+```sql
+SELECT assign_invoice('TEST', 'factura', 'D-99950', false, NULL, 'admin',
+  'partial', 'transferencia', 500, 'REF', true);
+-- ERROR 22023: No se puede registrar pago al asignar folio sin precio ✓
+```
+
+
 ## v10.49.2 — Fixes post-scan exhaustivo v10.49.0-1 (1 🔴 + 3 🟠 + 1 🟡) — 27-may-2026
 
 Scan inmediato post-v10.49.1 detectó 5 bugs reales. Atacados todos.

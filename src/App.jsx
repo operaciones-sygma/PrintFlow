@@ -4464,8 +4464,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
   }
 }} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div>
-    {/* v10.49.1 punto 2 — Banner naranja visible cuando se está creando un cliente nuevo SIN contacto */}
-    {showContactWarn&&<div style={{padding:"10px 20px",background:"#ff950015",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"start",gap:10}}>
+    {/* v10.49.1 punto 2 — Banner naranja visible cuando se está creando un cliente nuevo SIN contacto.
+        v10.49.3 F6 — role=alert para screen readers (WCAG SC 4.1.3 Status Messages). */}
+    {showContactWarn&&<div role="alert" aria-live="polite" style={{padding:"10px 20px",background:"#ff950015",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"start",gap:10}}>
       <div style={{fontSize:18,lineHeight:1}}>⚠️</div>
       <div style={{flex:1,fontSize:11,color:"#ff9500",lineHeight:1.5}}>
         <b>Cliente nuevo:</b> captura al menos un Email o WhatsApp para crearlo en CobranzaFlow. Sin contacto no podremos avisarle del estado de su orden.
@@ -9772,32 +9773,49 @@ export default function PrintFlow() {
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
-      {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio */}
-      {priceCaptureModal&&<PriceCaptureModal order={priceCaptureModal}
+      {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
+          v10.49.3 F1 FIX — capturar el target ANTES del await; si Karla cierra con ESC el state
+          se vuelve null y abortamos los setters externos. Evita "InvoiceModal fantasma" abriendo
+          después de cancelar. */}
+      {priceCaptureModal&&(()=>{
+        const target=priceCaptureModal; // snapshot estable para los handlers async
+        return <PriceCaptureModal order={target}
         onCapture={async newPrice=>{
-          // Capturar precio: UPDATE directo en orders + abrir InvoiceModal
-          const isMaq=priceCaptureModal.order_type==="maquila";
+          const isMaq=target.order_type==="maquila";
           const updField=isMaq?{maq_price:newPrice}:{price:newPrice};
           try{
-            const {error}=await supabase.from("orders").update(updField).eq("id",priceCaptureModal.id);
+            const {error}=await supabase.from("orders").update(updField).eq("id",target.id);
             if(error)throw new Error(error.message);
-            const updatedOrder={...priceCaptureModal,...updField};
-            setOrders(p=>p.map(o=>o.id===priceCaptureModal.id?{...o,...updField}:o));
-            const tlMsg="💰 Precio capturado al entregar: $"+Number(newPrice).toLocaleString("es-MX",{minimumFractionDigits:2})+(isMaq?" (maquila)":"");
-            await db.addTimeline(priceCaptureModal.id,tlMsg,user,C.ok);
-            showToast("✅ Precio guardado · abriendo asignación de folio");
-            setPriceCaptureModal(null);
-            setInvoiceModal(updatedOrder);
+            // v10.49.3 F1 — si Karla cerró el modal con ESC durante el await, abortar el setInvoiceModal
+            // pero preservar el UPDATE (ya pasó). Solo evitamos abrir InvoiceModal sobre otra orden.
+            setPriceCaptureModal(prev=>{
+              if(prev?.id!==target.id){
+                // El modal fue cerrado o cambió de orden. Solo aplicar setOrders + timeline silenciosos.
+                setOrders(p=>p.map(o=>o.id===target.id?{...o,...updField}:o));
+                db.addTimeline(target.id,"💰 Precio capturado al entregar: $"+Number(newPrice).toLocaleString("es-MX",{minimumFractionDigits:2})+(isMaq?" (maquila)":""),user,C.ok).catch(e=>console.warn(e));
+                showToast("⚠️ Precio guardado pero cerraste el modal. No se abrió el folio.","warning");
+                return prev;
+              }
+              // Modal aún abierto, aplicar el flow normal
+              const updatedOrder={...target,...updField};
+              setOrders(p=>p.map(o=>o.id===target.id?{...o,...updField}:o));
+              db.addTimeline(target.id,"💰 Precio capturado al entregar: $"+Number(newPrice).toLocaleString("es-MX",{minimumFractionDigits:2})+(isMaq?" (maquila)":""),user,C.ok).catch(e=>console.warn(e));
+              showToast("✅ Precio guardado · abriendo asignación de folio");
+              setAllowNoPriceForOrder(null); // v10.49.3 F2 FIX — defensa en profundidad
+              Promise.resolve().then(()=>setInvoiceModal(updatedOrder));
+              return null;
+            });
           }catch(e){console.error("[PriceCaptureModal capture]:",e);showToast("❌ No se pudo guardar precio: "+(e?.message||"error"),"error")}
         }}
         onSkip={()=>{
-          // Sin precio: marcar order como "permitido sin precio" + abrir InvoiceModal
-          setAllowNoPriceForOrder(priceCaptureModal.id);
-          const target=priceCaptureModal;
+          // v10.49.3 F1 — el setPriceCaptureModal(null) y setInvoiceModal son síncronos en el mismo tick,
+          // no hay await intermedio. Race no aplica aquí.
+          setAllowNoPriceForOrder(target.id);
           setPriceCaptureModal(null);
           setInvoiceModal(target);
         }}
-        onClose={()=>setPriceCaptureModal(null)}/>}
+        onClose={()=>setPriceCaptureModal(null)}/>;
+      })()}
 
       {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId)=>{
         try{
