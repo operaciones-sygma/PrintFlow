@@ -5,6 +5,91 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.50.0 — Múltiples pagos por folio (transferencia + cheque + tarjeta + otro) — 30-may-2026
+
+Marcelo: "agregar opción para más referencias de pagos en caso de que se hiciera más de 1 pago, igual sirva para cheque, depósito, tarjeta de crédito".
+
+### Arquitectura
+
+**Modelo elegido**: pagos mixtos (varios métodos + montos + referencias) → 1 invoice + N rows en `cobranza.payments`. Cliente paga 50% transfer + 50% cheque → CobranzaFlow ve los 2 pagos individuales con sus refs.
+
+### Schema DB
+
+**Nueva tabla `public.order_payment_refs`**:
+```sql
+CREATE TABLE order_payment_refs (
+  id uuid PRIMARY KEY,
+  order_id text REFERENCES orders(id) ON DELETE CASCADE,
+  payment_method text CHECK IN (transferencia, tarjeta, tarjeta_credito, cheque, otro),
+  amount numeric > 0,
+  bank_reference text,
+  notes text,
+  position integer,  -- orden en que se capturó
+  created_at, created_by
+);
+```
+
+Campos viejos en `orders.payment_method/amount/bank_reference` se mantienen como AGREGADOS:
+- 1 ref → comportamiento legacy
+- N refs distintos métodos → `payment_method='mixed'`, `bank_reference='MULTIPLES (N pagos)'`
+- Suma de amounts en `payment_amount` (null si paid total)
+
+### RPCs actualizadas
+
+**`assign_invoice`** (12º arg): `p_payment_refs jsonb` opcional. Array de objetos `{method, amount, bank_reference, notes}`.
+- Si NULL: flow legacy (campos individuales).
+- Si pasado: rechaza campos viejos (mutuamente excluyente), valida cada ref + suma vs total, inserta N rows en `order_payment_refs` ANTES del UPDATE de orders (para que el bridge AFTER UPDATE las vea).
+
+**`sync_invoice_from_orders`** (bridge): si la orden tiene refs en `order_payment_refs`, crea N rows en `cobranza.payments` con audit `bridge_apply_multi_payments`. Sino flow legacy.
+
+**Constraint orders**: ampliado para permitir `payment_method='mixed'` y `bank_reference` con métodos cheque/tarjeta_credito.
+
+### Frontend
+
+**Nuevo componente `MultiPaymentPicker`**: drop-in replacement de `PaymentStatusPicker`. UI con lista de pagos, botón "➕ Agregar otro pago", botón "🗑️ Eliminar" por pago, resumen total/falta/excede en vivo.
+
+Integrado en:
+- **`InvoiceModal`** (📄 Asignar Folio y Entregar)
+- **`PreInvoiceModal`** (folio anticipado v10.9.0)
+
+**`db.assignInvoice`** acepta 12º arg `paymentRefs`. Si pasado, omite campos legacy.
+
+### Validaciones (defensa en profundidad)
+
+| Regla | Frontend | Backend |
+|---|---|---|
+| Suma > total | bloquea botón + warning rojo | RAISE 22023 |
+| paid pero suma ≠ total | bloquea + warning | RAISE 22023 |
+| partial pero suma ≥ total | bloquea + warning | RAISE 22023 |
+| Pago sin referencia (transfer/tarjeta/cheque) | border naranja + bloquea | RAISE 22023 |
+| Pago sin método o monto ≤ 0 | bloquea | RAISE 22023 |
+| Mezclar refs con campos viejos | N/A | RAISE 22023 |
+
+### Inmutabilidad
+
+Una vez registrado un pago no se puede editar/borrar (decisión de Marcelo). Si hay error, se cancela la orden o se ajusta en CobranzaFlow.
+
+### Test transaccional end-to-end
+
+```sql
+-- Orden $1000 + factura D-XXXX + 2 pagos (transfer $600 + cheque $560 = $1160)
+SELECT assign_invoice('TEST', 'factura', 'D-99899', false, NULL, 'admin',
+  'paid', NULL, NULL, NULL, false,
+  '[{"method":"transferencia","amount":600,"bank_reference":"SPEI-AAA"},
+    {"method":"cheque","amount":560,"bank_reference":"BANAMEX-7890"}]'::jsonb);
+-- Resultado verificado:
+-- ✓ invoice $1160, status='pagada', balance=0
+-- ✓ 2 cobranza.payments (transferencia:600:SPEI-AAA | cheque:560:BANAMEX-7890)
+```
+
+### Backward compat
+
+- Frontend: si `paymentRefs` no se pasa → flow legacy intacto
+- Backend: `assign_invoice` con campos viejos sigue funcionando para callers que no actualicen
+- Bridge: si orden no tiene refs → flow legacy con 1 payment
+- Órdenes existentes: sin cambio (sin refs en order_payment_refs)
+
+
 ## v10.49.4 — Estancamiento ignora órdenes EN MÁQUINA — 27-may-2026
 
 Marcelo: "quita las notificaciones de estancamiento cuando una orden está en máquina".
