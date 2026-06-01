@@ -1256,6 +1256,9 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
   useEscClose(onClose);
   const [printing,setPrinting]=useState(false);
+  // v10.53.1 M2 — mountedRef previene setState/callback en componente desmontado
+  const mountedRef=useRef(true);
+  useEffect(()=>()=>{mountedRef.current=false},[]);
   // v10.34.2 fix #9 — escape para interpolaciones de standard_size en HTML template (defensa contra IDs corruptos en BD)
   const esc=s=>String(s||"").replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const pDate=o.created_at?new Date(o.created_at):new Date();
@@ -1265,30 +1268,32 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
   const isMaq=o.order_type==="maquila";
   // mode: "full" = con precio y contacto (secretaría/admin), "production" = sin precio ni contacto (para piso)
   // v10.53.0 — async: registra la impresión ANTES de abrir el window para incluir versión + hash en la hoja.
+  // v10.53.1 C1 — try/finally global para garantizar setPrinting(false) en TODOS los paths.
   const printIt=async(mode)=>{
     if(printing) return;
     setPrinting(true);
-    let printInfo=null;
     try{
-      printInfo=await db.registerPrint(o.id, userLogin||"sistema");
-    }catch(e){
-      // Si falla el registro (network, permisos), igual permitimos imprimir
-      // pero sin versión actualizada — el footer mostrará versión anterior + "(sin registro)".
-      console.warn("[register_print] falló, imprimiendo sin actualizar versión:", e?.message);
-      printInfo={version:o.print_version||"?", printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", content_hash:"NO-REG", failed:true};
-    }
-    // Actualizar state padre con los nuevos campos para que UI refleje sin reload
-    if(onReprinted && !printInfo.failed) onReprinted({
-      print_version: printInfo.version,
-      last_printed_at: printInfo.printed_at,
-      last_printed_by: printInfo.printed_by,
-      needs_reprint: false
-    });
-    setPrinting(false);
+      let printInfo=null;
+      try{
+        printInfo=await db.registerPrint(o.id, userLogin||"sistema");
+      }catch(e){
+        // Si falla el registro (network, permisos), igual permitimos imprimir
+        // pero sin versión actualizada — el footer mostrará versión anterior + "(sin registro)".
+        console.warn("[register_print] falló, imprimiendo sin actualizar versión:", e?.message);
+        printInfo={version:o.print_version||"?", printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", content_hash:"NO-REG", failed:true};
+      }
+      // v10.53.1 M2/M3 — solo actualizar state padre si el modal sigue montado, pasar o.id explícito
+      if(onReprinted && !printInfo.failed && mountedRef.current) onReprinted({
+        print_version: printInfo.version,
+        last_printed_at: printInfo.printed_at,
+        last_printed_by: printInfo.printed_by,
+        needs_reprint: false
+      }, o.id);
 
-    const w=window.open("","_blank","width=800,height=900");if(!w)return;
-    const isProd=mode==="production";
-    const pvVersion=printInfo.version;
+      const w=window.open("","_blank","width=800,height=900");
+      if(!w) return; // popup blocker — try/finally garantiza setPrinting(false)
+      const isProd=mode==="production";
+      const pvVersion=printInfo.version;
     const pvHash=printInfo.content_hash;
     const pvWhen=new Date(printInfo.printed_at);
     const pvWhenStr=pvWhen.getDate()+"-"+months[pvWhen.getMonth()].slice(0,3).toLowerCase()+" "+
@@ -1467,9 +1472,10 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     // ═══ DATOS ADMINISTRATIVOS (solo versión completa) ═══
     if(!isProd){
       // v10.52.0 — badge de estado de pago (solo si tiene folio asignado)
+      // v10.53.1 M1 — esc() en payment_method (display bug si contiene <>&)
       let payBadge="";
       if(o.invoice_folio){
-        if(o.payment_status==="paid") payBadge=`<span class="pay-badge pay-paid">✓ Pagada${o.payment_method?" · "+o.payment_method:""}</span>`;
+        if(o.payment_status==="paid") payBadge=`<span class="pay-badge pay-paid">✓ Pagada${o.payment_method?" · "+esc(o.payment_method):""}</span>`;
         else if(o.payment_status==="partial") payBadge=`<span class="pay-badge pay-partial">⚠ Parcial${o.payment_amount?" · $"+Number(o.payment_amount).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2}):""}</span>`;
         else payBadge=`<span class="pay-badge pay-unpaid">⏳ Por cobrar</span>`;
       }
@@ -1510,7 +1516,12 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     </div>`;
 
     h+=`</body></html>`;
-    w.document.write(h);w.document.close();setTimeout(()=>w.print(),300)};
+    w.document.write(h);w.document.close();setTimeout(()=>w.print(),300);
+    } finally {
+      // v10.53.1 C1 — siempre liberar el botón, incluso si el HTML build crashea o popup blocker
+      if(mountedRef.current) setPrinting(false);
+    }
+  };
 
   // Roles that always get production version
   const isFloor=role==="produccion"||role==="preprensa"||role==="german";
@@ -10459,7 +10470,7 @@ export default function PrintFlow() {
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
-      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields)=>{setOrders(prev=>prev.map(x=>x.id===printModal.id?{...x,...updatedFields}:x))}}/>}
+      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields, orderId)=>{setOrders(prev=>prev.map(x=>x.id===orderId?{...x,...updatedFields}:x))}}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}

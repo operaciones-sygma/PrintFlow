@@ -5,6 +5,66 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.53.1 — Fixes 🔴🟠 post-scan v10.53.0 — 01-jun-2026
+
+Scan exhaustivo (3 agentes) detectó 10 bugs reales (2🔴 + 5🟠 + 3🟡). Atacados los 7 críticos y mayores; los 3 menores quedan para v10.53.2 opcional (UX polish).
+
+### 🔴 C1 — Race condition `setPrinting` + popup blocker
+
+**Antes**: `setPrinting(false)` se llamaba ANTES de `window.open`. Si el popup blocker rechazaba la ventana, `printing=false` ya era el estado y la línea siguiente hacía `return`. Pero si Karla había clickeado rápido, el segundo click veía `printing=false` y disparaba 2do `registerPrint` paralelo.
+
+**Después**: TODO `printIt` envuelto en `try/finally`. `setPrinting(false)` se ejecuta SIEMPRE al final (popup blocker, crash en HTML build, error post-register). Botón nunca queda colgado.
+
+### 🔴 C2 — Trigger no detectaba cambio crítico si `OLD.needs_reprint=true` + UPDATE manual con `needs_reprint=false`
+
+**Antes**: el trigger tenía 3 guards al inicio. El tercero saltaba si `OLD.needs_reprint=true` ("no degradar info"). Si una transacción incluía `needs_reprint=false` + cambio en campo crítico, el guard salía sin re-detectar y el flag quedaba en false. Edge case raro pero válido.
+
+**Después**: la detección se ejecuta PRIMERO. Si detecta cambio crítico → fuerza `NEW.needs_reprint := true` (sobrescribe lo que venga del cliente). Cierra el agujero.
+
+**Test transaccional confirmó**: `UPDATE quantity=+5, needs_reprint=false` → trigger pisa con `needs_reprint=true`. ✅
+
+### 🟠 M1 — `esc()` en `payment_method` del badge de pago
+
+`payBadge` HTML inline incluía `o.payment_method` sin escape. Si el método contenía `<>&` se rompía el HTML. Fix: `esc(o.payment_method)`.
+
+### 🟠 M2 — `onReprinted` callback post-unmount
+
+Si Karla cerraba el modal mientras `await db.registerPrint` estaba pendiente, el callback ejecutaba en componente desmontado → React warning. Fix: `mountedRef` + `useEffect cleanup`. El callback y el setState solo corren si el componente sigue montado.
+
+### 🟠 M3 — Optimistic update con `printModal.id` closure stale
+
+El callback en render usaba `printModal.id` (closure capture en App raíz). Si entre el click de imprimir y la respuesta de la RPC Karla cambiaba de modal (otra orden), el update aplicaba a la orden equivocada.
+
+Fix: el callback de `PrintOrder.printIt` ahora pasa `o.id` explícito como 2do arg: `onReprinted(updatedFields, o.id)`. El render usa `orderId` recibido, no `printModal.id`.
+
+### 🟠 M4 — Hash de `register_print` no incluía todos los campos monitoreados por trigger
+
+**Antes**: el hash MD5 omitía `colors`, `price`, `maq_provider`, `maq_cost`, `maq_price`, `maquila_provider`, `maquila_phone`, `maquila_email`. Inconsistencia: cambios en esos campos marcaban `needs_reprint=true` (correcto) pero la siguiente impresión generaba un hash similar al anterior, confundiendo verificación manual.
+
+**Después**: hash incluye TODOS los campos monitoreados por trigger (paridad 1:1). Verificación manual ahora es confiable.
+
+### 🟠 M5 — REVOKE UPDATE en `print_version`, `last_printed_at`, `last_printed_by`
+
+**Antes**: solo `needs_reprint` tenía GRANT UPDATE explícito (necesario para el trigger). Las otras 3 columnas no tenían REVOKE explícito — quedaban en ambigüedad porque el `REVOKE UPDATE` table-level de v10.47.0 más los `GRANT UPDATE` por columna no incluían a estas. Defensa en profundidad incompleta.
+
+**Después**: `REVOKE UPDATE (print_version, last_printed_at, last_printed_by) FROM anon, authenticated`. Solo `register_print` (SECURITY DEFINER) puede modificarlas.
+
+### Falsos positivos descartados
+
+- ❌ "XSS real" en payment_method/notes/etc.: PrintFlow es app interna del equipo Sygma, no hay user-input externo. Display bug, no security.
+- ❌ SYGMA_LOGO data URL en `onerror`: constante hardcoded, no dinámica.
+- ❌ Race entre register_print + trigger: `FOR UPDATE` garantiza serialización.
+- ❌ MD5 8 chars colisión: 4.3 billones de combos vs ~10k órdenes. Cero riesgo práctico.
+- ❌ Falta audit log de register_print: nice-to-have, no bug.
+- ❌ Orden alfabético de triggers: documentación.
+
+### Pendientes 🟡 menores (v10.53.2 opcional)
+
+- m1: try/finally se completó en C1 ✅ (era duplicado de C1)
+- m2: visual "v?" cuando register falla → confuso, agregar marker "(sin registro)"
+- m3: parpadeo Realtime cuando 2 users editan misma orden simultáneamente
+
+
 ## v10.53.0 — Versionado de hojas impresas + detección post-edición — 01-jun-2026
 
 Marcelo: "¿Cómo diferenciar una orden impresa que ya fue editada para que no haya errores ni se aventen la bolita entre departamentos?"
