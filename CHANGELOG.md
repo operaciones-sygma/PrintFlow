@@ -5,6 +5,69 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.50.1 — Fixes 🔴 críticos post-scan exhaustivo v10.50.0 — 31-may-2026
+
+3 agentes en paralelo (frontend + backend + integración) auditaron v10.50.0. 3 críticos detectados, **uno BLOQUEABA todo el feature en producción**. Atacados todos.
+
+### 🔴 B1 — assign_invoice NO era SECURITY DEFINER → multi-pago FALLA en producción
+
+**El bug bloqueante**: `assign_invoice` se creó sin `SECURITY DEFINER`. Cuando el frontend (rol `authenticated`) llamaba con `p_payment_refs`, intentaba INSERT en `public.order_payment_refs` pero las grants solo dan `SELECT` a anon/authenticated → `ERROR 42501: permission denied`.
+
+Confirmado simulando `SET LOCAL ROLE authenticated`: el INSERT fallaba. Por eso v10.50.0 hubiera fallado silenciosamente para Karla en cuanto intentara multi-pago real.
+
+**Fix**: `ALTER FUNCTION public.assign_invoice(...) SECURITY DEFINER`. Verificado con test transaccional `SET LOCAL ROLE authenticated` → 2 refs + 2 cobranza.payments creados correctamente.
+
+Consistente con `assign_folio_to_oc` y `apply_credit_no_folio` (ambas SECURITY DEFINER).
+
+### 🔴 F1 — Timeline, notificaciones y pantalla de confirmación mostraban "null"
+
+`onConfirm` del InvoiceModal/PreInvoiceModal mandaba `paymentMethod=null` y `paymentAmount=null` cuando hay multi-pago (los datos están en `paymentRefs`, no en los campos viejos). El handler de App raíz usaba directamente esos nulls:
+
+```
+"📄 Asignado folio D-5870 · ✅ Pagada (null)"     ← timeline persistido en BD
+"📄 D-5870 asignado a Eva — Lonas..."             ← notif a admin/secretaria/vendedor
+"✅ Pagada · null"                                 ← pantalla de "confirmar"
+```
+
+**Fix**: detectar `paymentRefs?.length > 0` en ambos handlers y construir label desde el array:
+- 1 pago: `"✅ Pagada · transferencia"`
+- 2 pagos mismo método: `"✅ Pagada · 2 pagos: transferencia"`
+- 2 pagos métodos distintos: `"✅ Pagada · 2 pagos: transferencia + cheque"`
+
+Aplicado en:
+- Timeline + notif label (InvoiceModal handler línea 10054 + PreInvoiceModal handler línea 10097)
+- Pantalla de "Confirmar" en InvoiceModal (3334-3360)
+- Pantalla de "Confirmar" en PreInvoiceModal (3614-3641)
+- En confirm con N>1 pagos: lista detallada `#1 transferencia · $696 · SPEI-A`
+
+### 🔴 F2 — Optimistic update persistía nulls en orders local
+
+`setOrders` post-confirm guardaba `payment_method=null`, `payment_amount=null`, `bank_reference=null` (los campos del closure que valen null en multi-pago) hasta que Realtime trajera los agregados reales del backend. UI mostraba estado vacío durante esa ventana.
+
+**Fix**: calcular agregados en el frontend (mismo patrón que el backend) y usarlos en el optimistic:
+- `aggMethod`: `'mixed'` si métodos distintos, sino el único método
+- `aggBankRef`: `'MULTIPLES (N pagos)'` si N>1, sino la única ref
+- `aggAmount`: `null` si paid (cubre total), sino la suma de refs
+
+Aplicado en ambos handlers (línea 10053 y 10099).
+
+### Tests aplicados
+
+- ✅ `SET LOCAL ROLE authenticated; assign_invoice(...payment_refs)` → 2 refs + 2 cobranza.payments
+- ✅ Timeline ahora muestra info correcta en lugar de "null"
+- ✅ Confirmación muestra desglose de pagos cuando N>1
+- ✅ Backward compat: 1 pago legacy sigue funcionando idéntico
+
+### Quedó pendiente (no bloqueante, v10.50.2 opcional)
+
+- 🟠 PaymentStatusPicker dead code (174 líneas)
+- 🟠 A11y: aria-live en resumen, aria-invalid en inputs
+- 🟠 Backend: `tarjeta_credito` y `otro` no exigen bank_reference (asimetría con constraint)
+- 🟠 Backend: REVOKE EXECUTE en sync_invoice_from_orders trigger function
+- 🟠 Backend: sync_post_invoice_edit no actualiza order_payment_refs (gap semántico aceptable)
+- 🟡 Tolerancia drift 0.01 silencia diferencia pequeña en balance
+
+
 ## v10.50.0 — Múltiples pagos por folio (transferencia + cheque + tarjeta + otro) — 30-may-2026
 
 Marcelo: "agregar opción para más referencias de pagos en caso de que se hiciera más de 1 pago, igual sirva para cheque, depósito, tarjeta de crédito".

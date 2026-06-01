@@ -3331,15 +3331,30 @@ function InvoiceModal({order,onConfirm,onClose}) {
           </div>
           <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
             <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
-            <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
-              {paymentStatus==="paid"&&"✅ Pagada · "+paymentMethod}
-              {paymentStatus==="partial"&&"🔶 Parcial · $"+Number(paymentAmount).toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+paymentMethod}
-              {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
-              {isCorona&&!paymentStatus&&"💰 Saldo a favor Corona (bridge)"}
-            </div>
-            {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
-              Saldo pendiente a CobranzaFlow: ${(totalDisplay-Number(paymentAmount)).toLocaleString("es-MX",{minimumFractionDigits:2})}
-            </div>}
+            {/* v10.50.1 F1 — Si hay paymentRefs (multi-pago), mostrar info correcta en lugar de null */}
+            {(()=>{
+              const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
+              const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
+              const distinctMethods=usingMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+              const methodLabel=usingMulti
+                ?(paymentRefs.length===1?distinctMethods[0]:paymentRefs.length+" pagos: "+distinctMethods.join(" + "))
+                :paymentMethod;
+              const amountForPartial=usingMulti?refsTotal:Number(paymentAmount);
+              return <>
+                <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
+                  {paymentStatus==="paid"&&"✅ Pagada · "+methodLabel}
+                  {paymentStatus==="partial"&&"🔶 Parcial · $"+amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+methodLabel}
+                  {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+                  {isCorona&&!paymentStatus&&"💰 Saldo a favor Corona (bridge)"}
+                </div>
+                {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
+                  Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
+                </div>}
+                {usingMulti&&paymentRefs.length>1&&<div style={{fontSize:10,color:C.t2,marginTop:6,padding:"4px 8px",background:"#fff",borderRadius:6,textAlign:"left"}}>
+                  {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
+                </div>}
+              </>;
+            })()}
           </div>
           <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará marcada como <strong style={{color:C.ok}}>Entregada</strong> automáticamente. Esta acción no se puede deshacer.</p>
         </>}
@@ -3597,14 +3612,29 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         </div>
         <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
           <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
-          <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
-            {paymentStatus==="paid"&&"✅ Pagada · "+paymentMethod}
-            {paymentStatus==="partial"&&"🔶 Parcial · $"+Number(paymentAmount).toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+paymentMethod}
-            {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
-          </div>
-          {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
-            Saldo pendiente a CobranzaFlow: ${(totalDisplay-Number(paymentAmount)).toLocaleString("es-MX",{minimumFractionDigits:2})}
-          </div>}
+          {/* v10.50.1 F1 — Soporte multi-pago en confirmación PreInvoiceModal */}
+          {(()=>{
+            const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
+            const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
+            const distinctMethods=usingMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+            const methodLabel=usingMulti
+              ?(paymentRefs.length===1?distinctMethods[0]:paymentRefs.length+" pagos: "+distinctMethods.join(" + "))
+              :paymentMethod;
+            const amountForPartial=usingMulti?refsTotal:Number(paymentAmount);
+            return <>
+              <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
+                {paymentStatus==="paid"&&"✅ Pagada · "+methodLabel}
+                {paymentStatus==="partial"&&"🔶 Parcial · $"+amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+methodLabel}
+                {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+              </div>
+              {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
+                Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
+              </div>}
+              {usingMulti&&paymentRefs.length>1&&<div style={{fontSize:10,color:C.t2,marginTop:6,padding:"4px 8px",background:"#fff",borderRadius:6,textAlign:"left"}}>
+                {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
+              </div>}
+            </>;
+          })()}
         </div>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden mantiene su stage actual ({SM[order?.stage]?.l||order?.stage}). Solo se asigna el folio fiscal sin entregarla todavía.</p>
         <div style={{display:"flex",gap:8}}>
@@ -10046,11 +10076,24 @@ export default function PrintFlow() {
           // v10.49.0 — si Karla eligió "sin precio luego" para esta orden, pasar flag allow_no_price
           const skipPrice=allowNoPriceForOrder===invoiceModal.id;
           await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
-          // Optimistic update
+          // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs si multi-pago.
+          // Antes el timeline + optimistic mostraban "null" porque paymentMethod/Amount/bankRef quedan null en flow multi-pay.
+          const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
+          const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
+          const distinctMethods=usingMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+          const aggMethod=usingMulti?(distinctMethods.length>1?"mixed":distinctMethods[0]):paymentMethod;
+          const aggBankRef=usingMulti?(paymentRefs.length>1?"MULTIPLES ("+paymentRefs.length+" pagos)":(paymentRefs[0].bank_reference||null)):bankReference;
+          const aggAmount=usingMulti?(paymentStatus==="paid"?null:refsTotal):paymentAmount;
+          const payLabelMulti=usingMulti
+            ?(paymentRefs.length===1
+              ?(paymentStatus==="paid"?" · 💰 Pagada ("+distinctMethods[0]+")":" · 🔶 Parcial $"+refsTotal+" ("+distinctMethods[0]+")")
+              :(paymentStatus==="paid"?" · 💰 Pagada ("+paymentRefs.length+" pagos: "+distinctMethods.join("+")+")":" · 🔶 Parcial $"+refsTotal+" ("+paymentRefs.length+" pagos: "+distinctMethods.join("+")+")"))
+            :null;
+          const payLabel=payLabelMulti
+            ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
           const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
-          const payLabel=paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro";
           const tlMsg="📄 Asignado folio "+folio+" ("+(invoiceType==="factura"?"Factura":"Remisión")+") · "+SM[newStage]?.l+payLabel;
-          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,bank_reference:bankReference,stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
+          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
           await db.addTimeline(invoiceModal.id,tlMsg,user,C.ok);
           // Notify admin + secretaria + vendedor creator
           const notifMsg="📄 "+folio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
@@ -10073,9 +10116,22 @@ export default function PrintFlow() {
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
           await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
-          const payLabel=paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro";
+          // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs para timeline y optimistic update.
+          const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
+          const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
+          const distinctMethods=usingMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+          const aggMethod=usingMulti?(distinctMethods.length>1?"mixed":distinctMethods[0]):paymentMethod;
+          const aggBankRef=usingMulti?(paymentRefs.length>1?"MULTIPLES ("+paymentRefs.length+" pagos)":(paymentRefs[0].bank_reference||null)):bankReference;
+          const aggAmount=usingMulti?(paymentStatus==="paid"?null:refsTotal):paymentAmount;
+          const payLabelMulti=usingMulti
+            ?(paymentRefs.length===1
+              ?(paymentStatus==="paid"?" · 💰 Pagada ("+distinctMethods[0]+")":" · 🔶 Parcial $"+refsTotal+" ("+distinctMethods[0]+")")
+              :(paymentStatus==="paid"?" · 💰 Pagada ("+paymentRefs.length+" pagos: "+distinctMethods.join("+")+")":" · 🔶 Parcial $"+refsTotal+" ("+paymentRefs.length+" pagos: "+distinctMethods.join("+")+")"))
+            :null;
+          const payLabel=payLabelMulti
+            ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
           const tlMsg="⚡ Folio anticipado "+folio+" asignado ("+(invoiceType==="factura"?"Factura":"Remisión")+") · Razón: "+reason+payLabel;
-          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:paymentMethod,payment_amount:paymentAmount,bank_reference:bankReference,timeline:addTL(o,tlMsg)}:o));
+          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,timeline:addTL(o,tlMsg)}:o));
           await db.addTimeline(preInvoiceModal.id,tlMsg,user,"#ff9500");
           // Notificaciones a Lupita + Vendedor + Marcelo
           const notifMsg="⚡ Folio anticipado "+folio+" asignado a "+(preInvoiceModal.client||"")+" — "+(preInvoiceModal.product_type||"")+" · "+(preInvoiceModal.production_number||"");
