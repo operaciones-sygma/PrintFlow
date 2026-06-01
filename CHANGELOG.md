@@ -5,6 +5,70 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.0 — Mejoras: audit log impresiones + OC split Corona — 01-jun-2026
+
+Mejoras opt-in pedidas por Marcelo después de cerrar todos los bugs.
+
+### #1 — Tabla `print_audit` (histórico permanente de impresiones)
+
+Antes: `orders.print_version`, `last_printed_at`, `last_printed_by` se sobreescribían con cada print. Solo guardaban el ÚLTIMO.
+
+Ahora: nueva tabla `public.print_audit` con 1 row por impresión:
+
+```sql
+CREATE TABLE public.print_audit (
+  id uuid PK,
+  order_id text FK REFERENCES orders(id) ON DELETE CASCADE,
+  version int NOT NULL CHECK (>0),
+  printed_at timestamptz NOT NULL,
+  printed_by text NOT NULL,
+  content_hash text NOT NULL,
+  invoice_folio text,         -- snapshot al imprimir
+  invoice_type text,
+  stage text,
+  notes_snapshot text,        -- LEFT(notes, 200)
+  UNIQUE (order_id, version)
+);
+```
+
+Indexes: `order_id`, `printed_at DESC`, `printed_by`. RLS SELECT abierto (PrintFlow interno), mutaciones solo via `register_print` SECURITY DEFINER.
+
+`register_print` ahora inserta una row al final. Trazabilidad completa: "¿quién imprimió la v3 de la orden X y a qué hora? ¿qué stage tenía? ¿cuál era el folio fiscal entonces?" — ahora se responde con un SELECT.
+
+Útil para:
+- Disputas: "yo imprimí v2 a las 10am" → query confirma o niega
+- Reportes: cuántas impresiones por user/día, productividad de Karla
+- Audit: si una hoja sale a planta y se pierde, el hash sigue en BD
+
+### #2 — OC split soporta clientes Corona/anticipo
+
+Antes: la RPC `assign_folios_split_oc` rechazaba con `RAISE EXCEPTION` si el cliente tenía `billing_mode='anticipo'`. Limitación documentada.
+
+Ahora: replica la lógica de `sync_invoice_from_oc` para cada grupo:
+
+1. Detecta `billing_mode='anticipo'` + `corona_credit_bridge_enabled=true` (sin el flag, rechaza con error claro)
+2. Por cada grupo crea invoice como **pagada** con balance=0
+3. Llama `credit_consume()` consumiendo el SUBTOTAL del grupo (sin IVA) del ledger Corona
+4. INSERT `cobranza.payments` con `payment_type='saldo_a_favor'` y monto = invoice_amount (con IVA si factura)
+5. Audit log `oc_split_apply_credit_corona` por grupo
+
+**Restricción**: si la OC es Corona, NO se pueden capturar `payment_refs` en los grupos (el saldo a favor cubre todo). Se rechaza con error claro si Karla los pasa.
+
+Paridad con flujo `shared`: ledger consumido en moneda sin IVA, cobranza registra payment con IVA. v10.43.26 semantic.
+
+OC web siguen rechazadas (folios automáticos vía MP no encajan con división manual).
+
+### Verificación
+
+- `register_print` testeado: insert audit row con order_id, version=1, printed_by, content_hash, stage snapshot.
+- `assign_folios_split_oc` firma sin cambios (`p_oc_id, p_groups, p_pre_assigned, p_reason, p_actor`) — frontend no requiere cambios.
+
+### Lo que NO se atacó (con razón)
+
+- **OC web split**: la lógica de auto-aplicar pago MP por grupo requiere diseño nuevo (¿a qué grupo va el pago si hay $X en 1 transacción para N grupos?). Riesgo financiero alto, sin caso de uso claro. Marcelo: si necesita, lo discutimos.
+- **Sobrepago automático en CobranzaFlow**: la detección + alerta `audit_discrepancies` ya existe (v10.51.1 C2). La auto-creación de saldo a favor para no-Corona requiere modificar el módulo CobranzaFlow (otro scope). Se maneja manual hoy.
+
+
 ## v10.53.2 — Cierre menores post-scan v10.53.0 — 01-jun-2026
 
 Últimos 2 menores reales del scan v10.53.0:
