@@ -5,6 +5,89 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.51.0 — Dividir 1 OC en N facturas (drag-drop) — 31-may-2026
+
+Marcelo: "agrega la opción en órdenes de compra donde se puedan dividir las órdenes de producción en varias facturas, tal vez 2 órdenes de producción tienen una factura compartida y otra 2 tienen otra factura compartida. Karla las arrastra a su factura correspondiente."
+
+### UX adaptativa
+
+El modal "Asignar folio fiscal a OC" ahora tiene 2 modos vía toggle al inicio:
+
+- **📄 Asignación simple** (default): comportamiento idéntico a hoy — 1 folio compartido o N folios consecutivos.
+- **🔀 Dividir en N facturas** (nuevo): UI drag-drop donde Karla agrupa órdenes en columnas, cada una con su propio folio + tipo (factura/remisión) + multi-pago opcional.
+
+Toggle es persistente dentro del modal; cerrar y reabrir lo resetea a "simple".
+
+### Modo split — UX
+
+- Inicializa con 1 columna conteniendo TODAS las órdenes pendientes.
+- Botón **➕ Agregar otra factura** crea columna vacía.
+- Drag órdenes entre columnas (HTML5 nativo, sin librería).
+- Cada columna muestra: doc_type (D-/R-), input folio, total con/sin IVA, cards de órdenes asignadas, multi-pago opcional (reutiliza `MultiPaymentPicker` de v10.50.0).
+- Panel naranja arriba muestra órdenes huérfanas (no asignadas a ningún grupo) — bloquea submit.
+- Mensaje en vivo de validación: "Grupo 2: folio inválido", "Pagos exceden total", etc.
+- Botón **🗑️** elimina grupo; sus órdenes se mueven al primero restante (nunca quedan huérfanas).
+
+### Schema DB (alpha)
+
+```sql
+CREATE TABLE public.oc_invoice_groups (
+  id uuid PK,
+  purchase_order_id text FK REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  folio text NOT NULL UNIQUE,
+  doc_type text CHECK (doc_type IN ('factura','remision')),
+  position int,
+  amount numeric,  -- cache
+  created_at, created_by
+);
+ALTER TABLE public.orders ADD COLUMN oc_invoice_group_id uuid
+  REFERENCES public.oc_invoice_groups(id) ON DELETE SET NULL;
+```
+
+RLS: SELECT abierto, mutaciones solo via SECURITY DEFINER RPC.
+
+### RPC `assign_folios_split_oc` (beta)
+
+Input: `(p_oc_id, p_groups jsonb, p_pre_assigned, p_reason, p_actor)`.
+
+`p_groups` es array de `{doc_type, folio, order_ids[], payment_refs[]}`.
+
+**Validaciones críticas** (SECURITY DEFINER):
+- OC existe, no cancelada, no locked, sin shared_invoice_folio previo, sin grupos previos
+- Cliente NO billing_mode='anticipo' (limitación v10.51.0 — usa flujo shared)
+- OC no es web
+- Cobertura completa: todas las órdenes pendientes en algún grupo
+- Folios únicos entre grupos y vs DB (`orders.invoice_folio`, `purchase_orders.shared_invoice_folio`, `oc_invoice_groups.folio`)
+- order_ids no duplicados entre grupos
+- Cada orden tiene precio > 0
+- Si payment_refs presentes: suma EXACTA en cents == invoice_amount (regla v10.50.3); bank_reference requerida para transferencia/tarjeta/cheque
+
+**Acción atómica** (1 transacción):
+1. INSERT N rows en `oc_invoice_groups`
+2. UPDATE órdenes: invoice_folio + oc_invoice_group_id + invoice_type + invoiced_at + stage='delivered'/'maq_delivered'
+3. INSERT N invoices en `cobranza.invoices` (cada una con sum de orders del grupo + IVA si factura)
+4. INSERT payments en `cobranza.payments` (1 por ref)
+5. UPDATE invoice_counters con max folio asignado
+6. Si pre_assigned: lockea OC
+7. Audit log por grupo
+
+### Bridge guard
+
+`sync_invoice_from_orders` SKIPEA cuando `NEW.oc_invoice_group_id IS NOT NULL` (la invoice ya fue creada por la RPC). Evita duplicados.
+
+### Limitaciones v10.51.0
+
+- Clientes **Corona/anticipo**: rechazado con error claro. Hoy no hay ninguna OC Corona en producción (verificado: 0/4). Si surge, extendemos.
+- **OC web**: rechazado (folios automáticos vía MP).
+- **Cancelación parcial** sigue siendo gap preexistente (no scope de v10.51.0).
+
+### Backward compat
+
+- OCs existentes con `shared_invoice_folio` no se tocan; siguen funcionando con el flujo legacy.
+- Modal nuevo en modo "simple" usa el flujo legacy `assign_folio_to_oc` (sin cambios).
+- Modal nuevo en modo "split" usa la RPC nueva.
+
+
 ## v10.50.3 — Drift de centavos: comparación exacta — 31-may-2026
 
 Último 🟡 del scan v10.50.0 cerrado. La tolerancia de `0.01` en la validación de suma de pagos vs total dejaba pasar diferencias reales de hasta 1 centavo. Ahora la comparación es exacta.

@@ -569,6 +569,21 @@ const db = {
     if(error) throw new Error(error.message);
     return data; // {oc_id, mode, count, folios, pre_assigned}
   },
+  // 📄 v10.51.0 — Dividir 1 OC en N facturas (split). Cada grupo = 1 invoice con M órdenes.
+  // groups: [{doc_type:"factura"|"remision", folio:"D-XXXX", order_ids:["o1","o2"],
+  //           payment_refs:[{method,amount,bank_reference}]}]
+  // Limitación inicial: rechaza OCs con cliente Corona/anticipo y OC web.
+  async assignFoliosSplitOC(ocId, groups, preAssigned, reason, actor) {
+    const {data, error} = await supabase.rpc("assign_folios_split_oc", {
+      p_oc_id: ocId,
+      p_groups: groups,
+      p_pre_assigned: preAssigned,
+      p_reason: reason || null,
+      p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data; // {oc_id, groups_count, pre_assigned, groups:[{group_id, folio, doc_type, invoice_id, amount, balance, status, order_count}]}
+  },
   // 🆕 v10.9.0 — Cancelación de orden con folio fiscal (solo admin).
   // Marca NC como pendiente; el seguimiento de NC emitida se gestiona en v10.9.1.
   async cancelInvoicedOrder(orderId, reason, byUser) {
@@ -4889,27 +4904,36 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
   </div>;
 }
 
-// ─── ASSIGN OC FOLIO MODAL (v10.11.0 Sub-fase B) ───
-function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose}){
+// ─── ASSIGN OC FOLIO MODAL (v10.11.0 Sub-fase B + v10.51.0 split adaptativo) ───
+// Modos: "simple" (1 folio compartido o N consecutivos) | "split" (N facturas con drag-drop)
+function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onConfirmSplit, onClose}){
   useEscClose(onClose);
-  const [invoiceType, setInvoiceType] = useState("factura");
-  const [mode, setMode] = useState("shared"); // T2: default shared
-  const [folioStart, setFolioStart] = useState("");
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [suggestion, setSuggestion] = useState(""); // último valor sugerido por DB (para warning)
+  const parseFolioNum = (f)=>{const m=String(f||"").match(/^[DR]-(\d+)$/i); return m?parseInt(m[1],10):null};
 
-  // Recalcular sugerencia al abrir y al cambiar tipo
+  const [activeMode, setActiveMode] = useState("simple"); // "simple" | "split"
+  const [saving, setSaving] = useState(false);
+  const [reason, setReason] = useState("");
+
+  // ===== SIMPLE MODE state =====
+  const [invoiceType, setInvoiceType] = useState("factura");
+  const [mode, setMode] = useState("shared");
+  const [folioStart, setFolioStart] = useState("");
+  const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
+
+  // Sugerencias de folio para ambos tipos (compartidas entre simple y split)
   useEffect(()=>{
     let cancelled = false;
     (async()=>{
       try {
-        const s = await db.getNextFolioSuggestion(invoiceType);
-        if (!cancelled) { setSuggestion(s); setFolioStart(s); }
-      } catch(e) { /* sin sugerencia, dejar input vacío */ }
+        const [sF, sR] = await Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision")]);
+        if (!cancelled) {
+          setSuggestionByType({factura:sF||"", remision:sR||""});
+          if (activeMode === "simple") setFolioStart(invoiceType==="factura" ? (sF||"") : (sR||""));
+        }
+      } catch(e) {}
     })();
     return ()=>{cancelled = true};
-  }, [invoiceType]);
+  }, [invoiceType, activeMode]);
 
   const pendingOrders = useMemo(()=>
     ocOrders.filter(o=>!o.invoice_folio && !o.stage.includes("cancelled")),
@@ -4920,10 +4944,9 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
   const pendingCount = pendingOrders.length;
 
   const prefix = invoiceType==="factura" ? "D-" : "R-";
-  const parseFolioNum = (f)=>{const m=String(f||"").match(/^[DR]-(\d+)$/i); return m?parseInt(m[1],10):null};
   const startNum = parseFolioNum(folioStart);
   const folioValid = startNum !== null && folioStart.toUpperCase().startsWith(prefix);
-  const suggestionNum = parseFolioNum(suggestion);
+  const suggestionNum = parseFolioNum(suggestionByType[invoiceType] || "");
   const folioBelowSuggestion = folioValid && suggestionNum !== null && startNum < suggestionNum;
 
   const preview = useMemo(()=>{
@@ -4932,23 +4955,140 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
     return Array.from({length: pendingCount}, (_,i) => prefix+(startNum+i));
   }, [folioValid, startNum, mode, pendingCount, prefix]);
 
-  const canSubmit = !saving && folioValid && pendingCount > 0
+  const canSubmitSimple = !saving && folioValid && pendingCount > 0
     && (!preAssignedMode || reason.trim().length > 0);
 
-  const submit = async()=>{
-    if (!canSubmit) return;
+  // ===== SPLIT MODE state =====
+  // splitGroups: [{doc_type, folio, order_ids[], payment_status, payment_refs[]}]
+  const [splitGroups, setSplitGroups] = useState([]);
+  const [dragOrderId, setDragOrderId] = useState(null);
+
+  // Inicializa con 1 grupo conteniendo todas las pendientes la primera vez que entras a split
+  useEffect(()=>{
+    if (activeMode === "split" && splitGroups.length === 0 && pendingCount > 0) {
+      setSplitGroups([{
+        doc_type: "factura",
+        folio: suggestionByType.factura || "",
+        order_ids: pendingOrders.map(o=>o.id),
+        payment_status: "unpaid",
+        payment_refs: []
+      }]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMode, pendingCount]);
+
+  const allAssignedSet = useMemo(()=>new Set(splitGroups.flatMap(g=>g.order_ids)), [splitGroups]);
+  const unassignedOrders = useMemo(()=>pendingOrders.filter(o=>!allAssignedSet.has(o.id)), [pendingOrders, allAssignedSet]);
+
+  const fmtMx = (n)=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const orderSubtotal = (o)=>o.order_type==="maquila"?Number(o.maq_price||0):Number(o.price||0);
+
+  // Validación split
+  const splitValidation = useMemo(()=>{
+    if (splitGroups.length < 1) return {ok:false, reason:"Sin grupos"};
+    if (unassignedOrders.length > 0) return {ok:false, reason:`${unassignedOrders.length} órdenes sin asignar`};
+    const foliosSeen = new Set();
+    for (let i=0; i<splitGroups.length; i++) {
+      const g = splitGroups[i];
+      const pref = g.doc_type==="factura"?"D-":"R-";
+      const num = parseFolioNum(g.folio);
+      if (num === null || num <= 0 || !g.folio.toUpperCase().startsWith(pref)) {
+        return {ok:false, reason:`Grupo ${i+1}: folio inválido`};
+      }
+      const folU = g.folio.toUpperCase();
+      if (foliosSeen.has(folU)) return {ok:false, reason:`Folio duplicado: ${folU}`};
+      foliosSeen.add(folU);
+      if (g.order_ids.length === 0) return {ok:false, reason:`Grupo ${i+1}: sin órdenes`};
+      // Validar payment_refs si presentes
+      if (g.payment_status !== "unpaid" && g.payment_refs.length > 0) {
+        const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
+        if (subtotal <= 0) return {ok:false, reason:`Grupo ${i+1}: subtotal <= 0`};
+        const totalDisplay = g.doc_type==="factura" ? Math.round(subtotal*116)/100 : subtotal;
+        const totalCents = Math.round(totalDisplay*100);
+        const sumCents = g.payment_refs.reduce((s,r)=>s+Math.round((Number(r.amount)||0)*100), 0);
+        if (sumCents > totalCents) return {ok:false, reason:`Grupo ${i+1}: pagos exceden total`};
+        if (g.payment_status === "paid" && sumCents !== totalCents) return {ok:false, reason:`Grupo ${i+1}: pagos no cubren total`};
+        if (g.payment_status === "partial" && (sumCents === 0 || sumCents >= totalCents)) return {ok:false, reason:`Grupo ${i+1}: parcial fuera de rango`};
+        for (const r of g.payment_refs) {
+          if (!r.method) return {ok:false, reason:`Grupo ${i+1}: pago sin método`};
+          if (!(Number(r.amount)>0)) return {ok:false, reason:`Grupo ${i+1}: pago sin monto`};
+          if (["transferencia","tarjeta","tarjeta_credito","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) {
+            return {ok:false, reason:`Grupo ${i+1}: ref bancaria requerida`};
+          }
+        }
+      } else if (g.payment_status === "paid" || g.payment_status === "partial") {
+        return {ok:false, reason:`Grupo ${i+1}: marca pagada/parcial sin capturar pagos`};
+      }
+    }
+    return {ok:true};
+  }, [splitGroups, unassignedOrders, pendingOrders]);
+
+  const canSubmitSplit = !saving && splitValidation.ok && (!preAssignedMode || reason.trim().length > 0);
+
+  // Helpers split
+  const updateGroup = (idx, patch)=>setSplitGroups(prev=>prev.map((g,i)=>i===idx?{...g,...patch}:g));
+  const addGroup = ()=>setSplitGroups(prev=>[...prev, {
+    doc_type: "factura",
+    folio: "",
+    order_ids: [],
+    payment_status: "unpaid",
+    payment_refs: []
+  }]);
+  const removeGroup = (idx)=>{
+    setSplitGroups(prev=>{
+      if (prev.length <= 1) return prev;
+      const removed = prev[idx];
+      const next = prev.filter((_,i)=>i!==idx);
+      // Mover órdenes huérfanas al primer grupo restante
+      if (removed.order_ids.length > 0) {
+        next[0] = {...next[0], order_ids: Array.from(new Set([...next[0].order_ids, ...removed.order_ids]))};
+      }
+      return next;
+    });
+  };
+  const moveOrderToGroup = (orderId, toGroupIdx)=>{
+    setSplitGroups(prev=>prev.map((g,i)=>({
+      ...g,
+      order_ids: i===toGroupIdx
+        ? (g.order_ids.includes(orderId) ? g.order_ids : [...g.order_ids, orderId])
+        : g.order_ids.filter(id=>id!==orderId)
+    })));
+  };
+  const removeOrderFromGroup = (orderId, fromGroupIdx)=>{
+    setSplitGroups(prev=>prev.map((g,i)=>i===fromGroupIdx ? {...g, order_ids: g.order_ids.filter(id=>id!==orderId)} : g));
+  };
+
+  const submitSimple = async()=>{
+    if (!canSubmitSimple) return;
     setSaving(true);
     try {
-      await onConfirm(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null);
+      await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null);
+    } catch(e) { setSaving(false); }
+  };
+  const submitSplit = async()=>{
+    if (!canSubmitSplit) return;
+    setSaving(true);
+    try {
+      const payload = splitGroups.map(g=>({
+        doc_type: g.doc_type,
+        folio: g.folio.toUpperCase(),
+        order_ids: g.order_ids,
+        payment_refs: g.payment_status === "unpaid" ? [] : g.payment_refs.map(r=>({
+          method: r.method,
+          amount: Number(r.amount),
+          bank_reference: r.bank_reference || null
+        }))
+      }));
+      await onConfirmSplit(payload, preAssignedMode, reason.trim() || null);
     } catch(e) { setSaving(false); }
   };
 
   const tColor = invoiceType==="factura" ? "#5856d6" : "#34c759";
   const tLabel = invoiceType==="factura" ? "Factura" : "Remisión";
-  const tIcon = invoiceType==="factura" ? "📄" : "📋";
+  const modalMaxWidth = activeMode === "split" ? 880 : 540;
 
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:modalMaxWidth,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:preAssignedMode?C.wn:C.ac}}>{preAssignedMode?"🔒":"📄"} {preAssignedMode?"Pre-asignar":"Asignar"} folio fiscal a {oc?.id}</h3>
       {preAssignedMode && <p style={{fontSize:11,color:C.wn,margin:"0 0 12px",fontWeight:600}}>⚠️ La OC quedará bloqueada para nuevos productos y movimientos hasta que se complete el ciclo fiscal.</p>}
 
@@ -4962,40 +5102,165 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
         {invoicedOrders.length > 0 && <div style={{fontSize:10,color:C.t3,marginTop:6}}>Folios ya asignados (inmutables): {invoicedOrders.map(o=>o.invoice_folio).join(", ")}</div>}
       </div>
 
-      <div style={{marginBottom:14}}>
-        <label style={lbl}>Tipo de folio</label>
-        <div style={{display:"flex",gap:6}}>
-          {["factura","remision"].map(t=>{
-            const c = t==="factura"?"#5856d6":"#34c759";
-            const sel = invoiceType===t;
-            return <button key={t} onClick={()=>setInvoiceType(t)} style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?"📄 Factura (D-)":"📋 Remisión (R-)"}</button>;
+      {/* v10.51.0 — Toggle Simple/Split */}
+      <div style={{display:"flex",gap:6,marginBottom:14,padding:4,background:C.sf,borderRadius:10}}>
+        <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>📄 Asignación simple</button>
+        <button onClick={()=>setActiveMode("split")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="split"?C.bg:"transparent",color:activeMode==="split"?"#5856d6":C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif",boxShadow:activeMode==="split"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>🔀 Dividir en N facturas</button>
+      </div>
+
+      {activeMode === "simple" && <>
+        <div style={{marginBottom:14}}>
+          <label style={lbl}>Tipo de folio</label>
+          <div style={{display:"flex",gap:6}}>
+            {["factura","remision"].map(t=>{
+              const c = t==="factura"?"#5856d6":"#34c759";
+              const sel = invoiceType===t;
+              return <button key={t} onClick={()=>setInvoiceType(t)} style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?"📄 Factura (D-)":"📋 Remisión (R-)"}</button>;
+            })}
+          </div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <label style={lbl}>Modo de asignación</label>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>setMode("shared")} style={{...bs(mode==="shared"?C.ac:C.sf,mode==="shared"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="shared"?"none":"0.5px solid "+C.bd}}>📄 Un folio compartido</button>
+            <button onClick={()=>setMode("consecutive")} style={{...bs(mode==="consecutive"?C.ac:C.sf,mode==="consecutive"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="consecutive"?"none":"0.5px solid "+C.bd}}>🔢 {pendingCount} folios consecutivos</button>
+          </div>
+          <div style={{fontSize:10,color:C.t2,marginTop:6}}>{mode==="shared"?"Todos los productos pendientes reciben el mismo folio (1 sola factura/remisión).":"Cada producto pendiente recibe un folio consecutivo (N facturas/remisiones)."}</div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
+          <input style={{...inp,fontFamily:"monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
+          {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
+          {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
+        </div>
+
+        {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{fontSize:10,color:C.t2,fontWeight:600,marginBottom:4}}>VISTA PREVIA</div>
+          {mode==="shared"
+            ? <div style={{fontSize:13}}>Se asignará <strong style={{color:tColor,fontFamily:"monospace"}}>{preview[0]}</strong> a los <strong>{pendingCount}</strong> productos pendientes</div>
+            : <div style={{fontSize:13,lineHeight:1.5}}>Se asignarán <span style={{fontFamily:"monospace",color:tColor,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" ... "+preview[preview.length-1]}</span> ({preview.length} folios)</div>
+          }
+        </div>}
+      </>}
+
+      {activeMode === "split" && <>
+        <div style={{background:"#5856d610",border:"1px solid #5856d630",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#5856d6",lineHeight:1.5}}>
+          🔀 <strong>Modo dividir:</strong> arrastra órdenes entre columnas para agruparlas. Cada columna = 1 factura/remisión con su propio folio y pagos. <strong>Todas las órdenes deben quedar asignadas</strong>.
+        </div>
+
+        {/* Órdenes sin asignar (panel superior, solo visible si hay) */}
+        {unassignedOrders.length > 0 && (
+          <div style={{background:"#ff950010",border:"1px dashed #ff9500",borderRadius:10,padding:10,marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:8}}>⚠️ {unassignedOrders.length} órdenes sin asignar — arrástralas a un grupo</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {unassignedOrders.map(o=>(
+                <div key={o.id}
+                  draggable
+                  onDragStart={e=>{e.dataTransfer.setData("split-order-id", o.id); setDragOrderId(o.id);}}
+                  onDragEnd={()=>setDragOrderId(null)}
+                  style={{background:C.bg,border:"1px solid "+C.bd,borderRadius:8,padding:"6px 10px",fontSize:11,cursor:"grab",userSelect:"none",opacity:dragOrderId===o.id?0.5:1}}>
+                  <span style={{fontWeight:700,color:C.tx}}>#{o.production_number || o.id.slice(0,8)}</span>
+                  <span style={{marginLeft:6,color:C.t2}}>${fmtMx(orderSubtotal(o))}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Columnas de grupos */}
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(splitGroups.length,3)},1fr)`,gap:10,marginBottom:14}}>
+          {splitGroups.map((g, gIdx)=>{
+            const pref = g.doc_type==="factura"?"D-":"R-";
+            const fnum = parseFolioNum(g.folio);
+            const folOK = fnum!==null && fnum>0 && g.folio.toUpperCase().startsWith(pref);
+            const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
+            const totalDisplay = g.doc_type==="factura" ? Math.round(subtotal*116)/100 : subtotal;
+            const groupColor = g.doc_type==="factura"?"#5856d6":"#34c759";
+            return (
+              <div key={gIdx}
+                onDragOver={e=>e.preventDefault()}
+                onDrop={e=>{const oid = e.dataTransfer.getData("split-order-id"); if(oid){moveOrderToGroup(oid, gIdx);} setDragOrderId(null);}}
+                style={{background:C.bg,border:"1.5px solid "+(dragOrderId?groupColor:C.bd),borderRadius:12,padding:10,minHeight:200}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:groupColor}}>{g.doc_type==="factura"?"📄":"📋"} Factura #{gIdx+1}</div>
+                  {splitGroups.length > 1 && (
+                    <button onClick={()=>removeGroup(gIdx)} aria-label={`Eliminar grupo ${gIdx+1}`} style={{padding:"2px 6px",borderRadius:6,border:"1px solid "+C.dn+"40",background:C.dn+"10",color:C.dn,fontSize:10,fontWeight:700,cursor:"pointer"}}>🗑️</button>
+                  )}
+                </div>
+
+                {/* Tipo */}
+                <div style={{display:"flex",gap:4,marginBottom:6}}>
+                  {["factura","remision"].map(t=>{
+                    const c = t==="factura"?"#5856d6":"#34c759";
+                    const sel = g.doc_type===t;
+                    return <button key={t} onClick={()=>updateGroup(gIdx, {doc_type:t, folio:t==="factura"?(suggestionByType.factura||""):(suggestionByType.remision||""), payment_status:"unpaid", payment_refs:[]})} style={{flex:1,padding:"5px 4px",borderRadius:6,border:"1px solid "+(sel?c:C.bd),background:sel?c+"15":C.bg,color:sel?c:C.t2,fontSize:10,fontWeight:600,cursor:"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
+                  })}
+                </div>
+
+                {/* Folio */}
+                <input type="text" value={g.folio} onChange={e=>updateGroup(gIdx, {folio:e.target.value})}
+                  placeholder={pref+"XXXX"}
+                  style={{...inp,padding:"6px 8px",fontSize:12,fontFamily:"monospace",border:"1.5px solid "+(folOK?C.bd:C.dn+"40"),marginBottom:8}}/>
+
+                {/* Total */}
+                <div style={{fontSize:10,color:C.t2,marginBottom:8,padding:"4px 8px",background:C.sf,borderRadius:6}}>
+                  {g.doc_type==="factura"?"Con IVA":"Sin IVA"}: <strong style={{color:C.tx}}>${fmtMx(totalDisplay)}</strong>
+                </div>
+
+                {/* Órdenes asignadas */}
+                <div style={{minHeight:80,display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                  {g.order_ids.length === 0 && (
+                    <div style={{fontSize:10,color:C.t3,fontStyle:"italic",padding:"8px 0"}}>Arrastra órdenes aquí</div>
+                  )}
+                  {g.order_ids.map(oid=>{
+                    const o = pendingOrders.find(x=>x.id===oid);
+                    if (!o) return null;
+                    return (
+                      <div key={oid}
+                        draggable
+                        onDragStart={e=>{e.dataTransfer.setData("split-order-id", oid); setDragOrderId(oid);}}
+                        onDragEnd={()=>setDragOrderId(null)}
+                        style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:6,padding:"4px 8px",fontSize:10,cursor:"grab",userSelect:"none",display:"flex",alignItems:"center",gap:4,opacity:dragOrderId===oid?0.5:1}}>
+                        <span style={{fontWeight:700,color:C.tx}}>#{o.production_number || o.id.slice(0,6)}</span>
+                        <span style={{color:C.t2}}>${fmtMx(orderSubtotal(o))}</span>
+                        <button onClick={(e)=>{e.stopPropagation(); removeOrderFromGroup(oid, gIdx);}} aria-label={`Quitar ${o.id}`} style={{marginLeft:2,padding:0,width:14,height:14,borderRadius:7,border:"none",background:C.dn+"20",color:C.dn,fontSize:9,cursor:"pointer",lineHeight:1}}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Multi-pago opcional por grupo */}
+                {g.order_ids.length > 0 && subtotal > 0 && (
+                  <details style={{fontSize:11}}>
+                    <summary style={{cursor:"pointer",color:"#5856d6",fontWeight:600,padding:"4px 0"}}>💰 Pagos {g.payment_status!=="unpaid" && g.payment_refs.length > 0 ? `(${g.payment_refs.length})` : "(opcional)"}</summary>
+                    <div style={{marginTop:6}}>
+                      <MultiPaymentPicker
+                        status={g.payment_status}
+                        refs={g.payment_refs}
+                        orderTotal={subtotal}
+                        invoiceType={g.doc_type==="factura"?"factura":"remision"}
+                        onChange={(newStatus, newRefs)=>updateGroup(gIdx, {payment_status:newStatus, payment_refs:newRefs||[]})}
+                      />
+                    </div>
+                  </details>
+                )}
+              </div>
+            );
           })}
         </div>
-      </div>
 
-      <div style={{marginBottom:14}}>
-        <label style={lbl}>Modo de asignación</label>
-        <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setMode("shared")} style={{...bs(mode==="shared"?C.ac:C.sf,mode==="shared"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="shared"?"none":"0.5px solid "+C.bd}}>📄 Un folio compartido</button>
-          <button onClick={()=>setMode("consecutive")} style={{...bs(mode==="consecutive"?C.ac:C.sf,mode==="consecutive"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="consecutive"?"none":"0.5px solid "+C.bd}}>🔢 {pendingCount} folios consecutivos</button>
-        </div>
-        <div style={{fontSize:10,color:C.t2,marginTop:6}}>{mode==="shared"?"Todos los productos pendientes reciben el mismo folio (1 sola factura/remisión).":"Cada producto pendiente recibe un folio consecutivo (N facturas/remisiones)."}</div>
-      </div>
+        {/* Botón agregar grupo */}
+        <button onClick={addGroup} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed "+C.ac,background:C.acL,color:C.ac,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Poppins',sans-serif",marginBottom:12}}>➕ Agregar otra factura</button>
 
-      <div style={{marginBottom:14}}>
-        <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
-        <input style={{...inp,fontFamily:"monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
-        {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
-        {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestion}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
-      </div>
-
-      {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600,marginBottom:4}}>VISTA PREVIA</div>
-        {mode==="shared"
-          ? <div style={{fontSize:13}}>Se asignará <strong style={{color:tColor,fontFamily:"monospace"}}>{preview[0]}</strong> a los <strong>{pendingCount}</strong> productos pendientes</div>
-          : <div style={{fontSize:13,lineHeight:1.5}}>Se asignarán <span style={{fontFamily:"monospace",color:tColor,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" ... "+preview[preview.length-1]}</span> ({preview.length} folios)</div>
-        }
-      </div>}
+        {/* Estado de validación */}
+        {!splitValidation.ok && (
+          <div style={{fontSize:11,color:"#ff9500",marginBottom:12,padding:"6px 10px",background:"#ff950010",borderRadius:8,fontWeight:600}}>
+            ⚠️ {splitValidation.reason}
+          </div>
+        )}
+      </>}
 
       {preAssignedMode && <div style={{marginBottom:14}}>
         <label style={lbl}>Razón de pre-asignación * <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· obligatoria</span></label>
@@ -5004,7 +5269,10 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirm, onClose})
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?(preAssignedMode?C.wn:tColor):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmit?"pointer":"not-allowed"}}>{saving?"⏳ Asignando...":(preAssignedMode?"🔒 Pre-asignar":"📄 Asignar")+" "+tLabel}</button>
+        {activeMode === "simple"
+          ? <button onClick={submitSimple} disabled={!canSubmitSimple} style={{...bt(canSubmitSimple?(preAssignedMode?C.wn:tColor):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSimple?"pointer":"not-allowed"}}>{saving?"⏳ Asignando...":(preAssignedMode?"🔒 Pre-asignar":"📄 Asignar")+" "+tLabel}</button>
+          : <button onClick={submitSplit} disabled={!canSubmitSplit} style={{...bt(canSubmitSplit?(preAssignedMode?C.wn:"#5856d6"):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSplit?"pointer":"not-allowed"}}>{saving?"⏳ Dividiendo...":(preAssignedMode?"🔒 Pre-asignar":"🔀 Dividir")+" en "+splitGroups.length+" facturas"}</button>
+        }
       </div>
     </div>
   </div>;
@@ -8683,6 +8951,22 @@ export default function PrintFlow() {
     }catch(e){console.error("[assignFolioToOC] Error:",e);showToast("❌ No se pudo asignar: "+(e?.message||"error desconocido"),"error");return null}
   },[user,userLogin,showToast,reload]);
 
+  // 📄 v10.51.0 — Asigna N folios distintos dividiendo una OC en N facturas (split)
+  const assignFoliosSplitOC=useCallback(async(ocId,groups,preAssigned,reason)=>{
+    if(!canExecuteAction("assignFolioToOC",null,user,userLogin)){showToast(actionDeniedToast("assignFolioToOC",null,user,userLogin),"error");return null}
+    try{
+      const actor=userLogin||user;
+      const result=await db.assignFoliosSplitOC(ocId,groups,preAssigned,reason,actor);
+      const icon=preAssigned?"🔒":"📄";
+      const verb=preAssigned?"pre-asignadas":"asignadas";
+      const folios=(result?.groups||[]).map(g=>g.folio).join(" + ");
+      showToast(icon+" "+result.groups_count+" facturas "+verb+" a "+ocId+(folios?" ("+folios+")":""));
+      setFolioOCModal(null);
+      reload();
+      return result;
+    }catch(e){console.error("[assignFoliosSplitOC] Error:",e);showToast("❌ No se pudo dividir: "+(e?.message||"error desconocido"),"error");return null}
+  },[user,userLogin,showToast,reload]);
+
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
@@ -9828,7 +10112,7 @@ export default function PrintFlow() {
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
-      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirm={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
+      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
