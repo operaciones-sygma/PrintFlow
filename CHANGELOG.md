@@ -5,6 +5,74 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.51.1 — Fixes 🔴🟠 post-scan v10.51.0 — 31-may-2026
+
+Scan exhaustivo con 3 agentes paralelos detectó 3 críticos + 4 mayores + 7 menores. Marcelo: "hagamos los fixes críticos y mayores". 7/7 atacados; 7 menores quedan para v10.51.2 opcional.
+
+### 🔴 C1 — `sync_post_invoice_edit` no detectaba `oc_invoice_group_id`
+
+Si Karla editaba el precio de una orden YA asignada a un grupo OC split, el trigger intentaba crear/actualizar invoice retroactivamente, corrompiendo la invoice agregada del grupo. Lo mismo pasaba con multi-pago de v10.50.2 — gap aceptable: skipear y dejar ajuste manual en CobranzaFlow.
+
+**Fix**: guard al inicio del trigger: si `NEW.oc_invoice_group_id IS NOT NULL`, audit + RETURN NEW.
+
+### 🔴 C2 — `sync_cancellation_to_cobranza` cancelaba invoice ENTERA del grupo
+
+Si Karla cancelaba 1 orden de un grupo con 4 órdenes (folio D-100 $1000), el trigger cancelaba D-100 completa. Las otras 3 órdenes activas perdían su invoice → corte en CobranzaFlow.
+
+**Fix**: rama nueva al inicio si `oc_invoice_group_id IS NOT NULL`:
+- Recalcula subtotal del grupo excluyendo la orden cancelada
+- Si quedan 0 órdenes activas → cancela invoice entera (caso degenerate)
+- Si quedan N > 0 → **prorratea**: ajusta `amount` y `balance` de invoice, recalcula status (pagada/parcial/pendiente), actualiza `oc_invoice_groups.amount`
+- Si `paid_amount > new_amount` → audit_discrepancies alerta sobrepago para revisión manual
+
+### 🔴 C3 — `assign_folio_to_oc` legacy permitía mezclar flujos
+
+Una OC podía tener grupos `oc_invoice_groups` AND luego invocar `assign_folio_to_oc` modo 'shared' → estado inconsistente (órdenes con `oc_invoice_group_id` AND `shared_invoice_folio` set).
+
+**Fix**: nuevo check en `assign_folio_to_oc`: `IF EXISTS oc_invoice_groups WHERE purchase_order_id = p_oc_id` → RAISE EXCEPTION 22023. También cross-check del folio candidato vs `oc_invoice_groups.folio`.
+
+### 🟠 M1 — Cambio de doc_type borraba payment_refs sin warning
+
+Al cambiar D-↔R- en una columna del split UI, el handler reseteaba `payment_refs:[]` hardcodeado. Si Karla había capturado 3 pagos, se perdían silenciosamente.
+
+**Fix**: `window.confirm` antes de resetear si `payment_refs.length > 0`. Mensaje explica que el monto cambia por IVA.
+
+### 🟠 M2 — `sync_invoice_from_oc` no rechazaba si OC tenía grupos
+
+Si admin (o trigger automático) seteaba `shared_invoice_folio` retroactivamente en una OC con grupos, el trigger creaba una invoice agregada SEGUNDA → 1 OC con N+1 invoices (los N de los grupos + 1 agregada).
+
+**Fix**: guard al inicio: `IF EXISTS oc_invoice_groups WHERE purchase_order_id = NEW.id` → audit + RETURN NEW.
+
+### 🟠 M3 — `sync_post_invoice_edit` rama OC compartida sumaba TODAS las órdenes
+
+En una OC en transición (mix shared + split), la SUM agregada para recalcular el invoice del shared incluía órdenes ya migradas a grupos. Aggregate corrupto.
+
+**Fix**: el SUM en rama `v_is_oc_shared` ahora filtra `WHERE o.oc_invoice_group_id IS NULL`. Solo cuenta órdenes legacy.
+
+### 🟠 M4 — Frontend split no bloqueaba `paid`/`partial` sin órdenes
+
+Si Karla marcaba un grupo como "Pagada" y después arrastraba todas las órdenes fuera, la validación pasaba (porque verificaba `payment_refs.length > 0` AND subtotal, pero no el cruce con status).
+
+**Fix**: chequeo independiente: si `payment_status IN (paid, partial)` AND `subtotal <= 0` → bloquea con razón clara.
+
+### Falsos positivos del scan (descartados)
+
+- ❌ **RLS abierto en oc_invoice_groups**: PrintFlow es app interna del equipo Sygma, todas las tablas tienen `qual=true`
+- ❌ **PUBLIC EXECUTE en sync_invoice_from_orders**: verificado, solo postgres/service_role
+- ❌ **Drift `0.001` falla con multi-pago acumulado**: el ejemplo del agente confundió subtotal vs total con IVA
+- ❌ **UNIQUE(oc, position) en retry**: la RPC ya rechaza si hay grupos previos
+
+### Pendientes menores (v10.51.2 opcional)
+
+- 🟡 useEffect init `splitGroups` con `pendingOrders` en closure (eslint-disabled)
+- 🟡 RPC no rechaza `order_ids` con NULL en array
+- 🟡 RPC no rechaza `amount=null` en payment_refs (frontend ya valida)
+- 🟡 `oc_invoice_groups.amount` NULL permitido + `position` sin CHECK > 0
+- 🟡 `parseFolioNum` acepta leading zeros ("D-0123" → 123)
+- 🟡 `ERRCODE='22023'` semánticamente incorrecto para business rejects
+- 🟢 `setSaving(false)` en finally (modal se desmonta en éxito, no es bug real)
+
+
 ## v10.51.0 — Dividir 1 OC en N facturas (drag-drop) — 31-may-2026
 
 Marcelo: "agrega la opción en órdenes de compra donde se puedan dividir las órdenes de producción en varias facturas, tal vez 2 órdenes de producción tienen una factura compartida y otra 2 tienen otra factura compartida. Karla las arrastra a su factura correspondiente."

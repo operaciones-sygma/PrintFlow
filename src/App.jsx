@@ -4999,9 +4999,14 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       if (foliosSeen.has(folU)) return {ok:false, reason:`Folio duplicado: ${folU}`};
       foliosSeen.add(folU);
       if (g.order_ids.length === 0) return {ok:false, reason:`Grupo ${i+1}: sin órdenes`};
+      // v10.51.1 M4 — Si está marcado paid/partial, exigir órdenes asignadas con subtotal > 0
+      // (cubre el caso donde Karla marcó pagada y luego arrastró todas las órdenes fuera).
+      const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
+      if ((g.payment_status === "paid" || g.payment_status === "partial") && subtotal <= 0) {
+        return {ok:false, reason:`Grupo ${i+1}: marca pagada/parcial pero subtotal <= 0`};
+      }
       // Validar payment_refs si presentes
       if (g.payment_status !== "unpaid" && g.payment_refs.length > 0) {
-        const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
         if (subtotal <= 0) return {ok:false, reason:`Grupo ${i+1}: subtotal <= 0`};
         const totalDisplay = g.doc_type==="factura" ? Math.round(subtotal*116)/100 : subtotal;
         const totalCents = Math.round(totalDisplay*100);
@@ -5190,12 +5195,20 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                   )}
                 </div>
 
-                {/* Tipo */}
+                {/* Tipo — v10.51.1 M1: confirma si hay pagos capturados antes de resetear */}
                 <div style={{display:"flex",gap:4,marginBottom:6}}>
                   {["factura","remision"].map(t=>{
                     const c = t==="factura"?"#5856d6":"#34c759";
                     const sel = g.doc_type===t;
-                    return <button key={t} onClick={()=>updateGroup(gIdx, {doc_type:t, folio:t==="factura"?(suggestionByType.factura||""):(suggestionByType.remision||""), payment_status:"unpaid", payment_refs:[]})} style={{flex:1,padding:"5px 4px",borderRadius:6,border:"1px solid "+(sel?c:C.bd),background:sel?c+"15":C.bg,color:sel?c:C.t2,fontSize:10,fontWeight:600,cursor:"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
+                    return <button key={t} onClick={()=>{
+                      if (sel) return;
+                      const hasPayments = g.payment_refs && g.payment_refs.length > 0;
+                      if (hasPayments) {
+                        const ok = window.confirm(`Cambiar a ${t==="factura"?"Factura":"Remisión"} borrará los ${g.payment_refs.length} pago(s) capturado(s) (el monto cambia ${t==="factura"?"agregando":"quitando"} IVA). ¿Continuar?`);
+                        if (!ok) return;
+                      }
+                      updateGroup(gIdx, {doc_type:t, folio:t==="factura"?(suggestionByType.factura||""):(suggestionByType.remision||""), payment_status:"unpaid", payment_refs:[]});
+                    }} style={{flex:1,padding:"5px 4px",borderRadius:6,border:"1px solid "+(sel?c:C.bd),background:sel?c+"15":C.bg,color:sel?c:C.t2,fontSize:10,fontWeight:600,cursor:"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
                   })}
                 </div>
 
