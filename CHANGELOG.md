@@ -5,6 +5,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.2 — Cierre 🟡 menores post-scan v10.54.0 — 01-jun-2026
+
+3 menores restantes del scan v10.54.0 atacados.
+
+### 🟡 m1 — Compound index `(printed_by, printed_at DESC)`
+
+Antes: 2 indexes separados (`printed_by`, `printed_at DESC`). Queries del tipo "cuántas hojas imprimió Karla en últimos 7 días" hacían index scan en `printed_by` + filter por fecha.
+
+Ahora: compound `idx_print_audit_printed_by_at (printed_by, printed_at DESC)`. Index seek directo, mucho más rápido para reportes de productividad.
+
+### 🟡 m2 — CHECK constraint `printed_by` no-empty
+
+Defensa en profundidad: la RPC `register_print` ya valida `IF p_user IS NULL OR TRIM(p_user)=''`, pero un INSERT directo desde `service_role` (futuro script de mantenimiento, edge function, etc.) podría burlar. CHECK garantiza a nivel schema.
+
+```sql
+ALTER TABLE public.print_audit
+  ADD CONSTRAINT print_audit_printed_by_not_empty
+  CHECK (TRIM(printed_by) != '');
+```
+
+Verificado: INSERT con `printed_by='   '` rechazado con `check_violation`.
+
+### 🟡 m3 — Función `cleanup_print_audit(p_keep_months int DEFAULT 12)`
+
+Para retención de print_audit. NO se ejecuta automáticamente — Marcelo decide cuándo correrla (manual o vía Supabase Cron).
+
+**Comportamiento**:
+- Borra rows con `printed_at < NOW() - p_keep_months months`
+- Mínimo 3 meses (rechaza valores menores, evita borrado masivo accidental)
+- Audit log en `cobranza.audit_log` con `action='cleanup_print_audit'`
+- Returns `{keep_months, cutoff_date, rows_deleted}`
+
+**Permisos**: solo `postgres` y `service_role`. No `authenticated`.
+
+**Cómo programar** (cuando lo necesites):
+- Manual: ejecutar `SELECT public.cleanup_print_audit(12);` desde Supabase Studio
+- Automático: configurar en Supabase Cron (Dashboard → Database → Cron Jobs):
+  ```sql
+  SELECT cron.schedule('cleanup-print-audit', '0 3 1 * *', $$SELECT public.cleanup_print_audit(12)$$);
+  -- Día 1 de cada mes a las 3am
+  ```
+
+Tests aplicados:
+- `cleanup_print_audit(2)` → rechaza con "mínimo 3 meses"
+- `cleanup_print_audit(13)` → devuelve `rows_deleted=0` (no hay rows tan viejos), cutoff_date correcto
+
+### Resultado scan v10.54.0
+
+- 🔴 Críticos: 2/2 ✅ (v10.54.1)
+- 🟠 Mayores: 4/4 ✅ (v10.54.1)
+- 🟡 Menores: 3/3 ✅ (v10.54.2)
+- **Total: 9/9 cerrados. 0 pendientes.**
+
+
 ## v10.54.1 — Fixes 🔴🟠 post-scan v10.54.0 — 01-jun-2026
 
 Scan exhaustivo (3 agentes) detectó 9 bugs reales en v10.54.0: 2🔴 + 4🟠 + 3🟡. Atacados los 6 críticos y mayores.
