@@ -5,6 +5,93 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.1 — Fixes 🔴🟠 post-scan v10.54.0 — 01-jun-2026
+
+Scan exhaustivo (3 agentes) detectó 9 bugs reales en v10.54.0: 2🔴 + 4🟠 + 3🟡. Atacados los 6 críticos y mayores.
+
+### 🔴 C1 — `print_audit` con permisos INSERT/UPDATE/DELETE/TRUNCATE abiertos
+
+**Antes**: la tabla nueva heredaba el comportamiento default de Supabase que otorga TODOS los privilegios a `anon` y `authenticated`. Yo solo había hecho `GRANT SELECT`, pero el `REVOKE` no se ejecutó. Cualquier usuario authenticado podía insertar rows falsas en el histórico, borrar evidencia, alterar autor/timestamp, o TRUNCATE la tabla.
+
+**Después**:
+```sql
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON public.print_audit FROM anon, authenticated;
+```
+
+Verificado: solo `SELECT` queda granted. Mutaciones solo via `register_print` SECURITY DEFINER.
+
+### 🔴 C2 — `sync_cancellation_to_cobranza` NO reversaba ledger Corona en grupo OC split
+
+**Antes**: al cancelar una orden de un grupo Corona split, el trigger prorrateaba la invoice (correcto) pero NO tocaba el ledger Corona. El consumo del saldo_a_favor quedaba intacto. Resultado: cliente perdía saldo a favor automáticamente, solo se emitía `audit_discrepancies` para acción manual en CobranzaFlow.
+
+**Después**: nuevo branch para `billing_mode='anticipo'` en la rama de grupo OC split:
+
+1. **Cancelación parcial** (quedan órdenes activas en el grupo):
+   - `credit_adjust(client_id, +canceled_subtotal, motivo, user)` → devuelve al ledger el subtotal sin IVA de la orden cancelada
+   - `UPDATE cobranza.payments SET amount = new_amount` → ajusta el payment saldo_a_favor con el nuevo monto con IVA
+   - Invoice queda `pagada` con `balance=0` (sin sobrepago artificial)
+   - Audit `bridge_cancel_oc_split_prorate` con `billing_mode='anticipo'`
+
+2. **Cancelación completa** (última orden del grupo cancelada):
+   - `credit_reverse(client_id, source_invoice_id, user)` → reversa TODO el consumo del invoice
+   - Invoice + payments quedan cancelados
+   - Audit `bridge_cancel_oc_split_corona_reverse_full`
+
+Discrepancy `audit_discrepancies` ahora solo se emite si NO es Corona (Corona se ajusta automático).
+
+### 🟠 M1 — `register_print` orden de operations atomicidad
+
+**Antes**: UPDATE de `orders` (incrementa print_version) ANTES de INSERT en `print_audit`. Si por alguna razón el INSERT fallaba por UNIQUE constraint (race condition con FOR UPDATE no debería pasar, pero defensa en profundidad), `orders.print_version` quedaba incrementado sin row correspondiente en `print_audit`.
+
+**Después**: invertido — INSERT print_audit PRIMERO, UPDATE orders DESPUÉS. Si el INSERT falla, la TX rolea back ANTES de tocar orders. Atomicidad mejorada.
+
+### 🟠 M2 — Validación de saldo Corona ANTES del loop
+
+**Antes**: `assign_folios_split_oc` para Corona consumía el ledger grupo por grupo. Si el cliente tenía saldo para N-1 grupos pero no para el N-ésimo, `credit_consume` fallaba con mensaje genérico ("monto debe ser > 0"). La TX roleaba back (correcto) pero el usuario no sabía cuánto faltaba ni dónde.
+
+**Después**: nueva validación previa al loop:
+
+```sql
+SELECT SUM(subtotal de todas las órdenes de todos los grupos) INTO v_corona_total_subtotal;
+SELECT balance_despues INTO v_corona_balance FROM client_credit_ledger ORDER BY created_at DESC LIMIT 1;
+IF v_corona_balance < v_corona_total_subtotal - 0.001 THEN
+  RAISE EXCEPTION 'Saldo Corona insuficiente: cliente tiene $X, requiere $Y para Z grupos. Faltan $W.';
+END IF;
+```
+
+Falla fast con mensaje accionable. El return JSON ahora incluye `corona_balance_after` para que el frontend lo muestre post-éxito.
+
+### 🟠 M3 — `corona_credit_bridge_enabled` flag con TRIM de comillas
+
+**Antes**: `(value::text = 'true')` esperaba el JSON `"true"` (string). Si app_config almacenaba el valor como JSON boolean nativo `true`, el cast producía `'true'` y funcionaba. Pero si producía `'"true"'` (con comillas, caso de stringify), fallaba silenciosamente.
+
+**Después**: `(TRIM(value::text, '"') = 'true')`. Cubre ambos formatos: boolean nativo y string JSON. Robust.
+
+### 🟠 g1 — Comentario obsoleto en frontend
+
+`db.assignFoliosSplitOC` tenía comentario "Limitación inicial: rechaza OCs con cliente Corona/anticipo y OC web". v10.54.0 ya acepta Corona — solo rechaza OC web. Actualizado el comentario para reflejar el comportamiento actual + cambios de v10.54.1.
+
+### Falsos positivos descartados
+
+- ❌ "CASCADE delete pierde histórico" — frontend bloquea DELETE de órdenes facturadas
+- ❌ "printed_at DEFAULT vs explícito" — el código pasa explícito, no es bug actual
+- ❌ "Cross-schema audit unification" — design choice (PrintFlow vs cobranza), no bug
+- ❌ "Realtime sub a print_audit" — no hay dashboard que lo requiera hoy
+
+### Pendientes 🟡 menores (v10.54.2 opcional)
+
+- Compound index `(printed_by, printed_at DESC)` en print_audit
+- CHECK constraint `printed_by` no-empty
+- Política de retención print_audit a 6-12 meses
+
+### Resultado scan v10.54.0
+
+- 🔴 Críticos: 2/2 ✅
+- 🟠 Mayores: 4/4 ✅
+- 🟡 Menores: 0/3 (opcional, no urgentes)
+
+
 ## v10.54.0 — Mejoras: audit log impresiones + OC split Corona — 01-jun-2026
 
 Mejoras opt-in pedidas por Marcelo después de cerrar todos los bugs.

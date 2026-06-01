@@ -582,7 +582,10 @@ const db = {
   // 📄 v10.51.0 — Dividir 1 OC en N facturas (split). Cada grupo = 1 invoice con M órdenes.
   // groups: [{doc_type:"factura"|"remision", folio:"D-XXXX", order_ids:["o1","o2"],
   //           payment_refs:[{method,amount,bank_reference}]}]
-  // Limitación inicial: rechaza OCs con cliente Corona/anticipo y OC web.
+  // v10.54.0 — Soporta clientes Corona/anticipo: ledger se consume por grupo (sin IVA),
+  // payment saldo_a_favor se aplica con IVA. Para Corona NO se aceptan payment_refs.
+  // v10.54.1 — Valida saldo TOTAL del cliente Corona antes de procesar; mensaje claro si falta.
+  // Sigue rechazando OC web (folios MP requieren diseño separado).
   async assignFoliosSplitOC(ocId, groups, preAssigned, reason, actor) {
     const {data, error} = await supabase.rpc("assign_folios_split_oc", {
       p_oc_id: ocId,
