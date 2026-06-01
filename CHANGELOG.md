@@ -5,6 +5,46 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.50.3 — Drift de centavos: comparación exacta — 31-may-2026
+
+Último 🟡 del scan v10.50.0 cerrado. La tolerancia de `0.01` en la validación de suma de pagos vs total dejaba pasar diferencias reales de hasta 1 centavo. Ahora la comparación es exacta.
+
+### Frontend (`MultiPaymentPicker`)
+
+Comparación en **centavos enteros** (sin tolerancia float):
+
+```js
+const totalCents = Math.round(totalDisplay * 100);
+const sumCents = list.reduce((s, r) => s + Math.round((Number(r.amount) || 0) * 100), 0);
+const sumExactPaid = sumCents === totalCents;     // antes: Math.abs(sum-total) <= 0.01
+const sumOverPaid  = sumCents > totalCents;        // antes: sum > total + 0.01
+```
+
+Si Karla captura `580.00 + 580.01` para un total de `1160.00`, antes el sistema lo aceptaba como "✓ Cubierto"; ahora muestra "⚠️ Excede $0.01".
+
+### Backend (`sync_invoice_from_orders`)
+
+Tolerancia del bridge en multi-pay reducida de `0.01` → `0.001` (1/10 de centavo). Solo absorbe drift NUMERIC del propio Postgres (que es prácticamente cero porque NUMERIC tiene precisión exacta) pero no permite diferencias reales de centavo.
+
+```sql
+-- v10.50.3
+IF ABS(v_refs_total - v_invoice_amount) <= 0.001 THEN
+  v_invoice_balance := 0; v_invoice_status := 'pagada';
+ELSE
+  v_invoice_balance := v_invoice_amount - v_refs_total; v_invoice_status := 'parcial';
+END IF;
+```
+
+Defensa en profundidad: el frontend ya bloquea con suma exacta, pero si por alguna razón un cliente directo de Supabase llamara `assign_invoice` con drift, el bridge no le permite crear una "pagada" con balance fantasma.
+
+### Resultado scan v10.50.0
+
+- 🔴 Críticos: 3/3 ✅ (v10.50.1)
+- 🟠 Mayores: 5/5 ✅ (v10.50.2)
+- 🟡 Menores: 1/1 ✅ (v10.50.3)
+- **Pendientes del scan: 0**
+
+
 ## v10.50.2 — Cierre de pendientes 🟠 post-v10.50.1 — 31-may-2026
 
 Tras estabilizar el feature con v10.50.1, cerramos los 5 pendientes 🟠 no bloqueantes del scan inicial.

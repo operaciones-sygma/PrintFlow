@@ -2590,8 +2590,12 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const totalDisplay = invoiceType === "factura" ? Math.round((orderTotal || 0) * 116) / 100 : (orderTotal || 0);
   const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const list = Array.isArray(refs) ? refs : [];
-  const sum = list.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const sumRemaining = totalDisplay - sum;
+  // v10.50.3 — Comparación en centavos enteros: elimina drift de float (antes tolerancia 0.01
+  // dejaba pasar diferencias reales de hasta 1 centavo). Ahora sumExactPaid es EXACTO.
+  const totalCents = Math.round(totalDisplay * 100);
+  const sumCents = list.reduce((s, r) => s + Math.round((Number(r.amount) || 0) * 100), 0);
+  const sum = sumCents / 100;
+  const sumRemaining = (totalCents - sumCents) / 100;
 
   const addRef = () => {
     onChange(status, [...list, {method: null, amount: "", bank_reference: ""}]);
@@ -2612,9 +2616,10 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
     return true;
   };
   const allRefsValid = list.length > 0 && list.every(refValid);
-  const sumExactPaid = Math.abs(sum - totalDisplay) <= 0.01;
-  const sumOverPaid = sum > totalDisplay + 0.01;
-  const sumValidPartial = sum > 0 && sum < totalDisplay;
+  // v10.50.3 — Comparación exacta en centavos (sin tolerancia float).
+  const sumExactPaid = sumCents === totalCents;
+  const sumOverPaid = sumCents > totalCents;
+  const sumValidPartial = sumCents > 0 && sumCents < totalCents;
 
   return (
     <>
