@@ -556,6 +556,16 @@ const db = {
   // Modos: 'shared' (1 folio para todos los pendientes) | 'consecutive' (N folios desde folioStart).
   // Si preAssigned=true, requiere razón y bloquea la OC (folios_locked=true).
   // La RPC valida que folioStart > último folio usado y que no haya shared_invoice_folio previo.
+  // 🖨️ v10.53.0 — Registra impresión: incrementa print_version, setea autor/timestamp,
+  // resetea needs_reprint. Retorna {version, printed_at, printed_by, content_hash}.
+  async registerPrint(orderId, user) {
+    const {data, error} = await supabase.rpc("register_print", {
+      p_order_id: orderId,
+      p_user: user
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
   async assignFolioToOC(ocId, invoiceType, mode, folioStart, preAssigned, reason, actor) {
     const {data, error} = await supabase.rpc("assign_folio_to_oc", {
       p_oc_id: ocId,
@@ -1243,8 +1253,9 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 }
 
 // ─── MODALS ────────────────────────────────────────
-function PrintOrder({order:o,onClose,role}) {
+function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
   useEscClose(onClose);
+  const [printing,setPrinting]=useState(false);
   // v10.34.2 fix #9 — escape para interpolaciones de standard_size en HTML template (defensa contra IDs corruptos en BD)
   const esc=s=>String(s||"").replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const pDate=o.created_at?new Date(o.created_at):new Date();
@@ -1253,8 +1264,37 @@ function PrintOrder({order:o,onClose,role}) {
   const isUrg=o.priority==="urgente";const isNorm=o.priority==="normal"||(!o.priority);const isBaja=o.priority==="baja";
   const isMaq=o.order_type==="maquila";
   // mode: "full" = con precio y contacto (secretaría/admin), "production" = sin precio ni contacto (para piso)
-  const printIt=(mode)=>{const w=window.open("","_blank","width=800,height=900");if(!w)return;
+  // v10.53.0 — async: registra la impresión ANTES de abrir el window para incluir versión + hash en la hoja.
+  const printIt=async(mode)=>{
+    if(printing) return;
+    setPrinting(true);
+    let printInfo=null;
+    try{
+      printInfo=await db.registerPrint(o.id, userLogin||"sistema");
+    }catch(e){
+      // Si falla el registro (network, permisos), igual permitimos imprimir
+      // pero sin versión actualizada — el footer mostrará versión anterior + "(sin registro)".
+      console.warn("[register_print] falló, imprimiendo sin actualizar versión:", e?.message);
+      printInfo={version:o.print_version||"?", printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", content_hash:"NO-REG", failed:true};
+    }
+    // Actualizar state padre con los nuevos campos para que UI refleje sin reload
+    if(onReprinted && !printInfo.failed) onReprinted({
+      print_version: printInfo.version,
+      last_printed_at: printInfo.printed_at,
+      last_printed_by: printInfo.printed_by,
+      needs_reprint: false
+    });
+    setPrinting(false);
+
+    const w=window.open("","_blank","width=800,height=900");if(!w)return;
     const isProd=mode==="production";
+    const pvVersion=printInfo.version;
+    const pvHash=printInfo.content_hash;
+    const pvWhen=new Date(printInfo.printed_at);
+    const pvWhenStr=pvWhen.getDate()+"-"+months[pvWhen.getMonth()].slice(0,3).toLowerCase()+" "+
+      String(pvWhen.getHours()).padStart(2,"0")+":"+String(pvWhen.getMinutes()).padStart(2,"0");
+    const pvWho=printInfo.printed_by;
+    const isReprint=pvVersion>1;
     let h=`<html><head><title>Orden ${o.production_number||o.id}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1290,8 +1330,14 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .pay-paid{background:#dcfce7;color:#15803d;border:1px solid #16a34a}
 .pay-partial{background:#fef3c7;color:#a16207;border:1px solid #ca8a04}
 .pay-unpaid{background:#fee2e2;color:#b91c1c;border:1px solid #dc2626}
-@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}}
-</style></head><body>`;
+.print-version-corner{position:fixed;top:6mm;right:6mm;font-size:10px;font-weight:800;color:#fff;background:#111;padding:4px 10px;border-radius:4px;letter-spacing:.5px;z-index:10}
+.print-version-corner.reprint{background:#dc2626}
+.print-footer{margin-top:24px;padding-top:8px;border-top:1px dashed #999;font-size:8px;color:#666;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
+.print-footer .pv-hash{font-family:Courier,monospace;font-weight:700;color:#222;font-size:9px;background:#f0f0f0;padding:2px 6px;border-radius:3px}
+.print-footer .pv-reprint-tag{color:#dc2626;font-weight:800;text-transform:uppercase}
+@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm;right:3mm}}
+</style></head><body>
+<div class="print-version-corner${isReprint?" reprint":""}">v${pvVersion}${isReprint?" — REIMPRESO":""}</div>`;
 
     // ═══ HEADER ═══
     // v10.52.0 — logo desde /public/sygma-logo.png con fallback a SYGMA_LOGO data URL
@@ -1452,6 +1498,17 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       <div class="sig-box">Entrega</div>
     </div>`;
 
+    // v10.53.0 — Footer con versión, hash de contenido, autor y timestamp.
+    // Permite verificar que la copia física coincide con la versión actual del sistema.
+    h+=`<div class="print-footer">
+      <div>
+        <strong>v${pvVersion}</strong>${isReprint?' <span class="pv-reprint-tag">· Reimpreso</span>':''} · Imp. ${esc(pvWho)} · ${pvWhenStr}
+      </div>
+      <div>
+        Hash contenido: <span class="pv-hash">${pvHash}</span>
+      </div>
+    </div>`;
+
     h+=`</body></html>`;
     w.document.write(h);w.document.close();setTimeout(()=>w.print(),300)};
 
@@ -1460,17 +1517,35 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   // Roles that can choose
   const canChoose=isSec(role)||role==="admin";
 
+  // v10.53.0 — info de versión actual (para mostrar en el modal de print)
+  const wasPrinted=(o.print_version||0)>0;
+  const lastPrintWhen=o.last_printed_at?new Date(o.last_printed_at):null;
+  const lastPrintStr=lastPrintWhen?(lastPrintWhen.getDate()+"-"+months[lastPrintWhen.getMonth()].slice(0,3).toLowerCase()+" "+String(lastPrintWhen.getHours()).padStart(2,"0")+":"+String(lastPrintWhen.getMinutes()).padStart(2,"0")):"";
+
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto",textAlign:"center"}}>
       <div style={{fontSize:28,fontWeight:800,marginBottom:4}}>{o.production_number||o.id}</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:4}}>{o.client} · {o.product_type}</div>
       {isMaq&&<div style={{fontSize:10,color:"#e67e22",fontWeight:600,marginBottom:4}}>🚚 Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
-      {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir</div>}
+
+      {/* v10.53.0 — info de versión */}
+      {o.needs_reprint && (
+        <div style={{margin:"8px 0",padding:"8px 12px",background:"#fee2e2",border:"1.5px solid #dc2626",borderRadius:10,fontSize:11,color:"#991b1b",fontWeight:700,lineHeight:1.4}}>
+          ⚠️ EDITADA DESPUÉS DE IMPRIMIR<br/>
+          <span style={{fontWeight:500,fontSize:10}}>La copia física en planta está obsoleta. Reimprime y reemplaza.</span>
+        </div>
+      )}
+      {wasPrinted && !o.needs_reprint && (
+        <div style={{margin:"6px 0",padding:"4px 10px",background:"#dcfce7",border:"1px solid #16a34a40",borderRadius:8,fontSize:10,color:"#15803d",lineHeight:1.4}}>
+          ✓ Última impresión: v{o.print_version} · {lastPrintStr} · {o.last_printed_by}
+        </div>
+      )}
+      {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&" (será v"+((o.print_version||0)+1)+")"}</div>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {canChoose&&<button onClick={()=>printIt("full")} style={{...bt("#5856d6"),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12}}>🖨️ Imprimir — Versión Completa<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(con precio y contactos)</span></button>}
-        {canChoose&&<button onClick={()=>printIt("production")} style={{...bt(C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12}}>🏭 Imprimir — Copia Producción<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(sin precio ni contactos)</span></button>}
-        {isFloor&&<button onClick={()=>printIt("production")} style={{...bt(C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12}}>🖨️ Imprimir Orden</button>}
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
+        {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":"#5856d6"),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🖨️ Imprimir — Versión Completa"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(con precio y contactos)</span></button>}
+        {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🏭 Imprimir — Copia Producción"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(sin precio ni contactos)</span></button>}
+        {isFloor&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🖨️ Imprimir Orden"}</button>}
+        <button onClick={onClose} disabled={printing} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
       </div>
     </div>
   </div>;
@@ -5363,6 +5438,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {o.web_folio&&!compact&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
         {o.invoice_folio&&!compact&&<div style={{fontSize:13,fontWeight:800,color:o.invoice_type==="factura"?"#5856d6":"#34c759",letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?"⚡ ":""}{o.invoice_type==="factura"?"📄":"📋"} {o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:"#ff9500",marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:"#34c759",marginLeft:6,fontWeight:700,padding:"1px 6px",background:"#34c75915",borderRadius:4}}>✅ PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:"#5856d6",marginLeft:6,fontWeight:700,padding:"1px 6px",background:"#5856d615",borderRadius:4}}>🔶 PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
         {o.has_post_invoice_edits&&!compact&&<div style={{fontSize:10,color:"#ff9500",fontWeight:600,marginBottom:4,padding:"3px 8px",background:"#ff950010",borderRadius:6,display:"inline-block",border:"1px solid #ff950025"}} title="Esta orden fue editada después de tener folio fiscal asignado">⚠️ Editada después de facturar</div>}
+        {o.needs_reprint&&!compact&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}>🖨️⚠️ REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600}}>{st?.l}</span>
@@ -10383,7 +10459,7 @@ export default function PrintFlow() {
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
-      {printModal&&<PrintOrder order={printModal} role={user} onClose={()=>setPrintModal(null)}/>}
+      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields)=>{setOrders(prev=>prev.map(x=>x.id===printModal.id?{...x,...updatedFields}:x))}}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}

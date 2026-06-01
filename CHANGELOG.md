@@ -5,6 +5,101 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.53.0 — Versionado de hojas impresas + detección post-edición — 01-jun-2026
+
+Marcelo: "¿Cómo diferenciar una orden impresa que ya fue editada para que no haya errores ni se aventen la bolita entre departamentos?"
+
+Solución: cada hoja impresa lleva número de versión + autor + timestamp + hash de contenido. Si alguien edita la orden DESPUÉS de imprimir, el sistema lo detecta automáticamente y grita en rojo.
+
+### Schema DB (4 columnas nuevas en `orders`)
+
+```sql
+ALTER TABLE public.orders ADD COLUMN print_version int NOT NULL DEFAULT 0;
+ALTER TABLE public.orders ADD COLUMN last_printed_at timestamptz;
+ALTER TABLE public.orders ADD COLUMN last_printed_by text;
+ALTER TABLE public.orders ADD COLUMN needs_reprint boolean NOT NULL DEFAULT false;
+```
+
+### Trigger `auto_detect_post_print_edit` (BEFORE UPDATE)
+
+Si `OLD.print_version > 0` AND se detecta cambio en algún campo CRÍTICO de producción → setea `NEW.needs_reprint := true`. Campos monitoreados:
+
+- quantity, product, product_type, standard_size, width_cm, height_cm
+- paper_type, paper_grammage, ink_front, ink_back, colors
+- pantone_front, pantone_back (arrays)
+- finishes
+- notes, due_date, priority
+- image_url, image_url_2
+- maq_provider, maq_cost, maq_price, maquila_provider, maquila_phone, maquila_email
+- price
+
+NO dispara para: cambios de stage, timeline, comments, payment_*, invoice_*, oc_invoice_group_id, stocked_at, delivered_at, current_machine (no afectan producción física).
+
+### RPC `register_print(p_order_id, p_user)` — SECURITY DEFINER
+
+Se llama ANTES de generar la hoja impresa. Hace:
+1. Incrementa `print_version` (atómico, FOR UPDATE)
+2. Setea `last_printed_at = NOW()`, `last_printed_by = p_user`
+3. Resetea `needs_reprint = false`
+4. Calcula hash MD5 de 8 chars sobre los campos críticos
+5. Retorna `{order_id, version, printed_at, printed_by, content_hash}`
+
+GRANT EXECUTE solo a `authenticated` y `service_role`.
+
+### Frontend — `PrintOrder` async
+
+- Botones Imprimir ahora son async + disabled durante el registro (`⏳ Registrando...`)
+- Antes de abrir el `window.open`, llama `db.registerPrint`. Si falla por red, muestra warning en consola pero permite imprimir con `content_hash="NO-REG"` para no bloquear operaciones.
+- Optimistic update via callback `onReprinted({print_version, last_printed_at, last_printed_by, needs_reprint:false})` → el state padre se sincroniza sin reload.
+
+### Hoja impresa — nuevos elementos visuales
+
+**Esquina superior derecha** (sticky en print, fixed en screen):
+- `v3` en cuadrito negro si primera impresión
+- `v3 — REIMPRESO` en cuadrito rojo si v > 1
+
+**Footer al final** (debajo de firmas):
+```
+v3 · Reimpreso · Imp. Karla · 01-jun 10:30        Hash contenido: 012EDCDB
+```
+
+El hash permite que el piso compare con el sistema en caso de duda: si el sistema muestra hash distinto, hay versión más nueva.
+
+### Modal de imprimir — info de estado
+
+Cuando Karla/piso abre el modal de imprimir:
+- Si la orden YA se imprimió Y no necesita reimprimir: banner verde `✓ Última impresión: v3 · 01-jun 10:30 · Karla`
+- Si la orden necesita reimprimir: banner ROJO grande `⚠️ EDITADA DESPUÉS DE IMPRIMIR — La copia física en planta está obsoleta. Reimprime y reemplaza.`
+- Cada botón indica la versión próxima: `(será v4)`
+
+### Badge en `OCard` (cards en tableros)
+
+Si `needs_reprint = true` aparece badge rojo encima del status:
+
+```
+🖨️⚠️ REIMPRIMIR · v3 obsoleta
+```
+
+Tooltip al hover explica qué hacer. Visible para TODOS los roles (admin, secretaría, producción, preprensa, vendedor) — todos deben saber que la copia física está obsoleta.
+
+### Comportamiento ante red caída
+
+Si `register_print` falla (network, permisos):
+- Print no se bloquea (operación continúa)
+- Hoja se imprime con hash = `NO-REG` (marcador especial)
+- Versión queda como estaba (no se incrementa)
+- Sistema NO actualiza optimistic (porque el registro no quedó)
+- Karla puede reintentar en el siguiente print
+
+### Estimación operativa
+
+**Caso típico**: Lupita crea orden → Karla imprime para piso (v1). Más tarde Marcelo pide cambio: producción cambia papel → trigger marca `needs_reprint=true` → banner rojo en sistema → Karla reimprime (v2 — REIMPRESO en rojo) → piso ve la nueva versión y reemplaza la vieja.
+
+**Falso positivo controlado**: si la orden cambia de `stage` (avance normal de producción) → NO se marca needs_reprint. Solo campos que realmente importan en el papel.
+
+**Resultado**: la "bolita" se vuelve imposible de aventar. La hoja en piso siempre lleva versión clara. Si está obsoleta, el sistema lo grita.
+
+
 ## v10.52.1 — Fixes hoja impresa post-audit v10.52.0 — 01-jun-2026
 
 Audit exhaustivo campo-a-campo de `PrintOrder` detectó 5 bugs reales. Atacados todos.
