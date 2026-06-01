@@ -5,6 +5,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.51.3 — Candado de efectivo en entry-point (paridad con CobranzaFlow) — 01-jun-2026
+
+Marcelo: "Hacer el cambio IMPORTANTE donde falla la lógica de pagado en efectivo en PrintFlow → CobranzaFlow. Hay candados en CobranzaFlow pero en PrintFlow no."
+
+### Análisis previo
+
+CobranzaFlow ya rechaza efectivo en entry-point (`cobranza.apply_payment_manual` con `RAISE EXCEPTION 'Para pagos en efectivo, use el flujo de Vales de Caja'`). PrintFlow solo defendía al final, en el trigger `sync_invoice_from_orders` — el RPC `assign_invoice` y el CHECK constraint de `orders.payment_method` aceptaban `'efectivo'` como valor válido. Asimetría real.
+
+### Cambios
+
+**Fix #1 — `assign_invoice` rechaza 'efectivo' al input**
+
+Defensa en profundidad antes del bridge:
+- Check explícito al inicio: `IF p_payment_method = 'efectivo' THEN RAISE EXCEPTION ...` (cubre path single-pay legacy)
+- Check explícito por cada ref en multi-pay (`p_payment_refs`)
+- Lista válida de métodos en path legacy actualizada: era `('efectivo','transferencia','tarjeta','otro')` — ahora `('transferencia','tarjeta','tarjeta_credito','cheque','otro')`. Quita 'efectivo' + agrega 'cheque' y 'tarjeta_credito' (paridad con bridge multi-pay).
+- Mensaje friendly: *"Efectivo se cobra exclusivamente por Tesorería con vale de caja en CobranzaFlow. Marca la orden como 'no pagada' y Lucero genera el vale."*
+
+**Fix #2 — CHECK constraint en `orders.payment_method` quita 'efectivo'**
+
+Verificado: 0 rows históricas con `payment_method = 'efectivo'`. Safe para apretar.
+
+```sql
+ALTER TABLE public.orders DROP CONSTRAINT orders_payment_method_check;
+ALTER TABLE public.orders ADD CONSTRAINT orders_payment_method_check
+  CHECK (payment_method IS NULL OR payment_method = ANY (ARRAY[
+    'transferencia', 'tarjeta', 'tarjeta_credito', 'cheque', 'otro', 'mixed'
+  ]));
+```
+
+A nivel de schema ya es imposible que entre una row con `payment_method='efectivo'`.
+
+**Fix #3 — Mensaje friendly del trigger `sync_invoice_from_orders`**
+
+El mensaje del candado del bridge era críptico (`"v10.36 candado: efectivo vía vale de caja"`). Reemplazado por el mismo mensaje friendly que arriba. Última línea de defensa también amigable.
+
+### Test transaccional
+
+```sql
+SELECT assign_invoice('orden', 'factura', 'D-99999', false, NULL, 'test',
+  'paid', 'efectivo', NULL, NULL, false, NULL);
+-- ERROR 22023: Efectivo se cobra exclusivamente por Tesorería con vale de caja...
+```
+
+### Defensa en profundidad ahora
+
+| Capa | Antes | Ahora |
+|---|---|---|
+| Frontend (MultiPaymentPicker) | ✅ no expone 'efectivo' | ✅ |
+| RPC `assign_invoice` entry-point | ❌ aceptaba | ✅ rechaza con msg friendly |
+| Schema CHECK orders.payment_method | ❌ permitía | ✅ prohibido |
+| Trigger `sync_invoice_from_orders` | ⚠️ rechaza con msg críptico | ✅ rechaza con msg friendly |
+
+Paridad con CobranzaFlow ✅.
+
+
 ## v10.51.2 — Fixes 🟡 menores post-scan v10.51.0 — 01-jun-2026
 
 Cierre de los 7 menores del scan v10.51.0 que quedaban pendientes en v10.51.1.
