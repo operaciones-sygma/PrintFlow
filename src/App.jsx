@@ -1295,12 +1295,14 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 
     // ═══ HEADER ═══
     // v10.52.0 — logo desde /public/sygma-logo.png con fallback a SYGMA_LOGO data URL
-    // (window.open abre about:blank sin base URL, por eso origen absoluto)
+    // v10.52.1 — badge web + indicador OC split
     const logoSrc=window.location.origin+"/sygma-logo.png";
+    const isWebOrder=o.source==="web";
+    const isOcSplit=!!o.oc_invoice_group_id; // orden pertenece a grupo OC split (v10.51.0)
     h+=`<div class="header">
       <div class="header-logo"><img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/></div>
-      <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isProd?'<div class="copy-badge">Copia Producción</div>':''}</div>
-      <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+o.cart_folio+'</div>':''}${o.web_folio?'<div class="webf">'+o.web_folio+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+o.purchase_order_id+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+o.invoice_folio+'</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
+      <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isProd?'<div class="copy-badge">Copia Producción</div>':''}${isWebOrder?'<div style="font-size:8px;color:#fff;background:#06b6d4;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
+      <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
     // ═══ FECHAS + TIPO PROCESO ═══
@@ -1318,14 +1320,14 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     if(isProd){
       // Production copy: only client name, no contacts
       h+=`<table style="margin-top:-1px"><tr><td class="section-title">Cliente</td></tr>
-      <tr><td><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${o.client||"—"}</div></td></tr></table>`;
+      <tr><td><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td></tr></table>`;
     } else {
       // Full copy: all client data
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos del Cliente</td></tr>
-      <tr><td style="width:35%"><div class="field-lbl">Nombre o Denominación</div><div class="field-val" style="font-size:14px">${o.client||"—"}</div></td>
-      <td style="width:25%"><div class="field-lbl">Empresa</div><div class="field-val">${o.client_company||""}</div></td>
-      <td style="width:20%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:""}</div></td>
-      <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:10px">${o.client_email||""}</div></td></tr></table>`;
+      <tr><td style="width:35%"><div class="field-lbl">Nombre o Denominación</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
+      <td style="width:25%"><div class="field-lbl">Empresa</div><div class="field-val">${esc(o.client_company||"")}</div></td>
+      <td style="width:20%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.client_phone?esc((o.client_lada||"+52")+" "+o.client_phone):""}</div></td>
+      <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:10px">${esc(o.client_email||"")}</div></td></tr></table>`;
     }
 
     // ═══ DATOS DE LA FORMA ═══
@@ -1334,11 +1336,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos de la Forma</td></tr>
     <tr>
       <td style="width:15%"><div class="field-lbl">Cantidad</div><div class="field-val" style="font-size:16px;font-weight:800;color:#c00">${o.quantity?Number(o.quantity).toLocaleString():""}</div></td>
-      <td style="width:35%"><div class="field-lbl">Tipo de Producto</div><div class="field-val" style="font-size:13px">${o.product_type||""}</div></td>
-      ${!isAdvanced?`<td style="width:30%"><div class="field-lbl">Tamaño Final</div><div class="field-val">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm?o.width_cm+" × "+o.height_cm+" cm":"")}</div></td>`:`<td style="width:30%"><div class="field-lbl">Modo</div><div class="field-val" style="font-size:10px;color:#8b5cf6;font-weight:700">📖 Datos técnicos en descripción</div></td>`}
+      <td style="width:35%"><div class="field-lbl">Tipo de Producto</div><div class="field-val" style="font-size:13px">${esc(o.product_type||"")}</div></td>
+      ${!isAdvanced?`<td style="width:30%"><div class="field-lbl">Tamaño Final</div><div class="field-val">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm&&o.height_cm?o.width_cm+" × "+o.height_cm+" cm":"")}</div></td>`:`<td style="width:30%"><div class="field-lbl">Modo</div><div class="field-val" style="font-size:10px;color:#8b5cf6;font-weight:700">📖 Datos técnicos en descripción</div></td>`}
       <td style="width:20%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Interna"}</div></td>
     </tr>
-    ${o.product?`<tr><td colspan="4"><div class="field-lbl">${isAdvanced?"Datos Técnicos Completos":"Descripción del Producto"}</div><div class="field-val" style="font-size:${isAdvanced?"12":"12"}px;line-height:1.6;white-space:pre-wrap;min-height:${isAdvanced?"40":"24"}px;${isAdvanced?"padding:4px 0;":""}${isAdvanced?"border-top:1px dashed #ccc;padding-top:6px;":""}">${o.product}</div></td></tr>`:""}
+    ${o.product?`<tr><td colspan="4"><div class="field-lbl">${isAdvanced?"Datos Técnicos Completos":"Descripción del Producto"}</div><div class="field-val" style="font-size:${isAdvanced?"12":"12"}px;line-height:1.6;white-space:pre-wrap;min-height:${isAdvanced?"40":"24"}px;${isAdvanced?"padding:4px 0;":""}${isAdvanced?"border-top:1px dashed #ccc;padding-top:6px;":""}">${esc(o.product)}</div></td></tr>`:""}
     </table>`;
 
     // ═══ IMÁGENES DEL PRODUCTO (v10.52.0) ═══
@@ -1366,7 +1368,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       h+=`<table class="imp-table" style="margin-top:-1px">
       <tr><td colspan="5" class="section-title">Impresión</td></tr>
       <tr class="hdr"><td class="hdr" style="width:28%">Tipo de Papel</td><td class="hdr" style="width:12%">Gramaje</td><td class="hdr" style="width:25%">Tintas Frente</td><td class="hdr" style="width:25%">Tintas Vuelta</td><td class="hdr" style="width:10%">Medidas</td></tr>
-      <tr><td style="font-weight:600">${o.paper_type||""}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${o.ink_front||o.colors||""}</td><td style="font-weight:600">${o.ink_back||""}</td><td style="text-align:center">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm?o.width_cm+" × "+o.height_cm:"")}</td></tr>
+      <tr><td style="font-weight:600">${esc(o.paper_type||"")}</td><td style="text-align:center;font-weight:600">${o.paper_grammage?o.paper_grammage+" grs":""}</td><td style="font-weight:600">${esc(o.ink_front||o.colors||"")}</td><td style="font-weight:600">${esc(o.ink_back||"")}</td><td style="text-align:center">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm&&o.height_cm?o.width_cm+" × "+o.height_cm:"")}</td></tr>
       </table>`;
     }
     // v10.25.2 — Pantones en bloque independiente (aparece en modo Sencillo Y Avanzado, mientras haya pantones capturados)
@@ -1374,7 +1376,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       h+=`<table class="imp-table" style="margin-top:-1px">
       <tr><td colspan="2" class="section-title">🎨 Pantones</td></tr>
       <tr class="hdr"><td class="hdr" style="width:50%">Frente</td><td class="hdr" style="width:50%">Vuelta</td></tr>
-      <tr><td style="font-weight:600">${(o.pantone_front||[]).join(", ")||"—"}</td><td style="font-weight:600">${(o.pantone_back||[]).join(", ")||"—"}</td></tr>
+      <tr><td style="font-weight:600">${(o.pantone_front||[]).map(esc).join(", ")||"—"}</td><td style="font-weight:600">${(o.pantone_back||[]).map(esc).join(", ")||"—"}</td></tr>
       </table>`;
     }
 
@@ -1391,28 +1393,30 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
         <td style="width:25%"><span class="check${ac("perforado")?" on":""}">✓</span> Perforado<br/><span class="check${ac("plastificado")||ac("laminado")?" on":""}">✓</span> Plastificado<br/><span class="check${ac("suaje")||ac("suajado")?" on":""}">✓</span> Suajado<br/><span class="check${ac("botado")?" on":""}">✓</span> Botado</td>
         <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")||ac("block")?" on":""}">✓</span> Blocks<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
       </tr>
-      ${customAcabados.length>0?`<tr><td colspan="4" class="otros-row"><strong>Otros:</strong> ${customAcabados.join(", ")}</td></tr>`:""}
+      ${customAcabados.length>0?`<tr><td colspan="4" class="otros-row"><strong>Otros:</strong> ${customAcabados.map(esc).join(", ")}</td></tr>`:""}
       </table>`;
       }
     }
 
-    // ═══ MAQUILA (solo versión completa) ═══
+    // ═══ MAQUILA (solo versión completa — proveedor + costo) ═══
     if(isMaq&&!isProd){
       h+=`<table style="margin-top:-1px"><tr><td colspan="3" class="section-title">🚚 Datos de Maquila</td></tr>
-      <tr><td style="width:40%"><div class="field-lbl">Proveedor</div><div class="field-val" style="font-size:13px">${o.maq_provider||""}</div></td>
+      <tr><td style="width:40%"><div class="field-lbl">Proveedor</div><div class="field-val" style="font-size:13px">${esc(o.maq_provider||"")}</div></td>
       <td style="width:30%"><div class="field-lbl">Costo Maquila</div><div class="field-val">${o.maq_cost?fmt(o.maq_cost):""}</div></td>
       <td style="width:30%"><div class="field-lbl">Precio Cliente</div><div class="field-val" style="font-weight:800;color:#16a34a">${o.maq_price?fmt(o.maq_price):""}</div></td></tr></table>`;
     }
-    // Maquila parcial — proveedor externo
-    if(!isMaq&&o.maquila_provider&&!isProd){
-      h+=`<table style="margin-top:-1px"><tr><td colspan="3" class="section-title">🚚 Maquila Externa</td></tr>
-      <tr><td style="width:40%"><div class="field-lbl">Proveedor</div><div class="field-val">${o.maquila_provider}</div></td>
-      <td style="width:30%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.maquila_phone||""}</div></td>
-      <td style="width:30%"><div class="field-lbl">Email</div><div class="field-val">${o.maquila_email||""}</div></td></tr></table>`;
+    // v10.52.1 M-EXT — Maquila parcial (proveedor externo). Ahora visible EN AMBAS versiones
+    // — el piso necesita saber dónde se envía el trabajo (encuadernación, acabado externo, etc.).
+    // En versión producción se OCULTA email (PII innecesaria); se mantiene proveedor + teléfono.
+    if(!isMaq&&o.maquila_provider){
+      h+=`<table style="margin-top:-1px"><tr><td colspan="3" class="section-title">🚚 Maquila Externa (Proveedor)</td></tr>
+      <tr><td style="width:40%"><div class="field-lbl">Proveedor</div><div class="field-val">${esc(o.maquila_provider)}</div></td>
+      <td style="width:30%"><div class="field-lbl">Teléfono</div><div class="field-val">${esc(o.maquila_phone||"")}</div></td>
+      <td style="width:30%"><div class="field-lbl">${isProd?"":"Email"}</div><div class="field-val">${isProd?"":esc(o.maquila_email||"")}</div></td></tr></table>`;
     }
 
     // ═══ INSTRUCCIONES ═══
-    h+=`<table style="margin-top:-1px"><tr><td><div class="field-lbl">Instrucciones Complementarias / Notas</div><div class="field-val" style="min-height:28px;font-size:11px;line-height:1.5;white-space:pre-wrap">${o.notes||""}</div></td></tr></table>`;
+    h+=`<table style="margin-top:-1px"><tr><td><div class="field-lbl">Instrucciones Complementarias / Notas</div><div class="field-val" style="min-height:28px;font-size:11px;line-height:1.5;white-space:pre-wrap">${esc(o.notes||"")}</div></td></tr></table>`;
 
     // ═══ DATOS ADMINISTRATIVOS (solo versión completa) ═══
     if(!isProd){
@@ -1424,20 +1428,20 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
         else payBadge=`<span class="pay-badge pay-unpaid">⏳ Por cobrar</span>`;
       }
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos Administrativos</td></tr>
-      <tr><td style="width:40%"><div class="field-lbl">Facturar a</div><div class="field-val">${o.client_company||o.client||""}</div></td>
-      <td style="width:25%"><div class="field-lbl">R.F.C.</div><div class="field-val">${o.client_rfc||""}</div></td>
-      <td style="width:20%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${o.agent||""}</div></td>
+      <tr><td style="width:40%"><div class="field-lbl">Facturar a</div><div class="field-val">${esc(o.client_company||o.client||"")}</div></td>
+      <td style="width:25%"><div class="field-lbl">R.F.C.</div><div class="field-val">${esc(o.client_rfc||"")}</div></td>
+      <td style="width:20%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${esc(o.agent||"")}</div></td>
       <td style="width:15%"><div class="field-lbl">Precio</div><div class="field-val" style="font-weight:800;font-size:14px">${o.price?fmt(o.price):""}</div></td></tr>
-      <tr><td colspan="2"><div class="field-lbl">Email</div><div class="field-val">${o.client_email||""}</div></td>
+      <tr><td colspan="2"><div class="field-lbl">Email</div><div class="field-val">${esc(o.client_email||"")}</div></td>
       <td><div class="field-lbl">Cotización</div><div class="field-val"></div></td>
       <td><div class="field-lbl">Estado de Pago</div><div class="field-val">${payBadge||"—"}</div></td></tr>
       </table>`;
     } else {
       // Production copy: only agent, no price/RFC/email
       h+=`<table style="margin-top:-1px"><tr><td colspan="2" class="section-title">Información Adicional</td></tr>
-      <tr><td style="width:50%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${o.agent||""}</div></td>
-      <td style="width:50%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Producción Interna"}</div></td></tr>
-      </table>`;
+      <tr><td style="width:50%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${esc(o.agent||"")}</div></td>
+      <td style="width:50%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Producción Interna"}</div></td>
+      </tr></table>`;
     }
 
     // ═══ FIRMAS ═══

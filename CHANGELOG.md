@@ -5,6 +5,64 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.52.1 — Fixes hoja impresa post-audit v10.52.0 — 01-jun-2026
+
+Audit exhaustivo campo-a-campo de `PrintOrder` detectó 5 bugs reales. Atacados todos.
+
+### 🔴 Escape HTML faltante en campos de texto libre
+
+Texto con `<`, `>`, `&`, `"` (que Karla/Lupita pueden meter en notas, descripciones o pantones) rompía visualmente el HTML del print. NO era riesgo XSS real (PrintFlow es app interna sin user input externo) pero sí causaba display roto.
+
+Aplicado `esc()` (función helper ya existente, línea 1249) en:
+- `o.notes` (instrucciones)
+- `o.product` (descripción técnica del producto)
+- `customAcabados` (acabados custom tipo "Otros: ...")
+- `o.pantone_front[]` y `o.pantone_back[]` (arrays)
+- `o.paper_type`, `o.ink_front`, `o.ink_back`, `o.colors`
+- `o.client`, `o.client_company`, `o.client_phone`, `o.client_email`, `o.client_rfc`
+- `o.agent`, `o.product_type`
+- `o.maq_provider`, `o.maquila_provider`, `o.maquila_phone`, `o.maquila_email`
+- `o.cart_folio`, `o.web_folio`, `o.purchase_order_id`, `o.invoice_folio`
+
+Cobertura total: cualquier texto libre que viene de DB ahora pasa por `esc()`.
+
+### 🔴 `height_cm` null-check incompleto
+
+Antes: si la orden tenía `width_cm=100` pero `height_cm=null` (caso real — captura parcial de medidas), imprimía `"100 × undefined cm"`.
+
+Ahora: `o.width_cm && o.height_cm` exige ambas para mostrar el cálculo. Si solo hay una o ninguna, muestra vacío. Fix aplicado en 2 lugares: bloque "Tamaño Final" + tabla Impresión.
+
+### 🟠 Indicador OC split en header
+
+Si la orden pertenece a un grupo OC split (v10.51.0, `oc_invoice_group_id` NOT NULL), el folio fiscal mostrado en header es el folio del grupo (compartido entre N órdenes). Sin indicador, parecía folio standalone.
+
+Nuevo: texto pequeño en violeta debajo del folio fiscal: `↳ Folio compartido (OC dividida)`. Solo aparece si `oc_invoice_group_id` está set.
+
+### 🟠 Badge "🌐 Pedido Web" en header
+
+Las órdenes con `source='web'` ya tenían badge en DetailModal pero NO en la hoja impresa. Inconsistencia operativa.
+
+Nuevo: badge cyan al lado del título "Orden de Producción": `🌐 Pedido Web`. Aparece en ambas versiones (full y producción) cuando `source='web'`.
+
+### 🟠 Proveedor externo (`maquila_provider`) ahora visible en versión producción
+
+Antes: el bloque "🚚 Maquila Externa" (proveedor externo para encuadernación, acabado parcial, etc.) solo aparecía en versión completa. El piso/producción NO sabía si la pieza iba a un proveedor externo después.
+
+Ahora: visible en AMBAS versiones. En versión producción se oculta el email (PII innecesaria para piso); se mantienen proveedor + teléfono.
+
+### Bugs descartados como menores (no aplica fix)
+
+- `mp_payment_id` no se imprime → info de tracking web, raro caso, no operativo
+- `colors` legacy vs `ink_front` → ya hay fallback correcto, comportamiento intencional
+- `image_url_2` semantic "Vuelta" → convención del equipo, OK
+
+### Resultado audit v10.52.0
+
+- 🔴 Críticos: 2/2 ✅
+- 🟠 Mayores: 3/3 ✅
+- 🟡 Menores: descartados (no aplica fix)
+
+
 ## v10.52.0 — Hoja impresa: imagen producto + logo Sygma + folio OC + estado pago — 01-jun-2026
 
 Marcelo regresa al **modo híbrido con órdenes físicas** esta semana. Auditoría completa de `PrintOrder` (función única que genera ambas versiones: completa y producción) + 4 mejoras críticas.
