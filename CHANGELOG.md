@@ -5,6 +5,52 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.50.2 — Cierre de pendientes 🟠 post-v10.50.1 — 31-may-2026
+
+Tras estabilizar el feature con v10.50.1, cerramos los 5 pendientes 🟠 no bloqueantes del scan inicial.
+
+### 🟠 F3 — Eliminado PaymentStatusPicker (dead code)
+
+174 líneas del picker legacy single-payment, reemplazado por `MultiPaymentPicker` en v10.50.0. Sin referencias activas en el código (verificado con Grep). Reducción neta: -174 líneas. Histórico recuperable vía `git log`.
+
+### 🟠 F4 + F5 — A11y en MultiPaymentPicker
+
+- **F4**: `role="status" aria-live="polite" aria-atomic="true"` en el resumen (capturado / falta / cubierto / excede). Lectores de pantalla anuncian la suma cambiante automáticamente al editar montos.
+- **F5**: `aria-invalid={!valid}` por card de pago + `role="radiogroup" / aria-checked` en selector de método + `aria-invalid` + `aria-label` por input (monto y bank_reference). Pago incompleto marca card como inválida y muestra "· incompleto" junto al título.
+
+### 🟠 B2 — `tarjeta_credito` exige bank_reference — VERIFICADO sin cambios
+
+Reviewed: `sync_invoice_from_orders` ya incluye `'tarjeta_credito'` en la lista de métodos que requieren `bank_reference` (línea del candado v10.36). Check constraint `order_payment_refs_payment_method_check` también lo incluye. Frontend no expone `tarjeta_credito` en MultiPaymentPicker porque está reservado al webhook MercadoPago (web orders). No requiere fix.
+
+### 🟠 B3 — REVOKE EXECUTE en trigger functions
+
+`sync_invoice_from_orders`, `sync_post_invoice_edit`, `sync_cancellation_to_cobranza`, `auto_mark_post_invoice_edits` tenían EXECUTE para `anon` y `authenticated`. Son trigger handlers, NO RPCs invocables desde el cliente — el grant era superficie de ataque innecesaria.
+
+```sql
+REVOKE EXECUTE ON FUNCTION public.sync_invoice_from_orders() FROM anon, authenticated;
+-- + 3 más
+```
+
+Solo `postgres` y `service_role` conservan EXECUTE. Los triggers siguen disparándose normalmente (ejecutan en contexto del trigger, no requieren EXECUTE explícito al rol invocador).
+
+### 🟠 B4 — Gap de `sync_post_invoice_edit` con multi-pay — DOCUMENTADO sin fix
+
+**Comportamiento**: cuando se edita el precio post-folio en una orden con multi-pago:
+
+- **Si el nuevo precio SUBE** del total ya cobrado: `cobranza.invoices.amount` se actualiza al nuevo valor, `balance` queda como diferencia positiva, status pasa a `'parcial'`. Los pagos individuales en `cobranza.payments` permanecen intactos. Correcto: queda saldo pendiente por cobrar.
+- **Si el nuevo precio BAJA** por debajo del total ya cobrado: status pasa a `'pagada'` con `balance=0`, pero el cliente pagó de más. Solo para `billing_mode='anticipo'` se acredita automáticamente al ledger Corona. Para clientes contado, **el sobrepago debe acreditarse manualmente** como saldo a favor en CobranzaFlow.
+
+**Por qué no se fixea automáticamente**: el módulo de saldos a favor genéricos (no-Corona) está en roadmap futuro. Mientras tanto el flujo manual es aceptable (caso raro y detectable: discrepancia visible en CobranzaFlow).
+
+### Resultado v10.50.2
+
+- ✅ -174 líneas dead code
+- ✅ A11y completa en MultiPaymentPicker
+- ✅ Trigger handlers ya no son invocables como RPC
+- ✅ Gap de sobrepago post-edit documentado (no es un bug, es una decisión)
+- ✅ Pendientes 🟠 del scan: 0
+
+
 ## v10.50.1 — Fixes 🔴 críticos post-scan exhaustivo v10.50.0 — 31-may-2026
 
 3 agentes en paralelo (frontend + backend + integración) auditaron v10.50.0. 3 críticos detectados, **uno BLOQUEABA todo el feature en producción**. Atacados todos.

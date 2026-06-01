@@ -2637,8 +2637,8 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
 
       {(status === "paid" || status === "partial") && (
         <div style={{background: "#fafafa", borderRadius: 10, padding: 10, marginBottom: 10}}>
-          {/* Resumen total */}
-          <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "0.5px solid " + C.bd}}>
+          {/* Resumen total — v10.50.2 F4: aria-live para anunciar suma cambiante a lectores de pantalla */}
+          <div role="status" aria-live="polite" aria-atomic="true" style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "0.5px solid " + C.bd}}>
             <div style={{fontSize: 11, color: C.t2}}>Total {invoiceType === "factura" ? "(con IVA)" : "(sin IVA)"}: <b style={{color: C.tx, fontSize: 13}}>${fmtMx(totalDisplay)}</b></div>
             <div style={{fontSize: 11, color: sumOverPaid ? C.dn : sumExactPaid ? C.ok : C.t2}}>
               {sumOverPaid ? <>⚠️ Excede ${fmtMx(sum - totalDisplay)}</> :
@@ -2647,11 +2647,16 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
             </div>
           </div>
 
-          {/* Lista de pagos */}
-          {list.map((r, idx) => (
-            <div key={idx} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (refValid(r) ? C.bd : "#ff950040")}}>
+          {/* Lista de pagos — v10.50.2 F5: aria-invalid en card + inputs para anunciar pagos incompletos */}
+          {list.map((r, idx) => {
+            const valid = refValid(r);
+            const needsBankRef = ["transferencia","tarjeta","cheque"].includes(r.method);
+            const bankRefMissing = needsBankRef && !(r.bank_reference || "").trim();
+            const amountMissing = !(Number(r.amount) > 0);
+            return (
+            <div key={idx} role="group" aria-label={`Pago ${idx + 1}`} aria-invalid={!valid} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (valid ? C.bd : "#ff950040")}}>
               <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8}}>
-                <div style={{fontSize: 11, fontWeight: 700, color: "#5856d6"}}>💳 Pago #{idx + 1}</div>
+                <div style={{fontSize: 11, fontWeight: 700, color: "#5856d6"}}>💳 Pago #{idx + 1}{!valid && <span style={{marginLeft: 6, fontSize: 10, color: "#ff9500"}}>· incompleto</span>}</div>
                 {list.length > 1 && (
                   <button onClick={() => removeRef(idx)} aria-label={"Eliminar pago " + (idx + 1)} style={{padding: "4px 8px", borderRadius: 6, border: "1px solid " + C.dn + "40", background: C.dn + "10", color: C.dn, fontSize: 10, fontWeight: 700, cursor: "pointer"}}>
                     🗑️ Eliminar
@@ -2660,9 +2665,9 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
               </div>
 
               <label style={{...lbl, fontSize: 10, marginTop: 0}}>Método *</label>
-              <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8}}>
+              <div role="radiogroup" aria-label={`Método de pago ${idx + 1}`} aria-invalid={!r.method} style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8}}>
                 {METHODS.map(m => (
-                  <button key={m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Poppins',sans-serif", textAlign: "left"}}>
+                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Poppins',sans-serif", textAlign: "left"}}>
                     {m.i} {m.l}
                   </button>
                 ))}
@@ -2671,13 +2676,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
               <div style={{display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8}}>
                 <div>
                   <label style={{...lbl, fontSize: 10, marginTop: 0}}>Monto *</label>
-                  <input type="number" step="0.01" value={r.amount} onChange={e => updateRef(idx, {amount: e.target.value})} placeholder="0.00" style={{...inp, fontSize: 13, fontWeight: 700}}/>
+                  <input type="number" step="0.01" value={r.amount} onChange={e => updateRef(idx, {amount: e.target.value})} placeholder="0.00" aria-invalid={amountMissing} aria-label={`Monto del pago ${idx + 1}`} style={{...inp, fontSize: 13, fontWeight: 700}}/>
                 </div>
                 <div>
-                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: ["transferencia","tarjeta","cheque"].includes(r.method) && !(r.bank_reference||"").trim() ? C.dn : C.t2}}>
-                    🔗 Ref bancaria {["transferencia","tarjeta","cheque"].includes(r.method) ? "*" : "(opcional)"}
+                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.dn : C.t2}}>
+                    🔗 Ref bancaria {needsBankRef ? "*" : "(opcional)"}
                   </label>
-                  <input type="text" value={r.bank_reference || ""} onChange={e => updateRef(idx, {bank_reference: e.target.value})} placeholder={
+                  <input type="text" value={r.bank_reference || ""} onChange={e => updateRef(idx, {bank_reference: e.target.value})} aria-invalid={bankRefMissing} aria-label={`Referencia bancaria del pago ${idx + 1}`} placeholder={
                     r.method === "transferencia" ? "Folio SPEI" :
                     r.method === "tarjeta" ? "Voucher" :
                     r.method === "cheque" ? "Banco-Núm cheque" :
@@ -2686,7 +2691,8 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           <button onClick={addRef} style={{width: "100%", padding: "10px", borderRadius: 8, border: "1.5px dashed " + C.ac, background: C.acL, color: C.ac, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Poppins',sans-serif", marginTop: 4}}>
             ➕ Agregar otro pago
@@ -2716,180 +2722,9 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   );
 }
 
-function PaymentStatusPicker({status, method, amount, bankReference, orderTotal, invoiceType, onChange}) {
-  // v10.36.0 — 'efectivo' REMOVIDO: pagos en efectivo solo por Tesorería (vale VC-XXXX
-  // en CobranzaFlow). Si paga en efectivo, marca 'unpaid' y Lucero genera el vale;
-  // CobranzaFlow auto-aplica el payment al crear el vale ligado a este folio fiscal.
-  // 'cheque' AGREGADO: requiere bank_reference (banco + número de cheque).
-  const METHODS = [
-    {id: "transferencia", l: "Transferencia", i: "🏦"},
-    {id: "tarjeta", l: "Tarjeta", i: "💳"},
-    {id: "cheque", l: "Cheque", i: "📃"},
-    {id: "otro", l: "Otro", i: "📝"}
-  ];
-  // v10.30.0 — total en moneda literal del cliente (con IVA si factura D, sin IVA si remisión R)
-  // v10.31.1 fix #8 — redondeo consistente con backend ROUND(*1.16, 2) usando ints para evitar drift de float
-  const totalDisplay = invoiceType === "factura" ? Math.round((orderTotal || 0) * 116) / 100 : (orderTotal || 0);
-  const amountNum = Number(amount) || 0;
-  const amountValid = status !== "partial" || (amountNum > 0 && amountNum < totalDisplay);
-  const amountTooHigh = status === "partial" && amountNum > 0 && amountNum >= totalDisplay;
-  const remaining = totalDisplay - amountNum;
-  const fmtMx = n => n.toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  // v10.36.0 — bank_reference OBLIGATORIO para todos los métodos bancarios (transferencia/tarjeta/cheque)
-  // cuando paid o partial. El backend (sync_invoice_from_orders) también valida y rechaza vía RAISE.
-  const showBankRef = (status === "paid" || status === "partial") &&
-    ["transferencia", "tarjeta", "cheque"].includes(method);
-  const bankRefMissing = showBankRef && (!bankReference || !bankReference.trim());
-  return (
-    <div style={{marginTop: 14, marginBottom: 14, padding: 12, background: "#5856d610", borderRadius: 12, border: "1px solid #5856d630"}}>
-      <label style={{...lbl, color: "#5856d6", fontWeight: 700}}>💰 Estado de pago *</label>
-      <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, marginBottom: 12}}>
-        <button
-          onClick={() => onChange("unpaid", null, null, null)}
-          style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
-            background: status === "unpaid" ? "#ff9500" : "#fff",
-            color: status === "unpaid" ? "#fff" : C.tx,
-            border: "1.5px solid " + (status === "unpaid" ? "#ff9500" : C.bd),
-            borderRadius: 10, cursor: "pointer"}}>
-          ⏳ No pagada
-        </button>
-        <button
-          onClick={() => onChange("partial", method || null, amount || "", bankReference || null)}
-          style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
-            background: status === "partial" ? "#5856d6" : "#fff",
-            color: status === "partial" ? "#fff" : C.tx,
-            border: "1.5px solid " + (status === "partial" ? "#5856d6" : C.bd),
-            borderRadius: 10, cursor: "pointer"}}>
-          🔶 Parcial
-        </button>
-        <button
-          onClick={() => onChange("paid", method || null, null, bankReference || null)}
-          style={{padding: "12px 4px", fontSize: 12, fontWeight: 600,
-            background: status === "paid" ? "#34c759" : "#fff",
-            color: status === "paid" ? "#fff" : C.tx,
-            border: "1.5px solid " + (status === "paid" ? "#34c759" : C.bd),
-            borderRadius: 10, cursor: "pointer"}}>
-          ✅ Pagada
-        </button>
-      </div>
-      {status === "partial" && (
-        <div style={{marginBottom: 12, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid " + C.bd}}>
-          <div style={{fontSize: 10, color: C.t2, marginBottom: 4}}>
-            Total {invoiceType === "factura" ? "con IVA" : "sin IVA"}: <strong style={{color: C.tx}}>${fmtMx(totalDisplay)}</strong>
-          </div>
-          <label style={{...lbl, fontSize: 10, marginTop: 4}}>Anticipo recibido *</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            max={totalDisplay - 0.01}
-            value={amount || ""}
-            onChange={e => onChange(status, method, e.target.value, bankReference)}
-            placeholder="0.00"
-            style={{...inp, fontFamily: "monospace", fontSize: 14, fontWeight: 700,
-              border: "1.5px solid " + (amountTooHigh ? "#ff3b30" : (amountValid && amountNum > 0 ? "#5856d6" : C.bd))}}
-            autoFocus
-          />
-          {amountTooHigh && (
-            <div style={{fontSize: 10, color: "#ff3b30", marginTop: 4, fontWeight: 600}}>
-              ⚠️ El anticipo no puede ser igual o mayor al total. Si cubre el total, usa "✅ Pagada".
-            </div>
-          )}
-          {amountValid && amountNum > 0 && (
-            <div style={{fontSize: 10, color: "#34c759", marginTop: 4, fontWeight: 600}}>
-              ✅ Saldo pendiente: <strong>${fmtMx(remaining)}</strong>
-            </div>
-          )}
-        </div>
-      )}
-      {(status === "paid" || status === "partial") && (
-        <>
-          <label style={{...lbl, fontSize: 10, marginTop: 4}}>Método de pago *</label>
-          <div style={{display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginTop: 6}}>
-            {METHODS.map(m => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  // v10.36.1 #3 — preservar bankReference SOLO si el método no cambia.
-                  // Cambiar entre bancarios distintos (ej. transferencia→cheque) limpia la ref
-                  // para evitar guardar SPEI clave como número de cheque (data quality v2.7).
-                  // No-bancarios siempre limpian.
-                  const newBankRef = (m.id === method) ? bankReference : null;
-                  onChange(status, m.id, amount, newBankRef);
-                }}
-                style={{padding: "8px", fontSize: 12, fontWeight: 600,
-                  background: method === m.id ? (status === "paid" ? "#34c759" : "#5856d6") : "#fff",
-                  color: method === m.id ? "#fff" : C.tx,
-                  border: "1px solid " + (method === m.id ? (status === "paid" ? "#34c759" : "#5856d6") : C.bd),
-                  borderRadius: 8, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6}}>
-                <span>{m.i}</span><span>{m.l}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-      {/* v10.36.0 — Campo bank_reference OBLIGATORIO para transferencia/tarjeta/cheque cuando paid/partial.
-          El backend (sync_invoice_from_orders) también valida — defensa en profundidad. */}
-      {showBankRef && (
-        <div style={{marginTop: 10, padding: 10, background: "#fff", borderRadius: 8, border: "1px solid " + (bankRefMissing ? "#ef4444" : C.bd)}}>
-          <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? "#ef4444" : "#5856d6", fontWeight: 700}}>
-            🔗 Referencia bancaria * (obligatoria)
-          </label>
-          <input
-            type="text"
-            value={bankReference || ""}
-            onChange={e => onChange(status, method, amount, e.target.value)}
-            placeholder={
-              method === "transferencia" ? "Folio SPEI o clave de rastreo (obligatorio)" :
-              method === "tarjeta" ? "Folio del voucher de terminal (obligatorio)" :
-              method === "cheque" ? "Banco + número de cheque, ej: BANAMEX-1234567 (obligatorio)" :
-              "Referencia obligatoria"
-            }
-            maxLength={100}
-            required
-            style={{...inp, fontSize: 12, fontFamily: "monospace", border: bankRefMissing ? "1.5px solid #ef4444" : inp.border}}
-          />
-          {bankRefMissing ? (
-            <div style={{fontSize: 10, color: "#dc2626", marginTop: 4, lineHeight: 1.4, fontWeight: 600}}>
-              ⚠️ Referencia bancaria requerida. Si no la tienes en mano, marca la orden como "No pagada" y aplica el pago después desde CobranzaFlow.
-            </div>
-          ) : (
-            <div style={{fontSize: 10, color: C.t2, marginTop: 4, fontStyle: "italic"}}>
-              💡 Captura el folio SPEI, voucher de terminal o número de cheque. Permite conciliación bancaria automática al 95%.
-            </div>
-          )}
-        </div>
-      )}
-      {status === "unpaid" && (
-        <>
-          <div style={{fontSize: 10, color: C.t2, marginTop: 6, fontStyle: "italic"}}>
-            ⏳ Esta factura/remisión irá a CobranzaFlow como pendiente de cobro.
-          </div>
-          {/* v10.36.0 — Banner informativo: efectivo va exclusivamente por Tesorería (Candado #3) */}
-          <div style={{
-            background: "#e0f2fe", border: "1px solid #0ea5e9",
-            borderRadius: 8, padding: "8px 12px", marginTop: 8,
-            fontSize: 11, color: "#075985", lineHeight: 1.5,
-          }}>
-            💡 <strong>Pago en efectivo:</strong> si el cliente va a pagar en efectivo, marca "No pagada" y entrega al cliente con el folio asignado. Tesorería (Lucero) generará el vale de caja y el sistema aplicará el pago automáticamente al crearse el vale.
-          </div>
-        </>
-      )}
-      {/* v10.36.0 — mensajes de éxito solo cuando bank_reference (si requerida) esté válida */}
-      {status === "paid" && method && (!showBankRef || (bankReference && bankReference.trim())) && (
-        <div style={{fontSize: 10, color: "#34c759", marginTop: 6, fontWeight: 600}}>
-          ✅ Esta factura/remisión irá a CobranzaFlow ya marcada como pagada.{showBankRef && bankReference && ` Ref ${bankReference} permitirá conciliación bancaria automática.`}
-        </div>
-      )}
-      {status === "partial" && method && amountValid && amountNum > 0 && (!showBankRef || (bankReference && bankReference.trim())) && (
-        <div style={{fontSize: 10, color: "#5856d6", marginTop: 6, fontWeight: 600}}>
-          🔶 CobranzaFlow recibirá la factura con anticipo de ${fmtMx(amountNum)} aplicado y saldo pendiente de ${fmtMx(remaining)}.{showBankRef && bankReference && ` Ref ${bankReference} permitirá conciliación bancaria automática.`}
-        </div>
-      )}
-    </div>
-  );
-}
+// v10.50.2 — PaymentStatusPicker eliminado (reemplazado por MultiPaymentPicker en v10.50.0).
+// Histórico: 174 líneas de código muerto removidas. Ver git history para el componente legacy.
+
 
 // ─── PRICE CAPTURE MODAL (v10.49.0) ─── Karla captura precio o salta al dar Entregar
 // Aparece ANTES de InvoiceModal si la orden no tiene precio.
