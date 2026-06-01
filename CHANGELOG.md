@@ -5,6 +5,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.51.2 — Fixes 🟡 menores post-scan v10.51.0 — 01-jun-2026
+
+Cierre de los 7 menores del scan v10.51.0 que quedaban pendientes en v10.51.1.
+
+### Backend
+
+- **m2**: `assign_folios_split_oc` rechaza explícitamente si `order_ids` contiene valores `null` adentro del array (antes pasaba el null silenciosamente).
+- **m3**: rechaza `amount` NULL o vacío en payment_refs antes del cast a NUMERIC.
+- **m4**: `oc_invoice_groups.amount` ahora es `NOT NULL` + nuevo `CHECK (position > 0)`. Defensa en profundidad — la RPC siempre setea ambos correctamente.
+- **m6**: `assign_folios_split_oc` ya no usa `USING ERRCODE='22023'` (default `P0001` raise_exception es semánticamente correcto para business rejects). `assign_folio_to_oc` legacy conserva `22023` por retrocompat — el frontend distingue por `SQLERRM` string igual.
+
+### Frontend
+
+- **m1**: `useEffect` que inicializa `splitGroups` ahora tiene dep array completo (`pendingOrders`, `splitGroups.length`, `suggestionByType.factura`). El guard `splitGroups.length === 0` previene re-inicializaciones espurias cuando ocOrders cambia mid-edit; pero si Karla abre el modal antes de que ocOrders llegue por Realtime, las nuevas órdenes ya entran al grupo inicial.
+- **m5**: `parseFolioNum` rechaza leading zeros (`D-0123` → null). Antes parseInt los normalizaba silenciosamente y AlphaERP podía interpretar "D-0123" ≠ "D-123" como folios distintos.
+- **m7**: `setSaving(false)` ahora en `finally` (antes solo en catch). Defensivo — si el handler raíz no desmonta el modal por algún edge case, el botón no queda permanentemente disabled.
+
+### Resultado scan v10.51.0
+
+- 🔴 Críticos: 3/3 ✅ (v10.51.1)
+- 🟠 Mayores: 4/4 ✅ (v10.51.1)
+- 🟡 Menores: 7/7 ✅ (v10.51.2)
+- **Pendientes del scan v10.51.0: 0**
+
+
 ## v10.51.1 — Fixes 🔴🟠 post-scan v10.51.0 — 31-may-2026
 
 Scan exhaustivo con 3 agentes paralelos detectó 3 críticos + 4 mayores + 7 menores. Marcelo: "hagamos los fixes críticos y mayores". 7/7 atacados; 7 menores quedan para v10.51.2 opcional.

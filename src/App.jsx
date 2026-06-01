@@ -4908,7 +4908,13 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
 // Modos: "simple" (1 folio compartido o N consecutivos) | "split" (N facturas con drag-drop)
 function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onConfirmSplit, onClose}){
   useEscClose(onClose);
-  const parseFolioNum = (f)=>{const m=String(f||"").match(/^[DR]-(\d+)$/i); return m?parseInt(m[1],10):null};
+  // v10.51.2 m5 — rechazar leading zeros (D-0123) para evitar ambigüedad con AlphaERP.
+  const parseFolioNum = (f)=>{
+    const m=String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+    if (!m) return null;
+    if (m[1].length > 1 && m[1].startsWith("0")) return null;
+    return parseInt(m[1],10);
+  };
 
   const [activeMode, setActiveMode] = useState("simple"); // "simple" | "split"
   const [saving, setSaving] = useState(false);
@@ -4963,7 +4969,9 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   const [splitGroups, setSplitGroups] = useState([]);
   const [dragOrderId, setDragOrderId] = useState(null);
 
-  // Inicializa con 1 grupo conteniendo todas las pendientes la primera vez que entras a split
+  // Inicializa con 1 grupo conteniendo todas las pendientes la primera vez que entras a split.
+  // v10.51.2 m1 — pendingOrders en dep array; el guard splitGroups.length===0 previene
+  // re-inicializaciones espurias cuando ocOrders cambia mid-edit.
   useEffect(()=>{
     if (activeMode === "split" && splitGroups.length === 0 && pendingCount > 0) {
       setSplitGroups([{
@@ -4974,8 +4982,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         payment_refs: []
       }]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeMode, pendingCount]);
+  }, [activeMode, pendingCount, pendingOrders, splitGroups.length, suggestionByType.factura]);
 
   const allAssignedSet = useMemo(()=>new Set(splitGroups.flatMap(g=>g.order_ids)), [splitGroups]);
   const unassignedOrders = useMemo(()=>pendingOrders.filter(o=>!allAssignedSet.has(o.id)), [pendingOrders, allAssignedSet]);
@@ -5063,12 +5070,13 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     setSplitGroups(prev=>prev.map((g,i)=>i===fromGroupIdx ? {...g, order_ids: g.order_ids.filter(id=>id!==orderId)} : g));
   };
 
+  // v10.51.2 m7 — setSaving(false) en finally para robustez (defensa contra handler raíz que no desmonte modal).
   const submitSimple = async()=>{
     if (!canSubmitSimple) return;
     setSaving(true);
     try {
       await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null);
-    } catch(e) { setSaving(false); }
+    } finally { setSaving(false); }
   };
   const submitSplit = async()=>{
     if (!canSubmitSplit) return;
@@ -5085,7 +5093,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         }))
       }));
       await onConfirmSplit(payload, preAssignedMode, reason.trim() || null);
-    } catch(e) { setSaving(false); }
+    } finally { setSaving(false); }
   };
 
   const tColor = invoiceType==="factura" ? "#5856d6" : "#34c759";
