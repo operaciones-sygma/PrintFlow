@@ -5,6 +5,45 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.5 — Últimos 🟡 menores cerrados — 01-jun-2026
+
+### 🟡 m1 — Flag `corona_credit_bridge_enabled` case-insensitive
+
+**Antes**: las 3 funciones que verifican el flag (`sync_invoice_from_orders`, `sync_invoice_from_oc`, `assign_folios_split_oc`) usaban `TRIM(value::text, '"') = 'true'`. Si Marcelo escribía `"TRUE"`, `"True"`, `"yes"`, `"1"` en `cobranza.app_config` (manual desde Studio), el match fallaba silenciosamente y Corona "se desactivaba".
+
+**Después**: nuevo trigger `cobranza.normalize_app_config_booleans` BEFORE INSERT/UPDATE en `app_config` normaliza el valor a `true`/`false` jsonb canónico ANTES de almacenar. Acepta sinónimos: `true`, `1`, `yes`, `on`, `enabled` (case-insensitive, con o sin comillas). Las 3 funciones existentes siguen usando el cast simple sin cambios.
+
+**Tests (5/5 ✅)**:
+- `"TRUE"` → `true` ✓
+- `"yes"` → `true` ✓
+- `"1"` → `true` ✓
+- `"on"` → `true` ✓
+- `"False"` (negativo) → `false` ✓
+
+### 🟡 m2 — UI admin para `cleanup_print_audit`
+
+**Antes**: la función `cleanup_print_audit(months)` solo se invocaba desde Supabase Studio. Marcelo tenía que abrir el panel SQL para correr la limpieza.
+
+**Después**:
+- **Backend**: nuevo helper `db.cleanupPrintAudit(months)` y `db.printAuditCount()` en frontend
+- **Frontend**: componente nuevo `PrintAuditCleanupModal` con:
+  - Muestra el total actual de rows en `print_audit`
+  - Input para "Conservar últimos N meses" (3-120, default 12)
+  - Validación inline + `window.confirm` antes de ejecutar
+  - Banner verde con resultado: `X rows borradas · fecha de corte: DD/MM/YYYY`
+- **Integración**: botón "🧹 Mantenimiento" en el header de "🩺 Salud Operativa" (solo visible si `role === 'admin'`)
+
+Marcelo ahora puede ejecutar el cleanup directamente desde la app, sin acceder a Studio.
+
+### Resultado final scan v10.54.x
+
+- 🔴 Críticos: 4/4 ✅
+- 🟠 Mayores: 7/7 ✅
+- 🟡 Menores: 5/5 ✅
+- 🚨 Folio counter: reseteado + trigger defensivo
+- **Total: 16/16 cerrados. 0 pendientes.**
+
+
 ## v10.54.4 — Defensa preventiva contra corrupción del folio counter — 01-jun-2026
 
 Backend-only. Después del incidente en v10.54.3 (counter=90M por typo), prevenir que vuelva a pasar.

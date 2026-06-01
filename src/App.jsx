@@ -566,6 +566,21 @@ const db = {
     if (error) throw new Error(error.message);
     return data;
   },
+  // 🧹 v10.54.5 — Limpieza del histórico de impresiones (admin-only).
+  // Borra rows de print_audit con printed_at < NOW() - p_keep_months meses.
+  // Mínimo 3 meses. Devuelve {keep_months, cutoff_date, rows_deleted}.
+  async cleanupPrintAudit(months) {
+    const {data, error} = await supabase.rpc("cleanup_print_audit", {
+      p_keep_months: months
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async printAuditCount() {
+    const {count, error} = await supabase.from("print_audit").select("*", {count:"exact", head:true});
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
   async assignFolioToOC(ocId, invoiceType, mode, folioStart, preAssigned, reason, actor) {
     const {data, error} = await supabase.rpc("assign_folio_to_oc", {
       p_oc_id: ocId,
@@ -7313,6 +7328,67 @@ function WIPDashboard({ orders, role, onAction }) {
   );
 }
 
+// v10.54.5 m2 — Modal admin para limpiar histórico de print_audit
+function PrintAuditCleanupModal({onClose, showToast}) {
+  useEscClose(onClose);
+  const [months, setMonths] = useState(12);
+  const [currentCount, setCurrentCount] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(()=>{
+    let alive = true;
+    db.printAuditCount().then(c=>{ if(alive) setCurrentCount(c) }).catch(()=>{ if(alive) setCurrentCount("?") });
+    return ()=>{alive=false};
+  }, []);
+
+  const monthsNum = parseInt(months, 10);
+  const valid = Number.isFinite(monthsNum) && monthsNum >= 3 && monthsNum <= 120;
+
+  const submit = async()=>{
+    if (!valid) return;
+    if (!window.confirm(`¿Borrar histórico de impresiones de más de ${monthsNum} meses? Esta acción NO se puede deshacer.`)) return;
+    setBusy(true);
+    try {
+      const r = await db.cleanupPrintAudit(monthsNum);
+      setResult(r);
+      showToast(`🧹 Limpieza OK: ${r.rows_deleted} rows borradas (corte: ${new Date(r.cutoff_date).toLocaleDateString("es-MX")})`);
+    } catch(e) {
+      showToast("❌ Error en limpieza: "+(e?.message||"desconocido"), "error");
+    } finally { setBusy(false); }
+  };
+
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}}>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}>🧹 Limpieza histórico de impresiones</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",lineHeight:1.5}}>
+        Borra del histórico (<code>print_audit</code>) las impresiones más viejas que el periodo indicado.
+        Los datos actuales en cada orden (<code>print_version</code>, <code>last_printed_by</code>) no se ven afectados.
+      </p>
+
+      <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:14,fontSize:11}}>
+        <div style={{color:C.t2}}>Histórico actual:</div>
+        <div style={{fontSize:18,fontWeight:800,color:C.tx,marginTop:2}}>{currentCount===null?"⏳ cargando...":currentCount===1?"1 row":currentCount+" rows"}</div>
+      </div>
+
+      <label style={{...lbl,marginBottom:4}}>Conservar últimos N meses</label>
+      <input type="number" min="3" max="120" step="1" value={months} onChange={e=>setMonths(e.target.value)}
+        disabled={busy}
+        style={{...inp,fontSize:16,fontWeight:700,textAlign:"center",border:"1.5px solid "+(valid?C.bd:C.dn+"40")}}/>
+      {!valid && months && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Debe ser un número entre 3 y 120</div>}
+
+      {result && <div style={{background:"#dcfce7",border:"1px solid #16a34a",borderRadius:10,padding:10,marginTop:12,fontSize:11,color:"#15803d"}}>
+        ✅ <strong>{result.rows_deleted}</strong> rows borradas · fecha de corte: {new Date(result.cutoff_date).toLocaleDateString("es-MX")}
+      </div>}
+
+      <div style={{display:"flex",gap:8,marginTop:18}}>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
+        <button onClick={submit} disabled={!valid||busy} style={{...bt(valid&&!busy?C.dn:"#d1d1d6"),flex:1,justifyContent:"center",cursor:valid&&!busy?"pointer":"not-allowed"}}>{busy?"⏳ Limpiando...":"🧹 Limpiar"}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function StatCard({ label, value, subValue, color }) {
   return (
     <div style={{
@@ -7333,6 +7409,8 @@ function StatCard({ label, value, subValue, color }) {
 
 // ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
 function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
+  // v10.54.5 m2 — modal admin para limpiar histórico de impresiones
+  const [showPrintCleanup, setShowPrintCleanup] = useState(false);
   const [expandedSection, setExpandedSection] = useState({});
 
   // v10.32.0 — admin (Salud Operativa completa) o secretaria (Datos Pendientes con scope limitado)
@@ -7480,12 +7558,22 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
-      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
-        {role === "secretaria" ? "📝 Datos Pendientes" : "🩺 Salud Operativa"}
-      </h2>
-      <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
-        {role === "secretaria" ? "Órdenes que requieren tu atención para completar datos." : "Supervisión diaria del taller. Última actualización: ahora."}
-      </p>
+      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast}/>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
+            {role === "secretaria" ? "📝 Datos Pendientes" : "🩺 Salud Operativa"}
+          </h2>
+          <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
+            {role === "secretaria" ? "Órdenes que requieren tu atención para completar datos." : "Supervisión diaria del taller. Última actualización: ahora."}
+          </p>
+        </div>
+        {role === "admin" && (
+          <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
+            🧹 Mantenimiento
+          </button>
+        )}
+      </div>
 
       {/* SECCIÓN 1: Top Prioridad */}
       {topPriority && (
