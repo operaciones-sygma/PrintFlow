@@ -1278,19 +1278,29 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .field-val{font-size:12px;font-weight:600;min-height:16px;margin-top:1px}
 .check{display:inline-block;width:11px;height:11px;border:1.5px solid #444;margin-right:3px;vertical-align:middle;text-align:center;font-size:8px;line-height:11px}
 .check.on{background:#333;color:#fff}
-.sig-row{display:flex;gap:16px;margin-top:28px}
+.sig-row{display:flex;gap:16px;margin-top:28px;page-break-inside:avoid}
 .sig-box{flex:1;border-top:1.5px solid #000;padding-top:5px;text-align:center;font-size:7px;color:#999;text-transform:uppercase;letter-spacing:.5px}
 .imp-table td{height:20px}
 .imp-table .hdr{font-size:7px;font-weight:800;text-align:center;background:#f0f0f0;text-transform:uppercase;letter-spacing:.5px}
 .otros-row{font-size:10px;padding:3px 7px;border-top:none}
-@media print{body{padding:10px 14px}@page{margin:8mm}}
+.product-images{display:flex;gap:8px;margin-top:-1px;border:1px solid #444;padding:6px;background:#fafafa;page-break-inside:avoid}
+.product-images .ptitle{font-size:7px;font-weight:800;color:#777;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.product-images img{max-width:100%;max-height:180px;object-fit:contain;border:1px solid #ddd;background:#fff}
+.pay-badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.pay-paid{background:#dcfce7;color:#15803d;border:1px solid #16a34a}
+.pay-partial{background:#fef3c7;color:#a16207;border:1px solid #ca8a04}
+.pay-unpaid{background:#fee2e2;color:#b91c1c;border:1px solid #dc2626}
+@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}}
 </style></head><body>`;
 
     // ═══ HEADER ═══
+    // v10.52.0 — logo desde /public/sygma-logo.png con fallback a SYGMA_LOGO data URL
+    // (window.open abre about:blank sin base URL, por eso origen absoluto)
+    const logoSrc=window.location.origin+"/sygma-logo.png";
     h+=`<div class="header">
-      <div class="header-logo"><img src="${SYGMA_LOGO}" style="width:120px;height:auto;"/></div>
+      <div class="header-logo"><img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/></div>
       <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isProd?'<div class="copy-badge">Copia Producción</div>':''}</div>
-      <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+o.cart_folio+'</div>':''}${o.web_folio?'<div class="webf">'+o.web_folio+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+o.invoice_folio+'</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
+      <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+o.cart_folio+'</div>':''}${o.web_folio?'<div class="webf">'+o.web_folio+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+o.purchase_order_id+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+o.invoice_folio+'</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
     // ═══ FECHAS + TIPO PROCESO ═══
@@ -1330,6 +1340,26 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     </tr>
     ${o.product?`<tr><td colspan="4"><div class="field-lbl">${isAdvanced?"Datos Técnicos Completos":"Descripción del Producto"}</div><div class="field-val" style="font-size:${isAdvanced?"12":"12"}px;line-height:1.6;white-space:pre-wrap;min-height:${isAdvanced?"40":"24"}px;${isAdvanced?"padding:4px 0;":""}${isAdvanced?"border-top:1px dashed #ccc;padding-top:6px;":""}">${o.product}</div></td></tr>`:""}
     </table>`;
+
+    // ═══ IMÁGENES DEL PRODUCTO (v10.52.0) ═══
+    // Muestra image_url y/o image_url_2 si existen. Fallback a image (legacy) o file_url si es imagen.
+    const isImgUrl=(u)=>u&&/\.(jpe?g|png|gif|webp)$/i.test(u);
+    const imgs=[o.image_url, o.image_url_2,
+      (!o.image_url&&!o.image_url_2&&o.image)?o.image:null,
+      (!o.image_url&&!o.image_url_2&&!o.image&&isImgUrl(o.file_url||o.file_name))?o.file_url:null
+    ].filter(Boolean);
+    if(imgs.length>0){
+      h+=`<div class="product-images">
+        <div style="flex:1;text-align:center">
+          <div class="ptitle">${imgs.length>1?"Imagen 1 (Frente)":"Imagen del Producto"}</div>
+          <img src="${imgs[0]}" alt="" onerror="this.style.display='none'"/>
+        </div>
+        ${imgs[1]?`<div style="flex:1;text-align:center">
+          <div class="ptitle">Imagen 2 (Vuelta)</div>
+          <img src="${imgs[1]}" alt="" onerror="this.style.display='none'"/>
+        </div>`:""}
+      </div>`;
+    }
 
     // ═══ IMPRESIÓN (solo si hay specs individuales) ═══
     if(!isMaq&&hasSpecs){
@@ -1386,13 +1416,21 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 
     // ═══ DATOS ADMINISTRATIVOS (solo versión completa) ═══
     if(!isProd){
+      // v10.52.0 — badge de estado de pago (solo si tiene folio asignado)
+      let payBadge="";
+      if(o.invoice_folio){
+        if(o.payment_status==="paid") payBadge=`<span class="pay-badge pay-paid">✓ Pagada${o.payment_method?" · "+o.payment_method:""}</span>`;
+        else if(o.payment_status==="partial") payBadge=`<span class="pay-badge pay-partial">⚠ Parcial${o.payment_amount?" · $"+Number(o.payment_amount).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2}):""}</span>`;
+        else payBadge=`<span class="pay-badge pay-unpaid">⏳ Por cobrar</span>`;
+      }
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos Administrativos</td></tr>
       <tr><td style="width:40%"><div class="field-lbl">Facturar a</div><div class="field-val">${o.client_company||o.client||""}</div></td>
       <td style="width:25%"><div class="field-lbl">R.F.C.</div><div class="field-val">${o.client_rfc||""}</div></td>
       <td style="width:20%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${o.agent||""}</div></td>
       <td style="width:15%"><div class="field-lbl">Precio</div><div class="field-val" style="font-weight:800;font-size:14px">${o.price?fmt(o.price):""}</div></td></tr>
       <tr><td colspan="2"><div class="field-lbl">Email</div><div class="field-val">${o.client_email||""}</div></td>
-      <td colspan="2"><div class="field-lbl">Cotización</div><div class="field-val"></div></td></tr>
+      <td><div class="field-lbl">Cotización</div><div class="field-val"></div></td>
+      <td><div class="field-lbl">Estado de Pago</div><div class="field-val">${payBadge||"—"}</div></td></tr>
       </table>`;
     } else {
       // Production copy: only agent, no price/RFC/email

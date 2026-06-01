@@ -5,6 +5,74 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.52.0 — Hoja impresa: imagen producto + logo Sygma + folio OC + estado pago — 01-jun-2026
+
+Marcelo regresa al **modo híbrido con órdenes físicas** esta semana. Auditoría completa de `PrintOrder` (función única que genera ambas versiones: completa y producción) + 4 mejoras críticas.
+
+### Lo que se preserva sin cambios
+
+**2 versiones** vigentes — confirmado en scan que cubren todos los casos:
+- **Completa**: secretaría/admin. Incluye contactos, RFC, precio, datos admin.
+- **Producción**: piso (producción/preprensa/germán). Sin precio, sin contactos.
+
+**Campos técnicos completos** confirmados: papel, gramaje, tintas frente/vuelta, pantones, acabados (checkboxes con custom), maquila, instrucciones, firmas, prioridad, fechas.
+
+### Cambios nuevos
+
+**1. Imagen del producto** (🔴 pedido explícito de Marcelo)
+
+Sección nueva entre "Datos de la Forma" y "Impresión". Muestra:
+- `image_url` (Imagen 1 — Frente)
+- `image_url_2` (Imagen 2 — Vuelta) si existe
+- Fallback legacy a `image` (campo viejo) o `file_url` si es imagen
+
+Max-height 180px con `object-fit: contain` para no romper layout. `onerror` esconde si la URL falla. `page-break-inside: avoid` mantiene las imágenes en una sola página.
+
+Aplica a AMBAS versiones (completa y producción).
+
+**2. Logo Sygma — migración a `/public/`**
+
+Antes: data URL base64 embebido en línea 12 (pesaba el bundle).
+Ahora: intenta cargar `/sygma-logo.png` desde `/public/`. Si el archivo no existe, fallback automático al data URL viejo (`onerror`).
+
+```js
+<img src="${window.location.origin}/sygma-logo.png"
+     onerror="this.onerror=null;this.src='${SYGMA_LOGO}'"/>
+```
+
+Marcelo debe guardar `sygma-logo.png` en `c:\Users\padil\Projects\PrintFlow\public\`. Mientras no esté, el código sigue usando el data URL anterior — no rompe nada.
+
+Estilo nuevo: `max-width:140px;max-height:80px` para acomodar logos horizontales (como el "SYGMA · Arte en Impresión" adjuntado por Marcelo).
+
+**3. Folio de OC en header** (`purchase_order_id`)
+
+Si la orden pertenece a una OC, ahora se ve en el header (debajo del folio principal) con badge violeta y prefijo 📦. Útil para Karla y producción para asociar la orden con la OC del cliente.
+
+**4. Badge de estado de pago en versión completa**
+
+Reemplaza el campo "Cotización" (que estaba vacío) por "Estado de Pago" en datos administrativos. Solo aparece si la orden tiene folio fiscal asignado:
+- 🟢 `✓ Pagada · transferencia/cheque/tarjeta` (verde)
+- 🟡 `⚠ Parcial · $X` (ámbar)
+- 🔴 `⏳ Por cobrar` (rojo)
+
+No aparece en versión producción (piso no necesita info de cobranza).
+
+### CSS / print
+
+Nuevas reglas:
+- `.product-images` con `page-break-inside: avoid`
+- `.sig-row` con `page-break-inside: avoid` (evita firmas cortadas)
+- `.page-break` clase helper para futuro multi-orden printing
+- `.pay-badge` + variantes `pay-paid`, `pay-partial`, `pay-unpaid`
+
+### Verificado en scan
+
+✅ Todos los campos técnicos pasan correctamente (paper_type, ink_front, pantones, finishes con custom).
+✅ Maquila completa solo en versión "completa" (correcto).
+✅ Producción copy oculta correctamente precio/RFC/email/maq_cost.
+✅ Header con folio fiscal cuando ya asignado (D-/R- con color por tipo).
+
+
 ## v10.51.3 — Candado de efectivo en entry-point (paridad con CobranzaFlow) — 01-jun-2026
 
 Marcelo: "Hacer el cambio IMPORTANTE donde falla la lógica de pagado en efectivo en PrintFlow → CobranzaFlow. Hay candados en CobranzaFlow pero en PrintFlow no."
