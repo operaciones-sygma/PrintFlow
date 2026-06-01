@@ -5,6 +5,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.4 — Defensa preventiva contra corrupción del folio counter — 01-jun-2026
+
+Backend-only. Después del incidente en v10.54.3 (counter=90M por typo), prevenir que vuelva a pasar.
+
+### Trigger `trg_guard_invoice_counter_jump` (BEFORE UPDATE on `invoice_counters`)
+
+Reglas:
+- **Sin cambio en `last_number`** → OK (UPDATE solo de `updated_at`)
+- **Incremento 1..10,000** → OK (cubre asignaciones consecutivas + saltos legítimos por OC con N folios)
+- **Incremento > 10,000** → RAISE EXCEPTION (probable typo)
+- **Decremento (retroceso)** → RAISE EXCEPTION (casi siempre error)
+
+**Bypass para reset legítimo** (admin desde Studio o migration):
+```sql
+BEGIN;
+  SET LOCAL app.allow_counter_reset = 'true';
+  UPDATE invoice_counters SET last_number = X WHERE type='factura';
+COMMIT;
+```
+
+El bypass deja audit log automático en `cobranza.audit_log` con action `invoice_counter_reset_bypass` para trazabilidad.
+
+### Tests aplicados (4/4 ✅)
+
+1. `UPDATE last_number = 5870` (diff +1) → **OK** ✓
+2. `UPDATE last_number = 90000014` (diff +89,994,145) → **RAISE 22023**: "salto sospechoso: 5869 → 90000014. Probable typo en folio."
+3. `UPDATE last_number = 100` (diff -5769) → **RAISE 22023**: "retroceso bloqueado: 5869 → 100."
+4. `SET LOCAL app.allow_counter_reset = 'true'; UPDATE last_number = 99` → **OK** ✓ (bypass funciona)
+
+### Impacto operativo
+
+- Las RPCs `assign_invoice`, `assign_folio_to_oc`, `assign_folios_split_oc` siguen funcionando idénticas — los UPDATEs normales con `GREATEST(last_number, v_folio_number)` rara vez exceden +10 (consecutive mode) y nunca exceden +10,000.
+- Si Karla escribe accidentalmente `D-90000014` en el modal de asignación, el `GREATEST` intentará subir el counter a 90M → trigger RAISE → TX rolea back, la orden NO queda con folio corrupto, el counter NO se envenena, Karla ve el error claro y reintenta.
+- Si Marcelo necesita reset legítimo (próximo incidente, importación de histórico), usa el bypass con `SET LOCAL` desde Studio.
+
+### Pendientes 🟡 menores restantes (opcionales, no urgentes)
+
+- Flag `corona_credit_bridge_enabled` case-insensitive (`"TRUE"` falla silencioso) — edge case manual
+- UI admin para `cleanup_print_audit` — Marcelo usa Studio
+
+
 ## v10.54.3 — Reset folio counter + fixes 🔴🟠 post-scan v10.54.1 — 01-jun-2026
 
 **URGENTE**: Marcelo reportó que el folio consecutivo sugerido estaba en números exagerados.
