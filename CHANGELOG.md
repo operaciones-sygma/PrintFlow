@@ -5,6 +5,70 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.3 — Reset folio counter + fixes 🔴🟠 post-scan v10.54.1 — 01-jun-2026
+
+**URGENTE**: Marcelo reportó que el folio consecutivo sugerido estaba en números exagerados.
+
+### 🚨 Reset folio counter (FIX URGENTE)
+
+**Diagnóstico**: `invoice_counters.last_number` para `factura` estaba en **90,000,014** (8 dígitos). El folio REAL máximo en uso (cruzando 4 tablas: orders, purchase_orders.shared_invoice_folio, oc_invoice_groups, cobranza.invoices) era solo **D-5869**. La hoja de impresión sugería `D-90000015` como próximo folio.
+
+**Causa**: alguien (probablemente Karla en Studio o un typo en el modal) introdujo un folio con 8 dígitos. El `UPDATE invoice_counters SET last_number = GREATEST(last_number, v_folio_number)` lo aceptó y nunca se revirtió (auto-incrementa, no decrece). El folio anómalo NO quedó en ninguna tabla (probablemente la asignación se canceló después), pero el counter ya estaba "envenenado".
+
+**Fix**: migration `v10_54_3_folio_reset_and_post_scan_fixes` ejecuta:
+```sql
+UPDATE invoice_counters SET last_number = (folio real máximo) WHERE type='factura';
+-- factura: 90,000,014 → 5,869 (próximo D-5870 ✓)
+-- remision: 1,211 → 1,211 (sin cambio, ya estaba correcto)
+```
+
+Audit log `invoice_counter_reset` registra el cambio para trazabilidad.
+
+**Verificación post-fix**: `SELECT * FROM invoice_counters` muestra `factura=5869`, `remision=1211`. La hoja de impresión ahora sugiere `D-5870` correctamente.
+
+### 🔴 C1 — Race condition en cascada de cancelaciones de grupo Corona
+
+**Antes**: `sync_cancellation_to_cobranza` rama OC split usaba `SELECT COUNT(*)` SIN `FOR UPDATE`. Cuando se cancelaban 2+ órdenes del mismo grupo en paralelo (cancel OC completa, multi-tab, webhook + manual), cada trigger veía a la otra orden todavía activa → ambas creían NO ser la última → ambas hacían `credit_adjust` (parcial) en vez de una hacer `credit_reverse` (última). Resultado: grupo sin órdenes activas pero invoice NO cancelada, ledger desfasado.
+
+**Después**: `SELECT ... FOR UPDATE` serializa las cascadas. La 2ª cancelación del mismo grupo espera a que la 1ª termine su trigger, ve el estado real post-1ra cancelación, y decide correctamente entre `credit_adjust` (parcial) o `credit_reverse` (última).
+
+### 🟠 M1 — Validación de balance Corona FRESH antes de cada `credit_consume`
+
+**Antes**: `assign_folios_split_oc` leía `balance_despues` una vez al inicio para validar saldo total. Si otro flujo concurrente modificaba el ledger entre la validación y el primer `credit_consume`, el saldo real era menor → fallaba mid-loop con error genérico de `credit_consume` ("monto debe ser > 0").
+
+**Después**: re-lee `balance_despues` ANTES de cada `credit_consume` por grupo. Si insuficiente, RAISE con mensaje accionable: "Saldo Corona insuficiente al procesar grupo N (folio X): cliente tiene $A, requiere $B para este grupo. Faltan $C. (Saldo bajó entre validación inicial y procesamiento — algún otro flujo concurrente modificó el ledger.)"
+
+Audit `oc_split_apply_credit_corona` ahora incluye `balance_before_this_group` para trazabilidad.
+
+### 🟠 M2 — Banner Corona en `AssignOCFolioModal` Split tab
+
+**Antes**: el modal Split no detectaba si la OC era Corona. Karla podía capturar `payment_refs` en grupos sin saber que serían rechazados al submit.
+
+**Después**: `useEffect` carga `coronaInfo` via `db.getClientBillingInfo(oc.client_id, oc.client)` al montar. Si `billing_mode='anticipo'`, banner amarillo:
+
+> 🟡 **Cliente Corona (anticipo)**: el saldo a favor se aplicará automáticamente a CADA grupo (sin IVA al ledger, con IVA en cobranza). **NO captures pagos manuales** en los grupos — serán rechazados.
+> 
+> Saldo disponible: `$X,XXX.XX`
+
+### 🟠 M3 — Validación proactiva Corona + `payment_refs` en `splitValidation`
+
+**Antes**: si Karla capturaba `payment_refs` en grupo Corona, el rechazo solo venía del backend tras submit (mensaje raw en toast).
+
+**Después**: `splitValidation` ahora chequea `isCorona && (payment_status !== 'unpaid' || payment_refs.length > 0)` → bloquea submit con razón clara: "Grupo N: OC Corona se paga con saldo a favor automático — no captures pagos". El botón "Dividir" queda deshabilitado, mensaje visible en el footer del modal antes de intentar submit.
+
+### Pendientes 🟡 menores (no atacados — opcionales)
+
+- **m1 backend**: `TRIM(value::text, '"')` no case-insensitive en flag `corona_credit_bridge_enabled`. Si Marcelo escribe `"TRUE"` (uppercase) en app_config, falla silencioso. Edge case manual de Marcelo en Studio.
+- **m2 frontend**: Sin UI admin para invocar `cleanup_print_audit`. Marcelo ejecuta desde Studio. Aceptable hoy.
+
+### Resultado scan v10.54.1 + v10.54.2
+
+- 🚨 URGENT folio reset: ✅
+- 🔴 Críticos: 1/1 ✅
+- 🟠 Mayores: 3/3 ✅
+- 🟡 Menores: 0/2 (no urgentes)
+
+
 ## v10.54.2 — Cierre 🟡 menores post-scan v10.54.0 — 01-jun-2026
 
 3 menores restantes del scan v10.54.0 atacados.

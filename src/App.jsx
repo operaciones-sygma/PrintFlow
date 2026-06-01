@@ -5056,6 +5056,22 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
 
+  // v10.54.3 M2 — Detectar si la OC es Corona/anticipo para mostrar banner + validar
+  const [coronaInfo, setCoronaInfo] = useState(null); // {billing_mode, current_balance} | null
+  useEffect(()=>{
+    let alive = true;
+    (async()=>{
+      try {
+        const info = await db.getClientBillingInfo(oc?.client_id, oc?.client);
+        if (alive) setCoronaInfo(info);
+      } catch(e) {
+        if (alive) setCoronaInfo({billing_mode:"normal", current_balance:0});
+      }
+    })();
+    return ()=>{alive = false};
+  }, [oc?.client_id, oc?.client]);
+  const isCorona = coronaInfo?.billing_mode === "anticipo";
+
   // ===== SIMPLE MODE state =====
   const [invoiceType, setInvoiceType] = useState("factura");
   const [mode, setMode] = useState("shared");
@@ -5143,10 +5159,14 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       foliosSeen.add(folU);
       if (g.order_ids.length === 0) return {ok:false, reason:`Grupo ${i+1}: sin órdenes`};
       // v10.51.1 M4 — Si está marcado paid/partial, exigir órdenes asignadas con subtotal > 0
-      // (cubre el caso donde Karla marcó pagada y luego arrastró todas las órdenes fuera).
       const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
       if ((g.payment_status === "paid" || g.payment_status === "partial") && subtotal <= 0) {
         return {ok:false, reason:`Grupo ${i+1}: marca pagada/parcial pero subtotal <= 0`};
+      }
+      // v10.54.3 M3 — Si la OC es Corona, los grupos NO aceptan payment_refs.
+      // El saldo a favor se aplica automáticamente. Rechazar ANTES del submit.
+      if (isCorona && (g.payment_status !== "unpaid" || g.payment_refs.length > 0)) {
+        return {ok:false, reason:`Grupo ${i+1}: OC Corona se paga con saldo a favor automático — no captures pagos`};
       }
       // Validar payment_refs si presentes
       if (g.payment_status !== "unpaid" && g.payment_refs.length > 0) {
@@ -5298,6 +5318,18 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         <div style={{background:"#5856d610",border:"1px solid #5856d630",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#5856d6",lineHeight:1.5}}>
           🔀 <strong>Modo dividir:</strong> arrastra órdenes entre columnas para agruparlas. Cada columna = 1 factura/remisión con su propio folio y pagos. <strong>Todas las órdenes deben quedar asignadas</strong>.
         </div>
+
+        {/* v10.54.3 M2 — Banner amarillo si la OC es Corona/anticipo */}
+        {isCorona && (
+          <div style={{background:"#fef3c7",border:"1.5px solid #ca8a04",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#854d0e",lineHeight:1.5}}>
+            🟡 <strong>Cliente Corona (anticipo):</strong> el saldo a favor se aplicará automáticamente a CADA grupo (sin IVA al ledger, con IVA en cobranza). <strong>NO captures pagos manuales</strong> en los grupos — serán rechazados.
+            {typeof coronaInfo?.current_balance === "number" && (
+              <div style={{marginTop:6,fontWeight:700}}>
+                Saldo disponible: <span style={{fontFamily:"monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Órdenes sin asignar (panel superior, solo visible si hay) */}
         {unassignedOrders.length > 0 && (
