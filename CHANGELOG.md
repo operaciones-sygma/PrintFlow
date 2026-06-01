@@ -5,6 +5,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.53.2 — Cierre menores post-scan v10.53.0 — 01-jun-2026
+
+Últimos 2 menores reales del scan v10.53.0:
+
+### 🟡 m2 — Visual claro cuando `register_print` falla
+
+**Antes**: si la RPC fallaba (red caída, permisos), la hoja salía con `v?` críptico en esquina y `v?` también en footer. Karla no entendía qué pasó.
+
+**Después**: 3 cambios visuales:
+
+1. **Esquina superior** ámbar (`#a16207`) con texto: `SIN REGISTRO ⚠️` (en lugar de `v?` negro). CSS class nueva `.unregistered`.
+2. **Footer** detalla la causa: `SIN REGISTRO · ⚠️ NO se incrementó (red caída o permiso) · Imp. Karla · 01-jun 10:30`.
+3. **Toast warning** al usuario en el momento: `⚠️ Versión no se registró. La hoja saldrá con etiqueta SIN REGISTRO.` Nueva prop `onPrintError` en `PrintOrder`.
+
+La impresión NO se bloquea (defensa en profundidad mantenida) pero ahora Karla sabe que debe reintentar luego para registrar la versión correctamente.
+
+### m3 — Descartado: comportamiento correcto, no bug
+
+**Escenario "parpadeo Realtime"**: Karla imprime (optimistic verde `v2 ✓`) → otro usuario edita campo crítico → Realtime trae UPDATE → banner cambia a rojo "REIMPRIMIR".
+
+Análisis: este es exactamente el comportamiento que pedimos. La transición verde→rojo en ~100ms indica que la copia recién impresa quedó obsoleta porque alguien más editó. El "parpadeo" es la feature haciendo su trabajo.
+
+Mantener el banner verde sería peor: ocultaría info crítica al usuario.
+
+Sin fix.
+
+### Resultado scan v10.53.0
+
+- 🔴 Críticos: 2/2 ✅ (v10.53.1)
+- 🟠 Mayores: 5/5 ✅ (v10.53.1)
+- 🟡 Menores: 1/3 ✅ (v10.53.2)
+- 🟡 Menores descartados: m1 (duplicado de C1), m3 (comportamiento correcto)
+
+
 ## v10.53.1 — Fixes 🔴🟠 post-scan v10.53.0 — 01-jun-2026
 
 Scan exhaustivo (3 agentes) detectó 10 bugs reales (2🔴 + 5🟠 + 3🟡). Atacados los 7 críticos y mayores; los 3 menores quedan para v10.53.2 opcional (UX polish).

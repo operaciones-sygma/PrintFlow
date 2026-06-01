@@ -1253,7 +1253,7 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 }
 
 // ─── MODALS ────────────────────────────────────────
-function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
+function PrintOrder({order:o,onClose,role,userLogin,onReprinted,onPrintError}) {
   useEscClose(onClose);
   const [printing,setPrinting]=useState(false);
   // v10.53.1 M2 — mountedRef previene setState/callback en componente desmontado
@@ -1278,8 +1278,10 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
         printInfo=await db.registerPrint(o.id, userLogin||"sistema");
       }catch(e){
         // Si falla el registro (network, permisos), igual permitimos imprimir
-        // pero sin versión actualizada — el footer mostrará versión anterior + "(sin registro)".
+        // pero sin versión actualizada — el footer mostrará "SIN REGISTRO".
+        // v10.53.2 m2 — notificar al usuario con toast para que sepa que la versión NO se incrementó.
         console.warn("[register_print] falló, imprimiendo sin actualizar versión:", e?.message);
+        if(onPrintError) onPrintError("⚠️ Versión no se registró ("+(e?.message||"red caída")+"). La hoja saldrá con etiqueta SIN REGISTRO.");
         printInfo={version:o.print_version||"?", printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", content_hash:"NO-REG", failed:true};
       }
       // v10.53.1 M2/M3 — solo actualizar state padre si el modal sigue montado, pasar o.id explícito
@@ -1293,13 +1295,15 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted}) {
       const w=window.open("","_blank","width=800,height=900");
       if(!w) return; // popup blocker — try/finally garantiza setPrinting(false)
       const isProd=mode==="production";
-      const pvVersion=printInfo.version;
-    const pvHash=printInfo.content_hash;
-    const pvWhen=new Date(printInfo.printed_at);
-    const pvWhenStr=pvWhen.getDate()+"-"+months[pvWhen.getMonth()].slice(0,3).toLowerCase()+" "+
-      String(pvWhen.getHours()).padStart(2,"0")+":"+String(pvWhen.getMinutes()).padStart(2,"0");
-    const pvWho=printInfo.printed_by;
-    const isReprint=pvVersion>1;
+      // v10.53.2 m2 — etiquetas claras cuando register_print falla (no más "v?" críptico)
+      const pvFailed=!!printInfo.failed;
+      const pvVersionLabel=pvFailed?"SIN REGISTRO":("v"+printInfo.version);
+      const pvHash=printInfo.content_hash;
+      const pvWhen=new Date(printInfo.printed_at);
+      const pvWhenStr=pvWhen.getDate()+"-"+months[pvWhen.getMonth()].slice(0,3).toLowerCase()+" "+
+        String(pvWhen.getHours()).padStart(2,"0")+":"+String(pvWhen.getMinutes()).padStart(2,"0");
+      const pvWho=printInfo.printed_by;
+      const isReprint=!pvFailed && printInfo.version>1;
     let h=`<html><head><title>Orden ${o.production_number||o.id}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1337,12 +1341,13 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .pay-unpaid{background:#fee2e2;color:#b91c1c;border:1px solid #dc2626}
 .print-version-corner{position:fixed;top:6mm;right:6mm;font-size:10px;font-weight:800;color:#fff;background:#111;padding:4px 10px;border-radius:4px;letter-spacing:.5px;z-index:10}
 .print-version-corner.reprint{background:#dc2626}
+.print-version-corner.unregistered{background:#a16207}
 .print-footer{margin-top:24px;padding-top:8px;border-top:1px dashed #999;font-size:8px;color:#666;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
 .print-footer .pv-hash{font-family:Courier,monospace;font-weight:700;color:#222;font-size:9px;background:#f0f0f0;padding:2px 6px;border-radius:3px}
 .print-footer .pv-reprint-tag{color:#dc2626;font-weight:800;text-transform:uppercase}
 @media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm;right:3mm}}
 </style></head><body>
-<div class="print-version-corner${isReprint?" reprint":""}">v${pvVersion}${isReprint?" — REIMPRESO":""}</div>`;
+<div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>`;
 
     // ═══ HEADER ═══
     // v10.52.0 — logo desde /public/sygma-logo.png con fallback a SYGMA_LOGO data URL
@@ -1505,10 +1510,10 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     </div>`;
 
     // v10.53.0 — Footer con versión, hash de contenido, autor y timestamp.
-    // Permite verificar que la copia física coincide con la versión actual del sistema.
+    // v10.53.2 — etiqueta clara "SIN REGISTRO" + warning si register_print falló.
     h+=`<div class="print-footer">
       <div>
-        <strong>v${pvVersion}</strong>${isReprint?' <span class="pv-reprint-tag">· Reimpreso</span>':''} · Imp. ${esc(pvWho)} · ${pvWhenStr}
+        <strong>${pvVersionLabel}</strong>${isReprint?' <span class="pv-reprint-tag">· Reimpreso</span>':''}${pvFailed?' <span class="pv-reprint-tag" style="color:#a16207">· ⚠️ NO se incrementó (red caída o permiso)</span>':''} · Imp. ${esc(pvWho)} · ${pvWhenStr}
       </div>
       <div>
         Hash contenido: <span class="pv-hash">${pvHash}</span>
@@ -10470,7 +10475,7 @@ export default function PrintFlow() {
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
-      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields, orderId)=>{setOrders(prev=>prev.map(x=>x.id===orderId?{...x,...updatedFields}:x))}}/>}
+      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields, orderId)=>{setOrders(prev=>prev.map(x=>x.id===orderId?{...x,...updatedFields}:x))}} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
