@@ -5,6 +5,67 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.10 — Restaurar Gerardo en adjust_stock + cierre del último gap (delete_file) — 02-jun-2026
+
+Marcelo: "Gerardo SÍ puede ajustar el stock de cuadra pero debe quedar registrado todo movimiento, ya sea Karla, admin o Gerardo. ¿hay algo más que no pase en permisos?"
+
+### 1. Restaurado `produccion` en `adjust_stock`
+
+En v10.54.9 restringí mal — Gerardo (produccion) opera el inventario físico, debe poder ajustar (carga inicial vs conteo, mermas, errores).
+
+```js
+adjust_stock: { allowed:["admin","karla","produccion"], ownerBound:[] }
+```
+
+**Auditoría confirmada**: cada ajuste deja registro permanente en `public.stock_movements`:
+- `kind = 'ADJUST'`
+- `qty` (delta), `balance_after` (nuevo saldo)
+- `notes` (motivo capturado en modal)
+- `created_at`, **`created_by` (username del usuario)**
+
+Trazabilidad completa: en cualquier momento Marcelo puede consultar el historial de movimientos por usuario, fecha, producto. Si Gerardo ajusta, queda `created_by = 'gerardo'`. Si Karla ajusta, `created_by = 'karla'`. Etc.
+
+### 2. Scan exhaustivo (agente Explore) detectó 1 gap más: `delete_file`
+
+**Diagnóstico**: la función `deleteFile()` en `DetailModal` (línea 1606) borraba archivos de Supabase Storage **sin chequear role**. El prompt de borrar solo se mostraba a preprensa/german/admin (control superficial), pero la función no tenía defensa en profundidad.
+
+**Fixes**:
+
+1. Nuevo permiso en `ACTION_ROLES`:
+   ```js
+   delete_file: { allowed:["admin","preprensa","german"], ownerBound:[] }
+   ```
+
+2. Control superficial del download link cambiado de hardcode a `canExecuteAction`:
+   ```jsx
+   onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}}
+   ```
+
+3. Defensa en profundidad en `deleteFile()`:
+   ```js
+   if(!canExecuteAction("delete_file",o,role,userLogin)){return}
+   ```
+
+### Conclusión del audit
+
+El agente confirmó: el frontend de PrintFlow está **sólidamente defendido** contra escaladas accidentales:
+
+- ✅ `handleAction()` (router central) tiene gates en todas las acciones críticas (`edit_specs`, `send_maquila`, `waste`, `validate_prod`, `validate_pre`, `print`, `client_history`, `web_request_file`, `revert`, `web_reject`, `devolver_design`)
+- ✅ Handlers OC/Folio tienen gates (`moveOrderToOC`, `createOCAndMove`, `assignFolioToOC`, `assignFoliosSplitOC`)
+- ✅ InventoryModal con los 3 botones gateados (v10.54.9)
+- ✅ `delete_file` gateado (este commit)
+
+**Matriz de permisos del inventario Cuadra** (corregida vs v10.54.9):
+
+| Rol | Abrir | Cargar a stock | 📊 Ajustar | 🛒 Vender | 🗑️ Eliminar producto |
+|---|---|---|---|---|---|
+| admin | ✅ | ✅ | ✅ | ✅ | ✅ |
+| karla | ✅ | ✅ | ✅ | ✅ | ✅ |
+| secretaria (Lupita) | ✅ | ✅ | ❌ | ✅ | ❌ |
+| vendedor | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **produccion (Gerardo)** | ✅ | ✅ | **✅ RESTAURADO** | ❌ | ❌ |
+
+
 ## v10.54.9 — Hardening permisos en InventoryModal Cuadra — 02-jun-2026
 
 Marcelo: "Gerardo tiene habilitado el botón de vender en almacén Cuadra, él no debe tener ese permiso, quien lo debe tener es Karla."

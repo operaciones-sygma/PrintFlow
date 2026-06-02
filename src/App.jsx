@@ -273,11 +273,16 @@ const ACTION_ROLES = {
   // ─── Cuadra: producción a stock + venta desde stock (v10.42.0) ───
   load_stock:       { allowed:["admin","secretaria","produccion","karla"], ownerBound:[] },
   sell_from_stock:  { allowed:["admin","secretaria","vendedor","karla"], ownerBound:["vendedor"] },
-  // v10.54.9 — Acciones sensibles del inventario: solo admin y Karla.
-  // Gerardo (produccion) puede ABRIR el modal para load_stock, pero NO debe
-  // poder ajustar cantidades ni eliminar productos del catálogo.
-  adjust_stock:           { allowed:["admin","karla"], ownerBound:[] },
+  // v10.54.9 + v10.54.10 — Acciones del inventario Cuadra.
+  // adjust_stock: admin/karla/produccion (Gerardo opera el inventario físico también).
+  //   Todo movimiento queda registrado en stock_movements con created_by=username.
+  // delete_client_product: solo admin/karla (destructivo, fuera del flujo operativo).
+  adjust_stock:           { allowed:["admin","karla","produccion"], ownerBound:[] },
   delete_client_product:  { allowed:["admin","karla"], ownerBound:[] },
+  // v10.54.10 — delete_file: archivos de producción se borran post-descarga
+  // por preprensa/german/admin para liberar storage. NO admin-only porque flujo
+  // operativo (preprensa baja el archivo, lo manda a CTP, libera storage).
+  delete_file:            { allowed:["admin","preprensa","german"], ownerBound:[] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
@@ -1603,6 +1608,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const [showDeletePrompt,setShowDeletePrompt]=useState(false);
   const [deleting,setDeleting]=useState(false);
   const deleteFile=async()=>{
+    // v10.54.10 — defensa en profundidad: aunque el prompt solo se muestra a
+    // preprensa/german/admin, validar también aquí por si llegan por otro path.
+    if(!canExecuteAction("delete_file",o,role,userLogin)){return}
     setDeleting(true);
     try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id)}catch{}
     setDeleting(false);setShowDeletePrompt(false);
@@ -1666,7 +1674,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </>}
       </>}
 
-      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>📁 Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>{if(role==="preprensa"||role==="german"||role==="admin")setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><span style={{fontSize:24}}>📄</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}>⬇ Click para descargar</div></div></a></div>}
+      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>📁 Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><span style={{fontSize:24}}>📄</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}>⬇ Click para descargar</div></div></a></div>}
       {showDeletePrompt&&<div style={{marginTop:8,background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:12,padding:14}}>
         <div style={{fontSize:12,fontWeight:600,color:C.wn,marginBottom:4}}>💾 ¿Ya descargaste el archivo?</div>
         <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Bórralo para liberar espacio en almacenamiento</p>
