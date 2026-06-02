@@ -5,6 +5,49 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.6 — Limpieza de ruido visual en chips por rol — 01-jun-2026
+
+Marcelo: "quita los filtros de roles que no usen, solo hacen ruido visual."
+
+Análisis chip-por-chip de los 7 roles. Solo **3 chips** detectados como ruido (el resto está bien adaptado a cada flujo):
+
+### 🐢 Estancadas — ahora visible solo para roles que actúan sobre WIP atorado
+
+**Antes**: visible para TODOS los roles (estaba en `common`).
+**Después**: visible para `produccion`, `preprensa`, `german`, `karla`, `admin` (los que sí desatoran). **Oculto** para:
+- **Lupita** (secretaria): captura nuevas órdenes, no monitorea WIP atorado
+- **Vendedor**: solo observa sus órdenes, no es quien desatora
+
+### 💰 Sin precio — ahora visible solo para roles que capturan precios
+
+**Antes**: visible para todos los no-operativos (incluyendo Lupita).
+**Después**: visible para `karla`, `vendedor`, `admin`. **Oculto** para:
+- **Lupita** (secretaria): el precio lo pone Karla post-cotización, no Lupita
+
+### Cambio en `chipsForRole(role)` (líneas 95-115)
+
+Lógica nueva centralizada con 2 flags:
+
+```js
+const showStale = !isSec(role) && role !== "vendedor";
+const showPrice = !isOperative && !isSec(role);
+```
+
+Implementación condicional aditiva sobre `common`. Sin tocar los chips específicos de cada rol (que ya estaban bien adaptados).
+
+### Resultado por rol (chips totales)
+
+| Rol | Antes | Después | Δ |
+|---|---|---|---|
+| produccion | 7 | 7 | 0 (todos útiles) |
+| preprensa | 6 | 6 | 0 |
+| german | 6 | 6 | 0 |
+| karla | 8 | 8 | 0 |
+| vendedor | 7 | 6 | **-1** (sin Estancadas) |
+| **secretaria (Lupita)** | 7 | 5 | **-2** (sin Estancadas + sin Sin precio) |
+| admin | 8 | 8 | 0 |
+
+
 ## v10.54.5 — Últimos 🟡 menores cerrados — 01-jun-2026
 
 ### 🟡 m1 — Flag `corona_credit_bridge_enabled` case-insensitive

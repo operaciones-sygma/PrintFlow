@@ -93,18 +93,22 @@ function getRevertOptions(currentStage,role){
 // Para admin, los filtros base están disponibles + filtro por rol (separado).
 function getTaskFilters(role){
   // v10.43.21 — Chips comunes para todos los roles
+  // v10.54.6 — Limpieza de ruido visual: 🐢 Estancadas y 💰 Sin precio se muestran
+  // condicionalmente según el rol que realmente actúa sobre esa info.
   const common=[
     {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
     // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
     {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
-    // v10.41.1 #8 — boolean explícito (getStale retorna objeto truthy o null)
-    {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)},
   ];
-  // v10.43.21 — "Sin precio" SOLO para roles administrativos. Gerardo/Noemí/Germán no manejan precios.
   const isOperative=role==="produccion"||role==="preprensa"||role==="german";
-  const base=isOperative?common:[...common,
-    {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0},
-  ];
+  // v10.54.6 — 🐢 Estancadas: solo roles que actúan sobre WIP atorado (no Lupita ni vendedor).
+  // Lupita captura nuevas órdenes y no monitorea WIP; vendedor solo observa, no desatora.
+  const showStale = !isSec(role) && role !== "vendedor";
+  // v10.43.21 + v10.54.6 — 💰 Sin precio: solo roles que capturan precios.
+  // Excluidos: operativos (producción/preprensa/germán) y Lupita (precio lo pone Karla).
+  const showPrice = !isOperative && !isSec(role);
+  const baseWithStale = showStale ? [...common, {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)}] : common;
+  const base = showPrice ? [...baseWithStale, {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0}] : baseWithStale;
   if(role==="karla")return[...base,
     {key:"salidas",emoji:"📤",label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
     {key:"maq_received",emoji:"📥",label:"Maquila recibida",color:"#32ade6",predicate:o=>o.stage==="maq_received"},
