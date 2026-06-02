@@ -742,6 +742,7 @@ const db = {
   },
   async sellFromStock(args) {
     // v10.48.0 — dest_client_id obligatorio si el SKU es pooled
+    // v10.55.0 — legacy path: para 1 producto. Para N productos con folio compartido usar bulkSellFromStock.
     const {data,error}=await supabase.rpc("sell_from_stock",{
       p_client_product_id:args.client_product_id,
       p_qty:args.qty,
@@ -755,6 +756,24 @@ const db = {
     });
     if(error)throw new Error("sellFromStock: "+error.message);
     return data;
+  },
+  // 🛒 v10.55.0 — Venta batch desde stock: 1 OC con N productos + folio fiscal compartido.
+  // items: [{client_product_id, qty, unit_price}, ...]
+  // Crea 1 invoice agregada en cobranza vía sync_invoice_from_oc trigger.
+  async bulkSellFromStock({items, dest_client_id, invoice_type, folio, priority, due_date, agent, notes, actor}) {
+    const {data, error} = await supabase.rpc("bulk_sell_from_stock", {
+      p_items: items,
+      p_client_id: dest_client_id||null,
+      p_invoice_type: invoice_type,
+      p_folio: folio,
+      p_priority: priority||'normal',
+      p_due_date: due_date||null,
+      p_agent: agent||null,
+      p_notes: notes||null,
+      p_actor: actor
+    });
+    if (error) throw new Error(error.message);
+    return data; // {oc_id, folio, invoice_type, items_count, grand_total, orders_created[]}
   },
   async loadStockMovements(productId=null, limit=50) {
     let q=supabase.from("stock_movements").select("*").order("created_at",{ascending:false}).limit(limit);
@@ -1872,11 +1891,13 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         </div>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
       </div>
-      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>
+      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center"}}>
         {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"},{id:"history",l:"📚 Historial"}].map(t=>
           <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Poppins',sans-serif"}}>{t.l}</button>
         )}
         <div style={{flex:1}}/>
+        {/* v10.55.0 — Carrito de venta batch (sustituye el flujo individual sell_from_stock con folio compartido) */}
+        {tab==="products"&&canExecuteAction("sell_from_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}>🛒 Carrito de venta</button>}
         {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}>➕ Nuevo Producto</button>}
       </div>
       {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
@@ -1899,8 +1920,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:10}}>
                       {/* v10.54.9 — botones gated por role. Gerardo (produccion) puede load_stock pero NO ajustar/vender/eliminar */}
+                      {/* v10.55.0 — "🛒 Vender" individual eliminado: ahora todo va por el Carrito de venta (header) con folio compartido */}
                       {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>}
-                      {canExecuteAction("sell_from_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"sell",product:p})} disabled={p.stock_actual<=0} style={{...bt("#16a34a"),flex:1,justifyContent:"center",padding:"6px 10px",fontSize:11,opacity:p.stock_actual<=0?.4:1,cursor:p.stock_actual<=0?"not-allowed":"pointer"}}>🛒 Vender</button>}
                       {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
                       {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&<button onClick={async()=>{
                         if(!confirm("¿Eliminar producto \""+p.name+"\" del catálogo?\n\nSolo se permite porque stock=0. Esta acción no se puede deshacer."))return;
@@ -1984,6 +2005,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
       try{await db.recordStockMovement({client_product_id:editing.product.id,kind:"ADJUST",qty,notes,created_by:userLogin||user});showToast("✅ Ajuste registrado");setEditing(null);await reload()}
       catch(e){showToast(humanizeStockError(e),"error")}
     }} onClose={()=>setEditing(null)}/>}
+    {/* v10.55.0 — Carrito de venta batch: N productos + folio fiscal compartido */}
+    {editing?.mode==="bulk_sell"&&<BulkSellModal products={products} userLogin={userLogin} showToast={showToast} onSuccess={()=>{setEditing(null);reload().catch(e=>console.warn("[InventoryModal] post-bulk reload:",e))}} onClose={()=>setEditing(null)}/>}
     {editing?.mode==="sell"&&<SellFromStockModal product={editing.product} userLogin={userLogin} onSell={async args=>{
       try{
         // v10.46.0 — sell_from_stock RETURNS orders (la orden creada).
@@ -2105,6 +2128,236 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
         <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Aplicando...":"📊 Aplicar"}</button>
+      </div>
+    </div>
+  </div>;
+}
+
+// v10.55.0 — Carrito de venta batch desde stock Cuadra con folio fiscal compartido.
+// Reemplaza el flujo individual sell_from_stock cuando hay 1 o N productos.
+function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
+  useEscClose(onClose);
+  const [search, setSearch] = useState("");
+  const [cart, setCart] = useState([]);
+  const [poolClients, setPoolClients] = useState([]);
+  const [destClientId, setDestClientId] = useState("");
+  const [invoiceType, setInvoiceType] = useState("factura");
+  const [folio, setFolio] = useState("");
+  const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
+  const [priority, setPriority] = useState("normal");
+  const [agent, setAgent] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(()=>{
+    let alive = true;
+    Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision")])
+      .then(([f,r])=>{
+        if (!alive) return;
+        setSuggestionByType({factura:f||"", remision:r||""});
+        setFolio(invoiceType==="factura"?(f||""):(r||""));
+      })
+      .catch(e=>console.warn("[BulkSellModal] suggestions:",e));
+    return ()=>{alive=false};
+  }, []);
+
+  useEffect(()=>{
+    setFolio(invoiceType==="factura"?suggestionByType.factura:suggestionByType.remision);
+  }, [invoiceType]);
+
+  const hasPooled = cart.some(c=>c.stock_pool_id);
+  useEffect(()=>{
+    if (!hasPooled) { setPoolClients([]); setDestClientId(""); return; }
+    let alive = true;
+    const firstPool = cart.find(c=>c.stock_pool_id)?.stock_pool_id;
+    supabase.rpc("list_stock_clients").then(({data,error})=>{
+      if (!alive || error) return;
+      const list = (data||[]).filter(c=>c.stock_pool_id===firstPool);
+      setPoolClients(list);
+      if (list.length===1) setDestClientId(list[0].id);
+    });
+    return ()=>{alive=false};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPooled, cart.find(c=>c.stock_pool_id)?.stock_pool_id]);
+
+  const addToCart = (p) => {
+    if (cart.find(c=>c.client_product_id===p.id)) return;
+    setCart([...cart, {
+      client_product_id: p.id,
+      name: p.name,
+      sku: p.sku,
+      stock_actual: p.stock_actual,
+      qty: 1,
+      unit_price: p.unit_price?String(p.unit_price):"",
+      stock_pool_id: p.stock_pool_id
+    }]);
+  };
+  const removeFromCart = (id) => setCart(cart.filter(c=>c.client_product_id!==id));
+  const updateItem = (id, patch) => setCart(cart.map(c=>c.client_product_id===id?{...c,...patch}:c));
+
+  const parseFolio = (f) => {
+    const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+    if (!m) return null;
+    if (m[1].length>1 && m[1].startsWith("0")) return null;
+    return parseInt(m[1], 10);
+  };
+  const pref = invoiceType==="factura"?"D-":"R-";
+  const folioOK = parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref);
+  const grandTotal = cart.reduce((s,c)=>s+(parseFloat(c.unit_price)||0)*(c.qty||0), 0);
+  const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual && parseFloat(c.unit_price)>0);
+  const validDest = !hasPooled || !!destClientId;
+  const canSubmit = !busy && validCart && folioOK && validDest;
+
+  const submit = async()=>{
+    if (!canSubmit) return;
+    setBusy(true);
+    try {
+      const result = await db.bulkSellFromStock({
+        items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, unit_price:parseFloat(c.unit_price)})),
+        dest_client_id: hasPooled ? destClientId : null,
+        invoice_type: invoiceType,
+        folio: folio.toUpperCase(),
+        priority,
+        due_date: null,
+        agent: agent || userLogin,
+        notes: notes.trim() || null,
+        actor: userLogin || "sistema"
+      });
+      showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.grand_total).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
+      onSuccess(result);
+    } catch(e) {
+      showToast("❌ "+(e?.message||"error desconocido"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filtered = products.filter(p=>p.stock_actual>0 && (!search || (p.name||"").toLowerCase().includes(search.toLowerCase()) || (p.sku||"").toLowerCase().includes(search.toLowerCase())));
+
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:920,width:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🛒 Carrito de venta — Stock Cuadra</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos al carrito, asigna folio compartido y vende todo en un paso</div>
+        </div>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",flex:1,minHeight:0,overflow:"hidden"}}>
+        {/* Catálogo */}
+        <div style={{borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd}}>
+            <input style={{...inp,fontSize:12}} placeholder="🔍 Buscar producto..." value={search} onChange={e=>setSearch(e.target.value)} disabled={busy}/>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
+            {filtered.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Sin productos con stock disponible</div> :
+            filtered.map(p=>{
+              const inCart = !!cart.find(c=>c.client_product_id===p.id);
+              return <div key={p.id} style={{padding:10,borderRadius:8,background:inCart?"#16a34a10":C.sf,border:"1px solid "+(inCart?"#16a34a":C.bd),marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:"#10b981"}}>{p.stock_actual}</b>{p.unit_price?" · ref $"+Number(p.unit_price).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2}):""}</div>
+                </div>
+                {inCart
+                  ? <button onClick={()=>removeFromCart(p.id)} disabled={busy} style={{...bt(C.dn+"15",C.dn),padding:"4px 8px",fontSize:10,border:"0.5px solid "+C.dn+"40"}}>Quitar</button>
+                  : <button onClick={()=>addToCart(p)} disabled={busy} style={{...bt("#16a34a"),padding:"4px 10px",fontSize:11}}>+ Agregar</button>
+                }
+              </div>;
+            })}
+          </div>
+        </div>
+
+        {/* Carrito */}
+        <div style={{display:"flex",flexDirection:"column",overflow:"hidden",background:"#fafafa"}}>
+          <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd,fontSize:11,fontWeight:800,color:C.t2,textTransform:"uppercase",letterSpacing:.5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>🛒 Carrito ({cart.length})</span>
+            {cart.length>0 && <button onClick={()=>setCart([])} disabled={busy} style={{...bt(C.sf,C.t2),padding:"2px 8px",fontSize:9,border:"0.5px solid "+C.bd}}>Vaciar</button>}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
+            {cart.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Agrega productos del catálogo →</div> :
+            cart.map(c=>{
+              const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
+              const priceOk = parseFloat(c.unit_price)>0;
+              const total = (parseFloat(c.unit_price)||0)*(c.qty||0);
+              return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk&&priceOk?C.bd:"#ff9500"),marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:6}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                  <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}>×</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11}}>
+                  <div>
+                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
+                    <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:"#ff9500"+"60")}} type="number" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
+                    <div style={{fontSize:9,color:c.qty>c.stock_actual?C.dn:C.t3,marginTop:2}}>de {c.stock_actual} disp.</div>
+                  </div>
+                  <div>
+                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>P. unit.</div>
+                    <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(priceOk?C.bd:"#ff9500"+"60")}} type="number" step="0.01" value={c.unit_price} onChange={e=>updateItem(c.client_product_id,{unit_price:e.target.value})} placeholder="0.00" disabled={busy}/>
+                  </div>
+                  <div>
+                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Total</div>
+                    <div style={{padding:"6px 0",fontWeight:700,color:C.tx,fontSize:12}}>${total.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                  </div>
+                </div>
+              </div>;
+            })}
+          </div>
+
+          {/* Footer carrito */}
+          <div style={{borderTop:"0.5px solid "+C.bd,padding:"12px 14px",background:C.bg}}>
+            {hasPooled && (
+              <div style={{marginBottom:10}}>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Cliente destino *</label>
+                <select style={{...inp,fontSize:12}} value={destClientId} onChange={e=>setDestClientId(e.target.value)} disabled={busy||poolClients.length===0}>
+                  <option value="">{poolClients.length===0?"— Sin clientes en pool —":"— Selecciona cliente —"}</option>
+                  {poolClients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"100px 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Tipo *</label>
+                <div style={{display:"flex",gap:3}}>
+                  {["factura","remision"].map(t=>{
+                    const sel = invoiceType===t;
+                    const c = t==="factura"?"#5856d6":"#34c759";
+                    return <button key={t} onClick={()=>setInvoiceType(t)} disabled={busy} style={{flex:1,padding:"6px 4px",fontSize:10,fontWeight:700,borderRadius:6,border:"1.5px solid "+(sel?c:C.bd),background:sel?c:C.bg,color:sel?"#fff":C.t2,cursor:busy?"wait":"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
+                  })}
+                </div>
+              </div>
+              <div>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
+                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>setFolio(e.target.value)} placeholder={pref+"XXXX"} disabled={busy}/>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+              <div>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Vendedor</label>
+                <select style={{...inp,fontSize:11}} value={agent} onChange={e=>setAgent(e.target.value)} disabled={busy}>
+                  <option value="">— Sin asignar —</option>
+                  {AGENTS.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Prioridad</label>
+                <select style={{...inp,fontSize:11}} value={priority} onChange={e=>setPriority(e.target.value)} disabled={busy}>
+                  <option value="normal">Normal</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="baja">Baja</option>
+                </select>
+              </div>
+            </div>
+            <div style={{background:"#16a34a10",borderRadius:8,padding:10,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,letterSpacing:.5}}>Total venta</div>
+              <div style={{fontSize:18,fontWeight:800,color:"#16a34a",fontFamily:"monospace"}}>${grandTotal.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+            </div>
+            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#16a34a":"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Procesando...":"🛒 Vender y facturar todo"}</button>
+            {!folioOK && folio && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
+            {cart.length>0 && !validCart && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa cantidades y precios de los items</div>}
+            {hasPooled && !destClientId && cart.length>0 && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Selecciona el cliente destino del pool</div>}
+          </div>
+        </div>
       </div>
     </div>
   </div>;

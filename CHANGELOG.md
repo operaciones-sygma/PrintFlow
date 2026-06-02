@@ -5,6 +5,80 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.55.0 — Carrito de venta batch desde stock Cuadra con folio compartido — 02-jun-2026
+
+Marcelo: "Has que Karla pueda dar salida a productos de cuadra, pueda colocarlos en un recuadro y pueda agregar varios productos que den salida y pueda asignar folio de factura al conjunto de productos que salen. Que el input de folio recomendado funcione como todos."
+
+Sustituye el botón individual "🛒 Vender" en cada producto por un nuevo flujo de carrito (más flexible: cubre 1 o N productos en una operación con folio único).
+
+### Backend: RPC `bulk_sell_from_stock`
+
+Recibe un carrito de items + datos compartidos y ejecuta atómicamente:
+
+```sql
+bulk_sell_from_stock(
+  p_items jsonb,            -- [{client_product_id, qty, unit_price}, ...]
+  p_client_id uuid,         -- destino obligatorio si pool
+  p_invoice_type text,      -- 'factura' / 'remision'
+  p_folio text,             -- D-XXXX o R-XXXX
+  p_priority, p_due_date, p_agent, p_notes, p_actor
+) RETURNS jsonb              -- {oc_id, folio, items_count, grand_total, orders_created[]}
+```
+
+**Pasos internos** (todo en una transacción):
+1. Validar input (folio format, items no vacío, etc.)
+2. Validar folio único cross-tables (orders, purchase_orders.shared, oc_invoice_groups)
+3. Lock invoice_counters (`factura`/`remision` + `oc`) FOR UPDATE
+4. **Lock + validar cada producto** con `FOR UPDATE`: existe, activo, stock suficiente, precio>0, membresía pool si aplica
+5. Acumular grand_total
+6. Generar OC ID (`OC-NNNN` con padding 4 dígitos, usando `MAX+1`)
+7. Crear OC con `total`, `client_id`, `vendedor`, `notes`
+8. Por cada item: INSERT en `orders` con `stage='delivered'`, `purchase_order_id=oc_id`, `invoice_folio=p_folio`, `invoice_type`, `invoiced_at`, etc. + `record_stock_movement` kind=`SOLD`
+9. UPDATE `purchase_orders.shared_invoice_folio = p_folio` → dispara trigger `sync_invoice_from_oc` → crea **1 invoice agregada** en cobranza con monto total
+10. Actualizar `invoice_counters` (con bypass del guard v10.54.4)
+11. Audit log `bulk_sell_from_stock` con detalles
+
+### Frontend: Componente `BulkSellModal`
+
+**UI tipo split-pane** (920px max-width):
+
+- **Panel izquierdo**: catálogo de productos con stock>0 + búsqueda. Cada item con botón "+ Agregar" / "Quitar" si ya en carrito.
+
+- **Panel derecho** (Carrito):
+  - Items agregados con `qty` y `unit_price` editables inline. Total por item calculado.
+  - Border naranja si cantidad inválida (`> stock_actual`) o precio ≤ 0.
+  - Cliente destino (dropdown del pool) si algún producto es pooled.
+  - Tipo: D-/R- toggle.
+  - **Input folio fiscal con sugerencia consecutiva auto-cargada** (igual patrón que `AssignOCFolioModal`): usa `db.getNextFolioSuggestion(invoice_type)`. Modificable manualmente.
+  - Vendedor + Prioridad selectors.
+  - Total venta en badge verde.
+  - Botón "🛒 Vender y facturar todo" con `busy` state + try/finally (patrón v10.54.7).
+
+**Mensajes de validación inline**:
+- "Folio inválido. Formato: D-NNNN"
+- "⚠️ Revisa cantidades y precios"
+- "⚠️ Selecciona el cliente destino del pool"
+
+### Cambios en `InventoryModal`
+
+- **Botón nuevo en el header** "🛒 Carrito de venta" (solo si tab=products y `canExecuteAction("sell_from_stock", ...)`)
+- **Botón "🛒 Vender" individual en cada card ELIMINADO** — todo ahora pasa por el Carrito
+- `SellFromStockModal` legacy queda en el codebase por si se necesita, pero ya no se invoca
+
+### Frontend helper nuevo
+
+`db.bulkSellFromStock({items, dest_client_id, invoice_type, folio, priority, due_date, agent, notes, actor})`
+
+### Resultado operativo
+
+Karla abre Inventario → Carrito de venta → agrega N productos → captura folio (autosuggerido, modificable) → submit. En una sola operación queda:
+- 1 OC creada con todos los items
+- N órdenes en `stage='delivered'` con folio fiscal compartido
+- N stock_movements kind=SOLD (con stock_actual decrementado)
+- 1 invoice agregada en `cobranza.invoices` (vía trigger `sync_invoice_from_oc`)
+- Audit log completo
+
+
 ## v10.54.10 — Restaurar Gerardo en adjust_stock + cierre del último gap (delete_file) — 02-jun-2026
 
 Marcelo: "Gerardo SÍ puede ajustar el stock de cuadra pero debe quedar registrado todo movimiento, ya sea Karla, admin o Gerardo. ¿hay algo más que no pase en permisos?"
