@@ -5,6 +5,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.7 — Fix preventivo: busy state en modales de acción crítica — 02-jun-2026
+
+**Causa raíz del incidente del 02-jun (ledger de Jorge con 3 AJUSTEs duplicados)**: Marcelo dio click 3 veces al botón "📊 Aplicar" del `CreditAdjustModal` porque "no respondía". Sin `busy` state ni `disabled` durante el `await`, cada click disparó una llamada independiente a la RPC `credit_adjust` → 3 rows duplicadas en `cobranza.client_credit_ledger`.
+
+### Modales fixeados (5)
+
+| Modal | Acción que duplicaba | Patrón aplicado |
+|---|---|---|
+| **CreditAdjustModal** | `credit_adjust` (saldo Corona) | `busy` + `try/finally` + disabled inputs/botones + "⏳ Aplicando..." |
+| **AdjustStockModal** | `adjust_stock` (inventario) | Mismo patrón |
+| **ReturnToCtpModal** | Regresar orden a CTP | Mismo patrón |
+| **RevertOrderModal** | Regresar orden a stage previo | Mismo patrón |
+| **CancelOrderModal** | Cancelar orden | Mismo patrón |
+
+### Patrón aplicado (template reutilizable)
+
+```jsx
+const [busy,setBusy]=useState(false);
+const canSubmit = valid && !busy;
+const submit = async()=>{
+  if(!canSubmit) return;
+  setBusy(true);
+  try{ await onConfirm(...); }
+  finally{ setBusy(false); }
+};
+// Botón:
+<button onClick={submit} disabled={!canSubmit}>
+  {busy ? "⏳ Aplicando..." : "..."}
+</button>
+// Inputs y botón Cancelar también `disabled={busy}`
+```
+
+### Modales que YA tenían busy guard (verificados, sin cambios)
+
+- ✅ InvoiceModal (asignar folio fiscal)
+- ✅ PreInvoiceModal (pre-asignar folio)
+- ✅ DeliverOnlyModal (entregar sin facturar)
+- ✅ CancelInvoicedModal (cancelar facturado)
+- ✅ RegisterCoronaPOModal (registrar OC a crédito)
+- ✅ AssignOCFolioModal (asignar folios OC, ya tenía busy desde v10.51.0)
+
+### Limpieza de ledger (incidente 02-jun)
+
+Borradas las 2 rows duplicadas de Jorge (`1d09bb13...`, `f052481d...`). La row `2357eb11...` se mantuvo (balance correcto: $26,240.40 = $10,270.40 + $15,970.00). Audit log `ledger_dedupe_manual` registró el cleanup.
+
+### Por qué solo estos 5 (no toqué el resto)
+
+Los modales SIN busy guard son típicamente:
+- Maintenance/setup (StartMaintenanceModal, etc.) — bajo impacto si duplican
+- Modales de UI no-financiera (filters, search, etc.)
+
+Los CRÍTICOS (financieros, operativos con efecto en BD) eran estos 5. Cualquier otro que aparezca como vulnerable se ataca cuando se reporte.
+
+
 ## v10.54.6 — Limpieza de ruido visual en chips por rol — 01-jun-2026
 
 Marcelo: "quita los filtros de roles que no usen, solo hacen ruido visual."

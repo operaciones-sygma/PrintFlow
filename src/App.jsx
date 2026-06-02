@@ -1760,6 +1760,16 @@ function DevolverModal({onConfirm,onClose}) {
 function ReturnToCtpModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
+  // v10.54.7 — busy state previene duplicados por click múltiple
+  const [busy,setBusy]=useState(false);
+  const valid=!!reason.trim();
+  const canSubmit=valid&&!busy;
+  const submit=async()=>{
+    if(!canSubmit) return;
+    setBusy(true);
+    try{ await onConfirm(reason.trim()); }
+    finally{ setBusy(false); }
+  };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar a CTP</h3>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>La orden volverá a Germán para re-imprimir placas. Las placas existentes se marcarán como inválidas (se conserva el historial).</p>
@@ -1777,11 +1787,12 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
         onChange={e=>setReason(e.target.value)}
         placeholder="ej. placa rayada, color incorrecto, archivo cambió..."
         autoFocus
+        disabled={busy}
       />
     </div>
     <div style={{display:"flex",gap:8}}>
-      <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-      <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");onConfirm(reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar a CTP</button>
+      <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+      <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#0891b2":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Regresando...":"↩️ Regresar a CTP"}</button>
     </div>
   </div></div>;
 }
@@ -2044,9 +2055,18 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   useEscClose(onClose);
   const [qty,setQty]=useState("");
   const [notes,setNotes]=useState("");
+  // v10.54.7 — busy state previene duplicados por click múltiple (mismo patrón CreditAdjustModal)
+  const [busy,setBusy]=useState(false);
   const n=parseInt(qty,10);
   const valid=Number.isFinite(n)&&n!==0;
   const preview=valid?(product.stock_actual+n):product.stock_actual;
+  const canSubmit=valid&&preview>=0&&!busy;
+  const submit=async()=>{
+    if(!canSubmit) return;
+    setBusy(true);
+    try{ await onSave(n, notes.trim()||null); }
+    finally{ setBusy(false); }
+  };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:420,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste de Stock</h3>
@@ -2058,16 +2078,16 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
       </div>
       <div style={{marginBottom:10}}>
         <label style={lbl} htmlFor="adjust-qty">Cantidad (positiva o negativa) *</label>
-        <input id="adjust-qty" aria-label="Cantidad de ajuste (positiva suma, negativa resta)" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus/>
+        <input id="adjust-qty" aria-label="Cantidad de ajuste (positiva suma, negativa resta)" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus disabled={busy}/>
         <div style={{fontSize:10,color:C.t2,marginTop:3}}>Positiva: sumar inventario · Negativa: restar (merma, error)</div>
       </div>
       <div style={{marginBottom:16}}>
         <label style={lbl} htmlFor="adjust-notes">Motivo (recomendado)</label>
-        <input id="adjust-notes" aria-label="Motivo del ajuste" style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="ej. Carga inicial vs conteo Gerardo"/>
+        <input id="adjust-notes" aria-label="Motivo del ajuste" style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="ej. Carga inicial vs conteo Gerardo" disabled={busy}/>
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!valid)return;if(preview<0)return alert("El saldo nuevo sería negativo");onSave(n,notes.trim()||null)}} disabled={!valid||preview<0} style={{...bt("#f59e0b"),flex:1,justifyContent:"center",opacity:(valid&&preview>=0)?1:.4,cursor:(valid&&preview>=0)?"pointer":"not-allowed"}}>📊 Aplicar</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Aplicando...":"📊 Aplicar"}</button>
       </div>
     </div>
   </div>;
@@ -2542,9 +2562,19 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
   useEscClose(onClose);
   const [monto,setMonto]=useState("");
   const [motivo,setMotivo]=useState("");
+  // v10.54.7 — busy state + try/finally previene duplicados por click múltiple
+  // (caso real 02-jun: Marcelo dio click 3 veces porque "no respondía" → 3 AJUSTEs duplicados en ledger).
+  const [busy,setBusy]=useState(false);
   const n=parseFloat(monto);
   const valid=Number.isFinite(n)&&n!==0&&motivo.trim().length>=3;
+  const canSubmit=valid&&!busy;
   const preview=valid?(Number(client.current_balance||0)+n):Number(client.current_balance||0);
+  const submit=async()=>{
+    if(!canSubmit) return;
+    setBusy(true);
+    try{ await onSave(n, motivo.trim()); }
+    finally{ setBusy(false); }
+  };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste manual de saldo</h3>
@@ -2556,15 +2586,15 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
       </div>
       <div style={{marginBottom:10}}>
         <label style={lbl}>Monto (positivo suma, negativo resta) *</label>
-        <input style={inp} type="number" step="0.01" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="ej. +500 o -200" autoFocus/>
+        <input style={inp} type="number" step="0.01" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="ej. +500 o -200" autoFocus disabled={busy}/>
       </div>
       <div style={{marginBottom:16}}>
         <label style={lbl}>Motivo (obligatorio, mínimo 3 caracteres) *</label>
-        <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="ej. Reverso de cobro duplicado"/>
+        <input style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="ej. Reverso de cobro duplicado" disabled={busy}/>
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!valid)return;onSave(n,motivo.trim())}} disabled={!valid} style={{...bt("#f59e0b"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>📊 Aplicar</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Aplicando...":"📊 Aplicar"}</button>
       </div>
     </div>
   </div>;
@@ -2615,7 +2645,17 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
   // options = [{value: 'ctp', label: '💿 CTP'}, ...] preformateadas con label legible
   const [target,setTarget]=useState(options?.[0]?.value||"");
   const [reason,setReason]=useState("");
+  // v10.54.7 — busy state previene duplicados por click múltiple
+  const [busy,setBusy]=useState(false);
   if(!options||options.length===0)return null;
+  const valid=reason.trim()&&target;
+  const canSubmit=valid&&!busy;
+  const submit=async()=>{
+    if(!canSubmit) return;
+    setBusy(true);
+    try{ await onConfirm(target, reason.trim()); }
+    finally{ setBusy(false); }
+  };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar Orden</h3>
@@ -2658,8 +2698,8 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
       </div>
 
       <div style={{display:"flex",gap:8}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!reason.trim())return alert("Captura la razón del regreso");if(!target)return alert("Elige el stage destino");onConfirm(target,reason.trim())}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>↩️ Regresar Orden</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#0891b2":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Regresando...":"↩️ Regresar Orden"}</button>
       </div>
     </div>
   </div>;
@@ -2668,6 +2708,16 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
 function CancelOrderModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
+  // v10.54.7 — busy state previene duplicados por click múltiple
+  const [busy,setBusy]=useState(false);
+  const valid=!!reason.trim();
+  const canSubmit=valid&&!busy;
+  const submit=async()=>{
+    if(!canSubmit) return;
+    setBusy(true);
+    try{ await onConfirm(reason.trim()); }
+    finally{ setBusy(false); }
+  };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn}}>❌ Cancelar Orden</h3>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
@@ -2676,8 +2726,8 @@ function CancelOrderModal({order,onConfirm,onClose}) {
       {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
     </div>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Esta acción es permanente. La orden quedará marcada como cancelada y no se podrá revertir.</p>
-    <div style={{marginBottom:16}}><label style={lbl}>Motivo de cancelación (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se cancela esta orden?"/></div>
-    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, conservar</button><button onClick={()=>{if(!reason.trim())return alert("Escribe el motivo de cancelación");onConfirm(reason.trim())}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>❌ Sí, Cancelar Orden</button></div>
+    <div style={{marginBottom:16}}><label style={lbl}>Motivo de cancelación (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se cancela esta orden?" disabled={busy}/></div>
+    <div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>No, conservar</button><button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Cancelando...":"❌ Sí, Cancelar Orden"}</button></div>
   </div></div>;
 }
 
