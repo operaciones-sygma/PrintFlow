@@ -273,6 +273,11 @@ const ACTION_ROLES = {
   // ─── Cuadra: producción a stock + venta desde stock (v10.42.0) ───
   load_stock:       { allowed:["admin","secretaria","produccion","karla"], ownerBound:[] },
   sell_from_stock:  { allowed:["admin","secretaria","vendedor","karla"], ownerBound:["vendedor"] },
+  // v10.54.9 — Acciones sensibles del inventario: solo admin y Karla.
+  // Gerardo (produccion) puede ABRIR el modal para load_stock, pero NO debe
+  // poder ajustar cantidades ni eliminar productos del catálogo.
+  adjust_stock:           { allowed:["admin","karla"], ownerBound:[] },
+  delete_client_product:  { allowed:["admin","karla"], ownerBound:[] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
@@ -1885,10 +1890,11 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:10}}>
-                      <button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>
-                      <button onClick={()=>setEditing({mode:"sell",product:p})} disabled={p.stock_actual<=0} style={{...bt("#16a34a"),flex:1,justifyContent:"center",padding:"6px 10px",fontSize:11,opacity:p.stock_actual<=0?.4:1,cursor:p.stock_actual<=0?"not-allowed":"pointer"}}>🛒 Vender</button>
+                      {/* v10.54.9 — botones gated por role. Gerardo (produccion) puede load_stock pero NO ajustar/vender/eliminar */}
+                      {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>}
+                      {canExecuteAction("sell_from_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"sell",product:p})} disabled={p.stock_actual<=0} style={{...bt("#16a34a"),flex:1,justifyContent:"center",padding:"6px 10px",fontSize:11,opacity:p.stock_actual<=0?.4:1,cursor:p.stock_actual<=0?"not-allowed":"pointer"}}>🛒 Vender</button>}
                       {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
-                      {p.stock_actual===0&&<button onClick={async()=>{
+                      {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&<button onClick={async()=>{
                         if(!confirm("¿Eliminar producto \""+p.name+"\" del catálogo?\n\nSolo se permite porque stock=0. Esta acción no se puede deshacer."))return;
                         try{await db.deleteClientProduct(p.id);showToast("🗑️ Producto eliminado");await reload()}
                         catch(e){showToast("❌ No se pudo eliminar: "+e.message,"error")}

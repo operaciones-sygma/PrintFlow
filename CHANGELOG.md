@@ -5,6 +5,46 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.9 — Hardening permisos en InventoryModal Cuadra — 02-jun-2026
+
+Marcelo: "Gerardo tiene habilitado el botón de vender en almacén Cuadra, él no debe tener ese permiso, quien lo debe tener es Karla."
+
+### Diagnóstico
+
+3 botones en `InventoryModal` (📊 Ajustar, 🛒 Vender, 🗑️ Eliminar producto) se mostraban a **cualquier** rol que pudiera abrir el modal — incluyendo `produccion` (Gerardo). El permiso backend `sell_from_stock` SÍ estaba bien definido (`["admin","secretaria","vendedor","karla"]`, sin `produccion`), pero **el frontend no chequeaba** antes de mostrar el botón. Si Gerardo le daba click, la RPC backend lo rechazaba, pero el botón visible es confuso y operativamente peligroso.
+
+### Fix
+
+**Nuevos permisos en `ACTION_ROLES`** (líneas 277-280):
+```js
+adjust_stock:           { allowed:["admin","karla"], ownerBound:[] },
+delete_client_product:  { allowed:["admin","karla"], ownerBound:[] },
+```
+
+Más restrictivos que `sell_from_stock` porque ajustar cantidades y eliminar productos son acciones más sensibles que vender.
+
+**3 botones wrapeados con `canExecuteAction`** (líneas 1888-1898 aprox):
+```jsx
+{canExecuteAction("adjust_stock", null, user, userLogin) && <button>📊 Ajustar</button>}
+{canExecuteAction("sell_from_stock", null, user, userLogin) && <button>🛒 Vender</button>}
+{canExecuteAction("delete_client_product", null, user, userLogin) && <button>🗑️</button>}
+```
+
+Si el rol no tiene el permiso, el botón **no se renderiza** (no es solo `disabled`). Menos confusión visual.
+
+### Matriz de quién ve qué en el inventario Cuadra
+
+| Rol | Abre inventario | 📊 Ajustar | 🛒 Vender | 🗑️ Eliminar |
+|---|---|---|---|---|
+| **admin** | ✅ | ✅ | ✅ | ✅ |
+| **karla** | ✅ | ✅ | ✅ | ✅ |
+| **secretaria** (Lupita) | ✅ | ❌ | ✅ | ❌ |
+| **vendedor** | ❌ (no abre) | ❌ | ✅ (no aplica, no abre) | ❌ |
+| **produccion** (Gerardo) | ✅ (para `load_stock`) | **❌ ← era ✅** | **❌ ← era ✅** | **❌ ← era ✅** |
+
+Gerardo ahora solo ve el botón "Cargar a stock" (su flujo legítimo: producir y cargar al inventario).
+
+
 ## v10.54.8 — Filtro 🚚 Maquilas en Mis Pendientes para Lupita — 02-jun-2026
 
 Marcelo: "agrega el filtro de maquilas para Lupita en Mis Pendientes".
