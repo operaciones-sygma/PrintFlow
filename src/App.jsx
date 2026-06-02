@@ -133,8 +133,11 @@ function getTaskFilters(role){
     {key:"placas",emoji:"✅",label:"Placas listas",color:"#34c759",predicate:o=>o.stage==="placas_listas"},
   ];
   // v10.43.19 — Secretaria (Lupita): captura + esperar cliente + salida
+  // v10.54.8 — agregado 🚚 Maquilas (pedido de Marcelo): todas las maquila activas
+  // para que Lupita coordine con proveedores externos sin tener que filtrar manualmente.
   if(isSec(role))return[...base,
     {key:"drafts",emoji:"📝",label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"||o.stage==="maq_created"},
+    {key:"maquilas",emoji:"🚚",label:"Maquilas",color:"#e67e22",predicate:o=>o.order_type==="maquila"&&!o.stage.includes("cancelled")&&!o.stage.includes("delivered")&&!o.stage.includes("stocked")},
     {key:"proof_client",emoji:"🎯",label:"Prueba cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
     {key:"salidas",emoji:"📤",label:"En salida",color:"#16a34a",predicate:o=>o.stage==="salidas"},
   ];

@@ -5,6 +5,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.54.8 — Filtro 🚚 Maquilas en Mis Pendientes para Lupita — 02-jun-2026
+
+Marcelo: "agrega el filtro de maquilas para Lupita en Mis Pendientes".
+
+Chip nuevo en `getTaskFilters(role)` para `isSec(role)`:
+
+```js
+{key:"maquilas", emoji:"🚚", label:"Maquilas", color:"#e67e22",
+ predicate: o => o.order_type==="maquila"
+   && !o.stage.includes("cancelled")
+   && !o.stage.includes("delivered")
+   && !o.stage.includes("stocked")
+}
+```
+
+**Por qué este predicate**: muestra solo maquilas ACTIVAS (excluye finales cancelled/delivered/stocked) para que Lupita coordine con proveedores externos sin ver el histórico cerrado.
+
+**Color**: `#e67e22` (naranja maquila, mismo que admin usa para "Maquila externa") — consistente con el resto de la UI.
+
+### Chips de Lupita ahora
+
+| Antes (v10.54.7) | Después (v10.54.8) |
+|---|---|
+| 🔥 Urgentes | 🔥 Urgentes |
+| ⏰ Retrasos | ⏰ Retrasos |
+| 📝 Borradores | 📝 Borradores |
+| | **🚚 Maquilas (NUEVO)** |
+| 🎯 Prueba cliente | 🎯 Prueba cliente |
+| 📤 En salida | 📤 En salida |
+| **Total: 5** | **Total: 6** |
+
+Cierra el pendiente #2 del memory file (filtro maquilas para Lupita).
+
+
 ## v10.54.7 — Fix preventivo: busy state en modales de acción crítica — 02-jun-2026
 
 **Causa raíz del incidente del 02-jun (ledger de Jorge con 3 AJUSTEs duplicados)**: Marcelo dio click 3 veces al botón "📊 Aplicar" del `CreditAdjustModal` porque "no respondía". Sin `busy` state ni `disabled` durante el `await`, cada click disparó una llamada independiente a la RPC `credit_adjust` → 3 rows duplicadas en `cobranza.client_credit_ledger`.
