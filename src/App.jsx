@@ -3504,9 +3504,10 @@ function InvoiceModal({order,onConfirm,onClose}) {
     if (paymentStatus === "partial") return sum > 0 && sum < totalDisplay;
     return true;
   })();
-  // v10.43.0 — Corona: bridge resuelve el payment automáticamente al detectar billing_mode='anticipo'
+  // v10.57.0 — Las 3 opciones (factura/remisión/no_folio) son INDEPENDIENTES.
+  // Solo no_folio (Aplicar saldo) bypassa MultiPaymentPicker. Factura/remisión usan flujo normal.
   // v10.46.0 — Cuadra stock_load: no aplica payment (es ingreso a inventario, no facturación)
-  const paymentValid = isCorona
+  const paymentValid = (isCorona && isNoFolio)
     || isStockLoad
     || paymentStatus === "unpaid"
     || refsValid;
@@ -3547,23 +3548,17 @@ function InvoiceModal({order,onConfirm,onClose}) {
         await onConfirm("stock_load",null,null,null,null,null,cuadraSKU);
         return;
       }
-      // v10.43.0 — Corona: payment_status/method/amount/bank_reference son NULL,
-      // el bridge detecta billing_mode='anticipo' y aplica saldo a favor automáticamente.
-      if(isCorona){
-        // v10.43.2 FIX M7-b — Refrescar saldo justo antes de confirmar para evitar stale state
-        // v10.43.24 — fallback por nombre
+      // v10.57.0 — Corona: las 3 opciones son INDEPENDIENTES.
+      // - no_folio (Aplicar saldo): apply_credit_no_folio descuenta saldo SIN folio fiscal.
+      // - factura/remisión: flujo NORMAL como cualquier cliente. La invoice queda PENDIENTE
+      //   en cobranzaflow y Lucero cobra por la vía que toque. El bridge sync_invoice_from_*
+      //   ya NO consume saldo automáticamente (flag corona_credit_bridge_enabled=false desde v10.57.0).
+      if(isCorona && isNoFolio){
         try{
           const fresh=await db.getClientBillingInfo(order.client_id,order.client);
           if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
         }catch(e){console.warn("[InvoiceModal] refresh saldo:",e)}
-        // v10.43.10 — Tres caminos para Corona:
-        //   - factura/remision: assign_invoice normal, bridge consume saldo
-        //   - no_folio: apply_credit_no_folio (sin folio fiscal, descuento directo del ledger)
-        if(isNoFolio){
-          await onConfirm("no_folio",null,null,null,null,null);
-        }else{
-          await onConfirm(type,folio,null,null,null,null);
-        }
+        await onConfirm("no_folio",null,null,null,null,null);
         return;
       }
       // v10.50.0 — Si hay paymentRefs (multi-pago), pasarlo en lugar de campos individuales.
@@ -3692,23 +3687,23 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>}
-        {type&&folioValid&&!isStockLoad&&(isCorona?
+        {type&&folioValid&&!isStockLoad&&((isCorona&&isNoFolio)?
           (()=>{
-            // v10.43.27 FIX A3 — El ledger se descuenta por orderBaseAmount (sin IVA, post v10.43.26),
-            // no por totalDisplay (con IVA). Preview ahora coincide con lo que el bridge hará.
-            const ledgerDeduct=orderBaseAmount; // sin IVA — lo que realmente baja del saldo
+            // v10.57.0 — Banner Corona SOLO en la opción "Aplicar saldo" (no_folio).
+            // Para factura/remisión Corona se muestra el MultiPaymentPicker normal porque
+            // el bridge ya NO consume saldo automático — Karla decide cómo se cobra.
+            const ledgerDeduct=orderBaseAmount;
             const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
             const negative=newBalance<0;
             return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona) · ledger en sin IVA</div>
+              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Aplicar saldo a favor (Corona) · sin folio fiscal</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
               </div>
               {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Lucero deberá registrar el depósito faltante.</div>}
-              {!isNoFolio&&<div style={{fontSize:10,color:C.t2,marginTop:6}}>Cobranza: factura <b>{folio}</b> por <b>${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> {type==="factura"?"con IVA":"sin IVA"} — automáticamente pagada con saldo.</div>}
-              <div style={{fontSize:10,color:C.t2,marginTop:6}}>No se captura método ni referencia: el bridge aplica el saldo automáticamente y marca la factura como pagada.</div>
+              <div style={{fontSize:10,color:C.t2,marginTop:6}}>Sin folio fiscal — la orden se entrega y el monto se descuenta del saldo directamente. No se crea factura/remisión.</div>
             </div>;
           })()
           :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
@@ -3777,7 +3772,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
                   {paymentStatus==="paid"&&"✅ Pagada · "+methodLabel}
                   {paymentStatus==="partial"&&"🔶 Parcial · $"+amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+methodLabel}
                   {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
-                  {isCorona&&!paymentStatus&&"💰 Saldo a favor Corona (bridge)"}
+                  {/* v10.57.0: el bridge ya NO consume saldo automático; Corona+factura/remisión requiere MultiPaymentPicker */}
                 </div>
                 {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
                   Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
@@ -3902,9 +3897,10 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     if (paymentStatus === "partial") return sum > 0 && sum < totalDisplay;
     return true;
   })();
-  // v10.43.0 — Corona: bridge resuelve el payment al detectar billing_mode='anticipo'
-  const paymentValid = isCorona
-    || paymentStatus === "unpaid"
+  // v10.57.0 — Folio anticipado siempre usa MultiPaymentPicker (sin bypass Corona).
+  // El bridge ya NO consume saldo automático; las 3 opciones son independientes.
+  // PreInvoiceModal solo emite factura/remisión (no tiene opción "Aplicar saldo").
+  const paymentValid = paymentStatus === "unpaid"
     || refsValid;
 
   const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid;
@@ -3923,18 +3919,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const handleConfirm=async()=>{
     setBusy(true);
     try{
-      // v10.43.0 — Corona: bridge aplica saldo automáticamente
-      if(isCorona){
-        // v10.43.2 FIX M7-b — refresh saldo pre-confirm
-        // v10.43.24 — fallback por nombre
-        try{
-          const fresh=await db.getClientBillingInfo(order.client_id,order.client);
-          if(fresh&&fresh.billing_mode==="anticipo")setCoronaInfo(fresh);
-        }catch(e){console.warn("[PreInvoiceModal] refresh saldo:",e)}
-        await onConfirm(type,folio,finalReason,null,null,null,null,null);
-        return;
-      }
-      // v10.50.0 — Multi-pay refs si paid/partial
+      // v10.57.0 — Multi-pay refs si paid/partial
       if(paymentStatus==="paid"||paymentStatus==="partial"){
         const refsClean=paymentRefs.map(r=>({
           method:r.method,
@@ -4011,25 +3996,14 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <div style={{background:"#ff950010",borderRadius:10,padding:10,marginTop:14,fontSize:11,color:"#ff9500",fontWeight:600}}>
             ⚠️ Una vez asignado el folio, esta orden NO podrá cancelarse normalmente. Solo Marcelo podrá cancelarla con motivo de Nota de Crédito.
           </div>
-          {reasonValid&&(isCorona?
-            (()=>{
-              // v10.43.27 FIX A4 — ledger descuenta orderBaseAmount sin IVA (no totalDisplay con IVA)
-              const ledgerDeduct=orderBaseAmount; // sin IVA
-              const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
-              const negative=newBalance<0;
-              return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-                <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Cliente con saldo a favor (Corona) · ledger en sin IVA</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
-                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                  <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                </div>
-                {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo (descubierto permitido).</div>}
-                <div style={{fontSize:10,color:C.t2,marginTop:8}}>El bridge aplica el saldo automáticamente al asignar el folio.</div>
-              </div>;
-            })()
-            :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
-          )}
+          {/* v10.57.0 — PreInvoiceModal SIEMPRE usa MultiPaymentPicker. Para clientes Corona
+              mostramos un info banner azul indicando que el saldo NO se aplica automáticamente
+              (si Karla quiere descontar saldo debe usar la 3ra opción "Aplicar saldo" en
+              InvoiceModal al entregar). */}
+          {reasonValid&&isCorona&&<div style={{background:"#0891b210",border:"1px solid #0891b240",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
+            💡 Este cliente tiene saldo a favor (Corona) de <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Esta factura/remisión <b>NO descontará el saldo automáticamente</b> — captura el pago como con cualquier otro cliente. Si quieres aplicar saldo, usa la opción "Aplicar saldo" al entregar la orden.
+          </div>}
+          {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
 
         <div style={{display:"flex",gap:8,marginTop:16}}>

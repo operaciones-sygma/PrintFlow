@@ -5,6 +5,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.57.0 — Las 3 opciones Corona (factura/remisión/aplicar saldo) son independientes — 03-jun-2026
+
+Marcelo, al ver el InvoiceModal de EVA: "hay un bug si selecciono para EVA factura o remisión me aparece como si fuera a saldo. Justo hay 3 opciones para que se habiluten las 3 y sea flexible".
+
+Antes (v10.43.0+): para clientes con saldo a favor (Corona), seleccionar Factura/Remisión disparaba el bridge `sync_invoice_from_orders` que automáticamente consumía el saldo y marcaba la invoice como pagada. Esto eliminaba la opción "factura sin tocar saldo" — Karla no podía emitir factura a EVA/JORGE para cobranza manual posterior.
+
+Ahora (v10.57.0): las 3 opciones son INDEPENDIENTES:
+- **📄 Factura** → emite D-XXXX, invoice queda PENDIENTE en cobranzaflow. Karla captura cómo se paga (MultiPaymentPicker normal). Lucero cobra eventualmente.
+- **📋 Remisión** → emite R-XXXX, igual flujo normal.
+- **💰 Aplicar saldo** → `apply_credit_no_folio` descuenta saldo SIN folio fiscal.
+
+### Backend
+
+Switch del flag `cobranza.app_config['corona_credit_bridge_enabled']` de `true` → `false`. Los triggers `sync_invoice_from_orders` y `sync_invoice_from_oc` ya tenían la guarda `IF v_billing_mode = 'anticipo' AND COALESCE(v_credit_enabled, false) THEN ...consume...`, por lo que con el flag en false saltan ese bloque y la invoice queda 'pendiente' como cualquier otra.
+
+Esto es reversible: para volver al comportamiento Corona puro automático, basta con flipear el flag. La RPC `apply_credit_no_folio` (path "Aplicar saldo") NO depende del flag y siempre funciona.
+
+Audit log registrado en `cobranza.audit_log` con el cambio.
+
+### Frontend
+
+**`InvoiceModal`**:
+- Banner verde "💰 Aplicar saldo a favor (Corona)" SOLO aparece cuando `isCorona && isNoFolio`. Para `isCorona + factura/remisión` ahora aparece el `MultiPaymentPicker` normal.
+- `paymentValid` ya no bypassa cuando es Corona genérico — solo cuando `isCorona && isNoFolio`. Karla debe elegir No pagada/Parcial/Pagada como con cualquier cliente.
+- `handleConfirm` simplificado: Corona+factura/remisión va por el path normal (con `paymentStatus` + `paymentRefs`). Solo Corona+no_folio invoca `apply_credit_no_folio`.
+- Texto del banner actualizado: "Sin folio fiscal — la orden se entrega y el monto se descuenta del saldo directamente" (más claro vs el anterior "el bridge aplica el saldo automáticamente").
+
+**`PreInvoiceModal`** (folio anticipado):
+- Quitado el bypass Corona en `paymentValid` y `handleConfirm`. Folio anticipado siempre usa MultiPaymentPicker.
+- Para clientes Corona, banner informativo azul: "💡 Este cliente tiene saldo a favor de $X. Esta factura/remisión NO descontará el saldo automáticamente. Si quieres aplicar saldo, usa la opción 'Aplicar saldo' al entregar".
+
+### Impacto operacional
+
+- Cervecería Modelo / EVA / JORGE / Grupo Modelo: si Karla emite factura, queda pendiente para Lucero cobrar (efectivo via vale, transferencia, etc). Si quiere aplicar saldo a favor, usa la 3ra opción.
+- Comportamiento histórico (factura = consume saldo) ya NO ocurre. Si en el futuro se quiere volver, flag a true.
+- Los CONSUMOs históricos del ledger (P-3508, P-3529, P-3537) NO se ven afectados — fueron consumos puntuales completados.
+
+### Archivos modificados
+- `src/App.jsx`: `InvoiceModal` (~3509, 3552, 3700), `PreInvoiceModal` (~3900, 3920, 4000)
+- Supabase migration: `v10_57_0_disable_corona_bridge_auto_consume`
+
+---
+
+
 ## v10.56.2 — CoronaModal sidebar solo líderes + verificación consumos previos — 02-jun-2026
 
 Marcelo, viendo el sidebar con EVA y JORGE listados: "quita a Eva y Jorge del lateral. Solo debe ser cervecería Modelo, se ve en la captura que te envié". También solicitó verificar 2 consumos que Karla aplicó antes del fix v10.56.1.
