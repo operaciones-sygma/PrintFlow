@@ -2664,8 +2664,14 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
     setLoadingClients(true);
     try{
       const list=await db.listAnticipoClients();
-      setClients(list);
-      if(list.length>0&&!selectedId)setSelectedId(list[0].id);
+      // v10.56.2: el sidebar solo lista LÍDERES. Los miembros de cada pool
+      // son visibles dentro del detalle del líder (pool_members + sufijo "sub-cuenta: X"
+      // en el ledger). Mostrar miembros como filas separadas confunde — un solo saldo
+      // compartido NO debe verse como 3 entradas.
+      // La lista completa (con miembros) sigue disponible para RegisterCoronaPOModal.
+      const leadersOnly=(list||[]).filter(c=>c.is_pool_leader);
+      setClients(leadersOnly);
+      if(leadersOnly.length>0&&!selectedId)setSelectedId(leadersOnly[0].id);
     }catch(e){console.error("[CoronaModal] clients:",e);showToast("❌ Error: "+e.message,"error")}
     finally{setLoadingClients(false)}
   };
@@ -2690,7 +2696,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
           <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.filter(c=>c.is_pool_leader).length} pools · {clients.filter(c=>!c.is_pool_leader).length} sub-cuentas</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} cliente{clients.length===1?"":"s"} con saldo · {clients.reduce((s,c)=>s+(Array.isArray(c.pool_members)?c.pool_members.length:0),0)} sub-cuentas en pools</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
@@ -2710,18 +2716,13 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
            {clients.map(c=>{
              const sel=c.id===selectedId;
              const negative=Number(c.current_balance)<0;
-             const isMember=!c.is_pool_leader;
              const hasMembers=Array.isArray(c.pool_members)&&c.pool_members.length>0;
-             // v10.56.1 F-M3: miembros NO muestran $ — el saldo es del líder. Si lo mostráramos
-             // (como hacíamos antes), 3 miembros con $32k cada uno se ven como $96k aparentes.
-             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":(isMember?"3px solid #0891b240":"3px solid transparent"),paddingLeft:isMember?22:14,fontFamily:"'Poppins',sans-serif"}}>
-               <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isMember?"↳ ":""}{c.name}</div>
-               <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}{isMember?" · sub-cuenta de "+c.leader_name:""}</div>
-               {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 pool: {c.pool_members.join(", ")}</div>}
-               {isMember
-                 ? <div style={{fontSize:11,color:C.t3,marginTop:4,fontStyle:"italic"}}>↳ saldo en {c.leader_name}</div>
-                 : <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
-               }
+             // v10.56.2: sidebar SIEMPRE muestra líderes (filtrados en reloadClients).
+             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Poppins',sans-serif"}}>
+               <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+               <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
+               {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
+               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
              </button>;
            })}
          </div>

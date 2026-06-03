@@ -5,6 +5,41 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.56.2 — CoronaModal sidebar solo líderes + verificación consumos previos — 02-jun-2026
+
+Marcelo, viendo el sidebar con EVA y JORGE listados: "quita a Eva y Jorge del lateral. Solo debe ser cervecería Modelo, se ve en la captura que te envié". También solicitó verificar 2 consumos que Karla aplicó antes del fix v10.56.1.
+
+### Verificación de los 2 CONSUMO previos al fix
+
+Karla aplicó "Sin factura · Corona" en `InvoiceModal` para P-3529 y P-3537 (ambas órdenes vinculadas a la sub-cuenta JORGE del pool Modelo). Tras query directa al ledger:
+
+| Orden | Monto | Balance después | `client_id` ledger | Referencia |
+|---|---|---|---|---|
+| P-3537 | -$5,976.79 | $26,240.40 | **CERVECERIA MODELO** ✓ | "...sub-cuenta: JORGE" ✓ |
+| P-3529 | -$15,970.00 | $10,270.40 | **CERVECERIA MODELO** ✓ | "...sub-cuenta: JORGE" ✓ |
+
+Ambos consumos están **correctos**. La cadena de balance es consistente ($32,217.19 → $26,240.40 → $10,270.40 = saldo actual). 
+
+**Por qué no fueron afectados por el bug v10.56.1**: el bug crítico era para `credit_consume` (path bridge automático cuando se factura con folio fiscal a una sub-cuenta). El path "Sin factura · Corona" invoca `apply_credit_no_folio`, que **ya resolvía al líder desde v10.56.0**. Sí hubo suerte de timing, pero el resultado es correcto.
+
+### CoronaModal sidebar: solo líderes
+
+Antes (v10.56.0/v10.56.1): el sidebar listaba LÍDERES + MIEMBROS (con miembros indentados y prefijo ↳). Visualmente confuso: 1 saldo compartido se mostraba como N entradas separadas.
+
+Ahora (v10.56.2): el sidebar lista ÚNICAMENTE los líderes de cada pool. Los miembros se ven dentro del detalle del líder de 2 formas:
+- Badge "🔗 incluye sub-cuentas: EVA, JORGE" debajo del nombre del líder en el sidebar.
+- Sufijo automático "...sub-cuenta: JORGE" en cada movimiento del ledger (referencia generada por las RPCs desde v10.56.0).
+
+El dropdown de `RegisterCoronaPOModal` SIGUE mostrando líderes + miembros (Karla puede asignar una OC nueva a EVA específicamente; la factura queda al nombre de EVA y el saldo se acumula al líder).
+
+Header del modal cambió de "{N} pools · {M} sub-cuentas" a "{N} cliente(s) con saldo · {M} sub-cuentas en pools" (M ahora se calcula desde `pool_members.length` de cada líder).
+
+### Archivos modificados
+- `src/App.jsx`: `CoronaModal.reloadClients` filtra `is_pool_leader`; sidebar simplificado; header recalculado.
+
+---
+
+
 ## v10.56.1 — Fixes post-scan v10.56.0 (3 🔴 + 6 🟠) — 02-jun-2026
 
 Marcelo: "perfecto ahora puedes hacer un scan de bugs exhaustivo para asegurarnos de que no se nos pasa nada".
