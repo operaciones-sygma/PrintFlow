@@ -5,6 +5,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.56.1 — Fixes post-scan v10.56.0 (3 🔴 + 6 🟠) — 02-jun-2026
+
+Marcelo: "perfecto ahora puedes hacer un scan de bugs exhaustivo para asegurarnos de que no se nos pasa nada".
+
+Scan paralelo de 3 agentes (backend SQL, frontend React, integration end-to-end) detectó 3 🔴 críticos + 6 🟠 mayores en v10.55.1 y v10.56.0. Aplicados todos.
+
+### 🔴 Críticos resueltos
+
+**🔴 C-pool-bridge** (backend + integration confirmaron): `credit_consume` y `credit_reverse` NO resolvían al líder del pool. Cuando el trigger bridge (`sync_invoice_from_orders` / `sync_invoice_from_oc`) facturaba por una sub-cuenta (EVA/JORGE/GRUPO MODELO), el CONSUMO se insertaba en el ledger del miembro como "row huérfana" y el saldo del líder NUNCA se decrementaba → **la factura era gratis** desde la perspectiva del cliente Corona. La RPC manual (`apply_credit_no_folio`, `credit_deposit`, `credit_adjust`) sí resolvía líder desde v10.56.0, pero el path bridge automático seguía roto. Fix one-shot: agregar `cobranza.resolve_anticipo_leader(p_client_id)` como primera línea en ambas RPCs. **NO requiere tocar los triggers** — el resolve absorbe el caso para cualquier caller. Incluye sufijo "sub-cuenta: X" en la referencia para trazabilidad.
+
+**🔴 C-list-balance-x4** (integration): `list_anticipo_clients` retornaba el saldo del LÍDER en TODOS los miembros del pool. Si CERVECERIA MODELO tenía $32k de saldo, EVA, JORGE y GRUPO MODELO aparecían también con $32k cada uno. CobranzaFlow `CreditView.jsx:80` sumaba `current_balance` × N filas = **$96k falsamente reportado** a Lucero (Tesorería podría aceptar gastos 3× el cash real). Fix: `current_balance` ahora retorna 0 para miembros (suma agregada correcta); nuevo campo `pool_balance` retorna el saldo real del pool al que pertenecen (para UIs que necesitan mostrarlo en contexto de pool, como CoronaModal). Verificación: `SUM(current_balance)` ahora = $10,270.40 (saldo real único) vs antes $32k × 4 = falso.
+
+**🔴 C-payment-stale-on-type** (frontend): en `BulkSellModal`, si Karla capturaba pagos con MultiPaymentPicker y luego cambiaba el tipo factura↔remisión, los `paymentRefs` quedaban stale. La base IVA del total cambia (factura interpreta total CON IVA, remisión SIN IVA), pero los amounts capturados se enviaban al backend tal cual → invoice con monto X pero pagos por Y. Fix: useEffect que resetea `totalAmount`, `paymentStatus`, `paymentRefs` al cambiar `invoiceType` + toast informativo "Recaptura el total: cambió la base IVA".
+
+### 🟠 Mayores resueltos
+
+**🟠 backend bulk_sell residual**: el reparto proporcional `ROUND(v_subtotal * qty/total_qty, 2)` perdía centavos. Ejemplo: 3 items qty=1 con subtotal $100 → cada uno $33.33 = $99.99, falta 1¢. Invoice queda corta vs `purchase_orders.total`. Fix: el ÚLTIMO item recibe el residual `v_subtotal - SUM(asignados anteriores)` para que la suma cuadre exacta.
+
+**🟠 frontend ternaria muerta**: `const totalConIVA = invoiceType==="factura" ? totalNum : totalNum` — no-op engañoso. Si alguien lo "arreglaba" pensando que faltaba `× 1.16`, rompería la suma. Eliminada con comentario explicando que `totalAmount` ya viene CON IVA si factura (el label de captura lo aclara).
+
+**🟠 ESC durante busy**: `useEscClose(onClose)` siempre disparaba `onClose` aunque el RPC estuviera ejecutándose. Karla podía cancelar visualmente una venta a media transacción. Fix: `useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]))` con `busyRef` sincronizado vía useEffect.
+
+**🟠 folioEdited pegajoso**: si Karla borraba todo el folio (input vacío), `folioEdited` quedaba `true` → al cambiar tipo no se restauraba la sugerencia. Fix: `setFolioEdited(v.length>0)` en lugar de `setFolioEdited(true)`.
+
+**🟠 qty acepta floats silenciosamente**: input sin `step="1"` permitía pegar "1.5" desde Excel; `parseInt` truncaba sin warning. Fix: agregado `step="1"`.
+
+**🟠 CreditAdjustModal sin warning sub-cuenta**: admin podía hacer ajuste sobre EVA pensando que era el saldo personal de EVA. Sin warning. Fix: banner naranja "⚠️ Este ajuste afecta al pool de X, no solo a EVA" cuando `client.is_pool_leader===false`. Preview también ahora usa `pool_balance` (no `current_balance` que para miembros es 0).
+
+### Cambios menores incluidos
+
+- `BulkSellModal` warning visual para `mixedPooledAndNonPooled` (productos pool junto a no-pool en mismo carrito).
+- `BulkSellModal` `role="dialog" aria-modal="true" aria-busy` para accesibilidad.
+- `CoronaModal` sidebar: miembros muestran "↳ saldo en CERVECERIA MODELO" en lugar de duplicar el monto.
+- `CoronaModal` panel detalle: banner azul "📎 Estás viendo el pool de X" cuando se selecciona un miembro. Label cambia de "Saldo actual" a "Saldo del pool".
+- `CoronaModal` header: "{N} pools · {M} sub-cuentas" en lugar de "{N} clientes con anticipo abierto" (ya no es exacto con el pool).
+- `RegisterCoronaPOModal`: mensaje "Marcelo debe activarlo" → "Pide a admin que active el cliente o lo agregue a un pool existente".
+
+### Archivos modificados
+- `src/App.jsx`: `BulkSellModal` (~2142), `CoronaModal` panel detalle + sidebar (~2700–2780), `CreditAdjustModal` (~2911), `RegisterCoronaPOModal` (~2826).
+- Supabase migration: `v10_56_1_pool_consume_reverse_and_list_balance`
+
+---
+
+
 ## v10.56.0 — Pool de anticipo Corona: sub-cuentas comparten saldo — 02-jun-2026
 
 Marcelo: "EVA de grupo Modelo deben estar habilitados para que les aparezca la 3ra opción de sin factura y se quita del saldo de corona, actualmente tienen la P-3537 y P-3517."

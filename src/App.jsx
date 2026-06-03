@@ -2140,7 +2140,9 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
 // Karla captura UN total (no precios unitarios). Estado de pago + N referencias bancarias.
 // Reemplaza el flujo individual sell_from_stock.
 function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
-  useEscClose(onClose);
+  const busyRef = useRef(false);
+  // v10.56.1 F-M1: ESC no cierra durante busy (evita cancelación visual con RPC corriendo)
+  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState([]);
   const [poolClients, setPoolClients] = useState([]);
@@ -2155,6 +2157,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [agent, setAgent] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
+  // sync ref con state para que ESC handler lea el valor actual sin re-binding
+  useEffect(()=>{ busyRef.current = busy; }, [busy]);
 
   useEffect(()=>{
     let alive = true;
@@ -2176,12 +2180,29 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceType, suggestionByType]);
 
+  // v10.56.1 F-C1/F-C3: al cambiar invoiceType, la base IVA cambia → resetear total + pagos.
+  // Si Karla había capturado 1000 pensando "remisión SIN IVA" y cambia a factura, el monto se
+  // reinterpretaría como CON IVA silenciosamente (ledger queda corto). Mejor recapturar.
+  const firstTypeChangeRef = useRef(true);
+  useEffect(()=>{
+    if (firstTypeChangeRef.current) { firstTypeChangeRef.current = false; return; }
+    if (totalAmount || paymentRefs.length>0) {
+      setTotalAmount("");
+      setPaymentStatus("unpaid");
+      setPaymentRefs([]);
+      if (showToast) showToast("ℹ️ Recaptura el total: cambió la base IVA del documento","info");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceType]);
+
   const hasPooled = cart.some(c=>c.stock_pool_id);
   const firstPoolId = cart.find(c=>c.stock_pool_id)?.stock_pool_id;
   // M1 visual: detecta items de pools mezclados
   const mixedPools = cart.filter(c=>c.stock_pool_id).some(c=>c.stock_pool_id !== firstPoolId);
   const noPoolClientIds = cart.filter(c=>!c.stock_pool_id).map(c=>c.client_id);
   const mixedClientsNoPool = noPoolClientIds.length>0 && noPoolClientIds.some(id=>id!==noPoolClientIds[0]);
+  // v10.56.1 F-M7: edge case durante migración — productos pooled + no-pool mezclados
+  const mixedPooledAndNonPooled = cart.some(c=>c.stock_pool_id) && cart.some(c=>!c.stock_pool_id);
 
   useEffect(()=>{
     if (!hasPooled) { setPoolClients([]); setDestClientId(""); return; }
@@ -2226,10 +2247,10 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual);
   const validDest = !hasPooled || !!destClientId;
-  // Validación pagos: si partial/paid, suma debe coincidir con total (con IVA si factura)
-  const totalConIVA = invoiceType==="factura" ? totalNum : totalNum;
+  // v10.56.1 F-C2: ternaria muerta eliminada. totalAmount ya viene CON IVA si factura
+  // (el label de captura lo aclara). La suma de paymentRefs se compara directo contra él.
   const sumCents = paymentRefs.reduce((s,r)=>s+Math.round((Number(r.amount)||0)*100), 0);
-  const totalCents = Math.round((totalConIVA||0)*100);
+  const totalCents = Math.round((totalNum||0)*100);
   const refValid = (r) => {
     if (!r.method) return false;
     if (!(Number(r.amount) > 0)) return false;
@@ -2243,7 +2264,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         && (paymentStatus==="paid" ? sumCents===totalCents : (sumCents>0 && sumCents<totalCents)));
 
   const canSubmit = !busy && validCart && folioOK && validDest && totalOK
-    && !mixedPools && !mixedClientsNoPool && validPayments;
+    && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && validPayments;
 
   const submit = async()=>{
     if (!canSubmit) return;
@@ -2275,7 +2296,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const filtered = products.filter(p=>p.stock_actual>0 && (!search || (p.name||"").toLowerCase().includes(search.toLowerCase()) || (p.sku||"").toLowerCase().includes(search.toLowerCase())));
 
-  return <div onClick={busy?undefined:onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+  return <div onClick={busy?undefined:onClose} role="dialog" aria-modal="true" aria-busy={busy} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
@@ -2325,6 +2346,9 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               {mixedClientsNoPool && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
                 ⚠️ Hay productos de clientes distintos. Solo puedes vender productos de un mismo cliente en una sola venta.
               </div>}
+              {mixedPooledAndNonPooled && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                ⚠️ Hay productos de pool junto con productos individuales (sin pool). Solo se permite uno u otro en la misma venta.
+              </div>}
               {cart.map(c=>{
                 const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
                 return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk?C.bd:"#ff9500"),marginBottom:8}}>
@@ -2335,7 +2359,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                   <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
                     <div style={{flex:1}}>
                       <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
-                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:"#ff9500"+"60")}} type="number" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
+                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:"#ff9500"+"60")}} type="number" step="1" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
                     </div>
                     <div style={{flex:1,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:14}}>de <b>{c.stock_actual}</b> disp.</div>
                   </div>
@@ -2368,7 +2392,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               </div>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
-                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{setFolio(e.target.value); setFolioEdited(true);}} placeholder={pref+"XXXX"} disabled={busy}/>
+                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -2666,7 +2690,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
           <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} clientes con anticipo abierto</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.filter(c=>c.is_pool_leader).length} pools · {clients.filter(c=>!c.is_pool_leader).length} sub-cuentas</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
@@ -2688,27 +2712,39 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              const negative=Number(c.current_balance)<0;
              const isMember=!c.is_pool_leader;
              const hasMembers=Array.isArray(c.pool_members)&&c.pool_members.length>0;
+             // v10.56.1 F-M3: miembros NO muestran $ — el saldo es del líder. Si lo mostráramos
+             // (como hacíamos antes), 3 miembros con $32k cada uno se ven como $96k aparentes.
              return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":(isMember?"3px solid #0891b240":"3px solid transparent"),paddingLeft:isMember?22:14,fontFamily:"'Poppins',sans-serif"}}>
                <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isMember?"↳ ":""}{c.name}</div>
                <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}{isMember?" · sub-cuenta de "+c.leader_name:""}</div>
                {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 pool: {c.pool_members.join(", ")}</div>}
-               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}{isMember?<span style={{fontSize:9,color:C.t3,marginLeft:6,fontWeight:600}}>(compartido)</span>:null}</div>
+               {isMember
+                 ? <div style={{fontSize:11,color:C.t3,marginTop:4,fontStyle:"italic"}}>↳ saldo en {c.leader_name}</div>
+                 : <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+               }
              </button>;
            })}
          </div>
          <div style={{overflowY:"auto",padding:"14px 18px",display:"flex",flexDirection:"column"}}>
-           {selected?<>
+           {selected?(()=>{
+             const selIsMember=!selected.is_pool_leader;
+             // v10.56.1: usar pool_balance para mostrar el saldo real del pool aún cuando se ve un miembro
+             const displayBalance=Number(selected.pool_balance||selected.current_balance||0);
+             return <>
              <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:14}}>
                <div>
                  <h4 style={{fontSize:15,fontWeight:800,margin:0}}>{selected.name}</h4>
                  <div style={{fontSize:11,color:C.t2,marginTop:2}}>{selected.rfc||"sin RFC"} · billing_mode=<b>{selected.billing_mode}</b></div>
                </div>
                <div style={{textAlign:"right"}}>
-                 <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div>
-                 <div style={{fontSize:20,fontWeight:800,color:Number(selected.current_balance)<0?C.dn:"#10b981"}}>${Number(selected.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
-                 <div style={{fontSize:9,color:C.t3,marginTop:2}}>≈ ${(Number(selected.current_balance||0)*1.16).toLocaleString("es-MX",{minimumFractionDigits:2})} con IVA</div>
+                 <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo {selIsMember?"del pool":"actual"} (sin IVA)</div>
+                 <div style={{fontSize:20,fontWeight:800,color:displayBalance<0?C.dn:"#10b981"}}>${displayBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+                 <div style={{fontSize:9,color:C.t3,marginTop:2}}>≈ ${(displayBalance*1.16).toLocaleString("es-MX",{minimumFractionDigits:2})} con IVA</div>
                </div>
              </div>
+             {selIsMember && <div style={{padding:"8px 12px",background:"#0891b210",border:"1px solid #0891b240",borderRadius:8,fontSize:11,color:"#0891b2",marginBottom:12,lineHeight:1.5}}>
+               📎 Estás viendo el saldo y movimientos del <b>pool de {selected.leader_name}</b>. {selected.name} comparte este saldo con las otras sub-cuentas. Cualquier movimiento aquí afecta a todo el pool.
+             </div>}
              <div style={{display:"flex",gap:8,marginBottom:12}}>
                {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>📊 Ajuste manual</button>}
                <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>🔄 Recargar</button>
@@ -2736,7 +2772,8 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                 })}
               </div>
              }
-           </>:<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Selecciona un cliente</div>}
+           </>;
+           })():<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Selecciona un cliente</div>}
          </div>
        </div>
       }
@@ -2823,7 +2860,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes anticipo —":"Selecciona…")}</option>
           {stockClients.map(c=><option key={c.id} value={c.id}>{c.is_pool_leader?"🎱":"↳"} {c.name}{!c.is_pool_leader&&c.leader_name?" (sub-cuenta de "+c.leader_name+")":""} · saldo {c.is_pool_leader?"":"compartido "}(sin IVA): ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
         </select>
-        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes con billing_mode='anticipo'. Marcelo debe activarlo.</div>}
+        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes anticipo configurados. Pide a admin que active el cliente o que lo agregue a un pool existente.</div>}
       </div>
 
       <div style={{marginBottom:10}}>
@@ -2894,7 +2931,12 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
   const n=parseFloat(monto);
   const valid=Number.isFinite(n)&&n!==0&&motivo.trim().length>=3;
   const canSubmit=valid&&!busy;
-  const preview=valid?(Number(client.current_balance||0)+n):Number(client.current_balance||0);
+  // v10.56.1 I-C2: preview usa pool_balance (saldo real del pool) en lugar de current_balance,
+  // que para miembros es 0. Sin esto, admin ajusta sobre EVA y ve "$0 → $5,000" cuando en
+  // realidad el saldo del pool es $32k → $37k.
+  const baseBalance=Number(client?.pool_balance||client?.current_balance||0);
+  const isMember=client && client.is_pool_leader===false;
+  const preview=valid?(baseBalance+n):baseBalance;
   const submit=async()=>{
     if(!canSubmit) return;
     setBusy(true);
@@ -2902,11 +2944,14 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
     finally{ setBusy(false); }
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
-    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste manual de saldo</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{client?.name}</div>
+      {isMember && <div style={{padding:"10px 12px",background:"#ff950015",border:"1.5px solid #ff950050",borderRadius:8,marginBottom:12,fontSize:11,color:"#a85a00",lineHeight:1.5}}>
+        ⚠️ Este ajuste afecta al <b>pool de {client?.leader_name}</b>, NO solo a {client?.name}. Las otras sub-cuentas del pool verán el mismo nuevo saldo. Si querías aislar el ajuste, no se puede — el saldo es compartido.
+      </div>}
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:16,fontWeight:800}}>${Number(client?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>{isMember?"Pool actual":"Actual"}</div><div style={{fontSize:16,fontWeight:800}}>${baseBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
         <div style={{fontSize:24,color:C.t2,alignSelf:"center"}}>→</div>
         <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Después</div><div style={{fontSize:16,fontWeight:800,color:preview<0?C.dn:C.ok}}>${preview.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
       </div>
