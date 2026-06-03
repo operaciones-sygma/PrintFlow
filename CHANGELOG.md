@@ -5,6 +5,84 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.56.0 — Pool de anticipo Corona: sub-cuentas comparten saldo — 02-jun-2026
+
+Marcelo: "EVA de grupo Modelo deben estar habilitados para que les aparezca la 3ra opción de sin factura y se quita del saldo de corona, actualmente tienen la P-3537 y P-3517."
+
+Habilita que EVA, JORGE y GRUPO MODELO (sub-cuentas de Grupo Modelo) descuenten/depositen al MISMO saldo Corona del líder CERVECERIA MODELO DE MEXICO. La 3ra opción "Sin factura · Corona" aparece automáticamente para ellos en `InvoiceModal`.
+
+### Modelo de datos: pool de anticipo
+
+Nueva columna `cobranza.clients.anticipo_pool_id uuid` (referencia a otro cliente del mismo schema):
+
+- **Líder del pool**: `billing_mode='anticipo'` + `anticipo_pool_id=NULL`. Es donde se acumula el ledger único de saldo Corona.
+- **Miembros**: `billing_mode='anticipo'` + `anticipo_pool_id=<leader.id>`. Operan como clientes normales (PO, invoices propias) pero todos los DEPOSITO/CONSUMO/AJUSTE se acumulan al ledger del líder.
+
+Trigger `enforce_anticipo_pool_consistency`:
+- No se puede apuntar a sí mismo
+- Cliente con `anticipo_pool_id` debe tener `billing_mode='anticipo'`
+- El líder no puede ser miembro de otro pool (sin anidamiento)
+
+Helper `cobranza.resolve_anticipo_leader(client_id) → uuid`: devuelve `COALESCE(anticipo_pool_id, client_id)`.
+
+### RPCs modificadas (TODAS resuelven al líder antes de leer/escribir)
+
+- `client_credit_balance` — lee `balance_despues` del ledger del líder.
+- `get_client_billing_info` — si el cliente resuelto tiene `anticipo_pool_id`, retorna `billing_mode='anticipo'` + balance del líder. Esto es lo que dispara la 3ra opción "Sin factura · Corona" en `InvoiceModal` para EVA/JORGE.
+- `apply_credit_no_folio` — descuenta del líder pero registra en `audit_log` ambos `sub_client_id` y `leader_client_id` + flag `pool_used`. La referencia del ledger incluye " · sub-cuenta: <nombre>".
+- `credit_deposit` — el invoice se crea al nombre del sub-cliente (refleja a quién se le emitió la factura/remisión), pero el ledger se acumula al líder. Notificación a Tesorería incluye el nombre del sub-cliente.
+- `credit_adjust` — ajuste al ledger del líder. Motivo automáticamente sufijado con " · sub-cuenta: <nombre>" cuando aplica.
+- `load_credit_ledger` — si piden un miembro, devuelve el ledger del líder (es el único que tiene movimientos).
+- `list_anticipo_clients` — ahora retorna líderes Y miembros con campos nuevos:
+  - `is_pool_leader boolean`
+  - `leader_id uuid`, `leader_name text` (para miembros)
+  - `pool_members text[]` (para líderes, lista de sub-cuentas activas no-fusionadas)
+
+### Frontend
+
+**`CoronaModal`** (sidebar de clientes):
+- Líder se muestra normal con badge "🔗 pool: EVA, JORGE" debajo del balance.
+- Miembros aparecen indentados con "↳" + label "sub-cuenta de <líder>" + sufijo "(compartido)" al lado del balance.
+- Todos muestran el mismo balance del líder porque comparten ledger.
+
+**`RegisterCoronaPOModal`** (dropdown de cliente):
+- Líderes con prefijo "🎱 <nombre>".
+- Miembros con prefijo "↳ <nombre> (sub-cuenta de <líder>)" + label "saldo compartido".
+- Karla puede asignar la nueva OC al sub-cliente correcto (el invoice queda a su nombre, el saldo se acumula al líder).
+
+### Data migration (aplicada en mismo commit)
+
+```sql
+-- CERVECERIA MODELO DE MEXICO ya era el líder Corona (billing_mode='anticipo' desde antes)
+-- Vincular sub-cuentas:
+UPDATE cobranza.clients SET billing_mode='anticipo' WHERE id IN (EVA, GRUPO MODELO, JORGE);
+UPDATE cobranza.clients SET anticipo_pool_id=CERVECERIA_MODELO_ID WHERE id IN (EVA, GRUPO MODELO, JORGE);
+
+-- Relink órdenes legacy sin client_id:
+UPDATE orders SET client_id=EVA_ID WHERE production_number='P-3517';
+UPDATE orders SET client_id=JORGE_ID WHERE production_number IN ('P-3529','P-3537');
+```
+
+Nota: GRUPO MODELO está `merged_into=CERVECERIA_MODELO` desde v10.43.25, por lo que cualquier orden a "GRUPO MODELO" ya se redirigía al líder. La marca pool es defensiva (también funciona si en el futuro se deshace el merge).
+
+### Verificación post-migration
+
+```
+EVA (sub-cuenta CERVECERIA MODELO): billing_mode=anticipo, balance=$32,217.19 ✓
+JORGE (sub-cuenta CERVECERIA MODELO): billing_mode=anticipo, balance=$32,217.19 ✓
+CERVECERIA MODELO (líder): billing_mode=anticipo, balance=$32,217.19, members=[EVA,JORGE] ✓
+P-3517 → client_id=EVA, get_client_billing_info → anticipo ✓ (3ra opción visible)
+P-3529 → client_id=JORGE, anticipo ✓
+P-3537 → client_id=JORGE, anticipo ✓
+```
+
+### Archivos modificados
+- `src/App.jsx`: `CoronaModal` (~line 2686), `RegisterCoronaPOModal` (~line 2821)
+- Supabase migrations: `v10_56_0_anticipo_pool_corona`, `v10_56_0_data_link_eva_modelo_jorge_pool`, `v10_56_0_list_anticipo_exclude_merged_members`
+
+---
+
+
 ## v10.55.1 — Carrito de venta: total único + multi-pago + fixes post-scan — 02-jun-2026
 
 Marcelo, tras probar v10.55.0: "Quita la opción de precio unitario y el de prioridad, no lo utiliza Cuadra cuando se vende inventario. Damos el precio completo por venta de todos los productos que salen, ese lo ingresa Karla. Tambien que aparezca la ventana con todas las opciones con el estado de pago, con que se paga, agregar mas pagos, etc como normalmente se hace."

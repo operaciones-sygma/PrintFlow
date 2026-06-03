@@ -2686,10 +2686,13 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
            {clients.map(c=>{
              const sel=c.id===selectedId;
              const negative=Number(c.current_balance)<0;
-             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Poppins',sans-serif"}}>
-               <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-               <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
-               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+             const isMember=!c.is_pool_leader;
+             const hasMembers=Array.isArray(c.pool_members)&&c.pool_members.length>0;
+             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":(isMember?"3px solid #0891b240":"3px solid transparent"),paddingLeft:isMember?22:14,fontFamily:"'Poppins',sans-serif"}}>
+               <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isMember?"↳ ":""}{c.name}</div>
+               <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}{isMember?" · sub-cuenta de "+c.leader_name:""}</div>
+               {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 pool: {c.pool_members.join(", ")}</div>}
+               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}{isMember?<span style={{fontSize:9,color:C.t3,marginLeft:6,fontWeight:600}}>(compartido)</span>:null}</div>
              </button>;
            })}
          </div>
@@ -2818,7 +2821,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
         <label style={lbl}>Cliente *</label>
         <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes anticipo —":"Selecciona…")}</option>
-          {stockClients.map(c=><option key={c.id} value={c.id}>🎱 {c.name} · saldo (sin IVA): ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
+          {stockClients.map(c=><option key={c.id} value={c.id}>{c.is_pool_leader?"🎱":"↳"} {c.name}{!c.is_pool_leader&&c.leader_name?" (sub-cuenta de "+c.leader_name+")":""} · saldo {c.is_pool_leader?"":"compartido "}(sin IVA): ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
         </select>
         {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes con billing_mode='anticipo'. Marcelo debe activarlo.</div>}
       </div>
