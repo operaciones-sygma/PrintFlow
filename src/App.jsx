@@ -757,23 +757,26 @@ const db = {
     if(error)throw new Error("sellFromStock: "+error.message);
     return data;
   },
-  // 🛒 v10.55.0 — Venta batch desde stock: 1 OC con N productos + folio fiscal compartido.
-  // items: [{client_product_id, qty, unit_price}, ...]
-  // Crea 1 invoice agregada en cobranza vía sync_invoice_from_oc trigger.
-  async bulkSellFromStock({items, dest_client_id, invoice_type, folio, priority, due_date, agent, notes, actor}) {
+  // 🛒 v10.55.1 — Venta batch desde stock: 1 OC con N productos + folio fiscal compartido + multi-pago.
+  // items: [{client_product_id, qty}, ...]  (precio se reparte proporcional a qty desde total_amount)
+  // total_amount: total CON IVA si factura, SIN IVA si remisión.
+  // payment_status: 'unpaid' | 'partial' | 'paid'. payment_refs: [{method,amount,bank_reference}, ...]
+  async bulkSellFromStock({items, total_amount, dest_client_id, invoice_type, folio, payment_status='unpaid', payment_refs=null, due_date, agent, notes, actor}) {
     const {data, error} = await supabase.rpc("bulk_sell_from_stock", {
       p_items: items,
+      p_total_amount: total_amount,
       p_client_id: dest_client_id||null,
       p_invoice_type: invoice_type,
       p_folio: folio,
-      p_priority: priority||'normal',
+      p_payment_status: payment_status,
+      p_payment_refs: payment_refs,
       p_due_date: due_date||null,
       p_agent: agent||null,
       p_notes: notes||null,
       p_actor: actor
     });
     if (error) throw new Error(error.message);
-    return data; // {oc_id, folio, invoice_type, items_count, grand_total, orders_created[]}
+    return data;
   },
   async loadStockMovements(productId=null, limit=50) {
     let q=supabase.from("stock_movements").select("*").order("created_at",{ascending:false}).limit(limit);
@@ -2133,8 +2136,9 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   </div>;
 }
 
-// v10.55.0 — Carrito de venta batch desde stock Cuadra con folio fiscal compartido.
-// Reemplaza el flujo individual sell_from_stock cuando hay 1 o N productos.
+// v10.55.1 — Carrito de venta batch desde stock Cuadra con folio fiscal compartido + multi-pago.
+// Karla captura UN total (no precios unitarios). Estado de pago + N referencias bancarias.
+// Reemplaza el flujo individual sell_from_stock.
 function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   useEscClose(onClose);
   const [search, setSearch] = useState("");
@@ -2143,8 +2147,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [destClientId, setDestClientId] = useState("");
   const [invoiceType, setInvoiceType] = useState("factura");
   const [folio, setFolio] = useState("");
+  const [folioEdited, setFolioEdited] = useState(false); // M2: tracking si Karla editó manualmente
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
-  const [priority, setPriority] = useState("normal");
+  const [totalAmount, setTotalAmount] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("unpaid");
+  const [paymentRefs, setPaymentRefs] = useState([]);
   const [agent, setAgent] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2159,26 +2166,34 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       })
       .catch(e=>console.warn("[BulkSellModal] suggestions:",e));
     return ()=>{alive=false};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // M2: solo auto-rellenar folio si Karla NO lo editó manualmente
   useEffect(()=>{
+    if (folioEdited) return;
     setFolio(invoiceType==="factura"?suggestionByType.factura:suggestionByType.remision);
-  }, [invoiceType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceType, suggestionByType]);
 
   const hasPooled = cart.some(c=>c.stock_pool_id);
+  const firstPoolId = cart.find(c=>c.stock_pool_id)?.stock_pool_id;
+  // M1 visual: detecta items de pools mezclados
+  const mixedPools = cart.filter(c=>c.stock_pool_id).some(c=>c.stock_pool_id !== firstPoolId);
+  const noPoolClientIds = cart.filter(c=>!c.stock_pool_id).map(c=>c.client_id);
+  const mixedClientsNoPool = noPoolClientIds.length>0 && noPoolClientIds.some(id=>id!==noPoolClientIds[0]);
+
   useEffect(()=>{
     if (!hasPooled) { setPoolClients([]); setDestClientId(""); return; }
     let alive = true;
-    const firstPool = cart.find(c=>c.stock_pool_id)?.stock_pool_id;
     supabase.rpc("list_stock_clients").then(({data,error})=>{
       if (!alive || error) return;
-      const list = (data||[]).filter(c=>c.stock_pool_id===firstPool);
+      const list = (data||[]).filter(c=>c.stock_pool_id===firstPoolId);
       setPoolClients(list);
       if (list.length===1) setDestClientId(list[0].id);
     });
     return ()=>{alive=false};
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPooled, cart.find(c=>c.stock_pool_id)?.stock_pool_id]);
+  }, [hasPooled, firstPoolId]);
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
@@ -2188,8 +2203,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
       sku: p.sku,
       stock_actual: p.stock_actual,
       qty: 1,
-      unit_price: p.unit_price?String(p.unit_price):"",
-      stock_pool_id: p.stock_pool_id
+      stock_pool_id: p.stock_pool_id,
+      client_id: p.client_id
     }]);
   };
   const removeFromCart = (id) => setCart(cart.filter(c=>c.client_product_id!==id));
@@ -2203,27 +2218,53 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   };
   const pref = invoiceType==="factura"?"D-":"R-";
   const folioOK = parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref);
-  const grandTotal = cart.reduce((s,c)=>s+(parseFloat(c.unit_price)||0)*(c.qty||0), 0);
-  const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual && parseFloat(c.unit_price)>0);
+  const totalNum = parseFloat(totalAmount);
+  const totalOK = Number.isFinite(totalNum) && totalNum > 0;
+  // MultiPaymentPicker espera SUBTOTAL SIN IVA (lo multiplica × 1.16 si factura).
+  // Karla captura el total CON IVA si factura, SIN IVA si remisión.
+  const subtotalSinIVA = invoiceType==="factura" ? Math.round((totalNum/1.16)*100)/100 : totalNum;
+
+  const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual);
   const validDest = !hasPooled || !!destClientId;
-  const canSubmit = !busy && validCart && folioOK && validDest;
+  // Validación pagos: si partial/paid, suma debe coincidir con total (con IVA si factura)
+  const totalConIVA = invoiceType==="factura" ? totalNum : totalNum;
+  const sumCents = paymentRefs.reduce((s,r)=>s+Math.round((Number(r.amount)||0)*100), 0);
+  const totalCents = Math.round((totalConIVA||0)*100);
+  const refValid = (r) => {
+    if (!r.method) return false;
+    if (!(Number(r.amount) > 0)) return false;
+    if (["transferencia","tarjeta","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) return false;
+    return true;
+  };
+  const allRefsValid = paymentRefs.length===0 || paymentRefs.every(refValid);
+  const validPayments = paymentStatus==="unpaid"
+    ? true
+    : (allRefsValid && paymentRefs.length>0
+        && (paymentStatus==="paid" ? sumCents===totalCents : (sumCents>0 && sumCents<totalCents)));
+
+  const canSubmit = !busy && validCart && folioOK && validDest && totalOK
+    && !mixedPools && !mixedClientsNoPool && validPayments;
 
   const submit = async()=>{
     if (!canSubmit) return;
     setBusy(true);
     try {
+      const refsForBackend = paymentStatus==="unpaid" ? null
+        : paymentRefs.map(r=>({method:r.method, amount:Number(r.amount), bank_reference:r.bank_reference||null}));
       const result = await db.bulkSellFromStock({
-        items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty, unit_price:parseFloat(c.unit_price)})),
+        items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty})),
+        total_amount: totalNum,
         dest_client_id: hasPooled ? destClientId : null,
         invoice_type: invoiceType,
         folio: folio.toUpperCase(),
-        priority,
+        payment_status: paymentStatus,
+        payment_refs: refsForBackend,
         due_date: null,
         agent: agent || userLogin,
         notes: notes.trim() || null,
         actor: userLogin || "sistema"
       });
-      showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.grand_total).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
+      showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.total_amount).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
       onSuccess(result);
     } catch(e) {
       showToast("❌ "+(e?.message||"error desconocido"), "error");
@@ -2234,17 +2275,17 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const filtered = products.filter(p=>p.stock_actual>0 && (!search || (p.name||"").toLowerCase().includes(search.toLowerCase()) || (p.sku||"").toLowerCase().includes(search.toLowerCase())));
 
-  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:920,width:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
+  return <div onClick={busy?undefined:onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🛒 Carrito de venta — Stock Cuadra</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos al carrito, asigna folio compartido y vende todo en un paso</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos, captura el total de la venta y registra los pagos en un solo paso</div>
         </div>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",flex:1,minHeight:0,overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",flex:1,minHeight:0,overflow:"hidden"}}>
         {/* Catálogo */}
         <div style={{borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd}}>
@@ -2257,7 +2298,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               return <div key={p.id} style={{padding:10,borderRadius:8,background:inCart?"#16a34a10":C.sf,border:"1px solid "+(inCart?"#16a34a":C.bd),marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:"#10b981"}}>{p.stock_actual}</b>{p.unit_price?" · ref $"+Number(p.unit_price).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2}):""}</div>
+                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:"#10b981"}}>{p.stock_actual}</b></div>
                 </div>
                 {inCart
                   ? <button onClick={()=>removeFromCart(p.id)} disabled={busy} style={{...bt(C.dn+"15",C.dn),padding:"4px 8px",fontSize:10,border:"0.5px solid "+C.dn+"40"}}>Quitar</button>
@@ -2268,7 +2309,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
           </div>
         </div>
 
-        {/* Carrito */}
+        {/* Carrito + captura */}
         <div style={{display:"flex",flexDirection:"column",overflow:"hidden",background:"#fafafa"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd,fontSize:11,fontWeight:800,color:C.t2,textTransform:"uppercase",letterSpacing:.5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span>🛒 Carrito ({cart.length})</span>
@@ -2276,36 +2317,35 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
             {cart.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Agrega productos del catálogo →</div> :
-            cart.map(c=>{
-              const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
-              const priceOk = parseFloat(c.unit_price)>0;
-              const total = (parseFloat(c.unit_price)||0)*(c.qty||0);
-              return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk&&priceOk?C.bd:"#ff9500"),marginBottom:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:6}}>
-                  <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-                  <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}>×</button>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11}}>
-                  <div>
-                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
-                    <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:"#ff9500"+"60")}} type="number" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
-                    <div style={{fontSize:9,color:c.qty>c.stock_actual?C.dn:C.t3,marginTop:2}}>de {c.stock_actual} disp.</div>
+            <>
+              {/* M1/M3: warnings de mezcla */}
+              {mixedPools && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                ⚠️ Hay productos de pools distintos. Solo puedes vender productos del mismo pool en una sola venta.
+              </div>}
+              {mixedClientsNoPool && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                ⚠️ Hay productos de clientes distintos. Solo puedes vender productos de un mismo cliente en una sola venta.
+              </div>}
+              {cart.map(c=>{
+                const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
+                return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk?C.bd:"#ff9500"),marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:6}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                    <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}>×</button>
                   </div>
-                  <div>
-                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>P. unit.</div>
-                    <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(priceOk?C.bd:"#ff9500"+"60")}} type="number" step="0.01" value={c.unit_price} onChange={e=>updateItem(c.client_product_id,{unit_price:e.target.value})} placeholder="0.00" disabled={busy}/>
+                  <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
+                    <div style={{flex:1}}>
+                      <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
+                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:"#ff9500"+"60")}} type="number" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
+                    </div>
+                    <div style={{flex:1,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:14}}>de <b>{c.stock_actual}</b> disp.</div>
                   </div>
-                  <div>
-                    <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Total</div>
-                    <div style={{padding:"6px 0",fontWeight:700,color:C.tx,fontSize:12}}>${total.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-                  </div>
-                </div>
-              </div>;
-            })}
+                </div>;
+              })}
+            </>}
           </div>
 
-          {/* Footer carrito */}
-          <div style={{borderTop:"0.5px solid "+C.bd,padding:"12px 14px",background:C.bg}}>
+          {/* Footer: captura */}
+          <div style={{borderTop:"0.5px solid "+C.bd,padding:"12px 14px",background:C.bg,maxHeight:"55vh",overflowY:"auto"}}>
             {hasPooled && (
               <div style={{marginBottom:10}}>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Cliente destino *</label>
@@ -2328,7 +2368,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               </div>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
-                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>setFolio(e.target.value)} placeholder={pref+"XXXX"} disabled={busy}/>
+                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{setFolio(e.target.value); setFolioEdited(true);}} placeholder={pref+"XXXX"} disabled={busy}/>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -2340,22 +2380,35 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 </select>
               </div>
               <div>
-                <label style={{...lbl,marginTop:0,fontSize:10}}>Prioridad</label>
-                <select style={{...inp,fontSize:11}} value={priority} onChange={e=>setPriority(e.target.value)} disabled={busy}>
-                  <option value="normal">Normal</option>
-                  <option value="urgente">Urgente</option>
-                  <option value="baja">Baja</option>
-                </select>
+                <label style={{...lbl,marginTop:0,fontSize:10}}>Notas</label>
+                <input style={{...inp,fontSize:11}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Opcional" disabled={busy} maxLength={200}/>
               </div>
             </div>
-            <div style={{background:"#16a34a10",borderRadius:8,padding:10,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,letterSpacing:.5}}>Total venta</div>
-              <div style={{fontSize:18,fontWeight:800,color:"#16a34a",fontFamily:"monospace"}}>${grandTotal.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+
+            {/* Total venta */}
+            <div style={{background:"#16a34a08",border:"1.5px solid "+(totalOK?"#16a34a40":"#ff950060"),borderRadius:10,padding:12,marginBottom:10}}>
+              <label style={{...lbl,marginTop:0,fontSize:10,color:"#16a34a",fontWeight:700}}>💰 Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
+              <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"monospace",color:"#16a34a",textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:"#ff950060")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
+              {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${subtotalSinIVA.toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
             </div>
+
+            {/* MultiPaymentPicker: estado de pago + multi-pago */}
+            {totalOK && <div style={{marginBottom:10}}>
+              <MultiPaymentPicker
+                status={paymentStatus}
+                refs={paymentRefs}
+                orderTotal={subtotalSinIVA}
+                invoiceType={invoiceType}
+                onChange={(st, rs)=>{setPaymentStatus(st); setPaymentRefs(rs);}}
+              />
+            </div>}
+
             <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#16a34a":"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Procesando...":"🛒 Vender y facturar todo"}</button>
             {!folioOK && folio && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
-            {cart.length>0 && !validCart && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa cantidades y precios de los items</div>}
+            {!totalOK && totalAmount && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Captura un total mayor a 0</div>}
+            {cart.length>0 && !validCart && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa las cantidades de los items</div>}
             {hasPooled && !destClientId && cart.length>0 && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Selecciona el cliente destino del pool</div>}
+            {totalOK && !validPayments && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa el estado de pago y los montos</div>}
           </div>
         </div>
       </div>

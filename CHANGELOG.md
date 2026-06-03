@@ -5,6 +5,76 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.55.1 — Carrito de venta: total único + multi-pago + fixes post-scan — 02-jun-2026
+
+Marcelo, tras probar v10.55.0: "Quita la opción de precio unitario y el de prioridad, no lo utiliza Cuadra cuando se vende inventario. Damos el precio completo por venta de todos los productos que salen, ese lo ingresa Karla. Tambien que aparezca la ventana con todas las opciones con el estado de pago, con que se paga, agregar mas pagos, etc como normalmente se hace."
+
+Rediseño del flujo del carrito + aplicación de los fixes del scan exhaustivo post-v10.55.0 (1 🔴 + 3 🟠 corregidos).
+
+### Backend: RPC `bulk_sell_from_stock` rediseñada
+
+**Cambios en firma**:
+```diff
+- p_items jsonb            -- [{client_product_id, qty, unit_price}, ...]
++ p_items jsonb            -- [{client_product_id, qty}, ...]   (sin unit_price)
++ p_total_amount numeric   -- Total de venta (con IVA si factura, sin IVA si remisión)
+- p_priority text          -- (eliminado: Cuadra no usa prioridades)
++ p_payment_status text    -- 'unpaid' | 'partial' | 'paid'
++ p_payment_refs jsonb     -- [{method, amount, bank_reference}, ...] (mismo shape que assign_invoice)
+```
+
+**Reparto del total entre órdenes**: cada orden individual recibe `price = (item.qty / sum_qty) * subtotal_sin_iva`. Si factura: `subtotal = total / 1.16`. Si remisión: `subtotal = total`.
+
+**Multi-pago integrado**:
+- Si `payment_status='paid'`: suma de refs DEBE igualar el total (con IVA si factura). Invoice se marca `pagada` con `balance=0`.
+- Si `payment_status='partial'`: suma DEBE ser `>0 AND <total`. Invoice marca `parcial` con `balance=total−sum`.
+- Si `payment_status='unpaid'`: invoice queda `pendiente` para cobranzaflow.
+- Cada ref → un row en `cobranza.payments` con `payment_type`, `amount`, `bank_reference`, `applied_by` (usuario cxc del actor).
+- Validaciones por método (transferencia/tarjeta/cheque requieren `bank_reference`). Efectivo NO permitido (debe pasar por Tesorería con vale).
+
+### Fixes post-scan v10.55.0
+
+**🔴 C2 — Duplicate items in cart bypass stock check**: si Karla agregaba 2 veces el mismo `client_product_id` con `qty=10` cada uno y stock=15, la RPC validaba 10≤15 en cada item pero al INSERTAR descontaba 20. Fix: pasada 1 acumula qty por producto en un `jsonb` map; pasada 2 valida `stock vs qty_total` con `FOR UPDATE`.
+
+**🟠 M1 — Mixed pool products**: si el carrito mezclaba productos de pools distintos, la RPC validaba membresía cliente↔pool del primer producto pero los demás podían venderse a un cliente que no tiene acceso. Fix: tracking `v_first_pool_id`; cualquier producto pool con `stock_pool_id` distinto lanza error.
+
+**🟠 M3 — Mixed clients (no-pool)**: para productos no-pool, se podían mezclar items de clientes distintos en una sola venta. Fix: tracking `v_first_client_id` con el `client_id` del primer producto no-pool; cualquier producto subsiguiente con `client_id` distinto lanza error.
+
+**🟠 C1 — Backdrop cierra modal durante `busy`**: el click en el backdrop (`onClick={onClose}`) cerraba el modal incluso con `busy=true`, descartando el resultado mientras la RPC completaba. Fix: `onClick={busy?undefined:onClose}` en el backdrop.
+
+**🟠 M2 — Folio editado manualmente se sobrescribe al cambiar tipo**: si Karla editaba el folio sugerido y luego cambiaba de factura↔remisión, el folio editado se perdía. Fix: flag `folioEdited`; el useEffect solo auto-rellena si `!folioEdited`.
+
+### Frontend: `BulkSellModal` rediseñado
+
+- **Quitado**: columna "P. unit." de cada producto, columna "Total" por producto, selector "Prioridad" del footer.
+- **Agregado**:
+  - Input prominente **"💰 Total de venta"** en footer (con label dinámica "CON IVA" / "SIN IVA" según tipo). Muestra subtotal sin IVA debajo si es factura.
+  - Componente reusable **`MultiPaymentPicker`** integrado (mismo que usa `InvoiceModal` desde v10.50.0): 3 botones de estado (No pagada / Parcial / Pagada) + lista expandible de pagos con método/monto/referencia bancaria + suma vs total en vivo.
+  - Warnings visuales para mezcla de pools / clientes en el carrito.
+- Validación de envío: `validCart && folioOK && totalOK && validDest && !mixedPools && !mixedClientsNoPool && validPayments`.
+
+### Helper `db.bulkSellFromStock` actualizado
+
+```js
+db.bulkSellFromStock({
+  items,            // [{client_product_id, qty}, ...]
+  total_amount,     // numeric
+  dest_client_id,   // uuid|null
+  invoice_type,     // 'factura'|'remision'
+  folio,            // 'D-NNNN'|'R-NNNN'
+  payment_status,   // 'unpaid'|'partial'|'paid'
+  payment_refs,     // [{method, amount, bank_reference}, ...] | null
+  due_date, agent, notes, actor
+})
+```
+
+### Archivos modificados
+- `src/App.jsx`: `BulkSellModal` (líneas ~2139+) + `db.bulkSellFromStock` (línea 760+)
+- Supabase migration: `v10_55_1_bulk_sell_total_amount_multi_pay`
+
+---
+
+
 ## v10.55.0 — Carrito de venta batch desde stock Cuadra con folio compartido — 02-jun-2026
 
 Marcelo: "Has que Karla pueda dar salida a productos de cuadra, pueda colocarlos en un recuadro y pueda agregar varios productos que den salida y pueda asignar folio de factura al conjunto de productos que salen. Que el input de folio recomendado funcione como todos."
