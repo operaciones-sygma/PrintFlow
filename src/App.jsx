@@ -2750,7 +2750,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>📊 Ajuste manual</button>}
                <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>🔄 Recargar</button>
                <div style={{flex:1}}/>
-               <div style={{fontSize:10,color:C.t2,alignSelf:"center"}}>Los depósitos los registra Lucero en CobranzaFlow</div>
+               <div style={{fontSize:10,color:C.t2,alignSelf:"center"}}>Lucero registra depósitos y cobra facturas Corona pendientes en CobranzaFlow</div>
              </div>
              <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>Historial (últimos 200)</div>
              {loadingLedger?<div style={{padding:20,textAlign:"center",color:C.t2}}>Cargando ledger…</div>:
