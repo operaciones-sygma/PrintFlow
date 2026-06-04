@@ -3507,10 +3507,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // v10.57.0 — Las 3 opciones (factura/remisión/no_folio) son INDEPENDIENTES.
   // Solo no_folio (Aplicar saldo) bypassa MultiPaymentPicker. Factura/remisión usan flujo normal.
   // v10.46.0 — Cuadra stock_load: no aplica payment (es ingreso a inventario, no facturación)
+  // v10.57.1 F-M2: paymentStatus debe estar EXPLÍCITAMENTE seleccionado para factura/remisión
+  // (antes bypaseaba con null, permitiendo Continuar sin elegir → invoice fantasma).
+  const paymentExplicit = paymentStatus === "unpaid" || paymentStatus === "paid" || paymentStatus === "partial";
   const paymentValid = (isCorona && isNoFolio)
     || isStockLoad
-    || paymentStatus === "unpaid"
-    || refsValid;
+    || (paymentExplicit && (paymentStatus === "unpaid" || refsValid));
 
   const handleProceed=()=>{
     if(!folioValid){
@@ -3898,10 +3900,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     return true;
   })();
   // v10.57.0 — Folio anticipado siempre usa MultiPaymentPicker (sin bypass Corona).
-  // El bridge ya NO consume saldo automático; las 3 opciones son independientes.
-  // PreInvoiceModal solo emite factura/remisión (no tiene opción "Aplicar saldo").
-  const paymentValid = paymentStatus === "unpaid"
-    || refsValid;
+  // v10.57.1 F-M2: paymentStatus debe estar EXPLÍCITAMENTE seleccionado.
+  const paymentExplicit = paymentStatus === "unpaid" || paymentStatus === "paid" || paymentStatus === "partial";
+  const paymentValid = paymentExplicit && (paymentStatus === "unpaid" || refsValid);
 
   const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid;
 
@@ -5578,11 +5579,10 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       if ((g.payment_status === "paid" || g.payment_status === "partial") && subtotal <= 0) {
         return {ok:false, reason:`Grupo ${i+1}: marca pagada/parcial pero subtotal <= 0`};
       }
-      // v10.54.3 M3 — Si la OC es Corona, los grupos NO aceptan payment_refs.
-      // El saldo a favor se aplica automáticamente. Rechazar ANTES del submit.
-      if (isCorona && (g.payment_status !== "unpaid" || g.payment_refs.length > 0)) {
-        return {ok:false, reason:`Grupo ${i+1}: OC Corona se paga con saldo a favor automático — no captures pagos`};
-      }
+      // v10.57.1: el bloqueo "Corona no acepta payment_refs" se eliminó porque el bridge
+      // automático está OFF (cobranza.app_config['corona_credit_bridge_enabled']=false).
+      // Karla/Lucero capturan pagos como con cualquier cliente. Si Marcelo reactiva el flag,
+      // el backend volverá a rechazar con error claro.
       // Validar payment_refs si presentes
       if (g.payment_status !== "unpaid" && g.payment_refs.length > 0) {
         if (subtotal <= 0) return {ok:false, reason:`Grupo ${i+1}: subtotal <= 0`};
@@ -5693,6 +5693,12 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       </div>
 
       {activeMode === "simple" && <>
+        {/* v10.57.1: aviso Corona en modo simple — facturas quedan pendientes */}
+        {isCorona && (
+          <div style={{background:"#0891b210",border:"1.5px solid #0891b240",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#075985",lineHeight:1.5}}>
+            💡 <strong>Cliente Corona:</strong> las facturas quedarán <strong>pendientes</strong> en CobranzaFlow para que Lucero cobre. El modo simple NO captura pagos. Si quieres capturar transferencia/cheque al facturar, usa <strong>Dividir en N facturas</strong> (con 1 grupo está bien). Para descontar saldo Corona, usa "Aplicar saldo" al entregar cada orden.
+          </div>
+        )}
         <div style={{marginBottom:14}}>
           <label style={lbl}>Tipo de folio</label>
           <div style={{display:"flex",gap:6}}>
@@ -5734,13 +5740,15 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
           🔀 <strong>Modo dividir:</strong> arrastra órdenes entre columnas para agruparlas. Cada columna = 1 factura/remisión con su propio folio y pagos. <strong>Todas las órdenes deben quedar asignadas</strong>.
         </div>
 
-        {/* v10.54.3 M2 — Banner amarillo si la OC es Corona/anticipo */}
+        {/* v10.57.1: el bridge auto-consume está OFF. Banner azul informativo para Corona —
+            las facturas quedan pendientes en cobranzaflow como cualquier otra. Si Karla quiere
+            descontar saldo, usa "Aplicar saldo" en cada orden al entregar. */}
         {isCorona && (
-          <div style={{background:"#fef3c7",border:"1.5px solid #ca8a04",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#854d0e",lineHeight:1.5}}>
-            🟡 <strong>Cliente Corona (anticipo):</strong> el saldo a favor se aplicará automáticamente a CADA grupo (sin IVA al ledger, con IVA en cobranza). <strong>NO captures pagos manuales</strong> en los grupos — serán rechazados.
+          <div style={{background:"#0891b210",border:"1.5px solid #0891b240",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#075985",lineHeight:1.5}}>
+            💡 <strong>Cliente Corona (anticipo):</strong> el bridge automático YA NO consume saldo al facturar (v10.57.0). Captura los pagos como con cualquier cliente — quedarán en CobranzaFlow para que Lucero cobre. Si quieres descontar saldo Corona, usa "Aplicar saldo · sin folio" en cada orden al entregar.
             {typeof coronaInfo?.current_balance === "number" && (
               <div style={{marginTop:6,fontWeight:700}}>
-                Saldo disponible: <span style={{fontFamily:"monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                Saldo a favor del pool: <span style={{fontFamily:"monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>
             )}
           </div>
@@ -10903,8 +10911,20 @@ export default function PrintFlow() {
           // v10.49.2 fix#2 — Notificar si quedó huérfana (Karla eligió "sin precio")
           if(skipPrice){
             showToast("✅ Folio "+folio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea");
-          }else{
+          }else if(invoiceType==="no_folio"){
             showToast("✅ Folio "+folio+" asignado y orden entregada");
+          }else{
+            // v10.57.1: post-confirm chequea si era Corona para aclarar que el saldo NO se descontó.
+            try{
+              const bi=await db.getClientBillingInfo(invoiceModal.client_id,invoiceModal.client);
+              if(bi?.billing_mode==="anticipo"){
+                showToast("✅ Folio "+folio+" asignado · 💡 Factura Corona pendiente en CobranzaFlow (saldo NO descontado)");
+              }else{
+                showToast("✅ Folio "+folio+" asignado y orden entregada");
+              }
+            }catch{
+              showToast("✅ Folio "+folio+" asignado y orden entregada");
+            }
           }
           setInvoiceModal(null);setAllowNoPriceForOrder(null);
         }catch(e){

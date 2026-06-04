@@ -5,6 +5,61 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.57.1 — Fixes post-scan v10.57.0 (5 🔴 + 6 🟠) — 03-jun-2026
+
+3 agentes paralelos (backend SQL, frontend React, integration end-to-end) detectaron 5 🔴 críticos + 6 🟠 mayores tras el flag-off del bridge Corona en v10.57.0. Aplicados todos.
+
+### 🔴 Críticos resueltos
+
+**🔴 assign_folios_split_oc BLOQUEABA toda OC Corona split**: la RPC tenía `RAISE EXCEPTION 'flag corona_credit_bridge_enabled está desactivado'`. Con flag=false desde v10.57.0, CoronaOCBundleModal split y simple modes quedaban completamente rotos para clientes Corona. Fix: eliminar excepción y gate el path de auto-consume con `IF v_corona_credit_enabled` (no por billing_mode). Cuando flag=false, Corona se procesa como cliente normal: payment_refs si vienen, status='pendiente' si no.
+
+**🔴 Parser boolean inconsistente entre 3 callers del flag**: `sync_invoice_from_orders` y `sync_invoice_from_oc` usaban `(value::text = 'true')`; `assign_folios_split_oc` usaba `(TRIM(value::text, '"') = 'true')`. Riesgo asimétrico al volver flag a true. Fix: helper `cobranza.is_corona_bridge_enabled()` que maneja jsonb-bool y jsonb-string. Los 3 callers ahora lo usan.
+
+**🔴 CoronaOCBundleModal split rechazaba payment_refs en frontend**: validación `splitValidation` (App.jsx:5581) decía "OC Corona se paga con saldo a favor automático — no captures pagos". Lucero quedaba sin forma de cobrar. Fix: eliminado el bloque (el backend ya solo rechaza cuando flag=true).
+
+**🔴 CoronaOCBundleModal banner amarillo "saldo automático" mentía**: ahora banner azul informativo que indica que el bridge está OFF y captura pagos como cliente normal.
+
+**🔴 Simple mode sin MultiPaymentPicker dejaba facturas pendientes ciegas**: para clientes Corona el simple mode no tiene captura de pago. Fix: aviso azul "las facturas quedarán pendientes; para capturar pago al facturar usa 'Dividir en N facturas' (con 1 grupo está bien)".
+
+### 🟠 Mayores resueltos
+
+**🟠 sync_cancellation_to_cobranza inflaba saldo Corona ficticio**: rama prorate llamaba `credit_adjust(+monto)` sin verificar si hubo CONSUMO previo. Para invoices post-flag-off (sin consumo), el saldo Corona se inflaba artificialmente. Fix: gate `IF EXISTS CONSUMO source_invoice_id` antes de `credit_adjust`/`credit_reverse`. Audit log distintivo cuando NO hay consumo.
+
+**🟠 InvoiceModal/PreInvoiceModal paymentValid permitía Continuar con paymentStatus=null**: el `refsValid` retorna `true` cuando paymentStatus no es paid/partial, así que `paymentStatus=null` pasaba. v10.57.0 lo expuso a más casos (EVA+factura). Fix: nueva variable `paymentExplicit = paymentStatus in ['unpaid','paid','partial']`. Botón Continuar deshabilitado hasta selección explícita.
+
+**🟠 Falta toast informativo post-confirm Corona+factura**: Karla podía creer que el saldo se descontó cuando no fue así. Fix: post-confirm chequea `getClientBillingInfo`; si era Corona y eligió factura/remisión, muestra "💡 Factura Corona pendiente en CobranzaFlow (saldo NO descontado)".
+
+**🟠 CreditView (cobranzaflow) copy obsoleto**: "Cada factura consume saldo automáticamente vía bridge" → mentira tras v10.57.0. Fix: copy actualizado "El saldo se consume solo con 'Aplicar saldo · sin folio' desde PrintFlow. Las facturas fiscales quedan pendientes".
+
+**🟠 InvoicesView (cobranzaflow) no distingue clientes Corona**: Lucero verá facturas Corona pendientes mezcladas con cobrables normales. Fix: badge "🎱 ANTICIPO" al lado del nombre del cliente cuando `billing_mode='anticipo'`. Tooltip informativo: "considera revisar si conviene aplicar saldo en lugar de cobrar normal".
+
+**🟠 credit_reverse retorna NULL pero audit_log decía "reverse_full"**: engañaba auditoría cuando no había consumo. Fix: rama separada `bridge_cancel_oc_split_corona_no_consumo` en audit_log cuando flag=false (sin consumo previo).
+
+### Archivos modificados
+
+**PrintFlow** (`src/App.jsx`):
+- `CoronaOCBundleModal` (~5500): validación split sin bloqueo Corona, banner azul informativo, aviso simple mode
+- `InvoiceModal` (~3509): `paymentValid` requiere `paymentExplicit`
+- `PreInvoiceModal` (~3905): mismo cambio
+- Handler raíz `onConfirm` (~10912): toast informativo post-confirm Corona
+
+**cobranzaflow** (`src/App.jsx`, `src/views/CreditView.jsx`):
+- `InvoicesView.enrichedInvs` (3886): agrega `isCorona`
+- Tabla `InvoicesView`: badge 🎱 ANTICIPO en columna cliente
+- `CreditView` header: copy actualizado
+
+**Backend** (Supabase):
+- `cobranza.is_corona_bridge_enabled()` helper unificado
+- `public.assign_folios_split_oc` (sin RAISE; gate por flag, no billing_mode)
+- `public.sync_invoice_from_orders` (helper)
+- `public.sync_invoice_from_oc` (helper)
+- `public.sync_cancellation_to_cobranza` (gate credit_adjust/credit_reverse con EXISTS CONSUMO)
+
+Migration: `v10_57_1_corona_bridge_fixes`.
+
+---
+
+
 ## v10.57.0 — Las 3 opciones Corona (factura/remisión/aplicar saldo) son independientes — 03-jun-2026
 
 Marcelo, al ver el InvoiceModal de EVA: "hay un bug si selecciono para EVA factura o remisión me aparece como si fuera a saldo. Justo hay 3 opciones para que se habiluten las 3 y sea flexible".
