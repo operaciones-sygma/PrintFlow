@@ -5354,13 +5354,16 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
   const [newOC, setNewOC] = useState({client:"",vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
   const [saving, setSaving] = useState(false);
 
-  // Filtrar OCs candidatas: complejas, no canceladas, no folios_locked (forward-compat), distintas de la origen
+  // Filtrar OCs candidatas: complejas, ACTIVAS (open/in_progress, no completed/cancelled),
+  // no folios_locked, distintas de la origen.
+  // v10.57.4 — Marcelo (2026-06-05): solo OCs activas. Antes aparecían OCs ya completadas como
+  // candidatas (status='completed'), generando ruido visual y riesgo de mover a una OC cerrada.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return purchaseOrders.filter(po =>
       !po.is_simple_oc &&
       !po.is_web_oc &&                  // 🌐 v10.12.0 Sub-fase C — OCs web bloqueadas como destino de movimiento
-      po.status !== "cancelled" &&
+      (po.status === "open" || po.status === "in_progress") &&
       po.folios_locked !== true &&
       po.id !== order?.purchase_order_id
     ).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
