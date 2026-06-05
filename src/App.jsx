@@ -5345,7 +5345,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
   </div>;
 }
 
-function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose}) {
+function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove, onClose}) {
   useEscClose(onClose);
   const [mode, setMode] = useState("existing"); // "existing" | "new"
   const [search, setSearch] = useState("");
@@ -5354,10 +5354,23 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
   const [newOC, setNewOC] = useState({client:"",vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
   const [saving, setSaving] = useState(false);
 
+  // v10.57.5 — Conteo dinámico de órdenes activas (no canceladas) por OC.
+  // El flag is_simple_oc es estático al crear la OC y no refleja el estado actual.
+  const ordersPerOC = useMemo(() => {
+    const map = {};
+    (orders||[]).forEach(o => {
+      if (!o.purchase_order_id) return;
+      if (o.stage === "cancelled" || o.stage === "maq_cancelled") return;
+      map[o.purchase_order_id] = (map[o.purchase_order_id] || 0) + 1;
+    });
+    return map;
+  }, [orders]);
+
   // Filtrar OCs candidatas: complejas, ACTIVAS (open/in_progress, no completed/cancelled),
-  // no folios_locked, distintas de la origen.
-  // v10.57.4 — Marcelo (2026-06-05): solo OCs activas. Antes aparecían OCs ya completadas como
-  // candidatas (status='completed'), generando ruido visual y riesgo de mover a una OC cerrada.
+  // no folios_locked, distintas de la origen, CON ≥2 ÓRDENES (alineado con la vista
+  // principal de Órdenes de Compra que también oculta las simples).
+  // v10.57.4 — solo activas (no completed/cancelled).
+  // v10.57.5 — Marcelo: además exigir ≥2 órdenes y que aparezcan en la vista de OCs.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return purchaseOrders.filter(po =>
@@ -5365,10 +5378,11 @@ function MoveOrderModal({order, purchaseOrders, onMove, onCreateAndMove, onClose
       !po.is_web_oc &&                  // 🌐 v10.12.0 Sub-fase C — OCs web bloqueadas como destino de movimiento
       (po.status === "open" || po.status === "in_progress") &&
       po.folios_locked !== true &&
-      po.id !== order?.purchase_order_id
+      po.id !== order?.purchase_order_id &&
+      (ordersPerOC[po.id] || 0) >= 2    // v10.57.5: solo OCs con 2+ órdenes activas
     ).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [purchaseOrders, search, order]);
+  }, [purchaseOrders, search, order, ordersPerOC]);
 
   const canSubmitExisting = mode === "existing" && !!targetId && !saving;
   const canSubmitNew = mode === "new" && newOC.client.trim().length > 0 && !saving;
@@ -10800,7 +10814,7 @@ export default function PrintFlow() {
       {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
-      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
+      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
