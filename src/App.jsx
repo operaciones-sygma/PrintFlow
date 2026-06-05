@@ -418,8 +418,12 @@ const db = {
     }
   },
   async login(username, password) {
-    const { data } = await supabase.from("users").select("*").eq("username", username).eq("password_hash", password).eq("active", true).single();
-    return data;
+    // v10.58.0 — Auth via RPC server-side. Antes leíamos public.users directo con anon key,
+    // exponiendo TODOS los password_hash a quien tuviera DevTools. Ahora la comparación de
+    // credenciales corre en server-side via SECURITY DEFINER y solo retorna identidad básica.
+    const { data, error } = await supabase.rpc("verify_user_password", { p_username: username, p_password: password });
+    if (error) throw new Error("Error verificando credenciales: " + error.message);
+    return Array.isArray(data) && data.length > 0 ? data[0] : null;
   },
   async loadNotifications(role) {
     const { data } = await supabase.from("notifications").select("*").eq("target_role", role).order("created_at", { ascending: false }).limit(50);
@@ -480,13 +484,17 @@ const db = {
     const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser});
     if(error)throw new Error(error.message);
   },
+  // v10.58.0 — Acceso a app_config via RPC. Antes lectura directa con anon key exponía
+  // telegram_webhook_secret. La RPC whitelistea keys públicas (chemical_prices) y rechaza
+  // todo lo demás.
   async loadConfig(key) {
-    const {data}=await supabase.from("app_config").select("*").eq("key",key).single();
-    return data?.value||null;
+    const {data, error} = await supabase.rpc("get_app_config", { p_key: key });
+    if (error) throw new Error(error.message);
+    return data || null;
   },
   async saveConfig(key, value, byUser) {
-    const {error}=await supabase.from("app_config").upsert({key,value,updated_at:new Date().toISOString(),updated_by:byUser});
-    if(error)throw new Error(error.message);
+    const {error} = await supabase.rpc("save_app_config", { p_key: key, p_value: value, p_by_user: byUser });
+    if(error) throw new Error(error.message);
   },
   // 🛒 v10.10.0 — Carga Órdenes de Compra (OC-XXXX)
   async loadPurchaseOrders() {
@@ -9207,13 +9215,11 @@ export default function PrintFlow() {
           if (!cancelled) setAuthChecked(true);
           return;
         }
-        // Re-verificar contra DB: usuario debe existir Y estar activo
-        const { data: dbUser, error } = await supabase.from("users")
-          .select("username,role,display_name,active")
-          .eq("username", session.username)
-          .eq("active", true)
-          .single();
+        // v10.58.0 — Re-verificación via RPC server-side (acceso directo a public.users
+        // revocado para anon). La RPC solo retorna identidad básica si el user sigue activo.
+        const { data: dbUserRows, error } = await supabase.rpc("get_user_session", { p_username: session.username });
         if (cancelled) return;
+        const dbUser = Array.isArray(dbUserRows) && dbUserRows.length > 0 ? dbUserRows[0] : null;
         if (error || !dbUser) {
           // Usuario no existe o está desactivado → invalidar sesión
           localStorage.removeItem("pf-session");
@@ -10546,39 +10552,11 @@ export default function PrintFlow() {
         showToast("📩 Lupita notificada — pedirá el archivo al cliente");
       }catch(e){console.error("[web_request_file] Error:",e);showToast("❌ No se pudo enviar aviso: "+(e?.message||"error desconocido"),"error");reload()}})();
     }
-    if(action==="revert"){const o=orders.find(x=>x.id===id);if(!o)return;
-      // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo en propias)
-      if(!canExecuteAction("revert",o,user,userLogin)){showToast(actionDeniedToast("revert",o,user,userLogin),"error");return}
-      // 🆕 v10.7.0 — Bloquear revert si la orden ya tiene folio fiscal asignado
-      // (evita órdenes con folio en stages no-finales = inconsistencia fiscal)
-      if(o.invoice_folio){
-        showToast("❌ No se puede revertir: la orden ya tiene folio "+o.invoice_folio+" asignado. Karla debería gestionarlo.","error");
-        return;
-      }
-      // Find actual previous stage from timeline (not linear flow which skips stages)
-      const labelToId=Object.fromEntries(ALL_S.map(s=>[s.l,s.id]));
-      const tl=(o.timeline||[]).slice().reverse();
-      // Find most recent transition entry that ends with current stage label
-      const curLabel=SM[o.stage]?.l||"";
-      const transition=tl.find(t=>{if(!t.action?.includes(" → "))return false;const lastArr=t.action.lastIndexOf(" → ");const dest=t.action.substring(lastArr+3).trim();return dest===curLabel});
-      let prevId=null;
-      if(transition){
-        // Extract source: everything before the FIRST " → "
-        const firstArr=transition.action.indexOf(" → ");
-        const srcLabel=transition.action.substring(0,firstArr).trim();
-        prevId=labelToId[srcLabel]||null;
-      }
-      // Fallback to linear flow if timeline parsing fails
-      if(!prevId){const flow=o.order_type==="maquila"?MAQ_FLOW:INT_FLOW;const ci=flow.findIndex(s=>s.id===o.stage);if(ci>0)prevId=flow[ci-1].id}
-      if(prevId){setConfirmModal({title:"↩️ Regresar",message:"¿A \""+SM[prevId]?.l+"\"?",confirmLabel:"Sí",confirmColor:C.wn,onConfirm:async()=>{
-        // v10.40.1 — cerrar modal inmediatamente al click, side effects en background
-        setConfirmModal(null);
-        try{await doAdv(id,prevId);
-        // Notify the responsible role about the revert
-        const targetWho=SM[prevId]?.who;const revertMsg="↩️ Admin regresó orden de "+(o?.client||"")+" — "+(o?.product_type||"")+" a "+SM[prevId]?.l;
-        if(targetWho==="both"){await db.addNotification("produccion",id,"order_edit",revertMsg,null,"admin");await db.addNotification("preprensa",id,"order_edit",revertMsg,null,"admin")}
-        else if(targetWho&&targetWho!=="admin")await db.notify(targetWho,id,"order_edit",revertMsg,null,"admin");
-        }catch(e){console.error("[revert] Error:",e);showToast("❌ No se pudo revertir: "+(e?.message||"error desconocido"),"error")}}})}}
+    // v10.58.0 — Segundo branch `if(action==="revert")` ELIMINADO. Era código legacy duplicado
+    // que abría un ConfirmModal con doAdv directo, bypaseando: razón obligatoria, validación
+    // de área del rol, limpieza de delivered_at, invalidación de plates al volver a ctp.
+    // El primer branch (línea ~10374) ya cubre revert correctamente vía setRevertModal +
+    // revertOrder(), que aplica todo el flujo con razón + getRevertOptions + side-effects.
     if(action==="cancel_order"){const o=orders.find(x=>x.id===id);if(!o)return;
       // 🆕 v10.7.0 — Bloquear cancelación si la orden tiene folio fiscal asignado
       if(o.invoice_folio){
