@@ -4288,11 +4288,14 @@ function ChemicalPanel({user}) {
   const [savingPrices,setSavingPrices]=useState(false);
 
   useEffect(()=>{
+    // v10.58.1 — agregado .catch porque db.loadConfig ahora puede lanzar (antes silente).
+    // Sin esto, si la RPC fallaba, setLoading(false) nunca corría y el panel quedaba
+    // en estado de carga indefinido.
     Promise.all([db.loadChemicals(),db.loadPlates(),db.loadConfig("chemical_prices")]).then(([c,p,cfg])=>{
       setChemicals(c);setPlates(p);
       if(cfg)setPrices(cfg);
       setLoading(false);
-    });
+    }).catch(e=>{console.error("[ChemicalPanel load] Error:",e);setLoading(false)});
   },[]);
 
   const saveRev=async()=>{if(!revTambos||parseInt(revTambos,10)<1)return alert("Ingresa cantidad de tambos");setSaving(true);try{await db.addChemical("revelador","limpieza",parseInt(revTambos,10),revNotes||null,user);const c=await db.loadChemicals();setChemicals(c);setRevTambos("2");setRevNotes("");setShowRevForm(false)}catch(e){console.error("[saveRev] Error:",e);alert("Error al registrar: "+(e?.message||"error desconocido"))}finally{setSaving(false)}};
