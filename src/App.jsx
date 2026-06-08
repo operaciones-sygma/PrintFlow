@@ -10234,22 +10234,18 @@ export default function PrintFlow() {
     }
     setConfirmModal({title:"🗑️ Borrar Orden",message:"¿Borrar \""+o.client+" — "+(o.product_type||"")+"\"?\n\nSe eliminará permanentemente con todo su historial. Esta acción NO se puede deshacer.",confirmLabel:"Sí, borrar",confirmColor:C.dn,onConfirm:async()=>{
       // v10.40.1 — cerrar el modal INMEDIATAMENTE al click; los DELETEs continúan en background.
-      // Antes el modal quedaba visible ~2-3s mientras corrían 8 DELETE secuenciales — parecía colgado.
+      // v10.58.8 — Borrado via RPC SECURITY DEFINER server-side (delete_order_with_cascade).
+      // Antes 8 DELETEs directos desde anon key; ahora bloqueado por REVOKE DELETE.
+      // La RPC valida actor=admin, bloquea borrado de órdenes con folio fiscal, y audit log.
       setConfirmModal(null);
       setOrders(p=>p.filter(x=>x.id!==id));
       try{
-      // Delete file from storage if exists
-      if(o.file_url){try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}
-      // Delete related data then order
-      await supabase.from("order_timeline").delete().eq("order_id",id);
-      await supabase.from("order_comments").delete().eq("order_id",id);
-      await supabase.from("order_waste").delete().eq("order_id",id);
-      await supabase.from("order_machine_log").delete().eq("order_id",id);
-      await supabase.from("plate_log").delete().eq("order_id",id);
-      await supabase.from("order_notes").delete().eq("order_id",id);
-      await supabase.from("notifications").delete().eq("order_id",id);
-      await supabase.from("orders").delete().eq("id",id);
-      showToast("🗑️ Orden borrada","error");
+        // Delete file from storage if exists (frontend mantiene esta responsabilidad).
+        if(o.file_url){try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}
+        // RPC server-side hace toda la cascada de 7 tablas + orders + audit log.
+        const {error}=await supabase.rpc("delete_order_with_cascade",{p_order_id:id,p_actor:userLogin||user});
+        if(error)throw new Error(error.message);
+        showToast("🗑️ Orden borrada","error");
       }catch(e){console.error("[deleteOrder] Error:",e);showToast("❌ No se pudo borrar: "+(e?.message||"error desconocido"),"error");reload()}
     }});
   },[orders,showToast,reload]);
