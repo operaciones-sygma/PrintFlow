@@ -2458,6 +2458,9 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
   const [priority,setPriority]=useState("normal");
   const [dueDate,setDueDate]=useState("");
   const [notes,setNotes]=useState("");
+  // v10.58.3 — busy state previene doble venta + decremento de stock x2 por double-click.
+  // Patrón v10.54.7 (try/finally + disable buttons).
+  const [busy,setBusy]=useState(false);
   // v10.48.0 — Si el producto pertenece a un pool compartido, Karla debe elegir qué cliente del pool recibe.
   const [poolClients,setPoolClients]=useState([]);
   const [destClientId,setDestClientId]=useState("");
@@ -2535,8 +2538,16 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
         <input style={inp} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Instrucciones de entrega…"/>
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!valid)return;onSell({qty:n,unit_price:Number.isFinite(computedUnit)?Number(computedUnit.toFixed(2)):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null,dest_client_id:isPooled?destClientId:null})}} disabled={!valid} style={{...bt("#16a34a"),flex:1,justifyContent:"center",opacity:valid?1:.4,cursor:valid?"pointer":"not-allowed"}}>🛒 Crear Venta</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+        <button onClick={async()=>{
+          if(!valid||busy)return;
+          setBusy(true);
+          try{
+            await onSell({qty:n,unit_price:Number.isFinite(computedUnit)?Number(computedUnit.toFixed(2)):null,priority,due_date:dueDate||null,notes:notes.trim()||null,agent:userLogin||null,dest_client_id:isPooled?destClientId:null});
+          }finally{
+            setBusy(false);
+          }
+        }} disabled={!valid||busy} style={{...bt(valid&&!busy?"#16a34a":"#9ca3af"),flex:1,justifyContent:"center",opacity:valid&&!busy?1:.5,cursor:valid&&!busy?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Vendiendo...":"🛒 Crear Venta"}</button>
       </div>
     </div>
   </div>;
@@ -3151,6 +3162,8 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
 function PlateModal({order,machine,onConfirm,onClose}) {
   useEscClose(onClose);
   const [size,setSize]=useState("");const [qty,setQty]=useState("");
+  // v10.58.3 — busy state previene doble alta de placas + doble asignación por double-click.
+  const [busy,setBusy]=useState(false);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px"}}>💿 Registrar Placas — CTP</h3>
@@ -3168,8 +3181,15 @@ function PlateModal({order,machine,onConfirm,onClose}) {
         <input style={inp} type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} placeholder="¿Cuántas placas?"/>
       </div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(!size)return alert("Selecciona tamaño de placa");if(!qty||parseInt(qty,10)<1)return alert("Ingresa cantidad de placas");onConfirm(size,parseInt(qty,10))}} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>✅ Registrar y Asignar</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+        <button onClick={async()=>{
+          if(busy)return;
+          if(!size)return alert("Selecciona tamaño de placa");
+          if(!qty||parseInt(qty,10)<1)return alert("Ingresa cantidad de placas");
+          setBusy(true);
+          try{ await onConfirm(size,parseInt(qty,10)); }
+          finally{ setBusy(false); }
+        }} disabled={busy} style={{...bt(busy?"#9ca3af":"#0891b2"),flex:1,justifyContent:"center",opacity:busy?.6:1,cursor:busy?"wait":"pointer"}}>{busy?"⏳ Registrando...":"✅ Registrar y Asignar"}</button>
       </div>
     </div>
   </div>;
@@ -6994,6 +7014,8 @@ function Archive({orders,role,onAction,userLogin}) {
 function WebRejectModal({order,onConfirm,onClose}) {
   useEscClose(onClose);
   const [reason,setReason]=useState("");
+  // v10.58.3 — busy state previene doble rechazo + spam de notificaciones a vendedor por double-click.
+  const [busy,setBusy]=useState(false);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn}}>❌ Rechazar Pedido Web</h3>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
@@ -7002,8 +7024,17 @@ function WebRejectModal({order,onConfirm,onClose}) {
       {order?.price&&<div style={{fontSize:11,color:C.ok,fontWeight:600,marginTop:2}}>{fmt(order.price)}</div>}
     </div>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Describe el motivo del rechazo. El pedido quedará archivado como rechazado y no entrará al flujo de producción.</p>
-    <div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se rechaza este pedido?"/></div>
-    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(!reason.trim())return alert("Escribe el motivo del rechazo");onConfirm(reason.trim())}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>❌ Rechazar</button></div>
+    <div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se rechaza este pedido?" disabled={busy}/></div>
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
+      <button onClick={async()=>{
+        if(busy)return;
+        if(!reason.trim())return alert("Escribe el motivo del rechazo");
+        setBusy(true);
+        try{ await onConfirm(reason.trim()); }
+        finally{ setBusy(false); }
+      }} disabled={busy} style={{...bt(busy?"#9ca3af":C.dn),flex:1,justifyContent:"center",opacity:busy?.6:1,cursor:busy?"wait":"pointer"}}>{busy?"⏳ Rechazando...":"❌ Rechazar"}</button>
+    </div>
   </div></div>;
 }
 
