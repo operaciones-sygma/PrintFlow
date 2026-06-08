@@ -5552,7 +5552,6 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
             value={newOC.client}
             onChange={(v)=>setNewOC(p=>({...p,client:v,client_id:null}))}
             onSelect={(c)=>setNewOC(p=>({...p,client:c.name,client_id:c.id}))}
-            clients={[]}
           />
           {newOC.client_id
             ? <div style={{fontSize:10,color:C.ok,marginTop:4,fontWeight:600}}>✓ Cliente vinculado por ID</div>
@@ -10306,7 +10305,7 @@ export default function PrintFlow() {
         showToast("🗑️ Orden borrada","error");
       }catch(e){console.error("[deleteOrder] Error:",e);showToast("❌ No se pudo borrar: "+(e?.message||"error desconocido"),"error");reload()}
     }});
-  },[orders,showToast,reload]);
+  },[orders,showToast,reload,user,userLogin]);  // v10.58.14: user+userLogin se usan al pasar p_actor a la RPC
 
   const cancelOrder=useCallback(async(id,reason)=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
