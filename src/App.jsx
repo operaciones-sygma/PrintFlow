@@ -5465,10 +5465,12 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
   }, [orders]);
 
   // Filtrar OCs candidatas: complejas, ACTIVAS (open/in_progress, no completed/cancelled),
-  // no folios_locked, distintas de la origen, CON ≥2 ÓRDENES (alineado con la vista
-  // principal de Órdenes de Compra que también oculta las simples).
+  // no folios_locked, distintas de la origen, CON ≥1 ORDEN ACTIVA.
   // v10.57.4 — solo activas (no completed/cancelled).
-  // v10.57.5 — Marcelo: además exigir ≥2 órdenes y que aparezcan en la vista de OCs.
+  // v10.57.5 — exigir ≥2 órdenes para alinear con la vista de OCs.
+  // v10.58.17 — Marcelo: bajar a ≥1. El alineamiento con la vista de OCs no aplica
+  // al modal de mover; aquí queremos ver TODOS los destinos válidos. Caso reportado:
+  // OC-0140 (Flecha Amarilla) con 1 orden activa quedaba oculta como destino legítimo.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     return purchaseOrders.filter(po =>
@@ -5477,7 +5479,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
       (po.status === "open" || po.status === "in_progress") &&
       po.folios_locked !== true &&
       po.id !== order?.purchase_order_id &&
-      (ordersPerOC[po.id] || 0) >= 2    // v10.57.5: solo OCs con 2+ órdenes activas
+      (ordersPerOC[po.id] || 0) >= 1    // v10.58.17: al menos 1 orden activa (excluye huérfanas pero incluye OCs con 1 sola orden viva)
     ).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   }, [purchaseOrders, search, order, ordersPerOC]);
