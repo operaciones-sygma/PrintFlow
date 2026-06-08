@@ -5,6 +5,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.58.13 — Fixes post-scan exhaustivo (3 agentes paralelos)
+
+Después del deploy de v10.58.12, un scan adversarial con 3 agentes encontró
+3 bugs reales que se aplicaron:
+
+### 🔴 CRÍTICO Bug #1: CobranzaFlow rompió silenciosamente desde v10.58.9
+
+CobranzaFlow llamaba credit_adjust/credit_deposit con p_user=user.id (UUID).
+El verify_actor_role (v10.58.9) busca por username en public.users → rechazaba
+con 42501 SIN logear (la RAISE EXCEPTION aborta antes del audit_log).
+Última operación exitosa: 2026-06-05 23:06. Cero operaciones exitosas hoy
+desde el deploy.
+
+Fix doble:
+1. Frontend CobranzaFlow v3.7.7.7: p_user: user.id → user.username
+2. Backend v10.58.13: verify_actor_role ahora busca en public.users PRIMERO,
+   y si no encuentra, en cobranza.users con mapping de roles:
+   - cobranza.direccion → 'admin' (Marcelo, Manuel)
+   - cobranza.cxc → 'karla' (Karla cuando llama desde CobranzaFlow)
+   - cobranza.tesoreria → 'tesoreria' (Lucero — NO se promueve a admin)
+   - otros mantienen su rol literal
+3. credit_deposit allowed_roles: agregado 'tesoreria' (Lucero registra OCs).
+   credit_adjust queda admin-only (Marcelo/Manuel mapean vía direccion→admin).
+
+Tests adversariales 7/7 pass: lucero/marcelo/manuel/karla/admin OK,
+genaro vendedor rechazado para admin-only, dulce contabilidad rechazada
+para credit_deposit.
+
+### 🟠 Bug #2: DROP overload 6-arg create_purchase_order
+
+Existía overload legacy sin LPAD ni gate. Bomba dormida: si un caller
+invocaba la 6-arg, generaba OCs sin padding mezcladas (OC-138 vs OC-0138),
+reactivando el problema de las 8 colisiones históricas. PrintFlow ya usa
+solo la 10-arg (con client_id+email+phone+rfc). Drop seguro.
+
+### 🟡 Bug #5: guard credit_applied_at en delete_order_with_cascade
+
+apply_credit_no_folio inserta client_credit_ledger con source_order_id.
+Las órdenes anticipo NO tienen invoice_folio, así que el guard original
+(que solo bloqueaba por folio fiscal) NO impedía borrarlas. Resultado:
+ledger CONSUMO huérfano + balance Corona del cliente inconsistente. Fix:
+nuevo guard `IF v_order.credit_applied_at IS NOT NULL THEN RAISE...`.
+También la RPC ahora usa verify_actor_role en lugar del check inline
+para uniformidad y cobertura cross-schema.
+
+Falsos positivos del scan (verificados):
+- Bug #7 throttle realtime sin clearTimeout: el cleanup SÍ tiene clearTimeout
+  en App.jsx:9430. No es bug.
+
+---
+
+
 ## v10.58.x — Sesión 8-jun-2026: bugs operacionales + security incremental
 
 Día de productividad alta: 8 versiones desplegadas atacando el scan exhaustivo
