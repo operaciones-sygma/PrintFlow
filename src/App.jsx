@@ -1231,7 +1231,7 @@ function ClientInput({value,onChange,onSelect,clients}) {
 function ClientConfirmModal({open,typed,matches,onResolve}) {
   if(!open)return null;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>onResolve("cancel")}>
-    <div style={{background:C.bg,borderRadius:14,padding:24,maxWidth:520,width:"90%",boxShadow:"0 12px 40px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+    <div role="dialog" aria-modal="true" aria-label="Confirmar cliente similar" style={{background:C.bg,borderRadius:14,padding:24,maxWidth:520,width:"90%",boxShadow:"0 12px 40px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
       <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -3391,8 +3391,8 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
   const numPrice=parseFloat(price);
   const validPrice=Number.isFinite(numPrice)&&numPrice>0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>💰 Capturar precio antes de entregar</h3>
+    <div role="dialog" aria-modal="true" aria-labelledby="pricecapture-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
+      <h3 id="pricecapture-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>💰 Capturar precio antes de entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product||order?.product_type||""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>{order?.production_number||""} · {order?.quantity||0} pzas</p>
 
@@ -9201,8 +9201,8 @@ function CreateOCModal({onCreate, onClose}){
     }
   };
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-      <h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",color:C.ac}}>🛒 Nueva Orden de Compra</h2>
+    <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+      <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,margin:"0 0 4px",color:C.ac}}>🛒 Nueva Orden de Compra</h2>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 18px"}}>Crea una OC para agrupar varios productos del mismo cliente</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div>
