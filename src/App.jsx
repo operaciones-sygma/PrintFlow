@@ -283,6 +283,15 @@ const ACTION_ROLES = {
   // por preprensa/german/admin para liberar storage. NO admin-only porque flujo
   // operativo (preprensa baja el archivo, lo manda a CTP, libera storage).
   delete_file:            { allowed:["admin","preprensa","german"], ownerBound:[] },
+  // v10.58.5 — Acciones críticas que faltaban en ACTION_ROLES (scan exhaustivo 2026-06-05).
+  // Antes confiaban solo en que el botón no aparezca para roles no autorizados; ahora gate
+  // server-style en handleAction (defense in depth contra DevTools/llamadas directas).
+  deliver_with_invoice: { allowed:["admin","karla","secretaria"], ownerBound:[] },
+  deliver_only:         { allowed:["admin","karla","secretaria"], ownerBound:[] },
+  pre_invoice:          { allowed:["admin","karla"], ownerBound:[] },
+  cancel_order:         { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
+  cancel_with_nc:       { allowed:["admin"], ownerBound:[] },
+  move_to_oc:           { allowed:["admin","secretaria","karla"], ownerBound:[] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
@@ -2251,7 +2260,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const totalOK = Number.isFinite(totalNum) && totalNum > 0;
   // MultiPaymentPicker espera SUBTOTAL SIN IVA (lo multiplica × 1.16 si factura).
   // Karla captura el total CON IVA si factura, SIN IVA si remisión.
-  const subtotalSinIVA = invoiceType==="factura" ? Math.round((totalNum/1.16)*100)/100 : totalNum;
+  // v10.58.5 F10: NO pre-redondear el subtotal. Si pre-redondeamos, el picker
+  // luego hace round((round(X/1.16))*116)/100 y puede diferir 1¢ vs round(X*100)
+  // → bloquea facturas grandes con "Cubierto" verde pero sumCents !== totalCents.
+  // Pasamos el cociente exacto y dejamos que el picker haga UN solo redondeo final.
+  const subtotalSinIVA = invoiceType==="factura" ? (totalNum/1.16) : totalNum;
 
   const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual);
   const validDest = !hasPooled || !!destClientId;
@@ -2421,7 +2434,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             <div style={{background:"#16a34a08",border:"1.5px solid "+(totalOK?"#16a34a40":"#ff950060"),borderRadius:10,padding:12,marginBottom:10}}>
               <label style={{...lbl,marginTop:0,fontSize:10,color:"#16a34a",fontWeight:700}}>💰 Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
               <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"monospace",color:"#16a34a",textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:"#ff950060")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
-              {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${subtotalSinIVA.toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
+              {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${(Math.round(subtotalSinIVA*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
             </div>
 
             {/* MultiPaymentPicker: estado de pago + multi-pago */}
@@ -3431,23 +3444,29 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [paymentRefs,setPaymentRefs]=useState([]);
   // v10.43.0 — Corona: detectar billing_mode del cliente al montar
   const [coronaInfo,setCoronaInfo]=useState(null); // {billing_mode, current_balance} o null
+  // v10.58.5 F1: trackear si el coronaInfo viene del FALLBACK (timeout/error de red) o de
+  // la respuesta real del servidor. Si es fallback, la 3ra opción Cuadra/Corona queda oculta
+  // aunque el cliente sí lo sea — banner + botón "Recargar" para que Karla reintente sin cerrar.
+  const [coronaInfoFallback,setCoronaInfoFallback]=useState(false);
+  const [coronaReloadKey,setCoronaReloadKey]=useState(0);
   useEffect(()=>{
     let alive=true;
     // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
-    if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});return}
+    if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(false);return}
     // v10.46.10 M5 — timeout 5s con fallback a billing_mode='normal' si la red queda colgada.
-    // Evita que botones del modal queden deshabilitados indefinidamente esperando coronaInfo.
     const timeoutId=setTimeout(()=>{
-      if(alive&&!coronaInfo){console.warn("[InvoiceModal] billing info timeout 5s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0})}
+      if(alive&&!coronaInfo){console.warn("[InvoiceModal] billing info timeout 5s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(true)}
     },5000);
     db.getClientBillingInfo(order.client_id,order.client).then(info=>{
-      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0})}
+      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0});setCoronaInfoFallback(!info)}
     }).catch(e=>{
       console.warn("[InvoiceModal] billing info:",e);
-      if(alive){clearTimeout(timeoutId);setCoronaInfo({billing_mode:"normal",current_balance:0})}
+      if(alive){clearTimeout(timeoutId);setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(true)}
     });
     return ()=>{alive=false;clearTimeout(timeoutId)};
-  },[order?.client_id,order?.client]);
+  },[order?.client_id,order?.client,coronaReloadKey]);
+  // v10.58.5 F1: trigger de retry — incrementa coronaReloadKey + reset coronaInfo.
+  const reloadCoronaInfo=()=>{setCoronaInfo(null);setCoronaInfoFallback(false);setCoronaReloadKey(k=>k+1)};
   const isCorona=coronaInfo?.billing_mode==="anticipo";
   // v10.46.0 — Cuadra: 3ra opción "Sin factura · Stock". Solo aplica a producciones (nuevas);
   // si la orden ya es una VENTA desde stock (stock_role='sale'), no permitimos volverla a stock.
@@ -3650,6 +3669,10 @@ function InvoiceModal({order,onConfirm,onClose}) {
       {!confirming ? <>
         <p style={{fontSize:12,color:C.tx,margin:"0 0 12px"}}>Selecciona el tipo de comprobante:</p>
         {coronaInfoLoading&&<div style={{fontSize:11,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8,textAlign:"center"}}>⏳ Cargando datos del cliente…</div>}
+        {coronaInfoFallback&&!coronaInfoLoading&&<div style={{fontSize:11,color:C.wn,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <div style={{flex:1}}>⚠️ Datos del cliente cargados parcialmente (red lenta). Si este cliente debería ver "Cargar a Stock" o "Aplicar saldo Corona", recarga.</div>
+          <button onClick={reloadCoronaInfo} style={{...bt(C.wn),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}>🔄 Recargar</button>
+        </div>}
         <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
           {tBtn("factura","Factura","📄","#5856d6",suggestion.factura)}
           {tBtn("remision","Remisión","📋","#34c759",suggestion.remision)}
@@ -5599,6 +5622,21 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       }]);
     }
   }, [activeMode, pendingCount, pendingOrders, splitGroups.length, suggestionByType.factura]);
+
+  // v10.58.5 F25/F27: si pendingOrders cambia mid-edit (Lupita facturó una orden del mismo
+  // cliente en paralelo, o admin canceló), purgar order_ids que ya no son elegibles. Sin esto,
+  // los grupos pueden submitir con IDs fantasma → factura por menos monto del esperado.
+  useEffect(()=>{
+    if (activeMode !== "split" || splitGroups.length === 0) return;
+    const validIds = new Set(pendingOrders.map(o=>o.id));
+    let changed = false;
+    const purged = splitGroups.map(g=>{
+      const filtered = g.order_ids.filter(id=>validIds.has(id));
+      if (filtered.length !== g.order_ids.length) changed = true;
+      return changed ? {...g, order_ids: filtered} : g;
+    });
+    if (changed) setSplitGroups(purged);
+  }, [pendingOrders, activeMode, splitGroups]);
 
   const allAssignedSet = useMemo(()=>new Set(splitGroups.flatMap(g=>g.order_ids)), [splitGroups]);
   const unassignedOrders = useMemo(()=>pendingOrders.filter(o=>!allAssignedSet.has(o.id)), [pendingOrders, allAssignedSet]);
@@ -10356,6 +10394,8 @@ export default function PrintFlow() {
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // v10.58.5 — Gate central de rol (antes confiaba solo en visibilidad del botón).
+      if(!canExecuteAction("deliver_with_invoice",o,user,userLogin)){showToast(actionDeniedToast("deliver_with_invoice",o,user,userLogin),"error");return}
       // v10.43.32 — Guards defensivos explícitos (mismo set de validaciones que el RPC y la UI).
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
       if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Esta orden no está en stage de salida (actual: "+o.stage+").","error");return}
@@ -10371,12 +10411,15 @@ export default function PrintFlow() {
     }
     // v10.31.0 — Orden con folio anticipado ya asignado: solo marcar entregada (sin re-pedir folio)
     if(action==="deliver_only"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // v10.58.5 — Gate central de rol.
+      if(!canExecuteAction("deliver_only",o,user,userLogin)){showToast(actionDeniedToast("deliver_only",o,user,userLogin),"error");return}
       if(!o.invoice_folio){console.error("[deliver_only] Orden sin invoice_folio, debería usar deliver_with_invoice");return}
       setDeliverOnlyModal(o);
     }
     // 🆕 v10.9.0 — Asignar folio anticipado (Karla/Admin desde DetailModal)
     if(action==="pre_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
-      if(user!=="karla"&&user!=="admin"){showToast("❌ Solo Karla y Admin pueden asignar folio anticipado","error");return}
+      // v10.58.5 — Gate via ACTION_ROLES (antes era check inline string-comparado).
+      if(!canExecuteAction("pre_invoice",o,user,userLogin)){showToast(actionDeniedToast("pre_invoice",o,user,userLogin),"error");return}
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado","error");return}
       const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
       if(isFinal){showToast("❌ No se puede facturar anticipado en stage final: "+o.stage,"error");return}
@@ -10386,7 +10429,8 @@ export default function PrintFlow() {
     }
     // 🆕 v10.9.0 — Cancelar orden con folio (solo admin, genera NC pendiente)
     if(action==="cancel_with_nc"){const o=orders.find(x=>x.id===id);if(!o)return;
-      if(user!=="admin"){showToast("❌ Solo Marcelo puede cancelar órdenes con folio fiscal","error");return}
+      // v10.58.5 — Gate via ACTION_ROLES (antes era check inline string-comparado).
+      if(!canExecuteAction("cancel_with_nc",o,user,userLogin)){showToast(actionDeniedToast("cancel_with_nc",o,user,userLogin),"error");return}
       if(!o.invoice_folio){showToast("❌ Esta orden no tiene folio. Usa la cancelación normal.","error");return}
       setCancelInvoicedModal(o);
     }
@@ -10592,6 +10636,8 @@ export default function PrintFlow() {
     // El primer branch (línea ~10374) ya cubre revert correctamente vía setRevertModal +
     // revertOrder(), que aplica todo el flujo con razón + getRevertOptions + side-effects.
     if(action==="cancel_order"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // v10.58.5 — Gate central de rol (vendedor solo en propias; antes solo gate de UI).
+      if(!canExecuteAction("cancel_order",o,user,userLogin)){showToast(actionDeniedToast("cancel_order",o,user,userLogin),"error");return}
       // 🆕 v10.7.0 — Bloquear cancelación si la orden tiene folio fiscal asignado
       if(o.invoice_folio){
         showToast("❌ No se puede cancelar: la orden tiene folio "+o.invoice_folio+" asignado.","error");
@@ -10601,6 +10647,8 @@ export default function PrintFlow() {
     }
     // ↔️ v10.11.0 Sub-fase A — Abrir modal de mover orden entre OCs (defensa en profundidad: el botón ya gatea pero validamos también aquí)
     if(action==="move_to_oc"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // v10.58.5 — Gate central de rol.
+      if(!canExecuteAction("move_to_oc",o,user,userLogin)){showToast(actionDeniedToast("move_to_oc",o,user,userLogin),"error");return}
       if(o.invoice_folio){showToast("❌ No se puede mover: tiene folio "+o.invoice_folio,"error");return}
       if(o.stage.includes("cancelled")||o.stage.includes("delivered")){showToast("❌ No se puede mover orden cancelada/entregada","error");return}
       if(!o.purchase_order_id){showToast("❌ Esta orden no pertenece a ninguna OC","error");return}
