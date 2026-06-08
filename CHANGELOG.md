@@ -5,6 +5,94 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.58.x — Sesión 8-jun-2026: bugs operacionales + security incremental
+
+Día de productividad alta: 8 versiones desplegadas atacando el scan exhaustivo
+del 5-jun-2026 + nueva capa de defense-in-depth en RPCs críticas.
+
+### v10.58.3 — TANDA 1: busy state en 3 modales
+- SellFromStockModal, PlateModal, WebRejectModal con patrón try/finally +
+  disable buttons + texto "⏳ ...". Previene duplicados por double-click.
+
+### v10.58.4 — TANDA 2: backend OC + bridge OC reraise
+- `ensure_purchase_order`: formato OC unificado `OC-NNNN` con LPAD.
+- `bulk_sell_from_stock`: deriva v_oc_id del MISMO counter que
+  ensure_purchase_order (antes MAX scan → race condition garantizada).
+- `sync_invoice_from_oc`: reraise SQLSTATE 22023 + P0001 (antes silenciaba
+  TODO → 8 facturas perdidas en mayo sin alerta).
+- Migration: v10_58_4_oc_format_unified_and_bridge_reraise.
+
+### v10.58.5 — TANDA 3: UI medianos
+- ACTION_ROLES gap: 6 acciones críticas agregadas (deliver_with_invoice,
+  deliver_only, pre_invoice, cancel_order, cancel_with_nc, move_to_oc) con
+  gates server-style en handlers via canExecuteAction.
+- BulkSell doble redondeo IVA: pasa cociente exacto al picker, único
+  redondeo final en display. Antes "Cubierto" verde bloqueaba botón en
+  facturas > $10k.
+- InvoiceModal timeout reloadable: nuevo state coronaInfoFallback +
+  botón "🔄 Recargar" cuando fallback se aplica por red lenta.
+- AssignOCFolioModal split: useEffect adicional purga order_ids cuando
+  pendingOrders cambia mid-edit.
+
+### v10.58.6 — TANDA 4: cross-app
+- `sync_cancellation_to_cobranza` rama LEGACY ahora prorrata si hay
+  siblings vivos del mismo shared_invoice_folio (antes cancelaba invoice
+  completa al cancelar 1 orden del batch bulk_sell).
+- Realtime postgres_changes ahora con trailing debounce 350ms. Antes:
+  Karla hacía 2 acciones rápidas → reload de la 1ra sobreescribía
+  optimistic de la 2da → "rebobinado" visible.
+
+### v10.58.7 — Scan de verificación findings
+- Backend: `sync_invoice_from_oc` ahora tiene `SET search_path`
+  (consistencia con las otras 3 funciones de la TANDA 2).
+- Frontend AssignOCFolioModal split purge: variable `changed` ya no se
+  reutiliza en el return del map (cada grupo evalúa su propio cambio).
+
+### v10.58.8 — RLS mínimo viable
+Descubrimiento: lockdown completo no es factible sin migrar a Supabase Auth
+nativa (PrintFlow hace 30+ escrituras directas a tablas que ahora son
+`public`). Marcelo eligió opción mínima: cerrar el vector más destructivo.
+- Nueva RPC `delete_order_with_cascade(order_id, actor)` SECURITY DEFINER
+  con validación de actor=admin y bloqueo de órdenes con folio fiscal.
+- REVOKE DELETE de anon/authenticated en 11 tablas críticas: orders,
+  purchase_orders, client_products, stock_movements, machines,
+  maintenance_log, chemical_log, plate_log, production_plans, order_waste,
+  order_machine_log.
+- App.jsx deleteOrder handler refactoreado para usar la RPC.
+- Mantienen DELETE permitido: notifications (cleanup natural del frontend),
+  order_timeline/comments/notes (triggers downstream pueden depender).
+
+### v10.58.9 — verify_actor_role helper + 4 RPCs gated
+Nueva capa de defense-in-depth contra suplantación: vendedor en DevTools
+ya no puede pasar `p_actor='admin'` en las RPCs más críticas.
+
+- Nuevo helper `public.verify_actor_role(p_actor, p_allowed_roles[])`:
+  consulta public.users, valida que actor exista, esté activo y tenga rol
+  permitido. RAISE EXCEPTION 42501 si no. Returns role on success.
+- 4/4 tests pasaron en migration (admin OK, karla → admin-only falla,
+  inexistente falla, NULL falla).
+- Gates aplicados a las RPCs más críticas:
+  - `credit_adjust` (admin only) — mueve $ del ledger Corona
+  - `credit_deposit` (admin, karla, secretaria) — registra OC a crédito
+  - `apply_credit_no_folio` (admin, karla) — consume saldo Corona
+  - `move_order_to_oc` (admin, secretaria, karla) — cambia ownership
+
+Pendiente para próxima sesión (6 RPCs grandes, mismo patrón):
+- `assign_invoice` (admin, karla, secretaria) — folios fiscales con
+  MultiPaymentPicker. 12 args, body enorme.
+- `assign_folio_to_oc` (admin, karla) — folio a OC
+- `assign_folios_split_oc` (admin, karla) — split folios mode
+- `bulk_sell_from_stock` (admin, karla) — venta + factura compartida
+- `sell_from_stock` (admin, karla, secretaria, vendedor) — venta legacy
+- `load_order_to_stock` (admin, secretaria, produccion, karla) — modifica
+  inventario Cuadra.
+
+Riesgo residual hoy: vendedor sigue pudiendo suplantar admin en esas 6 RPCs.
+Próxima sesión las aplicamos.
+
+---
+
+
 ## v10.57.1 — Fixes post-scan v10.57.0 (5 🔴 + 6 🟠) — 03-jun-2026
 
 3 agentes paralelos (backend SQL, frontend React, integration end-to-end) detectaron 5 🔴 críticos + 6 🟠 mayores tras el flag-off del bridge Corona en v10.57.0. Aplicados todos.
