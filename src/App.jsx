@@ -5464,23 +5464,37 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
     return map;
   }, [orders]);
 
-  // Filtrar OCs candidatas: complejas, ACTIVAS (open/in_progress, no completed/cancelled),
-  // no folios_locked, distintas de la origen, CON ≥1 ORDEN ACTIVA.
+  // Filtrar OCs candidatas: complejas, ACTIVAS, no folios_locked, MISMO CLIENTE, ≥1 orden viva.
   // v10.57.4 — solo activas (no completed/cancelled).
   // v10.57.5 — exigir ≥2 órdenes para alinear con la vista de OCs.
-  // v10.58.17 — Marcelo: bajar a ≥1. El alineamiento con la vista de OCs no aplica
-  // al modal de mover; aquí queremos ver TODOS los destinos válidos. Caso reportado:
-  // OC-0140 (Flecha Amarilla) con 1 orden activa quedaba oculta como destino legítimo.
+  // v10.58.17 — Marcelo: bajar a ≥1. El alineamiento con la vista de OCs no aplica al modal.
+  // v10.58.18 P1 — Filtrar por MISMO CLIENTE. Una OC = 1 RFC receptor en CFDI. El backend
+  // (move_order_to_oc) ahora también valida client_id matching; el filtro UI evita falsa
+  // esperanza al usuario.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return purchaseOrders.filter(po =>
-      !po.is_simple_oc &&
-      !po.is_web_oc &&                  // 🌐 v10.12.0 Sub-fase C — OCs web bloqueadas como destino de movimiento
-      (po.status === "open" || po.status === "in_progress") &&
-      po.folios_locked !== true &&
-      po.id !== order?.purchase_order_id &&
-      (ordersPerOC[po.id] || 0) >= 1    // v10.58.17: al menos 1 orden activa (excluye huérfanas pero incluye OCs con 1 sola orden viva)
-    ).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
+    const orderClientId = order?.client_id || null;
+    const orderClientText = (order?.client || "").trim().toLowerCase();
+    return purchaseOrders.filter(po => {
+      // Filtros base
+      if (po.is_simple_oc || po.is_web_oc) return false;
+      if (po.status !== "open" && po.status !== "in_progress") return false;
+      if (po.folios_locked === true) return false;
+      if (po.id === order?.purchase_order_id) return false;
+      if ((ordersPerOC[po.id] || 0) < 1) return false;
+      // v10.58.18: solo OCs del MISMO cliente (preferir client_id; fallback texto si null)
+      if (orderClientId && po.client_id) {
+        if (po.client_id !== orderClientId) return false;
+      } else if (orderClientId && !po.client_id) {
+        return false;  // inconsistencia: una con id, otra sin
+      } else if (!orderClientId && po.client_id) {
+        return false;  // inconsistencia inversa
+      } else {
+        // Ambas sin client_id → fallback comparar texto normalizado
+        if ((po.client || "").trim().toLowerCase() !== orderClientText) return false;
+      }
+      return true;
+    }).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   }, [purchaseOrders, search, order, ordersPerOC]);
 
