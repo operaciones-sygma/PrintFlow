@@ -2692,22 +2692,30 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   const [adjusting,setAdjusting]=useState(false); // modal interno para AJUSTE manual (solo admin)
   const [registering,setRegistering]=useState(false); // v10.43.11 — modal nuevo: registrar OC a crédito Corona
 
+  // v10.58.12 F18: alive ref + cleanup. Antes: si Marcelo cerraba el modal mientras
+  // listAnticipoClients seguía cargando, setClients/setSelectedId corrían sobre
+  // componente desmontado → warning React + ledger vacío en próximo render.
+  const reloadAliveRef = useRef(true);
   const reloadClients=async()=>{
     setLoadingClients(true);
     try{
       const list=await db.listAnticipoClients();
-      // v10.56.2: el sidebar solo lista LÍDERES. Los miembros de cada pool
-      // son visibles dentro del detalle del líder (pool_members + sufijo "sub-cuenta: X"
-      // en el ledger). Mostrar miembros como filas separadas confunde — un solo saldo
-      // compartido NO debe verse como 3 entradas.
-      // La lista completa (con miembros) sigue disponible para RegisterCoronaPOModal.
+      if(!reloadAliveRef.current)return;
       const leadersOnly=(list||[]).filter(c=>c.is_pool_leader);
       setClients(leadersOnly);
       if(leadersOnly.length>0&&!selectedId)setSelectedId(leadersOnly[0].id);
-    }catch(e){console.error("[CoronaModal] clients:",e);showToast("❌ Error: "+e.message,"error")}
-    finally{setLoadingClients(false)}
+    }catch(e){
+      if(!reloadAliveRef.current)return;
+      console.error("[CoronaModal] clients:",e);showToast("❌ Error: "+e.message,"error");
+    }
+    finally{ if(reloadAliveRef.current) setLoadingClients(false); }
   };
-  useEffect(()=>{reloadClients()},[]);
+  useEffect(()=>{
+    reloadAliveRef.current=true;
+    reloadClients();
+    return()=>{ reloadAliveRef.current=false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   useEffect(()=>{
     if(!selectedId)return;
@@ -3643,8 +3651,16 @@ function InvoiceModal({order,onConfirm,onClose}) {
     const sel=type===t;
     // v10.46.7 C2 — disabled mientras coronaInfo carga (evita seleccionar antes de ver 3er botón)
     const disabled=busy||coronaInfoLoading;
+    // v10.58.12 F2: confirmar antes de borrar paymentRefs ya capturados.
+    // Karla podía perder N pagos capturados por click accidental al ver el folio del otro tipo.
+    const handleTypeClick=()=>{
+      if(t===type)return; // mismo tipo, no-op
+      const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference;
+      if(hasWork && !window.confirm("Al cambiar el tipo se perderán los pagos y datos capturados. ¿Continuar?"))return;
+      setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
+    };
     return <button
-      onClick={()=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}}
+      onClick={handleTypeClick}
       disabled={disabled}
       style={{
         flex:1,
@@ -4027,8 +4043,19 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 
         <label style={lbl}>Tipo de comprobante</label>
         <div style={{display:"flex",gap:8,marginBottom:14}}>
-          <button onClick={()=>{setType("factura");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
-          <button onClick={()=>{setType("remision");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
+          {/* v10.58.12 F2: confirmar antes de borrar paymentRefs ya capturados (mismo fix que InvoiceModal) */}
+          {(()=>{
+            const switchType=(t)=>{
+              if(t===type)return;
+              const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference;
+              if(hasWork && !window.confirm("Al cambiar el tipo se perderán los pagos y datos capturados. ¿Continuar?"))return;
+              setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
+            };
+            return <>
+              <button onClick={()=>switchType("factura")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
+              <button onClick={()=>switchType("remision")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
+            </>;
+          })()}
         </div>
 
         {type&&<>
@@ -5412,13 +5439,14 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
   </div>;
 }
 
-function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove, onClose}) {
+function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove, onClose, showToast}) {
   useEscClose(onClose);
   const [mode, setMode] = useState("existing"); // "existing" | "new"
   const [search, setSearch] = useState("");
   const [targetId, setTargetId] = useState(null);
   // Pre-fill SOLO vendedor + delivery_date (NO client — forzar elección consciente para evitar errores de inercia)
-  const [newOC, setNewOC] = useState({client:"",vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
+  // v10.58.12 F31: client_id se captura si Karla selecciona del autocomplete; null si escribe libre.
+  const [newOC, setNewOC] = useState({client:"",client_id:null,vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
   const [saving, setSaving] = useState(false);
 
   // v10.57.5 — Conteo dinámico de órdenes activas (no canceladas) por OC.
@@ -5464,12 +5492,17 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
       } else {
         await onCreateAndMove({
           client: newOC.client.trim(),
+          client_id: newOC.client_id || null,  // v10.58.12 F31: pass client_id if selected
           vendedor: newOC.vendedor || null,
           deliveryDate: newOC.delivery_date || null,
           notes: newOC.notes.trim() || null
         });
       }
     } catch (e) {
+      // v10.58.12 F30: antes el catch solo hacía setSaving(false) sin feedback.
+      // Karla hacía click y "nada pasaba". Ahora mostramos el error real.
+      console.error("[MoveOrderModal] Error:", e);
+      if (showToast) showToast("❌ No se pudo mover: " + (e?.message || "error desconocido"), "error");
       setSaving(false);
     }
   };
@@ -5510,10 +5543,22 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
       </div>}
 
       {mode==="new" && <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        <div style={{fontSize:11,color:C.t2,marginBottom:2}}>Vendedor y fecha vienen pre-llenados de la orden origen. <strong>El cliente debe escribirse manualmente</strong> para evitar errores de inercia.</div>
+        <div style={{fontSize:11,color:C.t2,marginBottom:2}}>Vendedor y fecha vienen pre-llenados de la orden origen. <strong>Busca el cliente</strong> y selecciónalo del autocomplete para vincular bien la OC.</div>
         <div>
           <label style={lbl}>Cliente *</label>
-          <input style={{...inp,border:"1.5px solid "+(newOC.client.trim()?C.bd:C.dn+"40")}} value={newOC.client} onChange={e=>setNewOC(p=>({...p,client:e.target.value}))} placeholder="Razón social del cliente nuevo" autoFocus/>
+          {/* v10.58.12 F31: ClientInput typeahead. Si Karla selecciona del autocomplete,
+              guardamos client_id. Si escribe libre, queda sin id (comportamiento legacy). */}
+          <ClientInput
+            value={newOC.client}
+            onChange={(v)=>setNewOC(p=>({...p,client:v,client_id:null}))}
+            onSelect={(c)=>setNewOC(p=>({...p,client:c.name,client_id:c.id}))}
+            clients={[]}
+          />
+          {newOC.client_id
+            ? <div style={{fontSize:10,color:C.ok,marginTop:4,fontWeight:600}}>✓ Cliente vinculado por ID</div>
+            : newOC.client.trim()
+              ? <div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Cliente sin vincular — quedará como texto libre. Mejor selecciónalo del autocomplete.</div>
+              : null}
         </div>
         <div>
           <label style={lbl}>Vendedor</label>
@@ -10703,7 +10748,14 @@ export default function PrintFlow() {
   const hasFilter=isSec(user)||user==="admin";
   const viewOrders=useMemo(()=>{let list=orders;if(hasFilter&&orderFilter!=="all")list=list.filter(o=>!o.created_by||o.created_by===userLogin);return list},[orders,orderFilter,userLogin,hasFilter]);
 
-  const searchFilter=useCallback(o=>{if(!search)return true;const q=search.toLowerCase();return[o.client,o.product,o.id,o.product_type,o.maq_provider,o.maquila_provider,o.client_company,o.production_number,o.agent,o.notes,o.paper_type,o.finishes,o.client_phone,o.client_email,o.web_order_ref,o.cart_folio,o.web_folio,o.invoice_folio,o.standard_size,ssLabel(o.standard_size)].some(x=>x?.toLowerCase().includes(q))},[search]);
+  // v10.58.12 m11: búsqueda accent-insensitive. Antes "Garcia" no matcheaba "García".
+  // Normalize NFD descompone acentos en caracteres base + diacrítico; el regex los quita.
+  const searchFilter=useCallback(o=>{
+    if(!search)return true;
+    const norm=(s)=>String(s||"").normalize("NFD").replace(/\p{Diacritic}/gu,"").toLowerCase();
+    const q=norm(search);
+    return[o.client,o.product,o.id,o.product_type,o.maq_provider,o.maquila_provider,o.client_company,o.production_number,o.agent,o.notes,o.paper_type,o.finishes,o.client_phone,o.client_email,o.web_order_ref,o.cart_folio,o.web_folio,o.invoice_folio,o.standard_size,ssLabel(o.standard_size)].some(x=>norm(x).includes(q));
+  },[search]);
 
   // Global search filter applied on top of viewOrders
   const filteredOrders=useMemo(()=>search?viewOrders.filter(searchFilter):viewOrders,[viewOrders,search,searchFilter]);
@@ -10904,7 +10956,7 @@ export default function PrintFlow() {
       {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
-      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)}/>}
+      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
