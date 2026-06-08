@@ -90,6 +90,42 @@ Pendiente para próxima sesión (6 RPCs grandes, mismo patrón):
 Riesgo residual hoy: vendedor sigue pudiendo suplantar admin en esas 6 RPCs.
 Próxima sesión las aplicamos.
 
+
+### v10.58.10 — verify_actor_role en las 6 RPCs restantes (cobertura completa)
+
+Aplicado el mismo patrón a las 6 RPCs que quedaron pendientes ayer.
+Confirmado vía smoke test: 10/10 RPCs críticas tienen el gate.
+
+- `assign_folio_to_oc` (admin, karla) — folio a OC shared/consecutive
+- `sell_from_stock` (admin, karla, secretaria, vendedor) — venta legacy
+- `load_order_to_stock` (admin, secretaria, produccion, karla) — carga
+  a inventario Cuadra
+- `assign_folios_split_oc` (admin, karla) — split folios OC
+- `bulk_sell_from_stock` (admin, karla) — venta batch desde stock
+- `assign_invoice` (admin, karla, secretaria) — entry point principal
+  de Karla con MultiPaymentPicker. 12 args, body enorme.
+
+Verificación final (consulta SELECT proname, status):
+| RPC | allowed_roles |
+|---|---|
+| credit_adjust | admin |
+| credit_deposit | admin, karla, secretaria |
+| apply_credit_no_folio | admin, karla |
+| move_order_to_oc | admin, secretaria, karla |
+| assign_folio_to_oc | admin, karla |
+| sell_from_stock | admin, karla, secretaria, vendedor |
+| load_order_to_stock | admin, secretaria, produccion, karla |
+| assign_folios_split_oc | admin, karla |
+| bulk_sell_from_stock | admin, karla |
+| assign_invoice | admin, karla, secretaria |
+
+Pendiente real ahora:
+- Lockdown de INSERT/UPDATE en orders/purchase_orders (requiere migrar
+  a Supabase Auth nativa primero, ~1-2 días)
+- Bugs operacionales mayores del scan (~10 fixes UX, 4-6h en tandas)
+- OMAR Corona — esperando confirmación de Lupita
+- Tailwind utilities-only → full (cuando decida modernizar visualmente)
+
 ---
 
 
