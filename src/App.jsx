@@ -2731,8 +2731,9 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   const tipoColor=t=>t==="DEPOSITO"?"#10b981":t==="CONSUMO"?"#dc2626":t==="REVERSO"?"#0891b2":"#f59e0b";
   const tipoIcon=t=>t==="DEPOSITO"?"💰":t==="CONSUMO"?"📤":t==="REVERSO"?"↩️":"📊";
 
+  // v10.58.15 — role=dialog para accessibility
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
+    <div role="dialog" aria-modal="true" aria-label="Saldos a favor Corona" style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
           <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
@@ -3682,9 +3683,10 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
   // v10.43.31 FIX — maxHeight + overflowY para que el modal scrollee internamente cuando crece
   // v10.58.11 — backdrop guard: durante busy no cierra al click fuera (Karla pierde acción si lo hace).
+  // v10.58.15 F57 — role=dialog + aria-modal para accessibility (lectores de pantalla anuncian "diálogo abierto").
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📄 Asignar Folio Fiscal y Entregar</h3>
+    <div role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+      <h3 id="invoice-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📄 Asignar Folio Fiscal y Entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.cart_folio?" · 🛒 "+order.cart_folio:""}{order?.web_folio?" · "+order.web_folio:""}</p>
 
@@ -4029,10 +4031,10 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     </div>;
   }
 
-  // v10.58.11 — backdrop guard
+  // v10.58.11 — backdrop guard. v10.58.15 — role=dialog para accessibility.
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>⚡ Folio Anticipado</h3>
+    <div role="dialog" aria-modal="true" aria-labelledby="preinvoice-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+      <h3 id="preinvoice-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>⚡ Folio Anticipado</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.price?" · "+fmt(order.price):""}</p>
 
@@ -4168,10 +4170,11 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
     try { await onConfirm(); } finally { setBusy(false); }
   };
 
+  // v10.58.15 — role=dialog para accessibility
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
-      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>✅ Marcar como Entregada</h3>
+      <div role="dialog" aria-modal="true" aria-labelledby="deliveronly-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <h3 id="deliveronly-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>✅ Marcar como Entregada</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
         <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}</p>
 
@@ -5509,9 +5512,10 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
 
   const fromOC = order?.purchase_order_id;
 
+  // v10.58.15 — role=dialog para accessibility
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}>↔️ Mover orden a otra OC</h3>
+    <div role="dialog" aria-modal="true" aria-labelledby="moveorder-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
+      <h3 id="moveorder-modal-title" style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}>↔️ Mover orden a otra OC</h3>
       <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}{order?.production_number?" · "+order.production_number:""}</div>
@@ -8081,15 +8085,16 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       confirmLabel: "Sí, cancelar OC",
       confirmColor: "#ff3b30",
       onConfirm: async () => {
-        // v10.40.1 — cerrar modal inmediatamente, side effects en background
+        // v10.40.1 — cerrar modal inmediatamente, side effects en background.
+        // v10.58.15 M9: migrado de UPDATE crudo a RPC cancel_orphan_oc (SECURITY DEFINER).
+        // La RPC valida actor (admin/secretaria), re-verifica que OC sigue huérfana
+        // server-side (race), bloquea si hay folio fiscal asignado y audita en cobranza.
         setConfirmModal(null);
         try {
-          const { error } = await supabase.from("purchase_orders").update({
-            status: "cancelled",
-            cancelled_at: new Date().toISOString(),
-            cancelled_by: "admin",
-            cancellation_reason: "Limpieza desde Salud Operativa — sin órdenes activas"
-          }).eq("id", oc.id);
+          const { error } = await supabase.rpc("cancel_orphan_oc", {
+            p_oc_id: oc.id,
+            p_actor: role || "admin"
+          });
           if (error) throw new Error(error.message);
           showToast("✅ OC " + oc.id + " cancelada");
           reload();
@@ -9165,9 +9170,12 @@ function CreateOCModal({onCreate, onClose}){
   const canSubmit = f.client.trim().length > 0 && !saving;
   const s = (k,v) => setF(p => ({...p, [k]: v}));
   // 🆕 v10.14.0 — Typeahead select: aplica master + fallback a última orden
+  // v10.58.15 F50: agregado `!c.rfc` al guard. Antes si master tenía email+whatsapp
+  // pero NO rfc, el fallback a last_contact nunca se disparaba — el RFC quedaba vacío
+  // aunque last_contact tuviera uno disponible.
   const selC = async c => {
     setF(p => ({...p, client_id:c.id, client:c.name, client_email:c.email||"", client_phone:c.whatsapp||"", client_rfc:c.rfc||""}));
-    if (!c.email || !c.whatsapp) {
+    if (!c.email || !c.whatsapp || !c.rfc) {
       try {
         const {data} = await supabase.rpc("get_last_contact_for_client", {p_client_id: c.id});
         if (data) setF(p => ({...p, client_email:p.client_email||data.last_email||"", client_phone:p.client_phone||data.last_phone||"", client_rfc:p.client_rfc||data.last_rfc||""}));
