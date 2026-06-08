@@ -5464,42 +5464,46 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
     return map;
   }, [orders]);
 
-  // Filtrar OCs candidatas: complejas, ACTIVAS, no folios_locked, MISMO CLIENTE.
+  // Filtrar OCs candidatas: complejas, ACTIVAS, no folios_locked.
   // v10.57.4 — solo activas (no completed/cancelled).
   // v10.57.5 — exigir ≥2 órdenes para alinear con la vista de OCs.
-  // v10.58.17 — Marcelo: bajar a ≥1. El alineamiento con la vista de OCs no aplica al modal.
-  // v10.58.18 P1 — Filtrar por MISMO CLIENTE. Una OC = 1 RFC receptor en CFDI. El backend
-  // (move_order_to_oc) ahora también valida client_id matching; el filtro UI evita falsa
-  // esperanza al usuario.
-  // v10.58.20 — Marcelo: incluir también OCs con 0 órdenes activas (OCs creadas vacías
-  // o con todas sus órdenes terminadas/canceladas). Caso real: OC-0141 PRIME PET creada
-  // hoy sin productos como contenedor pre-creado para apilar órdenes.
+  // v10.58.17 — Marcelo: bajar a ≥1.
+  // v10.58.18 P1 — Filtrar por MISMO CLIENTE (CFDI safe).
+  // v10.58.20 — Permitir OCs con 0 órdenes activas (contenedores pre-creados).
+  // v10.58.21 — Marcelo: el filtro UI de "mismo cliente" era demasiado restrictivo cuando
+  // hay datos sucios (clientes duplicados como HOTEL HOTSSON vs INMOBILIARIA HOTSSON,
+  // orden registrada con un cliente metida en OC de otro). Solución: mostrar TODAS las
+  // OCs activas pero con badge visual (✓ Mismo cliente / ⚠️ Cliente distinto). El backend
+  // sigue rechazando clientes distintos como última línea de defensa CFDI; el frontend
+  // pide confirmación explícita antes de intentar.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     const orderClientId = order?.client_id || null;
     const orderClientText = (order?.client || "").trim().toLowerCase();
     return purchaseOrders.filter(po => {
-      // Filtros base
       if (po.is_simple_oc || po.is_web_oc) return false;
       if (po.status !== "open" && po.status !== "in_progress") return false;
       if (po.folios_locked === true) return false;
       if (po.id === order?.purchase_order_id) return false;
-      // v10.58.20: ya NO filtramos por ≥1 orden activa. Las OCs vacías son destino válido.
-      // v10.58.18: solo OCs del MISMO cliente (preferir client_id; fallback texto si null)
-      if (orderClientId && po.client_id) {
-        if (po.client_id !== orderClientId) return false;
-      } else if (orderClientId && !po.client_id) {
-        return false;  // inconsistencia: una con id, otra sin
-      } else if (!orderClientId && po.client_id) {
-        return false;  // inconsistencia inversa
-      } else {
-        // Ambas sin client_id → fallback comparar texto normalizado
-        if ((po.client || "").trim().toLowerCase() !== orderClientText) return false;
-      }
       return true;
+    }).map(po => {
+      // Calcular si es mismo cliente (preferir client_id, fallback texto)
+      let sameClient;
+      if (orderClientId && po.client_id) {
+        sameClient = po.client_id === orderClientId;
+      } else if (!orderClientId && !po.client_id) {
+        sameClient = (po.client || "").trim().toLowerCase() === orderClientText;
+      } else {
+        sameClient = false;  // una con id, otra sin → inconsistencia
+      }
+      return { ...po, _sameClient: sameClient };
     }).filter(po => !q || po.id.toLowerCase().includes(q) || (po.client||"").toLowerCase().includes(q))
-     .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
-  }, [purchaseOrders, search, order, ordersPerOC]);
+     .sort((a,b) => {
+       // Ordenar: mismo cliente primero, después por fecha
+       if (a._sameClient !== b._sameClient) return a._sameClient ? -1 : 1;
+       return new Date(b.created_at) - new Date(a.created_at);
+     });
+  }, [purchaseOrders, search, order]);
 
   const canSubmitExisting = mode === "existing" && !!targetId && !saving;
   const canSubmitNew = mode === "new" && newOC.client.trim().length > 0 && !saving;
@@ -5553,10 +5557,30 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
             ? <div style={{textAlign:"center",padding:"20px",color:C.t3,fontSize:12}}>Sin OCs candidatas{search?" para \""+search+"\"":""}</div>
             : candidates.map(po => {
                 const selected = targetId === po.id;
-                return <button key={po.id} onClick={()=>setTargetId(po.id)} style={{textAlign:"left",padding:"10px 12px",border:"1.5px solid "+(selected?C.ac:C.bd),borderRadius:10,background:selected?C.acL:C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                const sameClient = po._sameClient;
+                // v10.58.21: confirmación cuando cliente distinto.
+                const handleSelect = () => {
+                  if (!sameClient) {
+                    const orderClient = order?.client || "(sin cliente)";
+                    const targetClient = po.client || "(sin cliente)";
+                    const msg = "⚠️ ATENCIÓN — clientes distintos:\n\n" +
+                      "Orden: \"" + orderClient + "\"\n" +
+                      "OC destino: \"" + targetClient + "\"\n\n" +
+                      "Una OC = 1 RFC receptor en facturación electrónica. Si los facturas " +
+                      "juntos, mezclarías clientes en 1 folio fiscal (CFDI roto).\n\n" +
+                      "El servidor rechazará el movimiento. ¿Continuar de todos modos para ver el error?";
+                    if (!window.confirm(msg)) return;
+                  }
+                  setTargetId(po.id);
+                };
+                return <button key={po.id} onClick={handleSelect} style={{textAlign:"left",padding:"10px 12px",border:"1.5px solid "+(selected?C.ac:(sameClient?C.bd:"#ff950040")),borderRadius:10,background:selected?C.acL:(sameClient?C.bg:"#ff950008"),cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
                     <span style={{fontSize:13,fontWeight:800,color:C.ac}}>🛒 {po.id}</span>
-                    {selected && <span style={{fontSize:11,color:C.ac,fontWeight:700}}>✓ Seleccionada</span>}
+                    {selected
+                      ? <span style={{fontSize:11,color:C.ac,fontWeight:700}}>✓ Seleccionada</span>
+                      : sameClient
+                        ? <span style={{fontSize:10,color:"#34c759",fontWeight:700}}>✓ Mismo cliente</span>
+                        : <span style={{fontSize:10,color:"#ff9500",fontWeight:700}}>⚠️ Cliente distinto</span>}
                   </div>
                   <div style={{fontSize:12,fontWeight:600,marginTop:2,color:C.tx}}>{po.client}</div>
                   {(po.delivery_date||po.vendedor) && <div style={{fontSize:10,color:C.t2,marginTop:2}}>{po.delivery_date?"📅 "+fD(po.delivery_date):""}{po.delivery_date&&po.vendedor?" · ":""}{po.vendedor?"👤 "+po.vendedor:""}</div>}
