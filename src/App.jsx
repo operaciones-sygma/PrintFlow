@@ -5464,13 +5464,16 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
     return map;
   }, [orders]);
 
-  // Filtrar OCs candidatas: complejas, ACTIVAS, no folios_locked, MISMO CLIENTE, ≥1 orden viva.
+  // Filtrar OCs candidatas: complejas, ACTIVAS, no folios_locked, MISMO CLIENTE.
   // v10.57.4 — solo activas (no completed/cancelled).
   // v10.57.5 — exigir ≥2 órdenes para alinear con la vista de OCs.
   // v10.58.17 — Marcelo: bajar a ≥1. El alineamiento con la vista de OCs no aplica al modal.
   // v10.58.18 P1 — Filtrar por MISMO CLIENTE. Una OC = 1 RFC receptor en CFDI. El backend
   // (move_order_to_oc) ahora también valida client_id matching; el filtro UI evita falsa
   // esperanza al usuario.
+  // v10.58.20 — Marcelo: incluir también OCs con 0 órdenes activas (OCs creadas vacías
+  // o con todas sus órdenes terminadas/canceladas). Caso real: OC-0141 PRIME PET creada
+  // hoy sin productos como contenedor pre-creado para apilar órdenes.
   const candidates = useMemo(() => {
     const q = search.trim().toLowerCase();
     const orderClientId = order?.client_id || null;
@@ -5481,7 +5484,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
       if (po.status !== "open" && po.status !== "in_progress") return false;
       if (po.folios_locked === true) return false;
       if (po.id === order?.purchase_order_id) return false;
-      if ((ordersPerOC[po.id] || 0) < 1) return false;
+      // v10.58.20: ya NO filtramos por ≥1 orden activa. Las OCs vacías son destino válido.
       // v10.58.18: solo OCs del MISMO cliente (preferir client_id; fallback texto si null)
       if (orderClientId && po.client_id) {
         if (po.client_id !== orderClientId) return false;
