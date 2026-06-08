@@ -3372,13 +3372,16 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
 //     La orden quedará huérfana en CobranzaFlow hasta que se capture el precio después
 //     (sync_post_invoice_edit v10.46.6 la crea retroactivamente).
 function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
-  useEscClose(onClose);
+  // v10.58.11: backdrop+ESC guards durante busy (mismo patrón v10.55.1 F-M1 / v10.58.3).
+  const busyRef = useRef(false);
+  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const isMaq=order?.order_type==="maquila";
   const [price,setPrice]=useState("");
   const [busy,setBusy]=useState(false);
+  useEffect(()=>{ busyRef.current = busy; }, [busy]);
   const numPrice=parseFloat(price);
   const validPrice=Number.isFinite(numPrice)&&numPrice>0;
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>💰 Capturar precio antes de entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product||order?.product_type||""}</p>
@@ -3428,10 +3431,13 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 
 // ─── INVOICE MODAL (v10.7.0) ─── Karla asigna folio fiscal D-XXXX o R-XXXX
 function InvoiceModal({order,onConfirm,onClose}) {
-  useEscClose(onClose);
+  // v10.58.11: backdrop+ESC guards durante busy.
+  const busyRef = useRef(false);
+  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const [type,setType]=useState(null);
   const [folio,setFolio]=useState("");
   const [busy,setBusy]=useState(false);
+  useEffect(()=>{ busyRef.current = busy; }, [busy]);
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
   const [confirming,setConfirming]=useState(false);
   const [warnLow,setWarnLow]=useState(false); // confirmación si folio menor al sugerido
@@ -3659,8 +3665,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
   };
 
   // v10.43.31 FIX — maxHeight + overflowY para que el modal scrollee internamente cuando crece
-  // (caso reportado: paid + transferencia + ref bancaria + payment picker → botón Continuar fuera de vista)
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+  // v10.58.11 — backdrop guard: durante busy no cierra al click fuera (Karla pierde acción si lo hace).
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📄 Asignar Folio Fiscal y Entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
@@ -3849,12 +3855,15 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
 // ─── PRE-INVOICE MODAL (v10.9.0) ─── Karla asigna folio ANTICIPADO antes de entregar
 function PreInvoiceModal({order,onConfirm,onClose}) {
-  useEscClose(onClose);
+  // v10.58.11: backdrop+ESC guards durante busy.
+  const busyRef = useRef(false);
+  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const [type,setType]=useState(null);
   const [folio,setFolio]=useState("");
   const [reason,setReason]=useState("");
   const [reasonOther,setReasonOther]=useState("");
   const [busy,setBusy]=useState(false);
+  useEffect(()=>{ busyRef.current = busy; }, [busy]);
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
   const [confirming,setConfirming]=useState(false);
   const [warnLow,setWarnLow]=useState(false);
@@ -4004,7 +4013,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     </div>;
   }
 
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+  // v10.58.11 — backdrop guard
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>⚡ Folio Anticipado</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</p>
@@ -4107,8 +4117,11 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 // ─── DELIVER ONLY MODAL (v10.31.0) ─── Karla entrega orden que YA tiene folio anticipado
 // Detecta payment_status y muestra info contextual (legacy/unpaid/paid/partial)
 function DeliverOnlyModal({order, onConfirm, onClose}) {
-  useEscClose(onClose);
+  // v10.58.11: backdrop+ESC guards durante busy.
+  const busyRef = useRef(false);
+  useEscClose(useCallback(()=>{ if(!busyRef.current) onClose(); }, [onClose]));
   const [busy, setBusy] = useState(false);
+  useEffect(()=>{ busyRef.current = busy; }, [busy]);
 
   const isFactura = order?.invoice_type === "factura";
   const baseAmount = order?.order_type === "maquila"
@@ -4129,7 +4142,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
       <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
         <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>✅ Marcar como Entregada</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
