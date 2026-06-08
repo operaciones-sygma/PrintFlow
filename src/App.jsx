@@ -5006,7 +5006,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     const baseMsg="✅ Datos replicados de "+(src.production_number||"orden anterior");
     showToast?.(skuOmitted?baseMsg+" (SKU del catálogo omitido — pertenece a otro cliente)":baseMsg);
   };
-  const canP=isSec(role)||role==="admin";const hideC=role==="produccion"||role==="preprensa"||role==="german";
+  // v10.58.22: agregada karla. Marcelo pidió que Karla pueda editar precio de órdenes
+  // sin precio (era admin/secretaria/vendedor; karla queda incluida con mismo poder de edición).
+  const canP=isSec(role)||role==="admin"||role==="karla";const hideC=role==="produccion"||role==="preprensa"||role==="german";
   const specsOnly=editOrder?._specsOnly;
   // Compute missing required fields
   const missing=useMemo(()=>{
@@ -10860,7 +10862,8 @@ export default function PrintFlow() {
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
-  if(user==="secretaria")navs.push({id:"health",i:"📝",l:"Datos Pendientes"});
+  // v10.58.22: Karla también puede ver Datos Pendientes (vista incluye "Sin precio" con botón Editar Precio)
+  if(user==="secretaria"||user==="karla")navs.push({id:"health",i:"📝",l:"Datos Pendientes"});
   if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
   if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
   if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
@@ -10970,7 +10973,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&(user==="admin"||user==="secretaria")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
