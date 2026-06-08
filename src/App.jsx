@@ -5628,12 +5628,19 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   // los grupos pueden submitir con IDs fantasma → factura por menos monto del esperado.
   useEffect(()=>{
     if (activeMode !== "split" || splitGroups.length === 0) return;
+    // v10.58.7 — `changed` solo trackea si HUBO cambios para evitar setSplitGroups innecesario.
+    // El return de cada grupo evalúa SU PROPIO cambio (antes usaba `changed` global, lo que
+    // generaba refs nuevas para grupos sin cambios después del primer grupo afectado → renders
+    // desperdiciados + riesgo de loop si otros effects comparan por identidad).
     const validIds = new Set(pendingOrders.map(o=>o.id));
     let changed = false;
     const purged = splitGroups.map(g=>{
       const filtered = g.order_ids.filter(id=>validIds.has(id));
-      if (filtered.length !== g.order_ids.length) changed = true;
-      return changed ? {...g, order_ids: filtered} : g;
+      if (filtered.length !== g.order_ids.length) {
+        changed = true;
+        return {...g, order_ids: filtered};
+      }
+      return g;
     });
     if (changed) setSplitGroups(purged);
   }, [pendingOrders, activeMode, splitGroups]);
