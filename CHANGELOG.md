@@ -5,6 +5,101 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.58.18 + v10.58.19 — Post-scan exhaustivo #2 (3 agentes paralelos)
+
+Segundo scan exhaustivo del día con 3 agentes (backend + frontend regression
++ bug hunt adversarial). Veredicto: backend y frontend APROBADOS. Bug hunt
+detectó 2 P1 + 1 P2 + algunas deudas menores.
+
+### v10.58.18 — P1 #1 + P2 race
+
+🔴 P1 #1 — move_order_to_oc mezclaba clientes (CFDI roto)
+La RPC no validaba que client_id de orden y OC destino coincidieran. Karla
+podía mover Cristian a OC de Flecha Amarilla → mezcla 2 clientes en 1 folio
+fiscal (CFDI solo permite 1 RFC receptor).
+
+Fix doble:
+- Backend (migration v10_58_18_move_order_to_oc_client_id_match): compara
+  client_id (con fallback a texto si ambas son NULL).
+- Frontend (App.jsx:5476-5500): MoveOrderModal filtra candidatos por mismo
+  cliente. Ya no aparecen OCs de otros clientes como destino.
+
+Consecuencia operacional: este era EL bug que Marcelo reportó originalmente
+(Cristian → Flecha Amarilla solo veía Inmobiliaria Hotsson). Ahora si quiere
+mover Cristian, solo verá OCs activas de Cristian. Si no hay, usar "Crear OC
+nueva" en modo "new" del modal.
+
+🟠 P2 — cancel_orphan_oc race con INSERT concurrente
+Si tab A inicia INSERT orders.purchase_order_id=X sin commit aún y tab B
+ejecuta cancel_orphan_oc(X), B ve COUNT(*)=0 → cancela. A commitea después →
+orden activa en OC cancelada.
+
+Fix (migration v10_58_18_block_insert_into_cancelled_oc): nuevo trigger
+trg_block_insert_into_cancelled_oc BEFORE INSERT OR UPDATE OF
+purchase_order_id ON orders. SELECT FOR SHARE de la OC + RAISE si cancelled.
+El FOR SHARE serializa con el FOR UPDATE de cancel_orphan_oc.
+
+🔴 P1 #2 — DEUDA URGENTE: cancelOrder + cancel_with_nc UPDATE crudo
+cancelOrder (App.jsx:10334) y handlers cancel_with_nc (10529) usan
+supabase.from("orders").update() directo desde anon key. Las policies split
+de v10.58.14 bloquean DELETE pero INSERT/UPDATE siguen con qual=true. Un
+vendedor con DevTools puede:
+  await supabase.from("orders").update({stage:"cancelled"}).eq("id","X")
+Bypass de TODOS los ACTION_ROLES gates de UI.
+
+Solución correcta: migrar a Supabase Auth nativa + RLS verdadera con
+auth.uid() filtering por created_by/seller_id. Migrarlo ahora con RPCs
+ad-hoc no escala (~30 sitios con UPDATE directo en orders). Documentado en
+CHANGELOG para próxima ventana de mantenimiento.
+
+### v10.58.19 — Quick wins / deuda chica
+
+Fix #1 — pg_temp uniforme en 4 RPCs
+4 RPCs se quedaron sin pg_temp en search_path durante el lockdown v3.7.7.6:
+credit_adjust, credit_deposit, load_order_to_stock, sell_from_stock. ALTER
+FUNCTION quirúrgico agregándolo. Defensa en profundidad contra search_path
+attacks vía CREATE OBJECT en pg_temp.
+
+Fix #2 — REVOKE TRUNCATE en 11 tablas críticas
+anon/authenticated tenían grant TRUNCATE como arrastre histórico. TRUNCATE
+no es controlado por RLS — vector teórico si policies fallaran. Revocado
+en orders, purchase_orders, client_products, stock_movements, machines,
+maintenance_log, chemical_log, plate_log, production_plans, order_waste,
+order_machine_log.
+
+Fix #3 — Backfill 41 órdenes históricas terminales con client_id
+v10.58.16 cubrió las 15 activas. Las 41 históricas (37 delivered + 3
+maq_delivered + 1 cancelled) quedaron fuera. Las vinculé con el mismo
+LOWER(TRIM()) match. 41 → 0 (modulo seed marker del sistema, que NO debe
+tener cliente). Reportes y queries JOIN cobranza.clients ahora consistentes.
+
+Fix #4 — COMMENT convention en verify_actor_role
+Documentado el orden de búsqueda (public.users primero, cobranza.users
+fallback con mapping), los casos conocidos (karla y genaro safe), y el riesgo
+futuro (no crear username en public.users que ya exista en cobranza con rol
+distinto al mapping — sería elevación silenciosa de permisos).
+
+### Total backend después del scan #2
+
+| Tabla / RPC | Estado de security |
+|---|---|
+| 12 RPCs críticas | ✓ verify_actor_role gate |
+| 11 tablas | ✓ REVOKE DELETE + REVOKE TRUNCATE + policies SELECT/INSERT/UPDATE |
+| sync triggers | ✓ search_path lockdown completo |
+| verify_actor_role | ✓ Cross-schema con mapping documentado |
+| cancel_orphan_oc race | ✓ Trigger bloquea INSERT en OC cancelled |
+| move_order_to_oc | ✓ Valida client_id matching (CFDI safe) |
+
+Pendiente real para próxima sesión:
+- 🔴 P1 #2 (BIG ROCK): migrar a Supabase Auth nativa. Pre-requisito para RLS
+  completo en INSERT/UPDATE. Cierra el último vector de bypass via DevTools.
+  Estimado: 1-2 días + ventana de mantenimiento + testing exhaustivo.
+- 🟡 5 RPCs de CobranzaFlow bank reconciliation pasan user.id (UUID) —
+  funcionan hoy porque esperan UUID, pero si se gatean en el futuro romperán.
+
+---
+
+
 ## v10.58.13 — Fixes post-scan exhaustivo (3 agentes paralelos)
 
 Después del deploy de v10.58.12, un scan adversarial con 3 agentes encontró
