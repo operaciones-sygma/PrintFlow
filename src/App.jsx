@@ -9333,9 +9333,19 @@ export default function PrintFlow() {
   // Realtime subscription — reload when any client makes changes
   // Use ref to avoid recreating channel when reload changes (archiveLoaded toggle)
   const reloadRef=useRef(reload);reloadRef.current=reload;
+  // v10.58.6: trailing debounce de 350ms agrupa múltiples postgres_changes en un solo reload.
+  // Antes: cada change disparaba reload completo → si Karla hacía 2 acciones rápidas, el reload
+  // de la 1ra podía sobreescribir el optimistic de la 2da (parpadeo + "rebobinado").
+  const reloadDebounceRef = useRef(null);
   useEffect(() => {
     if (!user) return;
-    const doReload=()=>reloadRef.current();
+    const doReload = () => {
+      if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
+      reloadDebounceRef.current = setTimeout(() => {
+        reloadDebounceRef.current = null;
+        reloadRef.current();
+      }, 350);
+    };
     const channel = supabase.channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, doReload)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_timeline" }, doReload)
@@ -9349,7 +9359,11 @@ export default function PrintFlow() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_notes" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "purchase_orders" }, doReload)
       .subscribe((status) => { setConnected(status==="SUBSCRIBED"); });
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+      // v10.58.6: limpiar debounce pendiente al desmontar
+      if (reloadDebounceRef.current) { clearTimeout(reloadDebounceRef.current); reloadDebounceRef.current = null; }
+    };
   }, [user, notifKey]);
 
   // v10.15.0 — Bug 3: forzar reload cuando la pestaña regresa al foreground.
