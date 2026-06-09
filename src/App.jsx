@@ -706,6 +706,61 @@ const db = {
     if(error) throw new Error(error.message);
     return data || [];
   },
+  // 🆕 v10.58.36 — Plan matriz por OC: N facturas × M órdenes con porciones por celda.
+  // p_plan = {groups: [{label, folio, doc_type, pre_assigned, reason, lines: [{order_id, qty, amount}]}]}
+  // Backend valida cobertura parcial OK, Corona saldo FOR UPDATE leader, folios únicos cross-tabla.
+  async assignOCInvoiceSplitPlan(ocId, plan, actor) {
+    const {data, error} = await supabase.rpc("assign_oc_invoice_split_plan", {
+      p_oc_id: ocId,
+      p_plan: plan,
+      p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.36 — Cancela 1 línea individual (devolución parcial cliente)
+  async cancelOCInvoiceSplitLine(lineId, reason, actor) {
+    const {data, error} = await supabase.rpc("cancel_oc_invoice_split_line", {
+      p_line_id: lineId, p_reason: reason, p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.36 — Cancela 1 factura completa del plan (todas sus líneas)
+  async cancelOCInvoiceSplitGroup(groupId, reason, actor) {
+    const {data, error} = await supabase.rpc("cancel_oc_invoice_split_group", {
+      p_group_id: groupId, p_reason: reason, p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.36 — Pago consolidado: 1 SPEI distribuido entre N facturas del plan
+  async applyPaymentToOCSplitPlan(ocId, distribution, method, bankRef, paymentDate, actor) {
+    const {data, error} = await supabase.rpc("apply_payment_to_oc_split_plan", {
+      p_oc_id: ocId, p_distribution: distribution,
+      p_payment_method: method, p_bank_reference: bankRef,
+      p_payment_date: paymentDate, p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.36 — Obtener plan matriz de una OC (groups + lines)
+  async getOCSplitPlan(ocId) {
+    const {data: groups, error: gerr} = await supabase
+      .from("oc_invoice_split_groups")
+      .select("*")
+      .eq("purchase_order_id", ocId)
+      .order("position");
+    if(gerr) throw new Error(gerr.message);
+    if(!groups || groups.length === 0) return {groups: [], lines: []};
+    const groupIds = groups.map(g => g.id);
+    const {data: lines, error: lerr} = await supabase
+      .from("oc_invoice_split_lines")
+      .select("*")
+      .in("oc_invoice_split_group_id", groupIds);
+    if(lerr) throw new Error(lerr.message);
+    return {groups, lines: lines || []};
+  },
   // 🆕 v10.9.0 — Sugerencia del siguiente folio.
   // Calcula el GREATEST entre MAX(invoice_folio) en órdenes y invoice_counters.last_number,
   // luego devuelve +1. Esto resiste correcciones manuales Y BD vacía (donde MAX sería 0).
@@ -3921,6 +3976,454 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           {!coronaTypesValid && "• corona_saldo solo aplica a clientes Corona. "}
         </div>
       )}
+    </div>
+  </div>;
+}
+
+// ─── OC SPLIT MATRIX MODAL (v10.58.36) ──────────────────────────────────────
+// Plan matriz por OC: N facturas × M órdenes con porciones por celda.
+// Caso real KFC: 1 OC con varios productos (posters/folletos/tarjetas) facturada
+// por destino/sucursal (CDMX/GDL/MTY) donde cada factura lleva porciones de
+// todos los productos.
+//
+// Cobertura PARCIAL permitida: Karla puede dejar quantity restante para otro plan futuro.
+// Pre-asignación POR COLUMNA (cada factura su checkbox + reason).
+// 1 factura = 1 doc_type (mezcla entre facturas SÍ permitida).
+// IVA en captura: CON IVA si tipo factura, SIN IVA si remisión/corona_saldo.
+// Backend convierte a SIN IVA antes de almacenar.
+//
+// NO confundir con:
+// - "📑 Facturar por partes" (1 orden → N facturas, modal SplitInvoiceModal)
+// - "🔀 Dividir folios" del modal OC (N órdenes enteras → N folios, sin porciones)
+function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin}) {
+  // Órdenes elegibles para el plan
+  const eligibleOrders = useMemo(() =>
+    (ocOrders || []).filter(o =>
+      !o.invoice_folio &&
+      !o.oc_invoice_group_id &&
+      !o.has_splits &&  // sin splits individuales activos
+      ["salidas","maq_received"].includes(o.stage) &&
+      Number(o.order_type === "maquila" ? o.maq_price : o.price) > 0 &&
+      Number(o.quantity) > 0
+    ),
+    [ocOrders]
+  );
+
+  const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  // Helper precio unitario por orden
+  const priceUnit = (o) => {
+    const total = Number(o.order_type === "maquila" ? o.maq_price : o.price);
+    const qty = Number(o.quantity);
+    return qty > 0 ? total / qty : 0;
+  };
+
+  // Estado del modal
+  const [groupsCount, setGroupsCount] = useState(2);
+  const [groups, setGroups] = useState(() =>
+    Array.from({length: 2}, (_, i) => ({
+      label: "",
+      folio: "",
+      doc_type: "factura",
+      pre_assigned: false,
+      reason: "",
+      // lines: {[order_id]: {qty: number, amountConIva: number}}
+      lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0}]))
+    }))
+  );
+  const [saving, setSaving] = useState(false);
+  const [coronaInfo, setCoronaInfo] = useState(null);
+  const [folioSugFactura, setFolioSugFactura] = useState("");
+  const [folioSugRemision, setFolioSugRemision] = useState("");
+
+  // ESC + backdrop
+  useEffect(() => {
+    const onKey = e => { if(e.key === "Escape" && !saving) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [saving, onClose]);
+
+  // Cargar Corona info + folios sugeridos
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [info, sF, sR] = await Promise.all([
+          db.getClientBillingInfo(oc?.client_id, oc?.client),
+          db.getNextFolioSuggestion("factura"),
+          db.getNextFolioSuggestion("remision")
+        ]);
+        if(!alive) return;
+        setCoronaInfo(info || {billing_mode:"normal", current_balance:0});
+        setFolioSugFactura(sF || "");
+        setFolioSugRemision(sR || "");
+      } catch(e) {
+        if(alive) setCoronaInfo({billing_mode:"normal", current_balance:0});
+      }
+    })();
+    return () => { alive = false; };
+  }, [oc?.client_id, oc?.client]);
+
+  const isCorona = coronaInfo?.billing_mode === "anticipo";
+  const coronaBalance = Number(coronaInfo?.current_balance || 0);
+
+  // Auto-sugerir folios consecutivos cuando cambia groups o folioSug
+  useEffect(() => {
+    if(!folioSugFactura && !folioSugRemision) return;
+    const parseNum = f => {
+      const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+      return m ? parseInt(m[1], 10) : null;
+    };
+    const baseF = parseNum(folioSugFactura);
+    const baseR = parseNum(folioSugRemision);
+    setGroups(prev => {
+      let nextF = baseF, nextR = baseR;
+      return prev.map(g => {
+        if(g.doc_type === "corona_saldo") return {...g, folio: ""};
+        if(g.folio && g.folio.length > 2) return g;
+        if(g.doc_type === "factura" && nextF != null) {
+          const f = "D-" + nextF;
+          nextF += 1;
+          return {...g, folio: f};
+        }
+        if(g.doc_type === "remision" && nextR != null) {
+          const f = "R-" + nextR;
+          nextR += 1;
+          return {...g, folio: f};
+        }
+        return g;
+      });
+    });
+  }, [folioSugFactura, folioSugRemision, groups.length]);
+
+  // Conversión IVA por tipo
+  const sinIvaFromCaptured = (amountConIva, doc_type) =>
+    doc_type === "factura" ? Math.round((amountConIva / 1.16) * 100) / 100 : Math.round(amountConIva * 100) / 100;
+
+  // Setters
+  const updateGroup = (idx, patch) => setGroups(p => p.map((g, i) => i === idx ? {...g, ...patch} : g));
+  const updateCell = (groupIdx, orderId, patch) => {
+    setGroups(p => p.map((g, i) => {
+      if(i !== groupIdx) return g;
+      return {...g, lines: {...g.lines, [orderId]: {...g.lines[orderId], ...patch}}};
+    }));
+  };
+
+  // Cambiar cantidad → auto-calcula monto CON IVA proporcional
+  const onChangeQty = (groupIdx, order, val) => {
+    const qty = Math.max(0, parseInt(val||0, 10));
+    const g = groups[groupIdx];
+    const punit = priceUnit(order);
+    const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
+    const autoAmount = Math.round(qty * punitConIva * 100) / 100;
+    updateCell(groupIdx, order.id, {qty, amountConIva: autoAmount});
+  };
+
+  // Cambiar N groups
+  const setGroupsCountSafe = (n) => {
+    if(n < 1 || n > 10) return;
+    setGroupsCount(n);
+    setGroups(prev => {
+      if(n === prev.length) return prev;
+      if(n > prev.length) {
+        return [
+          ...prev,
+          ...Array.from({length: n - prev.length}, () => ({
+            label: "",
+            folio: "",
+            doc_type: "factura",
+            pre_assigned: false,
+            reason: "",
+            lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0}]))
+          }))
+        ];
+      }
+      return prev.slice(0, n);
+    });
+  };
+
+  // Cálculos por orden (cobertura)
+  const orderTotals = useMemo(() => {
+    const result = {};
+    for(const o of eligibleOrders) {
+      let qtySum = 0, amountSumSinIva = 0;
+      for(const g of groups) {
+        const cell = g.lines[o.id];
+        if(!cell) continue;
+        qtySum += Number(cell.qty||0);
+        amountSumSinIva += sinIvaFromCaptured(Number(cell.amountConIva||0), g.doc_type);
+      }
+      const totalQty = Number(o.quantity);
+      const totalAmount = Number(o.order_type === "maquila" ? o.maq_price : o.price);
+      result[o.id] = {
+        qtySum, amountSumSinIva,
+        totalQty, totalAmount,
+        qtyRemaining: totalQty - qtySum,
+        qtyOver: qtySum > totalQty,
+        // Consistencia: amount proporcional ± 1%
+        expectedAmount: totalQty > 0 ? Math.round((totalAmount * qtySum / totalQty) * 100) / 100 : 0,
+      };
+    }
+    return result;
+  }, [groups, eligibleOrders]);
+
+  // Total Corona requerido (suma de groups corona_saldo)
+  const coronaTotal = useMemo(() => {
+    let total = 0;
+    for(const g of groups) {
+      if(g.doc_type !== "corona_saldo") continue;
+      for(const oid of Object.keys(g.lines)) {
+        total += Number(g.lines[oid]?.amountConIva || 0);
+      }
+    }
+    return total;
+  }, [groups]);
+
+  // Total general
+  const planTotalConIva = useMemo(() => {
+    let total = 0;
+    for(const g of groups) {
+      for(const oid of Object.keys(g.lines)) {
+        const cell = g.lines[oid];
+        const c = Number(cell?.amountConIva || 0);
+        if(g.doc_type === "factura") total += c;
+        else total += c * 1.16; // remision/corona se muestra con IVA equivalente
+      }
+    }
+    return total;
+  }, [groups]);
+
+  // Validación
+  const folioRegex = /^[DR]-[1-9]\d*$/;
+  const validation = useMemo(() => {
+    const errors = [];
+    // Por orden: no overflow
+    for(const o of eligibleOrders) {
+      const t = orderTotals[o.id];
+      if(t && t.qtyOver) errors.push(`${o.production_number}: ${t.qtySum} > ${t.totalQty} pzas`);
+      if(t && t.qtySum > 0) {
+        const tol = Math.max(0.5, t.amountSumSinIva * 0.01);
+        if(Math.abs(t.amountSumSinIva - t.expectedAmount) > tol) {
+          errors.push(`${o.production_number}: monto inconsistente con qty (${fmtMx(t.amountSumSinIva)} vs esperado ${fmtMx(t.expectedAmount)})`);
+        }
+      }
+    }
+    // Por grupo: al menos 1 línea con qty > 0
+    const folioSet = new Set();
+    groups.forEach((g, i) => {
+      const hasAnyCell = Object.values(g.lines).some(c => Number(c.qty||0) > 0);
+      if(!hasAnyCell) errors.push(`Factura ${i+1}: sin líneas con cantidad`);
+      if(g.doc_type !== "corona_saldo") {
+        if(!folioRegex.test((g.folio||"").toUpperCase())) errors.push(`Factura ${i+1}: folio inválido`);
+        else {
+          const fu = g.folio.toUpperCase();
+          if(folioSet.has(fu)) errors.push(`Factura ${i+1}: folio ${fu} duplicado en plan`);
+          folioSet.add(fu);
+          const prefix = g.doc_type === "factura" ? "D-" : "R-";
+          if(!fu.startsWith(prefix)) errors.push(`Factura ${i+1}: folio ${fu} no matchea tipo ${g.doc_type}`);
+        }
+      }
+      if(g.doc_type === "corona_saldo" && !isCorona) {
+        errors.push(`Factura ${i+1}: corona_saldo requiere cliente Corona (este NO lo es)`);
+      }
+      if(g.pre_assigned && (g.reason||"").trim().length < 3) {
+        errors.push(`Factura ${i+1}: razón requerida para pre-asignación (mín 3 chars)`);
+      }
+    });
+    // Saldo Corona
+    if(coronaTotal > 0 && coronaTotal > coronaBalance) {
+      errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
+    }
+    return errors;
+  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona]);
+
+  const canSubmit = !saving && validation.length === 0 && eligibleOrders.length > 0;
+
+  // Submit
+  const handleSubmit = async () => {
+    if(!canSubmit) return;
+    setSaving(true);
+    try {
+      const plan = {
+        groups: groups.map(g => ({
+          label: g.label || null,
+          folio: g.doc_type === "corona_saldo" ? null : (g.folio||"").toUpperCase(),
+          doc_type: g.doc_type,
+          pre_assigned: g.pre_assigned,
+          reason: g.pre_assigned ? (g.reason||"").trim() : null,
+          lines: Object.entries(g.lines)
+            .filter(([oid, c]) => Number(c.qty||0) > 0)
+            .map(([oid, c]) => ({
+              order_id: oid,
+              qty: Number(c.qty),
+              amount: sinIvaFromCaptured(Number(c.amountConIva), g.doc_type)
+            }))
+        }))
+      };
+      await onConfirm(plan);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if(eligibleOrders.length === 0) {
+    return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520}}>
+        <h3 style={{fontSize:16,margin:"0 0 12px"}}>📊 Facturas por destino</h3>
+        <p style={{fontSize:13,color:C.t2}}>Esta OC no tiene órdenes elegibles para plan matriz. Requieren: stage salidas o maq_received, sin folio, sin splits/grupos previos, con precio y cantidad capturados.</p>
+        <div style={{marginTop:14,textAlign:"right"}}>
+          <button onClick={onClose} style={bt(C.sf,C.t2)}>Cerrar</button>
+        </div>
+      </div>
+    </div>;
+  }
+
+  return <div onClick={e=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto"}}>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6"}}>📊 Facturas por destino · {oc?.id}</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
+        Crea N facturas para esta OC, cada factura con porciones de varias órdenes (caso: 1 cliente con varios productos facturados por sucursal).
+        Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
+      </p>
+
+      {/* HEADER de contexto OC */}
+      <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{oc?.client}</div>
+            <div style={{fontSize:10,color:C.t2,marginTop:2}}>{eligibleOrders.length} órdenes elegibles</div>
+            {isCorona && <div style={{display:"inline-block",marginTop:6,padding:"2px 8px",background:"#10b98115",border:"1px solid #10b98140",borderRadius:6,fontSize:10,color:"#10b981",fontWeight:700}}>
+              💎 Cliente Corona · saldo: ${fmtMx(coronaBalance)} (sin IVA)
+            </div>}
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Plan total (con IVA)</div>
+            <div style={{fontSize:18,fontWeight:800,color:C.tx}}>${fmtMx(planTotalConIva)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Selector N facturas */}
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{...lbl,marginBottom:0}}>N facturas:</label>
+        {[2,3,4,5,6].map(n => (
+          <button key={n} onClick={()=>setGroupsCountSafe(n)}
+            style={{...bs(groups.length===n?"#5856d6":C.sf, groups.length===n?"#fff":C.t2),padding:"5px 11px",border:groups.length===n?"none":"0.5px solid "+C.bd}}>
+            {n}
+          </button>
+        ))}
+        <input type="number" min="1" max="10" value={groups.length}
+          onChange={e=>setGroupsCountSafe(parseInt(e.target.value||1,10))}
+          style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
+      </div>
+
+      {/* GRID: filas=órdenes, columnas=facturas */}
+      <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"auto",marginBottom:14,maxHeight:"50vh"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead style={{position:"sticky",top:0,background:C.sf,zIndex:2}}>
+            <tr>
+              <th style={{padding:"10px 8px",textAlign:"left",borderBottom:"0.5px solid "+C.bd,minWidth:160,position:"sticky",left:0,background:C.sf,zIndex:3}}>
+                <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Orden / Producto</div>
+              </th>
+              {groups.map((g, i) => (
+                <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:200}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <input value={g.label||""} placeholder={`Factura ${i+1} (ej. CDMX)`}
+                      onChange={e=>updateGroup(i, {label: e.target.value})}
+                      style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600}}/>
+                    <select value={g.doc_type}
+                      onChange={e=>updateGroup(i, {doc_type: e.target.value, folio: e.target.value==="corona_saldo" ? "" : g.folio})}
+                      style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto"}}>
+                      <option value="factura">📄 Factura D-</option>
+                      <option value="remision">📋 Remisión R-</option>
+                      {isCorona && <option value="corona_saldo">💎 Saldo Corona</option>}
+                    </select>
+                    {g.doc_type !== "corona_saldo" && (
+                      <input value={g.folio||""} placeholder={g.doc_type==="factura"?"D-XXXX":"R-XXXX"}
+                        onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
+                        style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
+                    )}
+                    <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,cursor:"pointer"}}>
+                      <input type="checkbox" checked={g.pre_assigned}
+                        onChange={e=>updateGroup(i, {pre_assigned: e.target.checked})}
+                        style={{accentColor:"#ff9500"}}/>
+                      🔒 Pre-asignada
+                    </label>
+                    {g.pre_assigned && (
+                      <input value={g.reason||""} placeholder="razón (3+ chars)"
+                        onChange={e=>updateGroup(i, {reason: e.target.value})}
+                        style={{...inp,padding:"4px 8px",fontSize:10}}/>
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {eligibleOrders.map(o => {
+              const t = orderTotals[o.id];
+              const punit = priceUnit(o);
+              return (
+                <tr key={o.id} style={{borderTop:"0.5px solid "+C.bd}}>
+                  <td style={{padding:"8px",position:"sticky",left:0,background:C.bg,zIndex:1,borderRight:"0.5px solid "+C.bd}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.tx}}>{o.production_number}</div>
+                    <div style={{fontSize:10,color:C.t2}}>{o.product || o.product_type}</div>
+                    <div style={{fontSize:10,color:C.t2}}>{Number(o.quantity).toLocaleString("es-MX")} pzas · ${fmtMx(punit)}/pza</div>
+                    <div style={{marginTop:4,padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,
+                      background: t?.qtyOver ? "#ff3b3010" : (t?.qtySum === 0 ? C.sf : (t?.qtyRemaining === 0 ? "#34c75910" : "#ff950010")),
+                      color: t?.qtyOver ? C.dn : (t?.qtySum === 0 ? C.t2 : (t?.qtyRemaining === 0 ? C.ok : C.wn))}}>
+                      {t?.qtySum||0} / {t?.totalQty||0}
+                      {t?.qtyRemaining > 0 && <span style={{marginLeft:4,fontWeight:500}}>· {t.qtyRemaining} pend</span>}
+                      {t?.qtyOver && <span style={{marginLeft:4,fontWeight:500}}>· sobra {t.qtySum - t.totalQty}</span>}
+                    </div>
+                  </td>
+                  {groups.map((g, gi) => {
+                    const cell = g.lines[o.id] || {qty:0, amountConIva:0};
+                    return (
+                      <td key={gi} style={{padding:"6px",borderLeft:"0.5px solid "+C.bd,verticalAlign:"top"}}>
+                        <input type="number" min="0" value={cell.qty||""}
+                          onChange={e=>onChangeQty(gi, o, e.target.value)}
+                          placeholder="0"
+                          style={{...inp,padding:"4px 8px",fontSize:11,width:"calc(100% - 16px)"}}/>
+                        <div style={{fontSize:9,color:C.t2,marginTop:2,textAlign:"right"}}>
+                          ${fmtMx(cell.amountConIva||0)} {g.doc_type === "factura" ? "c/IVA" : "s/IVA"}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Validación */}
+      {validation.length > 0 && (
+        <div style={{background:"#ff950010",border:"1px solid "+C.wn+"40",borderRadius:8,padding:10,marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.wn,marginBottom:4}}>⚠ {validation.length} {validation.length===1?"error":"errores"}:</div>
+          {validation.slice(0,6).map((e,i) => <div key={i} style={{fontSize:10,color:C.wn}}>• {e}</div>)}
+          {validation.length > 6 && <div style={{fontSize:10,color:C.t2}}>... y {validation.length-6} más</div>}
+        </div>
+      )}
+
+      {coronaTotal > 0 && (
+        <div style={{background:coronaTotal<=coronaBalance?"#10b98110":"#ff3b3010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+(coronaTotal<=coronaBalance?"#10b98140":C.dn+"40")}}>
+          <div style={{fontSize:11,fontWeight:700,color:coronaTotal<=coronaBalance?"#10b981":C.dn}}>
+            {coronaTotal<=coronaBalance ? "✓" : "⚠"} Saldo Corona: ${fmtMx(coronaTotal)} requerido / ${fmtMx(coronaBalance)} disponible
+          </div>
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>
+          Cancelar
+        </button>
+        <button onClick={handleSubmit} disabled={!canSubmit}
+          style={{...bt(canSubmit?"#5856d6":C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
+          {saving ? "Creando..." : `📊 Crear ${groups.length} ${groups.length===1?"factura":"facturas"}`}
+        </button>
+      </div>
     </div>
   </div>;
 }
@@ -9585,7 +10088,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, pendingOCId, onConsumedPendingOC}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, pendingOCId, onConsumedPendingOC}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
@@ -9731,6 +10234,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {canMoveExistingHere && <button onClick={canMoveExisting?()=>onAddExisting(selectedOC):undefined} disabled={!canMoveExisting} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canMoveExisting?"#16a34a":"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canMoveExisting?"pointer":"not-allowed"}}>📦 Agregar Producto Existente</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
+          {/* v10.58.36 — Plan matriz: N facturas con porciones por orden (caso KFC) */}
+          {canAssignFolio && allPendingReady && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px",background:"#5856d6",backgroundImage:"linear-gradient(135deg, #5856d6, #af52de)"}} title="Plan matriz: crea N facturas con porciones de varias órdenes en cada una (caso KFC: 1 OC con varios productos facturada por estado/sucursal). Cobertura parcial permitida.">📊 Facturas por destino</button>}
         </div>
       </div>
       {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}>🌐 Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
@@ -9935,6 +10440,7 @@ export default function PrintFlow() {
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
   const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
   const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
+  const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
   const [maintenance,setMaintenance]=useState([]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
@@ -11707,7 +12213,7 @@ export default function PrintFlow() {
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
@@ -11881,6 +12387,24 @@ export default function PrintFlow() {
           reload();
         }
       }} onClose={()=>{setInvoiceModal(null);setAllowNoPriceForOrder(null)}}/>}
+      {/* 🆕 v10.58.36 — Modal plan matriz por OC (KFC) */}
+      {ocMatrixModal&&<OCSplitMatrixModal
+        oc={ocMatrixModal.oc}
+        ocOrders={ocMatrixModal.orders}
+        user={user} userLogin={userLogin}
+        onConfirm={async(plan)=>{
+          try {
+            const actor = userLogin || user;
+            const result = await db.assignOCInvoiceSplitPlan(ocMatrixModal.oc.id, plan, actor);
+            showToast(`📊 ${result.groups_count} facturas creadas para OC ${ocMatrixModal.oc.id}`, "success");
+            setOcMatrixModal(null);
+            reload();
+          } catch(e) {
+            console.error("[assignOCInvoiceSplitPlan] Error:", e);
+            showToast("❌ "+(e?.message||"No se pudo crear el plan"), "error");
+          }
+        }}
+        onClose={()=>setOcMatrixModal(null)}/>}
       {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
       {splitInvoiceModal&&<SplitInvoiceModal order={splitInvoiceModal} user={user} userLogin={userLogin}
         onConfirm={async(payload)=>{
