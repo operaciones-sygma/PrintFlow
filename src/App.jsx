@@ -8049,9 +8049,21 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
   const [expandedSection, setExpandedSection] = useState({});
 
   // v10.32.0 — admin (Salud Operativa completa) o secretaria (Datos Pendientes con scope limitado)
-  if (role !== "admin" && role !== "secretaria") return null;
+  // v10.58.24: agregada karla. v10.58.22 habilitó la entrada de nav y el render exterior pero
+  // este return null interno seguía bloqueándole la vista (pantalla en blanco para Karla).
+  if (role !== "admin" && role !== "secretaria" && role !== "karla") return null;
 
   const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage)), [orders]);
+
+  // v10.58.24: listado de órdenes sin precio para Karla/Lupita/admin.
+  // hasPrice: precio o maq_price > 0.
+  const ordersWithoutPriceList = useMemo(
+    () => active.filter(o => {
+      const p = o.order_type === "maquila" ? Number(o.maq_price) : Number(o.price);
+      return !p || p <= 0;
+    }).sort((a,b) => new Date(a.created_at) - new Date(b.created_at)),
+    [active]
+  );
 
   const orderMoney = (o) => o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
   // v10.28.1 — slice(0,10) tolera due_date con timestamp legacy (e.g. "2026-05-17T00:00:00Z")
@@ -8198,10 +8210,11 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
-            {role === "secretaria" ? "📝 Datos Pendientes" : "🩺 Salud Operativa"}
+            {/* v10.58.24: karla ve mismo título que Lupita (Datos Pendientes) */}
+            {role === "admin" ? "🩺 Salud Operativa" : "📝 Datos Pendientes"}
           </h2>
           <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
-            {role === "secretaria" ? "Órdenes que requieren tu atención para completar datos." : "Supervisión diaria del taller. Última actualización: ahora."}
+            {role === "admin" ? "Supervisión diaria del taller. Última actualización: ahora." : "Órdenes que requieren tu atención para completar datos."}
           </p>
         </div>
         {role === "admin" && (
@@ -8249,6 +8262,68 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
             )}
           </div>
         </div>
+      )}
+
+      {/* v10.58.24: SECCIÓN "Sin precio capturado" — accesible para admin/secretaria/karla.
+          Lista órdenes activas que no tienen precio. Click "✏️ Editar Precio" abre el form. */}
+      {ordersWithoutPriceList.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
+            ⚠️ Órdenes sin precio capturado ({ordersWithoutPriceList.length})
+          </h3>
+          <div style={{
+            background: "#ff950008",
+            border: "1px solid #ff950040",
+            borderRadius: 12,
+            overflow: "hidden",
+            marginBottom: 24
+          }}>
+            {ordersWithoutPriceList.map((o, i) => (
+              <div key={o.id} style={{
+                padding: "10px 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                borderBottom: i < ordersWithoutPriceList.length - 1 ? "0.5px solid #ff950025" : "none"
+              }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
+                    {o.production_number || "—"} · {(o.client || "—").trim()}
+                    {o.order_type === "maquila" && <span style={{ marginLeft: 6, fontSize: 9, color: "#e67e22", background: "#e67e2218", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>MAQUILA</span>}
+                  </div>
+                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
+                    {SM[o.stage]?.l || o.stage}
+                    {o.agent && <> · 👤 {o.agent}</>}
+                    {o.created_by && o.created_by !== o.agent && <> · por {o.created_by}</>}
+                    {" · "}
+                    {(() => {
+                      const days = Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86400000);
+                      return days + (days === 1 ? " día" : " días");
+                    })()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => onAction(o.id, "edit")}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    background: "#ff9500",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    fontFamily: "'Poppins',sans-serif",
+                    flexShrink: 0
+                  }}
+                >
+                  ✏️ Editar Precio
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* SECCIÓN 2: Pulso por Responsable */}
