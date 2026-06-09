@@ -9987,6 +9987,34 @@ export default function PrintFlow() {
       delete safeUpdate.price;
       delete safeUpdate.maq_price;
     }
+    // v10.58.27 BUG HUNT: defense-in-depth adicional. El form bloquea production_number
+    // con `canEditProductionNumber` UI, pero handler update NO re-validaba. Vendedor con
+    // DevTools podría reasignar PN, client_id o agent — bug serio:
+    //   - Cambiar PN rompe auditoría
+    //   - Cambiar client_id post-folio desincroniza cobranza.invoices vs orders
+    //   - Cambiar agent permite reasignar ownership (un vendedor podría apropiarse de orden ajena)
+    // Bloqueamos los 3 en edit mode para non-admin.
+    if(originalOrder && user!=="admin"){
+      if("production_number" in safeUpdate && safeUpdate.production_number !== originalOrder.production_number){
+        delete safeUpdate.production_number;
+      }
+      // Si la orden tiene folio fiscal, también bloqueamos cambios de cliente (desincronizaría factura)
+      if(originalOrder.invoice_folio){
+        if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id){
+          delete safeUpdate.client_id;
+        }
+        if("client" in safeUpdate && safeUpdate.client !== originalOrder.client){
+          delete safeUpdate.client;
+        }
+        if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc){
+          delete safeUpdate.client_rfc;
+        }
+      }
+      // Cambio de agent solo permitido por admin/secretaria (no vendedor — no puede apropiarse)
+      if(user==="vendedor" && "agent" in safeUpdate && safeUpdate.agent !== originalOrder.agent){
+        delete safeUpdate.agent;
+      }
+    }
     // v10.43.6 FIX A5 — Si al editar el cliente quedó sin client_id (escrito a mano) pero
     // tiene nombre, intentar upsert para mantener vínculo correcto con cobranza.clients.
     // No-bloqueante: si falla, se guarda sin client_id (queda como antes).
@@ -10466,6 +10494,13 @@ export default function PrintFlow() {
 
   const cancelOrder=useCallback(async(id,reason)=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
+    // v10.58.27 BUG HUNT: agregado guard de ownership/role. Antes no validaba —
+    // un vendedor podía cancelar la orden de otro vendedor llamando handleAction directamente.
+    // ACTION_ROLES "cancel_order" = {admin, secretaria, vendedor} con ownerBound vendedor.
+    if(!canExecuteAction("cancel_order",o,user,userLogin)){
+      showToast(actionDeniedToast("cancel_order",o,user,userLogin),"error");
+      return;
+    }
     // v10.43.1 FIX A2 — Bloquear cancelación si la orden ya cargó/sacó stock.
     // El saldo del producto quedaría desincronizado (sigue inflado/reducido respecto a la realidad).
     // Para revertir: primero AJUSTE manual desde el módulo Inventario, después cancelar.
@@ -10477,7 +10512,11 @@ export default function PrintFlow() {
     const ns=o.order_type==="maquila"?"maq_cancelled":"cancelled";
     const cancelMsg="❌ Orden cancelada: "+(o.client||"")+" — "+(o.product_type||"")+". Motivo: "+reason;
     const wasInQueue=o.machine_queue_position!=null&&o.current_machine&&o.current_machine!=="vm_manual";
-    setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:ns,current_machine:null,machine_queue_position:null,machine_log:closeML(x),timeline:addTL(x,"❌ Cancelada: "+reason,{to:ns})}));
+    // v10.58.27 BUG HUNT: optimistic update incluye cancelled_at/cancelled_by/cancellation_reason
+    // (coherente con el UPDATE remoto y previene flicker UI entre optimistic y realtime).
+    const cancelledAtIso=new Date().toISOString();
+    const cancelledByActor=userLogin||user;
+    setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:ns,current_machine:null,machine_queue_position:null,cancelled_at:cancelledAtIso,cancelled_by:cancelledByActor,cancellation_reason:reason,machine_log:closeML(x),timeline:addTL(x,"❌ Cancelada: "+reason,{to:ns})}));
     try{
       // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente)
       let queueResult=null;
@@ -10513,7 +10552,7 @@ export default function PrintFlow() {
       showToast("❌ Orden cancelada","error");
     }catch(e){console.error("[cancelOrder] Error:",e);showToast("❌ No se pudo cancelar: "+(e?.message||"error desconocido"),"error");reload()}
     finally{setCancelModal(null)} // v10.28.1 — cerrar modal aunque falle
-  },[orders,user,showToast,reload]);
+  },[orders,user,userLogin,showToast,reload]); // v10.58.27: userLogin agregado a deps
 
   const addComment=useCallback(async(oid,c)=>{
     // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no comenta en órdenes ajenas
