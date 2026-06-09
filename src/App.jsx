@@ -671,6 +671,41 @@ const db = {
     if(error) throw new Error(error.message);
     return data;
   },
+  // 🆕 v10.58.34 — Asignar N facturas (splits) a una sola orden.
+  // splits: [{qty, amount (sin IVA), doc_type, folio (null si corona_saldo), pre_assigned, reason}]
+  // Backend valida SUM(qty)=order.quantity, SUM(amount)=order.price ±0.01, folios únicos,
+  // uniformidad pre_assigned (XOR), saldo Corona si hay corona_saldo. Atómico.
+  async assignInvoiceSplits(orderId, splits, actor) {
+    const {data, error} = await supabase.rpc("assign_invoice_splits", {
+      p_order_id: orderId,
+      p_splits: splits,
+      p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.34 — Cancelar 1 split individual (admin-only). Si era corona_saldo o
+  // factura con Corona consumida, reversa el ledger. Si todos los splits quedan
+  // cancelados, marca la orden como cancelled.
+  async cancelInvoiceSplit(splitId, reason, actor) {
+    const {data, error} = await supabase.rpc("cancel_invoice_split", {
+      p_split_id: splitId,
+      p_reason: reason,
+      p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.58.34 — Obtener splits de una orden (incluye cancelados para auditoría)
+  async getOrderSplits(orderId) {
+    const {data, error} = await supabase
+      .from("order_invoice_splits")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("position");
+    if(error) throw new Error(error.message);
+    return data || [];
+  },
   // 🆕 v10.9.0 — Sugerencia del siguiente folio.
   // Calcula el GREATEST entre MAX(invoice_folio) en órdenes y invoice_counters.last_number,
   // luego devuelve +1. Esto resiste correcciones manuales Y BD vacía (donde MAX sería 0).
@@ -3456,6 +3491,440 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
   </div>;
 }
 
+// ─── SPLIT INVOICE MODAL (v10.58.34) ─────────────────────────────────────────
+// Karla parte UNA orden de producción en N facturas con cantidades y montos
+// parciales. Soporta factura D-, remisión R-, y saldo Corona (sin folio).
+//
+// IMPORTANTE — captura CON IVA si tipo='factura':
+// El backend almacena amount_portion SIN IVA. El modal captura "Total CON IVA"
+// para alineación con el resto del sistema (MultiPaymentPicker, captura de
+// orden, modal OC) y convierte a SIN IVA antes de llamar al RPC.
+// Esto evita el bug Corona-IVA que detectó Marcelo.
+//
+// NO confundir con AssignOCFolioModal > "Dividir en N facturas" que arrastra
+// órdenes ENTERAS a grupos. Este modal divide UNA orden en porciones.
+function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
+  const isMaq = order?.order_type === "maquila";
+  const totalSinIva = Number(isMaq ? (order?.maq_price||0) : (order?.price||0));
+  const totalConIva = Math.round(totalSinIva * 116) / 100;
+  const totalQty = Number(order?.quantity || 0);
+  const priceUnitario = totalQty > 0 ? totalSinIva / totalQty : 0;
+
+  const [splitsCount, setSplitsCount] = React.useState(2);
+  const [splits, setSplits] = React.useState(() =>
+    Array.from({length: 2}, (_, i) => ({
+      qty: 0,
+      amountConIva: 0,    // captura CON IVA si factura/corona+factura
+      doc_type: "factura",
+      folio: "",
+      payment_status: "unpaid"
+    }))
+  );
+  const [allPreAssigned, setAllPreAssigned] = React.useState(false);
+  const [globalReason, setGlobalReason] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [coronaInfo, setCoronaInfo] = React.useState(null);
+  const [folioSugFactura, setFolioSugFactura] = React.useState("");
+  const [folioSugRemision, setFolioSugRemision] = React.useState("");
+
+  // ESC close (solo cuando NO está guardando)
+  React.useEffect(()=>{
+    const onKey = e=>{
+      if(e.key==="Escape" && !saving) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return ()=>window.removeEventListener("keydown", onKey);
+  }, [saving, onClose]);
+
+  // Cargar info Corona + folios sugeridos al abrir
+  React.useEffect(()=>{
+    let alive = true;
+    (async()=>{
+      try {
+        const [info, sF, sR] = await Promise.all([
+          db.getClientBillingInfo(order?.client_id, order?.client),
+          db.getNextFolioSuggestion("factura"),
+          db.getNextFolioSuggestion("remision")
+        ]);
+        if(!alive) return;
+        setCoronaInfo(info || {billing_mode:"normal", current_balance:0});
+        setFolioSugFactura(sF || "");
+        setFolioSugRemision(sR || "");
+      } catch(e) {
+        if(alive) setCoronaInfo({billing_mode:"normal", current_balance:0});
+      }
+    })();
+    return ()=>{ alive = false; };
+  }, [order?.client_id, order?.client]);
+
+  const isCorona = coronaInfo?.billing_mode === "anticipo";
+  const coronaBalance = Number(coronaInfo?.current_balance || 0);
+
+  // Auto-sugerir folios consecutivos al cargar las sugerencias o al cambiar splits
+  React.useEffect(()=>{
+    if(!folioSugFactura && !folioSugRemision) return;
+    const parseNum = f => {
+      const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+      return m ? parseInt(m[1], 10) : null;
+    };
+    const baseF = parseNum(folioSugFactura);
+    const baseR = parseNum(folioSugRemision);
+    setSplits(prev => {
+      let nextF = baseF, nextR = baseR;
+      return prev.map(s => {
+        // Solo auto-sugerir si folio vacío
+        if (s.doc_type === "corona_saldo") return {...s, folio: ""};
+        if (s.folio && s.folio.length > 2) return s;  // respetar lo que el usuario ya tecleó
+        if (s.doc_type === "factura" && nextF != null) {
+          const f = "D-" + nextF;
+          nextF += 1;
+          return {...s, folio: f};
+        }
+        if (s.doc_type === "remision" && nextR != null) {
+          const f = "R-" + nextR;
+          nextR += 1;
+          return {...s, folio: f};
+        }
+        return s;
+      });
+    });
+  }, [folioSugFactura, folioSugRemision, splits.length]); // intencional: queremos re-sugerir al cambiar count
+
+  const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
+
+  // Convertir CON IVA → SIN IVA (la BD guarda SIN IVA)
+  const amountToBackend = (amountConIva, doc_type) => {
+    // Si tipo es factura: el captado es CON IVA, dividir por 1.16
+    // Si tipo es remision o corona_saldo: ya es SIN IVA
+    if (doc_type === "factura") return Math.round((amountConIva / 1.16) * 100) / 100;
+    return Math.round(amountConIva * 100) / 100;
+  };
+
+  // Convertir SIN IVA → CON IVA (para display)
+  const sinIvaToConIva = (amountSinIva, doc_type) => {
+    if (doc_type === "factura") return Math.round(amountSinIva * 1.16 * 100) / 100;
+    return Math.round(amountSinIva * 100) / 100;
+  };
+
+  // Sumas validadas
+  const sumQty = splits.reduce((s, sp) => s + Number(sp.qty||0), 0);
+  const sumAmountSinIva = splits.reduce((s, sp) =>
+    s + amountToBackend(Number(sp.amountConIva||0), sp.doc_type), 0);
+  // Comparar contra el total SIN IVA (que es lo que el backend valida)
+  const qtyOk = sumQty === totalQty;
+  const amountOk = Math.abs(sumAmountSinIva - totalSinIva) <= 0.01;
+
+  // Saldo Corona requerido (solo splits de tipo corona_saldo)
+  const coronaTotalSinIva = splits
+    .filter(s => s.doc_type === "corona_saldo")
+    .reduce((s, sp) => s + Number(sp.amountConIva||0), 0);
+  const hasCoronaSaldo = coronaTotalSinIva > 0;
+  const coronaOk = !hasCoronaSaldo || coronaTotalSinIva <= coronaBalance;
+
+  // Validación de folios fiscales (factura/remision)
+  const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo");
+  const folioRegex = /^[DR]-[1-9]\d*$/;
+  const foliosFmtOk = foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
+  const foliosUnicos = (() => {
+    const set = new Set();
+    for (const s of foliosNoCorona) {
+      const f = (s.folio||"").toUpperCase();
+      if (set.has(f)) return false;
+      set.add(f);
+    }
+    return true;
+  })();
+  // Prefix correcto según tipo
+  const foliosPrefixOk = foliosNoCorona.every(s => {
+    const f = (s.folio||"").toUpperCase();
+    const prefix = s.doc_type === "factura" ? "D-" : "R-";
+    return f.startsWith(prefix);
+  });
+
+  const reasonOk = !allPreAssigned || (globalReason||"").trim().length >= 3;
+  const qtysOk = splits.every(s => Number(s.qty||0) > 0);
+  const amountsOk = splits.every(s => Number(s.amountConIva||0) > 0);
+  const splitsMin = splits.length >= 2;
+  const coronaTypesValid = !hasCoronaSaldo || isCorona;  // corona_saldo solo si cliente Corona
+
+  const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosUnicos
+                    && foliosPrefixOk && reasonOk && qtysOk && amountsOk && splitsMin
+                    && coronaOk && coronaTypesValid;
+
+  // Actions
+  const updateSplit = (idx, patch) => {
+    setSplits(prev => prev.map((s, i) => i === idx ? {...s, ...patch} : s));
+  };
+
+  const setSplitsCountSafe = (n) => {
+    if (n < 2 || n > 20) return;
+    setSplitsCount(n);
+    setSplits(prev => {
+      if (n === prev.length) return prev;
+      if (n > prev.length) {
+        return [
+          ...prev,
+          ...Array.from({length: n - prev.length}, () => ({
+            qty: 0,
+            amountConIva: 0,
+            doc_type: "factura",
+            folio: "",
+            payment_status: "unpaid"
+          }))
+        ];
+      }
+      return prev.slice(0, n);
+    });
+  };
+
+  const divideEqualBetweenN = () => {
+    if (!totalQty || !totalConIva || splits.length < 2) return;
+    const N = splits.length;
+    // Distribuir cantidad y monto CON IVA, con residuo al último split
+    const qtyBase = Math.floor(totalQty / N);
+    const amountBaseConIva = Math.round((totalConIva / N) * 100) / 100;
+    const newSplits = splits.map((s, i) => {
+      const isLast = i === N - 1;
+      const qty = isLast ? totalQty - qtyBase * (N - 1) : qtyBase;
+      const amountConIva = isLast
+        ? Math.round((totalConIva - amountBaseConIva * (N - 1)) * 100) / 100
+        : amountBaseConIva;
+      return {...s, qty, amountConIva};
+    });
+    setSplits(newSplits);
+  };
+
+  const onChangeQty = (idx, val) => {
+    const qty = Math.max(0, parseInt(val||0, 10));
+    const split = splits[idx];
+    // Auto-calcular monto proporcional usando precio unitario CON IVA
+    // (solo si el usuario aún no ha capturado un monto manualmente)
+    const priceUnitarioConIva = priceUnitario * (split.doc_type === "factura" ? 1.16 : 1);
+    const autoAmount = Math.round(qty * priceUnitarioConIva * 100) / 100;
+    updateSplit(idx, {qty, amountConIva: autoAmount});
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    try {
+      // Convertir el array al formato del backend (amount SIN IVA, folio null si corona_saldo)
+      const payload = splits.map(s => {
+        const amountSinIva = amountToBackend(Number(s.amountConIva), s.doc_type);
+        return {
+          qty: Number(s.qty),
+          amount: amountSinIva,
+          doc_type: s.doc_type,
+          folio: s.doc_type === "corona_saldo" ? null : (s.folio||"").toUpperCase(),
+          pre_assigned: allPreAssigned,
+          reason: allPreAssigned ? (globalReason||"").trim() : null,
+          payment_status: s.payment_status || "unpaid"
+        };
+      });
+      await onConfirm(payload);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ─── RENDER ───
+  return <div onClick={e=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:920,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}>📑 Facturar por partes · {order?.production_number}</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
+        Divide UNA orden en varias facturas con cantidades parciales.
+        No confundir con "🔀 Dividir en N facturas" del modal de OC (que agrupa órdenes enteras).
+      </p>
+
+      {/* HEADER de contexto */}
+      <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{order?.client}</div>
+            <div style={{fontSize:10,color:C.t2,marginTop:2}}>
+              {order?.product || ""} · {totalQty.toLocaleString("es-MX")} pzas
+              {priceUnitario>0 && <span> · ${fmtMx(priceUnitario)}/pza (sin IVA)</span>}
+            </div>
+            {isCorona && <div style={{display:"inline-block",marginTop:6,padding:"2px 8px",background:"#10b98115",border:"1px solid #10b98140",borderRadius:6,fontSize:10,color:"#10b981",fontWeight:700}}>
+              💎 Cliente Corona · saldo disponible: ${fmtMx(coronaBalance)} (sin IVA)
+            </div>}
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Total a dividir</div>
+            <div style={{fontSize:18,fontWeight:800,color:C.tx}}>${fmtMx(totalConIva)}</div>
+            <div style={{fontSize:10,color:C.t2}}>CON IVA · subtotal ${fmtMx(totalSinIva)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Selector de N + acción Dividir igual */}
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{...lbl,marginBottom:0}}>N facturas:</label>
+        {[2,3,4,5,6].map(n => (
+          <button key={n} onClick={()=>setSplitsCountSafe(n)}
+            style={{...bs(splits.length===n?C.ac:C.sf, splits.length===n?"#fff":C.t2),padding:"5px 11px",border:splits.length===n?"none":"0.5px solid "+C.bd}}>
+            {n}
+          </button>
+        ))}
+        <input type="number" min="2" max="20" value={splits.length}
+          onChange={e=>setSplitsCountSafe(parseInt(e.target.value||2,10))}
+          style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
+        <div style={{flex:1}}/>
+        <button onClick={divideEqualBetweenN}
+          style={{...bs("#5856d6"),padding:"6px 12px"}}>
+          🪄 Dividir igual entre {splits.length}
+        </button>
+      </div>
+
+      {/* Tabla de splits */}
+      <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"hidden",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"40px 100px 1fr 140px 140px",gap:0,padding:"8px 10px",background:C.sf,fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,borderBottom:"0.5px solid "+C.bd}}>
+          <div>#</div>
+          <div>Cantidad</div>
+          <div>Total <span style={{color:C.ac}}>CON IVA</span> · subtotal</div>
+          <div>Tipo</div>
+          <div>Folio</div>
+        </div>
+        {splits.map((s, i) => {
+          const subtotal = amountToBackend(Number(s.amountConIva||0), s.doc_type);
+          const isFactura = s.doc_type === "factura";
+          const isCoronaSld = s.doc_type === "corona_saldo";
+          return <div key={i} style={{display:"grid",gridTemplateColumns:"40px 100px 1fr 140px 140px",gap:0,padding:"10px",borderTop:i>0?"0.5px solid "+C.bd:"none",alignItems:"center"}}>
+            <div style={{fontWeight:700,color:C.ac,fontSize:13}}>{i+1}</div>
+            <div>
+              <input type="number" min="0" value={s.qty||""}
+                onChange={e=>onChangeQty(i, e.target.value)}
+                style={{...inp,padding:"6px 10px",fontSize:13,width:"90px"}}
+                placeholder="0"/>
+            </div>
+            <div>
+              <input type="number" step="0.01" min="0" value={s.amountConIva||""}
+                onChange={e=>updateSplit(i, {amountConIva: parseFloat(e.target.value)||0})}
+                style={{...inp,padding:"6px 10px",fontSize:13,width:"calc(100% - 10px)"}}
+                placeholder="0.00"/>
+              <div style={{fontSize:9,color:C.t2,marginTop:2,marginLeft:2}}>
+                {isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)"}
+              </div>
+            </div>
+            <div>
+              <select value={s.doc_type}
+                onChange={e=>updateSplit(i, {doc_type: e.target.value, folio: e.target.value==="corona_saldo" ? "" : s.folio})}
+                style={{...inp,padding:"6px 10px",fontSize:12,width:"130px",appearance:"auto"}}>
+                <option value="factura">📄 Factura D-</option>
+                <option value="remision">📋 Remisión R-</option>
+                {isCorona && <option value="corona_saldo">💎 Saldo Corona</option>}
+              </select>
+            </div>
+            <div>
+              {isCoronaSld ? (
+                <div style={{fontSize:11,color:C.t2,fontStyle:"italic",padding:"6px 0"}}>
+                  Sin folio fiscal
+                </div>
+              ) : (
+                <input type="text" value={s.folio||""}
+                  onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
+                  style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
+                  placeholder={isFactura ? "D-XXXX" : "R-XXXX"}/>
+              )}
+            </div>
+          </div>;
+        })}
+      </div>
+
+      {/* Validación visual (semáforos) */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+        <div style={{background:qtyOk?"#34c75910":"#ff950010",borderRadius:8,padding:10,border:"0.5px solid "+(qtyOk?C.ok:C.wn)+"40"}}>
+          <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
+          <div style={{fontSize:14,fontWeight:700,color:qtyOk?C.ok:C.wn}}>
+            {qtyOk ? "✓" : "⚠"} {sumQty.toLocaleString("es-MX")} / {totalQty.toLocaleString("es-MX")}
+          </div>
+          {!qtyOk && <div style={{fontSize:10,color:C.wn,marginTop:2}}>
+            {sumQty < totalQty ? `Faltan ${(totalQty-sumQty).toLocaleString("es-MX")}` : `Sobran ${(sumQty-totalQty).toLocaleString("es-MX")}`}
+          </div>}
+        </div>
+        <div style={{background:amountOk?"#34c75910":"#ff950010",borderRadius:8,padding:10,border:"0.5px solid "+(amountOk?C.ok:C.wn)+"40"}}>
+          <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Monto subtotal (sin IVA)</div>
+          <div style={{fontSize:14,fontWeight:700,color:amountOk?C.ok:C.wn}}>
+            {amountOk ? "✓" : "⚠"} ${fmtMx(sumAmountSinIva)} / ${fmtMx(totalSinIva)}
+          </div>
+          {!amountOk && <div style={{fontSize:10,color:C.wn,marginTop:2}}>
+            Diferencia ${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}
+          </div>}
+        </div>
+      </div>
+
+      {/* Saldo Corona requerido */}
+      {hasCoronaSaldo && (
+        <div style={{background:coronaOk?"#10b98110":"#ff3b3010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+(coronaOk?"#10b98140":C.dn+"40")}}>
+          <div style={{fontSize:11,fontWeight:700,color:coronaOk?"#10b981":C.dn}}>
+            {coronaOk ? "✓" : "⚠"} Saldo Corona requerido: ${fmtMx(coronaTotalSinIva)} (sin IVA) · disponible ${fmtMx(coronaBalance)}
+          </div>
+          {!coronaOk && <div style={{fontSize:10,color:C.dn,marginTop:2}}>
+            Faltan ${fmtMx(coronaTotalSinIva - coronaBalance)}. Reduce el saldo a aplicar o cambia algunos splits a factura/remisión.
+          </div>}
+        </div>
+      )}
+
+      {/* Validación folios */}
+      {(!foliosFmtOk || !foliosUnicos || !foliosPrefixOk) && (
+        <div style={{background:"#ff950010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn}}>
+          {!foliosFmtOk && <div>⚠ Algún folio tiene formato inválido (debe ser D-NNNN o R-NNNN sin leading zeros)</div>}
+          {!foliosPrefixOk && <div>⚠ El prefix del folio no coincide con el tipo seleccionado (factura→D-, remisión→R-)</div>}
+          {!foliosUnicos && <div>⚠ Hay folios duplicados en el plan</div>}
+        </div>
+      )}
+
+      {/* Pre-asignación global (todos o ninguno) */}
+      <div style={{background:allPreAssigned?"#ff950010":C.sf,borderRadius:8,padding:12,marginBottom:14,border:"0.5px solid "+(allPreAssigned?C.wn+"40":C.bd)}}>
+        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,fontWeight:600,color:allPreAssigned?C.wn:C.tx}}>
+          <input type="checkbox" checked={allPreAssigned}
+            onChange={e=>setAllPreAssigned(e.target.checked)}
+            style={{accentColor:C.wn,transform:"scale(1.2)"}}/>
+          🔒 Pre-asignar TODOS los folios (anticipados, orden NO pasa a entregada)
+        </label>
+        <div style={{fontSize:10,color:C.t2,marginTop:4,marginLeft:24}}>
+          v10.58.34: la pre-asignación es <strong>uniforme</strong> (todos los splits o ninguno). Esto evita estados de stage ambiguos.
+        </div>
+        {allPreAssigned && (
+          <div style={{marginTop:10}}>
+            <label style={lbl}>Razón global de la pre-asignación (mínimo 3 caracteres)</label>
+            <input type="text" value={globalReason}
+              onChange={e=>setGlobalReason(e.target.value)}
+              style={{...inp,padding:"8px 12px",fontSize:13}}
+              placeholder="Ej. pago adelantado parcial Cervecería"/>
+          </div>
+        )}
+      </div>
+
+      {/* Total y submit */}
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>
+          Cancelar
+        </button>
+        <button onClick={handleSubmit} disabled={!canSubmit}
+          style={{...bt(canSubmit?C.ac:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
+          {saving ? "Creando..." : `📑 Crear ${splits.length} ${splits.length===1?"folio":"folios"}`}
+        </button>
+      </div>
+
+      {!canSubmit && !saving && (
+        <div style={{fontSize:10,color:C.t2,marginTop:8,textAlign:"center"}}>
+          {!qtyOk && "• Suma cantidades no cuadra. "}
+          {!amountOk && "• Suma montos no cuadra. "}
+          {!foliosFmtOk && "• Folios con formato inválido. "}
+          {!foliosUnicos && "• Folios duplicados. "}
+          {!foliosPrefixOk && "• Prefix no coincide con tipo. "}
+          {!reasonOk && "• Razón pre-asignación corta. "}
+          {!qtysOk && "• Hay splits con cantidad 0. "}
+          {!amountsOk && "• Hay splits con monto 0. "}
+          {!coronaOk && "• Saldo Corona insuficiente. "}
+          {!coronaTypesValid && "• corona_saldo solo aplica a clientes Corona. "}
+        </div>
+      )}
+    </div>
+  </div>;
+}
+
 // ─── INVOICE MODAL (v10.7.0) ─── Karla asigna folio fiscal D-XXXX o R-XXXX
 function InvoiceModal({order,onConfirm,onClose}) {
   // v10.58.11: backdrop+ESC guards durante busy.
@@ -6149,6 +6618,25 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {o.cart_folio&&!compact&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{fontSize:16,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {o.cart_folio}</span></div>}
         {o.web_folio&&!compact&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
         {o.invoice_folio&&!compact&&<div style={{fontSize:13,fontWeight:800,color:o.invoice_type==="factura"?"#5856d6":"#34c759",letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?"⚡ ":""}{o.invoice_type==="factura"?"📄":"📋"} {o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:"#ff9500",marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:"#34c759",marginLeft:6,fontWeight:700,padding:"1px 6px",background:"#34c75915",borderRadius:4}}>✅ PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:"#5856d6",marginLeft:6,fontWeight:700,padding:"1px 6px",background:"#5856d615",borderRadius:4}}>🔶 PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
+        {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
+        {o.has_splits&&!compact&&<div style={{fontSize:11,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
+          📑 Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
+          <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+            {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
+              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{color:C.t2,fontFamily:"'Poppins',sans-serif",fontWeight:500}}>#{s.position}</span>
+                {s.doc_type==="corona_saldo"
+                  ? <span style={{color:"#10b981"}}>💎 saldo Corona</span>
+                  : <span style={{color:s.doc_type==="factura"?"#5856d6":"#34c759"}}>{s.doc_type==="factura"?"📄":"📋"} {s.invoice_folio}</span>}
+                <span style={{color:C.t2,fontFamily:"'Poppins',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                {s.invoice_pre_assigned&&<span style={{color:"#ff9500",fontSize:9,fontFamily:"'Poppins',sans-serif",fontWeight:700}}>⚡ anticipado</span>}
+              </div>
+            ))}
+            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:9,color:C.t2,marginTop:2,fontStyle:"italic"}}>
+              {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
+            </div>}
+          </div>
+        </div>}
         {o.has_post_invoice_edits&&!compact&&<div style={{fontSize:10,color:"#ff9500",fontWeight:600,marginBottom:4,padding:"3px 8px",background:"#ff950010",borderRadius:6,display:"inline-block",border:"1px solid #ff950025"}} title="Esta orden fue editada después de tener folio fiscal asignado">⚠️ Editada después de facturar</div>}
         {o.needs_reprint&&!compact&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}>🖨️⚠️ REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
@@ -6208,6 +6696,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio.">📦 Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)">📑 Facturar por partes</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}>⚙️ Proveedor Trabajando</button>}
@@ -6223,6 +6713,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         </>;
       })()}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {/* v10.58.34 — Facturar por partes para maquila */}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales">📑 Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
@@ -9441,6 +9933,8 @@ export default function PrintFlow() {
   const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
+  const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
+  const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
   const [maintenance,setMaintenance]=useState([]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
@@ -9470,11 +9964,27 @@ export default function PrintFlow() {
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
   // When archive loaded: loads everything including related data for historical (full)
   const reload = useCallback(async () => {
-    const [data, pos] = await Promise.all([
+    const [data, pos, splitsResp] = await Promise.all([
       db.loadOrders(!archiveLoadedRef.current),
-      db.loadPurchaseOrders()
+      db.loadPurchaseOrders(),
+      // v10.58.34: cargar splits en paralelo y mergear con orders
+      supabase.from("order_invoice_splits")
+        .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by")
+        .order("position")
     ]);
-    setOrders(data);
+    const splitsArr = splitsResp?.data || [];
+    const splitsByOrder = {};
+    for (const s of splitsArr) {
+      if (!splitsByOrder[s.order_id]) splitsByOrder[s.order_id] = [];
+      splitsByOrder[s.order_id].push(s);
+    }
+    const withSplits = data.map(o => {
+      const sps = splitsByOrder[o.id];
+      if (!sps || sps.length === 0) return o;
+      const alive = sps.filter(s => !s.cancelled_at);
+      return {...o, splits: sps, has_splits: alive.length > 0, splits_alive_count: alive.length};
+    });
+    setOrders(withSplits);
     setPurchaseOrders(pos);
     setLoaded(true);
   }, []);
@@ -10725,6 +11235,20 @@ export default function PrintFlow() {
     }
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
+    // v10.58.34 — Facturar por partes: abre SplitInvoiceModal
+    if(action==="split_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
+      // Gate: alineado con assign_invoice_splits backend (admin/karla only)
+      if(user!=="admin"&&user!=="karla"){showToast("❌ Solo admin o Karla pueden facturar por partes.","error");return}
+      if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+      if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Solo en stage salidas o maq_received.","error");return}
+      if(!o.production_number){showToast("❌ La orden no tiene número de producción.","error");return}
+      const priceField=o.order_type==="maquila"?o.maq_price:o.price;
+      if(!priceField||Number(priceField)<=0){showToast("❌ Captura el precio antes de facturar por partes.","error");return}
+      if(!o.quantity||Number(o.quantity)<=0){showToast("❌ La orden necesita cantidad capturada para facturar por partes.","error");return}
+      if(o.oc_invoice_group_id){showToast("❌ Esta orden está en grupo OC compartido. Cancela el grupo antes de splittear.","error");return}
+      setSplitInvoiceModal(o);
+      return;
+    }
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
       // v10.58.5 — Gate central de rol (antes confiaba solo en visibilidad del botón).
       if(!canExecuteAction("deliver_with_invoice",o,user,userLogin)){showToast(actionDeniedToast("deliver_with_invoice",o,user,userLogin),"error");return}
@@ -11357,6 +11881,23 @@ export default function PrintFlow() {
           reload();
         }
       }} onClose={()=>{setInvoiceModal(null);setAllowNoPriceForOrder(null)}}/>}
+      {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
+      {splitInvoiceModal&&<SplitInvoiceModal order={splitInvoiceModal} user={user} userLogin={userLogin}
+        onConfirm={async(payload)=>{
+          try {
+            const actor = userLogin || user;
+            const result = await db.assignInvoiceSplits(splitInvoiceModal.id, payload, actor);
+            const corona = result?.has_corona_saldo ? " (incl. saldo Corona)" : "";
+            const preMsg = result?.all_pre_assigned ? " pre-asignados" : "";
+            showToast(`📑 ${result.splits_count} folios${preMsg}${corona} para ${splitInvoiceModal.production_number}`, "success");
+            setSplitInvoiceModal(null);
+            reload();
+          } catch(e) {
+            console.error("[assignInvoiceSplits] Error:", e);
+            showToast("❌ "+(e?.message||"No se pudo crear los splits"), "error");
+          }
+        }}
+        onClose={()=>setSplitInvoiceModal(null)}/>}
       {/* 🆕 v10.9.0 — Modal de folio anticipado (Karla asigna antes de producir) */}
       {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs)=>{
         try{
