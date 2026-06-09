@@ -10472,7 +10472,18 @@ export default function PrintFlow() {
       if(wasInQueue){
         queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
       }
-      const upd={stage:ns,current_machine:null,machine_queue_position:null};
+      // v10.58.25: agregados cancelled_at/cancelled_by/cancellation_reason para que el trigger
+      // sync_cancellation_to_cobranza se dispare (chequea IF NEW.cancelled_at IS NULL → RETURN).
+      // Antes faltaban estos 3 campos → trigger NO ejecutaba → cobranza nunca enteraba.
+      // Hoy no se manifestaba porque las órdenes con credit_applied_at están en stage final.
+      const upd={
+        stage:ns,
+        current_machine:null,
+        machine_queue_position:null,
+        cancelled_at:new Date().toISOString(),
+        cancelled_by:userLogin||user,
+        cancellation_reason:reason
+      };
       const {error}=await supabase.from("orders").update(upd).eq("id",id);
       if(error)throw new Error(error.message);
       await db.closeMachineLog(id);
@@ -10558,7 +10569,8 @@ export default function PrintFlow() {
     // v10.34.4 fix #6 — actionLoading bloquea doble-click (WebCartCard chequea cartBusy via actionLoading)
     setActionLoading(firstOrder.id);
     try{
-      const count=await db.approveWebCart(cartFolio,user);
+      // v10.58.25: userLogin en lugar de user (rol) — approve_web_cart espera username
+      const count=await db.approveWebCart(cartFolio,userLogin||user);
       const msg="✅ Carrito "+cartFolio+" aprobado completo ("+count+" productos) — "+(firstOrder.client||"");
       await db.notifySecs(firstOrder.id,"approval",msg,null,user,firstOrder.created_by);
       if(user!=="admin")await db.addNotification("admin",firstOrder.id,"approval",msg,null,user);
@@ -11192,7 +11204,11 @@ export default function PrintFlow() {
           // v10.35.0 — pasar bankReference para conciliación automática 95% en CobranzaFlow
           // v10.49.0 — si Karla eligió "sin precio luego" para esta orden, pasar flag allow_no_price
           const skipPrice=allowNoPriceForOrder===invoiceModal.id;
-          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
+          // v10.58.25: pasar userLogin (username) en lugar de user (rol). assign_invoice está gateada
+          // con verify_actor_role que busca en public.users.username. Hoy funcionaba por casualidad
+          // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
+          // username, falla con 42501 silencioso.
+          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs si multi-pago.
           // Antes el timeline + optimistic mostraban "null" porque paymentMethod/Amount/bankRef quedan null en flow multi-pay.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
@@ -11244,7 +11260,8 @@ export default function PrintFlow() {
       {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs)=>{
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
-          await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
+          // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
+          await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs para timeline y optimistic update.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
           const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
@@ -11305,7 +11322,8 @@ export default function PrintFlow() {
       {/* 🆕 v10.9.0 — Modal de cancelación con NC (solo Marcelo cuando hay folio) */}
       {cancelInvoicedModal&&<CancelInvoicedModal order={cancelInvoicedModal} onConfirm={async(reason)=>{
         try{
-          await db.cancelInvoicedOrder(cancelInvoicedModal.id,reason,user);
+          // v10.58.25: userLogin en lugar de user (rol) por consistencia con otras RPCs
+          await db.cancelInvoicedOrder(cancelInvoicedModal.id,reason,userLogin||user);
           const newStage=cancelInvoicedModal.order_type==="maquila"?"maq_cancelled":"cancelled";
           const tlMsg="❌ Cancelada (con NC pendiente) · Folio "+cancelInvoicedModal.invoice_folio+" · Razón: "+reason;
           setOrders(p=>p.map(o=>o.id===cancelInvoicedModal.id?{...o,stage:newStage,cancellation_reason:reason,cancelled_at:new Date().toISOString(),cancelled_by:user,nc_emitted:false,timeline:addTL(o,tlMsg,{to:newStage})}:o));
