@@ -3510,8 +3510,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const totalQty = Number(order?.quantity || 0);
   const priceUnitario = totalQty > 0 ? totalSinIva / totalQty : 0;
 
-  const [splitsCount, setSplitsCount] = React.useState(2);
-  const [splits, setSplits] = React.useState(() =>
+  const [splitsCount, setSplitsCount] = useState(2);
+  const [splits, setSplits] = useState(() =>
     Array.from({length: 2}, (_, i) => ({
       qty: 0,
       amountConIva: 0,    // captura CON IVA si factura/corona+factura
@@ -3520,15 +3520,15 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       payment_status: "unpaid"
     }))
   );
-  const [allPreAssigned, setAllPreAssigned] = React.useState(false);
-  const [globalReason, setGlobalReason] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [coronaInfo, setCoronaInfo] = React.useState(null);
-  const [folioSugFactura, setFolioSugFactura] = React.useState("");
-  const [folioSugRemision, setFolioSugRemision] = React.useState("");
+  const [allPreAssigned, setAllPreAssigned] = useState(false);
+  const [globalReason, setGlobalReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [coronaInfo, setCoronaInfo] = useState(null);
+  const [folioSugFactura, setFolioSugFactura] = useState("");
+  const [folioSugRemision, setFolioSugRemision] = useState("");
 
   // ESC close (solo cuando NO está guardando)
-  React.useEffect(()=>{
+  useEffect(()=>{
     const onKey = e=>{
       if(e.key==="Escape" && !saving) onClose();
     };
@@ -3537,7 +3537,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   }, [saving, onClose]);
 
   // Cargar info Corona + folios sugeridos al abrir
-  React.useEffect(()=>{
+  useEffect(()=>{
     let alive = true;
     (async()=>{
       try {
@@ -3561,7 +3561,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const coronaBalance = Number(coronaInfo?.current_balance || 0);
 
   // Auto-sugerir folios consecutivos al cargar las sugerencias o al cambiar splits
-  React.useEffect(()=>{
+  useEffect(()=>{
     if(!folioSugFactura && !folioSugRemision) return;
     const parseNum = f => {
       const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
