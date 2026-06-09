@@ -10504,6 +10504,17 @@ export default function PrintFlow() {
       showToast(actionDeniedToast("cancel_order",o,user,userLogin),"error");
       return;
     }
+    // v10.58.31 BUG #5: re-check de invoice_folio. handleAction("cancel_order") chequea
+    // pero el modal queda abierto. Race window: si Karla pre-asigna folio en otra sesión
+    // mientras el cancelModal está abierto con state viejo (sin folio), confirmar ejecutaba
+    // UPDATE stage=cancelled SIN pasar por cancel_with_nc → estado inconsistente.
+    // Detectado por bug hunt agent.
+    if(o.invoice_folio){
+      showToast("❌ La orden recibió folio "+o.invoice_folio+" en otra sesión. Usa 'Cancelar con NC' si necesitas cancelarla.","error");
+      setCancelModal(null);
+      reload();
+      return;
+    }
     // v10.43.1 FIX A2 — Bloquear cancelación si la orden ya cargó/sacó stock.
     // El saldo del producto quedaría desincronizado (sigue inflado/reducido respecto a la realidad).
     // Para revertir: primero AJUSTE manual desde el módulo Inventario, después cancelar.
