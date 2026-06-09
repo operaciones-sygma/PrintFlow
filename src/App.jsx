@@ -1932,7 +1932,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         )}
         <div style={{flex:1}}/>
         {/* v10.55.0 — Carrito de venta batch (sustituye el flujo individual sell_from_stock con folio compartido) */}
-        {tab==="products"&&canExecuteAction("sell_from_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}>🛒 Carrito de venta</button>}
+        {/* v10.58.30 BUG #2: gatear a admin/karla (alineado con backend bulk_sell_from_stock). Antes
+            usaba canExecuteAction("sell_from_stock") que incluía secretaria/vendedor, pero el backend
+            rechaza con 42501 → UX broken. */}
+        {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}>🛒 Carrito de venta</button>}
         {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}>➕ Nuevo Producto</button>}
       </div>
       {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
