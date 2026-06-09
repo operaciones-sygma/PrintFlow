@@ -3564,8 +3564,16 @@ function InvoiceModal({order,onConfirm,onClose}) {
 
   // v10.29.0 + v10.30.0 — paymentStatus debe estar definido; si paid/partial también method; si partial monto válido < total
   const orderBaseAmount=order?.order_type==="maquila"?(order.maq_price||0):(order.price||0);
-  // v10.43.10 — Corona 'no_folio' también descuenta CON IVA (consistente con apply_credit_no_folio).
-  const totalDisplay=(type==="factura"||type==="no_folio")?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8
+  // v10.58.32 BUG FIX: apply_credit_no_folio realmente descuenta SIN IVA del ledger
+  // (verificado en BD: 5/5 movimientos históricos guardan el subtotal sin IVA).
+  // El comentario antiguo v10.43.10 era INCORRECTO (decía "descuenta CON IVA" pero
+  // el backend cambió a sin IVA y el frontend nunca se actualizó).
+  // Resultado del bug: el modal mostraba descuento $131,451 (con IVA) pero el backend
+  // descontaba solo $113,320 (sin IVA) → "saldo después" mostrado era $113K menor
+  // que el real → Karla veía $14,125 cuando el saldo real quedaría en $32,257.
+  const totalDisplay=type==="factura"?Math.round(orderBaseAmount*116)/100:orderBaseAmount; // v10.31.1 fix #8
+  // v10.58.32: monto que REALMENTE se descuenta del saldo Corona (siempre sin IVA)
+  const coronaConsumoAmount=orderBaseAmount;
   const amountNum=Number(paymentAmount)||0;
   // v10.36.0 — exigir bank_reference para métodos bancarios cuando paid/partial.
   // v10.50.0 — MultiPaymentPicker reemplaza al PaymentStatusPicker. paymentRefs es el array de pagos.
@@ -3838,13 +3846,20 @@ function InvoiceModal({order,onConfirm,onClose}) {
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>Sin folio fiscal · solo descuento del saldo</div>
           </div>
           <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
+            {/* v10.58.32: ledger y descuento son SIN IVA (no con IVA como decía antes).
+                Mostramos el subtotal (coronaConsumoAmount) para que coincida con lo que
+                realmente descuenta apply_credit_no_folio. Mantenemos el monto con IVA
+                como nota informativa abajo para que Karla vea la equivalencia fiscal. */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11,textAlign:"center"}}>
               <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:13,fontWeight:800,color:"#10b981"}}>${(coronaInfo?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Descuento (con IVA)</div><div style={{fontSize:13,fontWeight:800}}>−${totalDisplay.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:13,fontWeight:800,color:((coronaInfo?.current_balance||0)-totalDisplay)<0?C.dn:"#10b981"}}>${((coronaInfo?.current_balance||0)-totalDisplay).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Descuento (sin IVA)</div><div style={{fontSize:13,fontWeight:800}}>−${coronaConsumoAmount.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:13,fontWeight:800,color:((coronaInfo?.current_balance||0)-coronaConsumoAmount)<0?C.dn:"#10b981"}}>${((coronaInfo?.current_balance||0)-coronaConsumoAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+            </div>
+            <div style={{fontSize:9,color:C.t2,textAlign:"center",marginTop:8,fontStyle:"italic"}}>
+              Equivalente con IVA: ${(Math.round(orderBaseAmount*116)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}
             </div>
           </div>
-          <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.ok}}>Entregada</strong> sin folio fiscal individual. El monto se descuenta del saldo Corona inmediatamente.</p>
+          <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.ok}}>Entregada</strong> sin folio fiscal individual. El subtotal se descuenta del saldo Corona inmediatamente.</p>
         </> : <>
           <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar:</div>
