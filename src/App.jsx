@@ -295,12 +295,26 @@ const ACTION_ROLES = {
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
 
+// v10.58.23 — helper: vendedor también es "owner" si es el agent de la orden.
+// Caso real: Lupita captura órdenes de maquila en nombre de Genaro (created_by="secretaria",
+// agent="genaro"). Antes Genaro no podía operar esas órdenes (ni avanzar stages ni reportar
+// maquila lista). Ahora si user="vendedor" y order.agent matchea userLogin, es owner.
+function isVendedorOwnerByAgent(user, userLogin, order) {
+  if (user !== "vendedor") return false;
+  const a = (order?.agent || "").toLowerCase().trim();
+  const u = (userLogin || "").toLowerCase().trim();
+  return !!a && a === u;
+}
+
 // 🔒 v10.12.0.2 — Gate central. Retorna true si el user puede ejecutar la acción sobre esta orden.
 function canExecuteAction(action, order, user, userLogin) {
   const rule = ACTION_ROLES[action];
   if (!rule) return false;
   if (!rule.allowed.includes(user)) return false;
-  if (rule.ownerBound.includes(user) && order?.created_by && order.created_by !== userLogin) return false;
+  // v10.58.23: ownerBound se cumple si created_by matchea O si el vendedor es el agent
+  if (rule.ownerBound.includes(user) && order?.created_by && order.created_by !== userLogin) {
+    if (!isVendedorOwnerByAgent(user, userLogin, order)) return false;
+  }
   return true;
 }
 
@@ -1643,7 +1657,8 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   const hp=role==="produccion"||role==="preprensa"||role==="german";const isMaq=o.order_type==="maquila";const st=SM[o.stage];
-  const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
+  // v10.58.23: vendedor también es owner si es el agent (caso Lupita captura por él)
+  const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||isVendedorOwnerByAgent(role,userLogin,o);
   const [showDeletePrompt,setShowDeletePrompt]=useState(false);
   const [deleting,setDeleting]=useState(false);
   const deleteFile=async()=>{
@@ -6092,7 +6107,9 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 // ─── ORDER CARD ────────────────────────────────────
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&parseDate(o.due_date)<new Date()&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
-  const secOwns=!isSec(role)||!o.created_by||o.created_by===userLogin;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
+  // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
+  const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
+  const secOwns=!isSec(role)||!o.created_by||o.created_by===userLogin||agentMatch;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||agentMatch;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
   const guide=GUIDES[role]?.[o.stage];
   const isDraggable=["ready","in_production","maquila_in","packaging"].includes(o.stage);
   const [expanded,setExpanded]=useState(false);
@@ -6207,8 +6224,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌ Cancelar</button>}
     </div>}
 
-    {/* Lupita: edit draft orders, locked after validation */}
-    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+    {/* Lupita: edit draft orders, locked after validation. v10.58.23: vendedor también si es agent */}
+    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
       {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <GuideBanner text="Orden esperando validación. Puedes editar mientras no validen ambos" color="#5856d6"/>
         {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>}
@@ -6221,8 +6238,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       </div>}
     </div>}
 
-    {/* Lupita: edit maquila orders (no validation lock) */}
-    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+    {/* Lupita: edit maquila orders (no validation lock). v10.58.23: vendedor también si es agent */}
+    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
       {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}>✏️ Editar Maquila</button>}
       <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
     </div>}
@@ -10512,7 +10529,7 @@ export default function PrintFlow() {
   },[user,userLogin,orders,showToast,reload]);
 
   const handleAction=useCallback((id,action,payload)=>{
-    if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;if(o.invoice_folio&&user!=="admin"){showToast("❌ Esta orden ya tiene folio fiscal "+o.invoice_folio+" asignado y no se puede editar.","error");return}if(!canEditWebOrder(o,user)){showToast("❌ Solo Lupita y Admin pueden editar pedidos de origen web","error");return}if(isSec(user)&&o.created_by&&o.created_by!==userLogin)return;if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;setEditO(o);setView("form")}
+    if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;if(o.invoice_folio&&user!=="admin"){showToast("❌ Esta orden ya tiene folio fiscal "+o.invoice_folio+" asignado y no se puede editar.","error");return}if(!canEditWebOrder(o,user)){showToast("❌ Solo Lupita y Admin pueden editar pedidos de origen web","error");return}/* v10.58.23: ownership de vendedor incluye agent matching */if(isSec(user)&&o.created_by&&o.created_by!==userLogin&&!isVendedorOwnerByAgent(user,userLogin,o))return;if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;setEditO(o);setView("form")}
     if(action==="edit_specs"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.4 Phase 3 — Hardstop: solo admin/preprensa/produccion editan specs técnicas
       if(o&&!canExecuteAction("edit_specs",o,user,userLogin)){showToast(actionDeniedToast("edit_specs",o,user,userLogin),"error");return}
@@ -10798,7 +10815,10 @@ export default function PrintFlow() {
   // Filtered orders for view — "mine" shows only orders created by current user, "all" shows everything
   // Only applies to vendedor/secretaría/admin; other roles always see all orders
   const hasFilter=isSec(user)||user==="admin";
-  const viewOrders=useMemo(()=>{let list=orders;if(hasFilter&&orderFilter!=="all")list=list.filter(o=>!o.created_by||o.created_by===userLogin);return list},[orders,orderFilter,userLogin,hasFilter]);
+  // v10.58.23: el filtro "mine" para vendedor también incluye órdenes donde él es el agent.
+  // Caso real: Lupita captura órdenes para Genaro (created_by="secretaria", agent="genaro").
+  // Antes Genaro no las veía con filtro "mine" → maquila completada quedaba invisible para él.
+  const viewOrders=useMemo(()=>{let list=orders;if(hasFilter&&orderFilter!=="all")list=list.filter(o=>!o.created_by||o.created_by===userLogin||isVendedorOwnerByAgent(user,userLogin,o));return list},[orders,orderFilter,userLogin,user,hasFilter]);
 
   // v10.58.12 m11: búsqueda accent-insensitive. Antes "Garcia" no matcheaba "García".
   // Normalize NFD descompone acentos en caracteres base + diacrítico; el regex los quita.
