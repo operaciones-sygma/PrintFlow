@@ -4175,7 +4175,11 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             doc_type: "factura",
             pre_assigned: false,
             reason: "",
-            lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0}]))
+            // v10.58.39 FIX HIGH #5: lastEdited debe inicializarse aquí también.
+            // Antes: solo el initializer (línea ~4042) lo tenía. Si Karla subía N de 2 a 3
+            // y capturaba en modo amount en grupo nuevo, el doc_type onChange caía a la rama
+            // qty (cell.lastEdited undefined !== 'amount') y DESTRUÍA el amount capturado.
+            lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0, lastEdited: "qty"}]))
           }))
         ];
       }
@@ -4261,10 +4265,26 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         }
       }
     }
-    // Por orden: no overflow (cobertura ≤ quantity). La validación per-cell arriba ya cubre consistencia qty↔amount.
+    // Por orden: no overflow (cobertura ≤ quantity)
+    // v10.58.39 FIX HIGH #8: en modo amount, drift acumulado del redondeo de qty puede sumar
+    // hasta groups.length pzas extra. Tolerar overflow ≤ groups.length pzas en modo amount.
+    const driftTolerance = captureMode === "amount" ? groups.length : 0;
     for(const o of eligibleOrders) {
       const t = orderTotals[o.id];
-      if(t && t.qtyOver) errors.push(`${o.production_number}: ${t.qtySum} > ${t.totalQty} pzas`);
+      if(t && t.qtyOver && (t.qtySum - t.totalQty) > driftTolerance) {
+        errors.push(`${o.production_number}: ${t.qtySum} > ${t.totalQty} pzas`);
+      }
+    }
+    // v10.58.39 FIX HIGH #7: detectar líneas con amountConIva>0 pero qty=0 (pérdida silenciosa
+    // en modo amount cuando captura $X < punitConIva → derivedQty=round(X/punit)=0 → handleSubmit
+    // filter qty>0 descarta la línea sin warning).
+    for(const o of eligibleOrders) {
+      groups.forEach((g, gi) => {
+        const cell = g.lines[o.id];
+        if(cell && Number(cell.amountConIva||0) > 0 && Number(cell.qty||0) === 0) {
+          errors.push(`${o.production_number} factura ${gi+1}: monto $${fmtMx(cell.amountConIva)} pero qty derivada = 0 (monto < precio unitario). Aumenta el monto o usa modo cantidad.`);
+        }
+      });
     }
     // Por grupo: al menos 1 línea con qty > 0
     const folioSet = new Set();
