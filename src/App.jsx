@@ -648,10 +648,11 @@ const db = {
   // La RPC valida que folioStart > último folio usado y que no haya shared_invoice_folio previo.
   // 🖨️ v10.53.0 — Registra impresión: incrementa print_version, setea autor/timestamp,
   // resetea needs_reprint. Retorna {version, printed_at, printed_by, content_hash}.
-  async registerPrint(orderId, user) {
+  async registerPrint(orderId, user, expectedHash) {
     const {data, error} = await supabase.rpc("register_print", {
       p_order_id: orderId,
-      p_user: user
+      p_user: user,
+      p_expected_hash: expectedHash || null
     });
     if (error) throw new Error(error.message);
     return data;
@@ -1540,6 +1541,7 @@ function getWakeupItems(role, userLogin, orders){
     placas_listas:"Pásala a producción",
     ready:"Asígnala a una máquina en el Tablero",
     in_production:"Avanza la producción en el Tablero",
+    maquila_out:"Recíbela de la maquila externa → 📥 Recibido de Maquila",
     maquila_in:"Llévala a acabados o empaque en el Tablero",
     packaging:"Empácala y mándala a Salidas",
     salidas:"Asigna folio fiscal y entrégala",
@@ -1762,7 +1764,7 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 }
 
 // ─── MODALS ────────────────────────────────────────
-function PrintOrder({order:o,onClose,role,userLogin,onReprinted,onPrintError}) {
+function PrintOrder({order:o,onClose,role,userLogin,onPrintError}) {
   useEscClose(onClose);
   const [printing,setPrinting]=useState(false);
   // v10.53.1 M2 — mountedRef previene setState/callback en componente desmontado
@@ -1857,20 +1859,25 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .pf-toolbar button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
 .pf-toolbar .pf-go{font-size:15px;font-weight:700;padding:10px 26px;background:#16a34a;color:#fff}
 .pf-toolbar .pf-close{font-size:13px;padding:10px 18px;background:#444;color:#fff}
-.pf-toolbar .pf-note{font-size:11px;color:#bbb;margin-left:6px}
-@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm;right:3mm}.no-print{display:none!important}}
+.pf-toolbar .pf-ver{font-size:12px;font-weight:800;color:#fbbf24;letter-spacing:.5px;margin-left:6px}
+.pf-toolbar .pf-note{font-size:11px;color:#bbb;margin-left:4px}
+@media screen{.print-version-corner{top:60px}}
+@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm!important;right:3mm}.no-print{display:none!important}}
 </style></head><body>
 <div class="pf-toolbar no-print">
   <button class="pf-go" onclick="pfPrint()">🖨️ Imprimir ahora</button>
   <button class="pf-close" onclick="window.close()">Cerrar</button>
-  <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"La versión se registra al imprimir"}</span>
+  <span class="pf-ver">${pvVersionLabel}${isReprint?" · REIMPRESO":""}</span>
+  <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"Se registra al imprimir"}</span>
 </div>
 <script>
   var __pfCommitted=false;
   function pfPrint(){
     if(!__pfCommitted){
       __pfCommitted=true;
-      try{ if(window.opener) window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")}},"*"); }catch(e){}
+      // v10.58.61: enviar el hash del peek (origin propio) para que el commit detecte si
+      // el contenido cambió desde que se generó la hoja (drift) y avise en vez de registrar mal.
+      try{ if(window.opener) window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")},hash:${pvFailed?"null":JSON.stringify(pvHash)}},${JSON.stringify(window.location.origin)}); }catch(e){}
     }
     window.print();
   }
@@ -1968,7 +1975,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     if(!isMaq&&(hasSpecs||o.finishes)){
       const acabados=(o.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);
       const ac=a=>acabados.some(x=>x.toLowerCase()===a.toLowerCase());
-      const customAcabados=acabados.filter(a=>!FINISHES.some(f=>f.toLowerCase()===a.toLowerCase()));
+      // v10.58.61: "Otros" debe excluir también los SINÓNIMOS que ya marcan una casilla
+      // (laminado→Plastificado, suaje→Suajado, block→Blocks, barniz maquina sin acento),
+      // si no, ej. "LAMINADO" salía marcado en Plastificado Y duplicado en Otros.
+      const ACABADO_ALIASES=["barniz brillante","barniz mate","barniz a registro","barniz máquina","barniz maquina","doblez","intercalado","grapado","perforado","plastificado","laminado","suaje","suajado","botado","forma suelta","blocks","block","engomado superior","engomado lateral"];
+      const customAcabados=acabados.filter(a=>!ACABADO_ALIASES.some(f=>f===a.toLowerCase())&&!FINISHES.some(f=>f.toLowerCase()===a.toLowerCase()));
       if(acabados.length>0||hasSpecs){
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Procesos Especiales y Acabados</td></tr>
       <tr>
@@ -11917,10 +11928,15 @@ export default function PrintFlow() {
   useEffect(()=>{
     if(!user)return;
     const handler=async(ev)=>{
+      // v10.58.61: solo aceptar mensajes de NUESTRO propio origin (la ventana de impresión)
+      if(ev.origin!==window.location.origin)return;
       const d=ev?.data;
       if(!d||d.type!=="pf-print-commit"||!d.orderId)return;
       try{
-        const info=await db.registerPrint(d.orderId, d.user||userLogin||"sistema");
+        const info=await db.registerPrint(d.orderId, d.user||userLogin||"sistema", d.hash||null);
+        // v10.58.61: el contenido cambió entre generar la hoja y presionar Imprimir →
+        // la hoja en mano quedó desactualizada; no se registró nada, avisar.
+        if(info?.stale){ showToast("⚠️ Esa orden cambió desde que abriste la hoja — ciérrala y vuelve a imprimir para la versión correcta.","warning"); return; }
         setOrders(prev=>prev.map(x=>x.id===d.orderId?{...x,print_version:info.version,last_printed_at:info.printed_at,last_printed_by:info.printed_by,needs_reprint:false}:x));
       }catch(e){ console.warn("[print-commit]",e); showToast("⚠️ No se registró la impresión: "+(e?.message||"error"),"warning"); }
     };
@@ -14057,7 +14073,7 @@ export default function PrintFlow() {
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
-      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onReprinted={(updatedFields, orderId)=>{setOrders(prev=>prev.map(x=>x.id===orderId?{...x,...updatedFields}:x))}} onPrintError={(msg)=>showToast(msg,"warning")}/>}
+      {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
