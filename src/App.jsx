@@ -4019,6 +4019,16 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   };
 
   // Estado del modal
+  // v10.58.38: captureMode global con default heurístico + persistencia localStorage.
+  // Karla pidió capturar por precio (modo amount) porque clientes mandan hoja con MONTOS por destino.
+  // Pero clientes normales mandan PIEZAS, mejor qty. Toggle global cubre ambos casos.
+  const [captureMode, setCaptureMode] = useState(() => {
+    try {
+      const stored = localStorage.getItem("oc_split_capture_mode_" + (userLogin || user || "default"));
+      if(stored === "qty" || stored === "amount") return stored;
+    } catch(e) {}
+    return "qty";  // default seguro; el useEffect post-load aplica heurística por billing_mode
+  });
   const [groupsCount, setGroupsCount] = useState(2);
   const [groups, setGroups] = useState(() =>
     Array.from({length: 2}, (_, i) => ({
@@ -4027,14 +4037,22 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       doc_type: "factura",
       pre_assigned: false,
       reason: "",
-      // lines: {[order_id]: {qty: number, amountConIva: number}}
-      lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0}]))
+      // v10.58.38: lines incluye lastEdited para fix del switch doc_type en modo amount
+      // lines: {[order_id]: {qty: number, amountConIva: number, lastEdited: 'qty'|'amount'}}
+      lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0, lastEdited: "qty"}]))
     }))
   );
   const [saving, setSaving] = useState(false);
   const [coronaInfo, setCoronaInfo] = useState(null);
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
+
+  // v10.58.38: persistir captureMode al cambiar
+  useEffect(() => {
+    try {
+      localStorage.setItem("oc_split_capture_mode_" + (userLogin || user || "default"), captureMode);
+    } catch(e) {}
+  }, [captureMode, user, userLogin]);
 
   // ESC + backdrop
   useEffect(() => {
@@ -4054,9 +4072,19 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           db.getNextFolioSuggestion("remision")
         ]);
         if(!alive) return;
-        setCoronaInfo(info || {billing_mode:"normal", current_balance:0});
+        const billingInfo = info || {billing_mode:"normal", current_balance:0};
+        setCoronaInfo(billingInfo);
         setFolioSugFactura(sF || "");
         setFolioSugRemision(sR || "");
+        // v10.58.38: heurística de default captureMode si no hay preferencia persistida.
+        // Cliente Corona (anticipo) suele mandar hoja con montos por destino → modo amount.
+        try {
+          const key = "oc_split_capture_mode_" + (userLogin || user || "default");
+          const hasUserPref = localStorage.getItem(key);
+          if(!hasUserPref && billingInfo.billing_mode === "anticipo") {
+            setCaptureMode("amount");
+          }
+        } catch(e) {}
       } catch(e) {
         if(alive) setCoronaInfo({billing_mode:"normal", current_balance:0});
       }
@@ -4110,13 +4138,26 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   };
 
   // Cambiar cantidad → auto-calcula monto CON IVA proporcional
+  // v10.58.38: marca lastEdited='qty' para que cambio de doc_type preserve qty
   const onChangeQty = (groupIdx, order, val) => {
     const qty = Math.max(0, parseInt(val||0, 10));
     const g = groups[groupIdx];
     const punit = priceUnit(order);
     const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
     const autoAmount = Math.round(qty * punitConIva * 100) / 100;
-    updateCell(groupIdx, order.id, {qty, amountConIva: autoAmount});
+    updateCell(groupIdx, order.id, {qty, amountConIva: autoAmount, lastEdited: "qty"});
+  };
+
+  // v10.58.38: cambiar monto → auto-calcula qty derivada (preferencia de Karla para casos con
+  // hoja de cliente que viene con MONTOS por destino). qty se mantiene como entero (Math.round)
+  // pero la validación per-cell tolera ±1% para evitar bloqueos por redondeo.
+  const onChangeAmount = (groupIdx, order, val) => {
+    const amountConIva = Math.max(0, parseFloat(val||0) || 0);
+    const g = groups[groupIdx];
+    const punit = priceUnit(order);
+    const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
+    const derivedQty = punitConIva > 0 ? Math.round(amountConIva / punitConIva) : 0;
+    updateCell(groupIdx, order.id, {qty: derivedQty, amountConIva, lastEdited: "amount"});
   };
 
   // Cambiar N groups
@@ -4194,19 +4235,36 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   }, [groups]);
 
   // Validación
+  // v10.58.38: validación per-cell qty*punit ≈ amountSinIva ±1%. NO tautológica en modo amount
+  // (en modo qty seguía siendo válida; en modo amount la comparación de SUM era tautológica).
   const folioRegex = /^[DR]-[1-9]\d*$/;
   const validation = useMemo(() => {
     const errors = [];
-    // Por orden: no overflow
+    // Per-cell: qty * priceUnit (SIN IVA) ≈ amountSinIva ±1%. Detecta drift real en ambos modos.
+    for(const o of eligibleOrders) {
+      const punit = priceUnit(o);
+      for(const g of groups) {
+        const cell = g.lines[o.id];
+        if(!cell || Number(cell.qty||0) === 0) continue;
+        const amountSinIva = g.doc_type === "factura"
+          ? Math.round((Number(cell.amountConIva) / 1.16) * 100) / 100
+          : Math.round(Number(cell.amountConIva) * 100) / 100;
+        const expected = Math.round(Number(cell.qty) * punit * 100) / 100;
+        const tol = Math.max(0.5, expected * 0.01);
+        if(Math.abs(amountSinIva - expected) > tol) {
+          // Mensaje según modo de captura
+          if(captureMode === "amount") {
+            errors.push(`${o.production_number} factura ${groups.indexOf(g)+1}: qty ${cell.qty} y monto $${fmtMx(cell.amountConIva)} no son proporcionales (drift por redondeo > 1%)`);
+          } else {
+            errors.push(`${o.production_number} factura ${groups.indexOf(g)+1}: monto $${fmtMx(amountSinIva)} no coincide con qty ${cell.qty} × $${fmtMx(punit)}/pza`);
+          }
+        }
+      }
+    }
+    // Por orden: no overflow (cobertura ≤ quantity). La validación per-cell arriba ya cubre consistencia qty↔amount.
     for(const o of eligibleOrders) {
       const t = orderTotals[o.id];
       if(t && t.qtyOver) errors.push(`${o.production_number}: ${t.qtySum} > ${t.totalQty} pzas`);
-      if(t && t.qtySum > 0) {
-        const tol = Math.max(0.5, t.amountSumSinIva * 0.01);
-        if(Math.abs(t.amountSumSinIva - t.expectedAmount) > tol) {
-          errors.push(`${o.production_number}: monto inconsistente con qty (${fmtMx(t.amountSumSinIva)} vs esperado ${fmtMx(t.expectedAmount)})`);
-        }
-      }
     }
     // Por grupo: al menos 1 línea con qty > 0
     const folioSet = new Set();
@@ -4235,7 +4293,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
     }
     return errors;
-  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona]);
+  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode]);
 
   const canSubmit = !saving && validation.length === 0 && eligibleOrders.length > 0;
 
@@ -4269,7 +4327,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   if(eligibleOrders.length === 0) {
     return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520}}>
-        <h3 style={{fontSize:16,margin:"0 0 12px"}}>📊 Facturas por destino</h3>
+        <h3 style={{fontSize:16,margin:"0 0 12px"}}>📊 Plan matriz de facturación</h3>
         <p style={{fontSize:13,color:C.t2}}>Esta OC no tiene órdenes elegibles para plan matriz. Requieren: stage salidas o maq_received, sin folio, sin splits/grupos previos, con precio y cantidad capturados.</p>
         <div style={{marginTop:14,textAlign:"right"}}>
           <button onClick={onClose} style={bt(C.sf,C.t2)}>Cerrar</button>
@@ -4280,10 +4338,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
 
   return <div onClick={e=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6"}}>📊 Facturas por destino · {oc?.id}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6"}}>📊 Plan matriz de facturación · {oc?.id}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
-        Crea N facturas para esta OC, cada factura con porciones de varias órdenes (caso: 1 cliente con varios productos facturados por sucursal).
-        Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
+        Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
       </p>
 
       {/* HEADER de contexto OC */}
@@ -4301,6 +4358,22 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             <div style={{fontSize:18,fontWeight:800,color:C.tx}}>${fmtMx(planTotalConIva)}</div>
           </div>
         </div>
+      </div>
+
+      {/* v10.58.38: Toggle global de modo de captura (qty vs amount) */}
+      <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap",background:C.sf,padding:"8px 12px",borderRadius:10}}>
+        <label style={{...lbl,marginBottom:0}}>Capturar por:</label>
+        <button onClick={()=>setCaptureMode("qty")}
+          style={{...bs(captureMode==="qty"?"#5856d6":C.bg, captureMode==="qty"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="qty"?"none":"0.5px solid "+C.bd}}
+          title="Karla teclea piezas, sistema calcula el monto proporcional. Útil cuando el cliente manda hoja con cantidades por destino.">
+          🔢 Cantidad (pzas)
+        </button>
+        <button onClick={()=>setCaptureMode("amount")}
+          style={{...bs(captureMode==="amount"?"#5856d6":C.bg, captureMode==="amount"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="amount"?"none":"0.5px solid "+C.bd}}
+          title="Karla teclea el monto, sistema calcula las piezas proporcionales. Útil cuando el cliente manda hoja con montos por destino (ej. cliente paga $X por sucursal).">
+          💰 Monto (con IVA)
+        </button>
+        <span style={{fontSize:10,color:C.t2,fontStyle:"italic",marginLeft:4}}>· se recuerda tu preferencia</span>
       </div>
 
       {/* Selector N facturas */}
@@ -4328,25 +4401,34 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
               {groups.map((g, i) => (
                 <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:200}}>
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <input value={g.label||""} placeholder={`Factura ${i+1} (ej. CDMX)`}
+                    <input value={g.label||""} placeholder="Etiqueta opcional (ej. Norte, Lote A, Pedido 123)"
                       onChange={e=>updateGroup(i, {label: e.target.value})}
+                      title="Identificador para distinguir esta factura del resto del plan. Opcional — Karla puede dejarlo vacío y el folio fiscal sirve como identificador."
                       style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600}}/>
                     <select value={g.doc_type}
                       onChange={e=>{
                         const newType = e.target.value;
-                        // v10.58.37 FIX C2: recalcular amountConIva de TODAS las líneas según el nuevo tipo
-                        // Antes: solo cambiaba doc_type. amountConIva quedaba stale del tipo anterior
-                        // (si era factura captura CON IVA, al cambiar a remision quedaba 16% inflado).
+                        // v10.58.37 C2 + v10.58.38: respetar lastEdited al recalcular.
+                        // Si lastEdited='qty' → preservar qty, recalcular amountConIva con nuevo punitConIva
+                        // Si lastEdited='amount' → preservar amountConIva, recalcular qty con nuevo punitConIva
+                        // Esto evita que cambiar doc_type destruya el valor capturado por Karla en modo amount.
                         const newLines = {};
                         for(const oid of Object.keys(g.lines)) {
-                          const cell = g.lines[oid] || {qty: 0, amountConIva: 0};
+                          const cell = g.lines[oid] || {qty: 0, amountConIva: 0, lastEdited: "qty"};
                           const order = eligibleOrders.find(o => o.id === oid);
-                          if(order && Number(cell.qty||0) > 0) {
-                            const punit = priceUnit(order);
-                            const punitConIva = punit * (newType === "factura" ? 1.16 : 1);
-                            newLines[oid] = {qty: cell.qty, amountConIva: Math.round(Number(cell.qty) * punitConIva * 100) / 100};
-                          } else {
+                          if(!order || (Number(cell.qty||0) === 0 && Number(cell.amountConIva||0) === 0)) {
                             newLines[oid] = cell;
+                            continue;
+                          }
+                          const punit = priceUnit(order);
+                          const newPunitConIva = punit * (newType === "factura" ? 1.16 : 1);
+                          if(cell.lastEdited === "amount") {
+                            // Preservar amount, recalcular qty
+                            const newQty = newPunitConIva > 0 ? Math.round(Number(cell.amountConIva) / newPunitConIva) : 0;
+                            newLines[oid] = {...cell, qty: newQty};
+                          } else {
+                            // Preservar qty, recalcular amount (comportamiento C2)
+                            newLines[oid] = {...cell, amountConIva: Math.round(Number(cell.qty) * newPunitConIva * 100) / 100};
                           }
                         }
                         // Si el folio actual no matchea el prefix del nuevo tipo, limpiarlo (auto-sugerirá)
@@ -4405,15 +4487,31 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                   </td>
                   {groups.map((g, gi) => {
                     const cell = g.lines[o.id] || {qty:0, amountConIva:0};
+                    const ivaTag = g.doc_type === "factura" ? "c/IVA" : "s/IVA";
                     return (
                       <td key={gi} style={{padding:"6px",borderLeft:"0.5px solid "+C.bd,verticalAlign:"top"}}>
-                        <input type="number" min="0" value={cell.qty||""}
-                          onChange={e=>onChangeQty(gi, o, e.target.value)}
-                          placeholder="0"
-                          style={{...inp,padding:"4px 8px",fontSize:11,width:"calc(100% - 16px)"}}/>
-                        <div style={{fontSize:9,color:C.t2,marginTop:2,textAlign:"right"}}>
-                          ${fmtMx(cell.amountConIva||0)} {g.doc_type === "factura" ? "c/IVA" : "s/IVA"}
-                        </div>
+                        {/* v10.58.38: input según captureMode + display del valor derivado debajo */}
+                        {captureMode === "qty" ? (
+                          <>
+                            <input type="number" min="0" value={cell.qty||""}
+                              onChange={e=>onChangeQty(gi, o, e.target.value)}
+                              placeholder="0 pzas"
+                              style={{...inp,padding:"4px 8px",fontSize:11,width:"calc(100% - 16px)"}}/>
+                            <div style={{fontSize:9,color:C.t2,marginTop:2,textAlign:"right"}}>
+                              ${fmtMx(cell.amountConIva||0)} {ivaTag}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <input type="number" min="0" step="0.01" value={cell.amountConIva||""}
+                              onChange={e=>onChangeAmount(gi, o, e.target.value)}
+                              placeholder="$0.00"
+                              style={{...inp,padding:"4px 8px",fontSize:11,width:"calc(100% - 16px)"}}/>
+                            <div style={{fontSize:9,color:C.t2,marginTop:2,textAlign:"right"}}>
+                              {Number(cell.qty||0).toLocaleString("es-MX")} pzas · {ivaTag}
+                            </div>
+                          </>
+                        )}
                       </td>
                     );
                   })}
@@ -10261,7 +10359,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados.">📄 Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales.">🔒 Pre-asignar folio</button>}
           {/* v10.58.36 — Plan matriz: N facturas con porciones por orden (caso KFC) */}
-          {canAssignFolio && allPendingReady && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px",background:"#5856d6",backgroundImage:"linear-gradient(135deg, #5856d6, #af52de)"}} title="Plan matriz: crea N facturas con porciones de varias órdenes en cada una (caso KFC: 1 OC con varios productos facturada por estado/sucursal). Cobertura parcial permitida.">📊 Facturas por destino</button>}
+          {canAssignFolio && allPendingReady && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px",background:"#5856d6",backgroundImage:"linear-gradient(135deg, #5856d6, #af52de)"}} title="Plan matriz: crea N facturas con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, etc.). Cobertura parcial permitida.">📊 Plan matriz</button>}
         </div>
       </div>
       {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}>🌐 Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
