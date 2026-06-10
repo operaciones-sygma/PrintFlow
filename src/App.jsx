@@ -4332,7 +4332,33 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                       onChange={e=>updateGroup(i, {label: e.target.value})}
                       style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600}}/>
                     <select value={g.doc_type}
-                      onChange={e=>updateGroup(i, {doc_type: e.target.value, folio: e.target.value==="corona_saldo" ? "" : g.folio})}
+                      onChange={e=>{
+                        const newType = e.target.value;
+                        // v10.58.37 FIX C2: recalcular amountConIva de TODAS las líneas según el nuevo tipo
+                        // Antes: solo cambiaba doc_type. amountConIva quedaba stale del tipo anterior
+                        // (si era factura captura CON IVA, al cambiar a remision quedaba 16% inflado).
+                        const newLines = {};
+                        for(const oid of Object.keys(g.lines)) {
+                          const cell = g.lines[oid] || {qty: 0, amountConIva: 0};
+                          const order = eligibleOrders.find(o => o.id === oid);
+                          if(order && Number(cell.qty||0) > 0) {
+                            const punit = priceUnit(order);
+                            const punitConIva = punit * (newType === "factura" ? 1.16 : 1);
+                            newLines[oid] = {qty: cell.qty, amountConIva: Math.round(Number(cell.qty) * punitConIva * 100) / 100};
+                          } else {
+                            newLines[oid] = cell;
+                          }
+                        }
+                        // Si el folio actual no matchea el prefix del nuevo tipo, limpiarlo (auto-sugerirá)
+                        const prefixOk = newType === "corona_saldo" ||
+                          (newType === "factura" && (g.folio||"").startsWith("D-")) ||
+                          (newType === "remision" && (g.folio||"").startsWith("R-"));
+                        updateGroup(i, {
+                          doc_type: newType,
+                          folio: newType === "corona_saldo" ? "" : (prefixOk ? g.folio : ""),
+                          lines: newLines
+                        });
+                      }}
                       style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto"}}>
                       <option value="factura">📄 Factura D-</option>
                       <option value="remision">📋 Remisión R-</option>
