@@ -10807,6 +10807,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
+  // v10.58.49 — Histórico en carpetas Año → Mes (pedido de Marcelo; mismo patrón que
+  // el Archivo de órdenes de producción)
+  const [openHistYear, setOpenHistYear] = useState(null);
+  const [openHistMonth, setOpenHistMonth] = useState(null);
   // v10.43.18 — Si Auditoría navegó hacia acá con un OC objetivo, preseleccionarlo.
   // Si la OC está cancelada/completada, switch al tab Histórico para que se vea.
   useEffect(()=>{
@@ -10862,6 +10866,26 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     });
     return {activas, historico};
   }, [purchaseOrders, orders, role, userLogin, orderFilter]);
+  // v10.58.49 — Árbol Año → Mes para el Histórico (fecha de cierre: completada o cancelada)
+  const histTree = useMemo(() => {
+    if(!historicoTab) return {};
+    const t = {};
+    complexOCs.forEach(po => {
+      const d = new Date(po.completed_at || po.cancelled_at || po.created_at);
+      if(isNaN(d.getTime())) return;
+      const y = d.getFullYear(), m = d.getMonth();
+      if(!t[y]) t[y] = {};
+      if(!t[y][m]) t[y][m] = [];
+      t[y][m].push(po);
+    });
+    return t;
+  }, [historicoTab, complexOCs]);
+  // Auto-abrir el año más reciente al entrar al Histórico
+  useEffect(() => {
+    if(!historicoTab) return;
+    const yrs = Object.keys(histTree).sort((a,b)=>b-a);
+    if(yrs.length > 0 && openHistYear === null) setOpenHistYear(parseInt(yrs[0]));
+  }, [historicoTab, histTree, openHistYear]);
   // 🌐 v10.12.0 Sub-fase C — Obtiene el cart_folio (C-XXXX) del primer hijo web de una OC, fallback al id de la OC
   const getCartFolio = (po) => {
     const child = orders.find(o => o.purchase_order_id === po.id && o.cart_folio);
@@ -10988,8 +11012,9 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin Órdenes de Compra complejas</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{canCreateOC?"Click en \"+ Nueva OC\" para crear la primera":"Las OCs aparecerán aquí cuando se cree una con varios productos"}</div>
         </div>
-      : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
-          {complexOCs.map(po => {
+      : (() => {
+          // v10.58.49 — tarjeta extraída para reusar en vista plana (Activas) y carpetas (Histórico)
+          const renderOCCard = (po) => {
             const products = orders.filter(o => o.purchase_order_id === po.id);
             const hasShared = !!po.shared_invoice_folio;
             const sFType = hasShared ? (po.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
@@ -11028,8 +11053,57 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                 </div>
               )}
             </div>;
-          })}
-        </div>
+          };
+          if(!historicoTab){
+            return <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+              {complexOCs.map(renderOCCard)}
+            </div>;
+          }
+          // v10.58.49 — HISTÓRICO en carpetas Año → Mes (mismo patrón que el Archivo de órdenes)
+          const OC_MONTHS=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+          const years = Object.keys(histTree).sort((a,b)=>b-a);
+          return <div>
+            {years.map(y => {
+              const yi = parseInt(y);
+              const yOpen = openHistYear === yi;
+              const months = Object.keys(histTree[y]).sort((a,b)=>b-a);
+              const yOCs = months.reduce((s,m)=>s+histTree[y][m].length, 0);
+              const yTotal = months.reduce((s,m)=>s+histTree[y][m].filter(po=>po.status==="completed").reduce((s2,po)=>s2+(parseFloat(po.total)||0),0), 0);
+              return <div key={y} style={{marginBottom:8}}>
+                <button onClick={()=>setOpenHistYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                  <span style={{fontSize:18}}>{yOpen?"📂":"📁"}</span>
+                  <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
+                  <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yOCs} OC{yOCs!==1?"s":""}</span>
+                  {yTotal>0&&<span style={{fontSize:11,color:C.ok,fontWeight:700}}>{fmt(yTotal)}</span>}
+                  <span style={{fontSize:12,color:C.t3}}>{yOpen?"▲":"▼"}</span>
+                </button>
+                {yOpen&&<div style={{paddingLeft:12,marginTop:4}}>
+                  {months.map(m => {
+                    const mi = parseInt(m);
+                    const mKey = yi*100+mi;
+                    const mOpen = openHistMonth === mKey;
+                    const mOCs = histTree[y][m];
+                    const mTotal = mOCs.filter(po=>po.status==="completed").reduce((s,po)=>s+(parseFloat(po.total)||0),0);
+                    const mCancel = mOCs.filter(po=>po.status==="cancelled").length;
+                    return <div key={m} style={{marginBottom:4}}>
+                      <button onClick={()=>setOpenHistMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                        <span style={{fontSize:15}}>{mOpen?"📂":"📁"}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{OC_MONTHS[mi]} {y}</span>
+                        <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mOCs.length} OC{mOCs.length!==1?"s":""}</span>
+                        {mCancel>0&&<span style={{fontSize:10,color:C.dn,fontWeight:600}}>❌ {mCancel}</span>}
+                        {mTotal>0&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(mTotal)}</span>}
+                        <span style={{fontSize:11,color:C.t3}}>{mOpen?"▲":"▼"}</span>
+                      </button>
+                      {mOpen&&<div style={{paddingLeft:8,marginTop:6,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginBottom:8}}>
+                        {mOCs.map(renderOCCard)}
+                      </div>}
+                    </div>;
+                  })}
+                </div>}
+              </div>;
+            })}
+          </div>;
+        })()
     }
     {showCreateModal && <CreateOCModal onCreate={async (data)=>{const ocId=await onCreateOC(data);setShowCreateModal(false);if(ocId)setSelectedOCId(ocId)}} onClose={()=>setShowCreateModal(false)}/>}
   </div>;
