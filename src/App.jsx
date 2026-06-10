@@ -1789,7 +1789,7 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted,onPrintError}) {
       let printInfo=null;
       try{
         const peek=await db.peekPrint(o.id);
-        printInfo={version:peek.version, content_hash:peek.content_hash, printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", failed:false};
+        printInfo={version:peek.version, content_hash:peek.content_hash, is_reprint:peek.is_reprint, printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", failed:false};
       }catch(e){
         // Si falla el peek (network, permisos), igual permitimos imprimir pero la hoja
         // saldrá "SIN REGISTRO" (y el commit posterior también fallaría).
@@ -1809,7 +1809,9 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted,onPrintError}) {
       const pvWhenStr=pvWhen.getDate()+"-"+months[pvWhen.getMonth()].slice(0,3).toLowerCase()+" "+
         String(pvWhen.getHours()).padStart(2,"0")+":"+String(pvWhen.getMinutes()).padStart(2,"0");
       const pvWho=printInfo.printed_by;
-      const isReprint=!pvFailed && printInfo.version>1;
+      // v10.58.60 — REIMPRESO = mismo contenido ya impreso antes (is_reprint del backend),
+      // no "version>1" (la versión ahora es por contenido, no por # de impresiones)
+      const isReprint=!pvFailed && !!printInfo.is_reprint;
     let h=`<html><head><title>Orden ${o.production_number||o.id}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
