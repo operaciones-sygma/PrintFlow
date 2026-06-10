@@ -1395,6 +1395,82 @@ function OrderChangeHistory({orderId}) {
     </div>}
   </div>;
 }
+// 🗼 v10.58.52 — TORRE DE CONTROL: motor de diagnóstico central.
+// snoozeActive: la orden está marcada "en espera" (Torre) — se auto-desactiva si
+// cambia de etapa o si pasa la fecha límite.
+function snoozeActive(o){
+  if(!o?.snooze_reason) return false;
+  if(o.snooze_stage && o.snooze_stage !== o.stage) return false;
+  if(o.snooze_until && parseDate(o.snooze_until) < new Date()) return false;
+  return true;
+}
+// Días REALES en la etapa actual (la última entrada de timeline que LLEGÓ a este
+// stage — doAdv escribe {to}); una edición ya no "des-estanca" la orden.
+function daysInStage(o){
+  const tl=o?.timeline||[];
+  for(let i=tl.length-1;i>=0;i--){
+    if(tl[i]?.to===o.stage && tl[i]?.date){
+      return Math.max(0,Math.floor((Date.now()-new Date(tl[i].date).getTime())/86400000));
+    }
+  }
+  return o?.created_at?Math.max(0,Math.floor((Date.now()-new Date(o.created_at).getTime())/86400000)):0;
+}
+// diagnoseOrder: POR QUÉ una orden no avanza → {key, text, respRole, respName,
+// external, sev, days, action, snoozed} o null si está sana. ÚNICA fuente de
+// verdad — la consume la Torre (Marcelo, desde arriba) y el Despertador (cada
+// quien, desde abajo). Reglas en orden de prioridad: la primera que aplica gana.
+function diagnoseOrder(o){
+  const stage=String(o?.stage||"");
+  if(!o||o.cancelled_at||stage.includes("cancelled")||stage.includes("delivered")||stage==="stocked"||["web_pending","web_rejected"].includes(stage)) return null;
+  const d=daysInStage(o);
+  const late=o.due_date&&parseDate(o.due_date)<new Date();
+  const lateDays=late?Math.max(1,Math.floor((Date.now()-parseDate(o.due_date).getTime())/86400000)):0;
+  const worst=Math.max(d,lateDays);
+  const mkSev=(money)=>(worst>=3||money)?"red":(worst>=1?"orange":"yellow");
+  const R=(key,text,role,name,opts={})=>({key,text,respRole:role,respName:name,
+    external:!!opts.external,sev:opts.sev||mkSev(!!opts.money),days:worst,
+    action:opts.action||"nudge",snoozed:snoozeActive(o)});
+  const isMaqStage=["maq_created","maq_sent","maq_in_progress"].includes(stage);
+  const noPrice=o.order_type==="maquila"?(!Number(o.maq_price)||Number(o.maq_price)<=0):(!Number(o.price)||Number(o.price)<=0);
+  const noCost=o.order_type==="maquila"&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
+  if(isMaqStage&&(noPrice||noCost))
+    return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir","secretaria","Lupita",{money:true,action:"edit"});
+  if(isMaqStage&&!(o.maq_provider||"").trim())
+    return R("maq_prov","🏭 Maquila sin proveedor asignado","secretaria","Lupita",{action:"edit"});
+  if(stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)){
+    const fP=!o.validated_by_production,fN=!o.validated_by_preprensa;
+    return R("validation","✋ Falta validación de "+(fP&&fN?"Gerardo y Noemí":(fP?"Gerardo (producción)":"Noemí (pre-prensa)")),
+      fP&&fN?"both":(fP?"produccion":"preprensa"),fP&&fN?"Gerardo y Noemí":(fP?"Gerardo":"Noemí"),{});
+  }
+  if(o.source==="web"&&!o.file_url&&["draft","design"].includes(stage))
+    return R("web_file","🌐 El cliente no manda su archivo — pagado y parado","secretaria","Lupita",{external:true});
+  if(stage==="proof_client"&&d>=3)
+    return R("proof","⏳ El cliente no aprueba la prueba desde hace "+d+" días","secretaria","Lupita",{external:true,sev:d>=6?"red":"orange"});
+  if(["maq_sent","maq_in_progress"].includes(stage)&&d>=7)
+    return R("maq_sleep","🚚 En maquila con "+((o.maq_provider||"el proveedor").trim())+" hace "+d+" días sin recibirse","secretaria","Lupita",{external:true,sev:d>=14?"red":"orange"});
+  if(stage==="ready"&&!o.current_machine&&d>=1)
+    return R("no_machine","🖱️ Sin máquina asignada hace "+d+" día"+(d===1?"":"s"),"produccion","Gerardo",{});
+  if(o.needs_reprint)
+    return R("reprint","🔁 Marcada para REIMPRIMIR","produccion","Gerardo",{sev:"red"});
+  if(["salidas","maq_received"].includes(stage)&&!o.invoice_folio&&!o.has_splits&&d>=3)
+    return R("no_folio","🧾 Sin folio de factura hace "+d+" días","karla","Karla",{});
+  if(o.order_type!=="maquila"&&noPrice&&stage!=="salidas")
+    return R("no_price","💰 Sin precio capturado","karla","Karla",{action:"edit"});
+  if(!o.due_date)
+    return R("no_date","📅 Sin fecha de entrega comprometida","secretaria","Lupita",{action:"edit"});
+  if(late){
+    const resp=STAGE_RESPONSIBLE[stage];
+    return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
+      resp?.role||"admin",resp?.role==="both"?"Producción y Pre-prensa":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
+  }
+  if(d>=2&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)){
+    const resp=STAGE_RESPONSIBLE[stage];
+    if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
+      resp.role,resp.role==="both"?"Producción y Pre-prensa":resp.name,{sev:d>=4?"red":"orange"});
+  }
+  return null;
+}
+
 // ☀️ v10.58.51 — DESPERTADOR: bienvenida diaria con los bloqueos del usuario.
 // Pedido de Marcelo: ventana GRANDE al entrar al app; solo se cierra escribiendo
 // "SI ENTIENDO" (queda registro vía log_wakeup_ack). Aplica a todos; Gerardo
@@ -1418,6 +1494,8 @@ function getWakeupItems(role, userLogin, orders){
   const items = [];
   for(const o of orders){
     if(!isActive(o)) continue;
+    // v10.58.52: las órdenes "en espera" (Torre de Control) no despiertan a nadie
+    if(snoozeActive(o)) continue;
     const late = daysLate(o);
     const resp = STAGE_RESPONSIBLE[o.stage];
     let why = null;
@@ -8043,6 +8121,10 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         esta etapa, decir QUIÉN la tiene y permitir recordarle (Karla veía maquilas
         retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse). */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
+      // v10.58.52: si está "en espera" (Torre), mostrar la razón en vez del nudge
+      if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10}}>
+        <span style={{fontSize:11,color:C.t2}}>🔕 En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
+      </div>;
       const resp=STAGE_RESPONSIBLE[o.stage];
       if(!resp)return null;
       const respName=resp.role==="both"?"Producción y Pre-prensa":resp.name;
@@ -11310,6 +11392,161 @@ function CreateOCModal({onCreate, onClose}){
 }
 
 
+// 🗼 v10.58.52 — TORRE DE CONTROL (admin): cada fila = una orden que NO avanza,
+// con la causa en español llano, el responsable CON NOMBRE, antigüedad, dinero y
+// acciones de 1 click. Agrupada POR PERSONA (decisión de Marcelo: "ir con ella
+// directamente"), crónicas arriba, sanas visibles por persona, y 🔕 En espera
+// para falsos positivos (ej. esperando autorización del cliente).
+function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudgeBatch,onOpenHealth}){
+  const [openHealthy,setOpenHealthy]=useState({});
+  const [showSnoozed,setShowSnoozed]=useState(true);
+  const isActive=o=>{const s=String(o.stage||"");return !o.cancelled_at&&!s.includes("cancelled")&&!s.includes("delivered")&&s!=="stocked"&&!["web_pending","web_rejected"].includes(s)};
+  const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders]);
+  const blocked=rows.filter(r=>r.diag&&!r.diag.snoozed);
+  const snoozedRows=rows.filter(r=>snoozeActive(r.o));
+  const healthy=rows.filter(r=>!r.diag&&!snoozeActive(r.o));
+  const money=blocked.reduce((s,r)=>s+(parseFloat(r.o.price)||parseFloat(r.o.maq_price)||0),0);
+  const oldest=blocked.reduce((m,r)=>Math.max(m,r.diag.days),0);
+  const cron=blocked.filter(r=>r.diag.sev==="red").sort((a,b)=>b.diag.days-a.diag.days);
+  const groupKey=r=>r.diag.external?"🌐 Cliente / Proveedor":r.diag.respName;
+  const groups={};blocked.forEach(r=>{const k=groupKey(r);(groups[k]=groups[k]||[]).push(r)});
+  Object.values(groups).forEach(a=>a.sort((x,y)=>y.diag.days-x.diag.days));
+  const personOrder=Object.keys(groups).sort((a,b)=>{
+    const w=k=>Math.max(0,...groups[k].map(r=>r.diag.sev==="red"?2:1));
+    return w(b)-w(a)||groups[b].length-groups[a].length;
+  });
+  const healthyBy={};healthy.forEach(r=>{const resp=STAGE_RESPONSIBLE[r.o.stage];const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(healthyBy[k]=healthyBy[k]||[]).push(r)});
+  const sevColor={red:C.dn,orange:"#f59e0b",yellow:"#eab308"};
+  const allPeople=["Lupita","Gerardo","Noemí","Germán","Karla"];
+  const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
+
+  const Row=({r,inCron})=>{
+    const {o,diag}=r;
+    const m=parseFloat(o.price)||parseFloat(o.maq_price)||0;
+    return <div style={{border:"1px solid "+(diag.sev==="red"?C.dn+"35":C.bd),borderLeft:"4px solid "+sevColor[diag.sev],borderRadius:10,padding:"10px 14px",background:diag.sev==="red"?C.dn+"05":C.bg,marginBottom:6}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
+        <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
+        <span style={{fontSize:10,color:C.t3}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
+        {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"monospace"}}>{o.invoice_folio}</span>}
+        <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
+        {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.ok,marginLeft:"auto"}}>{fmt(m)}</span>}
+      </div>
+      <div style={{fontSize:12,fontWeight:700,color:diag.sev==="red"?C.dn:"#b45309",marginTop:4}}>{diag.text}</div>
+      {inCron&&!diag.external&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>→ le toca a <b>{diag.respName}</b></div>}
+      <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
+        <span style={{fontSize:10,fontWeight:700,color:diag.days>=3?C.dn:C.t2}}>⏱ {diag.days===0?"hoy":diag.days+" día"+(diag.days===1?"":"s")}</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+          {diag.respRole!=="both"&&<button onClick={()=>onAction(o.id,"nudge_responsible")} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"3px 9px",border:"1px solid #f59e0b40"}} title={"Recordar por notificación + Telegram"+(diag.external?" (a Lupita, que da seguimiento)":"")}>📣 Recordar</button>}
+          <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ver detalle">👁</button>
+          {diag.action==="edit"&&<button onClick={()=>onAction(o.id,"edit")} style={{...bs("#5856d615","#5856d6"),fontSize:10,padding:"3px 9px",border:"1px solid #5856d640"}} title="Capturar el dato faltante yo mismo">✏️ Resolver</button>}
+          <button onClick={()=>onSnooze(o)} style={{...bs(C.sf,C.t3),fontSize:10,padding:"3px 9px"}} title="Ignorar / poner en espera con razón (ej. esperando al cliente)">🔕</button>
+        </div>
+      </div>
+    </div>;
+  };
+
+  return <div>
+    <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
+      <h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}>🗼 Torre de Control</h2>
+      <span style={{fontSize:11,color:C.t2,textTransform:"capitalize"}}>{today}</span>
+      <button onClick={onOpenHealth} style={{...bs(C.sf,C.t2),fontSize:10,padding:"4px 10px",marginLeft:"auto"}}>🩺 Salud Operativa completa</button>
+    </div>
+    <p style={{fontSize:12,color:C.t2,margin:"4px 0 12px"}}>
+      {blocked.length===0
+        ? "✅ Nada detenido — todo el flujo avanza normal."
+        : <><b style={{color:C.dn}}>{blocked.length} orden{blocked.length===1?"":"es"} detenida{blocked.length===1?"":"s"}</b> · {fmt(money)} atorados · la más vieja: <b>{oldest} día{oldest===1?"":"s"}</b></>}
+    </p>
+
+    {/* Semáforo de personas */}
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+      {allPeople.map(name=>{
+        const g=groups[name]||[];
+        const reds=g.filter(r=>r.diag.sev==="red").length;
+        const ok=g.length===0;
+        return <div key={name} style={{display:"flex",alignItems:"center",gap:5,background:ok?C.ok+"0c":(reds?C.dn+"0e":"#f59e0b12"),border:"1px solid "+(ok?C.ok+"30":(reds?C.dn+"35":"#f59e0b35")),borderRadius:10,padding:"6px 12px"}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.tx}}>👤 {name}</span>
+          {ok?<span style={{fontSize:11,color:C.ok,fontWeight:800}}>✅</span>
+            :<span style={{fontSize:11,fontWeight:800,color:reds?C.dn:"#b45309"}}>{reds?"🔴":"🟡"} {g.length}</span>}
+        </div>;
+      })}
+      {groups["🌐 Cliente / Proveedor"]&&<div style={{display:"flex",alignItems:"center",gap:5,background:"#0891b210",border:"1px solid #0891b235",borderRadius:10,padding:"6px 12px"}}>
+        <span style={{fontSize:11,fontWeight:700,color:C.tx}}>🌐 Externos</span>
+        <span style={{fontSize:11,fontWeight:800,color:"#0891b2"}}>{groups["🌐 Cliente / Proveedor"].length}</span>
+      </div>}
+    </div>
+
+    {/* Crónicas */}
+    {cron.length>0&&<div style={{background:C.dn+"06",border:"1px solid "+C.dn+"25",borderRadius:14,padding:12,marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:800,color:C.dn,marginBottom:8}}>🔥 CRÓNICAS — ve directo con ellos</div>
+      {cron.slice(0,5).map(r=><Row key={r.o.id} r={r} inCron/>)}
+      {cron.length>5&&<div style={{fontSize:10,color:C.t2}}>…y {cron.length-5} más abajo, en su persona</div>}
+    </div>}
+
+    {/* Por persona */}
+    {personOrder.map(name=>{
+      const g=groups[name];
+      const isExt=name==="🌐 Cliente / Proveedor";
+      return <div key={name} style={{marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+          <span style={{fontSize:14,fontWeight:800,color:C.tx}}>{isExt?name:"👤 "+name} — {g.length} bloqueo{g.length===1?"":"s"}</span>
+          {isExt&&<span style={{fontSize:10,color:C.t2}}>(Lupita da seguimiento)</span>}
+          {!isExt&&g.length>1&&g[0].diag.respRole!=="both"&&<button onClick={()=>onNudgeBatch(g[0].diag.respRole,name,g)} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",marginLeft:"auto"}}>📣 Recordarle los {g.length}</button>}
+        </div>
+        {g.map(r=><Row key={r.o.id} r={r}/>)}
+      </div>;
+    })}
+
+    {/* Sanas por persona (decisión de Marcelo: bloqueos Y sano) */}
+    <div style={{marginTop:6,borderTop:"1px solid "+C.bd,paddingTop:10}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>✅ Avanzando normal</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {Object.keys(healthyBy).sort().map(name=>{
+          const open=!!openHealthy[name];
+          return <div key={name} style={{minWidth:200,flex:"1 1 240px"}}>
+            <button onClick={()=>setOpenHealthy(p=>({...p,[name]:!p[name]}))} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:10,cursor:"pointer"}}>
+            <span style={{fontSize:11,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>👤 {name}</span>
+            <span style={{fontSize:11,color:C.ok,fontWeight:800}}>{healthyBy[name].length} ✅</span>
+            <span style={{fontSize:10,color:C.t3}}>{open?"▲":"▼"}</span>
+          </button>
+          {open&&<div style={{marginTop:4}}>
+            {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer"}}>
+              <b>{r.o.production_number||r.o.id}</b>
+              <span style={{color:C.t2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.o.client}</span>
+              <span style={{color:C.t3,fontSize:10}}>{SM[r.o.stage]?.l||r.o.stage}</span>
+              {r.o.due_date&&<span style={{color:C.t3,fontSize:10}}>📅 {fD(r.o.due_date)}</span>}
+            </div>)}
+            {healthyBy[name].length>15&&<div style={{fontSize:10,color:C.t3,padding:"4px 10px"}}>…y {healthyBy[name].length-15} más</div>}
+          </div>}
+          </div>;
+        })}
+        {healthy.length===0&&<span style={{fontSize:11,color:C.t3}}>—</span>}
+      </div>
+    </div>
+
+    {/* En espera / ignoradas */}
+    {snoozedRows.length>0&&<div style={{marginTop:14,borderTop:"1px solid "+C.bd,paddingTop:10}}>
+      <button onClick={()=>setShowSnoozed(s=>!s)} style={{...bs(C.sf,C.t2),fontSize:11,padding:"6px 12px",marginBottom:6}}>
+        🔕 En espera ({snoozedRows.length}) {showSnoozed?"▲":"▼"}
+      </button>
+      {showSnoozed&&snoozedRows.map(({o})=>(
+        <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6,opacity:0.85}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
+            <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
+            <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
+            <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+              <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}>👁</button>
+              <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}>🔔 Reactivar</button>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:C.t2,marginTop:3}}>🔕 {o.snooze_reason} <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
+        </div>
+      ))}
+    </div>}
+  </div>;
+}
+
 // ─── MAIN ──────────────────────────────────────────
 export default function PrintFlow() {
   const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
@@ -11346,6 +11583,45 @@ export default function PrintFlow() {
     supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(()=>{},()=>{});
     setWakeupItems([]);
   },[user,userLogin,wakeupItems]);
+  // 🗼 v10.58.52 — Torre de Control: handlers de snooze + recordatorio batch + aterrizaje admin
+  const snoozeOrder=useCallback(async(o)=>{
+    const reason=window.prompt('¿Por qué se pone en espera esta orden?\n(ej. "Esperando autorización del cliente — Noemí 04-jun")');
+    if(reason===null)return;
+    if(reason.trim().length<5){showToast("Razón mínima 5 caracteres","warning");return}
+    const daysStr=window.prompt("¿Por cuántos días? (vacío = hasta que cambie de etapa)","");
+    if(daysStr===null)return;
+    const days=parseInt(daysStr,10);
+    const until=Number.isFinite(days)&&days>0?new Date(Date.now()+days*86400000).toISOString().slice(0,10):null;
+    const upd={snooze_reason:reason.trim(),snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until};
+    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
+    if(error){showToast("❌ "+error.message,"error");return}
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
+    try{await db.addTimeline(o.id,"🔕 En espera (Torre): "+reason.trim()+(until?" · hasta "+fD(until):" · hasta que cambie de etapa"),user,"#8e8e93")}catch(e){}
+    showToast("🔕 En espera — se reactiva sola si cambia de etapa"+(until?" o el "+fD(until):""));
+  },[user,userLogin,showToast]);
+  const unsnoozeOrder=useCallback(async(o)=>{
+    const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null};
+    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
+    if(error){showToast("❌ "+error.message,"error");return}
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
+    try{await db.addTimeline(o.id,"🔔 Reactivada en Torre de Control",user,"#8e8e93")}catch(e){}
+    showToast("🔔 Reactivada");
+  },[user,showToast]);
+  const nudgeBatch=useCallback(async(respRole,respName,rows)=>{
+    try{
+      const lines=rows.slice(0,8).map(r=>"• "+(r.o.production_number||r.o.id)+" "+(r.o.client||"")+": "+r.diag.text);
+      const msg="📣 "+userDisplayName(user)+" — tienes "+rows.length+" bloqueo"+(rows.length===1?"":"s")+" en la Torre de Control:\n"+lines.join("\n")+(rows.length>8?"\n…y "+(rows.length-8)+" más":"");
+      await db.notify(respRole,rows[0].o.id,"admin_attention",msg,null,user);
+      showToast("📣 Recordatorio enviado a "+respName+" ("+rows.length+")");
+    }catch(e){console.error("[nudgeBatch]",e);showToast("❌ "+(e?.message||"error"),"error")}
+  },[user,showToast]);
+  // Aterrizaje: el admin entra directo a la Torre (decisión D1 de Marcelo)
+  const landedTorreRef=useRef(false);
+  useEffect(()=>{
+    if(user==="admin"&&!landedTorreRef.current){landedTorreRef.current=true;setView("torre");}
+    if(!user)landedTorreRef.current=false;
+  },[user]);
+  const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
   const [devolverModal,setDevolverModal]=useState(null);
   const [cancelModal,setCancelModal]=useState(null);
@@ -13162,6 +13438,8 @@ export default function PrintFlow() {
   const rC={produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",secretaria:"#5856d6",vendedor:"#d97706",karla:"#a855f7",admin:C.ok};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
+  // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
+  if(user==="admin")navs.unshift({id:"torre",i:"🗼",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
   // v10.58.22: Karla también puede ver Datos Pendientes (vista incluye "Sin precio" con botón Editar Precio)
   if(user==="secretaria"||user==="karla")navs.push({id:"health",i:"📝",l:"Datos Pendientes"});
@@ -13275,6 +13553,8 @@ export default function PrintFlow() {
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {/* 🗼 v10.58.52 — Torre de Control (admin) */}
+        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
