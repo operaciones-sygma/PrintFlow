@@ -11583,45 +11583,6 @@ export default function PrintFlow() {
     supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(()=>{},()=>{});
     setWakeupItems([]);
   },[user,userLogin,wakeupItems]);
-  // 🗼 v10.58.52 — Torre de Control: handlers de snooze + recordatorio batch + aterrizaje admin
-  const snoozeOrder=useCallback(async(o)=>{
-    const reason=window.prompt('¿Por qué se pone en espera esta orden?\n(ej. "Esperando autorización del cliente — Noemí 04-jun")');
-    if(reason===null)return;
-    if(reason.trim().length<5){showToast("Razón mínima 5 caracteres","warning");return}
-    const daysStr=window.prompt("¿Por cuántos días? (vacío = hasta que cambie de etapa)","");
-    if(daysStr===null)return;
-    const days=parseInt(daysStr,10);
-    const until=Number.isFinite(days)&&days>0?new Date(Date.now()+days*86400000).toISOString().slice(0,10):null;
-    const upd={snooze_reason:reason.trim(),snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until};
-    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
-    if(error){showToast("❌ "+error.message,"error");return}
-    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
-    try{await db.addTimeline(o.id,"🔕 En espera (Torre): "+reason.trim()+(until?" · hasta "+fD(until):" · hasta que cambie de etapa"),user,"#8e8e93")}catch(e){}
-    showToast("🔕 En espera — se reactiva sola si cambia de etapa"+(until?" o el "+fD(until):""));
-  },[user,userLogin,showToast]);
-  const unsnoozeOrder=useCallback(async(o)=>{
-    const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null};
-    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
-    if(error){showToast("❌ "+error.message,"error");return}
-    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
-    try{await db.addTimeline(o.id,"🔔 Reactivada en Torre de Control",user,"#8e8e93")}catch(e){}
-    showToast("🔔 Reactivada");
-  },[user,showToast]);
-  const nudgeBatch=useCallback(async(respRole,respName,rows)=>{
-    try{
-      const lines=rows.slice(0,8).map(r=>"• "+(r.o.production_number||r.o.id)+" "+(r.o.client||"")+": "+r.diag.text);
-      const msg="📣 "+userDisplayName(user)+" — tienes "+rows.length+" bloqueo"+(rows.length===1?"":"s")+" en la Torre de Control:\n"+lines.join("\n")+(rows.length>8?"\n…y "+(rows.length-8)+" más":"");
-      await db.notify(respRole,rows[0].o.id,"admin_attention",msg,null,user);
-      showToast("📣 Recordatorio enviado a "+respName+" ("+rows.length+")");
-    }catch(e){console.error("[nudgeBatch]",e);showToast("❌ "+(e?.message||"error"),"error")}
-  },[user,showToast]);
-  // Aterrizaje: el admin entra directo a la Torre (decisión D1 de Marcelo)
-  const landedTorreRef=useRef(false);
-  useEffect(()=>{
-    if(user==="admin"&&!landedTorreRef.current){landedTorreRef.current=true;setView("torre");}
-    if(!user)landedTorreRef.current=false;
-  },[user]);
-  const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
   const [devolverModal,setDevolverModal]=useState(null);
   const [cancelModal,setCancelModal]=useState(null);
@@ -12250,6 +12211,45 @@ export default function PrintFlow() {
     }catch(e){console.error("[assignFoliosSplitOC] Error:",e);showToast("❌ No se pudo dividir: "+(e?.message||"error desconocido"),"error");return null}
   },[user,userLogin,showToast,reload]);
 
+  // 🗼 v10.58.52 — Torre de Control: handlers de snooze + recordatorio batch + aterrizaje admin
+  const snoozeOrder=useCallback(async(o)=>{
+    const reason=window.prompt('¿Por qué se pone en espera esta orden?\n(ej. "Esperando autorización del cliente — Noemí 04-jun")');
+    if(reason===null)return;
+    if(reason.trim().length<5){showToast("Razón mínima 5 caracteres","warning");return}
+    const daysStr=window.prompt("¿Por cuántos días? (vacío = hasta que cambie de etapa)","");
+    if(daysStr===null)return;
+    const days=parseInt(daysStr,10);
+    const until=Number.isFinite(days)&&days>0?new Date(Date.now()+days*86400000).toISOString().slice(0,10):null;
+    const upd={snooze_reason:reason.trim(),snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until};
+    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
+    if(error){showToast("❌ "+error.message,"error");return}
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
+    try{await db.addTimeline(o.id,"🔕 En espera (Torre): "+reason.trim()+(until?" · hasta "+fD(until):" · hasta que cambie de etapa"),user,"#8e8e93")}catch(e){}
+    showToast("🔕 En espera — se reactiva sola si cambia de etapa"+(until?" o el "+fD(until):""));
+  },[user,userLogin,showToast]);
+  const unsnoozeOrder=useCallback(async(o)=>{
+    const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null};
+    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
+    if(error){showToast("❌ "+error.message,"error");return}
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
+    try{await db.addTimeline(o.id,"🔔 Reactivada en Torre de Control",user,"#8e8e93")}catch(e){}
+    showToast("🔔 Reactivada");
+  },[user,showToast]);
+  const nudgeBatch=useCallback(async(respRole,respName,rows)=>{
+    try{
+      const lines=rows.slice(0,8).map(r=>"• "+(r.o.production_number||r.o.id)+" "+(r.o.client||"")+": "+r.diag.text);
+      const msg="📣 "+userDisplayName(user)+" — tienes "+rows.length+" bloqueo"+(rows.length===1?"":"s")+" en la Torre de Control:\n"+lines.join("\n")+(rows.length>8?"\n…y "+(rows.length-8)+" más":"");
+      await db.notify(respRole,rows[0].o.id,"admin_attention",msg,null,user);
+      showToast("📣 Recordatorio enviado a "+respName+" ("+rows.length+")");
+    }catch(e){console.error("[nudgeBatch]",e);showToast("❌ "+(e?.message||"error"),"error")}
+  },[user,showToast]);
+  // Aterrizaje: el admin entra directo a la Torre (decisión D1 de Marcelo)
+  const landedTorreRef=useRef(false);
+  useEffect(()=>{
+    if(user==="admin"&&!landedTorreRef.current){landedTorreRef.current=true;setView("torre");}
+    if(!user)landedTorreRef.current=false;
+  },[user]);
+  const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders]);
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
