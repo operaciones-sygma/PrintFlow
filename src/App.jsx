@@ -7805,7 +7805,10 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&parseDate(o.due_date)<new Date()&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
   const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
-  const secOwns=!isSec(role)||!o.created_by||o.created_by===userLogin||agentMatch;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||agentMatch;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
+  // v10.58.50: el gate de ownership es para VENDEDOR (no operar órdenes ajenas).
+  // Lupita (secretaria) coordina TODAS las órdenes/maquilas sin importar quién las
+  // creó — desde que Genaro captura las suyas, el gate viejo la dejaba sin botones.
+  const secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||agentMatch;const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||agentMatch;const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));const stale=getStale(o);const hp=role==="produccion"||role==="preprensa"||role==="german";
   const guide=GUIDES[role]?.[o.stage];
   const isDraggable=["ready","in_production","maquila_in","packaging"].includes(o.stage);
   const [expanded,setExpanded]=useState(false);
@@ -7854,6 +7857,15 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
           {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}>⚠️ RETRASO</span>}
           {stale&&<span style={{background:(stale.lv==="critical"?C.dn:C.wn)+"12",color:stale.lv==="critical"?C.dn:C.wn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}>{stale.lb}</span>}
+          {/* v10.58.50: badge "falta costo/precio" de maquila visible para TODOS los roles
+              y desde maq_created (antes vivía dentro del bloque de botones — Karla veía
+              maquilas atoradas sin saber POR QUÉ; P-3562 estuvo 2 semanas así). */}
+          {isMaq&&["maq_created","maq_sent","maq_in_progress"].includes(o.stage)&&(()=>{
+            const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
+            const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
+            if(!noPrice&&!noCost)return null;
+            return <span title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" style={{background:"#ff950015",color:"#ff9500",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700,border:"1px solid #ff950040"}}>💸 Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</span>;
+          })()}
           {o.proof_approved&&<span style={{background:C.ok+"12",color:C.ok,padding:"2px 6px",borderRadius:5,fontSize:10}}>✓Prueba</span>}
           {o.file_url&&<span style={{background:"#007aff12",color:"#007aff",padding:"2px 6px",borderRadius:5,fontSize:10}}>📁</span>}
           {o.plate_status==="existing"&&!compact&&<span style={{background:"#34c75915",color:"#34c759",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Reutiliza placa existente — saltó CTP">♻️ Placa</span>}
@@ -7943,8 +7955,27 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌ Cancelar</button>}
     </div>}
 
+    {/* v10.58.50: tarjeta MUDA → contexto accionable. Si el rol NO tiene acciones en
+        esta etapa, decir QUIÉN la tiene y permitir recordarle (Karla veía maquilas
+        retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse). */}
+    {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
+      const resp=STAGE_RESPONSIBLE[o.stage];
+      if(!resp)return null;
+      const respName=resp.role==="both"?"Producción y Pre-prensa":resp.name;
+      const noPrice=isMaq&&(!Number(o.maq_price)||Number(o.maq_price)<=0);
+      const noCost=isMaq&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
+      const maqMissing=["maq_created","maq_sent","maq_in_progress"].includes(o.stage)&&(noPrice||noCost);
+      const hint=maqMissing
+        ?("capturar "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+" y marcar recibida")
+        :("avanzar la orden de "+(st?.l||o.stage));
+      return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f59e0b08",border:"1px solid #f59e0b25",borderRadius:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:C.t2,flex:1,minWidth:180}}>⏳ {isMaq&&(o.maq_provider||"").trim()?("En maquila con "+o.maq_provider.trim()+" — "):""}le toca a <b style={{color:C.tx}}>{respName}</b>: {hint}</span>
+        {role!==resp.role&&resp.role!=="both"&&<button onClick={()=>onAction(o.id,"nudge_responsible")} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",whiteSpace:"nowrap"}}>📣 Recordar a {resp.name}</button>}
+      </div>;
+    })()}
+
     {/* Lupita: edit draft orders, locked after validation. v10.58.23: vendedor también si es agent */}
-    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
       {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <GuideBanner text="Orden esperando validación. Puedes editar mientras no validen ambos" color="#5856d6"/>
         {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>}
@@ -7967,7 +7998,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     </div>}
 
     {/* Lupita: edit maquila orders (no validation lock). v10.58.23: vendedor también si es agent */}
-    {!compact&&isSec(role)&&(!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
       {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}>✏️ Editar Maquila</button>}
       <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
     </div>}
@@ -12613,6 +12644,21 @@ export default function PrintFlow() {
   },[user,userLogin,orders,showToast,reload]);
 
   const handleAction=useCallback((id,action,payload)=>{
+    // v10.58.50: 📣 Recordar al responsable de la etapa (cards sin acción para el rol).
+    // Notifica in-app + Telegram (db.notify ya copia a admin) con el bloqueo concreto.
+    if(action==="nudge_responsible"){const o=orders.find(x=>x.id===id);if(!o)return;
+      const resp=STAGE_RESPONSIBLE[o.stage];
+      if(!resp||resp.role==="both"){showToast("Esta etapa no tiene un responsable único","warning");return}
+      (async()=>{try{
+        const noPrice=o.order_type==="maquila"&&(!Number(o.maq_price)||Number(o.maq_price)<=0);
+        const noCost=o.order_type==="maquila"&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
+        const missing=(noPrice||noCost)?" — falta capturar "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y "):"";
+        const msg="📣 "+userDisplayName(user)+" pide atención: "+(o.production_number||o.id)+" · "+(o.client||"")+" · "+(SM[o.stage]?.l||o.stage)+missing+(o.due_date?" · entrega "+fD(o.due_date):"");
+        await db.notify(resp.role,id,"admin_attention",msg,null,user);
+        showToast("📣 Recordatorio enviado a "+resp.name+" (in-app + Telegram)");
+      }catch(e){console.error("[nudge]",e);showToast("❌ No se pudo notificar: "+(e?.message||"error"),"error")}})();
+      return;
+    }
     if(action==="edit"){const o=orders.find(x=>x.id===id);if(!o)return;
       // v10.58.26: edit limitado para órdenes con folio PRE-ASIGNADO (anticipado).
       // Karla a veces pre-asigna folio porque cliente paga adelantado, pero la orden
