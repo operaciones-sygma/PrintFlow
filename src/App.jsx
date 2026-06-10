@@ -4164,7 +4164,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
             </div>
             {!cancelled && isAdmin && <button onClick={()=>onCancelGroup&&onCancelGroup(g)} disabled={busy}
               style={{...bs(C.dn+"15",C.dn),fontSize:10,padding:"4px 10px",border:"0.5px solid "+C.dn+"40"}}
-              title="Cancela esta factura completa con NC. Si era Corona, reversa el saldo.">
+              title="Cancela esta factura completa. Si era Corona, reversa el saldo. Si tenía pagos reales, quedan registrados como discrepancia para devolución manual. La NC en SAT se emite aparte.">
               ❌ Cancelar factura
             </button>}
           </div>
@@ -4245,6 +4245,24 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     const qty = Number(o.quantity);
     return qty > 0 ? total / qty : 0;
   };
+
+  // v10.58.42 Fix #18: cobertura previa VIVA por orden (planes anteriores de esta OC).
+  // El RPC valida existente+plan ≤ quantity y existente+plan ≤ precio total; sin este
+  // espejo, el segundo plan sobre una OC con plan pre-asignado previo pasaba en verde
+  // y reventaba en el backend perdiendo la captura de Karla.
+  const existingByOrder = useMemo(() => {
+    const map = {};
+    for(const g of (oc?.matrix_plan?.groups || [])) {
+      if(g.cancelled_at) continue;
+      for(const l of (g.lines || [])) {
+        if(l.cancelled_at) continue;
+        const e = map[l.order_id] || (map[l.order_id] = {qty:0, amount:0});
+        e.qty += Number(l.qty_portion || 0);
+        e.amount += Number(l.amount_portion || 0);
+      }
+    }
+    return map;
+  }, [oc]);
 
   // Estado del modal
   // v10.58.38: captureMode global con default heurístico + persistencia localStorage.
@@ -4493,14 +4511,46 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         }
       }
     }
-    // Por orden: no overflow (cobertura ≤ quantity)
+    // Por orden: no overflow (cobertura ≤ disponible)
     // v10.58.39 FIX HIGH #8: en modo amount, drift acumulado del redondeo de qty puede sumar
     // hasta groups.length pzas extra. Tolerar overflow ≤ groups.length pzas en modo amount.
+    // v10.58.42: disponible = quantity − cobertura previa viva (el RPC valida existente+plan).
     const driftTolerance = captureMode === "amount" ? groups.length : 0;
     for(const o of eligibleOrders) {
       const t = orderTotals[o.id];
-      if(t && t.qtyOver && (t.qtySum - t.totalQty) > driftTolerance) {
-        errors.push(`${o.production_number}: ${t.qtySum} > ${t.totalQty} pzas`);
+      if(!t || t.qtySum === 0) continue;
+      const ex = existingByOrder[o.id] || {qty:0, amount:0};
+      const availQty = t.totalQty - ex.qty;
+      if(t.qtySum > availQty + driftTolerance) {
+        errors.push(`${o.production_number}: ${t.qtySum} pzas capturadas pero solo ${availQty} disponibles${ex.qty>0?` (${ex.qty} ya en otro plan)`:""}`);
+      } else if(t.qtySum > availQty) {
+        // v10.58.42 Fix #17: el exceso de redondeo se clampa al enviar, pero solo si hay
+        // de dónde reducir (celdas con qty ≥ 2). Si no alcanza, el RPC rechazaría tras
+        // el verde y Karla perdería la captura — error aquí, antes de enviar.
+        const clampable = groups.reduce((s,g)=>{const q=Number(g.lines[o.id]?.qty||0);return s+(q>1?q-1:0)},0);
+        if((t.qtySum - availQty) > clampable) {
+          errors.push(`${o.production_number}: ${t.qtySum} pzas en ${groups.length} facturas no caben en ${availQty} disponibles. Quita esta orden de alguna factura o captura por cantidad.`);
+        }
+      }
+      // v10.58.42 Fix #11: CAP de dinero — montos del plan + previos jamás exceden el total
+      // de la orden (espejo del cap duro del RPC; sin esto una captura en modo monto podía
+      // sobrefacturar en silencio).
+      if(ex.amount + t.amountSumSinIva > t.totalAmount + 0.01) {
+        errors.push(`${o.production_number}: montos $${fmtMx(t.amountSumSinIva)}${ex.amount>0?` + $${fmtMx(ex.amount)} previos`:""} exceden el total de la orden $${fmtMx(t.totalAmount)} (sin IVA)`);
+      }
+    }
+    // v10.58.42 Fix #6: espejo de la validación PER-ORDEN del RPC (antes el modal solo
+    // validaba per-cell y el backend rechazaba DESPUÉS del verde, perdiendo la captura).
+    // Misma fórmula y tolerancia que assign_oc_invoice_split_plan.
+    for(const o of eligibleOrders) {
+      const t = orderTotals[o.id];
+      if(!t || t.qtySum === 0) continue;
+      const punit = priceUnit(o);
+      const linesCount = groups.reduce((n,g)=>n+(Number(g.lines[o.id]?.qty||0)>0?1:0), 0);
+      const expected = Math.round(t.totalAmount * t.qtySum / t.totalQty * 100) / 100;
+      const tol = Math.max(0.5, t.amountSumSinIva * 0.01, 2 * punit * linesCount);
+      if(Math.abs(t.amountSumSinIva - expected) > tol) {
+        errors.push(`${o.production_number}: suma de montos $${fmtMx(t.amountSumSinIva)} inconsistente con ${t.qtySum} pzas (esperado ~$${fmtMx(expected)}). Revisa los montos de esa fila.`);
       }
     }
     // v10.58.39 FIX HIGH #7: detectar líneas con amountConIva>0 pero qty=0 (pérdida silenciosa
@@ -4541,7 +4591,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
     }
     return errors;
-  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode]);
+  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder]);
 
   const canSubmit = !saving && validation.length === 0 && eligibleOrders.length > 0;
 
@@ -4566,6 +4616,23 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             }))
         }))
       };
+      // v10.58.42 Fix #6: clamp de qty derivada. En modo monto el redondeo puede sumar
+      // unas pzas de más por orden (validación tolera ≤ groups.length) pero el RPC
+      // rechaza CUALQUIER exceso. El dinero NO se toca — solo la qty informativa de
+      // las últimas celdas baja para que la suma quepa en la orden.
+      const qtyByOrder = {};
+      plan.groups.forEach(g => g.lines.forEach(l => { qtyByOrder[l.order_id] = (qtyByOrder[l.order_id]||0) + l.qty; }));
+      for(const o of eligibleOrders) {
+        // v10.58.42 Fix #18: el techo es lo DISPONIBLE (quantity − cobertura previa viva)
+        const availQty = Number(o.quantity) - (existingByOrder[o.id]?.qty || 0);
+        let excess = (qtyByOrder[o.id]||0) - availQty;
+        for(let gi = plan.groups.length - 1; gi >= 0 && excess > 0; gi--) {
+          const line = plan.groups[gi].lines.find(l => l.order_id === o.id);
+          if(!line || line.qty <= 1) continue;
+          const take = Math.min(excess, line.qty - 1);
+          line.qty -= take; excess -= take;
+        }
+      }
       await onConfirm(plan);
     } finally {
       setSaving(false);
@@ -7688,8 +7755,10 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.wn),padding:"3px 8px",fontSize:9}}>🗑️+</button>}
     </div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
-    {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand) */}
-    {!compact&&expanded&&<OrderChangeHistory orderId={o.id}/>}
+    {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand).
+        v10.58.42 Fix #2: gate vOwns — el historial expone precio/costo maquila/cliente;
+        un vendedor NO debe verlo en órdenes ajenas (mismo gate que DetailModal). */}
+    {!compact&&expanded&&vOwns&&<OrderChangeHistory orderId={o.id}/>}
     {!compact&&expanded&&vOwns&&(isMaq||o.comments?.length>0)&&<div onClick={e=>e.stopPropagation()}><CommentLog comments={o.comments||[]} onAdd={c=>onAction(o.id,"comment",c)} role={role}/></div>}
     {!compact&&expanded&&vOwns&&<div onClick={e=>e.stopPropagation()}><QuickNotes notes={o.notes_log||[]} onAdd={text=>onAction(o.id,"quick_note",text)} role={role}/></div>}
   </div>;
