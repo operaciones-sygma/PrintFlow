@@ -1827,8 +1827,8 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .section-title{background:#e0e0e0;font-size:8px;font-weight:800;text-transform:uppercase;text-align:center;padding:4px;letter-spacing:1.5px;color:#333}
 .field-lbl{font-size:7px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.3px}
 .field-val{font-size:12px;font-weight:600;min-height:16px;margin-top:1px}
-.check{display:inline-block;width:11px;height:11px;border:1.5px solid #444;margin-right:3px;vertical-align:middle;text-align:center;font-size:8px;line-height:11px}
-.check.on{background:#333;color:#fff}
+.check{display:inline-block;width:11px;height:11px;border:1.5px solid #aaa;margin-right:3px;vertical-align:middle;text-align:center;font-size:9px;line-height:11px;color:transparent}
+.check.on{color:#000;font-weight:bold;border-color:#000}
 .sig-row{display:flex;gap:16px;margin-top:28px;page-break-inside:avoid}
 .sig-box{flex:1;border-top:1.5px solid #000;padding-top:5px;text-align:center;font-size:7px;color:#999;text-transform:uppercase;letter-spacing:.5px}
 .imp-table td{height:20px}
