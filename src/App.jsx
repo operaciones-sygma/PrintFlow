@@ -1522,6 +1522,30 @@ function getWakeupItems(role, userLogin, orders){
     (!Number(o.maq_price) || Number(o.maq_price)<=0 || !Number(o.maq_cost) || Number(o.maq_cost)<=0);
   const maqMissingTxt = o => "💸 falta " + [(!Number(o.maq_price)||Number(o.maq_price)<=0)&&"precio cliente",
     (!Number(o.maq_cost)||Number(o.maq_cost)<=0)&&"costo proveedor"].filter(Boolean).join(" y ");
+  // v10.58.56 (pedido de Marcelo): el Despertador decía QUÉ está mal pero no QUÉ
+  // hacer. Instrucción concreta por etapa — el paso que destraba la orden.
+  const STAGE_ACT = {
+    draft:"Ábrela, valídala (✅ Producción / ✅ Pre-prensa) o edítala si algo está mal",
+    design:"Trabaja el diseño o mándala a aprobación del cliente",
+    proof_printing:"Imprime la prueba para el cliente",
+    proof_client:"Llama al cliente para que apruebe la prueba",
+    ctp:"Procesa el CTP / quema la placa",
+    placas_listas:"Pásala a producción",
+    ready:"Asígnala a una máquina en el Tablero",
+    in_production:"Avanza la producción en el Tablero",
+    maquila_in:"Llévala a acabados o empaque en el Tablero",
+    packaging:"Empácala y mándala a Salidas",
+    salidas:"Asigna folio fiscal y entrégala",
+    maq_created:"Envíala al proveedor (🚚 Marcar Enviada)",
+    maq_sent:"Confirma que el proveedor ya está trabajando",
+    maq_in_progress:"Cuando regrese el trabajo: 📥 Recibimos el Trabajo",
+    maq_received:"Asigna folio fiscal y entrégala",
+  };
+  const maqMissingAct = o => "Abre la orden → ✏️ Editar Maquila → captura " +
+    [(!Number(o.maq_price)||Number(o.maq_price)<=0)&&"el precio del cliente",
+     (!Number(o.maq_cost)||Number(o.maq_cost)<=0)&&"el costo del proveedor"].filter(Boolean).join(" y ") +
+    " → 📥 Recibimos el Trabajo";
+  const stageAct = o => STAGE_ACT[o.stage] || "Ábrela y avánzala a la siguiente etapa";
   const items = [];
   for(const o of orders){
     if(!isActive(o)) continue;
@@ -1529,13 +1553,15 @@ function getWakeupItems(role, userLogin, orders){
     if(snoozeActive(o)) continue;
     const late = daysLate(o);
     const resp = STAGE_RESPONSIBLE[o.stage];
-    let why = null;
+    let why = null, action = null;
     if(role==="admin"){
-      if(maqMissing(o)) why = maqMissingTxt(o) + " (le toca a Lupita)";
-      else if(late > 0) why = "vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" → "+resp.name:"");
+      if(maqMissing(o)){ why = maqMissingTxt(o) + " (le toca a Lupita)"; action = "Pídele a Lupita: " + maqMissingAct(o); }
+      else if(late > 0){ why = "vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" → "+resp.name:""); action = "Ve con " + (resp?.name||"el responsable") + ": " + stageAct(o); }
     } else if(role==="vendedor"){
-      if(isVendedorOwnerByAgent(role, userLogin, o) && late > 0)
+      if(isVendedorOwnerByAgent(role, userLogin, o) && late > 0){
         why = "tu orden, vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" ("+resp.name+")":"");
+        action = "Apura con " + (resp?.name||"el área") + " o avísale al cliente del retraso";
+      }
     } else {
       // Gerardo: el trabajo EN MÁQUINAS no lo despierta (es su tablero normal)
       if(role==="produccion" && ["ready","in_production","packaging"].includes(o.stage)) continue;
@@ -1553,14 +1579,15 @@ function getWakeupItems(role, userLogin, orders){
         // ellos. Genaro tiene usuario y ve las suyas por la rama vendedor.
         const ag=(o.agent||"").trim();
         if(role==="secretaria" && late>0 && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase())){
-          items.push({o, why:"vencida hace "+late+" día"+(late===1?"":"s")+" · capturas por "+ag+" — está en "+(SM[o.stage]?.l||o.stage)+(resp?" ("+resp.name+")":""), late});
+          items.push({o, why:"vencida hace "+late+" día"+(late===1?"":"s")+" · capturas por "+ag+" — está en "+(SM[o.stage]?.l||o.stage)+(resp?" ("+resp.name+")":""),
+            action:"Apura con " + (resp?.name||"el área") + " o avísale al cliente (tú llevas lo de "+ag+")", late});
         }
         continue;
       }
-      if(role==="secretaria" && maqMissing(o)) why = maqMissingTxt(o) + " — sin esto NO se puede recibir";
-      else if(late > 0) why = "vencida hace " + late + " día" + (late===1?"":"s") + " · está en " + (SM[o.stage]?.l||o.stage);
+      if(role==="secretaria" && maqMissing(o)){ why = maqMissingTxt(o) + " — sin esto NO se puede recibir"; action = maqMissingAct(o); }
+      else if(late > 0){ why = "vencida hace " + late + " día" + (late===1?"":"s") + " · está en " + (SM[o.stage]?.l||o.stage); action = stageAct(o); }
     }
-    if(why) items.push({o, why, late});
+    if(why) items.push({o, why, action, late});
   }
   items.sort((a,b)=>b.late-a.late);
   return items;
@@ -1580,7 +1607,7 @@ function WakeupModal({user, userLogin, items, onAck}){
         {items.length===1?"Hay 1 pendiente esperando TU acción antes de empezar el día:":"Hay "+items.length+" pendientes esperando TU acción antes de empezar el día:"}
       </div>
       <div style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
-        {items.map(({o,why,late},i)=>(
+        {items.map(({o,why,action,late},i)=>(
           <div key={o.id} style={{border:"1px solid "+(late>3?C.dn+"40":C.bd),borderLeft:"4px solid "+(late>3?C.dn:"#f59e0b"),borderRadius:10,padding:"10px 14px",background:late>3?C.dn+"06":C.bg}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
@@ -1589,7 +1616,8 @@ function WakeupModal({user, userLogin, items, onAck}){
               {o.due_date&&<span style={{fontSize:10,color:late>0?C.dn:C.t3,fontWeight:late>0?700:400,marginLeft:"auto"}}>📅 {fD(o.due_date)}</span>}
             </div>
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?" · 🚚 "+o.maq_provider.trim():""}</div>
-            <div style={{fontSize:12,fontWeight:700,color:late>3?C.dn:"#b45309",marginTop:4}}>{why}</div>
+            <div style={{fontSize:12,fontWeight:700,color:late>3?C.dn:"#b45309",marginTop:4}}>⚠️ {why}</div>
+            {action&&<div style={{fontSize:12,fontWeight:700,color:C.ok,marginTop:5,background:C.ok+"0e",border:"1px solid "+C.ok+"30",borderRadius:8,padding:"6px 10px"}}>👉 Qué hacer: <span style={{fontWeight:600,color:C.tx}}>{action}</span></div>}
           </div>
         ))}
       </div>
