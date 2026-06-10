@@ -5,6 +5,77 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.58.22 + v10.58.23 — Override CFDI cross-client + hardening fiscal (scan adversarial)
+
+Reportado por Marcelo (chat producción): Karla no podía mover órdenes de
+"HOTEL HOTSSON" a OC-0087 de "INMOBILIARIA HOTSSON" — mismo grupo corporativo,
+razones sociales distintas para CFDI (Inmobiliaria, Capital y Grupo Hotelero,
+Mansion Solís Hotel y Spa). El lock duro de v10.58.18 P1 bloqueaba a nivel RPC
+sin opción de override.
+
+### v10.58.22 — Override CFDI consciente
+
+Backend (migration `move_order_to_oc_force_cross_client`): la RPC gana
+`p_force_cross_client BOOLEAN DEFAULT FALSE`. Si es TRUE y los clientes
+difieren, permite el movimiento e inserta audit trail en `order_timeline`
+("⚠️ Override CFDI: movida a OC de cliente distinto... Facturar por
+separado."). Default FALSE = backward compatible.
+
+Frontend (App.jsx):
+- `db.moveOrderToOC(orderId, targetOCId, actor, forceCrossClient=false)`.
+- `MoveOrderModal`: state `forceCrossClient`; confirm reescrito (de "el
+  servidor rechazará" a "se permitirá — asigna folios SEPARADOS"); el flag
+  se marca al confirmar override y se desmarca al elegir same-client.
+- Callback propaga el flag; toast con sufijo "⚠️ Override CFDI".
+
+### v10.58.23 — Hardening del scan adversarial (42 agentes, 23 findings confirmados)
+
+Workflow multi-agente (5 dimensiones + adversarial verify) sobre el fix.
+3 críticos corregidos:
+
+🔴 P0 (migration `split_oc_per_group_client_id`) — `assign_folios_split_oc`
+derivaba `client_id` UNA VEZ desde la OC y lo usaba para TODAS las facturas
+en `cobranza.invoices`. Con OC cross-client, la factura salía con RFC
+equivocado (CFDI inválido en SAT + cobranza al cliente erróneo). Ahora deriva
+client_id POR GRUPO desde las órdenes; RAISE si un grupo mezcla >1 client_id;
+fallback al de la OC para órdenes legacy sin client_id; audit_log registra
+`client_id`, `oc_client_id` y `cross_client_group`.
+
+🔴 P1 (migration `shared_folio_block_cross_client`) — `assign_folio_to_oc`
+modo 'shared' aceptaba 1 folio para órdenes de clientes distintos. Ahora
+RAISE si las pendientes mezclan client_id o difieren del de la OC. Modo
+'consecutive' intacto (cada orden→su folio→su client_id, correcto por
+construcción).
+
+🔴 P1 (App.jsx db.moveOrderToOC) — el RPC retorna `{ok:false, error}` en
+rechazos de negocio SIN lanzar excepción SQL; el wrapper resolvía silencioso
+→ toast falso "✅ Movida" + notifs spam aunque el UPDATE no corrió. Ahora:
+`if(data && data.ok===false) throw new Error(data.error)`.
+
+### Fix de datos aplicado en sesión (Hotsson)
+
+Las 6 órdenes del grupo Hotsson consolidadas en OC-0087 (total $33,256):
+P-3531/32/33/34 (internas, salidas) + P-3535/36 (maquila, maq_received).
+Todas realineadas a client_id de INMOBILIARIA HOTSSON. OC-39/42/43 (simples)
+se autolimpiaron al quedar vacías. Texto `client` preservado como "HOTEL
+HOTSSON" para la vista operativa. Timeline auditable en cada move.
+
+### Pendientes del scan (P2/P3, decisión Marcelo)
+
+- P2: notif persistente a admin no marca override CFDI (solo el toast).
+- P2: secretaria puede hacer override igual que admin/karla (¿restringir?).
+- P2: `p_actor` spoofeable vía DevTools (deuda conocida: sin Supabase Auth).
+- P2: falta advisor query de mismatch order.client_id vs oc.client_id
+  (hay 26 históricas, 20 por OC legacy con client_id NULL).
+- P2: `confirmAddExisting` (Agregar Producto Existente) sin override ni
+  badge cross-client; tampoco valida data.ok (mismo patrón pre-fix).
+- P3: source OC con folios_locked permite moves OUT; sin FOR UPDATE en
+  source OC (race teórica); sin razón capturada en override; banner
+  "clientes mezclados" en vista OC; reset de selección al cambiar tab.
+
+---
+
+
 ## v10.58.18 + v10.58.19 — Post-scan exhaustivo #2 (3 agentes paralelos)
 
 Segundo scan exhaustivo del día con 3 agentes (backend + frontend regression

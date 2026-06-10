@@ -580,13 +580,18 @@ const db = {
   },
   // ↔️ v10.11.0 Sub-fase A — Mueve orden entre OCs vía RPC atómica
   // El RPC valida invoice_folio, stage, OC destino (no simple/cancelled/folios_locked) y limpia OC origen vacía
-  async moveOrderToOC(orderId, targetOCId, actor) {
+  // 🆕 v10.58.22 — forceCrossClient: override CFDI para grupos corporativos multi-razón-social (ej. Hotsson)
+  // 🆕 v10.58.23 P1 — el RPC retorna {ok:false, error} en rechazos de negocio SIN lanzar excepción SQL;
+  //                  antes el wrapper resolvía silencioso → toast falso de éxito + notifs spam.
+  async moveOrderToOC(orderId, targetOCId, actor, forceCrossClient=false) {
     const {data, error}=await supabase.rpc("move_order_to_oc",{
       p_order_id: orderId,
       p_target_oc_id: targetOCId,
-      p_actor: actor
+      p_actor: actor,
+      p_force_cross_client: forceCrossClient
     });
     if(error)throw new Error(error.message);
+    if(data && data.ok===false) throw new Error(data.error||"Movimiento rechazado por el servidor");
     return data;
   },
   // 🆕 v10.7.0 — Asigna folio fiscal interno (D-XXXX factura, R-XXXX remisión) y marca entregada
@@ -4324,14 +4329,69 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     } catch(e) {}
   }, [captureMode, user, userLogin]);
 
+  // v10.58.46 A3: cierre PROTEGIDO + borrador automático. Una matriz de N×M celdas
+  // son 10-30 min de captura — antes un click en el fondo gris la destruía sin preguntar.
+  const capturedCells = useMemo(() =>
+    groups.reduce((n,g)=>n+Object.values(g.lines||{}).filter(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0).length, 0),
+    [groups]);
+  const hasCapture = capturedCells > 0 || groups.some(g=>(g.folio||"").trim()||(g.label||"").trim());
+  const draftKey = "pf_matrix_draft_" + (oc?.id || "noid");
+  const safeClose = useCallback(() => {
+    if(saving) return;
+    if(hasCapture && !window.confirm("Tienes una captura en curso ("+capturedCells+" celda"+(capturedCells===1?"":"s")+" con datos). ¿Cerrar de todos modos?\n\nQueda guardado un borrador automático por si quieres retomarla.")) return;
+    onClose();
+  }, [saving, hasCapture, capturedCells, onClose]);
+
+  // A3b: restaurar borrador al abrir (declarado ANTES del autosave para correr primero)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if(!raw) return;
+      const d = JSON.parse(raw);
+      if(!d?.groups?.length) return;
+      const anyData = d.groups.some(g=>(g.folio||"").trim()||(g.label||"").trim()||Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0));
+      if(!anyData){ localStorage.removeItem(draftKey); return; }
+      const mins = Math.max(1, Math.round((Date.now() - (d.ts||0))/60000));
+      if(!window.confirm("Tienes una captura sin terminar de este plan (hace ~"+mins+" min). ¿Retomarla?")) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      const restored = d.groups.map(g => ({
+        label: g.label||"", folio: g.folio||"", doc_type: g.doc_type||"factura",
+        pre_assigned: !!g.pre_assigned, reason: g.reason||"",
+        lines: Object.fromEntries(eligibleOrders.map(o => {
+          const c = (g.lines||{})[o.id];
+          return [o.id, c ? {qty:Number(c.qty||0), amountConIva:Number(c.amountConIva||0), lastEdited:(c.lastEdited==="amount"?"amount":"qty")} : {qty:0, amountConIva:0, lastEdited:"qty"}];
+        }))
+      }));
+      setGroups(restored);
+      setGroupsCount(restored.length);
+      if(d.captureMode==="qty"||d.captureMode==="amount") setCaptureMode(d.captureMode);
+    } catch(e) { console.warn("[matriz draft restore]", e); }
+    // Solo al montar — restaurar después pisaría la captura en curso.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A3c: autosave del borrador (debounce 600ms); se limpia si la captura queda vacía
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if(hasCapture) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()}));
+        else localStorage.removeItem(draftKey);
+      } catch(e) {}
+    }, 600);
+    return () => clearTimeout(t);
+  }, [groups, captureMode, hasCapture, draftKey]);
+
   // ESC + backdrop
   // v10.58.43 #25: guard de INPUT/TEXTAREA — ESC tecleando en una celda de la matriz
   // destruía un plan de N facturas × M órdenes sin confirmación.
+  // v10.58.46 A3: ESC ahora pasa por safeClose (confirma si hay captura).
   useEffect(() => {
-    const onKey = e => { const tag=e.target?.tagName; if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return; if(e.key === "Escape" && !saving) onClose(); };
+    const onKey = e => { const tag=e.target?.tagName; if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return; if(e.key === "Escape") safeClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [saving, onClose]);
+  }, [safeClose]);
 
   // Cargar Corona info + folios sugeridos
   useEffect(() => {
@@ -4665,7 +4725,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           line.qty -= take; excess -= take;
         }
       }
-      await onConfirm(plan);
+      const result = await onConfirm(plan);
+      // v10.58.46 A3: plan creado → limpiar el borrador (si onConfirm falla devuelve
+      // null/lanza y el borrador se conserva para reintentar)
+      if(result) { try { localStorage.removeItem(draftKey); } catch(e) {} }
     } finally {
       setSaving(false);
     }
@@ -4683,7 +4746,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     </div>;
   }
 
-  return <div onClick={e=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
+  return <div onClick={()=>safeClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6"}}>📊 Plan matriz de facturación · {oc?.id}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
@@ -4829,13 +4892,31 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                     <div style={{fontSize:11,fontWeight:700,color:C.tx}}>{o.production_number}</div>
                     <div style={{fontSize:10,color:C.t2}}>{o.product || o.product_type}</div>
                     <div style={{fontSize:10,color:C.t2}}>{Number(o.quantity).toLocaleString("es-MX")} pzas · ${fmtMx(punit)}/pza</div>
-                    <div style={{marginTop:4,padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,
-                      background: t?.qtyOver ? "#ff3b3010" : (t?.qtySum === 0 ? C.sf : (t?.qtyRemaining === 0 ? "#34c75910" : "#ff950010")),
-                      color: t?.qtyOver ? C.dn : (t?.qtySum === 0 ? C.t2 : (t?.qtyRemaining === 0 ? C.ok : C.wn))}}>
-                      {t?.qtySum||0} / {t?.totalQty||0}
-                      {t?.qtyRemaining > 0 && <span style={{marginLeft:4,fontWeight:500}}>· {t.qtyRemaining} pend</span>}
-                      {t?.qtyOver && <span style={{marginLeft:4,fontWeight:500}}>· sobra {t.qtySum - t.totalQty}</span>}
-                    </div>
+                    {/* v10.58.46 A2: LÍMITES REALES mientras captura — el badge ahora usa
+                        lo DISPONIBLE (descuenta otros planes vivos) y se agrega el tope de
+                        DINERO, que antes solo aparecía como error después de pasarse. */}
+                    {(() => {
+                      const ex = existingByOrder[o.id] || {qty:0, amount:0};
+                      const availQty = (t?.totalQty||0) - ex.qty;
+                      const qtyLeft = availQty - (t?.qtySum||0);
+                      const qtyOverAvail = (t?.qtySum||0) > availQty;
+                      const moneyAvail = Math.round(((t?.totalAmount||0) - ex.amount)*100)/100;
+                      const moneyLeft = Math.round((moneyAvail - (t?.amountSumSinIva||0))*100)/100;
+                      return <>
+                        <div style={{marginTop:4,padding:"3px 6px",borderRadius:6,fontSize:10,fontWeight:700,
+                          background: qtyOverAvail ? "#ff3b3010" : (t?.qtySum === 0 ? C.sf : (qtyLeft === 0 ? "#34c75910" : "#ff950010")),
+                          color: qtyOverAvail ? C.dn : (t?.qtySum === 0 ? C.t2 : (qtyLeft === 0 ? C.ok : C.wn))}}>
+                          {t?.qtySum||0} / {availQty.toLocaleString("es-MX")} disp.
+                          {qtyLeft > 0 && <span style={{marginLeft:4,fontWeight:500}}>· {qtyLeft.toLocaleString("es-MX")} pend</span>}
+                          {qtyOverAvail && <span style={{marginLeft:4,fontWeight:500}}>· sobran {((t?.qtySum||0) - availQty).toLocaleString("es-MX")}</span>}
+                        </div>
+                        {ex.qty > 0 && <div style={{fontSize:9,color:C.wn,marginTop:2,fontWeight:600}}>⚠ {ex.qty.toLocaleString("es-MX")} pzas ya en otro plan</div>}
+                        <div style={{fontSize:9,marginTop:2,color:C.t2}}>
+                          $ disp: <b style={{color: moneyLeft < -0.01 ? C.dn : (moneyLeft <= 0.01 && (t?.amountSumSinIva||0) > 0 ? C.ok : C.tx)}}>${fmtMx(Math.max(moneyLeft,0))}</b> de ${fmtMx(moneyAvail)} s/IVA
+                          {moneyLeft < -0.01 && <span style={{color:C.dn,fontWeight:700}}> · excede ${fmtMx(-moneyLeft)}</span>}
+                        </div>
+                      </>;
+                    })()}
                   </td>
                   {groups.map((g, gi) => {
                     const cell = g.lines[o.id] || {qty:0, amountConIva:0};
@@ -4871,6 +4952,32 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
               );
             })}
           </tbody>
+          {/* v10.58.46 A1: SUMA por columna — Karla cuadra cada factura contra la hoja
+              del cliente en vivo, sin calculadora. Sticky bottom (par del thead sticky). */}
+          <tfoot style={{position:"sticky",bottom:0,background:C.sf,zIndex:2}}>
+            <tr style={{borderTop:"2px solid "+C.bd}}>
+              <td style={{padding:"8px",position:"sticky",left:0,background:C.sf,zIndex:3,fontSize:9,fontWeight:800,color:C.t2,textTransform:"uppercase"}}>
+                Suma por factura
+              </td>
+              {groups.map((g, gi) => {
+                let colAmt = 0, colQty = 0;
+                for(const oid of Object.keys(g.lines||{})) {
+                  colAmt += Number(g.lines[oid]?.amountConIva||0);
+                  colQty += Number(g.lines[oid]?.qty||0);
+                }
+                colAmt = Math.round(colAmt*100)/100;
+                const ivaTag = g.doc_type === "factura" ? "c/IVA" : "s/IVA";
+                return (
+                  <td key={gi} style={{padding:"8px",borderLeft:"0.5px solid "+C.bd,textAlign:"right"}}>
+                    <div style={{fontSize:12,fontWeight:800,color:colAmt>0?C.tx:C.t3}}>
+                      ${fmtMx(colAmt)} <span style={{fontSize:9,fontWeight:600,color:C.t2}}>{ivaTag}</span>
+                    </div>
+                    <div style={{fontSize:9,color:C.t2}}>{colQty.toLocaleString("es-MX")} pzas</div>
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
         </table>
       </div>
 
@@ -4892,7 +4999,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       )}
 
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>
+        <button onClick={safeClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>
           Cancelar
         </button>
         <button onClick={handleSubmit} disabled={!canSubmit}
@@ -6934,6 +7041,8 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
   const [mode, setMode] = useState("existing"); // "existing" | "new"
   const [search, setSearch] = useState("");
   const [targetId, setTargetId] = useState(null);
+  // 🆕 v10.58.22 — flag de override CFDI cuando targetId es OC de cliente distinto
+  const [forceCrossClient, setForceCrossClient] = useState(false);
   // Pre-fill SOLO vendedor + delivery_date (NO client — forzar elección consciente para evitar errores de inercia)
   // v10.58.12 F31: client_id se captura si Karla selecciona del autocomplete; null si escribe libre.
   const [newOC, setNewOC] = useState({client:"",client_id:null,vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
@@ -7001,7 +7110,8 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
     setSaving(true);
     try {
       if (mode === "existing") {
-        await onMove(targetId);
+        // 🆕 v10.58.22 — pasar flag forceCrossClient para override CFDI consciente
+        await onMove(targetId, forceCrossClient);
       } else {
         await onCreateAndMove({
           client: newOC.client.trim(),
@@ -7046,6 +7156,9 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                 const selected = targetId === po.id;
                 const sameClient = po._sameClient;
                 // v10.58.21: confirmación cuando cliente distinto.
+                // 🆕 v10.58.22: ahora SÍ permite el override; backend acepta p_force_cross_client=true
+                //              y graba audit trail en timeline. Caso real: grupos corporativos con
+                //              múltiples razones sociales (Hotsson: Hotel/Inmobiliaria/Capital, Mansion Solís).
                 const handleSelect = () => {
                   if (!sameClient) {
                     const orderClient = order?.client || "(sin cliente)";
@@ -7053,10 +7166,16 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                     const msg = "⚠️ ATENCIÓN — clientes distintos:\n\n" +
                       "Orden: \"" + orderClient + "\"\n" +
                       "OC destino: \"" + targetClient + "\"\n\n" +
-                      "Una OC = 1 RFC receptor en facturación electrónica. Si los facturas " +
-                      "juntos, mezclarías clientes en 1 folio fiscal (CFDI roto).\n\n" +
-                      "El servidor rechazará el movimiento. ¿Continuar de todos modos para ver el error?";
+                      "Una OC = 1 RFC receptor en facturación electrónica. " +
+                      "Si los facturas con UN solo folio compartido, mezclarías clientes (CFDI roto).\n\n" +
+                      "Caso válido: grupo corporativo con varias razones sociales (ej. Hotsson, Mansion Solís).\n\n" +
+                      "✅ Al continuar SE PERMITIRÁ el movimiento. Cuando factures esta OC, " +
+                      "asigna folios SEPARADOS (consecutivos o divide en facturas) — NO compartido.\n" +
+                      "Se registrará un override auditable en el timeline.\n\n¿Continuar?";
                     if (!window.confirm(msg)) return;
+                    setForceCrossClient(true);
+                  } else {
+                    setForceCrossClient(false);
                   }
                   setTargetId(po.id);
                 };
@@ -11460,14 +11579,15 @@ export default function PrintFlow() {
   },[orders,user,userLogin,showToast,reload]);
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
-  const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
+  // 🆕 v10.58.22 — forceCrossClient: override CFDI para grupos corporativos multi-razón-social
+  const moveOrderToOC=useCallback(async(orderId,targetOCId,forceCrossClient=false)=>{
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria/karla mueven órdenes entre OCs
     if(!canExecuteAction("moveOrderToOC",null,user,userLogin)){showToast(actionDeniedToast("moveOrderToOC",null,user,userLogin),"error");return}
     try{
       const o=orders.find(x=>x.id===orderId);
       const fromId=o?.purchase_order_id;
-      await db.moveOrderToOC(orderId,targetOCId,userLogin||user);
-      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId);
+      await db.moveOrderToOC(orderId,targetOCId,userLogin||user,forceCrossClient);
+      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId+(forceCrossClient?" · ⚠️ Override CFDI":""));
       setMoveModal(null);
       // v10.20.0 — Notif al trío Lupita+Noemí+Gerardo (excepto al que movió) + creador externo + admin in-app
       try{
@@ -12857,7 +12977,7 @@ export default function PrintFlow() {
       {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
-      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
+      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={(targetOCId,forceCrossClient)=>moveOrderToOC(moveModal.id,targetOCId,forceCrossClient)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
@@ -13009,6 +13129,8 @@ export default function PrintFlow() {
             showToast(`📊 ${result.groups_count} facturas creadas para OC ${ocMatrixModal.oc.id}`, "success");
             setOcMatrixModal(null);
             reload();
+            // v10.58.46 A3: truthy → el modal limpia su borrador automático
+            return result;
           } catch(e) {
             console.error("[assignOCInvoiceSplitPlan] Error:", e);
             showToast("❌ "+(e?.message||"No se pudo crear el plan"), "error");
