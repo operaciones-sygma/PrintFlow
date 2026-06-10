@@ -545,13 +545,11 @@ const db = {
   },
   // ↔️ v10.11.0 Sub-fase A — Mueve orden entre OCs vía RPC atómica
   // El RPC valida invoice_folio, stage, OC destino (no simple/cancelled/folios_locked) y limpia OC origen vacía
-  // 🆕 v10.58.22 — forceCrossClient: override CFDI para grupos corporativos multi-razón-social (ej. Hotsson)
-  async moveOrderToOC(orderId, targetOCId, actor, forceCrossClient=false) {
+  async moveOrderToOC(orderId, targetOCId, actor) {
     const {data, error}=await supabase.rpc("move_order_to_oc",{
       p_order_id: orderId,
       p_target_oc_id: targetOCId,
-      p_actor: actor,
-      p_force_cross_client: forceCrossClient
+      p_actor: actor
     });
     if(error)throw new Error(error.message);
     return data;
@@ -3982,170 +3980,6 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   </div>;
 }
 
-// ─── MATRIX CANCEL CONFIRM MODAL (v10.58.40) ────────────────────────────────
-// Confirmación para cancelar 1 línea o 1 grupo del plan matriz.
-// Requiere reason (≥ 5 chars, backend lo valida). Admin only (backend gate).
-function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onClose}) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const isLine = kind === "line";
-  const canSubmit = reason.trim().length >= 5 && !busy;
-
-  useEffect(() => {
-    const onKey = e => { if(e.key === "Escape" && !busy) onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [busy, onClose]);
-
-  const submit = async () => {
-    if(!canSubmit) return;
-    setBusy(true);
-    try { await onConfirm(reason.trim()); }
-    finally { setBusy(false); }
-  };
-
-  const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
-  const orderLabel = order ? (order.production_number || line?.order_id || "?") : (line?.order_id || "?");
-  const folioLabel = group?.folio || (group?.doc_type === "corona_saldo" ? "(corona_saldo)" : "?");
-
-  return <div onClick={e=>!busy&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:20,maxWidth:500,width:"100%"}}>
-      <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 4px",color:C.dn}}>
-        {isLine ? "✂ Cancelar línea del plan matriz" : "❌ Cancelar factura completa del plan matriz"}
-      </h3>
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
-        Esta acción es <strong style={{color:C.dn}}>irreversible</strong>. Se reversa el ledger Corona si aplica.
-      </p>
-      <div style={{background:C.sf,borderRadius:8,padding:12,marginBottom:14,fontSize:11}}>
-        <div><strong>OC:</strong> {oc?.id} · <span style={{color:C.t2}}>{oc?.client}</span></div>
-        <div><strong>Factura:</strong> <span style={{fontFamily:"monospace",color:"#5856d6"}}>{folioLabel}</span> {group?.label && <span style={{color:C.t2}}>· {group.label}</span>}</div>
-        {isLine ? <>
-          <div style={{marginTop:6}}><strong>Línea a cancelar:</strong></div>
-          <div style={{color:C.tx,marginLeft:10}}>
-            {orderLabel} · {Number(line?.qty_portion||0).toLocaleString("es-MX")} pzas · ${fmtMx(line?.amount_portion||0)} sin IVA
-          </div>
-          <div style={{fontSize:10,color:C.t2,marginTop:4,marginLeft:10}}>
-            Si era la última línea viva, la factura completa también se cancelará.
-          </div>
-        </> : <>
-          <div style={{marginTop:6}}><strong>Total factura:</strong> ${fmtMx(group?.total_amount||0)} sin IVA</div>
-          <div style={{fontSize:10,color:C.t2,marginTop:4}}>
-            Se cancelarán las {(group?.lines||[]).filter(l=>!l.cancelled_at).length} líneas vivas, la invoice en cobranza se marcará cancelada y se reversa Corona si aplica.
-          </div>
-        </>}
-      </div>
-      <label style={lbl}>Motivo (mínimo 5 caracteres) <span style={{color:C.dn}}>*</span></label>
-      <textarea value={reason} onChange={e=>setReason(e.target.value)} autoFocus disabled={busy}
-        placeholder={isLine ? "Ej: Cliente devolvió 2000 piezas" : "Ej: Cliente canceló pedido completo de CDMX"}
-        style={{...inp,minHeight:60,resize:"vertical",fontFamily:"'Poppins',sans-serif"}}/>
-      <div style={{fontSize:10,color:reason.length>=5?C.ok:C.t3,marginTop:4}}>
-        {reason.length}/5 mínimo
-      </div>
-      <div style={{display:"flex",gap:8,marginTop:14}}>
-        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit}
-          style={{...bt(canSubmit?C.dn:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {busy ? "Cancelando..." : (isLine ? "✂ Confirmar cancelar línea" : "❌ Confirmar cancelar factura")}
-        </button>
-      </div>
-    </div>
-  </div>;
-}
-
-// ─── OC MATRIX PLAN VIEW (v10.58.40) ────────────────────────────────────────
-// Vista post-creación del plan matriz. Muestra cada factura del plan con:
-// - Folio, label, monto total, estado (pendiente/parcial/pagada/cancelada)
-// - Líneas (orden, qty, monto) con botón cancelar individual (admin only)
-// - Botón cancelar factura completa (admin only)
-// Soporta colapsable para no saturar la card de OC cuando hay varios planes.
-function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGroup, busy}) {
-  const [expanded, setExpanded] = useState(true);
-  if(!matrixPlan || !matrixPlan.groups || matrixPlan.groups.length === 0) return null;
-
-  const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
-  const orderById = Object.fromEntries((ocOrders||[]).map(o => [o.id, o]));
-  const aliveGroups = matrixPlan.groups.filter(g => !g.cancelled_at);
-  const cancelledCount = matrixPlan.total_count - matrixPlan.alive_count;
-  const isAdmin = role === "admin";
-
-  return <div style={{background:"#5856d608",border:"1px solid #5856d625",borderRadius:10,padding:12,marginBottom:10}}>
-    <div onClick={()=>setExpanded(p=>!p)} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
-      <span style={{fontSize:13,fontWeight:700,color:"#5856d6"}}>
-        📊 {matrixPlan.alive_count} factura{matrixPlan.alive_count===1?"":"s"} matricial{matrixPlan.alive_count===1?"":"es"}
-        {cancelledCount > 0 && <span style={{color:C.t2,fontWeight:500,marginLeft:6,fontSize:11}}>· {cancelledCount} cancelada{cancelledCount===1?"":"s"}</span>}
-      </span>
-      <span style={{fontSize:10,color:C.t2,marginLeft:"auto"}}>{expanded?"▾ ocultar":"▸ ver detalle"}</span>
-    </div>
-    {expanded && <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
-      {matrixPlan.groups.map(g => {
-        const cancelled = !!g.cancelled_at;
-        const totalWithIva = g.doc_type === "factura" ? Math.round(g.total_amount * 1.16 * 100) / 100 : Number(g.total_amount);
-        const aliveLines = (g.lines||[]).filter(l => !l.cancelled_at);
-        const docColor = g.doc_type === "factura" ? "#5856d6" : g.doc_type === "remision" ? "#34c759" : "#10b981";
-        const docEmoji = g.doc_type === "factura" ? "📄" : g.doc_type === "remision" ? "📋" : "💎";
-        return <div key={g.id} style={{background:C.bg,borderRadius:8,padding:10,border:"0.5px solid "+(cancelled?C.dn+"40":C.bd),opacity:cancelled?0.6:1}}>
-          <div style={{display:"flex",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:140}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:13,fontWeight:800,color:docColor,fontFamily:"monospace"}}>{docEmoji} {g.folio || "(corona_saldo)"}</span>
-                {g.label && <span style={{fontSize:11,color:C.tx,fontWeight:600,background:C.sf,padding:"2px 6px",borderRadius:4}}>{g.label}</span>}
-                {g.invoice_pre_assigned && <span style={{fontSize:9,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}>⚡ ANTICIPADA</span>}
-                {cancelled && <span style={{fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}>❌ CANCELADA</span>}
-                {g.payment_status==="pagada" && <span style={{fontSize:9,color:C.ok,fontWeight:700,background:C.ok+"15",padding:"1px 5px",borderRadius:3}}>✅ PAGADA</span>}
-              </div>
-              <div style={{fontSize:10,color:C.t2,marginTop:3}}>
-                {aliveLines.length} línea{aliveLines.length===1?"":"s"} · ${fmtMx(g.total_amount)} sin IVA
-                {g.doc_type==="factura" && <span> · ${fmtMx(totalWithIva)} c/IVA</span>}
-              </div>
-              {cancelled && g.cancellation_reason && <div style={{fontSize:10,color:C.dn,marginTop:2,fontStyle:"italic"}}>Motivo: {g.cancellation_reason}</div>}
-            </div>
-            {!cancelled && isAdmin && <button onClick={()=>onCancelGroup(g)} disabled={busy}
-              style={{...bs(C.dn+"15",C.dn),fontSize:10,padding:"4px 10px",border:"0.5px solid "+C.dn+"40"}}
-              title="Cancela esta factura completa con NC. Si era Corona, reversa el saldo.">
-              ❌ Cancelar factura
-            </button>}
-          </div>
-          {/* Tabla de líneas */}
-          {(g.lines||[]).length > 0 && <table style={{width:"100%",fontSize:10,marginTop:8,borderCollapse:"collapse"}}>
-            <thead>
-              <tr style={{background:C.sf}}>
-                <th style={{textAlign:"left",padding:"4px 6px",borderBottom:"0.5px solid "+C.bd,fontWeight:600,color:C.t2,fontSize:9,textTransform:"uppercase"}}>Orden / Producto</th>
-                <th style={{textAlign:"right",padding:"4px 6px",borderBottom:"0.5px solid "+C.bd,fontWeight:600,color:C.t2,fontSize:9,textTransform:"uppercase"}}>Cantidad</th>
-                <th style={{textAlign:"right",padding:"4px 6px",borderBottom:"0.5px solid "+C.bd,fontWeight:600,color:C.t2,fontSize:9,textTransform:"uppercase"}}>Monto s/IVA</th>
-                <th style={{textAlign:"right",padding:"4px 6px",borderBottom:"0.5px solid "+C.bd,fontWeight:600,color:C.t2,fontSize:9,textTransform:"uppercase",width:80}}>{isAdmin && !cancelled ? "Acciones" : ""}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(g.lines||[]).map(l => {
-                const lineCancelled = !!l.cancelled_at;
-                const order = orderById[l.order_id];
-                const orderLabel = order ? (order.production_number || l.order_id) : l.order_id;
-                const productLabel = order ? (order.product || order.product_type || "") : "";
-                return <tr key={l.id} style={{borderBottom:"0.5px dashed "+C.bd,opacity:lineCancelled?0.5:1}}>
-                  <td style={{padding:"4px 6px",color:lineCancelled?C.t3:C.tx}}>
-                    <span style={{fontWeight:700}}>{orderLabel}</span>
-                    {productLabel && <span style={{color:C.t2,marginLeft:6,fontSize:9}}>· {productLabel}</span>}
-                    {lineCancelled && <span style={{color:C.dn,marginLeft:6,fontSize:9,fontStyle:"italic"}}>(cancelada)</span>}
-                  </td>
-                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"monospace"}}>{Number(l.qty_portion).toLocaleString("es-MX")}</td>
-                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"monospace"}}>${fmtMx(l.amount_portion)}</td>
-                  <td style={{padding:"4px 6px",textAlign:"right"}}>
-                    {!lineCancelled && !cancelled && isAdmin && <button onClick={()=>onCancelLine(l, g, order)} disabled={busy}
-                      style={{...bs(C.sf,C.dn),fontSize:9,padding:"2px 7px",border:"0.5px solid "+C.dn+"30"}}
-                      title="Cancelar esta línea individual. Si era la última, cancela la factura.">
-                      ✂ Cancelar
-                    </button>}
-                  </td>
-                </tr>;
-              })}
-            </tbody>
-          </table>}
-        </div>;
-      })}
-    </div>}
-  </div>;
-}
-
 // ─── OC SPLIT MATRIX MODAL (v10.58.36) ──────────────────────────────────────
 // Plan matriz por OC: N facturas × M órdenes con porciones por celda.
 // Caso real KFC: 1 OC con varios productos (posters/folletos/tarjetas) facturada
@@ -6768,8 +6602,6 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
   const [mode, setMode] = useState("existing"); // "existing" | "new"
   const [search, setSearch] = useState("");
   const [targetId, setTargetId] = useState(null);
-  // 🆕 v10.58.22 — flag de override CFDI cuando target_id es OC de cliente distinto
-  const [forceCrossClient, setForceCrossClient] = useState(false);
   // Pre-fill SOLO vendedor + delivery_date (NO client — forzar elección consciente para evitar errores de inercia)
   // v10.58.12 F31: client_id se captura si Karla selecciona del autocomplete; null si escribe libre.
   const [newOC, setNewOC] = useState({client:"",client_id:null,vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
@@ -6837,8 +6669,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
     setSaving(true);
     try {
       if (mode === "existing") {
-        // 🆕 v10.58.22 — pasar flag forceCrossClient para override CFDI consciente
-        await onMove(targetId, forceCrossClient);
+        await onMove(targetId);
       } else {
         await onCreateAndMove({
           client: newOC.client.trim(),
@@ -6883,9 +6714,6 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                 const selected = targetId === po.id;
                 const sameClient = po._sameClient;
                 // v10.58.21: confirmación cuando cliente distinto.
-                // 🆕 v10.58.22: ahora SÍ permite el override; backend acepta p_force_cross_client=true
-                //              y graba audit trail. Caso real: grupos corporativos con múltiples razones sociales
-                //              (Hotsson: Hotel/Inmobiliaria/Capital, Mansion Solís, etc.)
                 const handleSelect = () => {
                   if (!sameClient) {
                     const orderClient = order?.client || "(sin cliente)";
@@ -6893,16 +6721,10 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                     const msg = "⚠️ ATENCIÓN — clientes distintos:\n\n" +
                       "Orden: \"" + orderClient + "\"\n" +
                       "OC destino: \"" + targetClient + "\"\n\n" +
-                      "Una OC = 1 RFC receptor en facturación electrónica. " +
-                      "Si los facturas con UN solo folio compartido, mezclarías clientes (CFDI roto).\n\n" +
-                      "Caso válido: grupo corporativo con varias razones sociales (ej. Hotsson, Mansion Solís).\n\n" +
-                      "✅ Al continuar SE PERMITIRÁ el movimiento. Cuando factures esta OC, " +
-                      "asigna folios SEPARADOS (modo split o consecutivo) — NO compartido.\n" +
-                      "Se registrará un override auditable en el timeline.\n\n¿Continuar?";
+                      "Una OC = 1 RFC receptor en facturación electrónica. Si los facturas " +
+                      "juntos, mezclarías clientes en 1 folio fiscal (CFDI roto).\n\n" +
+                      "El servidor rechazará el movimiento. ¿Continuar de todos modos para ver el error?";
                     if (!window.confirm(msg)) return;
-                    setForceCrossClient(true);
-                  } else {
-                    setForceCrossClient(false);
                   }
                   setTargetId(po.id);
                 };
@@ -10410,7 +10232,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, pendingOCId, onConsumedPendingOC}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
@@ -10561,8 +10383,6 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         </div>
       </div>
       {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}>🌐 Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
-      {/* v10.58.40 Día 1: vista del plan matriz si existe en esta OC */}
-      {selectedOC.matrix_plan && <OCMatrixPlanView matrixPlan={selectedOC.matrix_plan} ocOrders={ocOrders} role={role} onCancelLine={(line, group, order)=>onCancelMatrixLine&&onCancelMatrixLine(line, group, order, selectedOC)} onCancelGroup={(group)=>onCancelMatrixGroup&&onCancelMatrixGroup(group, selectedOC)} busy={false}/>}
       {ocOrders.length === 0
         ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
             <div style={{fontSize:36}}>📋</div>
@@ -10765,7 +10585,6 @@ export default function PrintFlow() {
   const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
   const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
   const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
-  const [matrixCancelModal,setMatrixCancelModal]=useState(null); // 🆕 v10.58.40 — Modal confirmar cancel línea/grupo del plan matriz
   const [maintenance,setMaintenance]=useState([]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
@@ -10795,19 +10614,13 @@ export default function PrintFlow() {
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
   // When archive loaded: loads everything including related data for historical (full)
   const reload = useCallback(async () => {
-    const [data, pos, splitsResp, matrixGroupsResp, matrixLinesResp] = await Promise.all([
+    const [data, pos, splitsResp] = await Promise.all([
       db.loadOrders(!archiveLoadedRef.current),
       db.loadPurchaseOrders(),
       // v10.58.34: cargar splits en paralelo y mergear con orders
       supabase.from("order_invoice_splits")
         .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by")
-        .order("position"),
-      // v10.58.40 Día 1: cargar plan matriz (groups + lines) y mergear con purchaseOrders
-      supabase.from("oc_invoice_split_groups")
-        .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by")
-        .order("position"),
-      supabase.from("oc_invoice_split_lines")
-        .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by")
+        .order("position")
     ]);
     const splitsArr = splitsResp?.data || [];
     const splitsByOrder = {};
@@ -10821,29 +10634,8 @@ export default function PrintFlow() {
       const alive = sps.filter(s => !s.cancelled_at);
       return {...o, splits: sps, has_splits: alive.length > 0, splits_alive_count: alive.length};
     });
-
-    // v10.58.40 Día 1: mergear plan matriz en purchaseOrders
-    const groupsArr = matrixGroupsResp?.data || [];
-    const linesArr = matrixLinesResp?.data || [];
-    const linesByGroup = {};
-    for (const l of linesArr) {
-      if (!linesByGroup[l.oc_invoice_split_group_id]) linesByGroup[l.oc_invoice_split_group_id] = [];
-      linesByGroup[l.oc_invoice_split_group_id].push(l);
-    }
-    const groupsByOC = {};
-    for (const g of groupsArr) {
-      if (!groupsByOC[g.purchase_order_id]) groupsByOC[g.purchase_order_id] = [];
-      groupsByOC[g.purchase_order_id].push({...g, lines: linesByGroup[g.id] || []});
-    }
-    const posWithMatrix = pos.map(po => {
-      const groups = groupsByOC[po.id];
-      if (!groups || groups.length === 0) return po;
-      const aliveGroups = groups.filter(g => !g.cancelled_at);
-      return {...po, matrix_plan: {groups, alive_count: aliveGroups.length, total_count: groups.length}};
-    });
-
     setOrders(withSplits);
-    setPurchaseOrders(posWithMatrix);
+    setPurchaseOrders(pos);
     setLoaded(true);
   }, []);
 
@@ -11285,15 +11077,14 @@ export default function PrintFlow() {
   },[orders,user,userLogin,showToast,reload]);
 
   // ↔️ v10.11.0 Sub-fase A — Mover orden a OC existente vía RPC atómica (limpia OC origen vacía)
-  // 🆕 v10.58.22 — forceCrossClient: override CFDI para grupos corporativos multi-razón-social
-  const moveOrderToOC=useCallback(async(orderId,targetOCId,forceCrossClient=false)=>{
+  const moveOrderToOC=useCallback(async(orderId,targetOCId)=>{
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/secretaria/karla mueven órdenes entre OCs
     if(!canExecuteAction("moveOrderToOC",null,user,userLogin)){showToast(actionDeniedToast("moveOrderToOC",null,user,userLogin),"error");return}
     try{
       const o=orders.find(x=>x.id===orderId);
       const fromId=o?.purchase_order_id;
-      await db.moveOrderToOC(orderId,targetOCId,userLogin||user,forceCrossClient);
-      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId+(forceCrossClient?" · ⚠️ Override CFDI":""));
+      await db.moveOrderToOC(orderId,targetOCId,userLogin||user);
+      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId);
       setMoveModal(null);
       // v10.20.0 — Notif al trío Lupita+Noemí+Gerardo (excepto al que movió) + creador externo + admin in-app
       try{
@@ -12566,7 +12357,7 @@ export default function PrintFlow() {
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
@@ -12600,7 +12391,7 @@ export default function PrintFlow() {
       {/* v10.39.0 — Modal agregar producto existente a OC (multi-select del mismo cliente) */}
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
-      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={(targetOCId,forceCrossClient)=>moveOrderToOC(moveModal.id,targetOCId,forceCrossClient)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
+      {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={targetOCId=>moveOrderToOC(moveModal.id,targetOCId)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
@@ -12758,31 +12549,6 @@ export default function PrintFlow() {
           }
         }}
         onClose={()=>setOcMatrixModal(null)}/>}
-      {/* 🆕 v10.58.40 Día 1 — Modal confirmar cancelar línea o grupo del plan matriz */}
-      {matrixCancelModal&&<MatrixCancelConfirmModal
-        kind={matrixCancelModal.kind}
-        line={matrixCancelModal.line}
-        group={matrixCancelModal.group}
-        order={matrixCancelModal.order}
-        oc={matrixCancelModal.oc}
-        onConfirm={async(reason)=>{
-          try {
-            const actor = userLogin || user;
-            if(matrixCancelModal.kind === "line") {
-              const r = await db.cancelOCInvoiceSplitLine(matrixCancelModal.line.id, reason, actor);
-              showToast(`✂ Línea cancelada${r?.group_cancelled?" (grupo también cancelado, era la última)":""}`, "success");
-            } else {
-              const r = await db.cancelOCInvoiceSplitGroup(matrixCancelModal.group.id, reason, actor);
-              showToast(`❌ Factura ${matrixCancelModal.group.folio||matrixCancelModal.group.label||"#"+matrixCancelModal.group.position} cancelada (${r?.lines_cancelled||0} líneas)`, "success");
-            }
-            setMatrixCancelModal(null);
-            reload();
-          } catch(e) {
-            console.error("[cancelMatrix] Error:", e);
-            showToast("❌ "+(e?.message||"No se pudo cancelar"), "error");
-          }
-        }}
-        onClose={()=>setMatrixCancelModal(null)}/>}
       {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
       {splitInvoiceModal&&<SplitInvoiceModal order={splitInvoiceModal} user={user} userLogin={userLogin}
         onConfirm={async(payload)=>{
