@@ -4358,7 +4358,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       }
       const restored = d.groups.map(g => ({
         label: g.label||"", folio: g.folio||"", doc_type: g.doc_type||"factura",
-        pre_assigned: !!g.pre_assigned, reason: g.reason||"",
+        pre_assigned: !!g.pre_assigned, reason: g.reason||"", totalTarget: g.totalTarget||"",
         lines: Object.fromEntries(eligibleOrders.map(o => {
           const c = (g.lines||{})[o.id];
           return [o.id, c ? {qty:Number(c.qty||0), amountConIva:Number(c.amountConIva||0), lastEdited:(c.lastEdited==="amount"?"amount":"qty")} : {qty:0, amountConIva:0, lastEdited:"qty"}];
@@ -4490,6 +4490,50 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
     const derivedQty = punitConIva > 0 ? Math.round(amountConIva / punitConIva) : 0;
     updateCell(groupIdx, order.id, {qty: derivedQty, amountConIva, lastEdited: "amount"});
+  };
+
+  // v10.58.46 B1: REPARTIR — Karla teclea el total de la factura tal como viene en la
+  // hoja del cliente y el sistema lo prorratea entre las órdenes según su DISPONIBLE
+  // (precio − cobertura en otros planes), redondeando a centavos con el residuo en la
+  // celda de mayor peso para que la columna sume EXACTO el total tecleado.
+  // Convierte 9-30 cálculos con calculadora en 1 tecleo por factura.
+  const repartirColumna = (groupIdx) => {
+    const g = groups[groupIdx];
+    const target = Math.round((parseFloat(g.totalTarget||0) || 0) * 100) / 100;
+    if(target <= 0) return;
+    // Pesos: disponible sin IVA por orden (la unidad se cancela en el ratio)
+    const weights = eligibleOrders.map(o => {
+      const t = orderTotals[o.id];
+      const ex = existingByOrder[o.id] || {qty:0, amount:0};
+      return {o, avail: Math.max(0, (t?.totalAmount||0) - ex.amount)};
+    });
+    const totalAvail = weights.reduce((s,w)=>s+w.avail, 0);
+    if(totalAvail <= 0){ window.alert("Ninguna orden tiene disponible para repartir."); return; }
+    const newLines = {...g.lines};
+    let assigned = 0, maxIdx = 0;
+    weights.forEach((w, i) => { if(w.avail > weights[maxIdx].avail) maxIdx = i; });
+    weights.forEach((w, i) => {
+      const share = i === weights.length - 1
+        ? Math.round((target - assigned) * 100) / 100   // el último cierra la suma exacta
+        : Math.round(target * (w.avail / totalAvail) * 100) / 100;
+      assigned = Math.round((assigned + share) * 100) / 100;
+      const punit = priceUnit(w.o);
+      const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
+      const qty = punitConIva > 0 ? Math.round(share / punitConIva) : 0;
+      newLines[w.o.id] = {qty, amountConIva: Math.max(0, share), lastEdited: "amount"};
+    });
+    // Si el cierre dejó al último con 0/negativo por redondeo, mover el residuo al de mayor disponible
+    const last = weights[weights.length - 1];
+    if(newLines[last.o.id].amountConIva <= 0 && weights.length > 1){
+      const residue = newLines[last.o.id].amountConIva;
+      newLines[last.o.id] = {qty:0, amountConIva:0, lastEdited:"amount"};
+      const big = weights[maxIdx].o;
+      const newAmt = Math.round((newLines[big.id].amountConIva + residue) * 100) / 100;
+      const punitB = priceUnit(big) * (g.doc_type === "factura" ? 1.16 : 1);
+      newLines[big.id] = {qty: punitB > 0 ? Math.round(newAmt / punitB) : 0, amountConIva: Math.max(0,newAmt), lastEdited:"amount"};
+    }
+    updateGroup(groupIdx, {lines: newLines});
+    if(captureMode !== "amount") setCaptureMode("amount");
   };
 
   // Cambiar N groups
@@ -4877,6 +4921,22 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         onChange={e=>updateGroup(i, {reason: e.target.value})}
                         style={{...inp,padding:"4px 8px",fontSize:10}}/>
                     )}
+                    {/* v10.58.46 B1: total de la factura tal como viene en la hoja del
+                        cliente → Repartir lo prorratea entre las órdenes por su disponible */}
+                    <div style={{display:"flex",gap:4,alignItems:"center",marginTop:2}}>
+                      <input type="number" min="0" step="0.01" value={g.totalTarget||""}
+                        onChange={e=>updateGroup(i, {totalTarget: e.target.value})}
+                        onKeyDown={e=>{if(e.key==="Enter")repartirColumna(i)}}
+                        placeholder={"Total "+(g.doc_type==="factura"?"c/IVA":"s/IVA")}
+                        title={"Total de esta factura como viene en la hoja del cliente ("+(g.doc_type==="factura"?"CON IVA":"SIN IVA")+"). Repartir lo prorratea entre las órdenes según su disponible."}
+                        style={{...inp,padding:"4px 8px",fontSize:10,flex:1,minWidth:0}}/>
+                      <button onClick={()=>repartirColumna(i)}
+                        disabled={!(parseFloat(g.totalTarget||0) > 0)}
+                        title="Prorratear este total entre las órdenes según su disponible (las celdas quedan editables para ajuste fino)"
+                        style={{...bs("#5856d6"),padding:"4px 8px",fontSize:10,opacity:(parseFloat(g.totalTarget||0)>0)?1:0.4}}>
+                        ➗ Repartir
+                      </button>
+                    </div>
                   </div>
                 </th>
               ))}
@@ -4967,12 +5027,21 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                 }
                 colAmt = Math.round(colAmt*100)/100;
                 const ivaTag = g.doc_type === "factura" ? "c/IVA" : "s/IVA";
+                // v10.58.46 B1: semáforo contra el total tecleado de la hoja del cliente
+                const target = Math.round((parseFloat(g.totalTarget||0)||0)*100)/100;
+                const hasTarget = target > 0;
+                const diff = Math.round((colAmt - target)*100)/100;
+                const cuadra = hasTarget && Math.abs(diff) <= 0.01;
                 return (
-                  <td key={gi} style={{padding:"8px",borderLeft:"0.5px solid "+C.bd,textAlign:"right"}}>
+                  <td key={gi} style={{padding:"8px",borderLeft:"0.5px solid "+C.bd,textAlign:"right",
+                    background: hasTarget ? (cuadra ? "#34c75910" : "#ff950012") : undefined}}>
                     <div style={{fontSize:12,fontWeight:800,color:colAmt>0?C.tx:C.t3}}>
                       ${fmtMx(colAmt)} <span style={{fontSize:9,fontWeight:600,color:C.t2}}>{ivaTag}</span>
                     </div>
                     <div style={{fontSize:9,color:C.t2}}>{colQty.toLocaleString("es-MX")} pzas</div>
+                    {hasTarget && (cuadra
+                      ? <div style={{fontSize:9,fontWeight:800,color:C.ok}}>CUADRA ✓</div>
+                      : <div style={{fontSize:9,fontWeight:700,color:C.wn}}>{diff>0?"sobran":"faltan"} ${fmtMx(Math.abs(diff))}</div>)}
                   </td>
                 );
               })}
