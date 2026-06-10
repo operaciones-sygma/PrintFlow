@@ -4714,10 +4714,15 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         </button>
         <button onClick={()=>setCaptureMode("amount")}
           style={{...bs(captureMode==="amount"?"#5856d6":C.bg, captureMode==="amount"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="amount"?"none":"0.5px solid "+C.bd}}
-          title="Karla teclea el monto, sistema calcula las piezas proporcionales. Útil cuando el cliente manda hoja con montos por destino (ej. cliente paga $X por sucursal).">
-          💰 Monto (con IVA)
+          title="Karla teclea el monto, sistema calcula las piezas proporcionales. La unidad depende del tipo de cada columna: factura = CON IVA (como la hoja del cliente), remisión y saldo Corona = SIN IVA. Cada celda muestra c/IVA o s/IVA.">
+          💰 Monto ($)
         </button>
         <span style={{fontSize:10,color:C.t2,fontStyle:"italic",marginLeft:4}}>· se recuerda tu preferencia</span>
+        {/* v10.58.44: el rótulo decía "(con IVA)" global pero solo aplica a facturas —
+            remisión/corona se capturan SIN IVA. La unidad real la marca cada celda. */}
+        {captureMode==="amount"&&<span style={{fontSize:10,color:"#5856d6",fontWeight:600,marginLeft:4,background:"#5856d610",padding:"3px 8px",borderRadius:6}}>
+          📄 Factura: monto CON IVA (como la hoja del cliente) · 📋 Remisión / 💎 Saldo: SIN IVA
+        </span>}
       </div>
 
       {/* Selector N facturas */}
