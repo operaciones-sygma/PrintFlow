@@ -1395,6 +1395,90 @@ function OrderChangeHistory({orderId}) {
     </div>}
   </div>;
 }
+// ☀️ v10.58.51 — DESPERTADOR: bienvenida diaria con los bloqueos del usuario.
+// Pedido de Marcelo: ventana GRANDE al entrar al app; solo se cierra escribiendo
+// "SI ENTIENDO" (queda registro vía log_wakeup_ack). Aplica a todos; Gerardo
+// (producción) NO se despierta por trabajo en máquinas (ready/in_production/
+// packaging = su flujo normal del tablero), solo por bloqueos fuera de máquinas.
+function getWakeupItems(role, userLogin, orders){
+  const isActive = o => !o.cancelled_at && !String(o.stage||"").includes("cancelled") &&
+    !String(o.stage||"").includes("delivered") && o.stage!=="stocked" &&
+    !["web_pending","web_rejected"].includes(o.stage);
+  const now = new Date();
+  const daysLate = o => {
+    if(!o.due_date) return 0;
+    const d = parseDate(o.due_date);
+    return d < now ? Math.max(1, Math.floor((now - d) / 86400000)) : 0;
+  };
+  const maqMissing = o => o.order_type==="maquila" &&
+    ["maq_created","maq_sent","maq_in_progress"].includes(o.stage) &&
+    (!Number(o.maq_price) || Number(o.maq_price)<=0 || !Number(o.maq_cost) || Number(o.maq_cost)<=0);
+  const maqMissingTxt = o => "💸 falta " + [(!Number(o.maq_price)||Number(o.maq_price)<=0)&&"precio cliente",
+    (!Number(o.maq_cost)||Number(o.maq_cost)<=0)&&"costo proveedor"].filter(Boolean).join(" y ");
+  const items = [];
+  for(const o of orders){
+    if(!isActive(o)) continue;
+    const late = daysLate(o);
+    const resp = STAGE_RESPONSIBLE[o.stage];
+    let why = null;
+    if(role==="admin"){
+      if(maqMissing(o)) why = maqMissingTxt(o) + " (le toca a Lupita)";
+      else if(late > 0) why = "vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" → "+resp.name:"");
+    } else if(role==="vendedor"){
+      if(isVendedorOwnerByAgent(role, userLogin, o) && late > 0)
+        why = "tu orden, vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" ("+resp.name+")":"");
+    } else {
+      // Gerardo: el trabajo EN MÁQUINAS no lo despierta (es su tablero normal)
+      if(role==="produccion" && ["ready","in_production","packaging"].includes(o.stage)) continue;
+      const r = resp?.role;
+      const mine = r===role || (r==="both" && (role==="produccion"||role==="preprensa")) || (r==="secretaria" && isSec(role));
+      if(!mine) continue;
+      if(role==="secretaria" && maqMissing(o)) why = maqMissingTxt(o) + " — sin esto NO se puede recibir";
+      else if(late > 0) why = "vencida hace " + late + " día" + (late===1?"":"s") + " · está en " + (SM[o.stage]?.l||o.stage);
+    }
+    if(why) items.push({o, why, late});
+  }
+  items.sort((a,b)=>b.late-a.late);
+  return items;
+}
+
+function WakeupModal({user, userLogin, items, onAck}){
+  const [text,setText]=useState("");
+  const norm=s=>String(s||"").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();
+  const matched=norm(text)==="SI ENTIENDO";
+  useEffect(()=>{ if(matched) onAck(); },[matched,onAck]);
+  const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
+  return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:16,backdropFilter:"blur(3px)"}}>
+    <div style={{background:C.bg,borderRadius:24,padding:28,maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.4)"}}>
+      <div style={{fontSize:30,fontWeight:900,color:C.tx,lineHeight:1.15}}>☀️ Buenos días, {userDisplayName(user)}</div>
+      <div style={{fontSize:12,color:C.t2,marginTop:4,textTransform:"capitalize"}}>{today}</div>
+      <div style={{fontSize:14,fontWeight:700,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:12,padding:"10px 14px",marginTop:14}}>
+        {items.length===1?"Hay 1 pendiente esperando TU acción antes de empezar el día:":"Hay "+items.length+" pendientes esperando TU acción antes de empezar el día:"}
+      </div>
+      <div style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
+        {items.map(({o,why,late},i)=>(
+          <div key={o.id} style={{border:"1px solid "+(late>3?C.dn+"40":C.bd),borderLeft:"4px solid "+(late>3?C.dn:"#f59e0b"),borderRadius:10,padding:"10px 14px",background:late>3?C.dn+"06":C.bg}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
+              <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
+              {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"monospace"}}>{o.invoice_folio}</span>}
+              {o.due_date&&<span style={{fontSize:10,color:late>0?C.dn:C.t3,fontWeight:late>0?700:400,marginLeft:"auto"}}>📅 {fD(o.due_date)}</span>}
+            </div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?" · 🚚 "+o.maq_provider.trim():""}</div>
+            <div style={{fontSize:12,fontWeight:700,color:late>3?C.dn:"#b45309",marginTop:4}}>{why}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{marginTop:16,borderTop:"1px solid "+C.bd,paddingTop:14}}>
+        <div style={{fontSize:12,color:C.t2,marginBottom:8}}>Para continuar, escribe <b style={{color:C.tx,letterSpacing:1}}>SI ENTIENDO</b> — la ventana se cierra sola y queda registrada tu confirmación.</div>
+        <input autoFocus value={text} onChange={e=>setText(e.target.value)}
+          placeholder="Escribe aquí..."
+          style={{...inp,fontSize:16,fontWeight:700,letterSpacing:1,textAlign:"center",padding:"12px 16px",border:"2px solid "+(matched?C.ok:C.bd)}}/>
+      </div>
+    </div>
+  </div>;
+}
+
 // 🆕 v10.13.0 — Typeahead contra cobranza.clients (RPC search_clients_typeahead)
 function ClientInput({value,onChange,onSelect,clients}) {
   const [show,setShow]=useState(false);
@@ -11240,6 +11324,28 @@ export default function PrintFlow() {
   const [pendingOCNavId,setPendingOCNavId]=useState(null);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
+  // ☀️ v10.58.51 — Despertador: bloqueos del usuario en ventana de bienvenida, 1 vez al día.
+  const [wakeupItems,setWakeupItems]=useState(null); // null = aún no evaluado
+  useEffect(()=>{
+    if(!loaded||!user){setWakeupItems(null);return}
+    try{
+      const key="pf_wakeup_"+(userLogin||user)+"_"+new Date().toISOString().slice(0,10);
+      if(localStorage.getItem(key)){setWakeupItems([]);return}
+      setWakeupItems(getWakeupItems(user,userLogin,orders));
+    }catch(e){console.warn("[wakeup]",e);setWakeupItems([])}
+    // Evalúa al completar la carga inicial o cambiar de usuario — no con cada reload
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[loaded,user,userLogin]);
+  const ackWakeup=useCallback(()=>{
+    try{
+      const key="pf_wakeup_"+(userLogin||user)+"_"+new Date().toISOString().slice(0,10);
+      localStorage.setItem(key,"1");
+    }catch(e){}
+    const compact=(wakeupItems||[]).map(({o,why})=>({pn:o.production_number||o.id,why}));
+    // Registro best-effort de la confirmación (no bloquea el cierre)
+    supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(()=>{},()=>{});
+    setWakeupItems([]);
+  },[user,userLogin,wakeupItems]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
   const [devolverModal,setDevolverModal]=useState(null);
   const [cancelModal,setCancelModal]=useState(null);
@@ -13497,6 +13603,8 @@ export default function PrintFlow() {
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
+      {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
+      {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={ackWakeup}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
       {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} onResolve={clientConfirmModal.onResolve}/>}
       {toast&&<Toast message={toast.message} type={toast.type} onDone={()=>setToast(null)}/>}
