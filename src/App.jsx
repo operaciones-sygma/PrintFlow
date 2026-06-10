@@ -1497,6 +1497,10 @@ function diagnoseOrder(o){
 // "SI ENTIENDO" (queda registro vía log_wakeup_ack). Aplica a todos; Gerardo
 // (producción) NO se despierta por trabajo en máquinas (ready/in_production/
 // packaging = su flujo normal del tablero), solo por bloqueos fuera de máquinas.
+// v10.58.54: agentes de ventas CON usuario en PrintFlow — las órdenes de agentes
+// fuera de esta lista (Manuel) las persigue Lupita, que captura por ellos.
+// Si un vendedor nuevo recibe usuario, agregarlo aquí (en minúsculas).
+const VENDEDORES_CON_USUARIO = new Set(["genaro"]);
 function getWakeupItems(role, userLogin, orders){
   const isActive = o => !o.cancelled_at && !String(o.stage||"").includes("cancelled") &&
     !String(o.stage||"").includes("delivered") && o.stage!=="stocked" &&
@@ -1538,7 +1542,16 @@ function getWakeupItems(role, userLogin, orders){
         if(role==="preprensa" && o.validated_by_preprensa) continue;
       }
       const mine = r===role || (r==="both" && (role==="produccion"||role==="preprensa")) || (r==="secretaria" && isSec(role));
-      if(!mine) continue;
+      if(!mine){
+        // v10.58.54 (decisión de Marcelo 2026-06-10): las órdenes de agentes SIN
+        // usuario en PrintFlow (Manuel) las persigue Lupita — ella captura por
+        // ellos. Genaro tiene usuario y ve las suyas por la rama vendedor.
+        const ag=(o.agent||"").trim();
+        if(role==="secretaria" && late>0 && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase())){
+          items.push({o, why:"vencida hace "+late+" día"+(late===1?"":"s")+" · capturas por "+ag+" — está en "+(SM[o.stage]?.l||o.stage)+(resp?" ("+resp.name+")":""), late});
+        }
+        continue;
+      }
       if(role==="secretaria" && maqMissing(o)) why = maqMissingTxt(o) + " — sin esto NO se puede recibir";
       else if(late > 0) why = "vencida hace " + late + " día" + (late===1?"":"s") + " · está en " + (SM[o.stage]?.l||o.stage);
     }
