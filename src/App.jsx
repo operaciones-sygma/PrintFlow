@@ -1404,8 +1404,13 @@ function localDayStr(d=new Date()){const p=x=>String(x).padStart(2,"0");return d
 // avanzado el viernes — consistente con calcDeliveryDate que ya usa días hábiles).
 function bizDaysSince(date){
   const from=new Date(date); if(isNaN(from.getTime()))return 0;
-  let d=0; const cur=new Date(from); const now=new Date();
-  while(cur<now){ cur.setDate(cur.getDate()+1); const dow=cur.getDay(); if(dow!==0&&dow!==6)d++; if(d>365)break; }
+  // v10.58.55 REG#1: contar por LÍMITES de día-calendario (no time-of-day) — una
+  // orden que entró HOY da 0, no 1. El conteo viejo avanzaba al día siguiente ANTES
+  // de evaluar y sumaba +1 a toda entrada del mismo día (falsos "hace 1 día").
+  const cur=new Date(from.getFullYear(),from.getMonth(),from.getDate());
+  const n=new Date(); const end=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  let d=0;
+  while(cur<end){ cur.setDate(cur.getDate()+1); const dow=cur.getDay(); if(dow!==0&&dow!==6)d++; if(d>365)break; }
   return d;
 }
 // 🗼 v10.58.52 — TORRE DE CONTROL: motor de diagnóstico central.
@@ -1426,11 +1431,11 @@ function daysInStage(o){
       return bizDaysSince(tl[i].date);
     }
   }
-  // v10.58.53: fallback = ÚLTIMA entrada del timeline (no created_at — eso medía la
-  // edad total de la orden e inundaba la Torre con falsos bloqueos tras recargar)
-  const last=tl.length?tl[tl.length-1]?.date:null;
-  const base=last||o?.created_at;
-  return base?bizDaysSince(base):0;
+  // v10.58.55 REG#2: fallback = created_at (sobre-cuenta = seguro). El fallback viejo
+  // ("última entrada de timeline") sub-contaba: una "✏️ Editada" reciente des-estancaba
+  // una orden vieja → falso NEGATIVO. Tras el backfill de to_stage (v10.58.55) toda
+  // orden activa tiene match real, así que este fallback casi nunca se usa.
+  return o?.created_at?bizDaysSince(o.created_at):0;
 }
 // diagnoseOrder: POR QUÉ una orden no avanza → {key, text, respRole, respName,
 // external, sev, days, action, snoozed} o null si está sana. ÚNICA fuente de
@@ -1481,13 +1486,13 @@ function diagnoseOrder(o){
   if(late){
     const resp=STAGE_RESPONSIBLE[stage];
     return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
-      resp?.role||"admin",resp?.role==="both"?"Producción y Pre-prensa":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
+      resp?.role||"admin",resp?.role==="both"?"Gerardo y Noemí":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
   }
   // v10.58.53: una orden MONTADA EN MÁQUINA no está estancada (paridad con getStale v10.49.4)
   if(d>=2&&!o.current_machine&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)){
     const resp=STAGE_RESPONSIBLE[stage];
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
-      resp.role,resp.role==="both"?"Producción y Pre-prensa":resp.name,{sev:d>=4?"red":"orange"});
+      resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
   }
   return null;
 }
@@ -4557,7 +4562,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       if(!d?.groups?.length) return;
       // v10.58.53: sin órdenes elegibles no hay nada que restaurar — NO tocar el draft
       if(eligibleOrders.length === 0) return;
-      const anyData = d.groups.some(g=>(g.folio||"").trim()||(g.label||"").trim()||Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0));
+      const anyData = d.groups.some(g=>(g.folio||"").trim()||(g.label||"").trim()||String(g.totalTarget||"").trim()||Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0));
       if(!anyData){ localStorage.removeItem(draftKey); return; }
       const mins = Math.max(1, Math.round((Date.now() - (d.ts||0))/60000));
       // v10.58.53: avisar si órdenes del borrador ya no son elegibles (celdas que se pierden)
@@ -11464,11 +11469,12 @@ function CreateOCModal({onCreate, onClose}){
 // acciones de 1 click. Agrupada POR PERSONA (decisión de Marcelo: "ir con ella
 // directamente"), crónicas arriba, sanas visibles por persona, y 🔕 En espera
 // para falsos positivos (ej. esperando autorización del cliente).
-function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth}){
+function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth,dayTick}){
   const [openHealthy,setOpenHealthy]=useState({});
   const [showSnoozed,setShowSnoozed]=useState(true);
   const isActive=o=>{const s=String(o.stage||"");return !o.cancelled_at&&!s.includes("cancelled")&&!s.includes("delivered")&&s!=="stocked"&&!["web_pending","web_rejected"].includes(s)};
-  const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders,dayTick]);
   const blocked=rows.filter(r=>r.diag&&!r.diag.snoozed);
   const snoozedRows=rows.filter(r=>snoozeActive(r.o));
   const healthy=rows.filter(r=>!r.diag&&!snoozeActive(r.o));
@@ -12246,7 +12252,7 @@ export default function PrintFlow() {
       }catch(moveErr){
         // v10.58.53 #3: si el move falla (ej. cliente distinto sin override), la OC
         // recién creada quedaba VIVA y VACÍA consumiendo folio. Limpiarla.
-        try{await supabase.from("purchase_orders").delete().eq("id",newOCId)}catch(cleanErr){console.warn("[createOCAndMove] cleanup:",cleanErr?.message)}
+        try{await supabase.rpc("delete_orphan_oc",{p_oc_id:newOCId})}catch(cleanErr){console.warn("[createOCAndMove] cleanup:",cleanErr?.message)}
         throw moveErr;
       }
       showToast("🛒 "+newOCId+" creada · ↔️ orden movida");
@@ -12772,7 +12778,7 @@ export default function PrintFlow() {
         const {error:amErr}=await supabase.from("orders").update({stage,current_machine:mid,machine_queue_position:null}).eq("id",oid);
         if(amErr)throw new Error(amErr.message);
         await db.addMachineLog(oid,mid);
-        await db.addTimeline(oid,"🏭 "+label,user,stageColor);
+        await db.addTimeline(oid,"🏭 "+label,user,stageColor,stage);
         setOrders(p=>p.map(x=>{if(x.id!==oid)return x;const l=closeML(x);l.push({machine:mid,started:new Date().toISOString()});return{...x,stage,current_machine:mid,machine_queue_position:null,machine_log:l,timeline:addTL(x,"🏭 "+label,{to:stage})}}));
         // Si había siguiente en cola en oldMachine, promover (abrir log)
         if(queueResult?.new_active_id){
@@ -12796,7 +12802,7 @@ export default function PrintFlow() {
       if(stageErr)throw new Error(stageErr.message);
       // Abrir log si será activa
       if(willBeActive)await db.addMachineLog(oid,mid);
-      await db.addTimeline(oid,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),user,stageColor);
+      await db.addTimeline(oid,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),user,stageColor,stage);
       // Update local
       setOrders(p=>p.map(x=>{
         if(x.id===oid){
@@ -13034,7 +13040,7 @@ export default function PrintFlow() {
     try{
       const {error}=await supabase.from("orders").update({stage:"draft",created_by:newCreator,production_number:newPN}).eq("id",id);
       if(error)throw new Error(error.message);
-      await db.addTimeline(id,"🌐 → 📝 Aprobado · "+newPN,user,C.t3);
+      await db.addTimeline(id,"🌐 → 📝 Aprobado · "+newPN,user,C.t3,"draft");
       await db.addComment(id,"🌐 Pedido web aprobado · folio asignado "+newPN+" — entra al flujo de validación",user);
       const msg="📋 Nueva orden web "+newPN+" de "+(o.client||"")+" — "+(o.product_type||"")+" requiere validación";
       await db.addNotification("produccion",id,"new_order",msg,null,user);
@@ -13653,7 +13659,7 @@ export default function PrintFlow() {
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
-        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")}/>}
+        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
