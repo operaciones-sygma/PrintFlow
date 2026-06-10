@@ -4606,19 +4606,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     return total;
   }, [groups]);
 
-  // Total general
-  const planTotalConIva = useMemo(() => {
-    let total = 0;
-    for(const g of groups) {
-      for(const oid of Object.keys(g.lines)) {
-        const cell = g.lines[oid];
-        const c = Number(cell?.amountConIva || 0);
-        if(g.doc_type === "factura") total += c;
-        else total += c * 1.16; // remision/corona se muestra con IVA equivalente
-      }
-    }
-    return total;
-  }, [groups]);
+  // v10.58.46 B1b: el "Plan total (con IVA)" se retiró — mezclaba unidades (inflaba
+  // remisión/corona con un ×1.16 ficticio). Su lugar lo ocupa el marcador en vivo
+  // del header (disponible/asignado/por asignar, todo s/IVA).
 
   // Validación
   // v10.58.38: validación per-cell qty*punit ≈ amountSinIva ±1%. NO tautológica en modo amount
@@ -4797,8 +4787,30 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
       </p>
 
-      {/* HEADER de contexto OC */}
-      <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14}}>
+      {/* HEADER de contexto OC + MARCADOR EN VIVO
+          v10.58.46 B1b (pedido de Marcelo): el monto de la OC "baja" en vivo conforme
+          se asigna — número grande de POR ASIGNAR + barra de progreso + alerta de
+          rebase. Sticky para que no se pierda al hacer scroll. Todo en s/IVA (la
+          unidad de la OC); el cuadre c/IVA contra la hoja del cliente vive en la
+          fila SUMA de cada columna. (Reemplaza el "Plan total con IVA" que mezclaba
+          unidades ficticias para remisión/corona.) */}
+      {(() => {
+        let pAvail = 0, pAssigned = 0;
+        for(const o of eligibleOrders) {
+          const t = orderTotals[o.id];
+          const ex = existingByOrder[o.id] || {qty:0, amount:0};
+          pAvail += Math.max(0, (t?.totalAmount||0) - ex.amount);
+          pAssigned += (t?.amountSumSinIva||0);
+        }
+        pAvail = Math.round(pAvail*100)/100;
+        pAssigned = Math.round(pAssigned*100)/100;
+        const pRemaining = Math.round((pAvail - pAssigned)*100)/100;
+        const pOver = pRemaining < -0.01;
+        const pFull = !pOver && Math.abs(pRemaining) <= 0.01 && pAssigned > 0;
+        const pPct = pAvail > 0 ? Math.min(100, (pAssigned/pAvail)*100) : 0;
+        const heroColor = pOver ? C.dn : (pFull ? C.ok : (pAssigned > 0 ? "#5856d6" : C.t2));
+        const barColor = pOver ? C.dn : (pFull ? C.ok : "#5856d6");
+        return <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14,position:"sticky",top:-20,zIndex:5,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{oc?.client}</div>
@@ -4807,12 +4819,38 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
               💎 Cliente Corona · saldo: ${fmtMx(coronaBalance)} (sin IVA)
             </div>}
           </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Plan total (con IVA)</div>
-            <div style={{fontSize:18,fontWeight:800,color:C.tx}}>${fmtMx(planTotalConIva)}</div>
+          <div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Disponible OC (s/IVA)</div>
+              <div style={{fontSize:16,fontWeight:700,color:C.t2}}>${fmtMx(pAvail)}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Asignado</div>
+              <div style={{fontSize:16,fontWeight:700,color:pAssigned>0?"#5856d6":C.t3}}>${fmtMx(pAssigned)}</div>
+            </div>
+            <div style={{textAlign:"right",minWidth:150}}>
+              <div style={{fontSize:9,color:heroColor,textTransform:"uppercase",fontWeight:700}}>
+                {pOver ? "⚠ REBASADO POR" : (pFull ? "✓ COMPLETO" : "POR ASIGNAR")}
+              </div>
+              <div style={{fontSize:24,fontWeight:900,color:heroColor,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>
+                ${fmtMx(pOver ? -pRemaining : pRemaining)}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+        {/* Barra de progreso */}
+        <div style={{marginTop:8,height:8,background:C.bg,borderRadius:6,overflow:"hidden",border:"0.5px solid "+C.bd}}>
+          <div style={{height:"100%",width:pPct+"%",background:barColor,borderRadius:6,transition:"width 0.25s ease, background 0.25s ease"}}/>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+          <span style={{fontSize:9,color:C.t2}}>{Math.round(pPct)}% asignado</span>
+          <span style={{fontSize:9,color:pOver?C.dn:C.t2,fontWeight:pOver?700:400}}>
+            {pOver ? "el plan excede el valor de la OC — quita $"+fmtMx(-pRemaining)+" para poder crear"
+              : (pFull ? "OC cubierta al 100%" : "lo no asignado puede quedar para otro plan")}
+          </span>
+        </div>
+      </div>;
+      })()}
 
       {/* v10.58.38: Toggle global de modo de captura (qty vs amount) */}
       <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap",background:C.sf,padding:"8px 12px",borderRadius:10}}>
