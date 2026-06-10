@@ -656,6 +656,13 @@ const db = {
     if (error) throw new Error(error.message);
     return data;
   },
+  // v10.58.59 — "asoma" la próxima versión + hash SIN grabar (read-only). La hoja la
+  // muestra; el commit real (registerPrint) ocurre al imprimir de verdad.
+  async peekPrint(orderId) {
+    const {data, error} = await supabase.rpc("peek_print_version", { p_order_id: orderId });
+    if (error) throw new Error(error.message);
+    return data;
+  },
   // 🧹 v10.54.5 — Limpieza del histórico de impresiones (admin-only).
   // Borra rows de print_audit con printed_at < NOW() - p_keep_months meses.
   // Mínimo 3 meses. Devuelve {keep_months, cutoff_date, rows_deleted}.
@@ -1775,24 +1782,21 @@ function PrintOrder({order:o,onClose,role,userLogin,onReprinted,onPrintError}) {
     if(printing) return;
     setPrinting(true);
     try{
+      // v10.58.59 — "peek" de solo lectura: la hoja muestra la PRÓXIMA versión pero NO
+      // la graba. El registro real (incremento + audit + needs_reprint=false) ocurre
+      // cuando el usuario presiona "🖨️ Imprimir ahora" en la ventana (postMessage →
+      // listener del root → db.registerPrint). Un misclick que cierra la ventana NO cuenta.
       let printInfo=null;
       try{
-        printInfo=await db.registerPrint(o.id, userLogin||"sistema");
+        const peek=await db.peekPrint(o.id);
+        printInfo={version:peek.version, content_hash:peek.content_hash, printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", failed:false};
       }catch(e){
-        // Si falla el registro (network, permisos), igual permitimos imprimir
-        // pero sin versión actualizada — el footer mostrará "SIN REGISTRO".
-        // v10.53.2 m2 — notificar al usuario con toast para que sepa que la versión NO se incrementó.
-        console.warn("[register_print] falló, imprimiendo sin actualizar versión:", e?.message);
-        if(onPrintError) onPrintError("⚠️ Versión no se registró ("+(e?.message||"red caída")+"). La hoja saldrá con etiqueta SIN REGISTRO.");
+        // Si falla el peek (network, permisos), igual permitimos imprimir pero la hoja
+        // saldrá "SIN REGISTRO" (y el commit posterior también fallaría).
+        console.warn("[peek_print] falló, imprimiendo sin versión:", e?.message);
+        if(onPrintError) onPrintError("⚠️ No se pudo leer la versión ("+(e?.message||"red caída")+"). La hoja saldrá con etiqueta SIN REGISTRO.");
         printInfo={version:o.print_version||"?", printed_at:new Date().toISOString(), printed_by:userLogin||"sistema", content_hash:"NO-REG", failed:true};
       }
-      // v10.53.1 M2/M3 — solo actualizar state padre si el modal sigue montado, pasar o.id explícito
-      if(onReprinted && !printInfo.failed && mountedRef.current) onReprinted({
-        print_version: printInfo.version,
-        last_printed_at: printInfo.printed_at,
-        last_printed_by: printInfo.printed_by,
-        needs_reprint: false
-      }, o.id);
 
       const w=window.open("","_blank","width=800,height=900");
       if(!w) return; // popup blocker — try/finally garantiza setPrinting(false)
@@ -1847,8 +1851,28 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .print-footer{margin-top:24px;padding-top:8px;border-top:1px dashed #999;font-size:8px;color:#666;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
 .print-footer .pv-hash{font-family:Courier,monospace;font-weight:700;color:#222;font-size:9px;background:#f0f0f0;padding:2px 6px;border-radius:3px}
 .print-footer .pv-reprint-tag{color:#dc2626;font-weight:800;text-transform:uppercase}
-@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm;right:3mm}}
+.pf-toolbar{position:sticky;top:0;left:0;right:0;background:#1a1a1a;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:center;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.pf-toolbar button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
+.pf-toolbar .pf-go{font-size:15px;font-weight:700;padding:10px 26px;background:#16a34a;color:#fff}
+.pf-toolbar .pf-close{font-size:13px;padding:10px 18px;background:#444;color:#fff}
+.pf-toolbar .pf-note{font-size:11px;color:#bbb;margin-left:6px}
+@media print{body{padding:10px 14px}@page{margin:8mm}.page-break{page-break-after:always}.print-version-corner{top:3mm;right:3mm}.no-print{display:none!important}}
 </style></head><body>
+<div class="pf-toolbar no-print">
+  <button class="pf-go" onclick="pfPrint()">🖨️ Imprimir ahora</button>
+  <button class="pf-close" onclick="window.close()">Cerrar</button>
+  <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"La versión se registra al imprimir"}</span>
+</div>
+<script>
+  var __pfCommitted=false;
+  function pfPrint(){
+    if(!__pfCommitted){
+      __pfCommitted=true;
+      try{ if(window.opener) window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")}},"*"); }catch(e){}
+    }
+    window.print();
+  }
+</script>
 <div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>`;
 
     // ═══ HEADER ═══
@@ -2023,7 +2047,9 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     </div>`;
 
     h+=`</body></html>`;
-    w.document.write(h);w.document.close();setTimeout(()=>w.print(),300);
+    // v10.58.59 — sin auto-print: el usuario presiona "🖨️ Imprimir ahora" en la barra,
+    // que es cuando se registra la versión (evita conteos por misclick).
+    w.document.write(h);w.document.close();w.focus();
     } finally {
       // v10.53.1 C1 — siempre liberar el botón, incluso si el HTML build crashea o popup blocker
       if(mountedRef.current) setPrinting(false);
@@ -11882,6 +11908,23 @@ export default function PrintFlow() {
     db.loadChemicals().then(setChemicals);
     db.loadPlates().then(setPlates);
   }, [user, notifKey]);
+
+  // v10.58.59 — registro de impresión DIFERIDO: la ventana de impresión (otra pestaña)
+  // hace postMessage cuando el usuario presiona "🖨️ Imprimir ahora" → aquí grabamos la
+  // versión (db.registerPrint). Un misclick que abre y cierra la ventana NO cuenta.
+  useEffect(()=>{
+    if(!user)return;
+    const handler=async(ev)=>{
+      const d=ev?.data;
+      if(!d||d.type!=="pf-print-commit"||!d.orderId)return;
+      try{
+        const info=await db.registerPrint(d.orderId, d.user||userLogin||"sistema");
+        setOrders(prev=>prev.map(x=>x.id===d.orderId?{...x,print_version:info.version,last_printed_at:info.printed_at,last_printed_by:info.printed_by,needs_reprint:false}:x));
+      }catch(e){ console.warn("[print-commit]",e); showToast("⚠️ No se registró la impresión: "+(e?.message||"error"),"warning"); }
+    };
+    window.addEventListener("message",handler);
+    return ()=>window.removeEventListener("message",handler);
+  },[user,userLogin]);
 
   // Realtime subscription — reload when any client makes changes
   // Use ref to avoid recreating channel when reload changes (archiveLoaded toggle)
