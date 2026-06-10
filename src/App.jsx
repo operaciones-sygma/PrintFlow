@@ -306,6 +306,22 @@ function isVendedorOwnerByAgent(user, userLogin, order) {
   return !!a && a === u;
 }
 
+// v10.58.41 — stages PRE-PRODUCCIÓN (antes de que el trabajo entre a máquina).
+// Genaro puede editar sus órdenes (donde es agent) hasta este punto. Una vez en
+// producción (placas_listas/ready/in_production/packaging/salidas) ya no, porque
+// cambiar specs con el trabajo en máquina causa reimpresiones costosas.
+const PRE_PROD_STAGES = ["draft","design","proof_printing","proof_client","ctp"];
+// ¿Genaro (vendedor owner) puede editar esta orden? Hasta antes de producción,
+// no facturada, no cancelada. El defense-in-depth del handler update ya bloquea
+// los campos comerciales (precio/cliente/folio). order_type interna (no maquila).
+function canVendedorEditPreProd(user, userLogin, order) {
+  if (user !== "vendedor") return false;
+  if (!isVendedorOwnerByAgent(user, userLogin, order)) return false;
+  if (order?.order_type === "maquila") return false;
+  if (order?.invoice_folio) return false;
+  return PRE_PROD_STAGES.includes(order?.stage);
+}
+
 // 🔒 v10.12.0.2 — Gate central. Retorna true si el user puede ejecutar la acción sobre esta orden.
 function canExecuteAction(action, order, user, userLogin) {
   const rule = ACTION_ROLES[action];
@@ -402,6 +418,16 @@ const db = {
   async addTimeline(orderId, action, byUser, color) {
     const {error}=await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color });
     if(error)throw new Error("addTimeline: "+error.message);
+  },
+  // 🆕 v10.58.41 — Historial campo-a-campo de cambios (order_change_log). El trigger lo escribe;
+  // aquí solo se lee. Devuelve [{field, field_label, value_before, value_after, stage_at_change, changed_by, changed_at}]
+  async getOrderChangeLog(orderId) {
+    const {data,error}=await supabase.from("order_change_log")
+      .select("field,field_label,value_before,value_after,stage_at_change,changed_by,changed_at")
+      .eq("order_id",orderId)
+      .order("changed_at",{ascending:false});
+    if(error)throw new Error("getOrderChangeLog: "+error.message);
+    return data||[];
   },
   async addComment(orderId, text, byUser) {
     const {error}=await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser });
@@ -1306,6 +1332,53 @@ function Timeline({tl=[]}) {
   const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",karla:"#a855f7",sistema:C.t3,admin:C.ok};
   const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   return <div style={{marginTop:6}}><button onClick={()=>setOp(!op)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>📜 ({tl.length}) {op?"▲":"▼"}</button>{(op||tl.length<=3)&&<div style={{marginTop:6,borderLeft:"2px solid "+C.bd,paddingLeft:12}}>{show.map((e,i)=><div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:C.tx,fontWeight:500}}>{e.action}</div><div style={{fontSize:10,color:C.t3}}><span style={{color:rc[e.by]||C.t3,fontWeight:600}}>{rN[e.by]||e.by||""}</span>{e.by?" · ":""}{fDT(e.date)}</div></div>)}</div>}</div>;
+}
+// 🆕 v10.58.41 — Historial campo-a-campo de cambios (lee order_change_log).
+// Carga on-demand al expandir. Muestra: campo · antes → después · quién · cuándo.
+function OrderChangeHistory({orderId}) {
+  const [open,setOpen]=useState(false);
+  const [rows,setRows]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",karla:"#a855f7",sistema:C.t3,admin:C.ok};
+  const load=async()=>{
+    if(rows!==null)return;
+    setLoading(true);
+    try{const data=await db.getOrderChangeLog(orderId);setRows(data);}
+    catch(e){console.error("[OrderChangeHistory]",e);setRows([]);}
+    finally{setLoading(false);}
+  };
+  const toggle=()=>{const n=!open;setOpen(n);if(n)load();};
+  const fmtV=(field,v)=>{
+    if(v===null||v===undefined||v==="")return "(vacío)";
+    if(field==="price"||field==="maq_cost"||field==="maq_price"){const n=Number(v);return isNaN(n)?v:fmt(n);}
+    if(field==="due_date")return fD(v);
+    if(field==="standard_size")return ssLabel(v)||v;
+    if(typeof v==="string"&&v.length>50)return v.substring(0,50)+"…";
+    return String(v);
+  };
+  return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+    <button onClick={toggle} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>
+      🕓 Historial de cambios {open?"▲":"▼"}
+    </button>
+    {open&&<div style={{marginTop:6}}>
+      {loading?<div style={{fontSize:10,color:C.t3,padding:"6px 0"}}>Cargando…</div>:
+       (rows&&rows.length>0)?<div style={{borderLeft:"2px solid "+C.bd,paddingLeft:12,display:"flex",flexDirection:"column",gap:6}}>
+        {rows.map((r,i)=><div key={i} style={{fontSize:10}}>
+          <div style={{color:C.tx,fontWeight:600}}>{r.field_label||r.field}</div>
+          <div style={{color:C.t2}}>
+            <span style={{color:C.dn}}>{fmtV(r.field,r.value_before)}</span>
+            {" → "}
+            <span style={{color:C.ok}}>{fmtV(r.field,r.value_after)}</span>
+          </div>
+          <div style={{color:C.t3,fontSize:9}}>
+            <span style={{color:rc[r.changed_by]||C.t3,fontWeight:600}}>{r.changed_by}</span>
+            {" · "}{fDT(r.changed_at)}
+            {r.stage_at_change&&<span> · {SM[r.stage_at_change]?.l||r.stage_at_change}</span>}
+          </div>
+        </div>)}
+      </div>:<div style={{fontSize:10,color:C.t3,padding:"6px 0"}}>Sin cambios registrados todavía.</div>}
+    </div>}
+  </div>;
 }
 // 🆕 v10.13.0 — Typeahead contra cobranza.clients (RPC search_clients_typeahead)
 function ClientInput({value,onChange,onSelect,clients}) {
@@ -7542,7 +7615,16 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
         <div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-p</span></div>
       </div>}
-      {(o.stage!=="draft"&&o.stage!=="salidas"&&o.stage!=="proof_client"||(o.validated_by_production&&o.validated_by_preprensa&&o.stage==="draft"))&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#5856d608",borderRadius:10,border:"1px solid #5856d620"}}>
+      {/* v10.58.41 — Genaro (vendedor owner) puede editar sus órdenes hasta antes de producción,
+          incluso después de validadas, para corregir errores de captura. El historial registra
+          cada cambio y se notifica al área responsable. */}
+      {role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"6px 10px",background:"#5856d608",borderRadius:10,border:"1px solid #5856d620"}}>
+        <span style={{fontSize:10,color:"#5856d6",fontWeight:600}}>Tu orden — puedes corregir antes de producción</span>
+        <button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️</button>
+      </div>}
+      {/* Read-only solo si NO es vendedor-owner editable (preserva lógica original para Lupita) */}
+      {!(role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft")&&(o.stage!=="draft"&&o.stage!=="salidas"&&o.stage!=="proof_client"||(o.validated_by_production&&o.validated_by_preprensa&&o.stage==="draft"))&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#5856d608",borderRadius:10,border:"1px solid #5856d620"}}>
         <span style={{fontSize:11,color:"#5856d6",fontWeight:600}}>🔒 Orden validada — solo lectura</span>
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️</button>
       </div>}
@@ -7600,6 +7682,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.wn),padding:"3px 8px",fontSize:9}}>🗑️+</button>}
     </div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
+    {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand) */}
+    {!compact&&expanded&&<OrderChangeHistory orderId={o.id}/>}
     {!compact&&expanded&&vOwns&&(isMaq||o.comments?.length>0)&&<div onClick={e=>e.stopPropagation()}><CommentLog comments={o.comments||[]} onAdd={c=>onAction(o.id,"comment",c)} role={role}/></div>}
     {!compact&&expanded&&vOwns&&<div onClick={e=>e.stopPropagation()}><QuickNotes notes={o.notes_log||[]} onAdd={text=>onAction(o.id,"quick_note",text)} role={role}/></div>}
   </div>;
@@ -11370,6 +11454,19 @@ export default function PrintFlow() {
       if(user==="vendedor" && "agent" in safeUpdate && safeUpdate.agent !== originalOrder.agent){
         delete safeUpdate.agent;
       }
+      // v10.58.41 — Genaro (vendedor) NUNCA edita campos COMERCIALES, ni antes de facturar.
+      // Decisión de Marcelo: "todo menos comerciales". Edita specs/cantidad/fecha/notas,
+      // pero NO precio/maquila/cliente. (price/maq_price ya cubiertos arriba si pre-asignado;
+      // esto lo extiende a vendedor SIEMPRE, sin importar folio.)
+      if(user==="vendedor"){
+        delete safeUpdate.price;
+        delete safeUpdate.maq_price;
+        delete safeUpdate.maq_cost;
+        if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) delete safeUpdate.client_id;
+        if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
+        if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
+        if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) delete safeUpdate.client_company;
+      }
     }
     // v10.43.6 FIX A5 — Si al editar el cliente quedó sin client_id (escrito a mano) pero
     // tiene nombre, intentar upsert para mantener vínculo correcto con cobranza.clients.
@@ -11413,6 +11510,11 @@ export default function PrintFlow() {
       const err=new Error("order_stage_changed");err._toasted=true;throw err;
     }
     const willMarkPostEdit=orderBefore?.invoice_folio&&!orderBefore?.has_post_invoice_edits;
+    // v10.58.41 — estampar actor + timestamp para el trigger de historial (order_change_log).
+    // El trigger log_order_field_changes solo atribuye a last_edited_by si last_edited_at cambió
+    // en este UPDATE (= edición de usuario). Esto distingue ediciones reales de cambios de sistema.
+    safeUpdate.last_edited_by = userLogin || user;
+    safeUpdate.last_edited_at = new Date().toISOString();
     // v10.47.0 — has_post_invoice_edits ahora lo setea el trigger BEFORE UPDATE auto_mark_post_invoice_edits.
     // Frontend solo predice el valor para optimistic UI; el backend (trigger SECURITY DEFINER) lo confirma.
     setOrders(p=>p.map(o=>o.id===f.id?{...o,...safeUpdate,...(willMarkPostEdit?{has_post_invoice_edits:true}:{}),timeline:addTL(o,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada")}:o));
@@ -11434,25 +11536,30 @@ export default function PrintFlow() {
         editMsg="✏️ "+userName+" editó la orden de "+clientStr+folioStr+"\n\nCambios:";
       }
       changes.forEach(c=>{editMsg+="\n• "+c.label+": "+fmtEditValue(c.key,c.before)+" → "+fmtEditValue(c.key,c.after)});
-      // Notif al trío (Lupita+Noemí+Gerardo) excepto al editor
-      const editTrio=["secretaria","preprensa","produccion"];
-      for(const targetRole of editTrio){
-        if(user!==targetRole)await db.addNotification(targetRole,f.id,"order_edit",editMsg,null,user);
+      // v10.58.41 — notificar al RESPONSABLE DEL ÁREA donde está el trabajo (stage actual),
+      // en lugar del trío fijo. Lo pidió Genaro: que se entere quien tiene el trabajo en su área.
+      const resp=STAGE_RESPONSIBLE[orderBefore?.stage];
+      const targetRoles=new Set();
+      if(resp){
+        if(resp.role==="both"){targetRoles.add("produccion");targetRoles.add("preprensa");}
+        else targetRoles.add(resp.role);
       }
-      // Karla si la orden ya estaba facturada
-      if(fiscalFolio&&user!=="karla")await db.addNotification("karla",f.id,"order_edit",editMsg,null,user);
-      // Si la orden fue creada por alguien fuera del trío (típicamente Genaro vendedor), también notificarle
+      // Karla si la orden ya estaba facturada (cobranza necesita saber cambios post-folio)
+      if(fiscalFolio)targetRoles.add("karla");
+      // El creador original (típicamente Genaro vendedor) si está fuera del set
       const stdR=["secretaria","produccion","preprensa","german","admin","karla","sistema"];
-      if(orderBefore?.created_by&&!stdR.includes(orderBefore.created_by)&&orderBefore.created_by!==user){
-        await db.addNotification(orderBefore.created_by,f.id,"order_edit",editMsg,null,user);
+      if(orderBefore?.created_by&&!stdR.includes(orderBefore.created_by))targetRoles.add(orderBefore.created_by);
+      // Enviar a cada destino (excepto al propio editor)
+      for(const targetRole of targetRoles){
+        if(targetRole!==user&&targetRole!==userLogin)await db.addNotification(targetRole,f.id,"order_edit",editMsg,null,user);
       }
-      // Admin in-app (filtro 2B en trigger Telegram excluye order_edit para admin)
+      // Admin: in-app + Telegram (v10.58.41: el filtro 2B ahora permite order_edit a admin)
       if(user!=="admin")await db.addNotification("admin",f.id,"order_edit",editMsg,null,user);
     }
     showToast(willMarkPostEdit?"💾 Orden actualizada (marcada como editada post-factura)":"💾 Orden actualizada");
     setEditO(null);setView("pipeline");
     }catch(e){console.error("[update] Error al guardar:",e);if(!e?._toasted)showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
-  },[user,orders,showToast,reload]);
+  },[user,userLogin,orders,showToast,reload]);
 
   const doAdv=useCallback(async(id,ns)=>{
     // v10.49.2 fix#3 — Guard maquila también en doAdv (cubre DnD, no solo botón).
@@ -12053,7 +12160,11 @@ export default function PrintFlow() {
       if(!canEditWebOrder(o,user)){showToast("❌ Solo Lupita y Admin pueden editar pedidos de origen web","error");return;}
       /* v10.58.23: ownership de vendedor incluye agent matching */
       if(isSec(user)&&o.created_by&&o.created_by!==userLogin&&!isVendedorOwnerByAgent(user,userLogin,o))return;
-      if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa)return;
+      // v10.58.41 — el lock por validación NO aplica a Genaro (vendedor owner) en stages
+      // pre-producción: puede corregir errores de captura hasta antes de que entre a máquina.
+      // El defense-in-depth del handler update ya protege precio/cliente/folio.
+      if(isSec(user)&&o.order_type!=="maquila"&&o.validated_by_production&&o.validated_by_preprensa
+         &&!canVendedorEditPreProd(user,userLogin,o))return;
       setEditO(o);setView("form");
     }
     if(action==="edit_specs"){const o=orders.find(x=>x.id===id);
