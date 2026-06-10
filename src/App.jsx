@@ -185,17 +185,26 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
+// v10.58.43 #12: comparar por CONTENIDO — los arrays (pantones) se comparaban por
+// referencia y los números por identidad estricta ('1500' vs 1500), generando
+// notificaciones fantasma "288 C → 288 C" en cada edición (verificado en producción).
 function diffOrderFields(before,after){
   const out=[];
+  const norm=v=>{
+    if(Array.isArray(v))return v.join("|");
+    if(typeof v==="number")return String(v);
+    if(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))return String(Number(v));
+    return v;
+  };
   for(const k of Object.keys(TRACKED_EDIT_FIELDS)){
     if(!(k in after))continue;
     const a=before==null?undefined:before[k];
     const b=after[k];
-    // Tratar null/undefined/"" como equivalentes (sin cambio real)
-    const aEmpty=a==null||a==="";
-    const bEmpty=b==null||b==="";
+    // Tratar null/undefined/""/array vacío como equivalentes (sin cambio real)
+    const aEmpty=a==null||a===""||(Array.isArray(a)&&a.length===0);
+    const bEmpty=b==null||b===""||(Array.isArray(b)&&b.length===0);
     if(aEmpty&&bEmpty)continue;
-    if(a===b)continue;
+    if(norm(a)===norm(b))continue;
     out.push({key:k,label:TRACKED_EDIT_FIELDS[k],before:a,after:b});
   }
   return out;
@@ -1341,7 +1350,8 @@ function OrderChangeHistory({orderId}) {
   const [loading,setLoading]=useState(false);
   const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",karla:"#a855f7",sistema:C.t3,admin:C.ok};
   const load=async()=>{
-    if(rows!==null)return;
+    // v10.58.43 #34: refetch en cada apertura — antes cacheaba para siempre y las
+    // ediciones posteriores no aparecían al re-expandir.
     setLoading(true);
     try{const data=await db.getOrderChangeLog(orderId);setRows(data);}
     catch(e){console.error("[OrderChangeHistory]",e);setRows([]);}
@@ -3662,8 +3672,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const [folioSugRemision, setFolioSugRemision] = useState("");
 
   // ESC close (solo cuando NO está guardando)
+  // v10.58.43 #25: guard de INPUT/TEXTAREA (convención escStack) — ESC dentro de un
+  // input destruía toda la captura sin confirmación.
   useEffect(()=>{
     const onKey = e=>{
+      const tag=e.target?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
       if(e.key==="Escape" && !saving) onClose();
     };
     window.addEventListener("keydown", onKey);
@@ -3791,11 +3805,11 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   };
 
   const setSplitsCountSafe = (n) => {
-    if (n < 2 || n > 20) return;
-    setSplitsCount(n);
+    if (!Number.isFinite(n) || n < 2 || n > 20) return;
     setSplits(prev => {
       if (n === prev.length) return prev;
       if (n > prev.length) {
+        setSplitsCount(n);
         return [
           ...prev,
           ...Array.from({length: n - prev.length}, () => ({
@@ -3807,6 +3821,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           }))
         ];
       }
+      // v10.58.43 #25: reducir N destruía capturas en silencio (borrar el campo para
+      // teclear otro número truncaba a 2). Confirmar si los grupos a quitar tienen datos.
+      const dropped = prev.slice(n);
+      const hasData = dropped.some(s=>Number(s.qty||0)>0||Number(s.amountConIva||0)>0||(s.folio||"").trim());
+      if(hasData && !window.confirm("Vas a quitar "+(prev.length-n)+" factura(s) que ya tienen datos capturados. ¿Continuar?")) return prev;
+      setSplitsCount(n);
       return prev.slice(0, n);
     });
   };
@@ -3901,7 +3921,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           </button>
         ))}
         <input type="number" min="2" max="20" value={splits.length}
-          onChange={e=>setSplitsCountSafe(parseInt(e.target.value||2,10))}
+          onChange={e=>{const v=e.target.value;if(v==="")return;setSplitsCountSafe(parseInt(v,10))}}
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
         <div style={{flex:1}}/>
         <button onClick={divideEqualBetweenN}
@@ -4066,7 +4086,8 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
   const isLine = kind === "line";
   const canSubmit = reason.trim().length >= 5 && !busy;
   useEffect(() => {
-    const onKey = e => { if(e.key === "Escape" && !busy) onClose(); };
+    // v10.58.43 #25: guard de INPUT/TEXTAREA — ESC en el campo de razón perdía la captura
+    const onKey = e => { const tag=e.target?.tagName; if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return; if(e.key === "Escape" && !busy) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
@@ -4301,8 +4322,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   }, [captureMode, user, userLogin]);
 
   // ESC + backdrop
+  // v10.58.43 #25: guard de INPUT/TEXTAREA — ESC tecleando en una celda de la matriz
+  // destruía un plan de N facturas × M órdenes sin confirmación.
   useEffect(() => {
-    const onKey = e => { if(e.key === "Escape" && !saving) onClose(); };
+    const onKey = e => { const tag=e.target?.tagName; if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return; if(e.key === "Escape" && !saving) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [saving, onClose]);
@@ -4408,11 +4431,11 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
 
   // Cambiar N groups
   const setGroupsCountSafe = (n) => {
-    if(n < 1 || n > 10) return;
-    setGroupsCount(n);
+    if(!Number.isFinite(n) || n < 1 || n > 10) return;
     setGroups(prev => {
       if(n === prev.length) return prev;
       if(n > prev.length) {
+        setGroupsCount(n);
         return [
           ...prev,
           ...Array.from({length: n - prev.length}, () => ({
@@ -4429,6 +4452,12 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           }))
         ];
       }
+      // v10.58.43 #25: reducir N destruía la matriz capturada en silencio (borrar el
+      // campo para teclear otro número truncaba a 1). Confirmar si hay datos.
+      const dropped = prev.slice(n);
+      const hasData = dropped.some(g => (g.folio||"").trim() || Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0));
+      if(hasData && !window.confirm("Vas a quitar "+(prev.length-n)+" factura(s) que ya tienen datos capturados. ¿Continuar?")) return prev;
+      setGroupsCount(n);
       return prev.slice(0, n);
     });
   };
@@ -4701,7 +4730,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           </button>
         ))}
         <input type="number" min="1" max="10" value={groups.length}
-          onChange={e=>setGroupsCountSafe(parseInt(e.target.value||1,10))}
+          onChange={e=>{const v=e.target.value;if(v==="")return;setGroupsCountSafe(parseInt(v,10))}}
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
       </div>
 
@@ -10929,15 +10958,20 @@ export default function PrintFlow() {
       db.loadOrders(!archiveLoadedRef.current),
       db.loadPurchaseOrders(),
       // v10.58.34: splits a nivel orden
+      // v10.58.43 #29: límites EXPLÍCITOS — PostgREST trunca en 1000 filas EN SILENCIO;
+      // al pasar el histórico de ese tamaño, splits/planes "desaparecían" de la UI.
+      // 5000 ordenado por created_at desc cubre años al volumen actual; los más
+      // recientes (los operables) siempre presentes.
       supabase.from("order_invoice_splits")
-        .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by")
-        .order("position"),
+        .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by,created_at")
+        .order("created_at",{ascending:false}).limit(5000),
       // v10.58.40 Día 1: plan matriz por OC
       supabase.from("oc_invoice_split_groups")
-        .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by")
-        .order("position"),
+        .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by,created_at")
+        .order("created_at",{ascending:false}).limit(5000),
       supabase.from("oc_invoice_split_lines")
-        .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by")
+        .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by,created_at")
+        .order("created_at",{ascending:false}).limit(5000)
     ]);
     const splitsArr = splitsResp?.data || [];
     const splitsByOrder = {};
@@ -10945,6 +10979,9 @@ export default function PrintFlow() {
       if (!splitsByOrder[s.order_id]) splitsByOrder[s.order_id] = [];
       splitsByOrder[s.order_id].push(s);
     }
+    // v10.58.43 #29: la query viene por created_at desc (supervivencia al límite);
+    // re-ordenar por position para el display
+    for (const k in splitsByOrder) splitsByOrder[k].sort((a,b)=>(a.position||0)-(b.position||0));
     const withSplits = data.map(o => {
       const sps = splitsByOrder[o.id];
       if (!sps || sps.length === 0) return o;
@@ -10964,6 +11001,7 @@ export default function PrintFlow() {
       if (!groupsByOC[g.purchase_order_id]) groupsByOC[g.purchase_order_id] = [];
       groupsByOC[g.purchase_order_id].push({...g, lines: linesByGroup[g.id] || []});
     }
+    for (const k in groupsByOC) groupsByOC[k].sort((a,b)=>(a.position||0)-(b.position||0));
     const posSafe = pos || [];
     const posWithMatrix = posSafe.map(po => {
       const groups = groupsByOC[po.id];
@@ -11584,6 +11622,13 @@ export default function PrintFlow() {
       showToast("❌ La orden cambió de estado ("+SM[orderBefore.stage]?.l+") mientras editabas. Recarga y vuelve a intentar.","error");
       const err=new Error("order_stage_changed");err._toasted=true;throw err;
     }
+    // v10.58.43 #17: el permiso de Genaro se validaba al ABRIR el form, no al GUARDAR.
+    // Si la orden entró a producción mientras editaba, sus cambios de specs aplicarían
+    // sobre un trabajo ya en máquina (la reimpresión costosa que queremos evitar).
+    if(user==="vendedor"&&orderBefore&&orderBefore.order_type!=="maquila"&&!PRE_PROD_STAGES.includes(orderBefore.stage)){
+      showToast("❌ La orden avanzó a "+(SM[orderBefore.stage]?.l||orderBefore.stage)+" mientras editabas — el trabajo ya está en producción y no se puede modificar.","error");
+      const err=new Error("order_in_production");err._toasted=true;throw err;
+    }
     const willMarkPostEdit=orderBefore?.invoice_folio&&!orderBefore?.has_post_invoice_edits;
     // v10.58.41 — estampar actor + timestamp para el trigger de historial (order_change_log).
     // El trigger log_order_field_changes solo atribuye a last_edited_by si last_edited_at cambió
@@ -11596,6 +11641,10 @@ export default function PrintFlow() {
     try{
     const {error}=await supabase.from("orders").update(safeUpdate).eq("id",f.id);
     if(error)throw new Error(error.message);
+    // v10.58.43 #23: timeline+notifs en try propio — el guardado YA está commiteado;
+    // si fallan por red NO mostrar "No se pudo guardar" (el catch general hacía reload
+    // con el form abierto e inducía guardados duplicados).
+    try{
     await db.addTimeline(f.id,willMarkPostEdit?"⚠️ Editada después de facturar":"✏️ Editada",user,willMarkPostEdit?"#ff9500":C.t3);
     // v10.19.0 — Notificación detallada al trío Lupita+Noemí+Gerardo (+ creador si está fuera del trío)
     const changes=diffOrderFields(orderBefore,safeUpdate);
@@ -11631,6 +11680,7 @@ export default function PrintFlow() {
       // Admin: in-app + Telegram (v10.58.41: el filtro 2B ahora permite order_edit a admin)
       if(user!=="admin")await db.addNotification("admin",f.id,"order_edit",editMsg,null,user);
     }
+    }catch(nErr){console.warn("[update] side-effects warn (guardado OK):",nErr?.message)}
     showToast(willMarkPostEdit?"💾 Orden actualizada (marcada como editada post-factura)":"💾 Orden actualizada");
     setEditO(null);setView("pipeline");
     }catch(e){console.error("[update] Error al guardar:",e);if(!e?._toasted)showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
@@ -11668,10 +11718,21 @@ export default function PrintFlow() {
     if(ns.includes("delivered"))upd.delivered_at=new Date().toISOString();
     if(!ns.includes("delivered")&&o?.stage?.includes("delivered"))upd.delivered_at=null;
     if(ns==="draft"){upd.validated_by_production=false;upd.validated_by_preprensa=false}
+    // v10.58.43 #15: salir de draft marca AMBAS validaciones — el botón admin
+    // "Enviar a Diseño" las brincaba y los flags quedaban false para siempre
+    // (P-3548: en salidas con validated_by_preprensa=false desde mayo).
+    if(o?.stage==="draft"&&ns!=="draft"){upd.validated_by_production=true;upd.validated_by_preprensa=true}
     if(ns==="design")upd.proof_approved=null;
     // UPDATE ORDER FIRST
-    const {error:advErr}=await supabase.from("orders").update(upd).eq("id",id);
+    // v10.58.43 #14: guard de stage — si otro usuario/tab ya avanzó la orden, el
+    // UPDATE no matchea ninguna fila y abortamos (antes: doble avance silencioso,
+    // timeline duplicado, órdenes saltando stages).
+    const {data:advRows,error:advErr}=await supabase.from("orders").update(upd).eq("id",id).eq("stage",o?.stage||"").select("id");
     if(advErr)throw new Error(advErr.message);
+    if(!advRows||advRows.length===0){
+      const stErr=new Error("La orden cambió de etapa en otra sesión. Recarga para ver el estado actual.");
+      stErr._stale=true;throw stErr;
+    }
     // Always close any open machine log (safe no-op if none exists)
     await db.closeMachineLog(id);
     // Start new machine log for packaging
@@ -11684,6 +11745,9 @@ export default function PrintFlow() {
     }
     // Timeline and notifications (o captured above before setOrders)
     await db.addTimeline(id,(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||""),user,SM[ns]?.c);
+    // v10.58.43 #23: notifs en try propio — el avance YA está commiteado; si una notif
+    // falla por red, NO mostrar "No se pudo avanzar" (inducía reintentos/confusión).
+    try{
     if(ns==="salidas"){await db.notifySecs(id,"salidas","📤 Orden de "+(o?.client||"")+" lista para entrega — "+(o?.product_type||""),null,user,o?.created_by);await db.addNotification("karla",id,"salidas","📄 Lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
     if(ns==="delivered"){const delMsg="✅ "+(o?.client||"")+" — "+(o?.product_type||"")+" entregada al cliente";await db.notify("produccion",id,"delivered",delMsg,null,user);const _sr=["secretaria","produccion","preprensa","german","admin"];if(user!=="secretaria")await db.addNotification("secretaria",id,"delivered",delMsg,null,user);if(o?.created_by&&!_sr.includes(o.created_by)&&o.created_by!==user)await db.addNotification(o.created_by,id,"delivered",delMsg,null,user)}
     if(ns==="maq_delivered")await db.notifySecs(id,"delivered","✅ Maquila "+(o?.client||"")+" — "+(o?.product_type||"")+" entregada al cliente",null,user,o?.created_by);
@@ -11697,6 +11761,7 @@ export default function PrintFlow() {
     if(ns==="maq_sent"&&user!=="admin")await db.addNotification("admin",id,"new_order","🚚 Maquila enviada al proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);
     if(ns==="maq_in_progress"&&user!=="admin")await db.addNotification("admin",id,"new_order","⚙️ Maquila en proceso — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
+    }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
     showToast((SM[ns]?.l||"Avance")+" — "+(o?.client||""));
     }catch(e){console.error("[doAdv] Error al avanzar:",e);showToast("❌ No se pudo avanzar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
@@ -11783,12 +11848,35 @@ export default function PrintFlow() {
           .eq("order_id",id).is("voided_at",null);
         if(plErr)console.warn("[revertOrder] plates void warn:",plErr.message);
       }
-      // 2. UPDATE orden: stage destino, limpiar current_machine. Si veníamos de 'delivered',
-      // limpiar también delivered_at.
-      const updates={stage:targetStage,current_machine:null};
+      // v10.58.43 #13: si la orden estaba ACTIVA en máquina real, sacarla de la cola
+      // (promueve la siguiente) ANTES del update — mismo trío que doAdv.
+      const wasActiveOnMachine=o.current_machine&&o.current_machine!=="vm_manual";
+      let queueResult=null;
+      if(wasActiveOnMachine&&o.machine_queue_position!=null){
+        try{queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema")}catch(qErr){console.warn("[revertOrder] queue warn:",qErr.message)}
+      }
+      // 2. UPDATE orden: stage destino, limpiar current_machine + posición de cola.
+      // Si veníamos de 'delivered', limpiar también delivered_at.
+      const updates={stage:targetStage,current_machine:null,machine_queue_position:null};
       if(o.stage==="delivered")updates.delivered_at=null;
+      // v10.58.43 #9: al regresar a Captura hay que RE-VALIDAR — sin resetear los flags,
+      // el auto-fix rebotaba la orden a Diseño/Lista en segundos (el motivo del revert
+      // era justamente re-validar). A design/prueba también se re-aprueba la prueba.
+      if(targetStage==="draft"){updates.validated_by_production=false;updates.validated_by_preprensa=false;updates.proof_approved=null}
+      if(["design","proof_printing","proof_client"].includes(targetStage))updates.proof_approved=null;
       const {error:uErr}=await supabase.from("orders").update(updates).eq("id",id);
       if(uErr)throw uErr;
+      // v10.58.43 #13: cerrar el reloj de máquina (no-op si no había log abierto) y
+      // abrir el log de la orden promovida — antes el reloj seguía corriendo y la
+      // cola quedaba sin activar a nadie.
+      try{await db.closeMachineLog(id)}catch(mlErr){console.warn("[revertOrder] machinelog warn:",mlErr.message)}
+      if(queueResult?.new_active_id){
+        try{
+          await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
+          await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system","#34c759");
+          setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
+        }catch(prErr){console.warn("[revertOrder] promote warn:",prErr.message)}
+      }
       // 3. Timeline (try/catch independiente — si falla no rompemos la operación principal)
       try{await db.addTimeline(id,tlMsg,user,"#dc2626")}catch(tlErr){console.warn("[revertOrder] timeline warn:",tlErr.message)}
       // 4. Notificar al rol responsable del stage destino + visibilidad
@@ -11815,8 +11903,8 @@ export default function PrintFlow() {
         }
         if(user!=="admin")await db.addNotification("admin",id,"order_edit",notifMsg,null,user);
       }catch(nErr){console.warn("[revertOrder] notify warn:",nErr.message)}
-      // 5. Optimistic local update
-      setOrders(p=>p.map(x=>x.id===id?{...x,stage:targetStage,current_machine:null,delivered_at:o.stage==="delivered"?null:x.delivered_at,timeline:addTL(x,tlMsg,{to:targetStage})}:x));
+      // 5. Optimistic local update (espeja TODOS los campos del UPDATE: cola, validaciones, prueba)
+      setOrders(p=>p.map(x=>x.id===id?{...x,...updates,machine_log:closeML(x),delivered_at:o.stage==="delivered"?null:x.delivered_at,timeline:addTL(x,tlMsg,{to:targetStage})}:x));
       showToast("↩️ "+(o.client||"")+" regresada a "+toLabel,"success");
     }catch(e){
       console.error("[revertOrder]",e);
@@ -12459,7 +12547,10 @@ export default function PrintFlow() {
     if(action==="validate_prod"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/produccion validan producción
       if(o&&!canExecuteAction("validate_prod",o,user,userLogin)){showToast(actionDeniedToast("validate_prod",o,user,userLogin),"error");return}
-      setActionLoading(id);(async()=>{try{setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage="design";u.timeline=addTL(u,"📝 → 🎨 Ambos validaron → Diseño",{to:"design"})}return u}));const {error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:"design"}:{})}).eq("id",id);if(vpErr)throw new Error(vpErr.message);await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,"📝 → 🎨 Ambos validaron → Diseño",user,"#ec4899");await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()
+      // v10.58.43 #16: "placa existente → saltar CTP" (v10.15.0) nunca se aplicaba en el
+      // flujo normal — solo el auto-fix lo hacía. Al validar ambos, placa existente va
+      // directo a Lista (ready); 41/41 órdenes verificadas iban a Diseño y se arrastraban a mano.
+      setActionLoading(id);(async()=>{try{const vTarget=o?.plate_status==="existing"?"ready":"design";const vTlMsg=vTarget==="ready"?"📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)":"📝 → 🎨 Ambos validaron → Diseño";setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_production:true,timeline:addTL(x,"✅ Validada por Producción")};if(x.validated_by_preprensa){u.stage=vTarget;u.timeline=addTL(u,vTlMsg,{to:vTarget})}return u}));const {error:vpErr}=await supabase.from("orders").update({validated_by_production:true,...(o?.validated_by_preprensa?{stage:vTarget}:{})}).eq("id",id);if(vpErr)throw new Error(vpErr.message);await db.addTimeline(id,"✅ Validada por Producción",user,C.ok);if(o?.validated_by_preprensa)await db.addTimeline(id,vTlMsg,user,"#ec4899");await db.notifySecs(id,"validation","✅ Producción validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);showToast("✅ Orden validada por Producción")}catch(e){console.error("[validate_prod] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()
     }
     if(action==="validate_pre"){const o=orders.find(x=>x.id===id);
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/preprensa validan pre-prensa
@@ -12470,8 +12561,11 @@ export default function PrintFlow() {
       const shouldCalcDate=isWeb&&!o?.due_date;
       const calcDate=shouldCalcDate?calcDeliveryDate(new Date(),o?.web_print_method,o?.finishes):null;
       const calcAt=shouldCalcDate?new Date().toISOString():null;
-      setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_preprensa:true,timeline:addTL(x,"✅ Validada por Pre-prensa")};if(calcDate){u.due_date=calcDate;u.delivery_calculated_at=calcAt;u.timeline=addTL(u,"⏱️ Tiempo de entrega arrancó · "+fD(calcDate))}if(x.validated_by_production){u.stage="design";u.timeline=addTL(u,"📝 → 🎨 Ambos validaron → Diseño",{to:"design"})}return u}));
-      const dbUpd={validated_by_preprensa:true,...(o?.validated_by_production?{stage:"design"}:{}),...(calcDate?{due_date:calcDate,delivery_calculated_at:calcAt}:{})};
+      // v10.58.43 #16: placa existente salta CTP también en esta rama
+      const vTarget=o?.plate_status==="existing"?"ready":"design";
+      const vTlMsg=vTarget==="ready"?"📝 → ⏩ Ambos validaron → Lista (placa existente, salta CTP)":"📝 → 🎨 Ambos validaron → Diseño";
+      setOrders(p=>p.map(x=>{if(x.id!==id)return x;const u={...x,validated_by_preprensa:true,timeline:addTL(x,"✅ Validada por Pre-prensa")};if(calcDate){u.due_date=calcDate;u.delivery_calculated_at=calcAt;u.timeline=addTL(u,"⏱️ Tiempo de entrega arrancó · "+fD(calcDate))}if(x.validated_by_production){u.stage=vTarget;u.timeline=addTL(u,vTlMsg,{to:vTarget})}return u}));
+      const dbUpd={validated_by_preprensa:true,...(o?.validated_by_production?{stage:vTarget}:{}),...(calcDate?{due_date:calcDate,delivery_calculated_at:calcAt}:{})};
       const {error:vpreErr}=await supabase.from("orders").update(dbUpd).eq("id",id);
       if(vpreErr)throw new Error(vpreErr.message);
       await db.addTimeline(id,"✅ Validada por Pre-prensa",user,"#ec4899");
@@ -12484,7 +12578,7 @@ export default function PrintFlow() {
         await db.notifySecs(id,"date_change",calcMsg,null,user,o?.created_by);
         if(user!=="admin")await db.addNotification("admin",id,"date_change",calcMsg,null,user);
       }
-      if(o?.validated_by_production)await db.addTimeline(id,"📝 → 🎨 Ambos validaron → Diseño",user,"#ec4899");
+      if(o?.validated_by_production)await db.addTimeline(id,vTlMsg,user,"#ec4899");
       await db.notifySecs(id,"validation","✅ Pre-prensa validó la orden de "+(o?.client||"")+" — "+(o?.product_type||""),null,user,o?.created_by);
       showToast(calcDate?"✅ Validada · Entrega: "+fD(calcDate):"✅ Orden validada por Pre-prensa");
     }catch(e){console.error("[validate_pre] Error:",e);showToast("❌ No se pudo validar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}})()}
