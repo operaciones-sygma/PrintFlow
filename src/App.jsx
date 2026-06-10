@@ -3133,15 +3133,18 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       </div>
 
       {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&(()=>{
-        const ivaPortion=Math.round(amountNum*0.16*100)/100;
-        const withIva=Math.round(amountNum*1.16*100)/100;
+        // v10.58.45: el preview debe espejar credit_deposit — ×1.16 SOLO si el folio
+        // es factura (D-); una remisión (R-) cruza a cobranza SIN IVA.
+        const isFacturaFolio=(folioClean||"").toUpperCase().startsWith("D-");
+        const ivaPortion=isFacturaFolio?Math.round(amountNum*0.16*100)/100:0;
+        const withIva=isFacturaFolio?Math.round(amountNum*1.16*100)/100:amountNum;
         return <div style={{padding:"12px 14px",background:"#10b98110",border:"1px solid #10b98140",borderRadius:8,marginBottom:10}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
           <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Subtotal (ledger)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-          <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>+ IVA 16%</div><div style={{fontSize:14,fontWeight:700,color:C.t2}}>${ivaPortion.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+          <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>{isFacturaFolio?"+ IVA 16%":"Sin IVA (remisión)"}</div><div style={{fontSize:14,fontWeight:700,color:C.t2}}>${ivaPortion.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
           <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Total cobranza</div><div style={{fontSize:14,fontWeight:800,color:C.ac}}>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
         </div>
-        <div style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Se crea factura <b>{folioClean}</b> en cobranza por <b>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> con IVA (lo que Cervecería paga). El saldo a favor interno se lleva en subtotal: <b>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
+        <div style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Se crea {isFacturaFolio?"factura":"remisión"} <b>{folioClean}</b> en cobranza por <b>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> {isFacturaFolio?"con IVA":"sin IVA"} (lo que Cervecería paga). El saldo a favor interno se lleva en subtotal: <b>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
       </div>;
       })()}
 
