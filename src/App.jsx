@@ -1906,6 +1906,12 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {vOwns&&(o.notes_log||[]).length>0&&<><div style={{fontSize:10,fontWeight:600,color:"#007aff",textTransform:"uppercase",marginTop:12,marginBottom:4}}>💬 Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-prensa</span></div>}
 
+      {/* 🆕 v10.58.41 — Historial campo-a-campo de cambios (antes/después/quién/cuándo).
+          Mismo gate vOwns que precios/notas: un vendedor no ve el historial de órdenes ajenas. */}
+      {vOwns&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
+        <OrderChangeHistory orderId={o.id}/>
+      </div>}
+
       {/* 🆕 v10.9.0 — Botón prominente "Facturar anticipado" para Karla/Admin */}
       {canPreInvoice&&<div style={{marginTop:14,padding:14,background:"#ff950010",border:"1.5px solid #ff950040",borderRadius:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
