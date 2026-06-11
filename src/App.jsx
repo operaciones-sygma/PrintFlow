@@ -8471,13 +8471,16 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const catCount=type=>inProd.filter(o=>{const m=MACHINES.find(x=>x.id===o.current_machine);return m?.type===type}).length;
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
 
-  const DragCard=({o,borderColor})=><div draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")}
+  const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",borderLeft:"3px solid "+(o.priority==="urgente"?C.dn:borderColor),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span style={{fontSize:11,fontWeight:700}}>⠿ {o.client}</span>
       {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
+    {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes,
+        Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
+    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-block"}}>🔁 REIMPRIMIR</span>}
     {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-block"}}>🔴 URGENTE</span>}
     {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
   </div>;
@@ -8578,7 +8581,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                           <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
                           {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
                         </div>
-                        <DragCard o={activa} borderColor={cc[type]}/>
+                        <DragCard o={activa} borderColor={cc[type]} reorderMachine={m.id}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           <button onClick={()=>onAction(activa.id,"advance","packaging")} style={bs("#af52de")}>📦 Empaque</button>
                           {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
@@ -8762,8 +8765,9 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                 <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
                 {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
               </div>
-              <div draggable onDragStart={e=>e.dataTransfer.setData("orderId",activa.id)} onClick={()=>onAction(activa.id,"detail")}
+              <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
                 style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",borderLeft:"3px solid "+(activa.priority==="urgente"?C.dn:"#0891b2")}}>
+                {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,display:"inline-block",marginBottom:3}}>🔁 REIMPRIMIR</div>}
                 <span style={{fontSize:12,fontWeight:700}}>⠿ {activa.client}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
                 {activa.due_date&&<div style={{fontSize:9,color:parseDate(activa.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(activa.due_date)}</div>}
@@ -12850,6 +12854,9 @@ export default function PrintFlow() {
   },[user,orders,showToast,reload]);
 
   const assignMachine=useCallback(async(oid,mid)=>{
+    // v10.58.64 M5: guard de reentrada REAL — setActionLoading no es síncrono, un
+    // doble-drop alcanzaba a correr 2 veces y duplicaba/triplicaba el machine_log.
+    if(actionLoading)return;
     const isManual=mid==="vm_manual";
     const mach=MACHINES.find(x=>x.id===mid);
     const isPreprensa=mach?.type==="preprensa";
@@ -12860,13 +12867,17 @@ export default function PrintFlow() {
     if(!o)return;
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
+    // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
+    // abierto — el check viejo (==0) no lo cerraba y el timer corría sobre vm_manual
+    // por días (registros de 5,800–9,674 min). Cerrar también al salir de vm_manual.
+    const hadOpenLog=wasActiveOldMachine||oldMachine==="vm_manual";
     // v10.28.1 — Bloquear reintentos concurrentes (doble-drop) y aplicar UI optimista temprana
     setActionLoading(oid);
     try{
       // v10.26.0 — vm_manual (Empaque) NO usa cola, sigue modelo paralelo. Resto: cola.
       if(isManual){
         // Cerrar log si traía de otra máquina activa
-        if(oldMachine&&oldMachine!==mid&&wasActiveOldMachine)await db.closeMachineLog(oid);
+        if(oldMachine&&oldMachine!==mid&&hadOpenLog)await db.closeMachineLog(oid);
         // Si venía de cola en otra máquina, sacarla atómicamente (puede promover siguiente)
         const queueResult=oldMachine&&oldMachine!==mid&&oldMachine!=="vm_manual"&&o?.machine_queue_position!=null
           ?await db.moveOrderInQueue(oid,null,null,userLogin||user):null;
@@ -12889,21 +12900,26 @@ export default function PrintFlow() {
       const targetPos=oldMachine===mid?(o.machine_queue_position??currentQueue.length):currentQueue.length;
       const willBeActive=targetPos===0;
       // Si era activa en máquina diferente, cerrar log allí
-      if(oldMachine&&oldMachine!==mid&&wasActiveOldMachine)await db.closeMachineLog(oid);
+      if(oldMachine&&oldMachine!==mid&&hadOpenLog)await db.closeMachineLog(oid);
       // RPC atómico: mueve la orden y maneja shifts en máquina vieja y nueva
       const result=await db.moveOrderInQueue(oid,mid,targetPos,userLogin||user);
+      // v10.58.64 M6: usar la posición REAL que devolvió el RPC (puede haber clampeado
+      // un targetPos stale) — antes el frontend abría/omitía el log según su estado viejo
+      // y podía dejar una activa sin machine_log.
+      const finalPos=(result&&typeof result.new_position==="number")?result.new_position:targetPos;
+      const finallyActive=finalPos===0;
       // Update stage en orders (la RPC ya seteó current_machine y machine_queue_position)
       const {error:stageErr}=await supabase.from("orders").update({stage}).eq("id",oid);
       if(stageErr)throw new Error(stageErr.message);
       // Abrir log si será activa
-      if(willBeActive)await db.addMachineLog(oid,mid);
-      await db.addTimeline(oid,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),user,stageColor,stage);
+      if(finallyActive)await db.addMachineLog(oid,mid);
+      await db.addTimeline(oid,"🏭 "+label+(finallyActive?"":" (cola #"+finalPos+")"),user,stageColor,stage);
       // Update local
       setOrders(p=>p.map(x=>{
         if(x.id===oid){
           const l=closeML(x);
-          if(willBeActive)l.push({machine:mid,started:new Date().toISOString()});
-          return{...x,stage,current_machine:mid,machine_queue_position:targetPos,machine_log:l,timeline:addTL(x,"🏭 "+label+(willBeActive?"":" (cola #"+targetPos+")"),{to:stage})};
+          if(finallyActive)l.push({machine:mid,started:new Date().toISOString()});
+          return{...x,stage,current_machine:mid,machine_queue_position:finalPos,machine_log:l,timeline:addTL(x,"🏭 "+label+(finallyActive?"":" (cola #"+finalPos+")"),{to:stage})};
         }
         return x;
       }));
