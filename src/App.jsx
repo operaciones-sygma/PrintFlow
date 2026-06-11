@@ -1427,7 +1427,9 @@ function bizDaysSince(date){
 function snoozeActive(o){
   if(!o?.snooze_reason) return false;
   if(o.snooze_stage && o.snooze_stage !== o.stage) return false;
-  if(o.snooze_until && parseDate(o.snooze_until) < new Date()) return false;
+  // v10.58.63: expira al FIN del día indicado (23:59), no al mediodía — parseDate ancla
+  // a T12:00 y revivía la orden medio día antes (igual que el fix de vencidas v10.58.53).
+  if(o.snooze_until){ const end=new Date(String(o.snooze_until).slice(0,10)+"T23:59:59"); if(end < new Date()) return false; }
   return true;
 }
 // Días REALES en la etapa actual (la última entrada de timeline que LLEGÓ a este
@@ -1487,10 +1489,10 @@ function diagnoseOrder(o){
     return R("reprint","🔁 Marcada para REIMPRIMIR","produccion","Gerardo",{sev:"red"});
   if(["salidas","maq_received"].includes(stage)&&!o.invoice_folio&&!o.has_splits&&d>=3)
     return R("no_folio","🧾 Sin folio de factura hace "+d+" días","karla","Karla",{});
-  if(o.order_type!=="maquila"&&noPrice&&stage!=="salidas")
-    return R("no_price","💰 Sin precio capturado","karla","Karla",{action:"edit"});
-  if(!o.due_date)
-    return R("no_date","📅 Sin fecha de entrega comprometida","secretaria","Lupita",{action:"edit"});
+  // v10.58.63: 'vencida' se evalúa ANTES que no_price/no_date — una orden atorada Y
+  // vencida es más urgente como retraso (→ responsable de la etapa) que como dato
+  // faltante; antes una orden sin precio + vencida se atribuía a Karla y desaparecía
+  // del bloque de su área en la Torre.
   if(late){
     const resp=STAGE_RESPONSIBLE[stage];
     return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
@@ -1502,6 +1504,11 @@ function diagnoseOrder(o){
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
       resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
   }
+  // v10.58.63: datos faltantes (no bloqueantes de flujo) al final — después de vencida/estancada
+  if(o.order_type!=="maquila"&&noPrice&&stage!=="salidas")
+    return R("no_price","💰 Sin precio capturado","karla","Karla",{action:"edit"});
+  if(!o.due_date)
+    return R("no_date","📅 Sin fecha de entrega comprometida","secretaria","Lupita",{action:"edit"});
   return null;
 }
 
@@ -1515,23 +1522,10 @@ function diagnoseOrder(o){
 // Si un vendedor nuevo recibe usuario, agregarlo aquí (en minúsculas).
 const VENDEDORES_CON_USUARIO = new Set(["genaro"]);
 function getWakeupItems(role, userLogin, orders){
-  const isActive = o => !o.cancelled_at && !String(o.stage||"").includes("cancelled") &&
-    !String(o.stage||"").includes("delivered") && o.stage!=="stocked" &&
-    !["web_pending","web_rejected"].includes(o.stage);
-  const now = new Date();
-  const daysLate = o => {
-    if(!o.due_date) return 0;
-    // v10.58.53: vencida = pasadas las 23:59 del día pactado
-    const end = new Date(String(o.due_date).slice(0,10)+"T23:59:59");
-    return end < now ? Math.max(1, Math.floor((now - end) / 86400000)+1) : 0;
-  };
   const maqMissing = o => o.order_type==="maquila" &&
     ["maq_created","maq_sent","maq_in_progress"].includes(o.stage) &&
     (!Number(o.maq_price) || Number(o.maq_price)<=0 || !Number(o.maq_cost) || Number(o.maq_cost)<=0);
-  const maqMissingTxt = o => "💸 falta " + [(!Number(o.maq_price)||Number(o.maq_price)<=0)&&"precio cliente",
-    (!Number(o.maq_cost)||Number(o.maq_cost)<=0)&&"costo proveedor"].filter(Boolean).join(" y ");
-  // v10.58.56 (pedido de Marcelo): el Despertador decía QUÉ está mal pero no QUÉ
-  // hacer. Instrucción concreta por etapa — el paso que destraba la orden.
+  // v10.58.56: instrucción concreta por etapa — el paso que destraba la orden.
   const STAGE_ACT = {
     draft:"Ábrela, valídala (✅ Producción / ✅ Pre-prensa) o edítala si algo está mal",
     design:"Trabaja el diseño o mándala a aprobación del cliente",
@@ -1555,48 +1549,37 @@ function getWakeupItems(role, userLogin, orders){
      (!Number(o.maq_cost)||Number(o.maq_cost)<=0)&&"el costo del proveedor"].filter(Boolean).join(" y ") +
     " → 📥 Recibimos el Trabajo";
   const stageAct = o => STAGE_ACT[o.stage] || "Ábrela y avánzala a la siguiente etapa";
+  const baseAct = o => maqMissing(o) ? maqMissingAct(o) : stageAct(o);
+  // v10.58.63: el Despertador ahora consume diagnoseOrder (el MISMO motor de la Torre)
+  // — antes era un motor paralelo que solo despertaba por vencidas/maqMissing y dejaba
+  // ciegos al responsable los bloqueos no-vencidos (sin folio, validación, estancada,
+  // sin máquina...). Omitimos no_price/no_date (nudges de datos, no alarma de la mañana;
+  // ya viven en la Torre y en Datos Pendientes) para no inundar.
+  const SKIP_KEYS = new Set(["no_price","no_date"]);
   const items = [];
   for(const o of orders){
-    if(!isActive(o)) continue;
-    // v10.58.52: las órdenes "en espera" (Torre de Control) no despiertan a nadie
     if(snoozeActive(o)) continue;
-    const late = daysLate(o);
-    const resp = STAGE_RESPONSIBLE[o.stage];
-    let why = null, action = null;
-    if(role==="admin"){
-      if(maqMissing(o)){ why = maqMissingTxt(o) + " (le toca a Lupita)"; action = "Pídele a Lupita: " + maqMissingAct(o); }
-      else if(late > 0){ why = "vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" → "+resp.name:""); action = "Ve con " + (resp?.name||"el responsable") + ": " + stageAct(o); }
-    } else if(role==="vendedor"){
-      if(isVendedorOwnerByAgent(role, userLogin, o) && late > 0){
-        why = "tu orden, vencida hace " + late + " día" + (late===1?"":"s") + " · en " + (SM[o.stage]?.l||o.stage) + (resp?" ("+resp.name+")":"");
-        action = "Apura con " + (resp?.name||"el área") + " o avísale al cliente del retraso";
-      }
-    } else {
-      // Gerardo: el trabajo EN MÁQUINAS no lo despierta (es su tablero normal)
-      if(role==="produccion" && ["ready","in_production","packaging"].includes(o.stage)) continue;
-      const r = resp?.role;
-      // v10.58.53: en draft (both), cada quien solo despierta por SU validación faltante
-      // (Gerardo tecleaba SI ENTIENDO por validaciones que él ya había dado)
-      if(r==="both"){
-        if(role==="produccion" && o.validated_by_production) continue;
-        if(role==="preprensa" && o.validated_by_preprensa) continue;
-      }
-      const mine = r===role || (r==="both" && (role==="produccion"||role==="preprensa")) || (r==="secretaria" && isSec(role));
-      if(!mine){
-        // v10.58.54 (decisión de Marcelo 2026-06-10): las órdenes de agentes SIN
-        // usuario en PrintFlow (Manuel) las persigue Lupita — ella captura por
-        // ellos. Genaro tiene usuario y ve las suyas por la rama vendedor.
-        const ag=(o.agent||"").trim();
-        if(role==="secretaria" && late>0 && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase())){
-          items.push({o, why:"vencida hace "+late+" día"+(late===1?"":"s")+" · capturas por "+ag+" — está en "+(SM[o.stage]?.l||o.stage)+(resp?" ("+resp.name+")":""),
-            action:"Apura con " + (resp?.name||"el área") + " o avísale al cliente (tú llevas lo de "+ag+")", late});
-        }
-        continue;
-      }
-      if(role==="secretaria" && maqMissing(o)){ why = maqMissingTxt(o) + " — sin esto NO se puede recibir"; action = maqMissingAct(o); }
-      else if(late > 0){ why = "vencida hace " + late + " día" + (late===1?"":"s") + " · está en " + (SM[o.stage]?.l||o.stage); action = stageAct(o); }
+    const diag = diagnoseOrder(o);
+    if(!diag || SKIP_KEYS.has(diag.key)) continue;
+    const ag = (o.agent||"").trim();
+    const viaManuel = isSec(role) && diag.key==="late" && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase());
+    let mine=false;
+    if(role==="admin") mine=true;
+    else if(role==="vendedor") mine = isVendedorOwnerByAgent(role, userLogin, o);
+    else if(diag.external) mine = isSec(role); // cliente/proveedor → Lupita da seguimiento
+    else {
+      const r=diag.respRole;
+      mine = r===role || (r==="both"&&(role==="produccion"||role==="preprensa")) || (r==="secretaria"&&isSec(role));
+      if(!mine && viaManuel) mine=true; // Manuel (sin usuario) → Lupita persigue
     }
-    if(why) items.push({o, why, action, late});
+    if(!mine) continue;
+    let action;
+    if(role==="admin") action = "Ve con " + diag.respName + ": " + baseAct(o);
+    else if(role==="vendedor") action = "Apura con " + diag.respName + " o avísale al cliente del retraso";
+    else if(viaManuel) action = "Apura con " + diag.respName + " o avísale al cliente (tú llevas lo de " + ag + ")";
+    else if(diag.external) action = "Dale seguimiento " + (diag.key==="maq_sleep" ? ("al proveedor " + ((o.maq_provider||"").trim()||"externo")) : "al cliente") + " para destrabarla";
+    else action = baseAct(o);
+    items.push({o, why:diag.text, action, late:diag.days});
   }
   items.sort((a,b)=>b.late-a.late);
   return items;
@@ -1801,7 +1784,9 @@ function PrintOrder({order:o,onClose,role,userLogin,onPrintError}) {
       }
 
       const w=window.open("","_blank","width=800,height=900");
-      if(!w) return; // popup blocker — try/finally garantiza setPrinting(false)
+      // v10.58.63: popup bloqueado — antes retornaba en silencio (el usuario creía que
+      // imprimió). Ahora avisa. (try/finally garantiza setPrinting(false).)
+      if(!w){ if(onPrintError) onPrintError("⚠️ El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio y reintenta."); return; }
       const isProd=mode==="production";
       // v10.53.2 m2 — etiquetas claras cuando register_print falla (no más "v?" críptico)
       const pvFailed=!!printInfo.failed;
@@ -1872,12 +1857,22 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 </div>
 <script>
   var __pfCommitted=false;
+  var __pfFailed=${pvFailed?"true":"false"};
   function pfPrint(){
+    // v10.58.63: si el peek falló, la hoja dice SIN REGISTRO → imprimimos SIN commit
+    // (coherente con el papel; antes mandaba hash:null y register_print sí incrementaba).
+    if(__pfFailed){ window.print(); return; }
+    // v10.58.63: sin opener (la pestaña de PrintFlow se cerró/recargó) NO se puede
+    // registrar → bloquear la impresión para que el papel nunca diga una versión fantasma.
+    if(!window.opener || window.opener.closed){
+      alert("⚠️ No se puede registrar la impresión porque PrintFlow se cerró o recargó.\\n\\nVuelve a abrir la orden desde la app e imprime de nuevo para que la versión quede registrada.");
+      return;
+    }
     if(!__pfCommitted){
       __pfCommitted=true;
       // v10.58.61: enviar el hash del peek (origin propio) para que el commit detecte si
       // el contenido cambió desde que se generó la hoja (drift) y avise en vez de registrar mal.
-      try{ if(window.opener) window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")},hash:${pvFailed?"null":JSON.stringify(pvHash)}},${JSON.stringify(window.location.origin)}); }catch(e){}
+      try{ window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")},hash:${JSON.stringify(pvHash)}},${JSON.stringify(window.location.origin)}); }catch(e){}
     }
     window.print();
   }
@@ -2097,7 +2092,9 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
           ✓ Última impresión: v{o.print_version} · {lastPrintStr} · {o.last_printed_by}
         </div>
       )}
-      {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&" (será v"+((o.print_version||0)+1)+")"}</div>}
+      {/* v10.58.63: el hint refleja versión-por-contenido — sin cambios reimprime la MISMA
+          versión (no "será vN+1" engañoso); editada sí sube. */}
+      {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&(o.needs_reprint?" (cambió desde la última → será v"+((o.print_version||0)+1)+")":" (sin cambios → se reimprime v"+(o.print_version||0)+")")}</div>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":"#5856d6"),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🖨️ Imprimir — Versión Completa"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(con precio y contactos)</span></button>}
         {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🏭 Imprimir — Copia Producción"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(sin precio ni contactos)</span></button>}
