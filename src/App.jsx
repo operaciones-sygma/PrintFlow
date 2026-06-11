@@ -1874,23 +1874,24 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"Se registra al imprimir"}</span>
 </div>
 <script>
-  var __pfCommitted=false;
+  var __pfCommitted=false, __pfAcked=false;
   var __pfFailed=${pvFailed?"true":"false"};
+  // v10.58.64 M4: el padre confirma (ack) que SÍ registró; si no llega en 3s (padre
+  // recargado o con sesión cerrada mientras esta ventana seguía abierta) avisamos —
+  // antes la hoja salía con versión fantasma sin registrarse y sin aviso.
+  window.addEventListener("message", function(e){
+    if(e.data && e.data.type==="pf-print-ack"){ __pfAcked=true; if(e.data.ok===false) alert("⚠️ "+(e.data.reason||"La impresión NO se registró. Reimprime desde la app.")); }
+  });
   function pfPrint(){
-    // v10.58.63: si el peek falló, la hoja dice SIN REGISTRO → imprimimos SIN commit
-    // (coherente con el papel; antes mandaba hash:null y register_print sí incrementaba).
     if(__pfFailed){ window.print(); return; }
-    // v10.58.63: sin opener (la pestaña de PrintFlow se cerró/recargó) NO se puede
-    // registrar → bloquear la impresión para que el papel nunca diga una versión fantasma.
     if(!window.opener || window.opener.closed){
       alert("⚠️ No se puede registrar la impresión porque PrintFlow se cerró o recargó.\\n\\nVuelve a abrir la orden desde la app e imprime de nuevo para que la versión quede registrada.");
       return;
     }
     if(!__pfCommitted){
       __pfCommitted=true;
-      // v10.58.61: enviar el hash del peek (origin propio) para que el commit detecte si
-      // el contenido cambió desde que se generó la hoja (drift) y avise en vez de registrar mal.
       try{ window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")},hash:${JSON.stringify(pvHash)}},${JSON.stringify(window.location.origin)}); }catch(e){}
+      setTimeout(function(){ if(!__pfAcked) alert("⚠️ No se confirmó el registro de esta impresión (¿PrintFlow se recargó o cerró sesión?). Reimprime la orden desde la app para que quede registrada."); }, 3000);
     }
     window.print();
   }
@@ -7710,8 +7711,11 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     return ()=>{cancelled = true};
   }, [invoiceType, activeMode]);
 
+  // v10.58.64 M8: alinear con el backend (assign_folio/split rechazan delivered/
+  // maq_delivered/stocked) — antes el modal contaba "6 pendientes" pero el backend
+  // contestaba "OC sin órdenes pendientes": contador contradictorio + dead-end.
   const pendingOrders = useMemo(()=>
-    ocOrders.filter(o=>!o.invoice_folio && !o.stage.includes("cancelled")),
+    ocOrders.filter(o=>!o.invoice_folio && !o.stage.includes("cancelled") && !o.stage.includes("delivered") && o.stage!=="stocked"),
     [ocOrders]);
   const invoicedOrders = useMemo(()=>
     ocOrders.filter(o=>o.invoice_folio),
@@ -11951,13 +11955,17 @@ export default function PrintFlow() {
       if(ev.origin!==window.location.origin)return;
       const d=ev?.data;
       if(!d||d.type!=="pf-print-commit"||!d.orderId)return;
+      // v10.58.64 M4: confirmar (ack) a la ventana de impresión que SÍ se registró,
+      // para que el papel nunca salga con versión fantasma sin aviso.
+      const ack=(ok,reason)=>{ try{ ev.source&&ev.source.postMessage({type:"pf-print-ack",ok,reason},ev.origin); }catch(_){} };
       try{
         const info=await db.registerPrint(d.orderId, d.user||userLogin||"sistema", d.hash||null);
         // v10.58.61: el contenido cambió entre generar la hoja y presionar Imprimir →
         // la hoja en mano quedó desactualizada; no se registró nada, avisar.
-        if(info?.stale){ showToast("⚠️ Esa orden cambió desde que abriste la hoja — ciérrala y vuelve a imprimir para la versión correcta.","warning"); return; }
+        if(info?.stale){ showToast("⚠️ Esa orden cambió desde que abriste la hoja — ciérrala y vuelve a imprimir para la versión correcta.","warning"); ack(false,"La orden cambió desde que abriste la hoja — ciérrala y reimprime."); return; }
         setOrders(prev=>prev.map(x=>x.id===d.orderId?{...x,print_version:info.version,last_printed_at:info.printed_at,last_printed_by:info.printed_by,needs_reprint:false}:x));
-      }catch(e){ console.warn("[print-commit]",e); showToast("⚠️ No se registró la impresión: "+(e?.message||"error"),"warning"); }
+        ack(true);
+      }catch(e){ console.warn("[print-commit]",e); showToast("⚠️ No se registró la impresión: "+(e?.message||"error"),"warning"); ack(false,"No se registró: "+(e?.message||"error")); }
     };
     window.addEventListener("message",handler);
     return ()=>window.removeEventListener("message",handler);
