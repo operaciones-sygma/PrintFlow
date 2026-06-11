@@ -417,7 +417,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -2211,7 +2211,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?"♻️ Placa ya existe (auto-salta CTP)":"🆕 Nueva placa CTP requerida"}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
-      {!hp&&vOwns&&<><Row l="Empresa" v={o.client_company}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
+      {!hp&&vOwns&&<><Row l="Agente" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
@@ -7063,15 +7063,28 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const specsOnly=editOrder?._specsOnly;
   // v10.58.26: folio pre-asignado → precios bloqueados pero costo proveedor editable
   const financialsLocked=editOrder?._financialsLocked;
+  // v10.59.0 — Catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge de Corona)
+  // de la razón social seleccionada. Se carga al elegir cliente.
+  const [clientAgents,setClientAgents]=useState([]);
+  const [newAgentOpen,setNewAgentOpen]=useState(false);
+  const [newAgent,setNewAgent]=useState({name:"",phone:"",email:""});
+  useEffect(()=>{
+    if(!f.client_id){setClientAgents([]);return}
+    let alive=true;
+    supabase.rpc("list_client_agents",{p_client_id:f.client_id}).then(({data})=>{if(alive)setClientAgents(data||[])}).catch(()=>{if(alive)setClientAgents([])});
+    return ()=>{alive=false};
+  },[f.client_id]);
   // Compute missing required fields
   const missing=useMemo(()=>{
     const m=[];
-    if(!f.client?.trim())m.push("Cliente");
+    if(!f.client?.trim())m.push("Razón social");
     if(!f.product_type?.trim()||f.product_type==="Otro")m.push("Tipo de Producto");
     if(f.order_type==="maquila"&&!f.maq_provider?.trim())m.push("Proveedor (Maquila)");
     if(!hideC&&!specsOnly&&!f.client_email?.trim()&&!f.client_phone?.trim())m.push("Contacto (Email o WhatsApp)");
+    // v10.59.0 — cliente NUEVO (sin client_id) requiere RFC obligatorio (decisión de Marcelo)
+    if(!editOrder&&!f.client_id&&(f.client||"").trim()&&!hideC&&!specsOnly&&!f.client_rfc?.trim())m.push("RFC (razón social nueva)");
     return m;
-  },[f.client,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,hideC,specsOnly]);
+  },[f.client,f.client_id,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,hideC,specsOnly,editOrder]);
   const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
   const errBorder=k=>tried&&!k?"1.5px solid "+C.dn+"60":"none";
   // v10.49.1 punto 2 — Cliente nuevo (sin client_id) requiere email o whatsapp.
@@ -7156,6 +7169,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     try{
       const clean={...f};delete clean._specsOnly;
       if(clean.agent==="otro")clean.agent=null;
+      // v10.59.0 — el "Nombre" ES la razón social; client_company la espeja (impresión/compat).
+      // El "Agente" (contacto del cliente) viaja en clean.client_agent. El vendedor SYGMA
+      // interno sigue en clean.agent (Manuel/Genaro) — no se toca.
+      if(clean.client?.trim())clean.client_company=clean.client.trim();
+      if(clean.client_agent)clean.client_agent=clean.client_agent.trim()||null;
       if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;
       // 🆕 v10.13.0 — Resolver client_id contra cobranza.clients antes de guardar (solo en creación)
       if(!editOrder?.id&&!clean.client_id&&clean.client?.trim()){
@@ -7177,6 +7195,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
               clean.client_id=confirmed;
             }
           }else{
+            // v10.59.0 — confirmación CONSCIENTE de razón social nueva (Marcelo): aunque no
+            // haya similares, avisar que se crea un cliente nuevo (evita duplicados como UVEG).
+            const okNew=window.confirm("⚠️ \""+clean.client.trim()+"\" no está registrado.\n\n¿Crear como NUEVA razón social?\n\nRFC: "+(clean.client_rfc?.trim()||"—")+"\nContacto: "+(clean.client_email?.trim()||clean.client_phone?.trim()||"—")+"\n\nVerifica que no sea un duplicado con otro nombre.");
+            if(!okNew){setSaving(false);return}
             const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
             if(createErr)throw createErr;
             clean.client_id=newId;
@@ -7222,13 +7244,38 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   };
 
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
+    {/* v10.59.0 — Modal: registrar nuevo AGENTE (contacto del cliente) con su contacto */}
+    {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={()=>setNewAgentOpen(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:380,width:"100%",boxShadow:"0 20px 50px rgba(0,0,0,.35)"}}>
+        <div style={{fontSize:16,fontWeight:800,color:C.tx}}>➕ Nuevo agente</div>
+        <div style={{fontSize:11,color:C.t2,margin:"4px 0 14px"}}>Contacto de <b style={{color:C.tx}}>{f.client||"este cliente"}</b>. Captura su celular o correo (al menos uno).</div>
+        <input style={{...inp,marginBottom:8}} value={newAgent.name} onChange={e=>setNewAgent(a=>({...a,name:e.target.value}))} placeholder="Nombre del agente"/>
+        <input style={{...inp,marginBottom:8}} value={newAgent.phone} onChange={e=>setNewAgent(a=>({...a,phone:e.target.value}))} placeholder="Celular / WhatsApp"/>
+        <input style={{...inp,marginBottom:14}} value={newAgent.email} onChange={e=>setNewAgent(a=>({...a,email:e.target.value}))} placeholder="Correo"/>
+        <div style={{display:"flex",gap:8}}>
+          <button type="button" onClick={()=>setNewAgentOpen(false)} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
+          <button type="button" onClick={async()=>{
+            if(!newAgent.name.trim()){alert("Nombre del agente requerido");return}
+            if(!newAgent.phone.trim()&&!newAgent.email.trim()){alert("Captura al menos un contacto (celular o correo)");return}
+            try{
+              await supabase.rpc("add_client_agent",{p_client_id:f.client_id,p_name:newAgent.name.trim(),p_phone:newAgent.phone.trim()||null,p_email:newAgent.email.trim()||null,p_actor:role||"sistema"});
+              const {data}=await supabase.rpc("list_client_agents",{p_client_id:f.client_id});
+              setClientAgents(data||[]);
+              s("client_agent",newAgent.name.trim());
+              setNewAgentOpen(false);
+              showToast?.("✅ Agente registrado");
+            }catch(e){alert("No se pudo registrar: "+(e?.message||"error"))}
+          }} style={{flex:1,padding:11,borderRadius:10,border:"none",background:"#5856d6",color:"#fff",fontWeight:700,cursor:"pointer"}}>Registrar</button>
+        </div>
+      </div>
+    </div>}
     {!editOrder&&canP&&<GuideBanner text={isMaq?"🚚 Orden de maquila — incluye proveedor, costo y precio":"📋 Crea la orden completa con datos, specs y precio"} color={isMaq?"#e67e22":"#5856d6"}/>}
     {editOrder&&specsOnly&&<GuideBanner text="✏️ Pre-prensa: edita las especificaciones técnicas" color="#ec4899"/>}
     {editOrder&&hideC&&!specsOnly&&<GuideBanner text="🔍 Revisa y completa las especificaciones"/>}
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Nombre" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
   // v10.46.9 F1 FIX — Solo limpiar client_id (+ stock_role/product_id) si el NOMBRE realmente cambió.
   // Antes (v10.46.5): cualquier onChange con f.client_id existente entraba al reset, incluso si v===f.client
   // (caso onSelect del autocomplete: selC setea client_id+client; el ClientInput dispara onChange con el
@@ -7240,7 +7287,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     s("billing_mode","normal");
     if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
   }
-}} onSelect={selC} clients={clients}/></div></FC><FC label="Empresa"><input style={inp} value={f.client_company} onChange={e=>s("client_company",e.target.value)} placeholder="Razón social"/></FC></div>
+}} onSelect={selC} clients={clients}/></div></FC><FC label="Agente"><input style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Contacto del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
+      <datalist id="pf-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
+      {f.client_id&&(f.client_agent||"").trim()&&!clientAgents.some(a=>(a.name||"").trim().toLowerCase()===(f.client_agent||"").trim().toLowerCase())&&<button type="button" onClick={()=>{setNewAgent({name:(f.client_agent||"").trim(),phone:"",email:""});setNewAgentOpen(true)}} style={{marginTop:4,fontSize:10,fontWeight:600,color:"#5856d6",background:"#5856d610",border:"1px solid #5856d630",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>➕ Registrar "{(f.client_agent||"").trim()}" como agente</button>}</FC></div>
     {/* v10.49.1 punto 2 — Banner naranja visible cuando se está creando un cliente nuevo SIN contacto.
         v10.49.3 F6 — role=alert para screen readers (WCAG SC 4.1.3 Status Messages). */}
     {showContactWarn&&<div role="alert" aria-live="polite" style={{padding:"10px 20px",background:"#ff950015",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"start",gap:10}}>
@@ -8235,7 +8284,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}{!hp&&vOwns&&!compact&&o.client_company&&<span style={{fontWeight:400,color:C.t2,fontSize:11}}> · {o.client_company}</span>}</div>
+            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}{!hp&&vOwns&&!compact&&o.client_agent&&<span style={{fontWeight:400,color:C.t2,fontSize:11}}> · 👤 {o.client_agent}</span>}</div>
             {!compact&&!hp&&vOwns&&o.client_phone&&<div style={{fontSize:10,color:"#25d366",marginTop:1}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
             <div style={{color:C.t2,fontSize:compact?10:11,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
             {!compact&&o.paper_type&&<div style={{color:C.t3,fontSize:10,marginTop:2}}>📄 {o.paper_type}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.standard_size?" | "+ssLabel(o.standard_size):(o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":"")}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
@@ -11136,7 +11185,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
 
         <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
         <Row label="Nombre" value={order.client}/>
-        <Row label="Empresa" value={order.client_company}/>
+        <Row label="Agente" value={order.client_agent}/>
         <Row label="RFC" value={order.client_rfc}/>
         <Row label="Email" value={order.client_email}/>
         <Row label="WhatsApp" value={order.client_phone?(order.client_lada||"+52")+" "+order.client_phone:null}/>
