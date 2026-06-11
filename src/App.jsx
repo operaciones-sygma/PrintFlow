@@ -1478,10 +1478,17 @@ function diagnoseOrder(o){
   const isMaqStage=["maq_created","maq_sent","maq_in_progress"].includes(stage);
   const noPrice=o.order_type==="maquila"?(!Number(o.maq_price)||Number(o.maq_price)<=0):(!Number(o.price)||Number(o.price)<=0);
   const noCost=o.order_type==="maquila"&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
+  // v10.58.65 (decisión de Marcelo): el pendiente de una MAQUILA le toca al VENDEDOR que
+  // la vendió si tiene usuario en la app (conoce a su proveedor y el costo); si no
+  // (Manuel/sin agente), a Lupita. P-3562 (agente Genaro) → Genaro, no Lupita.
+  const _maqAg=(o.agent||"").trim();
+  const _maqByVendor=!!_maqAg && VENDEDORES_CON_USUARIO.has(_maqAg.toLowerCase());
+  const _maqRole=_maqByVendor?"vendedor":"secretaria";
+  const _maqName=_maqByVendor?_maqAg:"Lupita";
   if(isMaqStage&&(noPrice||noCost))
-    return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir","secretaria","Lupita",{money:true,action:"edit"});
+    return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir",_maqRole,_maqName,{money:true,action:"edit"});
   if(isMaqStage&&!(o.maq_provider||"").trim())
-    return R("maq_prov","🏭 Maquila sin proveedor asignado","secretaria","Lupita",{action:"edit"});
+    return R("maq_prov","🏭 Maquila sin proveedor asignado",_maqRole,_maqName,{action:"edit"});
   if(stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)){
     const fP=!o.validated_by_production,fN=!o.validated_by_preprensa;
     return R("validation","✋ Falta validación de "+(fP&&fN?"Gerardo y Noemí":(fP?"Gerardo (producción)":"Noemí (pre-prensa)")),
@@ -1492,7 +1499,9 @@ function diagnoseOrder(o){
   if(stage==="proof_client"&&d>=3)
     return R("proof","⏳ El cliente no aprueba la prueba desde hace "+d+" días","secretaria","Lupita",{external:true,sev:d>=6?"red":"orange"});
   if(["maq_sent","maq_in_progress"].includes(stage)&&d>=7)
-    return R("maq_sleep","🚚 En maquila con "+((o.maq_provider||"el proveedor").trim())+" hace "+d+" días sin recibirse","secretaria","Lupita",{external:true,sev:d>=14?"red":"orange"});
+    // v10.58.65: perseguir al proveedor lento es del vendedor (Genaro) si tiene usuario;
+    // external solo cuando cae a Lupita (ella da seguimiento al externo en ese caso).
+    return R("maq_sleep","🚚 En maquila con "+((o.maq_provider||"el proveedor").trim())+" hace "+d+" días sin recibirse",_maqRole,_maqName,{external:!_maqByVendor,sev:d>=14?"red":"orange"});
   if(stage==="ready"&&!o.current_machine&&d>=1)
     return R("no_machine","🖱️ Sin máquina asignada hace "+d+" día"+(d===1?"":"s"),"produccion","Gerardo",{});
   if(o.needs_reprint)
@@ -11585,7 +11594,9 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
   });
   const healthyBy={};healthy.forEach(r=>{const resp=STAGE_RESPONSIBLE[r.o.stage];const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(healthyBy[k]=healthyBy[k]||[]).push(r)});
   const sevColor={red:C.dn,orange:"#f59e0b",yellow:"#eab308"};
-  const allPeople=["Lupita","Gerardo","Noemí","Germán","Karla"];
+  // v10.58.65: incluir a los vendedores con usuario (Genaro) — sus maquilas ahora se
+  // les atribuyen, así que deben aparecer en el semáforo (derivado del Set, sin duplicar).
+  const allPeople=["Lupita","Gerardo","Noemí","Germán","Karla",...[...VENDEDORES_CON_USUARIO].map(v=>v.charAt(0).toUpperCase()+v.slice(1))];
   const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
 
   const Row=({r,inCron})=>{
