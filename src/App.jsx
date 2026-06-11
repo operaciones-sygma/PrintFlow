@@ -1884,6 +1884,9 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   });
   function pfPrint(){
     if(__pfFailed){ window.print(); return; }
+    // v10.58.64 #1: si esta versión YA se registró en esta ventana, reimprimir el mismo
+    // papel no necesita opener (antes el check de abajo bloqueaba un reimpreso legítimo).
+    if(__pfCommitted){ window.print(); return; }
     if(!window.opener || window.opener.closed){
       alert("⚠️ No se puede registrar la impresión porque PrintFlow se cerró o recargó.\\n\\nVuelve a abrir la orden desde la app e imprime de nuevo para que la versión quede registrada.");
       return;
@@ -4776,7 +4779,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   // Cambiar cantidad → auto-calcula monto CON IVA proporcional
   // v10.58.38: marca lastEdited='qty' para que cambio de doc_type preserve qty
   const onChangeQty = (groupIdx, order, val) => {
-    const qty = Math.max(0, parseInt(val||0, 10));
+    // v10.58.64 #22: Number()||0 (no parseInt) — '1e3' truncaba a 1 en silencio y la
+    // validación pasaba en verde; ahora interpreta bien o cae a 0 (paridad con onChangeAmount).
+    const qty = Math.max(0, Math.floor(Number(val) || 0));
     const g = groups[groupIdx];
     const punit = priceUnit(order);
     const punitConIva = punit * (g.doc_type === "factura" ? 1.16 : 1);
@@ -11730,6 +11735,19 @@ export default function PrintFlow() {
   // v10.58.53 #21: tick para recalcular diagnósticos por paso del tiempo (pantalla fija)
   const [dayTick,setDayTick]=useState(0);
   useEffect(()=>{const t=setInterval(()=>setDayTick(x=>x+1),15*60*1000);return()=>clearInterval(t)},[]);
+  // v10.58.64 #20: GC de localStorage al arrancar — borradores de matriz (pf_matrix_draft_*)
+  // de OCs viejas y llaves de despertador (pf_wakeup_*) de días pasados se acumulaban sin
+  // límite. Limpia drafts > 7 días y wakeups que no son de hoy.
+  useEffect(()=>{
+    try{
+      const today=localDayStr(); const weekAgo=Date.now()-7*86400000;
+      for(let i=localStorage.length-1;i>=0;i--){
+        const k=localStorage.key(i); if(!k)continue;
+        if(k.startsWith("pf_wakeup_")&&!k.endsWith(today)){ localStorage.removeItem(k); continue; }
+        if(k.startsWith("pf_matrix_draft_")){ try{ const d=JSON.parse(localStorage.getItem(k)||"{}"); if(!d.ts||d.ts<weekAgo) localStorage.removeItem(k); }catch(_){ localStorage.removeItem(k); } }
+      }
+    }catch(e){}
+  },[]);
   useEffect(()=>{
     if(!loaded||!user){setWakeupItems(null);return}
     try{
