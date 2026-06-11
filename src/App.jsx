@@ -667,9 +667,10 @@ const db = {
   // 🧹 v10.54.5 — Limpieza del histórico de impresiones (admin-only).
   // Borra rows de print_audit con printed_at < NOW() - p_keep_months meses.
   // Mínimo 3 meses. Devuelve {keep_months, cutoff_date, rows_deleted}.
-  async cleanupPrintAudit(months) {
+  async cleanupPrintAudit(months, actor) {
     const {data, error} = await supabase.rpc("cleanup_print_audit", {
-      p_keep_months: months
+      p_keep_months: months,
+      p_actor: actor || null
     });
     if (error) throw new Error(error.message);
     return data;
@@ -1561,8 +1562,16 @@ function getWakeupItems(role, userLogin, orders){
     if(snoozeActive(o)) continue;
     const diag = diagnoseOrder(o);
     if(!diag || SKIP_KEYS.has(diag.key)) continue;
+    // v10.58.64 M1: Gerardo NO se despierta por trabajo MONTADO EN MÁQUINA (su tablero
+    // normal) — restaura la regla v61 que se perdió al delegar a diagnoseOrder. Una
+    // orden en 'ready' SIN máquina (no_machine) o estancada sí lo despierta.
+    if(role==="produccion" && o.current_machine && ["ready","in_production","packaging"].includes(o.stage)) continue;
     const ag = (o.agent||"").trim();
-    const viaManuel = isSec(role) && diag.key==="late" && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase());
+    // v10.58.64 M2: el rescate de Manuel (agente sin usuario → Lupita persigue) se basa
+    // en el VENCIMIENTO real, no en diag.key==='late' (no_folio/validation ganaban antes
+    // y Lupita perdía las vencidas más viejas de Manuel).
+    const overdue = o.due_date && new Date(String(o.due_date).slice(0,10)+"T23:59:59") < new Date();
+    const viaManuel = isSec(role) && overdue && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase());
     let mine=false;
     if(role==="admin") mine=true;
     else if(role==="vendedor") mine = isVendedorOwnerByAgent(role, userLogin, o);
@@ -1587,7 +1596,7 @@ function getWakeupItems(role, userLogin, orders){
 
 function WakeupModal({user, userLogin, items, onAck}){
   const [text,setText]=useState("");
-  const norm=s=>String(s||"").toUpperCase().normalize("NFD").replace(/[.,;:!¡?¿]+s*$/,"").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();
+  const norm=s=>String(s||"").toUpperCase().normalize("NFD").replace(/[.,;:!¡?¿]+\s*$/,"").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();
   const matched=norm(text)==="SI ENTIENDO";
   useEffect(()=>{ if(matched) onAck(); },[matched,onAck]);
   const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
@@ -10026,7 +10035,7 @@ function WIPDashboard({ orders, role, onAction }) {
 }
 
 // v10.54.5 m2 — Modal admin para limpiar histórico de print_audit
-function PrintAuditCleanupModal({onClose, showToast}) {
+function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
   useEscClose(onClose);
   const [months, setMonths] = useState(12);
   const [currentCount, setCurrentCount] = useState(null);
@@ -10047,7 +10056,7 @@ function PrintAuditCleanupModal({onClose, showToast}) {
     if (!window.confirm(`¿Borrar histórico de impresiones de más de ${monthsNum} meses? Esta acción NO se puede deshacer.`)) return;
     setBusy(true);
     try {
-      const r = await db.cleanupPrintAudit(monthsNum);
+      const r = await db.cleanupPrintAudit(monthsNum, userLogin);
       setResult(r);
       showToast(`🧹 Limpieza OK: ${r.rows_deleted} rows borradas (corte: ${new Date(r.cutoff_date).toLocaleDateString("es-MX")})`);
     } catch(e) {
@@ -10268,7 +10277,7 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
-      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast}/>}
+      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast} userLogin={userLogin||user}/>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
