@@ -1074,6 +1074,14 @@ const STAGE_RESPONSIBLE = {
 // usuario, agregarlo aquí (en minúsculas).
 const VENDEDORES_CON_USUARIO = new Set(["genaro"]);
 
+// v10.58.67: nombre CANÓNICO de un vendedor (capitaliza la 1ª letra del nombre en el
+// Set) — la detección es case-insensitive pero el display/agrupación/semáforo deben usar
+// la MISMA forma siempre, si no una maquila capturada con 'genaro' minúscula (vía campo
+// "Otro...") salía en un grupo aparte y el chip "Genaro" mostraba falso verde.
+function vendorDisplayName(ag){
+  const low=String(ag||"").trim().toLowerCase();
+  return low ? low.charAt(0).toUpperCase()+low.slice(1) : "";
+}
 // v10.58.65 (decisión de Marcelo): responsable EFECTIVO de una orden. Igual que
 // STAGE_RESPONSIBLE, salvo que el pendiente de una MAQUILA con proveedor externo
 // (maq_created/sent/in_progress) le toca al VENDEDOR que la vendió si tiene usuario en
@@ -1085,7 +1093,7 @@ function orderResponsible(o){
   const base = STAGE_RESPONSIBLE[o?.stage];
   if(base && o?.order_type==="maquila" && base.role==="secretaria"){
     const ag=(o?.agent||"").trim();
-    if(ag && VENDEDORES_CON_USUARIO.has(ag.toLowerCase())) return {role:"vendedor", name:ag};
+    if(ag && VENDEDORES_CON_USUARIO.has(ag.toLowerCase())) return {role:"vendedor", name:vendorDisplayName(ag)};
   }
   return base;
 }
@@ -1505,7 +1513,7 @@ function diagnoseOrder(o){
   const _maqAg=(o.agent||"").trim();
   const _maqByVendor=!!_maqAg && VENDEDORES_CON_USUARIO.has(_maqAg.toLowerCase());
   const _maqRole=_maqByVendor?"vendedor":"secretaria";
-  const _maqName=_maqByVendor?_maqAg:"Lupita";
+  const _maqName=_maqByVendor?vendorDisplayName(_maqAg):"Lupita"; // v10.58.67: nombre canónico
   if(isMaqStage&&(noPrice||noCost))
     return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir",_maqRole,_maqName,{money:true,action:"edit"});
   if(isMaqStage&&!(o.maq_provider||"").trim())
@@ -1900,13 +1908,18 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"Se registra al imprimir"}</span>
 </div>
 <script>
-  var __pfCommitted=false, __pfAcked=false;
+  var __pfCommitted=false, __pfAcked=false, __pfAckTimer=null;
   var __pfFailed=${pvFailed?"true":"false"};
-  // v10.58.64 M4: el padre confirma (ack) que SÍ registró; si no llega en 3s (padre
-  // recargado o con sesión cerrada mientras esta ventana seguía abierta) avisamos —
-  // antes la hoja salía con versión fantasma sin registrarse y sin aviso.
+  // v10.58.64 M4: el padre confirma (ack) que SÍ registró; si no llega (padre recargado
+  // o con sesión cerrada mientras esta ventana seguía abierta) avisamos.
+  // v10.58.67 Bug 7: al llegar el ack cancelamos el timer (red lenta legítima ya no
+  // dispara falso aviso) y el umbral sube a 8s.
   window.addEventListener("message", function(e){
-    if(e.data && e.data.type==="pf-print-ack"){ __pfAcked=true; if(e.data.ok===false) alert("⚠️ "+(e.data.reason||"La impresión NO se registró. Reimprime desde la app.")); }
+    if(e.data && e.data.type==="pf-print-ack"){
+      __pfAcked=true;
+      if(__pfAckTimer){ clearTimeout(__pfAckTimer); __pfAckTimer=null; }
+      if(e.data.ok===false) alert("⚠️ "+(e.data.reason||"La impresión NO se registró. Reimprime desde la app."));
+    }
   });
   function pfPrint(){
     if(__pfFailed){ window.print(); return; }
@@ -1920,7 +1933,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     if(!__pfCommitted){
       __pfCommitted=true;
       try{ window.opener.postMessage({type:"pf-print-commit",orderId:${JSON.stringify(o.id)},user:${JSON.stringify(userLogin||"sistema")},hash:${JSON.stringify(pvHash)}},${JSON.stringify(window.location.origin)}); }catch(e){}
-      setTimeout(function(){ if(!__pfAcked) alert("⚠️ No se confirmó el registro de esta impresión (¿PrintFlow se recargó o cerró sesión?). Reimprime la orden desde la app para que quede registrada."); }, 3000);
+      __pfAckTimer=setTimeout(function(){ if(!__pfAcked) alert("⚠️ No se confirmó el registro de esta impresión (¿PrintFlow se recargó o cerró sesión?). Reimprime la orden desde la app para que quede registrada."); }, 8000);
     }
     window.print();
   }
@@ -10197,13 +10210,15 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
     active.forEach(o => {
       const resp = orderResponsible(o); // v10.58.65: maquila → vendedor
       if (!resp || resp.role === "both") return;
-      if (!map[resp.role]) {
-        map[resp.role] = {
+      // v10.58.67 D1: llavear por NOMBRE (no por rol) — si no, dos vendedores colapsan
+      // en un bucket con el nombre del primero. Cada nombre es único por persona.
+      if (!map[resp.name]) {
+        map[resp.name] = {
           role: resp.role, name: resp.name, icon: icons[resp.role] || "👤",
           orders: [], vencidas: 0, urgentes: 0, horasSinActividad: 0
         };
       }
-      const r = map[resp.role];
+      const r = map[resp.name];
       r.orders.push(o);
       if (isVencida(o)) r.vencidas += 1;
       if (isUrgente(o)) r.urgentes += 1;
