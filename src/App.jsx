@@ -1069,6 +1069,27 @@ const STAGE_RESPONSIBLE = {
   maq_received: { role: "karla", name: "Karla" }
 };
 
+// v10.58.54: vendedores de ventas CON usuario en PrintFlow — las órdenes de agentes
+// fuera de esta lista (Manuel) las persigue/captura Lupita. Si un vendedor nuevo recibe
+// usuario, agregarlo aquí (en minúsculas).
+const VENDEDORES_CON_USUARIO = new Set(["genaro"]);
+
+// v10.58.65 (decisión de Marcelo): responsable EFECTIVO de una orden. Igual que
+// STAGE_RESPONSIBLE, salvo que el pendiente de una MAQUILA con proveedor externo
+// (maq_created/sent/in_progress) le toca al VENDEDOR que la vendió si tiene usuario en
+// la app (Genaro conoce a su proveedor y su costo); si el agente no tiene usuario
+// (Manuel) o no hay, queda en Lupita. maq_received (Karla asigna folio) NO cambia.
+// Fuente ÚNICA de verdad — la usan diagnoseOrder, el strip de las cards, los nudges
+// y Salud Operativa, para que la atribución sea consistente en todo el app.
+function orderResponsible(o){
+  const base = STAGE_RESPONSIBLE[o?.stage];
+  if(base && o?.order_type==="maquila" && base.role==="secretaria"){
+    const ag=(o?.agent||"").trim();
+    if(ag && VENDEDORES_CON_USUARIO.has(ag.toLowerCase())) return {role:"vendedor", name:ag};
+  }
+  return base;
+}
+
 const TERMINAL_STAGES = ["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected"];
 
 function getTopPriority(activeOrders) {
@@ -1513,13 +1534,13 @@ function diagnoseOrder(o){
   // faltante; antes una orden sin precio + vencida se atribuía a Karla y desaparecía
   // del bloque de su área en la Torre.
   if(late){
-    const resp=STAGE_RESPONSIBLE[stage];
+    const resp=orderResponsible(o); // v10.58.65: maquila vencida → vendedor (no Lupita)
     return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
       resp?.role||"admin",resp?.role==="both"?"Gerardo y Noemí":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
   }
   // v10.58.53: una orden MONTADA EN MÁQUINA no está estancada (paridad con getStale v10.49.4)
   if(d>=2&&!o.current_machine&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)){
-    const resp=STAGE_RESPONSIBLE[stage];
+    const resp=orderResponsible(o); // v10.58.65: consistente con la regla maquila→vendedor
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
       resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
   }
@@ -1536,10 +1557,6 @@ function diagnoseOrder(o){
 // "SI ENTIENDO" (queda registro vía log_wakeup_ack). Aplica a todos; Gerardo
 // (producción) NO se despierta por trabajo en máquinas (ready/in_production/
 // packaging = su flujo normal del tablero), solo por bloqueos fuera de máquinas.
-// v10.58.54: agentes de ventas CON usuario en PrintFlow — las órdenes de agentes
-// fuera de esta lista (Manuel) las persigue Lupita, que captura por ellos.
-// Si un vendedor nuevo recibe usuario, agregarlo aquí (en minúsculas).
-const VENDEDORES_CON_USUARIO = new Set(["genaro"]);
 function getWakeupItems(role, userLogin, orders){
   const maqMissing = o => o.order_type==="maquila" &&
     ["maq_created","maq_sent","maq_in_progress"].includes(o.stage) &&
@@ -8294,7 +8311,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10}}>
         <span style={{fontSize:11,color:C.t2}}>🔕 En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
       </div>;
-      const resp=STAGE_RESPONSIBLE[o.stage];
+      const resp=orderResponsible(o); // v10.58.65: maquila → vendedor (no Lupita)
       if(!resp)return null;
       const respName=resp.role==="both"?"Producción y Pre-prensa":resp.name;
       const noPrice=isMaq&&(!Number(o.maq_price)||Number(o.maq_price)<=0);
@@ -10178,7 +10195,7 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
     const icons = { preprensa: "🎨", produccion: "⚙️", secretaria: "📋", karla: "🧾", german: "💿" };
     const map = {};
     active.forEach(o => {
-      const resp = STAGE_RESPONSIBLE[o.stage];
+      const resp = orderResponsible(o); // v10.58.65: maquila → vendedor
       if (!resp || resp.role === "both") return;
       if (!map[resp.role]) {
         map[resp.role] = {
@@ -10232,7 +10249,7 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
   );
 
   const notifyResponsible = (order) => {
-    const resp = STAGE_RESPONSIBLE[order.stage];
+    const resp = orderResponsible(order); // v10.58.65: maquila → vendedor
     if (!resp || resp.role === "both") return;
     const msg = "🚨 Admin pide atención: " + order.production_number + " · " + (order.client || "—").trim() + " · " + (SM[order.stage]?.l || order.stage);
     setConfirmModal({
@@ -10345,7 +10362,7 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
             {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
             {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
             {isUrgente(topPriority) && <span style={{ color: "#ff9500", fontWeight: 600 }}>URGENTE · </span>}
-            {SM[topPriority.stage]?.l || topPriority.stage} · {STAGE_RESPONSIBLE[topPriority.stage]?.name || "—"}
+            {SM[topPriority.stage]?.l || topPriority.stage} · {orderResponsible(topPriority)?.name || "—"}
             {(() => {
               const lastAct = topPriority.timeline?.length > 0 ? topPriority.timeline[topPriority.timeline.length - 1].date : topPriority.created_at;
               const h = hoursAgo(lastAct);
@@ -10357,9 +10374,9 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
               Ver orden
             </button>
             {/* v10.32.0 — Notificar responsable es decisión admin (escalación), Lupita no */}
-            {role === "admin" && STAGE_RESPONSIBLE[topPriority.stage] && STAGE_RESPONSIBLE[topPriority.stage].role !== "both" && (
+            {role === "admin" && orderResponsible(topPriority) && orderResponsible(topPriority).role !== "both" && (
               <button onClick={() => notifyResponsible(topPriority)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff", color: C.tx, border: "1px solid " + C.bd, borderRadius: 8, cursor: "pointer" }}>
-                📣 Notificar {STAGE_RESPONSIBLE[topPriority.stage].name}
+                📣 Notificar {orderResponsible(topPriority).name}
               </button>
             )}
           </div>
@@ -11592,7 +11609,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
     const w=k=>Math.max(0,...groups[k].map(r=>r.diag.sev==="red"?2:1));
     return w(b)-w(a)||groups[b].length-groups[a].length;
   });
-  const healthyBy={};healthy.forEach(r=>{const resp=STAGE_RESPONSIBLE[r.o.stage];const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(healthyBy[k]=healthyBy[k]||[]).push(r)});
+  const healthyBy={};healthy.forEach(r=>{const resp=orderResponsible(r.o);const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(healthyBy[k]=healthyBy[k]||[]).push(r)});
   const sevColor={red:C.dn,orange:"#f59e0b",yellow:"#eab308"};
   // v10.58.65: incluir a los vendedores con usuario (Genaro) — sus maquilas ahora se
   // les atribuyen, así que deben aparecer en el semáforo (derivado del Set, sin duplicar).
@@ -12642,7 +12659,7 @@ export default function PrintFlow() {
       changes.forEach(c=>{editMsg+="\n• "+c.label+": "+fmtEditValue(c.key,c.before)+" → "+fmtEditValue(c.key,c.after)});
       // v10.58.41 — notificar al RESPONSABLE DEL ÁREA donde está el trabajo (stage actual),
       // en lugar del trío fijo. Lo pidió Genaro: que se entere quien tiene el trabajo en su área.
-      const resp=STAGE_RESPONSIBLE[orderBefore?.stage];
+      const resp=orderResponsible(orderBefore); // v10.58.65: maquila → vendedor
       const targetRoles=new Set();
       if(resp){
         if(resp.role==="both"){targetRoles.add("produccion");targetRoles.add("preprensa");}
@@ -13303,7 +13320,7 @@ export default function PrintFlow() {
     // v10.58.50: 📣 Recordar al responsable de la etapa (cards sin acción para el rol).
     // Notifica in-app + Telegram (db.notify ya copia a admin) con el bloqueo concreto.
     if(action==="nudge_responsible"){const o=orders.find(x=>x.id===id);if(!o)return;
-      const resp=STAGE_RESPONSIBLE[o.stage];
+      const resp=orderResponsible(o); // v10.58.65: maquila → vendedor
       if(!resp||resp.role==="both"){showToast("Esta etapa no tiene un responsable único","warning");return}
       (async()=>{try{
         const noPrice=o.order_type==="maquila"&&(!Number(o.maq_price)||Number(o.maq_price)<=0);
