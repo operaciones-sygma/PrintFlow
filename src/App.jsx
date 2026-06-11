@@ -648,6 +648,15 @@ const db = {
   // La RPC valida que folioStart > último folio usado y que no haya shared_invoice_folio previo.
   // 🖨️ v10.53.0 — Registra impresión: incrementa print_version, setea autor/timestamp,
   // resetea needs_reprint. Retorna {version, printed_at, printed_by, content_hash}.
+  // v10.58.64 A8: order_ids con un stale_alert en las últimas 24h — dedup PERSISTENTE
+  // (antes el dedup era un Set en memoria que se reseteaba en cada F5 → hasta 93
+  // alertas por orden y 3,178 Telegrams; Karla con 1,221 notifs sin leer).
+  async recentStaleAlerts() {
+    const since = new Date(Date.now() - 24*3600*1000).toISOString();
+    const {data, error} = await supabase.from("notifications").select("order_id").eq("type","stale_alert").gte("created_at", since);
+    if (error) throw new Error(error.message);
+    return new Set((data||[]).map(n=>n.order_id).filter(Boolean));
+  },
   async registerPrint(orderId, user, expectedHash) {
     const {data, error} = await supabase.rpc("register_print", {
       p_order_id: orderId,
@@ -11961,6 +11970,7 @@ export default function PrintFlow() {
   // Antes: cada change disparaba reload completo → si Karla hacía 2 acciones rápidas, el reload
   // de la 1ra podía sobreescribir el optimistic de la 2da (parpadeo + "rebobinado").
   const reloadDebounceRef = useRef(null);
+  const notifDebounceRef = useRef(null);
   useEffect(() => {
     if (!user) return;
     const doReload = () => {
@@ -11970,13 +11980,22 @@ export default function PrintFlow() {
         reloadRef.current();
       }, 350);
     };
+    // v10.58.64 M13: debounce del reload de notificaciones — "Borrar todas" (1,221 filas)
+    // disparaba ~1,221 reloads en cada cliente conectado (jank de decenas de segundos).
+    const doReloadNotifs = () => {
+      if (notifDebounceRef.current) clearTimeout(notifDebounceRef.current);
+      notifDebounceRef.current = setTimeout(() => {
+        notifDebounceRef.current = null;
+        db.loadNotifications(notifKey).then(setNotifications).catch(()=>{});
+      }, 400);
+    };
     const channel = supabase.channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, doReload)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_timeline" }, doReload)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_comments" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_waste" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_machine_log" }, doReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => { db.loadNotifications(notifKey).then(setNotifications); }) // v10.28.2 — antes solo INSERT; perdía sync cross-tab de read/delete
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, doReloadNotifs) // v10.28.2 sync cross-tab read/delete · v10.58.64 M13 debounce
       .on("postgres_changes", { event: "*", schema: "public", table: "maintenance_log" }, () => { db.loadMaintenance().then(setMaintenance); })
       .on("postgres_changes", { event: "*", schema: "public", table: "chemical_log" }, () => { setChemKey(k=>k+1); db.loadChemicals().then(setChemicals); })
       .on("postgres_changes", { event: "*", schema: "public", table: "plate_log" }, () => { setChemKey(k=>k+1); db.loadPlates().then(setPlates); })
@@ -12091,12 +12110,17 @@ export default function PrintFlow() {
   // Banner in Pendientes is visible for ALL roles regardless
   useEffect(() => {
     if (!loaded || !user || user !== "admin") return;
-    const checkStale = () => {
+    const checkStale = async () => {
+      // v10.58.64 A8: dedup PERSISTENTE en BD (24h) además del Set en memoria — antes
+      // cada F5/pestaña re-alertaba TODAS las estancadas (ruido masivo en campana+Telegram).
+      let recentlyAlerted = new Set();
+      try { recentlyAlerted = await db.recentStaleAlerts(); } catch(e) { console.warn("[stale] dedup query falló:", e?.message); }
       orders.forEach(o => {
         if (o.stage.includes("delivered")||o.stage.includes("cancelled")) return;
+        if (snoozeActive(o)) return; // A8: respetar el snooze de la Torre
         const stale = getStale(o);
         if (!stale) return;
-        if (staleNotifiedRef.current.has(o.id)) return;
+        if (recentlyAlerted.has(o.id) || staleNotifiedRef.current.has(o.id)) return;
         staleNotifiedRef.current.add(o.id);
         const who = SM[o.stage]?.who;
         const msg = "⚠️ Orden estancada: " + (o.client || "") + " — " + (o.product_type || "") + " lleva " + stale.lb + " en " + (SM[o.stage]?.l || o.stage);
