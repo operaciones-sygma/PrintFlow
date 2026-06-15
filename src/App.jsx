@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -10356,7 +10356,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   const topPriority = useMemo(() => getTopPriority(active), [active]);
 
   const responsiblePulse = useMemo(() => {
-    const icons = { preprensa: "🎨", produccion: "⚙️", secretaria: "📋", karla: "🧾", german: "💿" };
+    const icons = { preprensa: PaletteIcon, produccion: GearIcon, secretaria: ClipboardTextIcon, karla: ReceiptIcon, german: DiscIcon };
     const map = {};
     active.forEach(o => {
       const resp = orderResponsible(o); // v10.58.65: maquila → vendedor
@@ -10365,7 +10365,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       // en un bucket con el nombre del primero. Cada nombre es único por persona.
       if (!map[resp.name]) {
         map[resp.name] = {
-          role: resp.role, name: resp.name, icon: icons[resp.role] || "👤",
+          role: resp.role, name: resp.name, icon: icons[resp.role] || UserIcon,
           orders: [], vencidas: 0, urgentes: 0, horasSinActividad: 0
         };
       }
@@ -10495,9 +10495,9 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       {showMergeClients && <ClientMergeModal onClose={()=>setShowMergeClients(false)} showToast={showToast} userLogin={userLogin}/>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
+          <h2 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
             {/* v10.58.24: karla ve mismo título que Lupita (Datos Pendientes) */}
-            {role === "admin" ? "🩺 Salud Operativa" : "📝 Datos Pendientes"}
+            {role === "admin" ? <><HeartbeatIcon size={22} weight="bold"/>Salud Operativa</> : <><NotePencilIcon size={22} weight="bold"/>Datos Pendientes</>}
           </h2>
           <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
             {role === "admin" ? "Supervisión diaria del taller. Última actualización: ahora." : "Órdenes que requieren tu atención para completar datos."}
@@ -10506,10 +10506,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
         {role === "admin" && (
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>setShowMergeClients(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Fusionar clientes duplicados (admin)">
-              🔗 Fusionar clientes
+              <LinkIcon size={13} weight="bold"/>Fusionar clientes
             </button>
             <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
-              🧹 Mantenimiento
+              <BroomIcon size={13} weight="bold"/>Mantenimiento
             </button>
           </div>
         )}
@@ -10524,8 +10524,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           padding: "16px 20px",
           marginBottom: 24
         }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: isVencida(topPriority) ? "#ff3b30" : "#ff9500", textTransform: "uppercase", marginBottom: 8 }}>
-            🚨 Top Prioridad del Día
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 11, fontWeight: 800, color: isVencida(topPriority) ? "#ff3b30" : "#ff9500", textTransform: "uppercase", marginBottom: 8 }}>
+            <WarningOctagonIcon size={13} weight="fill" style={{flexShrink:0}}/>Top Prioridad del Día
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
             {topPriority.production_number || "—"} · {(topPriority.client || "—").trim()}
@@ -10548,7 +10548,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             {/* v10.32.0 — Notificar responsable es decisión admin (escalación), Lupita no */}
             {role === "admin" && orderResponsible(topPriority) && orderResponsible(topPriority).role !== "both" && (
               <button onClick={() => notifyResponsible(topPriority)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff", color: C.tx, border: "1px solid " + C.bd, borderRadius: 8, cursor: "pointer" }}>
-                📣 Notificar {orderResponsible(topPriority).name}
+<MegaphoneIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:5}}/>Notificar {orderResponsible(topPriority).name}
               </button>
             )}
           </div>
@@ -10559,8 +10559,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           Lista órdenes activas que no tienen precio. Click "✏️ Editar Precio" abre el form. */}
       {ordersWithoutPriceList.length > 0 && (
         <>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
-            ⚠️ Órdenes sin precio capturado ({ordersWithoutPriceList.length})
+          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
+            <WarningIcon size={16} weight="fill"/>Órdenes sin precio capturado ({ordersWithoutPriceList.length})
           </h3>
           <div style={{
             background: "#ff950008",
@@ -10609,7 +10609,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                     flexShrink: 0
                   }}
                 >
-                  ✏️ Editar Precio
+                  <NotePencilIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Editar Precio
                 </button>
               </div>
             ))}
@@ -10618,7 +10618,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       )}
 
       {/* SECCIÓN 2: Pulso por Responsable */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>👥 Pulso por Responsable</h3>
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><UsersIcon size={16} weight="bold"/>Pulso por Responsable</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 24 }}>
         {responsiblePulse.length === 0 && (
           <div style={{ padding: 20, textAlign: "center", color: C.t3, fontSize: 12 }}>Sin órdenes activas</div>
@@ -10636,25 +10636,25 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             position: "relative"
           }}>
             {isMe && (
-              <div style={{position:"absolute",top:-8,right:8,background:"#5856d6",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>
-                👤 Tú
+              <div style={{position:"absolute",top:-8,right:8,display:"inline-flex",alignItems:"center",gap:3,background:"#5856d6",color:"#fff",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>
+                <UserIcon size={10} weight="bold"/>Tú
               </div>
             )}
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
-              {r.icon} {r.name}
+            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 13, fontWeight: 700, color: C.tx, marginBottom: 8 }}>
+              {(()=>{const RI=r.icon;return RI?<RI size={15} weight="bold" style={{flexShrink:0}}/>:null})()}{r.name}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: C.tx, marginBottom: 8 }}>{r.orders.length}</div>
-            <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>
-              {r.vencidas > 0 ? "🔴 " + r.vencidas + " vencida" + (r.vencidas !== 1 ? "s" : "") : "🟢 0 vencidas"}
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}>
+              <CircleIcon size={9} weight="fill" color={r.vencidas > 0 ? "#ff3b30" : "#34c759"} style={{flexShrink:0}}/>{r.vencidas > 0 ? r.vencidas + " vencida" + (r.vencidas !== 1 ? "s" : "") : "0 vencidas"}
             </div>
-            <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>
-              {r.urgentes > 0 ? "🟠 " + r.urgentes + " urgente" + (r.urgentes !== 1 ? "s" : "") : "🟢 0 urgentes"}
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}>
+              <CircleIcon size={9} weight="fill" color={r.urgentes > 0 ? "#ff9500" : "#34c759"} style={{flexShrink:0}}/>{r.urgentes > 0 ? r.urgentes + " urgente" + (r.urgentes !== 1 ? "s" : "") : "0 urgentes"}
             </div>
-            <div style={{ fontSize: 11, color: C.t2, marginBottom: 8 }}>
-              ⏱️ {r.horasSinActividad}h máx sin actividad
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 8 }}>
+              <ClockIcon size={11} style={{flexShrink:0}}/>{r.horasSinActividad}h máx sin actividad
             </div>
             <button onClick={() => setExpandedSection(s => ({ ...s, ["resp_" + r.role]: !s["resp_" + r.role] }))} style={{ width: "100%", padding: "6px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer" }}>
-              {expandedSection["resp_" + r.role] ? "Ocultar ▲" : "Ver todas ▼"}
+              {expandedSection["resp_" + r.role] ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
             </button>
             {expandedSection["resp_" + r.role] && (
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid " + C.bd }}>
@@ -10674,13 +10674,13 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       </div>
 
       {/* SECCIÓN 3: Estancadas */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>
-        ⏳ Estancadas ({stale.total})
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>
+        <HourglassIcon size={16} weight="bold"/>Estancadas ({stale.total})
       </h3>
       <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
         <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
-          <span style={{ fontSize: 11, color: C.t2 }}>🔴 Críticas (&gt;48h): <strong>{stale.critical.length}</strong></span>
-          <span style={{ fontSize: 11, color: C.t2 }}>🟠 Warning (24-48h): <strong>{stale.warning.length}</strong></span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color="#ff3b30"/>Críticas (&gt;48h): <strong>{stale.critical.length}</strong></span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color="#ff9500"/>Warning (24-48h): <strong>{stale.warning.length}</strong></span>
         </div>
         {[...stale.critical, ...stale.warning].slice(0, expandedSection.stale ? 999 : 8).map(o => (
           <div key={o.id} onClick={() => onAction(o.id, "detail")} style={{
@@ -10688,8 +10688,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             padding: "6px 0", borderBottom: "0.5px solid " + C.bd, fontSize: 11, cursor: "pointer", gap: 8
           }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: o._stale.lv === "critical" ? "#ff3b30" : "#ff9500" }}>
-                {o._stale.lv === "critical" ? "🔴" : "🟠"} {o.production_number || "—"}
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize: 11, fontWeight: 600, color: o._stale.lv === "critical" ? "#ff3b30" : "#ff9500" }}>
+                <CircleIcon size={8} weight="fill" color={o._stale.lv === "critical" ? "#ff3b30" : "#ff9500"}/>{o.production_number || "—"}
               </span>
               <span style={{ color: C.t2 }}>{(o.client || "—").trim().substring(0, 22)}</span>
               <span style={{ color: C.t3 }}>{SM[o.stage]?.l || o.stage}</span>
@@ -10704,25 +10704,25 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
         ))}
         {stale.total > 8 && (
           <button onClick={() => setExpandedSection(s => ({ ...s, stale: !s.stale }))} style={{ marginTop: 8, padding: "4px 12px", fontSize: 11, background: "transparent", border: "none", color: "#007aff", cursor: "pointer" }}>
-            {expandedSection.stale ? "Ocultar ▲" : "Ver todas (" + stale.total + ") ▼"}
+            {expandedSection.stale ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas ({stale.total}) <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
           </button>
         )}
-        {stale.total === 0 && <div style={{ textAlign: "center", color: "#34c759", fontSize: 12, padding: 20 }}>✅ Sin órdenes estancadas</div>}
+        {stale.total === 0 && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, color: "#34c759", fontSize: 12, padding: 20 }}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
       </div>
 
       {/* SECCIÓN 4: Datos Incompletos */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>❗ Datos Incompletos</h3>
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><WarningCircleIcon size={16} weight="fill"/>Datos Incompletos</h3>
       <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
         {[
-          { key: "vencidas", label: "Vencidas", icon: "🔴", color: "#ff3b30", list: incomplete.vencidas, alwaysExpanded: true },
-          { key: "sinFecha", label: "Sin fecha de entrega", icon: "🔴", color: "#ff3b30", list: incomplete.sinFecha, alwaysExpanded: true },
-          { key: "sinPrecio", label: "Sin precio", icon: "🟠", color: "#ff9500", list: incomplete.sinPrecio, alwaysExpanded: true },
-          { key: "sinCantidad", label: "Sin cantidad", icon: "🟠", color: "#ff9500", list: incomplete.sinCantidad, alwaysExpanded: true },
-          { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", icon: "🟠", color: "#ff9500", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
-          { key: "maquilaSinProveedor", label: "Maquila sin proveedor", icon: "🔴", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
-          { key: "sinAgente", label: "Sin agente asignado", icon: "🟡", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
-          { key: "sinTelefono", label: "Sin teléfono cliente", icon: "🟡", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
-          { key: "sinEmail", label: "Sin email cliente", icon: "🟡", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
+          { key: "vencidas", label: "Vencidas", color: "#ff3b30", list: incomplete.vencidas, alwaysExpanded: true },
+          { key: "sinFecha", label: "Sin fecha de entrega", color: "#ff3b30", list: incomplete.sinFecha, alwaysExpanded: true },
+          { key: "sinPrecio", label: "Sin precio", color: "#ff9500", list: incomplete.sinPrecio, alwaysExpanded: true },
+          { key: "sinCantidad", label: "Sin cantidad", color: "#ff9500", list: incomplete.sinCantidad, alwaysExpanded: true },
+          { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", color: "#ff9500", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
+          { key: "maquilaSinProveedor", label: "Maquila sin proveedor", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
+          { key: "sinAgente", label: "Sin agente asignado", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
+          { key: "sinTelefono", label: "Sin teléfono cliente", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
+          { key: "sinEmail", label: "Sin email cliente", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
         ].filter(s => s.list.length > 0).map(section => {
           const expanded = section.alwaysExpanded || expandedSection["inc_" + section.key];
           return (
@@ -10731,10 +10731,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                 padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
                 cursor: section.alwaysExpanded ? "default" : "pointer", background: section.color + "08"
               }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: section.color }}>
-                  {section.icon} {section.label} ({section.list.length})
+                <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: section.color }}>
+                  <CircleIcon size={9} weight="fill" color={section.color}/>{section.label} ({section.list.length})
                 </span>
-                {!section.alwaysExpanded && <span style={{ fontSize: 11, color: C.t3 }}>{expanded ? "▲" : "▼"}</span>}
+                {!section.alwaysExpanded && <span style={{ fontSize: 11, color: C.t3 }}>{expanded ? <CaretUpIcon size={11}/> : <CaretDownIcon size={11}/>}</span>}
               </div>
               {expanded && (
                 <div style={{ padding: "4px 14px 10px" }}>
@@ -10744,7 +10744,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                         <strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim().substring(0, 22)} · {SM[o.stage]?.l || o.stage}
                       </span>
                       <button onClick={() => onAction(o.id, "edit")} style={{ fontSize: 10, padding: "3px 8px", background: section.color, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>
-                        ✏️ Editar
+                        <NotePencilIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Editar
                       </button>
                     </div>
                   ))}
@@ -10754,16 +10754,16 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             </div>
           );
         })}
-        {Object.values(incomplete).every(arr => arr.length === 0) && <div style={{ padding: 20, textAlign: "center", color: "#34c759", fontSize: 12 }}>✅ Datos completos en todas las órdenes activas</div>}
+        {Object.values(incomplete).every(arr => arr.length === 0) && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding: 20, color: "#34c759", fontSize: 12 }}><CheckCircleIcon size={14} weight="fill"/>Datos completos en todas las órdenes activas</div>}
       </div>
 
       {/* SECCIÓN 5: Estado de Máquinas */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🏭 Estado de Máquinas</h3>
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><FactoryIcon size={16} weight="bold"/>Estado de Máquinas</h3>
       <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
         {machineStatus.inMaintenance.length > 0 ? (
           <>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#ff9500", marginBottom: 8 }}>
-              🔧 {machineStatus.inMaintenance.length} en mantenimiento
+            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: "#ff9500", marginBottom: 8 }}>
+              <WrenchIcon size={13} weight="bold"/>{machineStatus.inMaintenance.length} en mantenimiento
             </div>
             {machineStatus.inMaintenance.map(m => {
               const machineName = MACHINES.find(x => x.id === m.machine_id)?.name || m.machine_id;
@@ -10773,13 +10773,13 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                 <div key={m.id} style={{ fontSize: 11, padding: "6px 0", borderBottom: "0.5px solid " + C.bd }}>
                   <strong>{machineName}</strong> · {daysInMaint} día(s) · iniciado por {m.started_by}
                   {m.notes && <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{m.notes}</div>}
-                  {ordersStuck > 0 && <div style={{ fontSize: 10, color: "#ff9500" }}>⚠️ {ordersStuck} órdenes detenidas</div>}
+                  {ordersStuck > 0 && <div style={{ display:"flex", alignItems:"center", gap:4, fontSize: 10, color: "#ff9500" }}><WarningIcon size={11} weight="fill"/>{ordersStuck} órdenes detenidas</div>}
                 </div>
               );
             })}
           </>
         ) : (
-          <div style={{ fontSize: 12, color: "#34c759", marginBottom: 12 }}>✅ Todas las máquinas operativas (0 en mantenimiento)</div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, color: "#34c759", marginBottom: 12 }}><CheckCircleIcon size={13} weight="fill"/>Todas las máquinas operativas (0 en mantenimiento)</div>
         )}
 
         {machineStatus.activeMachines.length > 0 && (
@@ -10803,18 +10803,18 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       {/* SECCIÓN 6: Limpieza Sugerida — v10.32.0: admin-only (acciones administrativas no son scope de Lupita) */}
       {role === "admin" && (orphanOCs.length > 0 || unreadNotifs.length > 10) && (
         <>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🧹 Limpieza Sugerida</h3>
+          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><BroomIcon size={16} weight="bold"/>Limpieza Sugerida</h3>
           <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
             {orphanOCs.length > 0 && (
               <div style={{ marginBottom: unreadNotifs.length > 10 ? 16 : 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>
-                  🟡 {orphanOCs.length} OCs huérfanas (sin órdenes activas)
+                <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>
+                  <CircleIcon size={9} weight="fill" color="#fbbf24"/>{orphanOCs.length} OCs huérfanas (sin órdenes activas)
                 </div>
                 {orphanOCs.map(oc => (
                   <div key={oc.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd }}>
                     <span>{oc.id} · {oc.client || "—"}</span>
                     <button onClick={() => cancelOrphanOC(oc)} style={{ fontSize: 10, padding: "3px 8px", background: "#ff3b30", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-                      ❌ Cancelar
+                      <XIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Cancelar
                     </button>
                   </div>
                 ))}
@@ -10824,11 +10824,11 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             {unreadNotifs.length > 10 && (
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#5856d6" }}>
-                    💬 {unreadNotifs.length} notificaciones admin sin leer
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: "#5856d6" }}>
+                    <ChatCircleIcon size={13} weight="fill"/>{unreadNotifs.length} notificaciones admin sin leer
                   </span>
                   <button onClick={markAllNotifsRead} style={{ fontSize: 11, padding: "5px 10px", background: "#5856d6", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-                    ✅ Marcar todas como leídas
+                    <CheckIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Marcar todas como leídas
                   </button>
                 </div>
                 <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
