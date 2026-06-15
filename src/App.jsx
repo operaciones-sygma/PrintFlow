@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -11859,22 +11859,22 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
       <div style={{fontSize:12,fontWeight:700,color:diag.sev==="red"?C.dn:"#b45309",marginTop:4}}>{diag.text}</div>
       {inCron&&!diag.external&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>→ le toca a <b>{diag.respName}</b></div>}
       <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,fontWeight:700,color:diag.days>=3?C.dn:C.t2}}>⏱ {diag.days===0?"hoy":diag.days+" día"+(diag.days===1?"":"s")}</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:diag.days>=3?C.dn:C.t2}}><ClockIcon size={11} weight="bold"/>{diag.days===0?"hoy":diag.days+" día"+(diag.days===1?"":"s")}</span>
         <div style={{marginLeft:"auto",display:"flex",gap:4}}>
-          <button onClick={()=>onNudge({o,diag})} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"3px 9px",border:"1px solid #f59e0b40"}} title={"Recordar por notificación + Telegram"+(diag.external?" (a Lupita, que da seguimiento)":"")}>📣 Recordar</button>
-          <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ver detalle">👁</button>
-          {diag.action==="edit"&&<button onClick={()=>onAction(o.id,"edit")} style={{...bs("#5856d615","#5856d6"),fontSize:10,padding:"3px 9px",border:"1px solid #5856d640"}} title="Capturar el dato faltante yo mismo">✏️ Resolver</button>}
-          <button onClick={()=>onSnooze(o)} style={{...bs(C.sf,C.t3),fontSize:10,padding:"3px 9px"}} title="Ignorar / poner en espera con razón (ej. esperando al cliente)">🔕</button>
+          <button onClick={()=>onNudge({o,diag})} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"3px 9px",border:"1px solid #f59e0b40"}} title={"Recordar por notificación + Telegram"+(diag.external?" (a Lupita, que da seguimiento)":"")}><MegaphoneIcon size={11} weight="bold"/>Recordar</button>
+          <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ver detalle"><EyeIcon size={13}/></button>
+          {diag.action==="edit"&&<button onClick={()=>onAction(o.id,"edit")} style={{...bs("#5856d615","#5856d6"),fontSize:10,padding:"3px 9px",border:"1px solid #5856d640"}} title="Capturar el dato faltante yo mismo"><NotePencilIcon size={11} weight="bold"/>Resolver</button>}
+          <button onClick={()=>onSnooze(o)} style={{...bs(C.sf,C.t3),fontSize:10,padding:"3px 9px"}} title="Ignorar / poner en espera con razón (ej. esperando al cliente)"><BellSlashIcon size={13}/></button>
         </div>
       </div>
     </div>;
   };
 
   return <div>
-    <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
-      <h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}>🗼 Torre de Control</h2>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <h2 style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}><BroadcastIcon size={20} weight="bold"/>Torre de Control</h2>
       <span style={{fontSize:11,color:C.t2,textTransform:"capitalize"}}>{today}</span>
-      <button onClick={onOpenHealth} style={{...bs(C.sf,C.t2),fontSize:10,padding:"4px 10px",marginLeft:"auto"}}>🩺 Salud Operativa completa</button>
+      <button onClick={onOpenHealth} style={{...bs(C.sf,C.t2),fontSize:10,padding:"4px 10px",marginLeft:"auto"}}><HeartbeatIcon size={12} weight="bold"/>Salud Operativa completa</button>
     </div>
     <p style={{fontSize:12,color:C.t2,margin:"4px 0 12px"}}>
       {blocked.length===0
@@ -11890,20 +11890,20 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         const reds=g.filter(r=>r.diag.sev==="red").length;
         const ok=g.length===0;
         return <div key={name} style={{display:"flex",alignItems:"center",gap:5,background:ok?C.ok+"0c":(reds?C.dn+"0e":"#f59e0b12"),border:"1px solid "+(ok?C.ok+"30":(reds?C.dn+"35":"#f59e0b35")),borderRadius:10,padding:"6px 12px"}}>
-          <span style={{fontSize:11,fontWeight:700,color:C.tx}}>👤 {name}</span>
-          {ok?<span style={{fontSize:11,color:C.ok,fontWeight:800}}>✅</span>
-            :<span style={{fontSize:11,fontWeight:800,color:reds?C.dn:"#b45309"}}>{reds?"🔴":"🟡"} {g.length}</span>}
+          <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx}}><UserIcon size={12} weight="bold"/>{name}</span>
+          {ok?<CheckCircleIcon size={14} weight="fill" color={C.ok}/>
+            :<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,color:reds?C.dn:"#b45309"}}><CircleIcon size={9} weight="fill" color={reds?C.dn:"#f59e0b"}/>{g.length}</span>}
         </div>;
       })}
       {groups["🌐 Cliente / Proveedor"]&&<div style={{display:"flex",alignItems:"center",gap:5,background:"#0891b210",border:"1px solid #0891b235",borderRadius:10,padding:"6px 12px"}}>
-        <span style={{fontSize:11,fontWeight:700,color:C.tx}}>🌐 Externos</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx}}><GlobeIcon size={12} weight="bold"/>Externos</span>
         <span style={{fontSize:11,fontWeight:800,color:"#0891b2"}}>{groups["🌐 Cliente / Proveedor"].length}</span>
       </div>}
     </div>
 
     {/* Crónicas */}
     {cron.length>0&&<div style={{background:C.dn+"06",border:"1px solid "+C.dn+"25",borderRadius:14,padding:12,marginBottom:14}}>
-      <div style={{fontSize:12,fontWeight:800,color:C.dn,marginBottom:8}}>🔥 CRÓNICAS — ve directo con ellos</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:C.dn,marginBottom:8}}><FireIcon size={14} weight="fill"/>CRÓNICAS — ve directo con ellos</div>
       {cron.slice(0,5).map(r=><Row key={r.o.id} r={r} inCron/>)}
       {cron.length>5&&<div style={{fontSize:10,color:C.t2}}>…y {cron.length-5} más abajo, en su persona</div>}
     </div>}
@@ -11914,9 +11914,9 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
       const isExt=name==="🌐 Cliente / Proveedor";
       return <div key={name} style={{marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-          <span style={{fontSize:14,fontWeight:800,color:C.tx}}>{isExt?name:"👤 "+name} — {g.length} bloqueo{g.length===1?"":"s"}</span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:C.tx}}>{isExt?<GlobeIcon size={14} weight="bold"/>:<UserIcon size={14} weight="bold"/>}<span>{isExt?"Cliente / Proveedor":name} — {g.length} bloqueo{g.length===1?"":"s"}</span></span>
           {isExt&&<span style={{fontSize:10,color:C.t2}}>(Lupita da seguimiento)</span>}
-          {!isExt&&g.length>1&&g[0].diag.respRole!=="both"&&<button onClick={()=>onNudgeBatch(g[0].diag.respRole,name,g)} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",marginLeft:"auto"}}>📣 Recordarle los {g.length}</button>}
+          {!isExt&&g.length>1&&g[0].diag.respRole!=="both"&&<button onClick={()=>onNudgeBatch(g[0].diag.respRole,name,g)} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",marginLeft:"auto"}}><MegaphoneIcon size={11} weight="bold"/>Recordarle los {g.length}</button>}
         </div>
         {g.map(r=><Row key={r.o.id} r={r}/>)}
       </div>;
@@ -11924,22 +11924,22 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
 
     {/* Sanas por persona (decisión de Marcelo: bloqueos Y sano) */}
     <div style={{marginTop:6,borderTop:"1px solid "+C.bd,paddingTop:10}}>
-      <div style={{fontSize:11,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>✅ Avanzando normal</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CheckCircleIcon size={13} weight="fill" color={C.ok}/>Avanzando normal</div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         {Object.keys(healthyBy).sort().map(name=>{
           const open=!!openHealthy[name];
           return <div key={name} style={{minWidth:200,flex:"1 1 240px"}}>
             <button onClick={()=>setOpenHealthy(p=>({...p,[name]:!p[name]}))} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:10,cursor:"pointer"}}>
-            <span style={{fontSize:11,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>👤 {name}</span>
-            <span style={{fontSize:11,color:C.ok,fontWeight:800}}>{healthyBy[name].length} ✅</span>
-            <span style={{fontSize:10,color:C.t3}}>{open?"▲":"▼"}</span>
+            <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}><UserIcon size={12} weight="bold" style={{flexShrink:0}}/>{name}</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:C.ok,fontWeight:800}}>{healthyBy[name].length}<CheckIcon size={12} weight="bold"/></span>
+            {open?<CaretUpIcon size={11} color={C.t3}/>:<CaretDownIcon size={11} color={C.t3}/>}
           </button>
           {open&&<div style={{marginTop:4}}>
             {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer"}}>
               <b>{r.o.production_number||r.o.id}</b>
               <span style={{color:C.t2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.o.client}</span>
               <span style={{color:C.t3,fontSize:10}}>{SM[r.o.stage]?.l||r.o.stage}</span>
-              {r.o.due_date&&<span style={{color:C.t3,fontSize:10}}>📅 {fD(r.o.due_date)}</span>}
+              {r.o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:3,color:C.t3,fontSize:10}}><CalendarDotsIcon size={11}/>{fD(r.o.due_date)}</span>}
             </div>)}
             {healthyBy[name].length>15&&<div style={{fontSize:10,color:C.t3,padding:"4px 10px"}}>…y {healthyBy[name].length-15} más</div>}
           </div>}
@@ -11952,7 +11952,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
     {/* En espera / ignoradas */}
     {snoozedRows.length>0&&<div style={{marginTop:14,borderTop:"1px solid "+C.bd,paddingTop:10}}>
       <button onClick={()=>setShowSnoozed(s=>!s)} style={{...bs(C.sf,C.t2),fontSize:11,padding:"6px 12px",marginBottom:6}}>
-        🔕 En espera ({snoozedRows.length}) {showSnoozed?"▲":"▼"}
+        <BellSlashIcon size={12} weight="bold"/>En espera ({snoozedRows.length}) {showSnoozed?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}
       </button>
       {showSnoozed&&snoozedRows.map(({o})=>(
         <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6,opacity:0.85}}>
@@ -11961,11 +11961,11 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
             <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
             <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
             <div style={{marginLeft:"auto",display:"flex",gap:4}}>
-              <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}>👁</button>
-              <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}>🔔 Reactivar</button>
+              <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}><EyeIcon size={13}/></button>
+              <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
             </div>
           </div>
-          <div style={{fontSize:11,color:C.t2,marginTop:3}}>🔕 {o.snooze_reason} <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:11,color:C.t2,marginTop:3}}><BellSlashIcon size={12} weight="bold" style={{flexShrink:0}}/>{o.snooze_reason} <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
         </div>
       ))}
     </div>}
