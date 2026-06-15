@@ -2888,10 +2888,10 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:980,width:"100%",maxHeight:"94vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"16px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
-          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🛒 Carrito de venta — Stock Cuadra</h3>
+          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ShoppingCartIcon size={18} weight="bold"/>Carrito de venta — Stock Cuadra</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos, captura el total de la venta y registra los pagos en un solo paso</div>
         </div>
-        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",flex:1,minHeight:0,overflow:"hidden"}}>
@@ -2921,28 +2921,28 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         {/* Carrito + captura */}
         <div style={{display:"flex",flexDirection:"column",overflow:"hidden",background:"#fafafa"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd,fontSize:11,fontWeight:800,color:C.t2,textTransform:"uppercase",letterSpacing:.5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span>🛒 Carrito ({cart.length})</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={12} weight="bold"/>Carrito ({cart.length})</span>
             {cart.length>0 && <button onClick={()=>setCart([])} disabled={busy} style={{...bt(C.sf,C.t2),padding:"2px 8px",fontSize:9,border:"0.5px solid "+C.bd}}>Vaciar</button>}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
             {cart.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Agrega productos del catálogo →</div> :
             <>
               {/* M1/M3: warnings de mezcla */}
-              {mixedPools && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
-                ⚠️ Hay productos de pools distintos. Solo puedes vender productos del mismo pool en una sola venta.
+              {mixedPools && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de pools distintos. Solo puedes vender productos del mismo pool en una sola venta.
               </div>}
-              {mixedClientsNoPool && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
-                ⚠️ Hay productos de clientes distintos. Solo puedes vender productos de un mismo cliente en una sola venta.
+              {mixedClientsNoPool && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de clientes distintos. Solo puedes vender productos de un mismo cliente en una sola venta.
               </div>}
-              {mixedPooledAndNonPooled && <div style={{padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
-                ⚠️ Hay productos de pool junto con productos individuales (sin pool). Solo se permite uno u otro en la misma venta.
+              {mixedPooledAndNonPooled && <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.dn+"15",border:"1px solid "+C.dn+"40",borderRadius:8,marginBottom:8,fontSize:11,color:C.dn,fontWeight:600}}>
+                <WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Hay productos de pool junto con productos individuales (sin pool). Solo se permite uno u otro en la misma venta.
               </div>}
               {cart.map(c=>{
                 const qtyOk = c.qty>0 && c.qty<=c.stock_actual;
                 return <div key={c.client_product_id} style={{padding:10,borderRadius:8,background:C.bg,border:"1px solid "+(qtyOk?C.bd:"#ff9500"),marginBottom:8}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:6}}>
                     <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
-                    <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}>×</button>
+                    <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}><XIcon size={12} weight="bold"/></button>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
                     <div style={{flex:1}}>
@@ -3005,7 +3005,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
             {/* Total venta */}
             <div style={{background:"#16a34a08",border:"1.5px solid "+(totalOK?"#16a34a40":"#ff950060"),borderRadius:10,padding:12,marginBottom:10}}>
-              <label style={{...lbl,marginTop:0,fontSize:10,color:"#16a34a",fontWeight:700}}>💰 Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
+              <label style={{...lbl,display:"flex",alignItems:"center",gap:5,marginTop:0,fontSize:10,color:"#16a34a",fontWeight:700}}><CurrencyDollarIcon size={11} weight="bold"/>Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
               <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:"#16a34a",textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:"#ff950060")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
               {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${(Math.round(subtotalSinIVA*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
             </div>
@@ -3021,12 +3021,12 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               />
             </div>}
 
-            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#16a34a":"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Procesando...":"🛒 Vender y facturar todo"}</button>
+            <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#16a34a":"#9ca3af"),width:"100%",justifyContent:"center",padding:"12px",fontSize:13,opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<><ShoppingCartIcon size={14} weight="bold"/>Vender y facturar todo</>}</button>
             {!folioOK && folio && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Folio inválido. Formato: {pref}NNNN</div>}
             {!totalOK && totalAmount && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Captura un total mayor a 0</div>}
-            {cart.length>0 && !validCart && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa las cantidades de los items</div>}
-            {hasPooled && !destClientId && cart.length>0 && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Selecciona el cliente destino del pool</div>}
-            {totalOK && !validPayments && <div style={{fontSize:10,color:"#ff9500",marginTop:6,textAlign:"center"}}>⚠️ Revisa el estado de pago y los montos</div>}
+            {cart.length>0 && !validCart && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:"#ff9500",marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa las cantidades de los items</div>}
+            {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:"#ff9500",marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
+            {totalOK && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:"#ff9500",marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
           </div>
         </div>
       </div>
@@ -3077,7 +3077,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
   const valid=validQty&&validDestClient;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🛒 Vender desde Stock</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><ShoppingCartIcon size={17} weight="bold"/>Vender desde Stock</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:"#10b981",fontSize:14}}>{product.stock_actual}</b></div>
       {/* v10.48.0 — Dropdown obligatorio cliente destino para productos pooled */}
@@ -3089,8 +3089,8 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
         </select>
         {/* v10.48.1 F3 — mensaje claro cuando pool no tiene clientes activos */}
         {poolClients.length===0
-          ?<div style={{fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}>⚠️ No hay clientes activos en este pool. Contacta admin para activar al menos uno antes de vender.</div>
-          :<div style={{fontSize:10,color:C.t2,marginTop:4,lineHeight:1.4}}>📦 Este producto es del pool compartido. La orden creada quedará a nombre del cliente seleccionado pero descontará del inventario común.</div>}
+          ?<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:C.dn,marginTop:6,padding:"4px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>No hay clientes activos en este pool. Contacta admin para activar al menos uno antes de vender.</div>
+          :<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:C.t2,marginTop:4,lineHeight:1.4}}><PackageIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Este producto es del pool compartido. La orden creada quedará a nombre del cliente seleccionado pero descontará del inventario común.</span></div>}
       </div>}
       <div style={{marginBottom:10}}>
         <label style={lbl} htmlFor="sell-qty">Cantidad *</label>
@@ -3099,8 +3099,8 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       <div style={{marginBottom:10}}>
         <label style={lbl}>Modo de precio</label>
         <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,marginBottom:8}}>
-          {[{id:"total",l:"💰 Monto total"},{id:"unit",l:"📐 Precio unitario"}].map(m=>
-            <button key={m.id} onClick={()=>setPriceMode(m.id)} style={{flex:1,padding:"8px 12px",border:"none",background:priceMode===m.id?"#16a34a":"transparent",color:priceMode===m.id?"#fff":C.t2,cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Geist',sans-serif"}}>{m.l}</button>
+          {[{id:"total",ic:CurrencyDollarIcon,l:"Monto total"},{id:"unit",ic:RulerIcon,l:"Precio unitario"}].map(m=>
+            <button key={m.id} onClick={()=>setPriceMode(m.id)} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,flex:1,padding:"8px 12px",border:"none",background:priceMode===m.id?"#16a34a":"transparent",color:priceMode===m.id?"#fff":C.t2,cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Geist',sans-serif"}}>{(()=>{const MI=m.ic;return <MI size={12} weight="bold"/>})()}{m.l}</button>
           )}
         </div>
         {priceMode==="total"
@@ -3133,7 +3133,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
           }finally{
             setBusy(false);
           }
-        }} disabled={!valid||busy} style={{...bt(valid&&!busy?"#16a34a":"#9ca3af"),flex:1,justifyContent:"center",opacity:valid&&!busy?1:.5,cursor:valid&&!busy?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Vendiendo...":"🛒 Crear Venta"}</button>
+        }} disabled={!valid||busy} style={{...bt(valid&&!busy?"#16a34a":"#9ca3af"),flex:1,justifyContent:"center",opacity:valid&&!busy?1:.5,cursor:valid&&!busy?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Vendiendo...</>:<><ShoppingCartIcon size={14} weight="bold"/>Crear Venta</>}</button>
       </div>
     </div>
   </div>;
@@ -3186,23 +3186,23 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"96%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🔁 Replicar de orden anterior</h3>
+          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ArrowsClockwiseIcon size={18} weight="bold"/>Replicar de orden anterior</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clientName||"—"} · {orders.length} órdenes históricas</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd}}>
         <input style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="🔍 Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
-      {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>⏳ Cargando órdenes…</div>
+      {loading?<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:40,color:C.t2}}><HourglassIcon size={14} weight="bold"/>Cargando órdenes…</div>
       :orders.length===0?<div style={{padding:"40px 20px",textAlign:"center",color:C.t2,fontSize:12}}>
-        <div style={{fontSize:40,marginBottom:10}}>📭</div>
-        <div style={{fontWeight:700,color:C.tx,marginBottom:4,fontSize:13}}>Sin órdenes previas para este cliente</div>
+        <TrayIcon size={38} color={C.ph}/>
+        <div style={{fontWeight:700,color:C.tx,marginTop:8,marginBottom:4,fontSize:13}}>Sin órdenes previas para este cliente</div>
         <div>Cuando captures órdenes para <b>{clientName||"este cliente"}</b>, aparecerán aquí como plantillas.</div>
       </div>
       :filtered.length===0?<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>
-        <div style={{fontSize:28,marginBottom:6}}>🔍</div>
-        Sin resultados con "{search}"
+        <MagnifyingGlassIcon size={26} color={C.ph}/>
+        <div style={{marginTop:6}}>Sin resultados con "{search}"</div>
       </div>
       :<div style={{overflowY:"auto",padding:"14px 22px",flex:1,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:10}}>
         {filtered.map(o=>{
@@ -3216,16 +3216,16 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
             onMouseLeave={e=>{if(!replicating){e.currentTarget.style.background=C.sf;e.currentTarget.style.borderColor=C.bd}}}>
             {/* Thumbnail — v10.45.1: fallback via React state (no DOM manipulation) */}
             <div style={{width:72,height:72,borderRadius:8,background:C.bg,border:"0.5px solid "+C.bd,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-              {img&&!imgFailed?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={()=>setFailedImgs(prev=>{const n=new Set(prev);n.add(o.id);return n})}/>:<div style={{fontSize:28}}>📋</div>}
+              {img&&!imgFailed?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={()=>setFailedImgs(prev=>{const n=new Set(prev);n.add(o.id);return n})}/>:<FileTextIcon size={26} color={C.ph}/>}
             </div>
             {/* Detalles */}
             <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                 <span style={{fontSize:12,fontWeight:800,color:C.ac}}>{o.production_number||"sin P-#"}</span>
                 {o.invoice_folio&&<span style={{fontSize:9,fontWeight:700,color:"#5856d6",background:"#5856d615",padding:"1px 6px",borderRadius:4}}>{o.invoice_folio}</span>}
-                {isCorona&&<span style={{fontSize:9,fontWeight:700,color:"#10b981",background:"#10b98115",padding:"1px 6px",borderRadius:4}}>📦 stock</span>}
+                {isCorona&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:"#10b981",background:"#10b98115",padding:"1px 6px",borderRadius:4}}><PackageIcon size={9} weight="bold"/>stock</span>}
                 {isCancelled&&<span style={{fontSize:9,fontWeight:700,color:C.dn,background:C.dn+"15",padding:"1px 6px",borderRadius:4}}>CANCELADA</span>}
-                {!isCancelled&&isDelivered&&<span style={{fontSize:9,fontWeight:700,color:C.ok,background:C.ok+"15",padding:"1px 6px",borderRadius:4}}>✓ entregada</span>}
+                {!isCancelled&&isDelivered&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.ok,background:C.ok+"15",padding:"1px 6px",borderRadius:4}}><CheckIcon size={9} weight="bold"/>entregada</span>}
               </div>
               <div style={{fontSize:13,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.product||"(sin nombre de producto)"}</div>
               <div style={{fontSize:11,color:C.t2,display:"flex",flexWrap:"wrap",gap:6}}>
@@ -3246,7 +3246,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
         })}
       </div>}
       <div style={{padding:"10px 22px",borderTop:"0.5px solid "+C.bd,fontSize:10,color:C.t2,background:C.sf,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span>💡 Al hacer click en una orden, sus datos (producto, papel, medidas, tintas, acabados, precio) se copian al formulario. <b>Los datos del cliente no se tocan</b>.</span>
+        <span style={{display:"inline-flex",alignItems:"flex-start",gap:5}}><LightbulbIcon size={12} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Al hacer click en una orden, sus datos (producto, papel, medidas, tintas, acabados, precio) se copian al formulario. <b>Los datos del cliente no se tocan</b>.</span></span>
       </div>
     </div>
   </div>;
