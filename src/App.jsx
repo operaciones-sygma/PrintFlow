@@ -8276,7 +8276,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.bg,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",cursor:isDraggable?"grab":"pointer",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)}}>
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3),transition:"box-shadow .16s ease,transform .12s ease"}}
+    onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><span style={{fontSize:12,color:C.ac}}>⠿</span><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
     {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
@@ -13994,7 +13995,22 @@ export default function PrintFlow() {
   return (
     <div style={{minHeight:"100vh",background:C.canvas,fontFamily:"'Geist',sans-serif",color:C.tx,display:"flex",alignItems:"flex-start"}}>
       <link href={FNT} rel="stylesheet"/>
-      <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes menuFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes menuFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+/* ═══ v10.60.2 — estados globales del redesign (sin tocar estilos en línea) ═══ */
+html{scroll-behavior:smooth}
+button{transition:background .12s ease,color .12s ease,box-shadow .15s ease,transform .08s ease,opacity .12s ease}
+button:not(:disabled):active{transform:scale(.97)}
+:focus{outline:none}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2.5px solid rgba(74,101,114,.5);outline-offset:1.5px}
+::selection{background:rgba(74,101,114,.22)}
+*{scrollbar-width:thin;scrollbar-color:#cdced4 transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#cdced4;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#b4b5bd;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+`}</style>
       {/* ═══ SIDEBAR (v10.60.0 redesign) ═══ */}
       <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.card,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",gap:9,padding:"15px 16px",minHeight:58,flexShrink:0}}>
