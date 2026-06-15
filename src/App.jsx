@@ -6109,7 +6109,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   if(!dataComplete){
     return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
       <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",color:"#ff9500"}}>⚠️ Datos incompletos</h3>
+        <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px",color:"#ff9500"}}><WarningIcon size={17} weight="fill"/>Datos incompletos</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Para asignar folio anticipado, la orden debe tener todos los datos fiscales completos:</p>
         <ul style={{margin:"0 0 18px",paddingLeft:20,fontSize:12,lineHeight:1.7}}>
           {missing.map(m=><li key={m} style={{color:C.dn,fontWeight:600}}>{m}</li>)}
@@ -6123,13 +6123,13 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   // v10.58.11 — backdrop guard. v10.58.15 — role=dialog para accessibility.
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div role="dialog" aria-modal="true" aria-labelledby="preinvoice-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <h3 id="preinvoice-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>⚡ Folio Anticipado</h3>
+      <h3 id="preinvoice-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><LightningIcon size={17} weight="fill"/>Folio Anticipado</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.price?" · "+fmt(order.price):""}</p>
 
       {!confirming ? <>
         <div style={{background:"#34c75910",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:C.t2}}>
-          ✅ <strong style={{color:C.ok}}>Datos completos.</strong> Cliente, producto, cantidad, precio y folio P-XXXX están registrados.
+          <CheckCircleIcon size={13} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/><strong style={{color:C.ok}}>Datos completos.</strong> Cliente, producto, cantidad, precio y folio P-XXXX están registrados.
         </div>
 
         <label style={lbl}>Tipo de comprobante</label>
@@ -6143,8 +6143,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
               setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
             };
             return <>
-              <button onClick={()=>switchType("factura")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>📄 Factura</button>
-              <button onClick={()=>switchType("remision")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>📋 Remisión</button>
+              <button onClick={()=>switchType("factura")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><FileTextIcon size={14} weight="bold"/>Factura</button>
+              <button onClick={()=>switchType("remision")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6,flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><ReceiptIcon size={14} weight="bold"/>Remisión</button>
             </>;
           })()}
         </div>
@@ -6161,8 +6161,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
             />
             <button onClick={useSuggestion} style={{...bt(C.sf,C.tx),padding:"0 14px",border:"0.5px solid "+C.bd,whiteSpace:"nowrap"}}>→ Usar {suggestion[type]||"..."}</button>
           </div>
-          {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:6}}>⚠️ Formato: {folioPrefix}XXXX</div>}
-          {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:6,fontWeight:600}}>⚠️ Menor al último registrado ({suggestion[type]})</div>}
+          {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:6}}><WarningIcon size={11} weight="fill"/>Formato: {folioPrefix}XXXX</div>}
+          {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#ff9500",marginBottom:6,fontWeight:600}}><WarningIcon size={11} weight="fill"/>Menor al último registrado ({suggestion[type]})</div>}
 
           <label style={{...lbl,marginTop:14}}>Razón del folio anticipado</label>
           <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
@@ -6174,14 +6174,14 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {reason==="otro"&&<input style={{...inp,marginTop:4}} value={reasonOther} onChange={e=>setReasonOther(e.target.value)} placeholder="Especifica la razón..." maxLength={120}/>}
 
           <div style={{background:"#ff950010",borderRadius:10,padding:10,marginTop:14,fontSize:11,color:"#ff9500",fontWeight:600}}>
-            ⚠️ Una vez asignado el folio, esta orden NO podrá cancelarse normalmente. Solo Marcelo podrá cancelarla con motivo de Nota de Crédito.
+            <WarningIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Una vez asignado el folio, esta orden NO podrá cancelarse normalmente. Solo Marcelo podrá cancelarla con motivo de Nota de Crédito.
           </div>
           {/* v10.57.0 — PreInvoiceModal SIEMPRE usa MultiPaymentPicker. Para clientes Corona
               mostramos un info banner azul indicando que el saldo NO se aplica automáticamente
               (si Karla quiere descontar saldo debe usar la 3ra opción "Aplicar saldo" en
               InvoiceModal al entregar). */}
           {reasonValid&&isCorona&&<div style={{background:"#0891b210",border:"1px solid #0891b240",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
-            💡 Este cliente tiene saldo a favor (Corona) de <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Esta factura/remisión <b>NO descontará el saldo automáticamente</b> — captura el pago como con cualquier otro cliente. Si quieres aplicar saldo, usa la opción "Aplicar saldo" al entregar la orden.
+            <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente tiene saldo a favor (Corona) de <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Esta factura/remisión <b>NO descontará el saldo automáticamente</b> — captura el pago como con cualquier otro cliente. Si quieres aplicar saldo, usa la opción "Aplicar saldo" al entregar la orden.
           </div>}
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
@@ -6193,7 +6193,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
       </> : <>
         <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
           <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar (anticipado):</div>
-          <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>⚡ {folio}</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}><LightningIcon size={24} weight="fill"/>{folio}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{type==="factura"?"Factura":"Remisión"} · Razón: {finalReason}</div>
         </div>
         <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
@@ -6209,9 +6209,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
             const amountForPartial=usingMulti?refsTotal:Number(paymentAmount);
             return <>
               <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
-                {paymentStatus==="paid"&&"✅ Pagada · "+methodLabel}
-                {paymentStatus==="partial"&&"🔶 Parcial · $"+amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+methodLabel}
-                {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+                {paymentStatus==="paid"&&<><CheckCircleIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Pagada · {methodLabel}</>}
+                {paymentStatus==="partial"&&<><CircleHalfIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Parcial · ${amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})} · {methodLabel}</>}
+                {paymentStatus==="unpaid"&&<><HourglassIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>No pagada (irá a cobranza)</>}
               </div>
               {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
                 Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
@@ -6224,8 +6224,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         </div>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden mantiene su stage actual ({SM[order?.stage]?.l||order?.stage}). Solo se asigna el folio fiscal sin entregarla todavía.</p>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>← Atrás</button>
-          <button onClick={handleConfirm} disabled={busy} style={{...bt("#ff9500"),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Asignando...":"⚡ Confirmar Folio"}</button>
+          <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}><CaretLeftIcon size={13} weight="bold"/>Atrás</button>
+          <button onClick={handleConfirm} disabled={busy} style={{...bt("#ff9500"),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?<><HourglassIcon size={14} weight="bold"/>Asignando...</>:<><LightningIcon size={14} weight="fill"/>Confirmar Folio</>}</button>
         </div>
       </>}
     </div>
@@ -6263,17 +6263,17 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="deliveronly-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <h3 id="deliveronly-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>✅ Marcar como Entregada</h3>
+        <h3 id="deliveronly-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><CheckCircleIcon size={17} weight="bold"/>Marcar como Entregada</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
         <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}</p>
 
         {/* Bloque: Folio ya asignado */}
         <div style={{background:(isFactura?"#5856d6":"#34c759")+"10",borderRadius:12,padding:14,marginBottom:12,border:"1px solid "+(isFactura?"#5856d6":"#34c759")+"40"}}>
-          <div style={{fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>
-            ⚡ Folio anticipado ya asignado
+          <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>
+            <LightningIcon size={11} weight="fill"/>Folio anticipado ya asignado
           </div>
-          <div style={{fontSize:22,fontWeight:800,color:isFactura?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>
-            {isFactura?"📄":"📋"} {order?.invoice_folio}
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:22,fontWeight:800,color:isFactura?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>
+            {isFactura?<FileTextIcon size={19} weight="bold"/>:<ReceiptIcon size={19} weight="bold"/>}{order?.invoice_folio}
           </div>
           {order?.invoice_reason && (
             <div style={{fontSize:11,color:C.t2,marginTop:4,fontStyle:"italic"}}>
@@ -6288,8 +6288,8 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         {/* CASO A: payment_status NULL (legacy pre-v10.29) */}
         {!paymentStatus && (
           <div style={{background:"#ff950010",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #ff950040"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
-              ⚠️ Estado de pago no registrado
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
+              <WarningIcon size={12} weight="fill"/>Estado de pago no registrado
             </div>
             <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
               Este folio se asignó antes del selector de pago (v10.29.0). El saldo de <strong>${fmtMx(totalDisplay)}</strong> queda pendiente en CobranzaFlow para cobro.
@@ -6303,8 +6303,8 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         {/* CASO B: unpaid */}
         {paymentStatus === "unpaid" && (
           <div style={{background:"#ff950010",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #ff950040"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
-              ⏳ Estado de pago: No pagada
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:4}}>
+              <HourglassIcon size={12} weight="bold"/>Estado de pago: No pagada
             </div>
             <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
               Saldo de <strong>${fmtMx(totalDisplay)}</strong> pendiente en CobranzaFlow.
@@ -6315,8 +6315,8 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         {/* CASO C: paid */}
         {paymentStatus === "paid" && (
           <div style={{background:"#34c75910",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #34c75940"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#34c759",marginBottom:4}}>
-              ✅ Estado de pago: Pagada
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:"#34c759",marginBottom:4}}>
+              <CheckCircleIcon size={12} weight="fill"/>Estado de pago: Pagada
             </div>
             <div style={{fontSize:11,color:C.t2,lineHeight:1.5}}>
               Esta orden ya está completamente pagada (<strong>${fmtMx(totalDisplay)} · {paymentMethod}</strong>) desde la asignación del folio. CobranzaFlow ya tiene el registro saldado.
@@ -6327,8 +6327,8 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
         {/* CASO D: partial */}
         {paymentStatus === "partial" && (
           <div style={{background:"#5856d610",borderRadius:12,padding:14,marginBottom:12,border:"1px solid #5856d640"}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#5856d6",marginBottom:6}}>
-              🔶 Estado de pago: Parcial
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:"#5856d6",marginBottom:6}}>
+              <CircleHalfIcon size={12} weight="fill"/>Estado de pago: Parcial
             </div>
             <div style={{fontSize:11,color:C.t2,lineHeight:1.6}}>
               <div>Total: <strong>${fmtMx(totalDisplay)}</strong></div>
@@ -6346,7 +6346,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
             Cancelar
           </button>
           <button onClick={handleConfirm} disabled={busy} style={{...bt(C.ok),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>
-            {busy ? "⏳ Procesando..." : "✅ Confirmar Entrega"}
+            {busy ? <><HourglassIcon size={14} weight="bold"/>Procesando...</> : <><CheckCircleIcon size={14} weight="bold"/>Confirmar Entrega</>}
           </button>
         </div>
       </div>
@@ -6381,16 +6381,16 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
   // v10.43.31 FIX — maxHeight + overflowY para evitar contenido fuera de vista cuando crece
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={onClose}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.dn}}>❌ Cancelar con Nota de Crédito</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.dn}}><XIcon size={17} weight="bold"/>Cancelar con Nota de Crédito</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{order?.client} · {order?.product_type}</p>
 
       <div style={{background:C.dn+"08",border:"1px solid "+C.dn+"30",borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Folio fiscal asignado:</div>
-        <div style={{fontSize:18,fontWeight:800,color:order?.invoice_type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace"}}>{order?.invoice_type==="factura"?"📄":"📋"} {order?.invoice_folio}</div>
-        {order?.invoice_pre_assigned&&<div style={{fontSize:10,color:"#ff9500",fontWeight:600,marginTop:4}}>⚡ Era folio anticipado</div>}
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:18,fontWeight:800,color:order?.invoice_type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace"}}>{order?.invoice_type==="factura"?<FileTextIcon size={16} weight="bold"/>:<ReceiptIcon size={16} weight="bold"/>}{order?.invoice_folio}</div>
+        {order?.invoice_pre_assigned&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#ff9500",fontWeight:600,marginTop:4}}><LightningIcon size={10} weight="fill"/>Era folio anticipado</div>}
       </div>
 
-      <p style={{fontSize:12,color:"#ff9500",fontWeight:600,margin:"0 0 12px"}}>⚠️ La cancelación NO emite la NC automáticamente. Deberás emitir la Nota de Crédito en SAT manualmente. PrintFlow registrará la NC como pendiente para auditoría.</p>
+      <p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:"#ff9500",fontWeight:600,margin:"0 0 12px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>La cancelación NO emite la NC automáticamente. Deberás emitir la Nota de Crédito en SAT manualmente. PrintFlow registrará la NC como pendiente para auditoría.</p>
 
       <label style={lbl}>Razón de cancelación (mínimo 5 caracteres)</label>
       <textarea
@@ -6404,7 +6404,7 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
 
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={handleConfirm} disabled={busy||!reasonValid} style={{...bt(C.dn),flex:1,justifyContent:"center",opacity:(busy||!reasonValid)?0.4:1}}>{busy?"⏳ Cancelando...":"❌ Cancelar con NC"}</button>
+        <button onClick={handleConfirm} disabled={busy||!reasonValid} style={{...bt(C.dn),flex:1,justifyContent:"center",opacity:(busy||!reasonValid)?0.4:1}}>{busy?<><HourglassIcon size={14} weight="bold"/>Cancelando...</>:<><XIcon size={14} weight="bold"/>Cancelar con NC</>}</button>
       </div>
     </div>
   </div>;
