@@ -2208,66 +2208,66 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"92%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
         <div>
-          {o.cart_folio?<div style={{fontSize:22,fontWeight:800,color:"#06b6d4",letterSpacing:1,lineHeight:1.1}}>🛒 {o.cart_folio}</div>:null}
+          {o.cart_folio?<div style={{display:"flex",alignItems:"center",gap:6,fontSize:22,fontWeight:800,color:"#06b6d4",letterSpacing:1,lineHeight:1.1}}><ShoppingCartIcon size={20} weight="bold"/>{o.cart_folio}</div>:null}
           {o.web_folio?<div style={{fontSize:12,fontWeight:700,color:C.t2,letterSpacing:0.5,marginTop:2}}>{o.web_folio}</div>:null}
-          {o.invoice_folio?<div style={{fontSize:16,fontWeight:800,color:o.invoice_type==="factura"?"#5856d6":"#34c759",letterSpacing:0.5,marginTop:2}}>{o.invoice_pre_assigned?"⚡ ":""}{o.invoice_type==="factura"?"📄":"📋"} {o.invoice_folio}</div>:null}
+          {o.invoice_folio?<div style={{fontSize:16,fontWeight:800,color:o.invoice_type==="factura"?"#5856d6":"#34c759",letterSpacing:0.5,marginTop:2}}>{o.invoice_pre_assigned?<LightningIcon size={13} weight="fill" color="#ff9500" style={{verticalAlign:"-2px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={14} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={14} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}</div>:null}
           <div style={{fontSize:(o.cart_folio||o.web_folio)?10:9,color:C.t3,marginTop:(o.cart_folio||o.web_folio)?2:0}}>{o.id}</div>
           <div style={{fontSize:20,fontWeight:800}}>{o.production_number||o.client}</div>
           <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
             <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{st?.l}</span>
-            {o.source==="web"&&<span style={{background:"#06b6d412",color:"#06b6d4",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}>🌐 Web{o.web_order_ref?" · "+o.web_order_ref:""}</span>}
+            {o.source==="web"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#06b6d412",color:"#06b6d4",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}><GlobeIcon size={11} weight="bold"/>Web{o.web_order_ref?" · "+o.web_order_ref:""}</span>}
             {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{PM[o.priority].l}</span>}
-            {o.has_post_invoice_edits&&<span style={{background:"#ff950015",color:"#ff9500",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}} title="Esta orden fue editada después de tener folio fiscal asignado">⚠️ Editada post-factura</span>}
+            {o.has_post_invoice_edits&&<span style={{background:"#ff950015",color:"#ff9500",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada post-factura</span>}
           </div>
         </div>
-        <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:C.t3,padding:4}}>✕</button>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:4,display:"inline-flex",alignItems:"center"}}><XIcon size={20} weight="bold"/></button>
       </div>
       {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt="" onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:"#f5f5f7",cursor:"pointer"}}/>)}</div>})()}
-      {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?"♻️ Placa ya existe (auto-salta CTP)":"🆕 Nueva placa CTP requerida"}</div>}
+      {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
       {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
-      {o.agent&&<Row l="👤 Vendedor" v={o.agent}/>}
+      {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
       {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
       {!hp&&vOwns&&isMaq&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginTop:12,marginBottom:4}}>Maquila</div><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
-      {vOwns&&o.maquila_provider&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginTop:12,marginBottom:4}}>🚚 Proveedor Maquila</div><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l="📱 Teléfono" v={o.maquila_phone}/>}{o.maquila_email&&<Row l="📧 Email" v={o.maquila_email}/>}</>}
+      {vOwns&&o.maquila_provider&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",display:"flex",alignItems:"center",gap:6,marginTop:12,marginBottom:4}}><TruckIcon size={12} weight="bold"/>Proveedor Maquila</div><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><WhatsappLogoIcon size={11} weight="bold"/>Teléfono</span>} v={o.maquila_phone}/>}{o.maquila_email&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><EnvelopeIcon size={11} weight="bold"/>Email</span>} v={o.maquila_email}/>}</>}
 
       {/* 🆕 v10.9.0 — Sección INFO FISCAL */}
       {(o.invoice_folio||o.cancellation_reason)&&!hp&&vOwns&&<>
-        <div style={{fontSize:10,fontWeight:600,color:o.invoice_type==="factura"?"#5856d6":"#34c759",textTransform:"uppercase",marginTop:12,marginBottom:4}}>📑 Info Fiscal</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:o.invoice_type==="factura"?"#5856d6":"#34c759",textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold"/>Info Fiscal</div>
         {o.invoice_folio&&<>
-          <Row l="Folio" v={(o.invoice_pre_assigned?"⚡ ":"")+o.invoice_folio+(o.invoice_pre_assigned?" (anticipado)":"")}/>
+          <Row l="Folio" v={<>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color="#ff9500" style={{verticalAlign:"-1px",marginRight:3}}/>:null}{o.invoice_folio}{o.invoice_pre_assigned?" (anticipado)":""}</>}/>
           <Row l="Tipo" v={o.invoice_type==="factura"?"Factura":(o.invoice_type==="remision"?"Remisión":null)}/>
           <Row l="Asignado por" v={o.invoiced_by}/>
           <Row l="Fecha asignación" v={o.invoiced_at?fDT(o.invoiced_at):null}/>
           {o.invoice_reason&&<Row l="Razón anticipo" v={o.invoice_reason}/>}
-          {o.payment_status&&<Row l="Pago" v={o.payment_status==="paid"?"✅ Pagada ("+(o.payment_method||"—")+")":o.payment_status==="partial"?"🔶 Parcial · $"+Number(o.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" ("+(o.payment_method||"—")+")":"⏳ No pagada (en cobranza)"}/>}
+          {o.payment_status&&<Row l="Pago" v={o.payment_status==="paid"?<><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Pagada ({o.payment_method||"—"})</>:o.payment_status==="partial"?<><CircleHalfIcon size={12} weight="fill" color="#5856d6" style={{verticalAlign:"-2px",marginRight:3}}/>Parcial · ${Number(o.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})} ({o.payment_method||"—"})</>:<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>No pagada (en cobranza)</>}/>}
         </>}
         {o.cancellation_reason&&<>
-          <Row l="❌ Cancelación" v={o.cancellation_reason}/>
+          <Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><XIcon size={11} weight="bold"/>Cancelación</span>} v={o.cancellation_reason}/>
           <Row l="Cancelada por" v={o.cancelled_by}/>
           <Row l="Fecha cancelación" v={o.cancelled_at?fDT(o.cancelled_at):null}/>
-          <Row l="NC emitida en SAT" v={o.nc_emitted?"✅ Sí":"⏳ Pendiente"}/>
+          <Row l="NC emitida en SAT" v={o.nc_emitted?<><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Sí</>:<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pendiente</>}/>
         </>}
       </>}
 
-      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>📁 Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><span style={{fontSize:24}}>📄</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}>⬇ Click para descargar</div></div></a></div>}
+      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={12} weight="bold"/>Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><FileTextIcon size={22} weight="bold" color="#007aff" style={{flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div></a></div>}
       {showDeletePrompt&&<div style={{marginTop:8,background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:12,padding:14}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.wn,marginBottom:4}}>💾 ¿Ya descargaste el archivo?</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:4}}><FloppyDiskIcon size={13} weight="bold"/>¿Ya descargaste el archivo?</div>
         <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Bórralo para liberar espacio en almacenamiento</p>
         <div style={{display:"flex",gap:6}}>
           <button onClick={()=>setShowDeletePrompt(false)} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>No, conservar</button>
-          <button onClick={deleteFile} disabled={deleting} style={bs(C.dn)}>{deleting?"⏳...":"🗑️ Sí, borrar archivo"}</button>
+          <button onClick={deleteFile} disabled={deleting} style={bs(C.dn)}>{deleting?<><HourglassIcon size={13} weight="bold"/>Borrando...</>:<><TrashIcon size={13} weight="bold"/>Sí, borrar archivo</>}</button>
         </div>
       </div>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12 (extensión): campo notes oculto para vendedor en órdenes ajenas (puede contener acuerdos verbales/descuentos/info comercial sensible) */}
       {vOwns&&o.notes&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Notas</div><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5}}>{o.notes}</div></>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12: quick_notes ocultos para vendedor en órdenes ajenas (mismo gate vOwns que precios/contactos) */}
-      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{fontSize:10,fontWeight:600,color:"#007aff",textTransform:"uppercase",marginTop:12,marginBottom:4}}>💬 Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
-      {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-prensa</span></div>}
+      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:"#007aff",textTransform:"uppercase",marginTop:12,marginBottom:4}}><ChatCircleIcon size={12} weight="bold"/>Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:"#5856d6",vendedor:"#d97706",produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
+      {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
       {/* 🆕 v10.58.41 — Historial campo-a-campo de cambios (antes/después/quién/cuándo).
           Mismo gate vOwns que precios/notas: un vendedor no ve el historial de órdenes ajenas. */}
@@ -2278,31 +2278,31 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {/* 🆕 v10.9.0 — Botón prominente "Facturar anticipado" para Karla/Admin */}
       {canPreInvoice&&<div style={{marginTop:14,padding:14,background:"#ff950010",border:"1.5px solid #ff950040",borderRadius:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{fontSize:24}}>⚡</div>
+          <LightningIcon size={24} weight="fill" color="#ff9500" style={{flexShrink:0}}/>
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:700,color:"#ff9500"}}>Facturar Anticipadamente</div>
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>Asigna folio fiscal antes de entregar (para clientes que pagan adelantado o solicitan anticipo)</div>
           </div>
         </div>
-        <button onClick={()=>dispatch("pre_invoice")} style={{...bt("#ff9500"),width:"100%",justifyContent:"center",fontSize:14,padding:"12px"}}>⚡ Asignar Folio Anticipado</button>
+        <button onClick={()=>dispatch("pre_invoice")} style={{...bt("#ff9500"),width:"100%",justifyContent:"center",fontSize:14,padding:"12px"}}><LightningIcon size={15} weight="fill"/>Asignar Folio Anticipado</button>
       </div>}
 
       {/* 🆕 v10.9.0 — Botón "Cancelar con NC" prominente solo para Marcelo cuando hay folio */}
       {canCancelWithNC&&<div style={{marginTop:14,padding:14,background:C.dn+"08",border:"1.5px solid "+C.dn+"30",borderRadius:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{fontSize:24}}>❌</div>
+          <XIcon size={24} weight="bold" color={C.dn} style={{flexShrink:0}}/>
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:700,color:C.dn}}>Cancelar con Nota de Crédito</div>
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>Esta orden tiene folio {o.invoice_folio} asignado. Cancelarla genera una NC pendiente.</div>
           </div>
         </div>
-        <button onClick={()=>dispatch("cancel_with_nc")} style={{...bt(C.dn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}>❌ Cancelar Orden (con NC)</button>
+        <button onClick={()=>dispatch("cancel_with_nc")} style={{...bt(C.dn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><XIcon size={14} weight="bold"/>Cancelar Orden (con NC)</button>
       </div>}
 
       <div style={{display:"flex",gap:8,marginTop:16}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>dispatch("edit")} style={{...bt("#007aff"),flex:1,justifyContent:"center"}}>✏️ Editar</button>}
-        {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>🖨️ Imprimir</button>}
+        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>dispatch("edit")} style={{...bt("#007aff"),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
+        {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
       </div>
     </div>
   </div>;
@@ -5730,7 +5730,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
     if(suggestion[type])setFolio(suggestion[type]);
   };
 
-  const tBtn=(t,label,emoji,color,sug)=>{
+  const tBtn=(t,label,Ic,color,sug)=>{
     const sel=type===t;
     // v10.46.7 C2 — disabled mientras coronaInfo carga (evita seleccionar antes de ver 3er botón)
     const disabled=busy||coronaInfoLoading;
@@ -5756,7 +5756,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         fontFamily:"'Geist',sans-serif",
         transition:"all .15s"
       }}>
-      <div style={{fontSize:32,marginBottom:6}}>{emoji}</div>
+      <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><Ic size={30} weight="bold" color={sel?color:C.t2}/></div>
       <div style={{fontSize:14,fontWeight:700,color:sel?color:C.tx}}>{label}</div>
       <div style={{fontSize:12,fontWeight:600,color:color,marginTop:8}}>sugerido:</div>
       <div style={{fontSize:16,fontWeight:800,color:color}}>{sug||"..."}</div>
@@ -5768,25 +5768,25 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // v10.58.15 F57 — role=dialog + aria-modal para accessibility (lectores de pantalla anuncian "diálogo abierto").
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-      <h3 id="invoice-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📄 Asignar Folio Fiscal y Entregar</h3>
+      <h3 id="invoice-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><FileTextIcon size={17} weight="bold"/>Asignar Folio Fiscal y Entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
-      <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.cart_folio?" · 🛒 "+order.cart_folio:""}{order?.web_folio?" · "+order.web_folio:""}</p>
+      <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}{order?.cart_folio?<> · <ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-1px"}}/> {order.cart_folio}</>:""}{order?.web_folio?" · "+order.web_folio:""}</p>
 
       {!confirming ? <>
         <p style={{fontSize:12,color:C.tx,margin:"0 0 12px"}}>Selecciona el tipo de comprobante:</p>
-        {coronaInfoLoading&&<div style={{fontSize:11,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8,textAlign:"center"}}>⏳ Cargando datos del cliente…</div>}
+        {coronaInfoLoading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Cargando datos del cliente…</div>}
         {coronaInfoFallback&&!coronaInfoLoading&&<div style={{fontSize:11,color:C.wn,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{flex:1}}>⚠️ Datos del cliente cargados parcialmente (red lenta). Si este cliente debería ver "Cargar a Stock" o "Aplicar saldo Corona", recarga.</div>
-          <button onClick={reloadCoronaInfo} style={{...bt(C.wn),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}>🔄 Recargar</button>
+          <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Datos del cliente cargados parcialmente (red lenta). Si este cliente debería ver "Cargar a Stock" o "Aplicar saldo Corona", recarga.</span></div>
+          <button onClick={reloadCoronaInfo} style={{...bt(C.wn),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}><ArrowsClockwiseIcon size={12} weight="bold"/>Recargar</button>
         </div>}
         <div style={{display:"flex",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-          {tBtn("factura","Factura","📄","#5856d6",suggestion.factura)}
-          {tBtn("remision","Remisión","📋","#34c759",suggestion.remision)}
+          {tBtn("factura","Factura",FileTextIcon,"#5856d6",suggestion.factura)}
+          {tBtn("remision","Remisión",ReceiptIcon,"#34c759",suggestion.remision)}
           {/* v10.43.10 — Tercer botón Corona: descontar saldo sin folio fiscal */}
           {isCorona&&(()=>{
             const sel=type==="no_folio";
             return <button onClick={()=>{setType("no_folio");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Geist',sans-serif",transition:"all .15s"}}>
-              <div style={{fontSize:32,marginBottom:6}}>💰</div>
+              <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><CurrencyDollarIcon size={30} weight="bold" color={sel?"#10b981":C.t2}/></div>
               <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Aplicar saldo</div>
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>sin folio fiscal</div>
             </button>;
@@ -5795,7 +5795,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {isCuadra&&(()=>{
             const sel=type==="stock_load";
             return <button onClick={()=>{setType("stock_load");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Geist',sans-serif",transition:"all .15s"}}>
-              <div style={{fontSize:32,marginBottom:6}}>📦</div>
+              <div style={{marginBottom:6,display:"flex",justifyContent:"center"}}><PackageIcon size={30} weight="bold" color={sel?"#10b981":C.t2}/></div>
               <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Sin factura · Stock</div>
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>va a inventario Cuadra</div>
             </button>;
@@ -5803,12 +5803,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
         </div>
         {/* v10.46.0 — Selector de SKU para cargar a stock (Cuadra) */}
         {isStockLoad&&<div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}>📦 Cargar a inventario Cuadra</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:8}}><PackageIcon size={12} weight="bold"/>Cargar a inventario Cuadra</div>
           {cuadraProducts.length===0?<div style={{fontSize:11,color:C.dn,padding:"8px 10px",background:C.dn+"08",borderRadius:8,lineHeight:1.5}}>
             {/* v10.48.1 F2 — Distinguir cliente individual sin SKU vs cliente con billing_mode='stock' sin pool asignado */}
             {coronaInfo?.stock_pool_id
-              ?<>⚠️ El pool de este cliente Cuadra no tiene productos en catálogo todavía. Créalos desde el modal 📦 Inventario.</>
-              :<>⚠️ Cliente con billing_mode='stock' pero sin pool asignado. Contacta admin para asignar pool, o este cliente debería ser billing_mode='normal'.</>}
+              ?<><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>El pool de este cliente Cuadra no tiene productos en catálogo todavía. Créalos desde el modal 📦 Inventario.</>
+              :<><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Cliente con billing_mode='stock' pero sin pool asignado. Contacta admin para asignar pool, o este cliente debería ser billing_mode='normal'.</>}
           </div>:<>
             <label style={{...lbl,marginTop:0}} htmlFor="cuadra-sku-select">Producto del catálogo *</label>
             <select id="cuadra-sku-select" aria-label="Producto del catálogo Cuadra para cargar a stock" style={inp} value={cuadraSKU} onChange={e=>setCuadraSKU(e.target.value)}>
@@ -5843,8 +5843,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
             />
             <button onClick={useSuggestion} style={{...bt(C.sf,C.tx),padding:"0 14px",border:"0.5px solid "+C.bd,whiteSpace:"nowrap"}}>→ Usar {suggestion[type]||"..."}</button>
           </div>
-          {folio&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ Formato inválido. Esperado: {folioPrefix}XXXX</div>}
-          {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestion[type]})</div>}
+          {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:8}}><WarningIcon size={11} weight="fill"/>Formato inválido. Esperado: {folioPrefix}XXXX</div>}
+          {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#ff9500",marginBottom:8,fontWeight:600}}><WarningIcon size={11} weight="fill"/>Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>}
         {type&&folioValid&&!isStockLoad&&((isCorona&&isNoFolio)?
           (()=>{
@@ -5855,13 +5855,13 @@ function InvoiceModal({order,onConfirm,onClose}) {
             const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
             const negative=newBalance<0;
             return <div style={{background:"#10b98110",border:"1px solid #10b98140",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}>💰 Aplicar saldo a favor (Corona) · sin folio fiscal</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#10b981",textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Aplicar saldo a favor (Corona) · sin folio fiscal</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:"#10b981"}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dn:"#10b981"}}>${newBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
               </div>
-              {negative&&<div style={{fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}>⚠️ El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Lucero deberá registrar el depósito faltante.</div>}
+              {negative&&<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:C.dn,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Lucero deberá registrar el depósito faltante.</div>}
               <div style={{fontSize:10,color:C.t2,marginTop:6}}>Sin folio fiscal — la orden se entrega y el monto se descuenta del saldo directamente. No se crea factura/remisión.</div>
             </div>;
           })()
@@ -5882,7 +5882,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           return <>
             <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
               <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a cargar a stock:</div>
-              <div style={{fontSize:22,fontWeight:800,color:"#10b981"}}>📦 {prod?.name||"—"}</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:22,fontWeight:800,color:"#10b981"}}><PackageIcon size={20} weight="bold"/>{prod?.name||"—"}</div>
               {prod?.sku&&<div style={{fontSize:11,color:C.t2,fontFamily:"'Geist Mono',monospace",marginTop:2}}>SKU: {prod.sku}</div>}
               <div style={{fontSize:12,color:C.t2,marginTop:6}}>Sin folio fiscal · va a inventario Cuadra</div>
             </div>
@@ -5898,7 +5898,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         })() : isNoFolio ? <>
           <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a aplicar:</div>
-            <div style={{fontSize:24,fontWeight:800,color:"#10b981"}}>💰 Saldo a favor (Corona)</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:24,fontWeight:800,color:"#10b981"}}><CurrencyDollarIcon size={22} weight="bold"/>Saldo a favor (Corona)</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>Sin folio fiscal · solo descuento del saldo</div>
           </div>
           <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
@@ -5935,9 +5935,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
               const amountForPartial=usingMulti?refsTotal:Number(paymentAmount);
               return <>
                 <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?"#34c759":paymentStatus==="partial"?"#5856d6":"#ff9500",marginTop:2}}>
-                  {paymentStatus==="paid"&&"✅ Pagada · "+methodLabel}
-                  {paymentStatus==="partial"&&"🔶 Parcial · $"+amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})+" · "+methodLabel}
-                  {paymentStatus==="unpaid"&&"⏳ No pagada (irá a cobranza)"}
+                  {paymentStatus==="paid"&&<><CheckCircleIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Pagada · {methodLabel}</>}
+                  {paymentStatus==="partial"&&<><CircleHalfIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Parcial · ${amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})} · {methodLabel}</>}
+                  {paymentStatus==="unpaid"&&<><HourglassIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>No pagada (irá a cobranza)</>}
                   {/* v10.57.0: el bridge ya NO consume saldo automático; Corona+factura/remisión requiere MultiPaymentPicker */}
                 </div>
                 {paymentStatus==="partial"&&<div style={{fontSize:10,color:C.t2,marginTop:4}}>
@@ -5952,8 +5952,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
           <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará marcada como <strong style={{color:C.ok}}>Entregada</strong> automáticamente. Esta acción no se puede deshacer.</p>
         </>}
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>← Atrás</button>
-          <button onClick={handleConfirm} disabled={busy} style={{...bt((isNoFolio||isStockLoad)?"#10b981":(type==="factura"?"#5856d6":"#34c759")),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?"⏳ Procesando...":"✅ Confirmar"}</button>
+          <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}><CaretLeftIcon size={13} weight="bold"/>Atrás</button>
+          <button onClick={handleConfirm} disabled={busy} style={{...bt((isNoFolio||isStockLoad)?"#10b981":(type==="factura"?"#5856d6":"#34c759")),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando...</>:<><CheckCircleIcon size={14} weight="bold"/>Confirmar</>}</button>
         </div>
       </>}
     </div>
