@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon } from "@phosphor-icons/react";
+// v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
+const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
 
 // ═══ SUPABASE CONNECTION ═══
@@ -11969,7 +11972,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
 
 // ─── MAIN ──────────────────────────────────────────
 export default function PrintFlow() {
-  const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");
+  const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");const [sbCollapsed,setSbCollapsed]=useState(()=>{try{return localStorage.getItem("pf-sidebar-collapsed")==="1"}catch{return false}});
   const [purchaseOrders,setPurchaseOrders]=useState([]); // 🛒 v10.10.0
   const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
   // v10.41.0 — Filtros chip en "Mis Pendientes". Set de keys activos (multi-select OR).
@@ -13983,22 +13986,34 @@ export default function PrintFlow() {
   if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
 
   const MAX_VISIBLE=5;
-  const visibleNavs=navs.slice(0,MAX_VISIBLE);
-  const moreNavs=navs.slice(MAX_VISIBLE);
+  const visibleNavs=[];/* v10.60.0 — la navegación vive ahora en el Sidebar lateral */
+  const moreNavs=[];
   const moreActive=moreNavs.some(n=>n.id===view);
   const navClick=(id)=>{setView(id);if(id!=="form")setEditO(null);setShowMoreMenu(false)};
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Poppins',sans-serif",color:C.tx}}>
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Poppins',sans-serif",color:C.tx,display:"flex",alignItems:"flex-start"}}>
       <link href={FNT} rel="stylesheet"/>
       <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes menuFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      {/* ═══ SIDEBAR (v10.60.0 redesign) ═══ */}
+      <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.sf,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,padding:"15px 16px",minHeight:58,flexShrink:0}}>
+          <img src={LOGO} alt="" style={{width:30,height:30,borderRadius:8,flexShrink:0}}/>
+          {!sbCollapsed&&<><span style={{fontWeight:800,fontSize:15.5,letterSpacing:.3,whiteSpace:"nowrap"}}>PrintFlow</span><div style={{width:7,height:7,borderRadius:"50%",background:connected===null?"#ff9500":connected?C.ok:C.dn,marginLeft:"auto",flexShrink:0}} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."}/></>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
+          {navs.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Poppins',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}
+        </div>
+        <div style={{borderTop:"0.5px solid "+C.bd,padding:"8px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {!sbCollapsed&&<div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}><div style={{width:27,height:27,borderRadius:8,background:(rC[user]||C.ac)+"1a",color:rC[user]||C.ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(userName||rL[user]||"?").charAt(0).toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{userName||rL[user]}</div><div style={{fontSize:9.5,color:C.t3}}>{rL[user]}</div></div></div>}
+          <button onClick={()=>{const nv=!sbCollapsed;setSbCollapsed(nv);try{localStorage.setItem("pf-sidebar-collapsed",nv?"1":"0")}catch{}}} title={sbCollapsed?"Expandir menú":"Colapsar menú"} style={{padding:"8px",borderRadius:8,border:"0.5px solid "+C.bd,background:C.bg,color:C.t2,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,margin:sbCollapsed?"0 auto":0}}>{sbCollapsed?<CaretRightIcon size={15}/>:<CaretLeftIcon size={15}/>}</button>
+        </div>
+      </div>
+      {/* ═══ COLUMNA PRINCIPAL ═══ */}
+      <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
       {/* v10.43.23 — header compacto: outer nowrap + minWidth:0 en secciones para evitar que las acciones (📦/🎱/CSV/Salir) caigan a 2da fila con admin en pantallas <1500px */}
       <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"nowrap",gap:6,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-          <img src={LOGO} alt="" style={{width:28,height:28,borderRadius:6}}/>
-          <span style={{fontWeight:800,fontSize:15,textTransform:"uppercase"}}>PrintFlow</span>
-          <div style={{width:8,height:8,borderRadius:"50%",background:connected===null?"#ff9500":connected?C.ok:C.dn,flexShrink:0}} title={connected===null?"Conectando...":connected?"Conectado en tiempo real":"Reconectando..."}/>
-        </div>
+        {/* logo + nav movidos al Sidebar lateral (v10.60.0) */}
         <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}>
           {visibleNavs.map(n=><button key={n.id} onClick={()=>navClick(n.id)} style={{background:view===n.id?C.acL:"transparent",border:"none",color:view===n.id?C.ac:C.t2,padding:"7px 11px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>{n.i} {n.l}</button>)}
           {moreNavs.length>0&&<div style={{position:"relative"}}>
@@ -14085,6 +14100,7 @@ export default function PrintFlow() {
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>📁 Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>🧪 Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>
+      </div>{/* ═══ /COLUMNA PRINCIPAL (v10.60.0) ═══ */}
 
       {showNotifs&&<NotificationTray notifications={notifications} onClose={()=>setShowNotifs(false)} onRead={async id=>{await db.markRead(id);setNotifications(p=>p.map(n=>n.id===id?{...n,read:true}:n))}} onReadAll={async()=>{await db.markAllRead(notifKey);setNotifications(p=>p.map(n=>({...n,read:true})))}} onDelete={async id=>{await db.deleteNotification(id);setNotifications(p=>p.filter(n=>n.id!==id))}} onDeleteAll={async()=>{await db.deleteAllNotifications(notifKey);setNotifications([])}} role={user}/>}
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
