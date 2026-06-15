@@ -1174,11 +1174,11 @@ const calcDeliveryDate=(startDate,method,finishes)=>{
   return d.toISOString().slice(0,10);
 };
 
-const C={bg:"#ffffff",sf:"#f8f8fa",bd:"#ebebef",tx:"#1c1c1e",t2:"#86868b",t3:"#aeaeb2",ph:"#c7c7cc",ac:"#546e7a",acL:"rgba(84,110,122,0.08)",ok:"#34c759",wn:"#ff9500",dn:"#ff3b30"};
+const C={bg:"#ffffff",canvas:"#f5f5f7",card:"#ffffff",sf:"#f4f4f6",bd:"#e7e7ec",bdSt:"#d8d8de",tx:"#1a1a1f",t2:"#6c6c75",t3:"#9a9aa2",ph:"#bcbcc4",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)"};
 // 🌐 v10.12.0 Sub-fase C — Azul saturado para badges de OCs web (distinto del cian #06b6d4 usado en cart_folio)
 const WEB_BLUE="#3b82f6";
-const FNT="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap";
-const inp={width:"100%",padding:"10px 14px",fontFamily:"'Poppins',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
+const FNT="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap";
+const inp={width:"100%",padding:"10px 14px",fontFamily:"'Geist',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
 
 // v10.21.0 — DualScroll: barras de scroll horizontal arriba y abajo, sincronizadas.
 // Pensado para users con mouse tradicional (sin trackpad) que no pueden deslizar lateralmente.
@@ -1231,7 +1231,7 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
   img.src = url;
 });
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
-const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
+const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
 
 const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento, borra el viejo y sube tu archivo preparado para prueba de color",design:"Prepara los archivos. Borra el documento anterior y sube el archivo listo. Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada",maq_received:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada"}};
@@ -1254,7 +1254,7 @@ function Toast({message,type="success",onDone}) {
     position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
     background:bg,color:"#fff",
     padding:"12px 24px",borderRadius:14,
-    fontSize:13,fontWeight:600,fontFamily:"'Poppins',sans-serif",
+    fontSize:13,fontWeight:600,fontFamily:"'Geist',sans-serif",
     boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:9999,
     display:"flex",alignItems:"center",gap:8,
     animation:"toastIn .3s ease",
@@ -1285,7 +1285,7 @@ function FirstTimeHint({hintKey,text,color=C.ac,role}) {
   if(!show)return null;
   return <div style={{background:color+"10",border:"1.5px solid "+color+"30",borderRadius:10,padding:"8px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8,animation:"toastIn .3s ease"}}>
     <span style={{fontSize:11,color,fontWeight:600,flex:1,lineHeight:1.4}}>💡 {text}</span>
-    <button onClick={dismiss} style={{background:color+"20",border:"none",color,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Poppins',sans-serif",flexShrink:0}}>Entendido</button>
+    <button onClick={dismiss} style={{background:color+"20",border:"none",color,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0}}>Entendido</button>
   </div>;
 }
 
@@ -1306,7 +1306,7 @@ function Login({onLogin}) {
     setLoading(false);
   };
   return (
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Poppins',sans-serif"}}>
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Geist',sans-serif"}}>
       <link href={FNT} rel="stylesheet"/>
       <div style={{textAlign:"center",maxWidth:400,width:"100%",padding:"0 24px"}}>
         <img src={LOGO} alt="PrintFlow" style={{width:120,height:120,marginBottom:12,borderRadius:20,display:"block",margin:"0 auto 12px"}}/>
@@ -1397,7 +1397,7 @@ function LiveTimer({started}) {
   useEffect(()=>{if(!started)return;const t=new Date(started);if(isNaN(t.getTime()))return;const c=()=>Math.round((Date.now()-t.getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
   if(!started) return null;
   const t=new Date(started);if(isNaN(t.getTime())) return null;
-  return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6}}>⏱ {fmtM(el)}</span>;
+  return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"'Geist Mono',monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6}}>⏱ {fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
   const [op,setOp]=useState(false);
@@ -1671,7 +1671,7 @@ function WakeupModal({user, userLogin, items, onAck}){
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
               <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
-              {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"monospace"}}>{o.invoice_folio}</span>}
+              {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
               {o.due_date&&<span style={{fontSize:10,color:late>0?C.dn:C.t3,fontWeight:late>0?700:400,marginLeft:"auto"}}>📅 {fD(o.due_date)}</span>}
             </div>
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?" · 🚚 "+o.maq_provider.trim():""}</div>
@@ -1722,7 +1722,7 @@ function ClientConfirmModal({open,typed,matches,onResolve}) {
       <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-        {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Poppins',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
+        {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
           <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
         </button>)}
@@ -2460,7 +2460,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center"}}>
         {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"},{id:"history",l:"📚 Historial"}].map(t=>
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Poppins',sans-serif"}}>{t.l}</button>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Geist',sans-serif"}}>{t.l}</button>
         )}
         <div style={{flex:1}}/>
         {/* v10.55.0 — Carrito de venta batch (sustituye el flujo individual sell_from_stock con folio compartido) */}
@@ -2547,7 +2547,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           <span style={{fontSize:12,fontWeight:700,color}}>{icon} {label}</span>
-                          <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"monospace"}}>{o.production_number||"—"}</span>
+                          <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{o.production_number||"—"}</span>
                           {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759"}}>{o.invoice_folio}</span>}
                         </div>
                         <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
@@ -2980,7 +2980,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               </div>
               <div>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
-                <input style={{...inp,fontSize:13,fontFamily:"monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
+                <input style={{...inp,fontSize:13,fontFamily:"'Geist Mono',monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -3006,7 +3006,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             {/* Total venta */}
             <div style={{background:"#16a34a08",border:"1.5px solid "+(totalOK?"#16a34a40":"#ff950060"),borderRadius:10,padding:12,marginBottom:10}}>
               <label style={{...lbl,marginTop:0,fontSize:10,color:"#16a34a",fontWeight:700}}>💰 Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
-              <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"monospace",color:"#16a34a",textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:"#ff950060")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
+              <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:"#16a34a",textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:"#ff950060")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
               {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${(Math.round(subtotalSinIVA*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
             </div>
 
@@ -3100,7 +3100,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
         <label style={lbl}>Modo de precio</label>
         <div style={{display:"flex",gap:0,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,marginBottom:8}}>
           {[{id:"total",l:"💰 Monto total"},{id:"unit",l:"📐 Precio unitario"}].map(m=>
-            <button key={m.id} onClick={()=>setPriceMode(m.id)} style={{flex:1,padding:"8px 12px",border:"none",background:priceMode===m.id?"#16a34a":"transparent",color:priceMode===m.id?"#fff":C.t2,cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Poppins',sans-serif"}}>{m.l}</button>
+            <button key={m.id} onClick={()=>setPriceMode(m.id)} style={{flex:1,padding:"8px 12px",border:"none",background:priceMode===m.id?"#16a34a":"transparent",color:priceMode===m.id?"#fff":C.t2,cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"'Geist',sans-serif"}}>{m.l}</button>
           )}
         </div>
         {priceMode==="total"
@@ -3332,7 +3332,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              const negative=Number(c.current_balance)<0;
              const hasMembers=Array.isArray(c.pool_members)&&c.pool_members.length>0;
              // v10.56.2: sidebar SIEMPRE muestra líderes (filtrados en reloadClients).
-             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Poppins',sans-serif"}}>
+             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Geist',sans-serif"}}>
                <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
                <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
                {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
@@ -3488,7 +3488,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
         <label style={lbl}>Folio fiscal emitido *</label>
         <div style={{display:"flex",gap:6}}>
           <input
-            style={{...inp,fontFamily:"monospace",fontWeight:700,textTransform:"uppercase",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioFiscal&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
+            style={{...inp,fontFamily:"'Geist Mono',monospace",fontWeight:700,textTransform:"uppercase",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioFiscal&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
             value={folioFiscal}
             onChange={e=>setFolioFiscal(e.target.value.toUpperCase().trim())}
             placeholder={(suggestedFolio||"D-XXXX").replace(/\d+$/,"XXXX")+" o R-XXXX"}
@@ -3607,7 +3607,7 @@ function TaskFilterChips({filters,tasks,activeFilters,onToggle}){
           background:isActive?f.color+"15":C.bg,
           color:isActive?f.color:C.t2,
           fontSize:12,fontWeight:isActive?700:500,
-          cursor:"pointer",fontFamily:"'Poppins',sans-serif",
+          cursor:"pointer",fontFamily:"'Geist',sans-serif",
           transition:"all .15s ease",
           opacity:count===0&&!isActive?.5:1,
         }}
@@ -3770,8 +3770,8 @@ function PlateModal({order,machine,onConfirm,onClose}) {
       <div style={{marginBottom:14}}>
         <label style={lbl}>Tamaño de placa (obligatorio)</label>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setSize("chica")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="chica"?"#0891b2":C.bd),background:size==="chica"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="chica"?700:500,color:size==="chica"?"#0891b2":C.t2,fontFamily:"'Poppins',sans-serif"}}>📏 Chica</button>
-          <button onClick={()=>setSize("grande")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="grande"?"#0891b2":C.bd),background:size==="grande"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="grande"?700:500,color:size==="grande"?"#0891b2":C.t2,fontFamily:"'Poppins',sans-serif"}}>📐 Grande</button>
+          <button onClick={()=>setSize("chica")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="chica"?"#0891b2":C.bd),background:size==="chica"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="chica"?700:500,color:size==="chica"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif"}}>📏 Chica</button>
+          <button onClick={()=>setSize("grande")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="grande"?"#0891b2":C.bd),background:size==="grande"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="grande"?700:500,color:size==="grande"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif"}}>📐 Grande</button>
         </div>
       </div>
       <div style={{marginBottom:16}}>
@@ -3846,13 +3846,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           💰 ESTADO DE PAGO *
         </label>
         <div style={{display: "flex", gap: 6}}>
-          <button onClick={() => onChange("unpaid", [])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "unpaid" ? "#ff9500" : C.bd), background: status === "unpaid" ? "#ff950015" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "unpaid" ? "#ff9500" : C.t2, fontFamily: "'Poppins',sans-serif"}}>
+          <button onClick={() => onChange("unpaid", [])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "unpaid" ? "#ff9500" : C.bd), background: status === "unpaid" ? "#ff950015" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "unpaid" ? "#ff9500" : C.t2, fontFamily: "'Geist',sans-serif"}}>
             ⏳ No pagada
           </button>
-          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? "#5856d6" : C.bd), background: status === "partial" ? "#5856d615" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? "#5856d6" : C.t2, fontFamily: "'Poppins',sans-serif"}}>
+          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? "#5856d6" : C.bd), background: status === "partial" ? "#5856d615" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? "#5856d6" : C.t2, fontFamily: "'Geist',sans-serif"}}>
             🔶 Parcial
           </button>
-          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? "#34c759" : C.bd), background: status === "paid" ? "#34c75915" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? "#34c759" : C.t2, fontFamily: "'Poppins',sans-serif"}}>
+          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? "#34c759" : C.bd), background: status === "paid" ? "#34c75915" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? "#34c759" : C.t2, fontFamily: "'Geist',sans-serif"}}>
             ✅ Pagada
           </button>
         </div>
@@ -3890,7 +3890,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
               <label style={{...lbl, fontSize: 10, marginTop: 0}}>Método *</label>
               <div role="radiogroup" aria-label={`Método de pago ${idx + 1}`} aria-invalid={!r.method} style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8}}>
                 {METHODS.map(m => (
-                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Poppins',sans-serif", textAlign: "left"}}>
+                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left"}}>
                     {m.i} {m.l}
                   </button>
                 ))}
@@ -3917,7 +3917,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
             );
           })}
 
-          <button onClick={addRef} style={{width: "100%", padding: "10px", borderRadius: 8, border: "1.5px dashed " + C.ac, background: C.acL, color: C.ac, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Poppins',sans-serif", marginTop: 4}}>
+          <button onClick={addRef} style={{width: "100%", padding: "10px", borderRadius: 8, border: "1.5px dashed " + C.ac, background: C.acL, color: C.ac, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Geist',sans-serif", marginTop: 4}}>
             ➕ Agregar otro pago
           </button>
 
@@ -4004,7 +4004,7 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
           try{await onSkip()}
           catch(e){console.error("[PriceCaptureModal onSkip]:",e)}
           finally{setBusy(false)}
-        }} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Poppins',sans-serif"}}>
+        }} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Geist',sans-serif"}}>
           💤 Sin precio, continuar a asignar folio <span style={{fontSize:10,opacity:0.7}}>(precio se agregará después)</span>
         </button>
         {/* v10.49.2 fix#5 — texto preciso: el folio se asigna en el siguiente paso (InvoiceModal), no aquí */}
@@ -4356,7 +4356,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
               ) : (
                 <input type="text" value={s.folio||""}
                   onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
-                  style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
+                  style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
                   placeholder={isFactura ? "D-XXXX" : "R-XXXX"}/>
               )}
             </div>
@@ -4489,7 +4489,7 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
       </p>
       <div style={{background:C.sf,borderRadius:8,padding:12,marginBottom:14,fontSize:11}}>
         <div><strong>OC:</strong> {oc?.id} · <span style={{color:C.t2}}>{oc?.client}</span></div>
-        <div><strong>Factura:</strong> <span style={{fontFamily:"monospace",color:"#5856d6"}}>{folioLabel}</span> {group?.label && <span style={{color:C.t2}}>· {group.label}</span>}</div>
+        <div><strong>Factura:</strong> <span style={{fontFamily:"'Geist Mono',monospace",color:"#5856d6"}}>{folioLabel}</span> {group?.label && <span style={{color:C.t2}}>· {group.label}</span>}</div>
         {isLine ? <>
           <div style={{marginTop:6}}><strong>Línea a cancelar:</strong></div>
           <div style={{color:C.tx,marginLeft:10}}>
@@ -4508,7 +4508,7 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
       <label style={lbl}>Motivo (mínimo 5 caracteres) <span style={{color:C.dn}}>*</span></label>
       <textarea value={reason} onChange={e=>setReason(e.target.value)} autoFocus disabled={busy}
         placeholder={isLine ? "Ej: Cliente devolvió 2000 piezas" : "Ej: Cliente canceló pedido completo"}
-        style={{...inp,minHeight:60,resize:"vertical",fontFamily:"'Poppins',sans-serif"}}/>
+        style={{...inp,minHeight:60,resize:"vertical",fontFamily:"'Geist',sans-serif"}}/>
       <div style={{fontSize:10,color:reason.length>=5?C.ok:C.t3,marginTop:4}}>
         {reason.length}/5 mínimo
       </div>
@@ -4550,7 +4550,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
           <div style={{display:"flex",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:140}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:13,fontWeight:800,color:docColor,fontFamily:"monospace"}}>{docEmoji} {g.folio || "(corona_saldo)"}</span>
+                <span style={{fontSize:13,fontWeight:800,color:docColor,fontFamily:"'Geist Mono',monospace"}}>{docEmoji} {g.folio || "(corona_saldo)"}</span>
                 {g.label && <span style={{fontSize:11,color:C.tx,fontWeight:600,background:C.sf,padding:"2px 6px",borderRadius:4}}>{g.label}</span>}
                 {g.invoice_pre_assigned && <span style={{fontSize:9,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}>⚡ ANTICIPADA</span>}
                 {cancelled && <span style={{fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}>❌ CANCELADA</span>}
@@ -4589,8 +4589,8 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
                     {productLabel && <span style={{color:C.t2,marginLeft:6,fontSize:9}}>· {productLabel}</span>}
                     {lineCancelled && <span style={{color:C.dn,marginLeft:6,fontSize:9,fontStyle:"italic"}}>(cancelada)</span>}
                   </td>
-                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"monospace"}}>{Number(l.qty_portion||0).toLocaleString("es-MX")}</td>
-                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"monospace"}}>${fmtMx(l.amount_portion)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>{Number(l.qty_portion||0).toLocaleString("es-MX")}</td>
+                  <td style={{padding:"4px 6px",textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>${fmtMx(l.amount_portion)}</td>
                   <td style={{padding:"4px 6px",textAlign:"right"}}>
                     {!lineCancelled && !cancelled && isAdmin && <button onClick={()=>onCancelLine&&onCancelLine(l, g, order)} disabled={busy}
                       style={{...bs(C.sf,C.dn),fontSize:9,padding:"2px 7px",border:"0.5px solid "+C.dn+"30"}}
@@ -5340,7 +5340,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                     {g.doc_type !== "corona_saldo" && (
                       <input value={g.folio||""} placeholder={g.doc_type==="factura"?"D-XXXX":"R-XXXX"}
                         onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
-                        style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
+                        style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
                     )}
                     <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,cursor:"pointer"}}>
                       <input type="checkbox" checked={g.pre_assigned}
@@ -5753,7 +5753,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         background:sel?color+"15":C.bg,
         cursor:disabled?"not-allowed":"pointer",
         opacity:disabled?0.5:1,
-        fontFamily:"'Poppins',sans-serif",
+        fontFamily:"'Geist',sans-serif",
         transition:"all .15s"
       }}>
       <div style={{fontSize:32,marginBottom:6}}>{emoji}</div>
@@ -5785,7 +5785,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {/* v10.43.10 — Tercer botón Corona: descontar saldo sin folio fiscal */}
           {isCorona&&(()=>{
             const sel=type==="no_folio";
-            return <button onClick={()=>{setType("no_folio");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Poppins',sans-serif",transition:"all .15s"}}>
+            return <button onClick={()=>{setType("no_folio");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Geist',sans-serif",transition:"all .15s"}}>
               <div style={{fontSize:32,marginBottom:6}}>💰</div>
               <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Aplicar saldo</div>
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>sin folio fiscal</div>
@@ -5794,7 +5794,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {/* v10.46.0 — Tercer botón Cuadra: cargar a stock sin folio fiscal */}
           {isCuadra&&(()=>{
             const sel=type==="stock_load";
-            return <button onClick={()=>{setType("stock_load");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Poppins',sans-serif",transition:"all .15s"}}>
+            return <button onClick={()=>{setType("stock_load");setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([])}} disabled={busy} style={{flex:1,minWidth:140,padding:"20px 12px",borderRadius:14,border:"2px solid "+(sel?"#10b981":C.bd),background:sel?"#10b98115":C.bg,cursor:busy?"not-allowed":"pointer",opacity:busy?0.6:1,fontFamily:"'Geist',sans-serif",transition:"all .15s"}}>
               <div style={{fontSize:32,marginBottom:6}}>📦</div>
               <div style={{fontSize:13,fontWeight:700,color:sel?"#10b981":C.tx,lineHeight:1.2}}>Sin factura · Stock</div>
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.2}}>va a inventario Cuadra</div>
@@ -5835,7 +5835,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           <label style={{...lbl,marginTop:4}}>Folio del {type==="factura"?"CFDI":"comprobante"} (escribe o usa sugerido):</label>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <input
-              style={{...inp,fontFamily:"monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
+              style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
               value={folio}
               onChange={e=>{setFolio(e.target.value.toUpperCase().trim());setWarnLow(false)}}
               placeholder={folioPrefix+"XXXX"}
@@ -5883,7 +5883,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
             <div style={{background:"#10b98110",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid #10b98140"}}>
               <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a cargar a stock:</div>
               <div style={{fontSize:22,fontWeight:800,color:"#10b981"}}>📦 {prod?.name||"—"}</div>
-              {prod?.sku&&<div style={{fontSize:11,color:C.t2,fontFamily:"monospace",marginTop:2}}>SKU: {prod.sku}</div>}
+              {prod?.sku&&<div style={{fontSize:11,color:C.t2,fontFamily:"'Geist Mono',monospace",marginTop:2}}>SKU: {prod.sku}</div>}
               <div style={{fontSize:12,color:C.t2,marginTop:6}}>Sin folio fiscal · va a inventario Cuadra</div>
             </div>
             <div style={{background:"#10b98108",borderRadius:10,padding:12,marginBottom:14}}>
@@ -5919,7 +5919,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         </> : <>
           <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar:</div>
-            <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>{folio}</div>
+            <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>{folio}</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"})</div>
           </div>
           <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
@@ -5944,7 +5944,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
                   Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
                 </div>}
                 {usingMulti&&paymentRefs.length>1&&<div style={{fontSize:10,color:C.t2,marginTop:6,padding:"4px 8px",background:"#fff",borderRadius:6,textAlign:"left"}}>
-                  {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
+                  {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"'Geist Mono',monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
                 </div>}
               </>;
             })()}
@@ -6143,8 +6143,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
               setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
             };
             return <>
-              <button onClick={()=>switchType("factura")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📄 Factura</button>
-              <button onClick={()=>switchType("remision")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>📋 Remisión</button>
+              <button onClick={()=>switchType("factura")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="factura"?"#5856d6":C.bd),background:type==="factura"?"#5856d610":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>📄 Factura</button>
+              <button onClick={()=>switchType("remision")} style={{flex:1,padding:"12px",borderRadius:10,border:"2px solid "+(type==="remision"?"#34c759":C.bd),background:type==="remision"?"#34c75910":C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>📋 Remisión</button>
             </>;
           })()}
         </div>
@@ -6153,7 +6153,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <label style={lbl}>Folio</label>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
             <input
-              style={{...inp,fontFamily:"monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
+              style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":(folioIsLower?"#ff9500":C.bd))}}
               value={folio}
               onChange={e=>{setFolio(e.target.value.toUpperCase().trim());setWarnLow(false)}}
               placeholder={folioPrefix+"XXXX"}
@@ -6193,7 +6193,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
       </> : <>
         <div style={{background:(type==="factura"?"#5856d6":"#34c759")+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?"#5856d6":"#34c759")+"40"}}>
           <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar (anticipado):</div>
-          <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>⚡ {folio}</div>
+          <div style={{fontSize:28,fontWeight:800,color:type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>⚡ {folio}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{type==="factura"?"Factura":"Remisión"} · Razón: {finalReason}</div>
         </div>
         <div style={{background:paymentStatus==="paid"?"#34c75910":paymentStatus==="partial"?"#5856d610":"#ff950010",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?"#34c75940":paymentStatus==="partial"?"#5856d640":"#ff950040")}}>
@@ -6217,7 +6217,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
                 Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
               </div>}
               {usingMulti&&paymentRefs.length>1&&<div style={{fontSize:10,color:C.t2,marginTop:6,padding:"4px 8px",background:"#fff",borderRadius:6,textAlign:"left"}}>
-                {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
+                {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"'Geist Mono',monospace"}}>#{i+1} {r.method} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
               </div>}
             </>;
           })()}
@@ -6272,7 +6272,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
           <div style={{fontSize:10,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>
             ⚡ Folio anticipado ya asignado
           </div>
-          <div style={{fontSize:22,fontWeight:800,color:isFactura?"#5856d6":"#34c759",fontFamily:"monospace",letterSpacing:0.5}}>
+          <div style={{fontSize:22,fontWeight:800,color:isFactura?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>
             {isFactura?"📄":"📋"} {order?.invoice_folio}
           </div>
           {order?.invoice_reason && (
@@ -6386,7 +6386,7 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
 
       <div style={{background:C.dn+"08",border:"1px solid "+C.dn+"30",borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Folio fiscal asignado:</div>
-        <div style={{fontSize:18,fontWeight:800,color:order?.invoice_type==="factura"?"#5856d6":"#34c759",fontFamily:"monospace"}}>{order?.invoice_type==="factura"?"📄":"📋"} {order?.invoice_folio}</div>
+        <div style={{fontSize:18,fontWeight:800,color:order?.invoice_type==="factura"?"#5856d6":"#34c759",fontFamily:"'Geist Mono',monospace"}}>{order?.invoice_type==="factura"?"📄":"📋"} {order?.invoice_folio}</div>
         {order?.invoice_pre_assigned&&<div style={{fontSize:10,color:"#ff9500",fontWeight:600,marginTop:4}}>⚡ Era folio anticipado</div>}
       </div>
 
@@ -6725,8 +6725,8 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
       <span style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>📅 {calView==="week"?"Semana del "+fD(sow):months[monthIdx]+" "+monthYear}</span>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
         <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,marginRight:6}}>
-          <button onClick={()=>setCalView("week")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",cursor:"pointer",background:calView==="week"?C.ac:"transparent",color:calView==="week"?"#fff":C.t2}}>Semana</button>
-          <button onClick={()=>setCalView("month")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:calView==="month"?C.ac:"transparent",color:calView==="month"?"#fff":C.t2}}>Mes</button>
+          <button onClick={()=>setCalView("week")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:calView==="week"?C.ac:"transparent",color:calView==="week"?"#fff":C.t2}}>Semana</button>
+          <button onClick={()=>setCalView("month")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:calView==="month"?C.ac:"transparent",color:calView==="month"?"#fff":C.t2}}>Mes</button>
         </div>
         {calView==="week"&&<><button onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}>‹</button><button onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}>›</button></>}
         {calView==="month"&&<><button onClick={()=>setMo(m=>m-1)} style={bs(C.bg,C.t2)}>‹</button><button onClick={()=>setMo(0)} style={bs(mo===0?C.ac:C.bg,mo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setMo(m=>m+1)} style={bs(C.bg,C.t2)}>›</button></>}
@@ -6982,7 +6982,7 @@ function PantoneInput({label, value, onChange}) {
       {arr.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,marginBottom:6}}>
         {arr.map(code => {
           const hex = hexCache[code] || "#cccccc";
-          return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Poppins',sans-serif"}}>
+          return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
             <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
             <span>{code}</span>
             <button type="button" onClick={()=>removePantone(code)} style={{border:"none",background:"transparent",cursor:"pointer",color:C.t3,fontSize:14,padding:0,marginLeft:2,lineHeight:1}} title="Quitar">×</button>
@@ -6993,7 +6993,7 @@ function PantoneInput({label, value, onChange}) {
         <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} placeholder="Buscar Pantone (ej. 186 C, Reflex Blue)..."/>
         {open && results.length > 0 && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:10,maxHeight:240,overflowY:"auto"}}>
           {results.map(r => (
-            <div key={r.code} onMouseDown={e=>{e.preventDefault();addPantone(r.code)}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:"0.5px solid "+C.bd,fontFamily:"'Poppins',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+            <div key={r.code} onMouseDown={e=>{e.preventDefault();addPantone(r.code)}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:"0.5px solid "+C.bd,fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
               <div style={{width:24,height:24,borderRadius:12,background:r.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{r.code}</div>
@@ -7026,7 +7026,7 @@ function PantoneChips({codes}) {
   return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>
     {codes.map(code => {
       const hex = hexes[code] || "#cccccc";
-      return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px 2px 3px",borderRadius:12,background:"#f5f5f7",fontSize:11,fontWeight:600,fontFamily:"'Poppins',sans-serif"}}>
+      return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px 2px 3px",borderRadius:12,background:"#f5f5f7",fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
         <div style={{width:14,height:14,borderRadius:7,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
         <span>{code}</span>
       </div>;
@@ -7321,8 +7321,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!editOrder&&canP&&<GuideBanner text={isMaq?"🚚 Orden de maquila — incluye proveedor, costo y precio":"📋 Crea la orden completa con datos, specs y precio"} color={isMaq?"#e67e22":"#5856d6"}/>}
     {editOrder&&specsOnly&&<GuideBanner text="✏️ Pre-prensa: edita las especificaciones técnicas" color="#ec4899"/>}
     {editOrder&&hideC&&!specsOnly&&<GuideBanner text="🔍 Revisa y completa las especificaciones"/>}
-    {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
-    {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Poppins',sans-serif"}}>{p.l}</button>)}</div></div>}
+    {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?"#e67e22":C.ac):C.bd),background:f.order_type===t?(t==="maquila"?"#e67e2208":C.acL):C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><div style={{fontSize:22}}>{t==="interna"?"🏭":"🚚"}</div><div style={{fontSize:12,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
+    {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Geist',sans-serif"}}>{p.l}</button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Cliente</div>
     {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:15,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br><div style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
   // v10.46.9 F1 FIX — Solo limpiar client_id (+ stock_role/product_id) si el NOMBRE realmente cambió.
@@ -7432,21 +7432,21 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       })()}
     </FC></div>
     {!isMaq&&!specsOnly&&<div style={{padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}><div><div style={{fontSize:11,fontWeight:700,color:advMode?"#8b5cf6":C.t2}}>{advMode?"📖 Modo Avanzado":"📋 Modo Sencillo"}</div><div style={{fontSize:9,color:C.t3,marginTop:1}}>{advMode?"Libros, cuadernos, calendarios — escribe todos los datos técnicos":"Etiquetas, flyers, volantes — descripción rápida del producto"}</div></div><button onClick={()=>setAdvMode(!advMode)} style={{position:"relative",width:44,height:24,borderRadius:12,border:"none",background:advMode?"#8b5cf6":"#d1d5db",cursor:"pointer",transition:"background .2s",flexShrink:0}}><div style={{position:"absolute",top:2,left:advMode?22:2,width:20,height:20,borderRadius:10,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)",transition:"left .2s"}}/></button></div>}
-    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Medida final</label><div style={{display:"flex",gap:6,marginTop:4,marginBottom:8}}><button type="button" onClick={()=>{s("standard_size","")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(!f.standard_size?C.ac:C.bd),background:!f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:!f.standard_size?700:500,color:!f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>✏️ Medida en cm</button><button type="button" onClick={()=>{if(!f.standard_size)s("standard_size","carta")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(f.standard_size?C.ac:C.bd),background:f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:f.standard_size?700:500,color:f.standard_size?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>📐 Tamaño estándar</button></div>{f.standard_size?(()=>{const groups={};STANDARD_SIZES.forEach(sz=>{(groups[sz.group]=groups[sz.group]||[]).push(sz)});return <select style={inp} value={f.standard_size} onChange={e=>s("standard_size",e.target.value)}>{Object.entries(groups).map(([g,szs])=><optgroup key={g} label={g}>{szs.map(sz=><option key={sz.id} value={sz.id}>{sz.label} ({sz.w.toFixed(1)} × {sz.h.toFixed(1)} cm)</option>)}</optgroup>)}</select>})():<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Ancho cm</div><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></div><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Alto cm</div><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></div></div>}</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Poppins',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={customFinish} onChange={e=>{const v=e.target.value;setCustomFinish(v);const std=(f.finishes||"").split(",").map(x=>x.trim()).filter(x=>FINISHES.includes(x));const custom=v.split(",").map(x=>x.trim()).filter(Boolean);s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
+    {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:10,fontWeight:600,color:C.t3,marginBottom:2}}>📝 Descripción:</div><div style={{fontSize:12,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br><input style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)"><input style={inp} value={f.paper_grammage} onChange={e=>s("paper_grammage",e.target.value)} placeholder="Ejemplo · 150"/></FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br><input style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta"><input style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Medida final</label><div style={{display:"flex",gap:6,marginTop:4,marginBottom:8}}><button type="button" onClick={()=>{s("standard_size","")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(!f.standard_size?C.ac:C.bd),background:!f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:!f.standard_size?700:500,color:!f.standard_size?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>✏️ Medida en cm</button><button type="button" onClick={()=>{if(!f.standard_size)s("standard_size","carta")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(f.standard_size?C.ac:C.bd),background:f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:11,fontWeight:f.standard_size?700:500,color:f.standard_size?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>📐 Tamaño estándar</button></div>{f.standard_size?(()=>{const groups={};STANDARD_SIZES.forEach(sz=>{(groups[sz.group]=groups[sz.group]||[]).push(sz)});return <select style={inp} value={f.standard_size} onChange={e=>s("standard_size",e.target.value)}>{Object.entries(groups).map(([g,szs])=><optgroup key={g} label={g}>{szs.map(sz=><option key={sz.id} value={sz.id}>{sz.label} ({sz.w.toFixed(1)} × {sz.h.toFixed(1)} cm)</option>)}</optgroup>)}</select>})():<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Ancho cm</div><input style={inp} type="number" step="0.1" value={f.width_cm} onChange={e=>s("width_cm",e.target.value)}/></div><div><div style={{fontSize:10,color:C.t3,marginBottom:2,fontWeight:600}}>Alto cm</div><input style={inp} type="number" step="0.1" value={f.height_cm} onChange={e=>s("height_cm",e.target.value)}/></div></div>}</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{FINISHES.map(fin=>{const active=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean).includes(fin);return <button key={fin} onClick={()=>{const arr=(f.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);if(active)s("finishes",arr.filter(x=>x!==fin).join(", "));else s("finishes",[...arr,fin].join(", "))}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?"#e67e22":C.bd),background:active?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:active?700:500,color:active?"#e67e22":C.t2,fontFamily:"'Geist',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}<button onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?"#e67e22":C.bd),background:showOtroFinish?"#e67e2210":C.bg,cursor:"pointer",fontSize:10,fontWeight:showOtroFinish?700:500,color:showOtroFinish?"#e67e22":C.t2,fontFamily:"'Geist',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{showOtroFinish&&<input style={{...inp,marginTop:8}} value={customFinish} onChange={e=>{const v=e.target.value;setCustomFinish(v);const std=(f.finishes||"").split(",").map(x=>x.trim()).filter(x=>FINISHES.includes(x));const custom=v.split(",").map(x=>x.trim()).filter(Boolean);s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
     {!specsOnly&&!advMode&&!isMaq&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label="📝 Descripción del producto"><textarea style={{...inp,minHeight:90,resize:"vertical",lineHeight:1.6}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder="Ejemplo (escribe aquí) · Etiqueta adhesiva a 4 tintas en couché 150g, suaje redondo 5cm, barniz UV..."/></FC></div>}
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?"📝 Descripción del trabajo":"📖 Datos Técnicos Completos"}><div style={{background:(isMaq?"#e67e22":"#8b5cf6")+"08",borderRadius:12,padding:2}}><textarea style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:13}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:9,color:"#8b5cf6",marginTop:4,fontStyle:"italic"}}>💡 Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico</div>}</FC></div>}
     {/* v10.25.1 — Pantones también disponibles en modo Avanzado (no en Maquila por D-7) */}
     {!specsOnly&&advMode&&!isMaq&&<><PantoneInput label="🎨 Pantones Frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label="🎨 Pantones Vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/></>}
-    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" rec br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Ejemplo · 1000"/></FC><FC label="📅 Entrega" rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9.5,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)">⏱️ Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:9,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}>⚠️ {pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok}}>✓ OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9,fontWeight:600,fontFamily:"'Poppins',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)">💡 Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:9,color:C.ok,fontWeight:600}}>✓ Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
-    {!specsOnly&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>👤 Agente / Vendedor</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} onClick={()=>s("agent",a)} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>{a}</button>)}<button onClick={()=>s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Poppins',sans-serif"}}>Otro...</button></div>{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>s("agent",e.target.value||"otro")} placeholder="Nombre del agente"/>}</div>}
+    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" rec br><input style={inp} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value)} placeholder="Ejemplo · 1000"/></FC><FC label="📅 Entrega" rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9.5,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)">⏱️ Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:9,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}>⚠️ {pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok}}>✓ OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:9,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)">💡 Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:13,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:9,color:C.ok,fontWeight:600}}>✓ Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
+    {!specsOnly&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>👤 Agente / Vendedor</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} onClick={()=>s("agent",a)} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{a}</button>)}<button onClick={()=>s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>Otro...</button></div>{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>s("agent",e.target.value||"otro")} placeholder="Nombre del agente"/>}</div>}
     {/* v10.58.26: banner si folio pre-asignado bloquea precios */}
     {financialsLocked&&<div style={{margin:"12px 20px",padding:"10px 14px",background:"#ff950012",border:"1px solid #ff950040",borderRadius:10,fontSize:11,color:"#9a3412",lineHeight:1.4}}>🔒 <strong>Folio fiscal pre-asignado ({editOrder?.invoice_folio}).</strong> Puedes editar costo proveedor y datos operativos, pero <strong>precio cliente está bloqueado</strong> para no alterar la facturación. Solo admin puede modificar precios en órdenes ya facturadas.</div>}
     {isMaq&&!specsOnly&&<><div style={{padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase"}}>🚚 Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value)} placeholder="$0"/></FC><FC label={financialsLocked?"Precio cliente 🔒":"Precio cliente"} br><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.maq_price} onChange={e=>!financialsLocked&&s("maq_price",e.target.value)} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></FC><FC label="% Ganancia"><div style={{padding:10,background:"#fff",borderRadius:12,fontSize:18,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center"}}>{margin!==null?margin+"%":"—"}</div></FC></div></>}
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>{financialsLocked?"💰 Precio MXN 🔒":"💰 Precio MXN"}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value)} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {!isMaq&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>💿 Placa CTP</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-      <button type="button" onClick={()=>s("plate_status",f.plate_status==="new_ctp"?"":"new_ctp")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="new_ctp"?"#0891b2":C.bd),background:f.plate_status==="new_ctp"?"#0891b210":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="new_ctp"?700:500,color:f.plate_status==="new_ctp"?"#0891b2":C.t2,fontFamily:"'Poppins',sans-serif"}}>{f.plate_status==="new_ctp"?"✓ ":""}🆕 Nueva CTP</button>
-      <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Poppins',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}♻️ Ya existe (reutilizar)</button>
+      <button type="button" onClick={()=>s("plate_status",f.plate_status==="new_ctp"?"":"new_ctp")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="new_ctp"?"#0891b2":C.bd),background:f.plate_status==="new_ctp"?"#0891b210":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="new_ctp"?700:500,color:f.plate_status==="new_ctp"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="new_ctp"?"✓ ":""}🆕 Nueva CTP</button>
+      <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}♻️ Ya existe (reutilizar)</button>
     </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:10,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para Producción".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:10,color:"#0891b2",fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
     {/* v10.22.0 — Hasta 2 imágenes de referencia (compresión client-side via v10.16.0). */}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>📷 Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><img src={val} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:C.dn,color:"#fff",border:"none",fontSize:8,cursor:"pointer"}}>✕</button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}>📷 {val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){alert("Imagen muy grande (máx 10MB)");return}setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+(idx+1)+"-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s(slot,urlData.publicUrl);if(idx===0)s("image",null)}catch(err){console.error("[image upload "+slot+"]",err);alert("Error al subir imagen: "+(err?.message||err))}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
@@ -7742,7 +7742,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                   }
                   setTargetId(po.id);
                 };
-                return <button key={po.id} onClick={handleSelect} style={{textAlign:"left",padding:"10px 12px",border:"1.5px solid "+(selected?C.ac:(sameClient?C.bd:"#ff950040")),borderRadius:10,background:selected?C.acL:(sameClient?C.bg:"#ff950008"),cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                return <button key={po.id} onClick={handleSelect} style={{textAlign:"left",padding:"10px 12px",border:"1.5px solid "+(selected?C.ac:(sameClient?C.bd:"#ff950040")),borderRadius:10,background:selected?C.acL:(sameClient?C.bg:"#ff950008"),cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
                     <span style={{fontSize:13,fontWeight:800,color:C.ac}}>🛒 {po.id}</span>
                     {selected
@@ -8057,8 +8057,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
       {/* v10.51.0 — Toggle Simple/Split */}
       <div style={{display:"flex",gap:6,marginBottom:14,padding:4,background:C.sf,borderRadius:10}}>
-        <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>📄 Asignación simple</button>
-        <button onClick={()=>setActiveMode("split")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="split"?C.bg:"transparent",color:activeMode==="split"?"#5856d6":C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif",boxShadow:activeMode==="split"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>🔀 Dividir en N facturas</button>
+        <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>📄 Asignación simple</button>
+        <button onClick={()=>setActiveMode("split")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="split"?C.bg:"transparent",color:activeMode==="split"?"#5856d6":C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="split"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>🔀 Dividir en N facturas</button>
       </div>
 
       {activeMode === "simple" && <>
@@ -8090,7 +8090,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
         <div style={{marginBottom:14}}>
           <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
-          <input style={{...inp,fontFamily:"monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
+          <input style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
           {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
           {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
         </div>
@@ -8098,8 +8098,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>
           <div style={{fontSize:10,color:C.t2,fontWeight:600,marginBottom:4}}>VISTA PREVIA</div>
           {mode==="shared"
-            ? <div style={{fontSize:13}}>Se asignará <strong style={{color:tColor,fontFamily:"monospace"}}>{preview[0]}</strong> a los <strong>{pendingCount}</strong> productos pendientes</div>
-            : <div style={{fontSize:13,lineHeight:1.5}}>Se asignarán <span style={{fontFamily:"monospace",color:tColor,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" ... "+preview[preview.length-1]}</span> ({preview.length} folios)</div>
+            ? <div style={{fontSize:13}}>Se asignará <strong style={{color:tColor,fontFamily:"'Geist Mono',monospace"}}>{preview[0]}</strong> a los <strong>{pendingCount}</strong> productos pendientes</div>
+            : <div style={{fontSize:13,lineHeight:1.5}}>Se asignarán <span style={{fontFamily:"'Geist Mono',monospace",color:tColor,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" ... "+preview[preview.length-1]}</span> ({preview.length} folios)</div>
           }
         </div>}
       </>}
@@ -8117,7 +8117,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             💡 <strong>Cliente Corona (anticipo):</strong> el bridge automático YA NO consume saldo al facturar (v10.57.0). Captura los pagos como con cualquier cliente — quedarán en CobranzaFlow para que Lucero cobre. Si quieres descontar saldo Corona, usa "Aplicar saldo · sin folio" en cada orden al entregar.
             {typeof coronaInfo?.current_balance === "number" && (
               <div style={{marginTop:6,fontWeight:700}}>
-                Saldo a favor del pool: <span style={{fontFamily:"monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                Saldo a favor del pool: <span style={{fontFamily:"'Geist Mono',monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>
             )}
           </div>
@@ -8183,7 +8183,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                 {/* Folio */}
                 <input type="text" value={g.folio} onChange={e=>updateGroup(gIdx, {folio:e.target.value})}
                   placeholder={pref+"XXXX"}
-                  style={{...inp,padding:"6px 8px",fontSize:12,fontFamily:"monospace",border:"1.5px solid "+(folOK?C.bd:C.dn+"40"),marginBottom:8}}/>
+                  style={{...inp,padding:"6px 8px",fontSize:12,fontFamily:"'Geist Mono',monospace",border:"1.5px solid "+(folOK?C.bd:C.dn+"40"),marginBottom:8}}/>
 
                 {/* Total */}
                 <div style={{fontSize:10,color:C.t2,marginBottom:8,padding:"4px 8px",background:C.sf,borderRadius:6}}>
@@ -8233,7 +8233,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         </div>
 
         {/* Botón agregar grupo */}
-        <button onClick={addGroup} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed "+C.ac,background:C.acL,color:C.ac,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Poppins',sans-serif",marginBottom:12}}>➕ Agregar otra factura</button>
+        <button onClick={addGroup} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed "+C.ac,background:C.acL,color:C.ac,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:12}}>➕ Agregar otra factura</button>
 
         {/* Estado de validación */}
         {!splitValidation.ok && (
@@ -8290,13 +8290,13 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
           📑 Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
           <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
             {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
-              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{color:C.t2,fontFamily:"'Poppins',sans-serif",fontWeight:500}}>#{s.position}</span>
+              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>#{s.position}</span>
                 {s.doc_type==="corona_saldo"
                   ? <span style={{color:"#10b981"}}>💎 saldo Corona</span>
                   : <span style={{color:s.doc_type==="factura"?"#5856d6":"#34c759"}}>{s.doc_type==="factura"?"📄":"📋"} {s.invoice_folio}</span>}
-                <span style={{color:C.t2,fontFamily:"'Poppins',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-                {s.invoice_pre_assigned&&<span style={{color:"#ff9500",fontSize:9,fontFamily:"'Poppins',sans-serif",fontWeight:700}}>⚡ anticipado</span>}
+                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                {s.invoice_pre_assigned&&<span style={{color:"#ff9500",fontSize:9,fontFamily:"'Geist',sans-serif",fontWeight:700}}>⚡ anticipado</span>}
               </div>
             ))}
             {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:9,color:C.t2,marginTop:2,fontStyle:"italic"}}>
@@ -9328,7 +9328,7 @@ function Archive({orders,role,onAction,userLogin}) {
       const yRev=months.reduce((s,m)=>s+Object.values(tree[y][m]).reduce((s2,w)=>s2+w.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s3,o)=>s3+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0),0),0);
 
       return <div key={y} style={{marginBottom:8}}>
-        <button onClick={()=>setOpenYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+        <button onClick={()=>setOpenYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
           <span style={{fontSize:18}}>{yOpen?"📂":"📁"}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
           <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yCount} orden{yCount!==1?"es":""}</span>
@@ -9346,7 +9346,7 @@ function Archive({orders,role,onAction,userLogin}) {
             const mRev=weeks.reduce((s,w)=>s+tree[y][m][w].filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s2,o)=>s2+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0),0);
 
             return <div key={m} style={{marginBottom:4}}>
-              <button onClick={()=>setOpenMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+              <button onClick={()=>setOpenMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                 <span style={{fontSize:15}}>{mOpen?"📂":"📁"}</span>
                 <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{MONTHS[mi]} {y}</span>
                 <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mCount}</span>
@@ -9362,7 +9362,7 @@ function Archive({orders,role,onAction,userLogin}) {
                   const wRev=wOrders.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
 
                   return <div key={w} style={{marginBottom:4}}>
-                    <button onClick={()=>setOpenWeek(wOpen?null:wKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:wOpen?"#007aff06":C.bg,border:"0.5px solid "+(wOpen?"#007aff20":C.bd),borderRadius:8,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                    <button onClick={()=>setOpenWeek(wOpen?null:wKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:wOpen?"#007aff06":C.bg,border:"0.5px solid "+(wOpen?"#007aff20":C.bd),borderRadius:8,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                       <span style={{fontSize:13}}>{wOpen?"📂":"📁"}</span>
                       <span style={{fontSize:12,fontWeight:600,color:C.tx,flex:1,textAlign:"left"}}>Semana {w}</span>
                       <span style={{fontSize:10,color:C.t2}}>{wOrders.length} orden{wOrders.length!==1?"es":""}</span>
@@ -9443,7 +9443,7 @@ function WebCartChildRow({order,onApprove,onReject,busy}){
     {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:10}}><span style={{fontSize:11,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"3px 10px",borderRadius:6}}>⏳ Procesando...</span></div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:10,fontWeight:600,color:C.t2,fontFamily:"monospace",letterSpacing:0.3}}>{order.web_folio||order.id}</div>
+        <div style={{fontSize:10,fontWeight:600,color:C.t2,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3}}>{order.web_folio||order.id}</div>
         <div style={{fontSize:12,fontWeight:600,color:C.tx,marginTop:2}}>{order.product_type||"Producto"}{order.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
         {(order.paper_type||order.width_cm||order.standard_size)&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>{order.paper_type||""}{order.paper_grammage?" "+order.paper_grammage+"g":""}{order.standard_size?" | "+ssLabel(order.standard_size):(order.width_cm?" | "+order.width_cm+"×"+order.height_cm+"cm":"")}{order.ink_front?" | F:"+order.ink_front:""}{order.ink_back?" V:"+order.ink_back:""}</div>}
         {order.finishes&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>✨ {order.finishes}</div>}
@@ -9647,7 +9647,7 @@ function Analytics({orders,onReload}) {
     {/* Tab navigation */}
     <DualScroll style={{display:"flex",gap:4,marginBottom:16}}>
       {[{id:"finance",l:"💰 Financiero"},{id:"machines",l:"🏭 Máquinas"},{id:"efficiency",l:"📊 Eficiencia"},{id:"clients",l:"👥 Clientes"},{id:"storage",l:"📁 Archivos"}].map(t=>
-        <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>{t.l}</button>
+        <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{t.l}</button>
       )}
     </DualScroll>
 
@@ -10603,7 +10603,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                     border: "none",
                     borderRadius: 8,
                     cursor: "pointer",
-                    fontFamily: "'Poppins',sans-serif",
+                    fontFamily: "'Geist',sans-serif",
                     flexShrink: 0
                   }}
                 >
@@ -11006,7 +11006,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
       {[{id:"folios",l:"📄 Folios Fiscales (D- / R-)"},{id:"production",l:"📋 Órdenes de Producción (P-XXXX)"}].map(t=>
         <button key={t.id} onClick={()=>{if(tab!==t.id){setTab(t.id);setSearch("");setStatusChip("all")}}}
-          style={{background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
+          style={{background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
           {t.l}
         </button>
       )}
@@ -11034,7 +11034,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     {/* v10.43.18 QW2 — Chips de filtro por status */}
     <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
       {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:"⚠️ Solo gaps",c:C.dn},{id:"duplicate",l:"Duplicados",c:C.wn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"preassigned",l:"⚡ Pre-asignados",c:C.wn}].map(chip=>
-        <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>{chip.l}</button>
+        <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
       )}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
@@ -11065,7 +11065,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {sharedOCs.map(po=><div key={po.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:C.sf,borderRadius:8,flexWrap:"wrap"}}>
           <span style={{fontSize:12,fontWeight:800,color:C.ac}}>🛒 {po.id}</span>
-          <span style={{fontSize:13,fontWeight:700,color:tColor,fontFamily:"monospace"}}>{po.shared_invoice_folio}</span>
+          <span style={{fontSize:13,fontWeight:700,color:tColor,fontFamily:"'Geist Mono',monospace"}}>{po.shared_invoice_folio}</span>
           <span style={{fontSize:11,fontWeight:600,color:C.tx}}>{po.client}</span>
           <span style={{fontSize:10,color:C.t2,marginLeft:"auto"}}><strong>{po.orderCount}</strong> orden{po.orderCount!==1?"es":""} · {po.folios_locked?"🔒 bloqueada":"abierta"}</span>
         </div>)}
@@ -11126,7 +11126,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
             <div style={{fontSize:12,color:C.tx,fontWeight:600}}>{o.client}</div>
             {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
-            {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"monospace"}}>PO: {o.coronaPoRef}</div>}
+            {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</div>}
             {isCorona&&o.coronaAmountWithIva&&<div style={{fontSize:10,color:"#10b981",fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</div>}
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
           </div>;
@@ -11194,7 +11194,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         {/* QW2 chips */}
         <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
           {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:"⚠️ Solo gaps",c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:"📄 Con folio fiscal",c:"#5856d6"},{id:"no_folio",l:"💰 Sin folio (saldo Corona)",c:"#10b981"}].map(chip=>
-            <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>{chip.l}</button>
+            <button key={chip.id} onClick={()=>setStatusChip(chip.id)} style={{padding:"4px 10px",borderRadius:14,border:"1px solid "+(statusChip===chip.id?chip.c:C.bd),background:statusChip===chip.id?chip.c+"15":"transparent",color:statusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
           )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
@@ -11512,7 +11512,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
             {statusBadge(selectedOC.status)}
             {isWeb && <span style={{fontSize:11,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",letterSpacing:0.3}}>🌐 Pedido web</span>}
-            {hasShared && <span style={{fontSize:11,fontWeight:700,color:sharedFolioColor,background:sharedFolioColor+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",fontFamily:"monospace"}}>{sharedFolioIcon} {selectedOC.shared_invoice_folio} compartido</span>}
+            {hasShared && <span style={{fontSize:11,fontWeight:700,color:sharedFolioColor,background:sharedFolioColor+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{sharedFolioIcon} {selectedOC.shared_invoice_folio} compartido</span>}
             {isLocked && <span style={{fontSize:11,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap"}} title={selectedOC.folios_lock_reason||"OC bloqueada por folios pre-asignados"}>🔒 Bloqueada</span>}
           </div>
         </div>
@@ -11600,7 +11600,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
               {ocAgent&&<div style={{marginTop:3}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{ocAgent}</span></div>}
               {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
                 {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3}}>🌐 Pedido web</span>}
-                {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
+                {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"'Geist Mono',monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
                 {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"2px 6px",borderRadius:4}} title={po.folios_lock_reason||"OC bloqueada"}>🔒 Bloqueada</span>}
               </div>}
               <div style={{display:"flex",gap:10,marginTop:8,fontSize:11,color:C.t2,flexWrap:"wrap"}}>
@@ -11636,7 +11636,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
               const yOCs = months.reduce((s,m)=>s+histTree[y][m].length, 0);
               const yTotal = months.reduce((s,m)=>s+histTree[y][m].filter(po=>po.status==="completed").reduce((s2,po)=>s2+(parseFloat(po.total)||0),0), 0);
               return <div key={y} style={{marginBottom:8}}>
-                <button onClick={()=>setOpenHistYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                <button onClick={()=>setOpenHistYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                   <span style={{fontSize:18}}>{yOpen?"📂":"📁"}</span>
                   <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
                   <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yOCs} OC{yOCs!==1?"s":""}</span>
@@ -11652,7 +11652,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                     const mTotal = mOCs.filter(po=>po.status==="completed").reduce((s,po)=>s+(parseFloat(po.total)||0),0);
                     const mCancel = mOCs.filter(po=>po.status==="cancelled").length;
                     return <div key={m} style={{marginBottom:4}}>
-                      <button onClick={()=>setOpenHistMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                      <button onClick={()=>setOpenHistMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                         <span style={{fontSize:15}}>{mOpen?"📂":"📁"}</span>
                         <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{OC_MONTHS[mi]} {y}</span>
                         <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mOCs.length} OC{mOCs.length!==1?"s":""}</span>
@@ -11850,7 +11850,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         <span style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
         <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
         <span style={{fontSize:10,color:C.t3}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
-        {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"monospace"}}>{o.invoice_folio}</span>}
+        {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
         <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
         {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.ok,marginLeft:"auto"}}>{fmt(m)}</span>}
       </div>
@@ -13950,7 +13950,7 @@ export default function PrintFlow() {
 
   // v10.17.0 — Mostrar loading screen mientras se restaura la sesión (evita flash del Login)
   if(!authChecked) return (
-    <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Poppins',sans-serif"}}>
+    <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Geist',sans-serif"}}>
       <div style={{textAlign:"center"}}>
         <div style={{fontSize:36,fontWeight:800,color:C.tx,marginBottom:6,letterSpacing:"-0.5px"}}>Σ PrintFlow</div>
         <div style={{fontSize:12,color:C.t2,fontWeight:500}}>⏳ Cargando...</div>
@@ -13963,7 +13963,7 @@ export default function PrintFlow() {
   );
 
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
-  const rC={produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",secretaria:"#5856d6",vendedor:"#d97706",karla:"#a855f7",admin:C.ok};
+  const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a"};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
   // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
@@ -13992,17 +13992,17 @@ export default function PrintFlow() {
   const navClick=(id)=>{setView(id);if(id!=="form")setEditO(null);setShowMoreMenu(false)};
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Poppins',sans-serif",color:C.tx,display:"flex",alignItems:"flex-start"}}>
+    <div style={{minHeight:"100vh",background:C.canvas,fontFamily:"'Geist',sans-serif",color:C.tx,display:"flex",alignItems:"flex-start"}}>
       <link href={FNT} rel="stylesheet"/>
       <style>{`@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes menuFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}`}</style>
       {/* ═══ SIDEBAR (v10.60.0 redesign) ═══ */}
-      <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.sf,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
+      <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.card,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
         <div style={{display:"flex",alignItems:"center",gap:9,padding:"15px 16px",minHeight:58,flexShrink:0}}>
           <img src={LOGO} alt="" style={{width:30,height:30,borderRadius:8,flexShrink:0}}/>
           {!sbCollapsed&&<><span style={{fontWeight:800,fontSize:15.5,letterSpacing:.3,whiteSpace:"nowrap"}}>PrintFlow</span><div style={{width:7,height:7,borderRadius:"50%",background:connected===null?"#ff9500":connected?C.ok:C.dn,marginLeft:"auto",flexShrink:0}} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."}/></>}
         </div>
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
-          {navs.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Poppins',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}
+          {navs.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}
         </div>
         <div style={{borderTop:"0.5px solid "+C.bd,padding:"8px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           {!sbCollapsed&&<div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}><div style={{width:27,height:27,borderRadius:8,background:(rC[user]||C.ac)+"1a",color:rC[user]||C.ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(userName||rL[user]||"?").charAt(0).toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{userName||rL[user]}</div><div style={{fontSize:9.5,color:C.t3}}>{rL[user]}</div></div></div>}
@@ -14015,9 +14015,9 @@ export default function PrintFlow() {
       <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"nowrap",gap:6,minWidth:0}}>
         {/* logo + nav movidos al Sidebar lateral (v10.60.0) */}
         <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}>
-          {visibleNavs.map(n=><button key={n.id} onClick={()=>navClick(n.id)} style={{background:view===n.id?C.acL:"transparent",border:"none",color:view===n.id?C.ac:C.t2,padding:"7px 11px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap"}}>{n.i} {n.l}</button>)}
+          {visibleNavs.map(n=><button key={n.id} onClick={()=>navClick(n.id)} style={{background:view===n.id?C.acL:"transparent",border:"none",color:view===n.id?C.ac:C.t2,padding:"7px 11px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{n.i} {n.l}</button>)}
           {moreNavs.length>0&&<div style={{position:"relative"}}>
-            <button onClick={()=>setShowMoreMenu(!showMoreMenu)} title="Más vistas" style={{background:moreActive?C.acL:"transparent",border:"none",color:moreActive?C.ac:C.t2,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"'Poppins',sans-serif",whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",gap:3,transition:"background 0.15s, color 0.15s"}} onMouseEnter={e=>{if(!moreActive){e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!moreActive){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>
+            <button onClick={()=>setShowMoreMenu(!showMoreMenu)} title="Más vistas" style={{background:moreActive?C.acL:"transparent",border:"none",color:moreActive?C.ac:C.t2,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",gap:3,transition:"background 0.15s, color 0.15s"}} onMouseEnter={e=>{if(!moreActive){e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!moreActive){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>
               <div style={{display:"flex",flexDirection:"column",gap:3,width:14}}>
                 <div style={{height:1.5,background:"currentColor",borderRadius:1}}/>
                 <div style={{height:1.5,background:"currentColor",borderRadius:1,width:10}}/>
@@ -14027,13 +14027,13 @@ export default function PrintFlow() {
             </button>
             {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:997}} onClick={()=>setShowMoreMenu(false)}/><div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.bg,borderRadius:14,boxShadow:"0 12px 40px -8px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.04)",border:"0.5px solid "+C.bd,zIndex:998,minWidth:220,overflow:"hidden",animation:"menuFade 0.18s ease-out"}}>
               <div style={{padding:"12px 16px 8px",fontSize:10,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:0.6}}>Más vistas</div>
-              {moreNavs.map((n,i)=><button key={n.id} onClick={()=>navClick(n.id)} onMouseEnter={e=>{if(view!==n.id)e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{if(view!==n.id)e.currentTarget.style.background="transparent"}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",background:view===n.id?C.acL:"transparent",color:view===n.id?C.ac:C.tx,cursor:"pointer",fontSize:12.5,fontWeight:view===n.id?700:500,fontFamily:"'Poppins',sans-serif",textAlign:"left",transition:"background 0.12s"}}><span style={{fontSize:14,width:18,textAlign:"center"}}>{n.i}</span>{n.l}</button>)}
+              {moreNavs.map((n,i)=><button key={n.id} onClick={()=>navClick(n.id)} onMouseEnter={e=>{if(view!==n.id)e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{if(view!==n.id)e.currentTarget.style.background="transparent"}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",background:view===n.id?C.acL:"transparent",color:view===n.id?C.ac:C.tx,cursor:"pointer",fontSize:12.5,fontWeight:view===n.id?700:500,fontFamily:"'Geist',sans-serif",textAlign:"left",transition:"background 0.12s"}}><span style={{fontSize:14,width:18,textAlign:"center"}}>{n.i}</span>{n.l}</button>)}
             </div></>}
           </div>}
         </div>
         {/* v10.43.23 — minWidth:0 permite que la sección se comprima (input shrink) en vez de envolver a 2da fila */}
         <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,flexShrink:1}}>
-          {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap"}}>👤 Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Poppins',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap"}}>📋 Todas</button></div>}
+          {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap"}}>👤 Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap"}}>📋 Todas</button></div>}
           {/* v10.43.23 — search comprimible: minWidth:90, flexShrink:1 → se adapta al espacio sin tirar el layout */}
           <input style={{...inp,width:160,minWidth:90,flexShrink:1,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="🔍 Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
@@ -14062,7 +14062,7 @@ export default function PrintFlow() {
             <span style={{fontSize:11,color:C.t2,fontWeight:600}}>👤 Ver como rol:</span>
             {[{v:"",l:"Admin (todo)"},{v:"karla",l:"🟣 Karla"},{v:"produccion",l:"🔵 Gerardo"},{v:"preprensa",l:"🩷 Noemí"},{v:"german",l:"🩵 Germán"},{v:"secretaria",l:"🟪 Lupita"},{v:"vendedor",l:"🟠 Vendedor"}].map(opt=>(
               <button key={opt.v} onClick={()=>{setAdminRoleFilter(opt.v);setTaskFilters(new Set())}}
-                style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
+                style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                 {opt.l}
               </button>
             ))}
