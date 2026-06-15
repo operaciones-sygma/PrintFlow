@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -9649,30 +9649,30 @@ function Analytics({orders,onReload}) {
   return <div>
     {/* Tab navigation */}
     <DualScroll style={{display:"flex",gap:4,marginBottom:16}}>
-      {[{id:"finance",l:"💰 Financiero"},{id:"machines",l:"🏭 Máquinas"},{id:"efficiency",l:"📊 Eficiencia"},{id:"clients",l:"👥 Clientes"},{id:"storage",l:"📁 Archivos"}].map(t=>
-        <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{t.l}</button>
+      {[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}].map(t=>
+        <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{display:"inline-flex",alignItems:"center",gap:6,background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{(()=>{const TI=t.ic;return <TI size={13} weight="bold"/>})()}{t.l}</button>
       )}
     </DualScroll>
 
     {/* ══ FINANCIERO ══ */}
     {tab==="finance"&&<div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l="💰 Ingresos Totales" v={fmt(totalRev)} s={orders.length+" órdenes"} c={C.ok} big/>
-        <Stat l="🏭 Producción Interna" v={fmt(tR)} s={intOrders.length+" órdenes"} c={C.ac} big/>
-        <Stat l="🚚 Maquila" v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)+" ("+(mR>0?Math.round(((mR-mC)/mR)*100):0)+"%)"} c="#e67e22" big/>
-        <Stat l="🎫 Ticket Promedio" v={fmt(avgTicket)} s={del.length+" entregadas"} c="#5856d6" big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>Ingresos Totales</span>} v={fmt(totalRev)} s={orders.length+" órdenes"} c={C.ok} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FactoryIcon size={10} weight="bold"/>Producción Interna</span>} v={fmt(tR)} s={intOrders.length+" órdenes"} c={C.ac} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TruckIcon size={10} weight="bold"/>Maquila</span>} v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)+" ("+(mR>0?Math.round(((mR-mC)/mR)*100):0)+"%)"} c="#e67e22" big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TicketIcon size={10} weight="bold"/>Ticket Promedio</span>} v={fmt(avgTicket)} s={del.length+" entregadas"} c="#5856d6" big/>
       </div>
 
       {/* Mes actual vs anterior */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}>📅 Mes Actual</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CalendarDotsIcon size={11} weight="bold"/>Mes Actual</div>
           <div style={{fontSize:28,fontWeight:800,color:C.ok}}>{fmt(curRev)}</div>
-          <div style={{fontSize:11,color:revChange>=0?C.ok:C.dn,fontWeight:600,marginTop:4}}>{revChange>=0?"▲":"▼"} {Math.abs(revChange)}% vs mes anterior</div>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:revChange>=0?C.ok:C.dn,fontWeight:600,marginTop:4}}>{revChange>=0?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}{Math.abs(revChange)}% vs mes anterior</div>
           <div style={{fontSize:10,color:C.t3,marginTop:2}}>{byMonth[curM]?.cnt||0} órdenes · {byMonth[curM]?.del||0} entregadas</div>
         </div>
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}>📅 Mes Anterior</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CalendarDotsIcon size={11} weight="bold"/>Mes Anterior</div>
           <div style={{fontSize:28,fontWeight:800,color:C.t2}}>{fmt(prevRev)}</div>
           <div style={{fontSize:10,color:C.t3,marginTop:4}}>{byMonth[prevM]?.cnt||0} órdenes · {byMonth[prevM]?.del||0} entregadas</div>
         </div>
@@ -9680,7 +9680,7 @@ function Analytics({orders,onReload}) {
 
       {/* Revenue trend */}
       {months.length>1&&<div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}>📈 Tendencia Mensual</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrendUpIcon size={13} weight="bold"/>Tendencia Mensual</div>
         <div style={{display:"flex",alignItems:"flex-end",gap:8,height:120}}>
           {months.map(([m,d])=>{const h=Math.max((d.rev/maxMR)*100,4);const isCur=m===curM;return <div key={m} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
             <div style={{fontSize:9,fontWeight:700,color:isCur?C.ok:C.t2}}>{fmt(d.rev).replace("MXN","").trim()}</div>
@@ -9692,7 +9692,7 @@ function Analytics({orders,onReload}) {
 
       {/* Products by revenue */}
       <div style={{background:C.sf,borderRadius:14,padding:16}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}>📊 Productos por Ingreso</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Productos por Ingreso</div>
         {sT.map(([t,d],i)=><div key={t} style={{marginBottom:8}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12}}>{t}</span><span style={{fontSize:11,color:C.t2}}>{fmt(d.rev)} · {d.cnt} órdenes</span></div>
           <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((d.rev/mxT)*100)+"%",height:"100%",background:cls[i%cls.length],borderRadius:3}}/></div>
@@ -9704,14 +9704,14 @@ function Analytics({orders,onReload}) {
     {tab==="machines"&&<div>
       {!selMachine?<>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-          <Stat l="⏱ Horas Trabajadas" v={fmtM(mStats.reduce((s,x)=>s+x.t,0))} s={availHrsPerMachine>0?("de "+availHrsPerMachine+"h disponibles · "+workDays+" días"):""} c="#007aff" big/>
-          <Stat l="💰 MXN/Hora Real" v={fmt(availHrsPerMachine>0?mStats.reduce((s,x)=>s+x.rev,0)/availHrsPerMachine:0)} s="ingresos ÷ horas disponibles" c={C.ok} big/>
-          <Stat l="📊 Utilización Prom." v={mStats.length>0?Math.round(mStats.reduce((s,x)=>s+x.util,0)/mStats.length)+"%":"—"} s="horas trabajadas ÷ disponibles" c={C.ac} big/>
+          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClockIcon size={10} weight="bold"/>Horas Trabajadas</span>} v={fmtM(mStats.reduce((s,x)=>s+x.t,0))} s={availHrsPerMachine>0?("de "+availHrsPerMachine+"h disponibles · "+workDays+" días"):""} c="#007aff" big/>
+          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>MXN/Hora Real</span>} v={fmt(availHrsPerMachine>0?mStats.reduce((s,x)=>s+x.rev,0)/availHrsPerMachine:0)} s="ingresos ÷ horas disponibles" c={C.ok} big/>
+          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ChartBarIcon size={10} weight="bold"/>Utilización Prom.</span>} v={mStats.length>0?Math.round(mStats.reduce((s,x)=>s+x.util,0)/mStats.length)+"%":"—"} s="horas trabajadas ÷ disponibles" c={C.ac} big/>
         </div>
         <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>Click en una máquina para ver detalle</div>
         {["preprensa","offset","digital","acabados"].map(type=>{const ms=mStats.filter(x=>x.m?.type===type);if(!ms.length)return null;
           return <div key={type} style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:600,color:tc[type],textTransform:"uppercase",marginBottom:8}}>{type==="preprensa"?"💿 Pre-prensa":type==="offset"?"⚙️ Offset":type==="digital"?"🖨️ Digital":"🔧 Acabados"}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:tc[type],textTransform:"uppercase",marginBottom:8}}>{type==="preprensa"?<><DiscIcon size={12} weight="bold"/>Pre-prensa</>:type==="offset"?<><GearIcon size={12} weight="bold"/>Offset</>:type==="digital"?<><PrinterIcon size={12} weight="bold"/>Digital</>:<><WrenchIcon size={12} weight="bold"/>Acabados</>}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
               {ms.map(x=><div key={x.mid} onClick={()=>setSelMachine(x.mid)} style={{background:C.sf,borderRadius:12,padding:14,cursor:"pointer",border:"0.5px solid "+C.bd,transition:"all .2s"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -9728,10 +9728,10 @@ function Analytics({orders,onReload}) {
               </div>)}
             </div>
           </div>})}
-        {mStats.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>🏭</div><div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin datos de máquinas</div><div style={{fontSize:12,marginTop:4}}>Los tiempos se registran al mover órdenes en el Tablero</div></div>}
+        {mStats.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin datos de máquinas</div><div style={{fontSize:12,marginTop:4}}>Los tiempos se registran al mover órdenes en el Tablero</div></div>}
       </>:selM&&<div>
         {/* Machine detail view */}
-        <button onClick={()=>setSelMachine(null)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,marginBottom:14}}>← Volver a todas</button>
+        <button onClick={()=>setSelMachine(null)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,marginBottom:14}}><CaretLeftIcon size={14} weight="bold"/>Volver a todas</button>
         <div style={{background:C.sf,borderRadius:16,padding:20,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div><div style={{fontSize:22,fontWeight:800}}>{selM.m.name}</div><div style={{fontSize:12,color:tc[selM.m.type],fontWeight:600}}>{selM.m.type.charAt(0).toUpperCase()+selM.m.type.slice(1)} · {selM.m.sub}</div></div>
@@ -9747,7 +9747,7 @@ function Analytics({orders,onReload}) {
 
           {/* Products for this machine */}
           <div style={{marginBottom:16}}>
-            <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>📊 Productos en esta máquina</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}><ChartBarIcon size={12} weight="bold"/>Productos en esta máquina</div>
             {Object.entries(selM.types).sort((a,b)=>b[1]-a[1]).map(([t,c],i)=>{const mx2=Object.values(selM.types).reduce((a,b)=>Math.max(a,b),1);return <div key={t} style={{marginBottom:6}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:11}}>{t}</span><span style={{fontSize:10,color:C.t2}}>{c} ({Math.round(c/selM.j*100)}%)</span></div>
               <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:((c/mx2)*100)+"%",height:"100%",background:cls[i%cls.length],borderRadius:3}}/></div>
@@ -9756,7 +9756,7 @@ function Analytics({orders,onReload}) {
 
           {/* Recent jobs on this machine */}
           <div>
-            <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>📋 Últimos trabajos ({Math.min(selM.orders.length,10)})</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}><ListBulletsIcon size={12} weight="bold"/>Últimos trabajos ({Math.min(selM.orders.length,10)})</div>
             {selM.orders.slice(-10).reverse().map((job,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<9?"0.5px solid "+C.bd:"none"}}>
               <div><div style={{fontSize:12,fontWeight:600}}>{job.client}</div><div style={{fontSize:9,color:C.t3}}>{job.type} · {job.id}</div></div>
               <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:"#007aff"}}>{fmtM(job.min)}</div>{job.price>0&&<div style={{fontSize:9,color:C.ok}}>{fmt(job.price)}</div>}</div>
@@ -9769,16 +9769,16 @@ function Analytics({orders,onReload}) {
     {/* ══ EFICIENCIA ══ */}
     {tab==="efficiency"&&<div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l="✅ Entregas a Tiempo" v={onTimePct+"%"} s={onTime+" de "+(onTime+late)} c={onTimePct>=80?C.ok:onTimePct>=60?C.wn:C.dn} big/>
-        <Stat l="⏱ Días Promedio" v={avgDays+"d"} s="creación → entrega" c="#007aff" big/>
-        <Stat l="📄 Merma Pliegos" v={totalWastePl} s="total acumulado" c={C.wn} big/>
-        <Stat l="📦 Merma Piezas" v={totalWastePz} s="total acumulado" c={C.wn} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CheckCircleIcon size={10} weight="bold"/>Entregas a Tiempo</span>} v={onTimePct+"%"} s={onTime+" de "+(onTime+late)} c={onTimePct>=80?C.ok:onTimePct>=60?C.wn:C.dn} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClockIcon size={10} weight="bold"/>Días Promedio</span>} v={avgDays+"d"} s="creación → entrega" c="#007aff" big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FileTextIcon size={10} weight="bold"/>Merma Pliegos</span>} v={totalWastePl} s="total acumulado" c={C.wn} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><PackageIcon size={10} weight="bold"/>Merma Piezas</span>} v={totalWastePz} s="total acumulado" c={C.wn} big/>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
         {/* On-time visual */}
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}>📅 Puntualidad de Entregas</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><CalendarDotsIcon size={13} weight="bold"/>Puntualidad de Entregas</div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}>
             <div style={{position:"relative",width:120,height:120}}>
               <svg viewBox="0 0 36 36" style={{width:120,height:120,transform:"rotate(-90deg)"}}>
@@ -9792,19 +9792,19 @@ function Analytics({orders,onReload}) {
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"center",gap:16,fontSize:11}}>
-            <span style={{color:C.ok}}>✅ {onTime} a tiempo</span>
-            <span style={{color:C.dn}}>⚠️ {late} retrasadas</span>
+            <span style={{color:C.ok,display:"inline-flex",alignItems:"center",gap:4}}><CheckCircleIcon size={11} weight="fill"/>{onTime} a tiempo</span>
+            <span style={{color:C.dn,display:"inline-flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>{late} retrasadas</span>
           </div>
         </div>
 
         {/* Stale orders */}
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}>⚠️ Órdenes Estancadas</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><WarningIcon size={13} weight="fill"/>Órdenes Estancadas</div>
           {orders.filter(o=>getStale(o)).map(o=>{const s=getStale(o);return <div key={o.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"0.5px solid "+C.bd}}>
             <div><div style={{fontSize:11,fontWeight:600}}>{o.client}</div><div style={{fontSize:9,color:C.t3}}>{SM[o.stage]?.l} · {o.product_type}</div></div>
             <span style={{background:(s.lv==="critical"?C.dn:C.wn)+"15",color:s.lv==="critical"?C.dn:C.wn,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:700,alignSelf:"center"}}>{s.lb}</span>
           </div>})}
-          {orders.filter(o=>getStale(o)).length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.ok,fontSize:12}}>✅ Sin órdenes estancadas</div>}
+          {orders.filter(o=>getStale(o)).length===0&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 0",color:C.ok,fontSize:12}}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
         </div>
       </div>
     </div>}
@@ -9812,13 +9812,13 @@ function Analytics({orders,onReload}) {
     {/* ══ CLIENTES ══ */}
     {tab==="clients"&&<div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l="👥 Clientes Únicos" v={Object.keys(byClient).length} c={C.ac} big/>
-        <Stat l="💰 Ingreso/Cliente" v={fmt(totalRev/(Object.keys(byClient).length||1))} c={C.ok} big/>
-        <Stat l="📋 Órdenes/Cliente" v={(orders.length/(Object.keys(byClient).length||1)).toFixed(1)} c="#5856d6" big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UsersIcon size={10} weight="bold"/>Clientes Únicos</span>} v={Object.keys(byClient).length} c={C.ac} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>Ingreso/Cliente</span>} v={fmt(totalRev/(Object.keys(byClient).length||1))} c={C.ok} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ListBulletsIcon size={10} weight="bold"/>Órdenes/Cliente</span>} v={(orders.length/(Object.keys(byClient).length||1)).toFixed(1)} c="#5856d6" big/>
       </div>
 
       <div style={{background:C.sf,borderRadius:14,padding:16}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}>🏆 Top 10 Clientes por Facturación</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrophyIcon size={13} weight="bold"/>Top 10 Clientes por Facturación</div>
         {topClients.map(([name,d],i)=>{const mxC=topClients[0]?.[1]?.rev||1;return <div key={name} style={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -9953,8 +9953,8 @@ function WIPDashboard({ orders, role, onAction }) {
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
-      <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: C.tx }}>
-        💰 Dinero en Proceso
+      <h2 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 20, fontWeight: 800, margin: "0 0 8px", color: C.tx }}>
+        <CurrencyDollarIcon size={22} weight="bold"/>Dinero en Proceso
       </h2>
       <p style={{ fontSize: 12, color: C.t2, margin: "0 0 24px" }}>
         Distribución de capital atorado por zona del workflow. Excluye entregadas, canceladas y rechazadas.
@@ -9974,7 +9974,7 @@ function WIPDashboard({ orders, role, onAction }) {
         />
         <StatCard
           label="Sin precio"
-          value={totals.withoutPriceCount > 0 ? "⚠️ " + totals.withoutPriceCount : "✅ 0"}
+          value={totals.withoutPriceCount > 0 ? <span style={{display:"inline-flex",alignItems:"center",gap:5}}><WarningIcon size={16} weight="fill"/>{totals.withoutPriceCount}</span> : <span style={{display:"inline-flex",alignItems:"center",gap:5}}><CheckCircleIcon size={16} weight="fill"/>0</span>}
           color={totals.withoutPriceCount > 0 ? "#ff9500" : "#34c759"}
         />
         <StatCard
@@ -9986,7 +9986,7 @@ function WIPDashboard({ orders, role, onAction }) {
       </div>
 
       {/* Zonas */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>📊 Por zona del workflow</h3>
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><ChartBarIcon size={16} weight="bold"/>Por zona del workflow</h3>
       <div style={{ marginBottom: 24 }}>
         {byZone.map(zone => (
           <div key={zone.id} style={{
@@ -10011,8 +10011,8 @@ function WIPDashboard({ orders, role, onAction }) {
               <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: zone.color }}>{zone.label}</span>
                 <span style={{ fontSize: 11, color: C.t3 }}>{zone.count} órd</span>
-                {zone.avgDays > 0 && <span style={{ fontSize: 11, color: C.t3 }}>⏱️ {zone.avgDays.toFixed(1)}d prom</span>}
-                {zone.withoutPrice > 0 && <span style={{ fontSize: 11, color: "#ff9500", fontWeight: 600 }}>⚠️ {zone.withoutPrice} sin precio</span>}
+                {zone.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: C.t3 }}><ClockIcon size={11}/>{zone.avgDays.toFixed(1)}d prom</span>}
+                {zone.withoutPrice > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: "#ff9500", fontWeight: 600 }}><WarningIcon size={11} weight="fill"/>{zone.withoutPrice} sin precio</span>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span style={{ fontSize: 14, fontWeight: 800, color: C.tx }}>
@@ -10024,8 +10024,8 @@ function WIPDashboard({ orders, role, onAction }) {
                   </span>
                 )}
                 {zone.count > 0 && (
-                  <span style={{ fontSize: 12, color: C.t3 }}>
-                    {expandedZone === zone.id ? "▼" : "▶"}
+                  <span style={{ fontSize: 12, color: C.t3, display:"inline-flex", alignItems:"center" }}>
+                    {expandedZone === zone.id ? <CaretDownIcon size={12} weight="bold"/> : <CaretRightIcon size={12} weight="bold"/>}
                   </span>
                 )}
               </div>
@@ -10045,7 +10045,7 @@ function WIPDashboard({ orders, role, onAction }) {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: stage.color }}>{stage.label}</span>
                         <span style={{ fontSize: 10, color: C.t3 }}>{stage.count} órd</span>
-                        {stage.avgDays > 0 && <span style={{ fontSize: 10, color: C.t3 }}>⏱️ {stage.avgDays.toFixed(1)}d</span>}
+                        {stage.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 10, color: C.t3 }}><ClockIcon size={10}/>{stage.avgDays.toFixed(1)}d</span>}
                       </div>
                       <span style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
                         ${stage.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}
@@ -10082,8 +10082,8 @@ function WIPDashboard({ orders, role, onAction }) {
 
                 {zone.byMachine && zone.byMachine.length > 0 && (
                   <div style={{ marginTop: 12, padding: "10px", background: "#ff950008", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#ff9500", marginBottom: 6 }}>
-                      🏭 Por máquina
+                    <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 11, fontWeight: 700, color: "#ff9500", marginBottom: 6 }}>
+                      <FactoryIcon size={12} weight="bold"/>Por máquina
                     </div>
                     {zone.byMachine.map(m => (
                       <div key={m.machine} style={{
@@ -10108,7 +10108,7 @@ function WIPDashboard({ orders, role, onAction }) {
       </div>
 
       {/* Top 5 clientes */}
-      <h3 style={{ fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>🏆 Top 5 clientes con dinero atorado</h3>
+      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><TrophyIcon size={16} weight="bold"/>Top 5 clientes con dinero atorado</h3>
       <div style={{
         background: "#fff",
         borderRadius: 12,
@@ -10148,8 +10148,8 @@ function WIPDashboard({ orders, role, onAction }) {
       {/* Alertas: órdenes sin precio */}
       {totals.withoutPriceList.length > 0 && (
         <>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
-            ⚠️ Órdenes sin precio capturado
+          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: "#ff9500", margin: "0 0 12px" }}>
+            <WarningIcon size={16} weight="fill"/>Órdenes sin precio capturado
           </h3>
           <div style={{
             background: "#ff950008",
@@ -10183,10 +10183,13 @@ function WIPDashboard({ orders, role, onAction }) {
                     color: "#fff",
                     border: "none",
                     borderRadius: 8,
-                    cursor: "pointer"
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5
                   }}
                 >
-                  ✏️ Editar Precio
+                  <NotePencilIcon size={12} weight="bold"/>Editar Precio
                 </button>
               </div>
             ))}
