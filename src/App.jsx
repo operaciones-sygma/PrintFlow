@@ -10144,6 +10144,55 @@ function WIPDashboard({ orders, role, onAction }) {
   );
 }
 
+// v10.59.1 — Modal admin para FUSIONAR clientes duplicados (UVEG, etc.)
+function ClientMergeModal({onClose, showToast, userLogin}) {
+  useEscClose(onClose);
+  const [keepText,setKeepText]=useState(""); const [keep,setKeep]=useState(null);
+  const [mergeText,setMergeText]=useState(""); const [merge,setMerge]=useState(null);
+  const [preview,setPreview]=useState(null); const [busy,setBusy]=useState(false);
+  useEffect(()=>{
+    if(keep?.id&&merge?.id&&keep.id!==merge.id){
+      supabase.rpc("merge_clients_preview",{p_keep_id:keep.id,p_merge_id:merge.id}).then(({data})=>setPreview(data||null)).catch(()=>setPreview(null));
+    }else setPreview(null);
+  },[keep,merge]);
+  const both=keep?.id&&merge?.id&&keep.id!==merge.id;
+  const doMerge=async()=>{
+    if(!both)return;
+    if(!window.confirm("¿Fusionar \""+merge.name+"\" → \""+keep.name+"\"?\n\nTodo lo del duplicado (órdenes, OCs, facturas, vales, ledger Corona, agentes) se reasigna al cliente que CONSERVAS, y el duplicado se desactiva. Verifica bien cuál conservas (el que tenga el RFC correcto)."))return;
+    setBusy(true);
+    try{
+      const {data,error}=await supabase.rpc("merge_clients",{p_keep_id:keep.id,p_merge_id:merge.id,p_actor:userLogin||"sistema"});
+      if(error)throw error;
+      showToast("✅ Fusionado: \""+data.merged+"\" → \""+data.keep+"\"");
+      onClose();
+    }catch(e){showToast("❌ No se pudo fusionar: "+(e?.message||"error"),"error");setBusy(false)}
+  };
+  const pick=(label,text,setText,sel,setSel,color)=><div style={{flex:1}}>
+    <div style={{fontSize:11,fontWeight:700,color:color,marginBottom:4}}>{label}</div>
+    <ClientInput value={text} onChange={v=>{setText(v);setSel(null)}} onSelect={c=>{setSel(c);setText(c.name)}} clients={[]}/>
+    {sel&&<div style={{fontSize:10,color:C.t2,marginTop:3}}>RFC: {sel.rfc||"—"} · {sel.billing_mode||"normal"}</div>}
+  </div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,.35)"}}>
+      <div style={{fontSize:17,fontWeight:800,color:C.tx}}>🔗 Fusionar clientes duplicados</div>
+      <div style={{fontSize:11,color:C.t2,margin:"4px 0 16px"}}>Reasigna TODO del duplicado al cliente que conservas y lo desactiva. Ej: "UVEG" → "UNIVERSIDAD VIRTUAL DEL ESTADO".</div>
+      <div style={{display:"flex",gap:12,marginBottom:14}}>
+        {pick("✅ CONSERVAR (canónico)",keepText,setKeepText,keep,setKeep,C.ok)}
+        {pick("❌ FUSIONAR (duplicado)",mergeText,setMergeText,merge,setMerge,C.dn)}
+      </div>
+      {preview&&<div style={{background:C.sf,borderRadius:10,padding:"10px 14px",fontSize:12,color:C.t2,marginBottom:14}}>
+        <b style={{color:C.tx}}>Se reasignarán del duplicado:</b><br/>
+        {preview.ordenes} órdenes · {preview.ocs} OCs · {preview.facturas} facturas · {preview.vales} vales · {preview.ledger_corona} mov. Corona · {preview.productos_stock} productos · {preview.agentes} agentes
+      </div>}
+      {both&&keep.billing_mode!==merge.billing_mode&&<div style={{fontSize:11,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:8,padding:"8px 10px",marginBottom:12}}>⚠️ Tienen billing_mode distinto ({keep.billing_mode} vs {merge.billing_mode}). Asegúrate de conservar el correcto (ej. el de Corona/anticipo si aplica).</div>}
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
+        <button onClick={doMerge} disabled={!both||busy} style={{flex:1,padding:11,borderRadius:10,border:"none",background:both&&!busy?C.dn:"#d1d1d6",color:"#fff",fontWeight:700,cursor:both&&!busy?"pointer":"not-allowed"}}>{busy?"⏳ Fusionando...":"🔗 Fusionar"}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 // v10.54.5 m2 — Modal admin para limpiar histórico de print_audit
 function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
   useEscClose(onClose);
@@ -10224,9 +10273,10 @@ function StatCard({ label, value, subValue, color }) {
 }
 
 // ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
-function OperationalHealthView({ orders, role, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
+function OperationalHealthView({ orders, role, userLogin, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
   // v10.54.5 m2 — modal admin para limpiar histórico de impresiones
   const [showPrintCleanup, setShowPrintCleanup] = useState(false);
+  const [showMergeClients, setShowMergeClients] = useState(false);
   const [expandedSection, setExpandedSection] = useState({});
 
   // v10.32.0 — admin (Salud Operativa completa) o secretaria (Datos Pendientes con scope limitado)
@@ -10389,7 +10439,8 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: 1280, margin: "0 auto" }}>
-      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast} userLogin={userLogin||user}/>}
+      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast} userLogin={userLogin}/>}
+      {showMergeClients && <ClientMergeModal onClose={()=>setShowMergeClients(false)} showToast={showToast} userLogin={userLogin}/>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
@@ -10401,9 +10452,14 @@ function OperationalHealthView({ orders, role, notifications, maintenance, purch
           </p>
         </div>
         {role === "admin" && (
-          <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
-            🧹 Mantenimiento
-          </button>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>setShowMergeClients(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Fusionar clientes duplicados (admin)">
+              🔗 Fusionar clientes
+            </button>
+            <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
+              🧹 Mantenimiento
+            </button>
+          </div>
         )}
       </div>
 
@@ -13910,7 +13966,7 @@ export default function PrintFlow() {
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📊 Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
         {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>📑 Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}>📂 Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
