@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -8352,34 +8352,34 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     </div>
 
     {!compact&&canAct&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
-      {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8}}>⏳ Procesando...</span></div>}
-      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={bt("#ec4899")}>✏️ Editar Specs</button>}{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#007aff")}>📋 Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={bt(C.ok)}>✅ Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}>✅ Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={bt(C.ok)}>✅ Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}>✅ Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt("#ec4899")}>🎨 Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-p</span></div></>}
-      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt("#8b5cf6")}>🖨️ Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt("#0891b2")}>💿 Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>⏩ Sin CTP, Lista</button></>}
-      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}>📤 Enviar Prueba al Cliente</button>}
-      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}>✅ Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}>❌ Pide Cambios</button></>}
-      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
-      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt("#06b6d4")}>📋 Placas Listas</button>}
-      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>👆 Arrastra a CTP en el Tablero Germán</div>}
+      {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
+      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={bt("#ec4899")}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#007aff")}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt("#ec4899")}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
+      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt("#8b5cf6")}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt("#0891b2")}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
+      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
+      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
+      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
+      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt("#06b6d4")}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
+      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:"#0891b2",padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
-      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}>✅ Recoger Placas → Lista</button>}
+      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
-      {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}>👆 Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
-      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button></>}
+      {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
       {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
           Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
-      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt("#0891b2")}>↩️ Regresar</button>}
-      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}>📥 Recibido de Maquila</button>}
-      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}>🔄 Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}>📦 Empaque</button></>}
-      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}>👆 Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}>📤 Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}>🚚 Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio.">📦 Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
+      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt("#0891b2")}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar</button>}
+      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt("#32ade6")}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
+      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt("#007aff")}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt("#af52de")}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
+      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:"#32ade6",padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt("#16a34a")}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt("#e67e22")}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
-      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio.">📦 Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt("#10b981")} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)">📑 Facturar por partes</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
-      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}>🚚 Marcar Enviada</button>}
-      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}>⚙️ Proveedor Trabajando</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt("#e67e22")}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
+      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
       {o.stage==="maq_in_progress"&&(()=>{
         // v10.49.1 punto 3 — Mostrar badge naranja si faltan precio cliente o costo proveedor.
         // El advance() los valida y bloquea, pero el badge avisa antes para que se complete antes de click.
@@ -8388,33 +8388,33 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         const incomplete=noPrice||noCost;
         return <>
           {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
-          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?"#d1d1d6":"#32ade6")} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}>📥 Recibimos el Trabajo</button>
+          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?"#d1d1d6":"#32ade6")} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}>📄 Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales">📑 Facturar por partes</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}>✅ Marcar como Entregada</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt("#5856d6")} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
-        {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar">📋</button>}
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir">🖨️</button>
-        <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo">🔀</button>
-        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.invoice_folio?"Editar (orden facturada)":"Editar"}>✏️</button>}
-        {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar">↩️</button>}
-        {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌</button>}
+        {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,"#5856d6")} title="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
+        <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
+        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.invoice_folio?"Editar (orden facturada)":"Editar"}><NotePencilIcon size={15} weight="bold"/></button>}
+        {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar"><ArrowUUpLeftIcon size={15} weight="bold"/></button>}
+        {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
-        {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC">↔️</button>}
+        {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
         {/* 🆕 v10.9.0 — Botón "Cancelar (NC)" solo para admin cuando hay folio */}
-        {role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"cancel_with_nc")} style={bs(C.sf,C.dn)} title="Cancelar con Nota de Crédito">❌</button>}
-        {role==="admin"&&<button onClick={()=>onAction(o.id,"delete")} style={bs(C.sf,C.dn)} title="Borrar orden">🗑️</button>}
+        {role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"cancel_with_nc")} style={bs(C.sf,C.dn)} title="Cancelar con Nota de Crédito"><XIcon size={15} weight="bold"/></button>}
+        {role==="admin"&&<button onClick={()=>onAction(o.id,"delete")} style={bs(C.sf,C.dn)} title="Borrar orden"><TrashIcon size={15} weight="bold"/></button>}
       </div>
     </div>}
 
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
-      {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC">↔️ Mover</button>}
-      {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden">❌ Cancelar</button>}
+      {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
+      {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={13} weight="bold"/>Cancelar</button>}
     </div>}
 
     {/* v10.58.50: tarjeta MUDA → contexto accionable. Si el rol NO tiene acciones en
@@ -8423,7 +8423,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
       // v10.58.52: si está "en espera" (Torre), mostrar la razón en vez del nudge
       if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10}}>
-        <span style={{fontSize:11,color:C.t2}}>🔕 En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
+        <span style={{fontSize:11,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
       </div>;
       const resp=orderResponsible(o); // v10.58.65: maquila → vendedor (no Lupita)
       if(!resp)return null;
@@ -8435,8 +8435,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         ?("capturar "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+" y marcar recibida")
         :("avanzar la orden de "+(st?.l||o.stage));
       return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f59e0b08",border:"1px solid #f59e0b25",borderRadius:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:C.t2,flex:1,minWidth:180}}>⏳ {isMaq&&(o.maq_provider||"").trim()?("En maquila con "+o.maq_provider.trim()+" — "):""}le toca a <b style={{color:C.tx}}>{respName}</b>: {hint}</span>
-        {role!==resp.role&&resp.role!=="both"&&<button onClick={()=>onAction(o.id,"nudge_responsible")} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",whiteSpace:"nowrap"}}>📣 Recordar a {resp.name}</button>}
+        <span style={{fontSize:11,color:C.t2,flex:1,minWidth:180}}><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>{isMaq&&(o.maq_provider||"").trim()?("En maquila con "+o.maq_provider.trim()+" — "):""}le toca a <b style={{color:C.tx}}>{respName}</b>: {hint}</span>
+        {role!==resp.role&&resp.role!=="both"&&<button onClick={()=>onAction(o.id,"nudge_responsible")} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",whiteSpace:"nowrap"}}><MegaphoneIcon size={12} weight="bold"/>Recordar a {resp.name}</button>}
       </div>;
     })()}
 
@@ -8444,75 +8444,75 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type!=="maquila"&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
       {o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
         <GuideBanner text="Orden esperando validación. Puedes editar mientras no validen ambos" color="#5856d6"/>
-        {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>}
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
-        <div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?"✅":"⏳"} Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?"✅":"⏳"} Pre-p</span></div>
+        {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}><NotePencilIcon size={14} weight="bold"/>Editar Orden</button>}
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
+        <div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div>
       </div>}
       {/* v10.58.41 — Genaro (vendedor owner) puede editar sus órdenes hasta antes de producción,
           incluso después de validadas, para corregir errores de captura. El historial registra
           cada cambio y se notifica al área responsable. */}
       {role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"6px 10px",background:"#5856d608",borderRadius:10,border:"1px solid #5856d620"}}>
         <span style={{fontSize:10,color:"#5856d6",fontWeight:600}}>Tu orden — puedes corregir antes de producción</span>
-        <button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}>✏️ Editar Orden</button>
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️</button>
+        <button onClick={()=>onAction(o.id,"edit")} style={bt("#5856d6")}><NotePencilIcon size={14} weight="bold"/>Editar Orden</button>
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={15} weight="bold"/></button>
       </div>}
       {/* Read-only solo si NO es vendedor-owner editable (preserva lógica original para Lupita) */}
       {!(role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft")&&(o.stage!=="draft"&&o.stage!=="salidas"&&o.stage!=="proof_client"||(o.validated_by_production&&o.validated_by_preprensa&&o.stage==="draft"))&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"#5856d608",borderRadius:10,border:"1px solid #5856d620"}}>
-        <span style={{fontSize:11,color:"#5856d6",fontWeight:600}}>🔒 Orden validada — solo lectura</span>
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️</button>
+        <span style={{fontSize:11,color:"#5856d6",fontWeight:600}}><LockIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Orden validada — solo lectura</span>
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={15} weight="bold"/></button>
       </div>}
     </div>}
 
     {/* Lupita: edit maquila orders (no validation lock). v10.58.23: vendedor también si es agent */}
     {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
-      {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}>✏️ Editar Maquila</button>}
-      <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}>🖨️ Imprimir</button>
+      {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt("#e67e22")}><NotePencilIcon size={14} weight="bold"/>Editar Maquila</button>}
+      <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
     </div>}
 
     {/* Banner especial: pedido web en draft, visible para pre-prensa y admin */}
     {!compact&&o.source==="web"&&o.stage==="draft"&&(role==="preprensa"||role==="admin")&&!o.validated_by_preprensa&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"12px 14px",background:"#fff8e1",borderRadius:10,border:"1px solid #ffe082",borderLeft:"4px solid #ff9800"}}>
       <div style={{fontSize:11,fontWeight:800,color:"#e65100",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
-        🌐 Pedido web — Acción requerida
+        <GlobeIcon size={12} weight="bold"/>Pedido web — Acción requerida
       </div>
       <div style={{fontSize:11,color:C.tx,lineHeight:1.5,marginBottom:8}}>
         Esta orden viene de la tienda en línea. El cliente ya pagó, pero el <b>tiempo de entrega prometido aún NO arranca</b>. Arrancará cuando tú valides el archivo.
       </div>
       {o.file_url?<div style={{fontSize:10.5,color:C.tx,lineHeight:1.5,marginBottom:8,padding:"6px 10px",background:"#e8f5e9",borderRadius:8,border:"0.5px solid #c8e6c9"}}>
-        ✅ <b>Archivo recibido.</b> Revísalo y valida cuando esté correcto. Al validar se calculará la fecha de entrega automáticamente.
+        <CheckCircleIcon size={13} weight="fill" color="#34c759" style={{verticalAlign:"-2px",marginRight:3}}/><b>Archivo recibido.</b> Revísalo y valida cuando esté correcto. Al validar se calculará la fecha de entrega automáticamente.
       </div>:<div style={{fontSize:10.5,color:C.tx,lineHeight:1.5,marginBottom:8,padding:"6px 10px",background:"#ffebee",borderRadius:8,border:"0.5px solid #ffcdd2"}}>
-        ⚠️ <b>Falta el archivo del cliente.</b> Avisa a Lupita con el botón de abajo para que se lo pida al cliente. <b>NO valides hasta tener el archivo correcto.</b>
+        <WarningIcon size={13} weight="fill" color="#ff9800" style={{verticalAlign:"-2px",marginRight:3}}/><b>Falta el archivo del cliente.</b> Avisa a Lupita con el botón de abajo para que se lo pida al cliente. <b>NO valides hasta tener el archivo correcto.</b>
       </div>}
       <div style={{fontSize:10,color:C.t2,lineHeight:1.5,paddingTop:6,borderTop:"0.5px solid #ffe082"}}>
-        ⏱️ <b>Reglas de tiempo de entrega</b> (días hábiles desde tu validación):<br/>
+        <ClockIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/><b>Reglas de tiempo de entrega</b> (días hábiles desde tu validación):<br/>
         • Digital: 4 días · Offset: 8 días · Acabados: +3 días extra
       </div>
-      {!o.file_url&&<button onClick={()=>onAction(o.id,"web_request_file")} style={{marginTop:8,...bs("#ff9800","#fff")}}>📩 Avisar a Lupita — Falta archivo</button>}
+      {!o.file_url&&<button onClick={()=>onAction(o.id,"web_request_file")} style={{marginTop:8,...bs("#ff9800","#fff")}}><MegaphoneIcon size={13} weight="bold"/>Avisar a Lupita — Falta archivo</button>}
     </div>}
 
     {!compact&&role==="preprensa"&&["design","proof_client"].includes(o.stage)&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"10px 12px",background:"#ec489908",borderRadius:10,border:"1px solid #ec489920"}}>
-      <div style={{fontSize:11,fontWeight:700,color:"#ec4899",marginBottom:6}}>{o.stage==="design"?"📁 Prepara el archivo para prueba de color":"📁 Sube el archivo corregido para nueva prueba"}</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#ec4899",marginBottom:6}}><FolderOpenIcon size={13} weight="bold"/>{o.stage==="design"?"Prepara el archivo para prueba de color":"Sube el archivo corregido para nueva prueba"}</div>
       {o.file_url&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-        <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} style={{fontSize:11,color:"#007aff",fontWeight:500,textDecoration:"none"}}>⬇ {o.file_name||"Descargar archivo"}</a>
+        <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} style={{fontSize:11,color:"#007aff",fontWeight:500,textDecoration:"none"}}><DownloadSimpleIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.file_name||"Descargar archivo"}</a>
       </div>}
       <div style={{fontSize:10,color:C.t2,marginBottom:6}}>{o.file_url?"Borra el archivo viejo y sube tu versión preparada":"Sube el archivo listo para producción"}</div>
-      <button onClick={()=>onAction(o.id,"edit_specs")} style={bs("#ec4899")}>📁 Gestionar Archivo</button>
+      <button onClick={()=>onAction(o.id,"edit_specs")} style={bs("#ec4899")}><FolderOpenIcon size={13} weight="bold"/>Gestionar Archivo</button>
     </div>}
     {!compact&&role==="german"&&o.stage==="proof_printing"&&o.file_url&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"10px 12px",background:"#0891b208",borderRadius:10,border:"1px solid #0891b220"}}>
-      <div style={{fontSize:11,fontWeight:700,color:"#0891b2",marginBottom:4}}>📁 Archivo para imprimir</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#0891b2",marginBottom:4}}><FolderOpenIcon size={13} weight="bold"/>Archivo para imprimir</div>
       <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} style={{display:"flex",alignItems:"center",gap:6,background:C.sf,borderRadius:8,padding:"8px 12px",textDecoration:"none",border:"0.5px solid "+C.bd}}>
-        <span style={{fontSize:18}}>📄</span><div><div style={{fontSize:11,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}>⬇ Click para descargar</div></div>
+        <FileTextIcon size={20} weight="bold" color="#007aff" style={{flexShrink:0}}/><div><div style={{fontSize:11,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:"#007aff",fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div>
       </a>
     </div>}
     {!compact&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&expanded&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.wn+"06",borderRadius:10}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:11,color:C.wn,fontWeight:600}}>🗑️ Merma</span><button onClick={()=>onAction(o.id,"waste")} style={bs(C.wn)}>+ Registrar</button></div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{fontSize:11,color:C.wn,fontWeight:600}}><TrashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Merma</span><button onClick={()=>onAction(o.id,"waste")} style={bs(C.wn)}>+ Registrar</button></div>
       {(o.waste_log||[]).length>0&&<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>{(o.waste_log||[]).map((w,i)=><span key={i} style={{fontSize:9,color:C.wn,background:C.bg,padding:"2px 8px",borderRadius:6}}>{w.pliegos?"📄"+w.pliegos+"pl":""}{w.pliegos&&w.qty?" ":""}{w.qty?"📦"+w.qty+"pz":""}{w.note?" — "+w.note:""}</span>)}</div>}
     </div>}
     {!compact&&hasSecondary&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",alignItems:"center",gap:6}}>
       <button onClick={()=>setExpanded(!expanded)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"3px 10px",fontSize:10,gap:4}}>
-        {expanded?"▲ Menos":hasContent?("▼ Más"+(o.timeline?.length>0?" · 📜"+o.timeline.length:"")+((o.comments?.length>0||o.notes_log?.length>0)?" · 💬":"")):"💬 Notas"}
+        {expanded?<><CaretUpIcon size={10} weight="bold"/>Menos</>:hasContent?<><CaretDownIcon size={10} weight="bold"/>Más{o.timeline?.length>0?<span style={{display:"inline-flex",alignItems:"center",gap:2}}><ClockCounterClockwiseIcon size={10} weight="bold"/>{o.timeline.length}</span>:null}{(o.comments?.length>0||o.notes_log?.length>0)?<ChatCircleIcon size={10} weight="bold"/>:null}</>:<><ChatCircleIcon size={10} weight="bold"/>Notas</>}
       </button>
-      {!expanded&&(o.waste_log||[]).length>0&&<span style={{fontSize:9,color:C.wn,fontWeight:600}}>🗑️ {(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0)+(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0)} merma</span>}
-      {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.wn),padding:"3px 8px",fontSize:9}}>🗑️+</button>}
+      {!expanded&&(o.waste_log||[]).length>0&&<span style={{fontSize:9,color:C.wn,fontWeight:600}}><TrashIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0)+(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0)} merma</span>}
+      {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.wn),padding:"3px 8px",fontSize:9}}><TrashIcon size={11} weight="bold"/>+</button>}
     </div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
     {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand).
@@ -9536,7 +9536,7 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
           // Sin cart_folio: card individual idéntico al UI previo
           const o=g.orders[0];const busy=actionLoading===o.id;
           return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
-            {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8}}>⏳ Procesando...</span></div>}
+            {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
               <div style={{display:"flex",flexDirection:"column",gap:3}}>
                 {o.cart_folio&&<span style={{fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}>🛒 {o.cart_folio}</span>}
