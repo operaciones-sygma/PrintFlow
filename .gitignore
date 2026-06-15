@@ -21,3 +21,8 @@ dist/
 .env.*
 !.env.example
 secrets/
+
+# Tooling artifacts (Graphify, stray diffs)
+graphify-out/
+_fix_diff.txt
+*.diff.txt
