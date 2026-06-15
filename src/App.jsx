@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -2453,22 +2453,22 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
     <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"94%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>📦 Inventario Cuadra</h3>
+          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><PackageIcon size={18} weight="bold"/>Inventario Cuadra</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>Productos en stock · {products.length} SKUs</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center"}}>
-        {[{id:"products",l:"📦 Productos"},{id:"movements",l:"📋 Movimientos"},{id:"history",l:"📚 Historial"}].map(t=>
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Geist',sans-serif"}}>{t.l}</button>
+        {[{id:"products",ic:PackageIcon,l:"Productos"},{id:"movements",ic:ListBulletsIcon,l:"Movimientos"},{id:"history",ic:BooksIcon,l:"Historial"}].map(t=>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?"#10b98115":"transparent",color:tab===t.id?"#10b981":C.t2,fontWeight:700,fontSize:12,fontFamily:"'Geist',sans-serif"}}>{(()=>{const TI=t.ic;return <TI size={13} weight="bold"/>})()}{t.l}</button>
         )}
         <div style={{flex:1}}/>
         {/* v10.55.0 — Carrito de venta batch (sustituye el flujo individual sell_from_stock con folio compartido) */}
         {/* v10.58.30 BUG #2: gatear a admin/karla (alineado con backend bulk_sell_from_stock). Antes
             usaba canExecuteAction("sell_from_stock") que incluía secretaria/vendedor, pero el backend
             rechaza con 42501 → UX broken. */}
-        {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}>🛒 Carrito de venta</button>}
-        {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}>➕ Nuevo Producto</button>}
+        {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}><ShoppingCartIcon size={14} weight="bold"/>Carrito de venta</button>}
+        {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}><PlusIcon size={14} weight="bold"/>Nuevo Producto</button>}
       </div>
       {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
@@ -2491,13 +2491,13 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                     <div style={{display:"flex",gap:6,marginTop:10}}>
                       {/* v10.54.9 — botones gated por role. Gerardo (produccion) puede load_stock pero NO ajustar/vender/eliminar */}
                       {/* v10.55.0 — "🛒 Vender" individual eliminado: ahora todo va por el Carrito de venta (header) con folio compartido */}
-                      {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}>📊 Ajustar</button>}
+                      {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}><ChartBarIcon size={12} weight="bold"/>Ajustar</button>}
                       {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
                       {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&<button onClick={async()=>{
                         if(!confirm("¿Eliminar producto \""+p.name+"\" del catálogo?\n\nSolo se permite porque stock=0. Esta acción no se puede deshacer."))return;
                         try{await db.deleteClientProduct(p.id);showToast("🗑️ Producto eliminado");await reload()}
                         catch(e){showToast("❌ No se pudo eliminar: "+e.message,"error")}
-                      }} title="Eliminar producto (solo si stock=0)" style={{...bt(C.dn+"15",C.dn),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}>🗑️</button>}
+                      }} title="Eliminar producto (solo si stock=0)" style={{...bt(C.dn+"15",C.dn),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}><TrashIcon size={13} weight="bold"/></button>}
                     </div>
                   </div>
                 )}
@@ -2509,10 +2509,10 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
               {movements.map(m=>{
                 const prod=products.find(p=>p.id===m.client_product_id);
                 const color=m.kind==="PRODUCED"?"#10b981":m.kind==="SOLD"?"#16a34a":"#f59e0b";
-                const icon=m.kind==="PRODUCED"?"📥":m.kind==="SOLD"?"📤":"📊";
+                const MIcon=m.kind==="PRODUCED"?DownloadSimpleIcon:m.kind==="SOLD"?ExportIcon:ChartBarIcon;
                 return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color}}>{icon} {m.kind}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}><MIcon size={12} weight="bold"/>{m.kind}</div>
                     <div style={{fontSize:11,marginTop:2}}>{prod?.name||"(producto)"}</div>
                     {m.notes&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{m.notes}</div>}
                     <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}</div>
@@ -2539,19 +2539,19 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                   const isProd=o.stock_role==="production";
                   const isSale=o.stock_role==="sale";
                   const color=isProd?"#10b981":isSale?"#16a34a":C.t2;
-                  const icon=isProd?"📦":isSale?"🛒":"·";
+                  const HIcon=isProd?PackageIcon:isSale?ShoppingCartIcon:null;
                   const label=isProd?(o.stock_loaded?"a Stock":"a Stock (pendiente)"):(isSale?"desde Stock":"—");
                   const stageLabel=SM[o.stage]?.l||o.stage;
                   return <div key={o.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                          <span style={{fontSize:12,fontWeight:700,color}}>{icon} {label}</span>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{HIcon?<HIcon size={12} weight="bold"/>:"·"}{label}</span>
                           <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{o.production_number||"—"}</span>
                           {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759"}}>{o.invoice_folio}</span>}
                         </div>
                         <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
-                        {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{o.client_agent}</span></div>}
+                        {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
                         <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
                         <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
@@ -2627,18 +2627,18 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
   const canSave=clientId&&name.trim();
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:440,width:"94%"}}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 14px"}}>➕ Nuevo Producto al Catálogo</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 14px"}}><PlusIcon size={17} weight="bold"/>Nuevo Producto al Catálogo</h3>
       <div style={{marginBottom:10}}>
         <label style={lbl}>Cliente (stock) *</label>
         <select style={inp} value={clientId} onChange={e=>setClientId(e.target.value)} disabled={loadingClients||stockClients.length===0}>
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes stock —":"Selecciona cliente…")}</option>
           {stockClients.map(c=><option key={c.id} value={c.id}>{c.name}{c.pool_name?" · pool "+c.pool_name:""}</option>)}
         </select>
-        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ No hay clientes con billing_mode=stock.</div>}
+        {!loadingClients&&stockClients.length===0&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.wn,marginTop:4}}><WarningIcon size={11} weight="fill"/>No hay clientes con billing_mode=stock.</div>}
         {/* v10.48.0 — Aviso si el cliente seleccionado comparte stock con otros del mismo pool */}
         {(()=>{const sel=stockClients.find(c=>c.id===clientId);if(!sel?.stock_pool_id)return null;
           const others=stockClients.filter(c=>c.stock_pool_id===sel.stock_pool_id&&c.id!==sel.id);
-          return <div style={{fontSize:10,color:"#10b981",marginTop:4,padding:"4px 8px",background:"#10b98108",borderRadius:6,lineHeight:1.4}}>📦 Producto compartido con pool <b>{sel.pool_name}</b> · {others.length} clientes más usan este stock</div>;
+          return <div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:"#10b981",marginTop:4,padding:"4px 8px",background:"#10b98108",borderRadius:6,lineHeight:1.4}}><PackageIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Producto compartido con pool <b>{sel.pool_name}</b> · {others.length} clientes más usan este stock</span></div>;
         })()}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
@@ -2656,7 +2656,7 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
             ? {client_id:null,stock_pool_id:sel.stock_pool_id,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null}
             : {client_id:clientId,stock_pool_id:null,name:name.trim(),sku:sku.trim()||null,unit_price:null,created_by:userLogin||null};
           onSave(payload);
-        }} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}>💾 Guardar</button>
+        }} disabled={!canSave} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:canSave?1:.4,cursor:canSave?"pointer":"not-allowed"}}><FloppyDiskIcon size={14} weight="bold"/>Guardar</button>
       </div>
     </div>
   </div>;
@@ -2680,7 +2680,7 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:420,width:"94%"}}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste de Stock</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><ChartBarIcon size={17} weight="bold"/>Ajuste de Stock</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
         <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:18,fontWeight:800}}>{product.stock_actual}</div></div>
@@ -2698,7 +2698,7 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Aplicando...":"📊 Aplicar"}</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Aplicando...</>:<><ChartBarIcon size={14} weight="bold"/>Aplicar</>}</button>
       </div>
     </div>
   </div>;
@@ -3583,7 +3583,7 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Aplicando...":"📊 Aplicar"}</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#f59e0b":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Aplicando...</>:<><ChartBarIcon size={14} weight="bold"/>Aplicar</>}</button>
       </div>
     </div>
   </div>;
