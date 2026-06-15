@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -6832,8 +6832,8 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
   return <div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:14}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <span style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>📊 Resumen Semanal</span>
-      {isAdmin&&<button onClick={()=>setExpanded(!expanded)} style={{...bs(C.bg,C.ac),boxShadow:"0 0 0 0.5px "+C.bd,fontSize:10}}>{expanded?"▲ Cerrar":"▼ Reporte Completo"}</button>}
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><ChartBarIcon size={13} weight="bold"/>Resumen Semanal</span>
+      {isAdmin&&<button onClick={()=>setExpanded(!expanded)} style={{...bs(C.bg,C.ac),boxShadow:"0 0 0 0.5px "+C.bd,fontSize:10}}>{expanded?<><CaretUpIcon size={11} weight="bold"/>Cerrar</>:<><CaretDownIcon size={11} weight="bold"/>Reporte Completo</>}</button>}
     </div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><St l="Creadas" v={created.length} c={C.ac}/><St l="Entregadas" v={delivered.length} c={C.ok}/><St l="Facturado" v={fmt(rev)} c={C.ok}/><St l="Con retraso" v={late} c={late>0?C.dn:C.ok}/></div>
 
@@ -6858,7 +6858,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
       {/* Top clients */}
       {topClients.length>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:4}}>🏅 Top Clientes de la Semana</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:4}}><TrophyIcon size={12} weight="bold"/>Top Clientes de la Semana</div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{topClients.map(([name,amt],i)=>
           <div key={i} style={{background:C.bg,borderRadius:8,padding:"6px 10px",fontSize:11}}>
             <span style={{fontWeight:700}}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":"  "} {name}</span>
@@ -6869,7 +6869,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
       {/* Top products */}
       {topProducts.length>0&&<div style={{marginBottom:10}}>
-        <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:4}}>📦 Productos más producidos</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:4}}><PackageIcon size={12} weight="bold"/>Productos más producidos</div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{topProducts.map(([name,cnt],i)=>
           <div key={i} style={{background:C.bg,borderRadius:8,padding:"4px 10px",fontSize:11}}>
             <span style={{fontWeight:600}}>{name}</span>
@@ -6880,7 +6880,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
       {/* Stale orders */}
       {staleOrders.length>0&&<div>
-        <div style={{fontSize:10,fontWeight:600,color:C.dn,textTransform:"uppercase",marginBottom:4}}>⚠️ Órdenes Estancadas ({staleOrders.length})</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.dn,textTransform:"uppercase",marginBottom:4}}><WarningIcon size={12} weight="fill"/>Órdenes Estancadas ({staleOrders.length})</div>
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{staleOrders.slice(0,8).map(o=>
           <div key={o.id} style={{background:C.dn+"08",borderRadius:8,padding:"4px 10px",fontSize:10,border:"0.5px solid "+C.dn+"20"}}>
             <span style={{fontWeight:600}}>{o.client}</span>
@@ -8590,13 +8590,13 @@ function Pipeline({orders,role,onAction}) {
   const intO=orders.filter(o=>o.order_type!=="maquila"&&o.stage!=="delivered"&&o.stage!=="cancelled"&&o.stage!=="web_pending"&&o.stage!=="web_rejected");const maqO=orders.filter(o=>o.order_type==="maquila"&&o.stage!=="maq_delivered"&&o.stage!=="maq_cancelled");
   const delC=orders.filter(o=>o.stage.includes("delivered")).length;const staleC=orders.filter(o=>getStale(o)).length;
   return <div>
-    {staleC>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}>⚠️ {staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
-    <div style={{fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}>🏭 Internas ({intO.length})</div>
+    {staleC>0&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}><WarningIcon size={15} weight="fill" style={{flexShrink:0}}/>{staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
+    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}><FactoryIcon size={13} weight="bold"/>Internas ({intO.length})</div>
     <DualScroll style={{display:"flex",gap:6,paddingBottom:10,marginBottom:16}}>
       {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
       <div style={{minWidth:90,flex:"0 0 auto",background:C.ok+"08",borderRadius:14,padding:12,borderTop:"3px solid "+C.ok,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:22,fontWeight:800,color:C.ok}}>{delC}</div><div style={{fontSize:9,color:C.t2}}>Entregadas</div></div>
     </DualScroll>
-    {maqO.length>0&&<><div style={{fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}>🚚 Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
+    {maqO.length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}><TruckIcon size={13} weight="bold"/>Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
   </div>;
 }
 
