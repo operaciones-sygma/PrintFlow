@@ -1178,7 +1178,7 @@ const C={bg:"#ffffff",canvas:"#f5f5f7",card:"#ffffff",sf:"#f4f4f6",bd:"#e7e7ec",
 // 🌐 v10.12.0 Sub-fase C — Azul saturado para badges de OCs web (distinto del cian #06b6d4 usado en cart_folio)
 const WEB_BLUE="#3b82f6";
 const FNT="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap";
-const inp={width:"100%",padding:"10px 14px",fontFamily:"'Geist',sans-serif",fontSize:13,border:"none",borderRadius:12,background:"#fff",color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)",WebkitAppearance:"none"};
+const inp={width:"100%",padding:"10px 14px",fontFamily:"'Geist',sans-serif",fontSize:13,border:"none",borderRadius:10,background:C.card,color:C.tx,boxSizing:"border-box",outline:"none",boxShadow:"0 0 0 1px "+C.bd,WebkitAppearance:"none"};
 
 // v10.21.0 — DualScroll: barras de scroll horizontal arriba y abajo, sincronizadas.
 // Pensado para users con mouse tradicional (sin trackpad) que no pueden deslizar lateralmente.
@@ -1231,7 +1231,7 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
   img.src = url;
 });
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
-const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
+const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
 
 const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento, borra el viejo y sube tu archivo preparado para prueba de color",design:"Prepara los archivos. Borra el documento anterior y sube el archivo listo. Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada",maq_received:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada"}};
@@ -8670,7 +8670,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           <div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>Órdenes Listas</div><div style={{fontSize:10,color:C.t2}}>Arrastra a máquinas, Empaque o Salidas</div></div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok)}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok)}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{fontSize:12,fontWeight:700}}>⠿ {o.client}</div>
@@ -11589,7 +11589,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
             // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
             const isWeb = po.is_web_oc === true;
             const cartFolio = isWeb ? getCartFolio(po) : null;
-            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.bg,borderRadius:12,padding:14,cursor:"pointer",border:"1px solid "+C.bd,borderLeft:"4px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac)),boxShadow:"0 1px 4px rgba(0,0,0,0.04)",transition:"transform 0.1s"}} onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"} onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
+            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",borderLeft:"4px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac)),boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                 {isWeb ? <div>
                   <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3}}>🛒 {cartFolio}</div>
