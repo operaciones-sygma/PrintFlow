@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -8633,15 +8633,15 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",borderLeft:"3px solid "+(o.priority==="urgente"?C.dn:borderColor),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <span style={{fontSize:11,fontWeight:700}}>⠿ {o.client}</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
       {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
     {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes,
         Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
-    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-block"}}>🔁 REIMPRIMIR</span>}
-    {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-block"}}>🔴 URGENTE</span>}
-    {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
+    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
+    {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
+    {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
   </div>;
 
   return <div>
@@ -8675,22 +8675,22 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok)}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{fontSize:12,fontWeight:700}}>⠿ {o.client}</div>
+            <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
             <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
-            {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>📄 {o.paper_type}</div>}
+            {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
-            {o.stage==="maquila_in"&&<span style={{background:"#32ade612",color:"#32ade6",padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>📥 De maquila</span>}
-            {o.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700}}>🔴</span>}
+            {o.stage==="maquila_in"&&<span style={{background:"#32ade612",color:"#32ade6",padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>De maquila</span>}
+            {o.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><CircleIcon size={9} weight="fill"/></span>}
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           </div>
         </div>
-        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
     {/* Empty state */}
-    {ready.length===0&&inProd.length===0&&inManual.length===0&&inSalidas.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>🏭</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Cuando una orden esté lista, arrástrala aquí</div></div>}
+    {ready.length===0&&inProd.length===0&&inManual.length===0&&inSalidas.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Cuando una orden esté lista, arrástrala aquí</div></div>}
 
     {/* ═══ TWO-COLUMN LAYOUT: Machines left + Sticky sidebar right ═══ */}
     <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
@@ -8707,7 +8707,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 {cnt>0&&<div style={{background:cc[type],color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{cnt} en producción</div>}
-                <span style={{fontSize:14,color:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)"}}>{isCol?"›":"▼"}</span>
+                <span style={{fontSize:14,color:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
               </div>
             </div>
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
@@ -8717,54 +8717,54 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                     style={{background:inMaint?"#ff950008":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid #ff950040":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
                       <div>
-                        <div style={{fontSize:13,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?"🔧 ":""}{m.name}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
                         <div style={{fontSize:9,color:inMaint?C.wn:cc[type],fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
                         {hasWork?<div style={{background:cc[type],color:"#fff",width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{mo.length}</div>
                         :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>—</div>}
-                        {(role==="produccion"||role==="admin")&&!inMaint&&!hasWork&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"3px 6px",fontSize:9,fontWeight:600,cursor:"pointer"}} title="Mantenimiento">🔧</button>}
-                        {inMaint&&role==="admin"&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"3px 6px",fontSize:9,fontWeight:600,cursor:"pointer"}} title="Quitar mantenimiento">✅</button>}
+                        {(role==="produccion"||role==="admin")&&!inMaint&&!hasWork&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"3px 6px",fontSize:9,fontWeight:600,cursor:"pointer"}} title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
+                        {inMaint&&role==="admin"&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"3px 6px",fontSize:9,fontWeight:600,cursor:"pointer"}} title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
                       </div>
                     </div>
                     {inMaint&&!hasWork?<div style={{textAlign:"center",padding:"12px 0",color:C.wn,fontSize:11,fontWeight:600}}>
-                      🔧 Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
+                      <WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
                     </div>
                     :mo.length===0?<div style={{textAlign:"center",padding:"12px 0",color:isD?cc[type]:C.ph,fontSize:isD?12:10,fontWeight:isD?600:400,transition:"all .15s"}}>
-                      {isD?"⬇ Soltar aquí":"Disponible"}
+                      {isD?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Disponible"}
                     </div>
                     :<>
                       {/* v10.26.0 — Activa (timer corriendo) */}
                       {activa&&<div key={activa.id} style={{border:"2px solid #34c759",borderRadius:10,padding:6,marginBottom:6,background:"#34c75908"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-                          <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
+                          <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
                           {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
                         </div>
                         <DragCard o={activa} borderColor={cc[type]} reorderMachine={m.id}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
-                          <button onClick={()=>onAction(activa.id,"advance","packaging")} style={bs("#af52de")}>📦 Empaque</button>
-                          {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                          <button onClick={()=>onAction(activa.id,"advance","packaging")} style={bs("#af52de")}><PackageIcon size={13} weight="bold"/>Empaque</button>
+                          {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={13} weight="bold"/></button>}
                         </div>
                       </div>}
                       {/* v10.26.0 — Cola en espera */}
                       {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
-                        <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
+                        <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
                         {enEspera.map(o=><div key={o.id} draggable
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
-                            <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3}}><DotsSixVerticalIcon size={11}/>#{o.machine_queue_position}</span>
                             <div style={{display:"flex",gap:3}}>
-                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
-                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                             </div>
                           </div>
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-                            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+                            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                           </div>
                         </div>)}
                       </div>}
@@ -8783,20 +8783,20 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           style={{borderRadius:14,border:dO==="vm_manual"?"2px solid #af52de":"1.5px solid #af52de40",background:dO==="vm_manual"?"#af52de12":"#af52de06",transition:"all .15s",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid #af52de20",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:13,fontWeight:800,color:"#af52de"}}>📦 Empaque</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:"#af52de"}}><PackageIcon size={14} weight="bold"/>Empaque</span>
             </div>
             {inManual.length>0&&<div style={{background:"#af52de",color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inManual.length}</div>}
           </div>
           <div style={{padding:10,minHeight:60}}>
             {inManual.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_manual"?"#af52de":C.ph,fontSize:dO==="vm_manual"?11:10,fontWeight:dO==="vm_manual"?600:400}}>
-              {dO==="vm_manual"?"⬇ Soltar aquí":"Arrastra órdenes aquí"}
+              {dO==="vm_manual"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Arrastra órdenes aquí"}
             </div>
             :inManual.map(o=><div key={o.id}>
               <DragCard o={o} borderColor={"#af52de"}/>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
-                <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs("#16a34a")}>📤</button>
-                <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs("#e67e22"),padding:"4px 8px"}}>🚚</button>
-                <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}}>🗑️</button>
+                <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs("#16a34a")}><ExportIcon size={14} weight="bold"/></button>
+                <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs("#e67e22"),padding:"4px 8px"}}><TruckIcon size={14} weight="bold"/></button>
+                <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}}><TrashIcon size={14} weight="bold"/></button>
               </div>
             </div>)}
           </div>
@@ -8807,18 +8807,18 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           style={{borderRadius:14,border:dO==="vm_salidas"?"2px solid #16a34a":"1.5px solid #16a34a40",background:dO==="vm_salidas"?"#16a34a12":"#16a34a06",transition:"all .15s",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid #16a34a20",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:13,fontWeight:800,color:"#16a34a"}}>📤 Salidas</span>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:"#16a34a"}}><ExportIcon size={14} weight="bold"/>Salidas</span>
             </div>
             {inSalidas.length>0&&<div style={{background:"#16a34a",color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inSalidas.length}</div>}
           </div>
           <div style={{padding:10,minHeight:60}}>
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?"#16a34a":C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
-              {dO==="vm_salidas"?"⬇ Soltar aquí":"Sin órdenes en salida"}
+              {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
             :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
-              {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(o.due_date)}</div>}
+              {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
             </div>)}
           </div>
         </div>
@@ -8827,11 +8827,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         <div onDragOver={e=>{e.preventDefault();setDO("vm_maquila")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_maquila",e)}
           style={{borderRadius:14,border:dO==="vm_maquila"?"2px solid #e67e22":"1.5px solid #e67e2240",background:dO==="vm_maquila"?"#e67e2212":"#e67e2206",transition:"all .15s",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid #e67e2220"}}>
-            <span style={{fontSize:13,fontWeight:800,color:"#e67e22"}}>🚚 Maquila</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:"#e67e22"}}><TruckIcon size={14} weight="bold"/>Maquila</span>
           </div>
           <div style={{padding:10,minHeight:50}}>
             <div style={{textAlign:"center",padding:"8px 0",color:dO==="vm_maquila"?"#e67e22":C.ph,fontSize:dO==="vm_maquila"?11:10,fontWeight:dO==="vm_maquila"?600:400}}>
-              {dO==="vm_maquila"?"⬇ Soltar aquí":"Enviar a proveedor"}
+              {dO==="vm_maquila"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Enviar a proveedor"}
             </div>
           </div>
         </div>
@@ -8842,13 +8842,13 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     {/* Drop confirmation modal */}
     {dropConfirm&&(()=>{const queueCount=orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").length;const totalMins=(orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").reduce((s,o)=>s+(o.estimated_hours||0),0)*60);return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
       <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:420,width:"90%",textAlign:"center"}}>
-        <div style={{fontSize:36,marginBottom:8}}>{dropConfirm.fromMachine?"🔄":"🏭"}</div>
+        <div style={{marginBottom:8}}>{dropConfirm.fromMachine?<ArrowsClockwiseIcon size={34} weight="bold" color={C.ac}/>:<FactoryIcon size={34} weight="bold" color={C.ac}/>}</div>
         <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{dropConfirm.fromMachine?"¿Mover de máquina?":"¿Asignar a máquina?"}</h3>
         <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:12,textAlign:"left"}}>
           <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{dropConfirm.order.client}</div>
           <div style={{fontSize:11,color:C.t2}}>{dropConfirm.order.product_type}{dropConfirm.order.quantity?" · "+Number(dropConfirm.order.quantity).toLocaleString()+" pzas":""}</div>
-          {dropConfirm.order.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:700,marginTop:4,display:"inline-block"}}>🔴 Urgente</span>}
-          {dropConfirm.order.due_date&&<div style={{fontSize:10,color:new Date(dropConfirm.order.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(dropConfirm.order.due_date)}</div>}
+          {dropConfirm.order.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:700,marginTop:4,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
+          {dropConfirm.order.due_date&&<div style={{fontSize:10,color:new Date(dropConfirm.order.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(dropConfirm.order.due_date)}</div>}
           {dropConfirm.order.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>#{dropConfirm.order.production_number}</div>}
           <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
             {dropConfirm.fromMachine&&<><span style={{fontSize:12,fontWeight:600,color:C.dn}}>{dropConfirm.fromMachine.name}</span><span style={{fontSize:14}}>→</span></>}
@@ -8856,10 +8856,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             <span style={{fontSize:9,color:C.t2}}>({dropConfirm.machine.sub})</span>
           </div>
         </div>
-        {queueCount>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.wn,fontWeight:600}}>⚠️ Esta máquina tiene {queueCount} trabajo{queueCount>1?"s":""} en cola{totalMins>0?" (~"+fmtM(Math.round(totalMins))+")":""}</div>}
+        {queueCount>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.wn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Esta máquina tiene {queueCount} trabajo{queueCount>1?"s":""} en cola{totalMins>0?" (~"+fmtM(Math.round(totalMins))+")":""}</div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setDropConfirm(null)} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={confirmDrop} style={{...bt(dropConfirm.fromMachine?C.wn:C.ok),flex:1,justifyContent:"center"}}>{dropConfirm.fromMachine?"🔄 Sí, mover":"✅ Sí, asignar"}</button>
+          <button onClick={confirmDrop} style={{...bt(dropConfirm.fromMachine?C.wn:C.ok),flex:1,justifyContent:"center"}}>{dropConfirm.fromMachine?<><ArrowsClockwiseIcon size={14} weight="bold"/>Sí, mover</>:<><CheckCircleIcon size={14} weight="bold"/>Sí, asignar</>}</button>
         </div>
       </div>
     </div>})()}
@@ -8891,10 +8891,10 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div><div style={{fontSize:13,fontWeight:700,color:"#0891b2"}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:"#0891b2")}}>
-        <div style={{fontSize:12,fontWeight:700}}>⠿ {o.client}</div>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
-        {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>📄 {o.paper_type}</div>}
-        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}>📅 Entrega: {fD(o.due_date)}</div>}
+        {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
@@ -8905,56 +8905,56 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
           style={{background:inMaint?"#ff950008":isD?"#0891b212":C.bg,borderRadius:14,padding:16,border:inMaint?"2px solid #ff950040":isD?"2px solid #0891b2":hasWork?"1.5px solid #0891b240":"1.5px dashed "+C.bd,minHeight:120,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px #0891b215":"none",opacity:inMaint&&!hasWork?0.7:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
             <div>
-              <div style={{fontSize:15,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?"🔧 ":""}{m.name}</div>
+              <div style={{fontSize:15,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
               <div style={{fontSize:10,color:inMaint?C.wn:"#0891b2",fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
             </div>
             {hasWork?<div style={{background:"#0891b2",color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800}}>{mo.length}</div>
             :<div style={{background:C.sf,color:C.ph,width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12}}>—</div>}
           </div>
           {inMaint&&!hasWork?<div style={{textAlign:"center",padding:"16px 0",color:C.wn,fontSize:11,fontWeight:600}}>
-            🔧 Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
+            <WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
           </div>
           :mo.length===0?<div style={{textAlign:"center",padding:"16px 0",color:isD?"#0891b2":C.ph,fontSize:isD?13:11,fontWeight:isD?600:400}}>
-            {isD?"⬇ Soltar aquí":"Disponible"}
+            {isD?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Disponible"}
           </div>
           :<>
             {/* v10.26.0 — Activa (timer corriendo) */}
             {activa&&<div key={activa.id} style={{border:"2px solid #34c759",borderRadius:10,padding:8,marginBottom:8,background:"#34c75908"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-                <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase"}}>🏭 Activa</span>
+                <span style={{fontSize:9,fontWeight:800,color:"#34c759",textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
                 {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
               </div>
               <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
                 style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",borderLeft:"3px solid "+(activa.priority==="urgente"?C.dn:"#0891b2")}}>
-                {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,display:"inline-block",marginBottom:3}}>🔁 REIMPRIMIR</div>}
-                <span style={{fontSize:12,fontWeight:700}}>⠿ {activa.client}</span>
+                {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,marginBottom:3,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</div>}
+                <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{activa.client}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
-                {activa.due_date&&<div style={{fontSize:9,color:parseDate(activa.due_date)<new Date()?C.dn:C.t3,marginTop:2}}>📅 {fD(activa.due_date)}</div>}
+                {activa.due_date&&<div style={{fontSize:9,color:parseDate(activa.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(activa.due_date)}</div>}
               </div>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6,paddingLeft:2}}>
-                {activa.current_machine==="pp_proc"&&<button onClick={()=>onAction(activa.id,"advance","placas_listas")} style={bs("#06b6d4")}>📋 Placas Listas</button>}
-                {(role==="admin"||role==="german")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                {activa.current_machine==="pp_proc"&&<button onClick={()=>onAction(activa.id,"advance","placas_listas")} style={bs("#06b6d4")}><ClipboardTextIcon size={13} weight="bold"/>Placas Listas</button>}
+                {(role==="admin"||role==="german")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs("#007aff"),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={13} weight="bold"/></button>}
               </div>
             </div>}
             {/* v10.26.0 — Cola en espera */}
             {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
-              <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4}}>⏳ En espera ({enEspera.length})</div>
+              <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
               {enEspera.map(o=><div key={o.id} draggable
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                   onDragOver={e=>{e.preventDefault()}}
                   onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                   style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
-                  <span style={{fontSize:9,fontWeight:700,color:C.t3}}>⠿ #{o.machine_queue_position}</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3}}><DotsSixVerticalIcon size={11}/>#{o.machine_queue_position}</span>
                   <div style={{display:"flex",gap:3}}>
-                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa">⏯️ Activar</button>}
-                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600}} title="Sacar de la máquina y volver a Lista">🔄</button>}
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #34c759",background:"#fff",color:"#34c759",cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:8,padding:"1px 6px",borderRadius:4,border:"1px solid #007aff",background:"#fff",color:"#007aff",cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                   </div>
                 </div>
                 <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                   <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                   <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-                  {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}>📅 {fD(o.due_date)}</div>}
+                  {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                 </div>
               </div>)}
             </div>}
@@ -8962,11 +8962,11 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         </div>})}
     </div>
 
-    {readyCtp.length===0&&assigned.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>💿</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en CTP</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes llegarán aquí desde Diseño</div></div>}
+    {readyCtp.length===0&&assigned.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><DiscIcon size={46} color={C.ph}/><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en CTP</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes llegarán aquí desde Diseño</div></div>}
 
     {dropConfirm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
       <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:420,width:"90%",textAlign:"center"}}>
-        <div style={{fontSize:36,marginBottom:8}}>💿</div>
+        <div style={{marginBottom:8}}><DiscIcon size={34} weight="bold" color="#0891b2"/></div>
         <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{dropConfirm.fromMachine?"¿Mover a "+dropConfirm.machine.name+"?":"¿Asignar a "+dropConfirm.machine.name+"?"}</h3>
         <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:16,textAlign:"left"}}>
           <div style={{fontSize:13,fontWeight:700}}>{dropConfirm.order.client}</div>
@@ -8975,7 +8975,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setDropConfirm(null)} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={confirmDrop} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>✅ Sí, asignar</button>
+          <button onClick={confirmDrop} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Sí, asignar</button>
         </div>
       </div>
     </div>}
@@ -14104,7 +14104,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🌐 Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,margin:"20px 0 4px",textTransform:"uppercase",color:"#0891b2"}}>💿 Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?"✅ Marcar como Entregada":"📄 Asignar Folio y Entregar"}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>📄 Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:48}}>📤</div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?"✅ Marcar como Entregada":"📄 Asignar Folio y Entregar"}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 14px",textTransform:"uppercase"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · 🔍 "{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",textTransform:"uppercase"}}>🗂️ Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?" · 🔍 \""+search+"\"":""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}>📂 Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
