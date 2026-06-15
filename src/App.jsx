@@ -11557,16 +11557,16 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
 
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:4}}>
-      <h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase"}}>🛒 Órdenes de Compra</h2>
+      <h2 style={{fontSize:18,fontWeight:800,margin:0,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={19} weight="bold"/>Órdenes de Compra</h2>
       {canCreateOC && !historicoTab && <button onClick={()=>setShowCreateModal(true)} style={{...bt(C.ac),fontSize:12,padding:"8px 14px"}}>+ Nueva OC</button>}
     </div>
     {/* v10.32.3 — Tabs Activas / Histórico */}
     <div style={{display:"flex",gap:4,marginTop:8,marginBottom:14,borderBottom:"1px solid "+C.bd}}>
-      <button onClick={()=>setHistoricoTab(false)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:!historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(!historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer"}}>
-        📋 Activas ({tabCounts.activas})
+      <button onClick={()=>setHistoricoTab(false)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:!historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(!historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+        <ListBulletsIcon size={15} weight="bold"/>Activas ({tabCounts.activas})
       </button>
-      <button onClick={()=>setHistoricoTab(true)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer"}}>
-        📚 Histórico ({tabCounts.historico})
+      <button onClick={()=>setHistoricoTab(true)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+        <ArchiveIcon size={15} weight="bold"/>Histórico ({tabCounts.historico})
       </button>
     </div>
     <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · Read-only` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño`}</p>
