@@ -2543,7 +2543,8 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                           <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"monospace"}}>{o.production_number||"—"}</span>
                           {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759"}}>{o.invoice_folio}</span>}
                         </div>
-                        <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}{(o.client_agent||"").trim()&&<span style={{color:C.t2,fontWeight:400}}> · 👤 {o.client_agent}</span>}</div>
+                        <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
+                        {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{o.client_agent}</span></div>}
                         <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
                         <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
@@ -8313,7 +8314,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}{!hp&&vOwns&&!compact&&o.client_agent&&<span style={{fontWeight:400,color:C.t2,fontSize:11}}> · 👤 {o.client_agent}</span>}</div>
+            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}</div>
+            {!hp&&vOwns&&!compact&&(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{o.client_agent}</span></div>}
             {!compact&&!hp&&vOwns&&o.client_phone&&<div style={{fontSize:10,color:"#25d366",marginTop:1}}>📱 {o.client_lada||"+52"} {o.client_phone}</div>}
             <div style={{color:C.t2,fontSize:compact?10:11,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
             {!compact&&o.paper_type&&<div style={{color:C.t3,fontSize:10,marginTop:2}}>📄 {o.paper_type}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.standard_size?" | "+ssLabel(o.standard_size):(o.width_cm?" | "+o.width_cm+"×"+o.height_cm+"cm":"")}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
@@ -11575,7 +11577,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                 </div> : <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>}
                 {statusBadge(po.status)}
               </div>
-              <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}{ocAgent&&<span style={{color:C.t2,fontWeight:400}}> · 👤 {ocAgent}</span>}</div>
+              <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}</div>
+              {ocAgent&&<div style={{marginTop:3}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{ocAgent}</span></div>}
               {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
                 {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3}}>🌐 Pedido web</span>}
                 {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
