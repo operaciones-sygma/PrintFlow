@@ -449,6 +449,9 @@ const db = {
     if(error)throw new Error("addWaste: "+error.message);
   },
   async addMachineLog(orderId, machineId) {
+    // v10.59.3 — garantizar 1 solo log ABIERTO por orden: cerrar (capando) cualquier previo
+    // abierto antes de abrir el nuevo. Mata el caso doble-log y el timer huérfano del leak.
+    try{ await db.closeMachineLog(orderId); }catch(e){ console.warn("addMachineLog: cierre previo falló:",e); }
     const {error}=await supabase.from("order_machine_log").insert({ order_id: orderId, machine_id: machineId });
     if(error)throw new Error("addMachineLog: "+error.message);
   },
@@ -471,8 +474,12 @@ const db = {
       for (const row of data) {
         const started = new Date(row.started_at);
         const valid = !isNaN(started.getTime()); // v10.28.2 — guard NaN
-        const minutes = valid ? Math.round((ended - started) / 60000) : 0;
-        const {error}=await supabase.from("order_machine_log").update({ ended_at: ended.toISOString(), minutes }).eq("id", row.id);
+        const rawMin = valid ? Math.round((ended - started) / 60000) : 0;
+        // v10.59.3 — Cap anti-leak: una sesión dejada abierta días (>1440 min = 24h) no es
+        // tiempo real de producción (incluye noches/fines de semana). Se guarda minutes=null +
+        // minutes_invalid → excluido de KPIs (util/MXN-hora) sin inventar un número falso.
+        const invalid = rawMin > 1440;
+        const {error}=await supabase.from("order_machine_log").update({ ended_at: ended.toISOString(), minutes: invalid?null:rawMin, minutes_invalid: invalid }).eq("id", row.id);
         if(error)throw new Error("closeMachineLog update: "+error.message);
       }
     }
@@ -12431,7 +12438,7 @@ export default function PrintFlow() {
   }, [loaded, user, orders]);
 
   const addTL=(o,action,extra={})=>[...(o.timeline||[]),{action,date:new Date().toISOString(),by:user||"sistema",color:SM[extra.to]?.c||C.t3,...extra}];
-  const closeML=o=>{const l=[...(o.machine_log||[])];const now=new Date();l.forEach((e,i)=>{if(!e.ended){const s=e.started?new Date(e.started):null;const valid=s&&!isNaN(s.getTime());l[i]={...e,ended:now.toISOString(),minutes:valid?Math.round((now-s)/60000):0}}});return l}; // v10.28.1 — guard NaN si started inválido
+  const closeML=o=>{const l=[...(o.machine_log||[])];const now=new Date();l.forEach((e,i)=>{if(!e.ended){const s=e.started?new Date(e.started):null;const valid=s&&!isNaN(s.getTime());const mins=valid?Math.round((now-s)/60000):0;l[i]={...e,ended:now.toISOString(),minutes:mins>1440?null:mins}}});return l}; // v10.28.1 guard NaN · v10.59.3 cap anti-leak >1440min→null
 
   const create=useCallback(async f=>{
     const isMaq=f.order_type==="maquila";
