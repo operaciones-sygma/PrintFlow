@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -4263,7 +4263,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // ─── RENDER ───
   return <div onClick={e=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:920,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}>📑 Facturar por partes · {order?.production_number}</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><FilesIcon size={17} weight="bold"/>Facturar por partes · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
         Divide UNA orden en varias facturas con cantidades parciales.
         No confundir con "🔀 Dividir en N facturas" del modal de OC (que agrupa órdenes enteras).
@@ -4279,7 +4279,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
               {priceUnitario>0 && <span> · ${fmtMx(priceUnitario)}/pza (sin IVA)</span>}
             </div>
             {isCorona && <div style={{display:"inline-block",marginTop:6,padding:"2px 8px",background:"#10b98115",border:"1px solid #10b98140",borderRadius:6,fontSize:10,color:"#10b981",fontWeight:700}}>
-              💎 Cliente Corona · saldo disponible: ${fmtMx(coronaBalance)} (sin IVA)
+              <DiamondIcon size={11} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>Cliente Corona · saldo disponible: ${fmtMx(coronaBalance)} (sin IVA)
             </div>}
           </div>
           <div style={{textAlign:"right"}}>
@@ -4305,7 +4305,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         <div style={{flex:1}}/>
         <button onClick={divideEqualBetweenN}
           style={{...bs("#5856d6"),padding:"6px 12px"}}>
-          🪄 Dividir igual entre {splits.length}
+          <MagicWandIcon size={13} weight="bold"/>Dividir igual entre {splits.length}
         </button>
       </div>
 
@@ -4369,7 +4369,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         <div style={{background:qtyOk?"#34c75910":"#ff950010",borderRadius:8,padding:10,border:"0.5px solid "+(qtyOk?C.ok:C.wn)+"40"}}>
           <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
           <div style={{fontSize:14,fontWeight:700,color:qtyOk?C.ok:C.wn}}>
-            {qtyOk ? "✓" : "⚠"} {sumQty.toLocaleString("es-MX")} / {totalQty.toLocaleString("es-MX")}
+            {qtyOk ? <CheckIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/> : <WarningIcon size={12} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>}{sumQty.toLocaleString("es-MX")} / {totalQty.toLocaleString("es-MX")}
           </div>
           {!qtyOk && <div style={{fontSize:10,color:C.wn,marginTop:2}}>
             {sumQty < totalQty ? `Faltan ${(totalQty-sumQty).toLocaleString("es-MX")}` : `Sobran ${(sumQty-totalQty).toLocaleString("es-MX")}`}
@@ -4378,7 +4378,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         <div style={{background:amountOk?"#34c75910":"#ff950010",borderRadius:8,padding:10,border:"0.5px solid "+(amountOk?C.ok:C.wn)+"40"}}>
           <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Monto subtotal (sin IVA)</div>
           <div style={{fontSize:14,fontWeight:700,color:amountOk?C.ok:C.wn}}>
-            {amountOk ? "✓" : "⚠"} ${fmtMx(sumAmountSinIva)} / ${fmtMx(totalSinIva)}
+            {amountOk ? <CheckIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/> : <WarningIcon size={12} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>}${fmtMx(sumAmountSinIva)} / ${fmtMx(totalSinIva)}
           </div>
           {!amountOk && <div style={{fontSize:10,color:C.wn,marginTop:2}}>
             Diferencia ${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}
@@ -4390,7 +4390,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       {hasCoronaSaldo && (
         <div style={{background:coronaOk?"#10b98110":"#ff3b3010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+(coronaOk?"#10b98140":C.dn+"40")}}>
           <div style={{fontSize:11,fontWeight:700,color:coronaOk?"#10b981":C.dn}}>
-            {coronaOk ? "✓" : "⚠"} Saldo Corona requerido: ${fmtMx(coronaTotalSinIva)} (sin IVA) · disponible ${fmtMx(coronaBalance)}
+            {coronaOk ? <CheckIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/> : <WarningIcon size={12} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>}Saldo Corona requerido: ${fmtMx(coronaTotalSinIva)} (sin IVA) · disponible ${fmtMx(coronaBalance)}
           </div>
           {!coronaOk && <div style={{fontSize:10,color:C.dn,marginTop:2}}>
             Faltan ${fmtMx(coronaTotalSinIva - coronaBalance)}. Reduce el saldo a aplicar o cambia algunos splits a factura/remisión.
@@ -4401,9 +4401,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       {/* Validación folios */}
       {(!foliosFmtOk || !foliosUnicos || !foliosPrefixOk) && (
         <div style={{background:"#ff950010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn}}>
-          {!foliosFmtOk && <div>⚠ Algún folio tiene formato inválido (debe ser D-NNNN o R-NNNN sin leading zeros)</div>}
-          {!foliosPrefixOk && <div>⚠ El prefix del folio no coincide con el tipo seleccionado (factura→D-, remisión→R-)</div>}
-          {!foliosUnicos && <div>⚠ Hay folios duplicados en el plan</div>}
+          {!foliosFmtOk && <div style={{display:"flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>Algún folio tiene formato inválido (debe ser D-NNNN o R-NNNN sin leading zeros)</div>}
+          {!foliosPrefixOk && <div style={{display:"flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>El prefix del folio no coincide con el tipo seleccionado (factura→D-, remisión→R-)</div>}
+          {!foliosUnicos && <div style={{display:"flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>Hay folios duplicados en el plan</div>}
         </div>
       )}
 
@@ -4413,7 +4413,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           <input type="checkbox" checked={allPreAssigned}
             onChange={e=>setAllPreAssigned(e.target.checked)}
             style={{accentColor:C.wn,transform:"scale(1.2)"}}/>
-          🔒 Pre-asignar TODOS los folios (anticipados, orden NO pasa a entregada)
+          <LockIcon size={12} weight="bold" style={{flexShrink:0}}/>Pre-asignar TODOS los folios (anticipados, orden NO pasa a entregada)
         </label>
         <div style={{fontSize:10,color:C.t2,marginTop:4,marginLeft:24}}>
           v10.58.34: la pre-asignación es <strong>uniforme</strong> (todos los splits o ninguno). Esto evita estados de stage ambiguos.
@@ -4436,7 +4436,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         </button>
         <button onClick={handleSubmit} disabled={!canSubmit}
           style={{...bt(canSubmit?C.ac:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {saving ? "Creando..." : `📑 Crear ${splits.length} ${splits.length===1?"folio":"folios"}`}
+          {saving ? "Creando..." : <><FilesIcon size={14} weight="bold"/>Crear {splits.length} {splits.length===1?"folio":"folios"}</>}
         </button>
       </div>
 
@@ -4482,7 +4482,7 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
   return <div onClick={e=>!busy&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:20,maxWidth:500,width:"100%"}}>
       <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 4px",color:C.dn}}>
-        {isLine ? "✂ Cancelar línea del plan matriz" : "❌ Cancelar factura completa del plan matriz"}
+        {isLine ? <><ScissorsIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Cancelar línea del plan matriz</> : <><XIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Cancelar factura completa del plan matriz</>}
       </h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
         Esta acción es <strong style={{color:C.dn}}>irreversible</strong>. Se reversa el ledger Corona si aplica.
@@ -4516,7 +4516,7 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
         <button onClick={submit} disabled={!canSubmit}
           style={{...bt(canSubmit?C.dn:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {busy ? "Cancelando..." : (isLine ? "✂ Confirmar cancelar línea" : "❌ Confirmar cancelar factura")}
+          {busy ? "Cancelando..." : (isLine ? <><ScissorsIcon size={14} weight="bold"/>Confirmar cancelar línea</> : <><XIcon size={14} weight="bold"/>Confirmar cancelar factura</>)}
         </button>
       </div>
     </div>
@@ -4533,11 +4533,11 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
   const isAdmin = role === "admin";
   return <div style={{background:"#5856d608",border:"1px solid #5856d625",borderRadius:10,padding:12,marginBottom:10}}>
     <div onClick={()=>setExpanded(p=>!p)} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
-      <span style={{fontSize:13,fontWeight:700,color:"#5856d6"}}>
-        📊 {matrixPlan.alive_count||0} factura{matrixPlan.alive_count===1?"":"s"} matricial{matrixPlan.alive_count===1?"":"es"}
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,color:"#5856d6"}}>
+        <ChartBarIcon size={14} weight="bold"/>{matrixPlan.alive_count||0} factura{matrixPlan.alive_count===1?"":"s"} matricial{matrixPlan.alive_count===1?"":"es"}
         {cancelledCount > 0 && <span style={{color:C.t2,fontWeight:500,marginLeft:6,fontSize:11}}>· {cancelledCount} cancelada{cancelledCount===1?"":"s"}</span>}
       </span>
-      <span style={{fontSize:10,color:C.t2,marginLeft:"auto"}}>{expanded?"▾ ocultar":"▸ ver detalle"}</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:C.t2,marginLeft:"auto"}}>{expanded?<><CaretDownIcon size={11} weight="bold"/>ocultar</>:<><CaretRightIcon size={11} weight="bold"/>ver detalle</>}</span>
     </div>
     {expanded && <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}>
       {(matrixPlan.groups||[]).map(g => {
@@ -4545,16 +4545,16 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
         const totalAmt = Number(g.total_amount||0);
         const totalWithIva = g.doc_type === "factura" ? Math.round(totalAmt * 1.16 * 100) / 100 : totalAmt;
         const docColor = g.doc_type === "factura" ? "#5856d6" : g.doc_type === "remision" ? "#34c759" : "#10b981";
-        const docEmoji = g.doc_type === "factura" ? "📄" : g.doc_type === "remision" ? "📋" : "💎";
+        const DocIcon = g.doc_type === "factura" ? FileTextIcon : g.doc_type === "remision" ? ReceiptIcon : DiamondIcon;
         return <div key={g.id} style={{background:C.bg,borderRadius:8,padding:10,border:"0.5px solid "+(cancelled?C.dn+"40":C.bd),opacity:cancelled?0.6:1}}>
           <div style={{display:"flex",alignItems:"flex-start",gap:8,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:140}}>
               <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                <span style={{fontSize:13,fontWeight:800,color:docColor,fontFamily:"'Geist Mono',monospace"}}>{docEmoji} {g.folio || "(corona_saldo)"}</span>
+                <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:800,color:docColor,fontFamily:"'Geist Mono',monospace"}}><DocIcon size={13} weight="bold"/>{g.folio || "(corona_saldo)"}</span>
                 {g.label && <span style={{fontSize:11,color:C.tx,fontWeight:600,background:C.sf,padding:"2px 6px",borderRadius:4}}>{g.label}</span>}
-                {g.invoice_pre_assigned && <span style={{fontSize:9,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}>⚡ ANTICIPADA</span>}
-                {cancelled && <span style={{fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}>❌ CANCELADA</span>}
-                {g.payment_status==="pagada" && <span style={{fontSize:9,color:C.ok,fontWeight:700,background:C.ok+"15",padding:"1px 5px",borderRadius:3}}>✅ PAGADA</span>}
+                {g.invoice_pre_assigned && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"1px 5px",borderRadius:3}}><LightningIcon size={9} weight="fill"/>ANTICIPADA</span>}
+                {cancelled && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"1px 5px",borderRadius:3}}><XIcon size={9} weight="bold"/>CANCELADA</span>}
+                {g.payment_status==="pagada" && <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,color:C.ok,fontWeight:700,background:C.ok+"15",padding:"1px 5px",borderRadius:3}}><CheckCircleIcon size={9} weight="fill"/>PAGADA</span>}
               </div>
               <div style={{fontSize:10,color:C.t2,marginTop:3}}>
                 {(g.lines||[]).filter(l=>!l.cancelled_at).length} línea{(g.lines||[]).filter(l=>!l.cancelled_at).length===1?"":"s"} · ${fmtMx(totalAmt)} sin IVA
@@ -4565,7 +4565,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
             {!cancelled && isAdmin && <button onClick={()=>onCancelGroup&&onCancelGroup(g)} disabled={busy}
               style={{...bs(C.dn+"15",C.dn),fontSize:10,padding:"4px 10px",border:"0.5px solid "+C.dn+"40"}}
               title="Cancela esta factura completa. Si era Corona, reversa el saldo. Si tenía pagos reales, quedan registrados como discrepancia para devolución manual. La NC en SAT se emite aparte.">
-              ❌ Cancelar factura
+              <XIcon size={12} weight="bold"/>Cancelar factura
             </button>}
           </div>
           {(g.lines||[]).length > 0 && <table style={{width:"100%",fontSize:10,marginTop:8,borderCollapse:"collapse"}}>
@@ -4595,7 +4595,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
                     {!lineCancelled && !cancelled && isAdmin && <button onClick={()=>onCancelLine&&onCancelLine(l, g, order)} disabled={busy}
                       style={{...bs(C.sf,C.dn),fontSize:9,padding:"2px 7px",border:"0.5px solid "+C.dn+"30"}}
                       title="Cancelar esta línea individual. Si era la última, cancela la factura.">
-                      ✂ Cancelar
+                      <ScissorsIcon size={11} weight="bold"/>Cancelar
                     </button>}
                   </td>
                 </tr>;
