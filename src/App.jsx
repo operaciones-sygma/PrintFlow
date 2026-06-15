@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -9126,8 +9126,8 @@ function StorageTab({orders,onReload}) {
     {/* Storage usage bar */}
     <div style={{background:C.sf,borderRadius:14,padding:20,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:13,fontWeight:700}}>💾 Almacenamiento Supabase</div>
-        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{loadingSize?"⏳ Calculando...":(storageUsed!==null?(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"):"Error")}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700}}><FloppyDiskIcon size={14} weight="bold"/>Almacenamiento Supabase</div>
+        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{loadingSize?<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Calculando...</>:(storageUsed!==null?(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"):"Error")}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
       </div>
       <div style={{background:C.bg,borderRadius:8,height:20,overflow:"hidden",border:"0.5px solid "+C.bd}}>
         <div style={{width:usedPct+"%",height:"100%",background:barColor,borderRadius:8,transition:"width .8s ease",minWidth:usedPct>0?"8px":"0"}}/>
@@ -9136,40 +9136,40 @@ function StorageTab({orders,onReload}) {
         <span style={{fontSize:9,color:C.t3}}>{usedPct.toFixed(1)}% usado</span>
         <span style={{fontSize:9,color:C.t3}}>{storageUsed!==null?(maxStorage-storageUsed>=1024?((maxStorage-storageUsed)/1024).toFixed(1)+" GB libres":(maxStorage-storageUsed).toFixed(1)+" MB libres"):"—"}</span>
       </div>
-      {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600}}>{usedPct>=90?"⚠️ Almacenamiento casi lleno — limpia archivos antiguos":"⚡ Más del 70% usado — considera limpiar archivos antiguos"}</div>}
+      {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{usedPct>=90?<><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Almacenamiento casi lleno — limpia archivos antiguos</>:<><LightningIcon size={13} weight="fill" style={{flexShrink:0}}/>Más del 70% usado — considera limpiar archivos antiguos</>}</div>}
     </div>
 
     {/* v10.18.0 — Breakdown imágenes vs archivos */}
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       <div style={{flex:"1 1 200px",minWidth:180,background:C.ac+"08",border:"1px solid "+C.ac+"20",borderRadius:12,padding:14}}>
-        <div style={{fontSize:9,color:C.ac,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>📁 Archivos Producción</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.ac,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={11} weight="bold"/>Archivos Producción</div>
         <div style={{fontSize:20,fontWeight:800,color:C.ac}}>{breakdown.prod.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.prod.bytes)}</span></div>
         <div style={{fontSize:9,color:C.t3,marginTop:2}}>PDF, AI, PSD para imprenta</div>
       </div>
       <div style={{flex:"1 1 200px",minWidth:180,background:"#ec489908",border:"1px solid #ec489920",borderRadius:12,padding:14}}>
-        <div style={{fontSize:9,color:"#ec4899",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>📷 Imágenes Referencia</div>
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:"#ec4899",fontWeight:700,textTransform:"uppercase",marginBottom:4}}><CameraIcon size={11} weight="bold"/>Imágenes Referencia</div>
         <div style={{fontSize:20,fontWeight:800,color:"#ec4899"}}>{breakdown.img.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.img.bytes)}</span></div>
         <div style={{fontSize:9,color:C.t3,marginTop:2}}>Fotos para visualizar el producto</div>
       </div>
     </div>
 
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-      <Stat l="📁 Total con Archivo" v={withFile.length} s={orders.length+" órdenes totales"} c={C.ac}/>
-      <Stat l="📦 Archivos >30 días" v={oldFiles.length} s="elegibles para limpieza" c={oldFiles.length>0?C.wn:C.ok}/>
+      <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FolderOpenIcon size={10} weight="bold"/>Total con Archivo</span>} v={withFile.length} s={orders.length+" órdenes totales"} c={C.ac}/>
+      <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><PackageIcon size={10} weight="bold"/>Archivos &gt;30 días</span>} v={oldFiles.length} s="elegibles para limpieza" c={oldFiles.length>0?C.wn:C.ok}/>
     </div>
 
     {/* Bulk cleanup */}
     {oldFiles.length>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:14,padding:16,marginBottom:16}}>
-      <div style={{fontSize:12,fontWeight:600,color:C.wn,marginBottom:8}}>🗑️ Limpieza Masiva — Archivos +30 días</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:8}}><TrashIcon size={13} weight="bold"/>Limpieza Masiva — Archivos +30 días</div>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Hay {oldFiles.length} archivo{oldFiles.length>1?"s":""} de órdenes con más de 30 días.</p>
-      <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?"#d1d1d6":C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?"⏳ Limpiando...":cleaned>0?"✅ "+cleaned+" borrados":"🗑️ Borrar Todos los Antiguos ("+oldFiles.length+")"}</button>
+      <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?"#d1d1d6":C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:cleaned>0?<><CheckCircleIcon size={14} weight="bold"/>{cleaned} borrados</>:<><TrashIcon size={14} weight="bold"/>Borrar Todos los Antiguos ({oldFiles.length})</>}</button>
     </div>}
-    {oldFiles.length===0&&<div style={{background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:14,padding:16,marginBottom:16,textAlign:"center"}}><div style={{fontSize:14,fontWeight:700,color:C.ok}}>✅ Sin archivos antiguos</div><div style={{fontSize:11,color:C.t2,marginTop:4}}>Todos los archivos tienen menos de 30 días</div></div>}
+    {oldFiles.length===0&&<div style={{background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:14,padding:16,marginBottom:16,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:14,fontWeight:700,color:C.ok}}><CheckCircleIcon size={15} weight="fill"/>Sin archivos antiguos</div><div style={{fontSize:11,color:C.t2,marginTop:4}}>Todos los archivos tienen menos de 30 días</div></div>}
 
     {/* v10.18.0 — Top 5 archivos más grandes */}
     {topFiles.length>0&&<div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>🏆 Archivos Más Pesados</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><TrophyIcon size={13} weight="bold"/>Archivos Más Pesados</div>
         <div style={{fontSize:9,color:C.t3}}>Top {topFiles.length}</div>
       </div>
       {topFiles.map((f,i)=>{
@@ -9177,7 +9177,7 @@ function StorageTab({orders,onReload}) {
         return <div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topFiles.length-1?"0.5px solid "+C.bd:"none"}}>
           <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
             <div style={{fontSize:18,fontWeight:800,color:C.t3,width:18,textAlign:"center"}}>{i+1}</div>
-            <div style={{fontSize:16}}>{f.isOrphan?"🧩":f.isImage?"📷":"📁"}</div>
+            <div style={{display:"flex",alignItems:"center"}}>{f.isOrphan?<PuzzlePieceIcon size={16} weight="bold" color={C.wn}/>:f.isImage?<CameraIcon size={16} weight="bold" color="#ec4899"/>:<FolderOpenIcon size={16} weight="bold" color={C.ac}/>}</div>
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                 {f.isOrphan?<span style={{color:C.t3,fontStyle:"italic"}}>(huérfano)</span>:f.order?.client||"—"}
@@ -9188,7 +9188,7 @@ function StorageTab({orders,onReload}) {
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
             <span style={{fontSize:11,fontWeight:700,color:C.tx,minWidth:60,textAlign:"right"}}>{fmtBytes(f.size)}</span>
             {f.isOrphan&&<span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>HUÉRFANO</span>}
-            <button onClick={()=>deleteTopFile(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30"}} title="Borrar">🗑️</button>
+            <button onClick={()=>deleteTopFile(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30"}} title="Borrar"><TrashIcon size={14} weight="bold"/></button>
           </div>
         </div>;
       })}
@@ -9198,18 +9198,18 @@ function StorageTab({orders,onReload}) {
     {orphans.length>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:14,padding:16,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,flexWrap:"wrap",gap:8}}>
         <div>
-          <div style={{fontSize:12,fontWeight:700,color:C.wn,marginBottom:4}}>🧩 Archivos Huérfanos Detectados</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:C.wn,marginBottom:4}}><PuzzlePieceIcon size={13} weight="bold"/>Archivos Huérfanos Detectados</div>
           <div style={{fontSize:10,color:C.t2}}>{orphans.length} archivo{orphans.length>1?"s":""} sin referencia en BD · {fmtBytes(orphans.reduce((s,f)=>s+f.size,0))}</div>
           <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Estos archivos están en Storage pero no apuntan a ninguna orden. Pueden borrarse de forma segura.</div>
         </div>
-        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?"#d1d1d6":C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?"⏳ Limpiando...":"🗑️ Limpiar Todos ("+orphans.length+")"}</button>
+        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?"#d1d1d6":C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><TrashIcon size={14} weight="bold"/>Limpiar Todos ({orphans.length})</>}</button>
       </div>
       <div style={{maxHeight:200,overflowY:"auto",marginTop:8}}>
         {orphans.slice(0,20).map(f=><div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:10}}>
           <div style={{flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:C.t2}}>{f.path}</div>
           <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:8}}>
             <span style={{color:C.tx,fontWeight:600,minWidth:50,textAlign:"right"}}>{fmtBytes(f.size)}</span>
-            <button onClick={()=>deleteOrphan(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",padding:"2px 6px",fontSize:10}} title="Borrar">🗑️</button>
+            <button onClick={()=>deleteOrphan(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",padding:"2px 6px",fontSize:10}} title="Borrar"><TrashIcon size={13} weight="bold"/></button>
           </div>
         </div>)}
         {orphans.length>20&&<div style={{fontSize:10,color:C.t3,textAlign:"center",padding:"8px 0",fontStyle:"italic"}}>+{orphans.length-20} más (usa "Limpiar Todos" para borrarlos)</div>}
@@ -9218,11 +9218,11 @@ function StorageTab({orders,onReload}) {
 
     {/* File list with individual delete */}
     <div style={{background:C.sf,borderRadius:14,padding:16}}>
-      <div style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}>📁 Todos los Archivos ({withFile.length})</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><FolderOpenIcon size={13} weight="bold"/>Todos los Archivos ({withFile.length})</div>
       {withFile.map(o=>{const age=Math.round((Date.now()-new Date(o.created_at).getTime())/86400000);const isDel=deleting===o.id;return <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"0.5px solid "+C.bd,opacity:isDel?.5:1}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:16}}>📄</span>
+            <FileTextIcon size={16} weight="bold" color={C.t3} style={{flexShrink:0}}/>
             <div style={{minWidth:0}}>
               <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t3}}>{o.file_name} · {age} días · {o.product_type}</div>
@@ -9231,8 +9231,8 @@ function StorageTab({orders,onReload}) {
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
           {age>30&&<span style={{background:C.wn+"15",color:C.wn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>+30d</span>}
-          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>setTimeout(()=>setDownloadedOrder(o),500)} style={{...bs("#007aff"),textDecoration:"none"}}>⬇</a>
-          <button onClick={()=>deleteOne(o)} disabled={isDel} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",cursor:isDel?"wait":"pointer"}} title="Borrar archivo">🗑️</button>
+          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClick={()=>setTimeout(()=>setDownloadedOrder(o),500)} style={{...bs("#007aff"),textDecoration:"none"}}><DownloadSimpleIcon size={14} weight="bold"/></a>
+          <button onClick={()=>deleteOne(o)} disabled={isDel} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",cursor:isDel?"wait":"pointer"}} title="Borrar archivo"><TrashIcon size={14} weight="bold"/></button>
         </div>
       </div>})}
       {withFile.length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.t3,fontSize:12}}>Sin archivos subidos aún</div>}
@@ -9241,13 +9241,13 @@ function StorageTab({orders,onReload}) {
     {/* Post-download recommendation popup */}
     {downloadedOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
       <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:400,width:"90%",textAlign:"center"}}>
-        <div style={{fontSize:36,marginBottom:8}}>💾</div>
+        <div style={{marginBottom:8}}><FloppyDiskIcon size={34} weight="bold" color={C.ac}/></div>
         <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>¿Ya descargaste el archivo?</h3>
         <p style={{fontSize:12,color:C.t2,margin:"0 0 6px"}}>{downloadedOrder.client} — {downloadedOrder.file_name}</p>
-        <p style={{fontSize:11,color:C.wn,margin:"0 0 20px",fontWeight:500}}>💡 Bórralo para liberar espacio en almacenamiento</p>
+        <p style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:C.wn,margin:"0 0 20px",fontWeight:500}}><LightbulbIcon size={13} weight="fill"/>Bórralo para liberar espacio en almacenamiento</p>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setDownloadedOrder(null)} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, conservar</button>
-          <button onClick={()=>{deleteOne(downloadedOrder);setDownloadedOrder(null)}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}>🗑️ Sí, borrar</button>
+          <button onClick={()=>{deleteOne(downloadedOrder);setDownloadedOrder(null)}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}><TrashIcon size={14} weight="bold"/>Sí, borrar</button>
         </div>
       </div>
     </div>}
@@ -9308,7 +9308,7 @@ function Archive({orders,role,onAction,userLogin}) {
         <span style={{fontWeight:800}}>{totalDel}</span>
       </div>
       {cancelledCount>0&&<div style={{background:C.dn+"08",borderRadius:10,padding:"8px 14px",fontSize:12}}>
-        <span style={{color:C.dn,fontWeight:600}}>❌ Canceladas: </span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:4,color:C.dn,fontWeight:600}}><XIcon size={11} weight="bold"/>Canceladas: </span>
         <span style={{fontWeight:800,color:C.dn}}>{cancelledCount}</span>
       </div>}
       {!hp&&<div style={{background:C.sf,borderRadius:10,padding:"8px 14px",fontSize:12}}>
@@ -9318,7 +9318,7 @@ function Archive({orders,role,onAction,userLogin}) {
     </div>
 
     {years.length===0&&<div style={{textAlign:"center",padding:"40px 20px"}}>
-      <div style={{fontSize:48}}>📁</div>
+      <FolderOpenIcon size={46} color={C.ph}/>
       <div style={{fontSize:15,fontWeight:700,marginTop:8}}>Sin órdenes completadas</div>
       <div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes entregadas aparecerán aquí organizadas por fecha</div>
     </div>}
@@ -9332,11 +9332,11 @@ function Archive({orders,role,onAction,userLogin}) {
 
       return <div key={y} style={{marginBottom:8}}>
         <button onClick={()=>setOpenYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-          <span style={{fontSize:18}}>{yOpen?"📂":"📁"}</span>
+          <span style={{display:"inline-flex",alignItems:"center"}}>{yOpen?<FolderOpenIcon size={17} weight="bold" color={C.ac}/>:<FolderIcon size={17} weight="bold" color={C.t3}/>}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
           <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yCount} orden{yCount!==1?"es":""}</span>
           {!hp&&<span style={{fontSize:11,color:C.ok,fontWeight:700}}>{fmt(yRev)}</span>}
-          <span style={{fontSize:12,color:C.t3}}>{yOpen?"▲":"▼"}</span>
+          <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{yOpen?<CaretUpIcon size={12} weight="bold"/>:<CaretDownIcon size={12} weight="bold"/>}</span>
         </button>
 
         {yOpen&&<div style={{paddingLeft:12,marginTop:4}}>
@@ -9350,11 +9350,11 @@ function Archive({orders,role,onAction,userLogin}) {
 
             return <div key={m} style={{marginBottom:4}}>
               <button onClick={()=>setOpenMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-                <span style={{fontSize:15}}>{mOpen?"📂":"📁"}</span>
+                <span style={{display:"inline-flex",alignItems:"center"}}>{mOpen?<FolderOpenIcon size={15} weight="bold" color="#ec4899"/>:<FolderIcon size={15} weight="bold" color={C.t3}/>}</span>
                 <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{MONTHS[mi]} {y}</span>
                 <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mCount}</span>
                 {!hp&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(mRev)}</span>}
-                <span style={{fontSize:11,color:C.t3}}>{mOpen?"▲":"▼"}</span>
+                <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{mOpen?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}</span>
               </button>
 
               {mOpen&&<div style={{paddingLeft:12,marginTop:4}}>
@@ -9366,29 +9366,29 @@ function Archive({orders,role,onAction,userLogin}) {
 
                   return <div key={w} style={{marginBottom:4}}>
                     <button onClick={()=>setOpenWeek(wOpen?null:wKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:wOpen?"#007aff06":C.bg,border:"0.5px solid "+(wOpen?"#007aff20":C.bd),borderRadius:8,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-                      <span style={{fontSize:13}}>{wOpen?"📂":"📁"}</span>
+                      <span style={{display:"inline-flex",alignItems:"center"}}>{wOpen?<FolderOpenIcon size={13} weight="bold" color="#007aff"/>:<FolderIcon size={13} weight="bold" color={C.t3}/>}</span>
                       <span style={{fontSize:12,fontWeight:600,color:C.tx,flex:1,textAlign:"left"}}>Semana {w}</span>
                       <span style={{fontSize:10,color:C.t2}}>{wOrders.length} orden{wOrders.length!==1?"es":""}</span>
                       {!hp&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(wRev)}</span>}
-                      <span style={{fontSize:10,color:C.t3}}>{wOpen?"▲":"▼"}</span>
+                      <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{wOpen?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</span>
                     </button>
 
                     {wOpen&&<div style={{paddingLeft:8,marginTop:4,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:6}}>
                       {wOrders.map(o=>{
                         const st=SM[o.stage];const isMaq=o.order_type==="maquila";const isCancelled=o.stage.includes("cancelled");
                         return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",borderLeft:"3px solid "+(st?.c||C.ok),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                          {o.cart_folio&&<div style={{fontSize:13,fontWeight:800,color:"#06b6d4",letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}>🛒 {o.cart_folio}</div>}
+                          {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:"#06b6d4",letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
                           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:3}}>{o.web_folio}</div>}
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
                           <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
                             {o.production_number&&<span style={{fontSize:11,fontWeight:700,color:C.ac,background:C.acL,padding:"2px 6px",borderRadius:4}}>{o.production_number}</span>}
-                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759",background:(o.invoice_type==="factura"?"#5856d6":"#34c759")+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?"⚡":""}{o.invoice_type==="factura"?"📄":"📋"} {o.invoice_folio}</span>}
+                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759",background:(o.invoice_type==="factura"?"#5856d6":"#34c759")+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?<LightningIcon size={10} weight="fill" color="#ff9500" style={{verticalAlign:"-1px",marginRight:1}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
                             <span style={{fontSize:9,color:C.t3}}>{o.id}</span>
-                            {isCancelled&&<span style={{background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>❌ Cancelada</span>}
-                            {isCancelled&&o.invoice_folio&&!o.nc_emitted&&<span style={{background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}} title="Nota de crédito pendiente de emitir">⏳ NC pendiente</span>}
-                            {o.has_post_invoice_edits&&<span style={{background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>⚠️ Editada post-factura</span>}
+                            {isCancelled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><XIcon size={9} weight="bold"/>Cancelada</span>}
+                            {isCancelled&&o.invoice_folio&&!o.nc_emitted&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}} title="Nota de crédito pendiente de emitir"><HourglassIcon size={9} weight="bold"/>NC pendiente</span>}
+                            {o.has_post_invoice_edits&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><WarningIcon size={9} weight="fill"/>Editada post-factura</span>}
                             {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>{PM[o.priority].l}</span>}
                             {isMaq&&<span style={{background:"#e67e2215",color:"#e67e22",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Maquila</span>}
                           </div>
