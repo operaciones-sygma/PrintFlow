@@ -2793,7 +2793,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     let alive=true;
     supabase.rpc("list_client_agents",{p_client_id:effId}).then(({data})=>{if(alive)setClientAgents(data||[])}).catch(()=>{if(alive)setClientAgents([])});
     return ()=>{alive=false};
-  }, [hasPooled, destClientId, cart]);
+  // v10.59.6 — dep por el client_id primitivo (no el array cart): evita re-fetch en cada tecla de cantidad
+  }, [hasPooled, destClientId, cart[0]?.client_id]);
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
@@ -7092,6 +7093,13 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       return next;
     });
     setReplicateOpen(false);
+    // v10.59.6 — si la fuente trae acabados, sincronizar el panel "Otro" (customFinish/showOtroFinish)
+    // con el acabado custom replicado; si no, no tocar el panel actual.
+    if(src.finishes!==null&&src.finishes!==undefined&&src.finishes!==""){
+      const customFins=String(src.finishes).split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro");
+      setCustomFinish(customFins.join(", "));
+      setShowOtroFinish(customFins.length>0);
+    }
     const baseMsg="✅ Datos replicados de "+(src.production_number||"orden anterior");
     showToast?.(skuOmitted?baseMsg+" (SKU del catálogo omitido — pertenece a otro cliente)":baseMsg);
   };
@@ -7149,7 +7157,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   },[orders]);
   const [advMode,setAdvMode]=useState(false);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
-  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);setShowOtroFinish(fins.some(x=>!FINISHES.includes(x)&&x!=="Otro"));if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
+  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(x)&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes) */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
   const pnSetRef=useRef(false);
   useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
   // 🆕 v10.14.0 — Folio P-XXXX editable para Lupita/Admin/Vendedor (NO Karla/Producción/etc)
