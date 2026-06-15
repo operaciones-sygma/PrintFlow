@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -6536,18 +6536,18 @@ function ChemicalPanel({user}) {
     return {refPerL,revPerL,evapMonth,revReal,costoRef,costoRev,costoTotal,ratio,costoQuimChica,costoQuimGrande,costoQuimProm,matChica,matGrande,iva,fullChica,fullGrande};
   },[prices,user,revMonth,refMonth,plChicas,plGrandes,plTotal]);
 
-  if(loading)return <div style={{textAlign:"center",padding:40,color:C.t2}}>⏳ Cargando...</div>;
+  if(loading)return <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:40,color:C.t2}}><HourglassIcon size={14} weight="bold"/>Cargando...</div>;
 
   return <div>
     {/* ── Monthly Summary ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
       <div style={{background:"#0891b208",border:"1.5px solid #0891b225",borderRadius:16,padding:16}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#0891b2",marginBottom:8}}>🧪 Revelador — este mes</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,color:"#0891b2",marginBottom:8}}><FlaskIcon size={14} weight="bold"/>Revelador — este mes</div>
         <div style={{fontSize:28,fontWeight:800,color:C.tx}}>{revMonth}L</div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{revCleanings} limpieza{revCleanings!==1?"s":""}</div>
       </div>
       <div style={{background:"#8b5cf608",border:"1.5px solid #8b5cf625",borderRadius:16,padding:16}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#8b5cf6",marginBottom:8}}>💧 Reforzador — este mes</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,color:"#8b5cf6",marginBottom:8}}><DropIcon size={14} weight="bold"/>Reforzador — este mes</div>
         <div style={{fontSize:28,fontWeight:800,color:C.tx}}>{refMonth}L</div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{thisMonth.filter(c=>c.chemical_type==="reforzador").length} tambo{thisMonth.filter(c=>c.chemical_type==="reforzador").length!==1?"s":""}</div>
       </div>
@@ -6555,7 +6555,7 @@ function ChemicalPanel({user}) {
 
     {/* ── Plates Summary ── */}
     <div style={{background:C.sf,borderRadius:16,padding:16,marginBottom:20}}>
-      <div style={{fontSize:13,fontWeight:700,color:C.tx,marginBottom:8}}>📋 Placas usadas — este mes</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,color:C.tx,marginBottom:8}}><ClipboardTextIcon size={14} weight="bold"/>Placas usadas — este mes</div>
       <div style={{display:"flex",gap:20}}>
         <div><span style={{fontSize:22,fontWeight:800}}>{plChicas}</span><span style={{fontSize:11,color:C.t2,marginLeft:4}}>chicas</span></div>
         <div><span style={{fontSize:22,fontWeight:800}}>{plGrandes}</span><span style={{fontSize:11,color:C.t2,marginLeft:4}}>grandes</span></div>
@@ -6566,8 +6566,8 @@ function ChemicalPanel({user}) {
     {/* ── ADMIN: Cost Analysis ── */}
     {user==="admin"&&costs&&<div style={{background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",border:"1.5px solid #16a34a25",borderRadius:16,padding:16,marginBottom:20}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontSize:14,fontWeight:800,color:"#16a34a"}}>💰 Análisis de Costos — Este Mes</div>
-        <button onClick={()=>{setPriceForm(prices||{});setShowPriceEditor(true)}} style={{...bs("#16a34a"),fontSize:10}}>⚙️ Editar Precios</button>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:"#16a34a"}}><CurrencyDollarIcon size={15} weight="bold"/>Análisis de Costos — Este Mes</div>
+        <button onClick={()=>{setPriceForm(prices||{});setShowPriceEditor(true)}} style={{...bs("#16a34a"),fontSize:10}}><GearIcon size={12} weight="bold"/>Editar Precios</button>
       </div>
 
       {/* Chemical costs */}
@@ -6591,7 +6591,7 @@ function ChemicalPanel({user}) {
 
       {/* Per-plate costs */}
       {plTotal>0&&<div style={{marginBottom:8}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.tx,marginBottom:6}}>📊 Costo por Placa (proporcional por área, ratio {costs.ratio.toFixed(2)}×)</div>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.tx,marginBottom:6}}><ChartBarIcon size={13} weight="bold"/>Costo por Placa (proporcional por área, ratio {costs.ratio.toFixed(2)}×)</div>
         <DualScroll>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,background:"#fff",borderRadius:10,overflow:"hidden"}}>
             <thead><tr style={{background:"#f8fafb"}}>
@@ -6617,13 +6617,13 @@ function ChemicalPanel({user}) {
 
     {/* ── Register Buttons ── */}
     <div style={{display:"flex",gap:10,marginBottom:20}}>
-      <button onClick={()=>setShowRevForm(true)} style={{...bt("#0891b2"),flex:1,justifyContent:"center",padding:"14px 16px",borderRadius:14}}>🧪 Registrar Limpieza (Revelador)</button>
-      <button onClick={()=>setShowRefForm(true)} style={{...bt("#8b5cf6"),flex:1,justifyContent:"center",padding:"14px 16px",borderRadius:14}}>💧 Registrar Reforzador</button>
+      <button onClick={()=>setShowRevForm(true)} style={{...bt("#0891b2"),flex:1,justifyContent:"center",padding:"14px 16px",borderRadius:14}}><FlaskIcon size={15} weight="bold"/>Registrar Limpieza (Revelador)</button>
+      <button onClick={()=>setShowRefForm(true)} style={{...bt("#8b5cf6"),flex:1,justifyContent:"center",padding:"14px 16px",borderRadius:14}}><DropIcon size={15} weight="bold"/>Registrar Reforzador</button>
     </div>
 
     {/* ── Revelador Form ── */}
     {showRevForm&&<div style={{background:"#0891b208",border:"1.5px solid #0891b225",borderRadius:16,padding:16,marginBottom:16}}>
-      <h4 style={{fontSize:14,fontWeight:700,color:"#0891b2",margin:"0 0 4px"}}>🧪 Limpieza de Procesadora — Revelador</h4>
+      <h4 style={{display:"flex",alignItems:"center",gap:6,fontSize:14,fontWeight:700,color:"#0891b2",margin:"0 0 4px"}}><FlaskIcon size={15} weight="bold"/>Limpieza de Procesadora — Revelador</h4>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Registra los tambos de revelador usados en la limpieza (normalmente 2 tambos = 40L)</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><label style={lbl}>Tambos usados</label><input style={inp} type="number" min="1" value={revTambos} onChange={e=>setRevTambos(e.target.value)}/></div>
@@ -6632,13 +6632,13 @@ function ChemicalPanel({user}) {
       <div style={{marginBottom:12}}><label style={lbl}>Notas (opcional)</label><input style={inp} value={revNotes} onChange={e=>setRevNotes(e.target.value)} placeholder="Observaciones..."/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={()=>{setShowRevForm(false);setRevTambos("2");setRevNotes("")}} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={saveRev} disabled={saving} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>{saving?"⏳...":"✅ Registrar Limpieza"}</button>
+        <button onClick={saveRev} disabled={saving} style={{...bt("#0891b2"),flex:1,justifyContent:"center"}}>{saving?"Guardando...":<><CheckCircleIcon size={14} weight="bold"/>Registrar Limpieza</>}</button>
       </div>
     </div>}
 
     {/* ── Reforzador Form ── */}
     {showRefForm&&<div style={{background:"#8b5cf608",border:"1.5px solid #8b5cf625",borderRadius:16,padding:16,marginBottom:16}}>
-      <h4 style={{fontSize:14,fontWeight:700,color:"#8b5cf6",margin:"0 0 4px"}}>💧 Reforzador — Tambo Terminado</h4>
+      <h4 style={{display:"flex",alignItems:"center",gap:6,fontSize:14,fontWeight:700,color:"#8b5cf6",margin:"0 0 4px"}}><DropIcon size={15} weight="bold"/>Reforzador — Tambo Terminado</h4>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Registra cuando se termine un tambo de reforzador (20L por tambo)</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div><label style={lbl}>Tambos terminados</label><input style={inp} type="number" min="1" value={refTambos} onChange={e=>setRefTambos(e.target.value)}/></div>
@@ -6647,18 +6647,18 @@ function ChemicalPanel({user}) {
       <div style={{marginBottom:12}}><label style={lbl}>Notas (opcional)</label><input style={inp} value={refNotes} onChange={e=>setRefNotes(e.target.value)} placeholder="Observaciones..."/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={()=>{setShowRefForm(false);setRefTambos("1");setRefNotes("")}} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={saveRef} disabled={saving} style={{...bt("#8b5cf6"),flex:1,justifyContent:"center"}}>{saving?"⏳...":"✅ Registrar Tambo"}</button>
+        <button onClick={saveRef} disabled={saving} style={{...bt("#8b5cf6"),flex:1,justifyContent:"center"}}>{saving?"Guardando...":<><CheckCircleIcon size={14} weight="bold"/>Registrar Tambo</>}</button>
       </div>
     </div>}
 
     {/* ── History ── */}
     <div style={{marginBottom:16}}>
-      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>📜 Historial de registros</div>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,marginBottom:8}}><ClockCounterClockwiseIcon size={14} weight="bold"/>Historial de registros</div>
       {chemicals.length===0&&plates.length===0?<div style={{textAlign:"center",padding:"20px",color:C.t3}}>Sin registros aún</div>
       :<div style={{maxHeight:300,overflowY:"auto"}}>
         {chemicals.slice(0,30).map(c=><div key={c.id} style={{padding:"8px 12px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
-            <span style={{fontSize:12,fontWeight:600,color:c.chemical_type==="revelador"?"#0891b2":"#8b5cf6"}}>{c.chemical_type==="revelador"?"🧪 Limpieza":"💧 Reforzador"}</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:600,color:c.chemical_type==="revelador"?"#0891b2":"#8b5cf6"}}>{c.chemical_type==="revelador"?<><FlaskIcon size={11} weight="bold"/>Limpieza</>:<><DropIcon size={11} weight="bold"/>Reforzador</>}</span>
             <span style={{fontSize:12,marginLeft:6}}>{c.tambos} tambo{c.tambos!==1?"s":""} ({c.tambos*20}L)</span>
             {c.notes&&<span style={{fontSize:10,color:C.t3,marginLeft:6}}>— {c.notes}</span>}
           </div>
@@ -6707,11 +6707,11 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
         {isWeekView&&<div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:1}}>
           <span style={{fontSize:isWeekView?8:7,color:st?.c,fontWeight:600}}>{st?.l}</span>
-          {o.priority==="urgente"&&<span style={{fontSize:7,color:C.dn,fontWeight:800}}>🔴</span>}
+          {o.priority==="urgente"&&<span style={{fontSize:7,color:C.dn,fontWeight:800,display:"inline-flex",alignItems:"center"}}><CircleIcon size={7} weight="fill"/></span>}
         </div>
       </div>})}
       {done.map(o=><div key={o.id} style={{background:C.ok+"08",borderRadius:6,padding:isWeekView?"4px 7px":"2px 5px",marginBottom:3,borderLeft:"3px solid "+C.ok,opacity:.6}}>
-        <div style={{fontSize:isWeekView?9:8,color:C.ok,fontWeight:600}}>✓ {o.client}</div>
+        <div style={{fontSize:isWeekView?9:8,color:C.ok,fontWeight:600}}><CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.client}</div>
       </div>)}
       {!pend.length&&!done.length&&<div style={{color:C.ph,fontSize:9,textAlign:"center",marginTop:isWeekView?20:10}}>—</div>}
     </div>;
@@ -6722,18 +6722,18 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
 
   return <div style={{background:C.sf,borderRadius:16,padding:16}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:6}}>
-      <span style={{fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}>📅 {calView==="week"?"Semana del "+fD(sow):months[monthIdx]+" "+monthYear}</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><CalendarDotsIcon size={13} weight="bold"/>{calView==="week"?"Semana del "+fD(sow):months[monthIdx]+" "+monthYear}</span>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
         <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,marginRight:6}}>
           <button onClick={()=>setCalView("week")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:calView==="week"?C.ac:"transparent",color:calView==="week"?"#fff":C.t2}}>Semana</button>
           <button onClick={()=>setCalView("month")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:calView==="month"?C.ac:"transparent",color:calView==="month"?"#fff":C.t2}}>Mes</button>
         </div>
-        {calView==="week"&&<><button onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}>‹</button><button onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}>›</button></>}
-        {calView==="month"&&<><button onClick={()=>setMo(m=>m-1)} style={bs(C.bg,C.t2)}>‹</button><button onClick={()=>setMo(0)} style={bs(mo===0?C.ac:C.bg,mo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setMo(m=>m+1)} style={bs(C.bg,C.t2)}>›</button></>}
+        {calView==="week"&&<><button onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
+        {calView==="month"&&<><button onClick={()=>setMo(m=>m-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button onClick={()=>setMo(0)} style={bs(mo===0?C.ac:C.bg,mo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setMo(m=>m+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
       </div>
     </div>
     <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,padding:"6px 10px",background:C.ac+"06",borderRadius:8,border:"1px dashed "+C.ac+"25"}}>
-      <span style={{fontSize:10,color:C.ac,fontWeight:600}}>👆 Haz click en cualquier orden para cambiar su fecha de entrega</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,color:C.ac,fontWeight:600}}><HandPointingIcon size={12} weight="bold" style={{flexShrink:0}}/>Haz click en cualquier orden para cambiar su fecha de entrega</span>
       <span style={{display:"flex",gap:8,marginLeft:"auto",fontSize:9,color:C.t2}}>
         <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:C.dn+"30"}}/> Retrasada</span>
         <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:C.ac+"30"}}/> Pendiente</span>
@@ -6758,7 +6758,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
 
     {editOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
       <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-        <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 12px"}}>📅 Cambiar Fecha de Entrega</h3>
+        <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 12px"}}><CalendarDotsIcon size={17} weight="bold"/>Cambiar Fecha de Entrega</h3>
         <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
@@ -6779,7 +6779,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
         <div style={{marginBottom:16}}><label style={{...lbl,color:C.dn}}>¿Por qué se cambia la fecha? *</label><input style={{...inp,border:!reason.trim()?"1.5px solid "+C.dn+"40":"none"}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo del cambio (obligatorio)"/></div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>{setEditOrder(null);setNewDate("");setReason("")}} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={saveDate} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>💾 Guardar Nueva Fecha</button>
+          <button onClick={saveDate} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><FloppyDiskIcon size={15} weight="bold"/>Guardar Nueva Fecha</button>
         </div>
       </div>
     </div>}
@@ -8544,12 +8544,12 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
   return <div style={{background:"#e67e22"+"08",border:"1.5px solid #e67e22"+"25",borderRadius:16,padding:16,marginBottom:16}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:14,fontWeight:800,color:"#e67e22"}}>🚚 En Maquila</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:"#e67e22"}}><TruckIcon size={15} weight="bold"/>En Maquila</span>
         <div style={{background:"#e67e22",color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{all.length}</div>
       </div>
       <div style={{display:"flex",gap:8,fontSize:10,color:C.t2}}>
-        {partial.length>0&&<span>🔄 {partial.length} parcial{partial.length>1?"es":""}</span>}
-        {full.length>0&&<span>📋 {full.length} completa{full.length>1?"s":""}</span>}
+        {partial.length>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={11} weight="bold"/>{partial.length} parcial{partial.length>1?"es":""}</span>}
+        {full.length>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><ClipboardTextIcon size={11} weight="bold"/>{full.length} completa{full.length>1?"s":""}</span>}
       </div>
     </div>
 
@@ -8557,8 +8557,8 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
         <div style={{background:"#e67e22"+"15",padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,color:"#e67e22"}}>{prov}</div>
         <span style={{fontSize:10,color:C.t2}}>{d.orders.length} orden{d.orders.length>1?"es":""}</span>
-        {sample?.maquila_phone&&<a href={"https://wa.me/"+(sample.maquila_phone.replace(/\D/g,"").replace(/^(?!52|1)/,"52"))} target="_blank" rel="noopener" style={{fontSize:10,color:"#25d366",textDecoration:"none",fontWeight:500}}>📱 {sample.maquila_phone}</a>}
-        {sample?.maquila_email&&<a href={"mailto:"+sample.maquila_email} style={{fontSize:10,color:"#007aff",textDecoration:"none",fontWeight:500}}>📧 {sample.maquila_email}</a>}
+        {sample?.maquila_phone&&<a href={"https://wa.me/"+(sample.maquila_phone.replace(/\D/g,"").replace(/^(?!52|1)/,"52"))} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#25d366",textDecoration:"none",fontWeight:500}}><WhatsappLogoIcon size={11} weight="bold"/>{sample.maquila_phone}</a>}
+        {sample?.maquila_email&&<a href={"mailto:"+sample.maquila_email} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#007aff",textDecoration:"none",fontWeight:500}}><EnvelopeIcon size={11} weight="bold"/>{sample.maquila_email}</a>}
       </div>
       {d.orders.map(o=>{const days=getDays(o);const st=SM[o.stage];const hp=role==="produccion"||role==="preprensa"||role==="german";const oOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
         const urgColor=days>=14?C.dn:days>=7?C.wn:days>=3?"#e67e22":C.ok;
@@ -8570,8 +8570,8 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
                 <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>{st?.l}</span>
                 {o.order_type==="maquila"?<span style={{background:"#e67e22"+"12",color:"#e67e22",padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila completa</span>:<span style={{background:"#32ade6"+"12",color:"#32ade6",padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila parcial</span>}
-                {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700}}>🔴 Urgente</span>}
-                {days>=14&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700}}>⚠️ +14 días</span>}
+                {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
+                {days>=14&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={10} weight="fill"/>+14 días</span>}
               </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
@@ -8580,7 +8580,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               {!hp&&oOwns&&(o.price||o.maq_price)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}
             </div>
           </div>
-          {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}>📅 Entrega: {fD(o.due_date)}{parseDate(o.due_date)<new Date()?" ⚠️ RETRASO":""}</div>}
+          {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{parseDate(o.due_date)<new Date()?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
         </div>})}
     </div>})}
   </div>;
