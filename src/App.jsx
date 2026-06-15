@@ -182,7 +182,7 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 // v10.19.0 — Helpers para notificaciones detalladas de edit
 // ============================================================
 // Campos que disparan notificación cuando cambian (con su label legible)
-const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta"};
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente (contacto)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
 // v10.58.43 #12: comparar por CONTENIDO — los arrays (pantones) se comparaban por
@@ -909,7 +909,7 @@ const db = {
   async loadCuadraOrdersHistory(limit=80) {
     // Lista órdenes con stock_role IN ('production','sale') ordenadas por created_at
     const {data,error}=await supabase.from("orders")
-      .select("id, production_number, client, client_id, product, quantity, price, due_date, stage, stock_role, stock_loaded, client_product_id, invoice_folio, invoice_type, invoice_reason, invoiced_at, invoiced_by, cancelled_at, created_at")
+      .select("id, production_number, client, client_id, client_agent, product, quantity, price, due_date, stage, stock_role, stock_loaded, client_product_id, invoice_folio, invoice_type, invoice_reason, invoiced_at, invoiced_by, cancelled_at, created_at")
       .in("stock_role",["production","sale"])
       .order("created_at",{ascending:false})
       .limit(limit);
@@ -942,7 +942,7 @@ const db = {
   // items: [{client_product_id, qty}, ...]  (precio se reparte proporcional a qty desde total_amount)
   // total_amount: total CON IVA si factura, SIN IVA si remisión.
   // payment_status: 'unpaid' | 'partial' | 'paid'. payment_refs: [{method,amount,bank_reference}, ...]
-  async bulkSellFromStock({items, total_amount, dest_client_id, invoice_type, folio, payment_status='unpaid', payment_refs=null, due_date, agent, notes, actor}) {
+  async bulkSellFromStock({items, total_amount, dest_client_id, invoice_type, folio, payment_status='unpaid', payment_refs=null, due_date, agent, notes, actor, client_agent}) {
     const {data, error} = await supabase.rpc("bulk_sell_from_stock", {
       p_items: items,
       p_total_amount: total_amount,
@@ -954,7 +954,8 @@ const db = {
       p_due_date: due_date||null,
       p_agent: agent||null,
       p_notes: notes||null,
-      p_actor: actor
+      p_actor: actor,
+      p_client_agent: client_agent||null // v10.59.2 C2 — contacto del cliente (no el vendedor SYGMA)
     });
     if (error) throw new Error(error.message);
     return data;
@@ -1972,7 +1973,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       // Full copy: all client data
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos del Cliente</td></tr>
       <tr><td style="width:35%"><div class="field-lbl">Nombre o Denominación</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
-      <td style="width:25%"><div class="field-lbl">Empresa</div><div class="field-val">${esc(o.client_company||"")}</div></td>
+      <td style="width:25%"><div class="field-lbl">Atención / Contacto</div><div class="field-val">${esc(o.client_agent||"")}</div></td>
       <td style="width:20%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.client_phone?esc((o.client_lada||"+52")+" "+o.client_phone):""}</div></td>
       <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:10px">${esc(o.client_email||"")}</div></td></tr></table>`;
     }
@@ -2211,11 +2212,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?"#34c759":"#0891b2")+"15",color:o.plate_status==="existing"?"#34c759":"#0891b2"}}>{o.plate_status==="existing"?"♻️ Placa ya existe (auto-salta CTP)":"🆕 Nueva placa CTP requerida"}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
-      {!hp&&vOwns&&<><Row l="Agente" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
+      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
-      {o.agent&&<Row l="👤 Agente" v={o.agent}/>}
+      {o.agent&&<Row l="👤 Vendedor" v={o.agent}/>}
       {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
       {!hp&&vOwns&&isMaq&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginTop:12,marginBottom:4}}>Maquila</div><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
       {vOwns&&o.maquila_provider&&<><div style={{fontSize:10,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginTop:12,marginBottom:4}}>🚚 Proveedor Maquila</div><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l="📱 Teléfono" v={o.maquila_phone}/>}{o.maquila_email&&<Row l="📧 Email" v={o.maquila_email}/>}</>}
@@ -2535,7 +2536,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                           <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"monospace"}}>{o.production_number||"—"}</span>
                           {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759"}}>{o.invoice_folio}</span>}
                         </div>
-                        <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
+                        <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}{(o.client_agent||"").trim()&&<span style={{color:C.t2,fontWeight:400}}> · 👤 {o.client_agent}</span>}</div>
                         <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
                         <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
@@ -2707,6 +2708,9 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [paymentRefs, setPaymentRefs] = useState([]);
   const [agent, setAgent] = useState("");
+  // v10.59.2 C3 — AGENTE (contacto del cliente comprador, ej. Eva/Jorge). Distinto del Vendedor SYGMA (agent).
+  const [clientAgent, setClientAgent] = useState("");
+  const [clientAgents, setClientAgents] = useState([]);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   // sync ref con state para que ESC handler lea el valor actual sin re-binding
@@ -2767,6 +2771,17 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     });
     return ()=>{alive=false};
   }, [hasPooled, firstPoolId]);
+
+  // v10.59.2 C3 — agentes (contactos) del cliente efectivo del carrito: destClientId si hay
+  // pool, si no el client_id compartido del 1er item (los guards mixedClientsNoPool garantizan
+  // que todos los items sin pool comparten cliente).
+  useEffect(()=>{
+    const effId = hasPooled ? destClientId : (cart[0]?.client_id||null);
+    if(!effId){ setClientAgents([]); return; }
+    let alive=true;
+    supabase.rpc("list_client_agents",{p_client_id:effId}).then(({data})=>{if(alive)setClientAgents(data||[])}).catch(()=>{if(alive)setClientAgents([])});
+    return ()=>{alive=false};
+  }, [hasPooled, destClientId, cart]);
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
@@ -2839,7 +2854,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         due_date: null,
         agent: agent || userLogin,
         notes: notes.trim() || null,
-        actor: userLogin || "sistema"
+        actor: userLogin || "sistema",
+        client_agent: clientAgent.trim() || null // v10.59.2 C3 — contacto del cliente comprador
       });
       showToast(`✅ ${result.folio} · OC ${result.oc_id} · ${result.items_count} productos · $${Number(result.total_amount).toLocaleString("es-MX",{minimumFractionDigits:2})}`);
       onSuccess(result);
@@ -2963,6 +2979,12 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Notas</label>
                 <input style={{...inp,fontSize:11}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Opcional" disabled={busy} maxLength={200}/>
               </div>
+            </div>
+            {/* v10.59.2 C3 — Agente (contacto del cliente comprador) */}
+            <div style={{marginBottom:10}}>
+              <label style={{...lbl,marginTop:0,fontSize:10}}>Agente <span style={{color:C.t3,fontWeight:400}}>(quién compró — contacto del cliente, opcional)</span></label>
+              <input style={{...inp,fontSize:11}} value={clientAgent} onChange={e=>setClientAgent(e.target.value)} placeholder="ej. Eva, Jorge" list="cuadra-client-agents" autoComplete="off" disabled={busy}/>
+              <datalist id="cuadra-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
             </div>
 
             {/* Total venta */}
@@ -6998,7 +7020,7 @@ function PantoneChips({codes}) {
 
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false};
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
   const [stockProducts,setStockProducts]=useState([]);
@@ -11423,6 +11445,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     // 📄 v10.11.0 Sub-fase B — Métricas y permisos para asignación de folios
     const pendingOrders = ocOrders.filter(o => !o.invoice_folio && !o.stage.includes("cancelled"));
     const invoicedCount = ocOrders.filter(o => o.invoice_folio).length;
+    // v10.59.2 D3 — agente (contacto) derivado de la 1ª orden hija que lo tenga
+    const ocAgent = ocOrders.find(o => (o.client_agent||"").trim())?.client_agent || "";
     const isLocked = selectedOC.folios_locked === true;
     const hasShared = !!selectedOC.shared_invoice_folio;
     // 🌐 v10.12.0 Sub-fase C — Flag de OC web + cart_folio para D5 hierarchy
@@ -11466,6 +11490,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginTop:14}}>
           {selectedOC.vendedor && <div><div style={{fontSize:10,color:C.t2}}>👤 Vendedor</div><div style={{fontSize:13,fontWeight:600}}>{selectedOC.vendedor}</div></div>}
+          {ocAgent && <div><div style={{fontSize:10,color:C.t2}}>👤 Contacto</div><div style={{fontSize:13,fontWeight:600}}>{ocAgent}</div></div>}
           {selectedOC.delivery_date && <div><div style={{fontSize:10,color:C.t2}}>📅 Entrega</div><div style={{fontSize:13,fontWeight:600}}>{fD(selectedOC.delivery_date)}</div></div>}
           {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2}}>💰 Total</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(selectedOC.total)}</div></div>}
           <div><div style={{fontSize:10,color:C.t2}}>Productos</div><div style={{fontSize:13,fontWeight:700}}>{ocOrders.length}{invoicedCount>0?<span style={{fontSize:10,color:C.t2,fontWeight:500}}> · {invoicedCount} facturado{invoicedCount!==1?"s":""}</span>:null}</div></div>
@@ -11526,6 +11551,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           // v10.58.49 — tarjeta extraída para reusar en vista plana (Activas) y carpetas (Histórico)
           const renderOCCard = (po) => {
             const products = orders.filter(o => o.purchase_order_id === po.id);
+            // v10.59.2 D3 — purchase_orders no guarda agente; se deriva de la 1ª orden hija que lo tenga
+            const ocAgent = products.find(o=>(o.client_agent||"").trim())?.client_agent || "";
             const hasShared = !!po.shared_invoice_folio;
             const sFType = hasShared ? (po.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
             const sFColor = sFType === "factura" ? "#5856d6" : "#34c759";
@@ -11541,7 +11568,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                 </div> : <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>}
                 {statusBadge(po.status)}
               </div>
-              <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}</div>
+              <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}{ocAgent&&<span style={{color:C.t2,fontWeight:400}}> · 👤 {ocAgent}</span>}</div>
               {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
                 {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3}}>🌐 Pedido web</span>}
                 {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
@@ -11621,9 +11648,17 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
 
 // ─── MODAL: CREAR ORDEN DE COMPRA (v10.10.0) ───
 function CreateOCModal({onCreate, onClose}){
-  const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",vendedor:"",delivery_date:"",notes:""});
+  const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",client_agent:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
+  // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
+  const [clientAgents,setClientAgents]=useState([]);
   useEscClose(onClose);
+  useEffect(()=>{
+    if(!f.client_id){setClientAgents([]);return}
+    let alive=true;
+    supabase.rpc("list_client_agents",{p_client_id:f.client_id}).then(({data})=>{if(alive)setClientAgents(data||[])}).catch(()=>{if(alive)setClientAgents([])});
+    return ()=>{alive=false};
+  },[f.client_id]);
   const canSubmit = f.client.trim().length > 0 && !saving;
   const s = (k,v) => setF(p => ({...p, [k]: v}));
   // 🆕 v10.14.0 — Typeahead select: aplica master + fallback a última orden
@@ -11643,12 +11678,49 @@ function CreateOCModal({onCreate, onClose}){
     if (!canSubmit) return;
     setSaving(true);
     try {
+      let resolvedClientId = f.client_id || null;
+      const nm = f.client.trim();
+      // v10.59.2 B1 — ANTI-DUPLICADO: si la razón social no está vinculada (sin client_id),
+      // resolver/confirmar contra cobranza.clients ANTES de crear la OC. Espeja la lógica del
+      // OrderForm (resolve_client_for_order → confirmar similares → confirmar nueva + RFC oblig).
+      if(!resolvedClientId && nm){
+        try{
+          const {data:resolution,error:resErr}=await supabase.rpc("resolve_client_for_order",{p_name:nm});
+          if(resErr)throw resErr;
+          if(resolution?.exact_match){
+            resolvedClientId=resolution.exact_match;
+          }else if(resolution?.similar_matches?.length>0){
+            const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:resolution.similar_matches});
+            if(confirmed==="cancel"){setSaving(false);return}
+            if(confirmed==="new"){
+              if(!f.client_rfc.trim()){alert("⚠️ Para crear una razón social NUEVA el RFC es obligatorio.");setSaving(false);return}
+              const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
+              if(createErr)throw createErr;
+              resolvedClientId=newId;
+            }else{
+              resolvedClientId=confirmed;
+            }
+          }else{
+            if(!f.client_rfc.trim()){alert("⚠️ Para crear una razón social NUEVA el RFC es obligatorio.");setSaving(false);return}
+            const okNew=window.confirm("⚠️ \""+nm+"\" no está registrado.\n\n¿Crear como NUEVA razón social?\n\nRFC: "+(f.client_rfc.trim()||"—")+"\nContacto: "+(f.client_email.trim()||f.client_phone.trim()||"—")+"\n\nVerifica que no sea un duplicado con otro nombre.");
+            if(!okNew){setSaving(false);return}
+            const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
+            if(createErr)throw createErr;
+            resolvedClientId=newId;
+          }
+        }catch(e){
+          console.error("[CreateOCModal] client resolution error:",e);
+          alert("Error resolviendo cliente: "+(e?.message||"desconocido"));
+          setSaving(false);return;
+        }
+      }
       await onCreate({
-        client: f.client.trim(),
-        client_id: f.client_id || null,
+        client: nm,
+        client_id: resolvedClientId,
         client_email: f.client_email.trim() || null,
         client_phone: f.client_phone.trim() || null,
         client_rfc: f.client_rfc.trim() || null,
+        client_agent: f.client_agent.trim() || null, // v10.59.2 B2 — el 1er producto de la OC lo hereda
         vendedor: f.vendedor || null,
         deliveryDate: f.delivery_date || null,
         notes: f.notes.trim() || null
@@ -11679,6 +11751,11 @@ function CreateOCModal({onCreate, onClose}){
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>RFC</label>
           <input value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Agente (contacto del cliente)</label>
+          <input value={f.client_agent} onChange={e=>s("client_agent",e.target.value)} placeholder="ej. Eva, Jorge" list="oc-client-agents" autoComplete="off" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <datalist id="oc-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Vendedor</label>
@@ -12417,9 +12494,13 @@ export default function PrintFlow() {
   },[user,userLogin,showToast,reload]);
 
   // 🛒 v10.10.0 — Crear OC explícita (compleja)
+  // v10.59.2 — purchase_orders NO guarda agente (vive en la orden hija); guardamos el agente
+  // elegido en la OC transitoriamente para que el PRIMER producto agregado lo herede.
+  const ocPendingAgentRef=useRef({});
   const createOC=useCallback(async data=>{
     try{
       const ocId=await db.createPurchaseOrder({...data,byUser:userLogin||user});
+      if(ocId&&(data.client_agent||"").trim())ocPendingAgentRef.current[ocId]=data.client_agent.trim();
       showToast("🛒 "+ocId+" creada exitosamente");
       reload();
       return ocId;
@@ -12436,12 +12517,16 @@ export default function PrintFlow() {
     // v10.34.2 fix #10 — hereda product_type de la última orden de la OC (común que sean del mismo tipo)
     const ocOrders=orders.filter(x=>x.purchase_order_id===oc.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     const inheritedType=ocOrders[0]?.product_type||"";
+    // v10.59.2 — heredar el AGENTE (contacto): de una orden hija que ya lo tenga, o del que se
+    // capturó al crear la OC (ref transitoria, para el 1er producto cuando aún no hay hijas).
+    const inheritedAgent=(ocOrders.find(o=>(o.client_agent||"").trim())?.client_agent)||ocPendingAgentRef.current[oc.id]||"";
     setEditO({
       client: oc.client||"",
       client_id: oc.client_id||null, // v10.28.2 — sin esto, resolve_client_for_order corre de nuevo y puede linkear a otro client_id
       client_email: oc.client_email||"",
       client_phone: oc.client_phone||"",
       client_rfc: oc.client_rfc||"",
+      client_agent: inheritedAgent, // v10.59.2 B2
       agent: oc.vendedor||"",
       due_date: oc.delivery_date||"",
       product_type: inheritedType,
@@ -12645,7 +12730,7 @@ export default function PrintFlow() {
   const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick]);
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
-    const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
+    const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
     // v10.58.26: defense-in-depth — si la orden original tenía folio pre-asignado y el actor
     // NO es admin, quitar price/maq_price del payload aunque el frontend los haya enviado.
