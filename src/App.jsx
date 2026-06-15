@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -8345,7 +8345,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             {!hp&&vOwns?(o.price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok}}>✓Precio</span>:<span style={{fontSize:10,color:C.wn}}>⏳</span>)}
           </div>}
         </div>
-        {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac}}>🏭 {MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
+        {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
         {!compact&&<ProgressBar order={o}/>}
       </div>
     </div>
@@ -8624,7 +8624,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
   const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
   const cc={offset:C.ac,digital:"#7c3aed",acabados:"#e67e22"};
-  const catLabel={offset:"⚙️ Offset",digital:"🖨️ Digital",acabados:"🔧 Acabados"};
+  const catLabel={offset:"Offset",digital:"Digital",acabados:"Acabados"};
+  const catIcon={offset:GearIcon,digital:PrinterIcon,acabados:WrenchIcon};
   const catCount=type=>inProd.filter(o=>{const m=MACHINES.find(x=>x.id===o.current_machine);return m?.type===type}).length;
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
 
@@ -8700,7 +8701,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           return <div key={type} style={{marginBottom:20}}>
             <div onClick={()=>toggle(type)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:cc[type]+"10",borderRadius:isCol?"12px":"12px 12px 0 0",cursor:"pointer",border:"1px solid "+cc[type]+"25",borderBottom:isCol?"1px solid "+cc[type]+"25":"none"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:14,fontWeight:800,color:cc[type]}}>{catLabel[type]}</span>
+                {(()=>{const CI=catIcon[type];return CI?<CI size={17} weight="bold" color={cc[type]} style={{flexShrink:0}}/>:null})()}<span style={{fontSize:14,fontWeight:800,color:cc[type]}}>{catLabel[type]}</span>
                 <span style={{fontSize:10,color:C.t2}}>{ms.length} máquinas</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
