@@ -4181,7 +4181,10 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     s + amountToBackend(Number(sp.amountConIva||0), sp.doc_type), 0);
   // Comparar contra el total SIN IVA (que es lo que el backend valida)
   const qtyOk = sumQty === totalQty;
-  const amountOk = Math.abs(sumAmountSinIva - totalSinIva) <= 0.01;
+  // v10.64.2 — tolerancia proporcional al N de splits: el round-trip CON↔SIN IVA redondea por
+  // split y al teclear cantidades manualmente la suma derivaba >0.01 y bloqueaba Crear. El backend
+  // revalida la suma real, así que esta tolerancia solo absorbe ruido de redondeo (no errores reales).
+  const amountOk = Math.abs(sumAmountSinIva - totalSinIva) <= 0.01 * splits.length;
 
   // Saldo Corona requerido (solo splits de tipo corona_saldo)
   const coronaTotalSinIva = splits
@@ -12468,17 +12471,21 @@ export default function PrintFlow() {
         if (!stale) return;
         if (recentlyAlerted.has(o.id) || staleNotifiedRef.current.has(o.id)) return;
         staleNotifiedRef.current.add(o.id);
-        const who = SM[o.stage]?.who;
+        // v10.64.2 — usar el responsable EFECTIVO (orderResponsible hace maquila→vendedor),
+        // no SM[stage].who (que para maq_created daba "secretaria" y nunca alertaba al vendedor).
+        const resp = orderResponsible(o);
+        const who = resp?.role;
+        const target = responsibleNotifyTarget(o, who);
         const msg = "⚠️ Orden estancada: " + (o.client || "") + " — " + (o.product_type || "") + " lleva " + stale.lb + " en " + (SM[o.stage]?.l || o.stage);
         if (who === "both") {
           db.addNotification("produccion", o.id, "stale_alert", msg, null, "sistema");
           db.addNotification("preprensa", o.id, "stale_alert", msg, null, "sistema");
-        } else if (who && who !== "admin") {
-          db.addNotification(who, o.id, "stale_alert", msg, null, "sistema");
+        } else if (target && target !== "admin") {
+          db.addNotification(target, o.id, "stale_alert", msg, null, "sistema");
         }
-        // Notify vendedor creator if applicable
+        // Notify vendedor creator if applicable (y distinto del responsable ya notificado)
         const stdR=["secretaria","produccion","preprensa","german","admin"];
-        if(o.created_by && !stdR.includes(o.created_by)) db.addNotification(o.created_by, o.id, "stale_alert", msg, null, "sistema");
+        if(o.created_by && !stdR.includes(o.created_by) && o.created_by!==target) db.addNotification(o.created_by, o.id, "stale_alert", msg, null, "sistema");
         db.addNotification("admin", o.id, "stale_alert", msg, null, "sistema");
       });
     };
@@ -12579,7 +12586,8 @@ export default function PrintFlow() {
       // v10.34.3 — mensaje específico para violación de UNIQUE INDEX en production_number (race condition entre validación y insert)
       const msg=String(e?.message||"");
       if(msg.includes("idx_orders_production_number_unique")||msg.includes("duplicate key")){
-        showToast("❌ El folio "+assignedPN+" fue tomado por otra orden mientras guardabas. Cámbialo y vuelve a intentar.","error");
+        // v10.64.2 — el folio ya es automático: en la rara colisión solo hay que reintentar
+        showToast("❌ Colisión de folio (muy raro). Vuelve a guardar — el sistema asignará un folio nuevo automáticamente.","error");
       }else{
         showToast("❌ No se pudo crear: "+(e?.message||"error desconocido"),"error");
       }
@@ -12969,7 +12977,8 @@ export default function PrintFlow() {
       const targetRoles=new Set();
       if(resp){
         if(resp.role==="both"){targetRoles.add("produccion");targetRoles.add("preprensa");}
-        else targetRoles.add(resp.role);
+        // v10.64.2 — si el responsable es vendedor, agregar su USERNAME (no el literal "vendedor")
+        else { const t=responsibleNotifyTarget(orderBefore,resp.role); if(t)targetRoles.add(t); }
       }
       // Karla si la orden ya estaba facturada (cobranza necesita saber cambios post-folio)
       if(fiscalFolio)targetRoles.add("karla");
