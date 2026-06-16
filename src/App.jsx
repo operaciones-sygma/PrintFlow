@@ -1274,6 +1274,11 @@ function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
   </div>;
 }
 
+// v10.65.0 — bloque skeleton (shimmer .pf-skel) para estados de carga con forma del contenido
+const Skel=({w="100%",h=12,r=8,style={}})=><div className="pf-skel" style={{width:w,height:h,borderRadius:r,flexShrink:0,...style}}/>;
+// lista skeleton: n filas tipo registro (avatar + 2 líneas + monto) para listas que cargan
+const SkelRows=({n=5})=><div style={{display:"flex",flexDirection:"column",gap:6,padding:"4px 0"}}>{Array.from({length:n}).map((_,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px"}}><Skel w={34} h={34} r={9}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}><Skel w="55%" h={11}/><Skel w="32%" h={9}/></div><Skel w={52} h={14} r={6}/></div>)}</div>;
+
 const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento, borra el viejo y sube tu archivo preparado para prueba de color",design:"Prepara los archivos. Borra el documento anterior y sube el archivo listo. Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada",maq_received:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada"}};
 
 // ─── TOAST NOTIFICATION ───────────────────────────
@@ -2248,7 +2253,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const dispatch=(action)=>{onClose();if(onAction)onAction(o.id,action)};
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"92%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+    <div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"92%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
         <div>
           {o.cart_folio?<div style={{display:"flex",alignItems:"center",gap:6,fontSize:22,fontWeight:800,color:"#06b6d4",letterSpacing:1,lineHeight:1.1}}><ShoppingCartIcon size={20} weight="bold"/>{o.cart_folio}</div>:null}
@@ -2361,7 +2366,7 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
 }
 function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose}) {
   useEscClose(onClose);
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, cancelar</button><button onClick={onConfirm} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center"}}>{confirmLabel}</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, cancelar</button><button onClick={onConfirm} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center"}}>{confirmLabel}</button></div></div></div>;
 }
 function MaqModal({onSend,onClose,providers=[]}) {
   useEscClose(onClose);
@@ -2513,7 +2518,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt("#16a34a"),padding:"8px 12px"}}><ShoppingCartIcon size={14} weight="bold"/>Carrito de venta</button>}
         {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt("#10b981"),padding:"8px 12px"}}><PlusIcon size={14} weight="bold"/>Nuevo Producto</button>}
       </div>
-      {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
+      {loading?<SkelRows n={6}/>:
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
           {tab==="products"&&<>
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
@@ -3236,7 +3241,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd}}>
         <SearchInput style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
-      {loading?<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:40,color:C.t2}}><HourglassIcon size={14} weight="bold"/>Cargando órdenes…</div>
+      {loading?<SkelRows n={5}/>
       :orders.length===0?<div style={{padding:"40px 20px",textAlign:"center",color:C.t2,fontSize:12}}>
         <TrayIcon size={38} color={C.ph}/>
         <div style={{fontWeight:700,color:C.tx,marginTop:8,marginBottom:4,fontSize:13}}>Sin órdenes previas para este cliente</div>
@@ -3361,7 +3366,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
         </div>
       </div>
 
-      {loadingClients?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
+      {loadingClients?<SkelRows n={6}/>:
        clients.length===0?<div style={{padding:40,textAlign:"center"}}>
          <WalletIcon size={34} color={C.ph}/>
          <div style={{fontSize:13,fontWeight:600,marginTop:8}}>Sin clientes con saldo a favor todavía</div>
@@ -14102,6 +14107,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 ::-webkit-scrollbar-thumb{background:#cdced4;border-radius:8px;border:2px solid transparent;background-clip:content-box}
 ::-webkit-scrollbar-thumb:hover{background:#b4b5bd;background-clip:content-box}
 ::-webkit-scrollbar-track{background:transparent}
+/* ═══ v10.65.0 — pase de motion ligero (entrada de modales + skeletons + reduce-motion) ═══ */
+@keyframes popIn{from{opacity:0;transform:scale(.975) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes shimmer{0%{background-position:-360px 0}100%{background-position:360px 0}}
+[role="dialog"]{animation:popIn .18s cubic-bezier(.2,0,0,1) both}
+.pf-skel{background:linear-gradient(90deg,#ececef 25%,#f5f5f7 50%,#ececef 75%);background-size:360px 100%;animation:shimmer 1.15s linear infinite;border-radius:8px}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 `}</style>
       {/* ═══ SIDEBAR (v10.60.0 redesign) ═══ */}
       <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.card,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
