@@ -10942,6 +10942,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   // v10.43.18 — QuickWins: búsqueda + chips de status
   const [search,setSearch]=useState("");
   const [statusChip,setStatusChip]=useState("all"); // 'all'|'gap'|'duplicate'|'cancelled'|'preassigned' (folios) | 'all'|'gap'|'cancelled'|'invoiced'|'no_folio' (production)
+  const [showH,setShowH]=useState(false); // v10.70.0 — apartado histórico H-XXXX (pre-corte) colapsable
   const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
@@ -11339,6 +11340,46 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
           <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Click en cualquier orden para ver detalles completos.
         </div>
+      </div>;
+    })()}
+
+    {tab==="production"&&(()=>{
+      // v10.70.0 — Apartado histórico: folios de producción H-XXXX (la serie vieja renombrada en el corte).
+      // Se separa a propósito del consecutivo P- nuevo (que arranca en P-0001). Ignora el filtro de fecha
+      // porque la serie H- es histórica/congelada (casi siempre > 90 días); sí respeta la búsqueda.
+      const parseHN=p=>{const m=String(p||"").match(/H-(\d+)/);return m?parseInt(m[1],10):null};
+      const hAll=orders.filter(o=>o.production_number&&o.production_number.startsWith("H-")&&!(o.client&&o.client.startsWith("[SISTEMA]")));
+      const hFiltered=(sq?hAll.filter(o=>normSearch(o.production_number||"").includes(sq)||normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)):hAll).sort((a,b)=>(parseHN(b.production_number)||0)-(parseHN(a.production_number)||0));
+      const hShown=hFiltered.slice(0,300);
+      return <div style={{marginTop:18}}>
+        <div onClick={()=>setShowH(!showH)} onMouseEnter={e=>e.currentTarget.style.background=C.bd+"45"} onMouseLeave={e=>e.currentTarget.style.background=C.sf} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"11px 14px",background:C.sf,borderRadius:showH?"12px 12px 0 0":12,border:"1px solid "+C.bd,transition:"background .12s"}}>
+          <ClockCounterClockwiseIcon size={16} weight="bold" color={C.t2}/>
+          <div style={{fontSize:14,fontWeight:800,color:C.tx}}>Histórico de producción <span style={{color:C.t2,fontWeight:600}}>(pre-corte · H-XXXX)</span></div>
+          <span style={{fontSize:11,color:C.t2,background:C.bg,padding:"2px 9px",borderRadius:10,fontWeight:700}}>{hFiltered.length}</span>
+          {!showH&&<span style={{fontSize:11,fontWeight:600,color:C.ac}}>clic para ver</span>}
+          <span style={{marginLeft:"auto",fontSize:13,color:C.t2,transform:showH?"rotate(0)":"rotate(-90deg)",transition:"transform .2s",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
+        </div>
+        {showH&&<div style={{background:C.bg,borderRadius:"0 0 12px 12px",border:"1px solid "+C.bd,borderTop:"none",maxHeight:520,overflowY:"auto"}}>
+          {hShown.length===0?<div style={{padding:"24px",textAlign:"center",color:C.t3,fontSize:12}}>{sq?"Sin folios H-XXXX que coincidan con la búsqueda":"No hay folios H-XXXX cargados. Carga el archivo histórico completo arriba para verlos."}</div>:<>
+            {hShown.map((o,i)=>{
+              const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
+              const stClr=SM[o.stage]?.c||C.t3;
+              return <div key={"h-"+i} onClick={()=>setSelectedProdOrder(o)}
+                style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
+                onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent")}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.t2,minWidth:90}}><ClockCounterClockwiseIcon size={12} weight="bold"/>{o.production_number}</div>
+                {o.order_type==="maquila"&&<div style={{fontSize:9,color:"#e67e22",fontWeight:700,background:"#e67e2215",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
+                <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
+                {o.invoice_folio&&<div style={{fontSize:10,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
+                {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
+                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
+                <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
+              </div>;
+            })}
+            {hFiltered.length>300&&<div style={{padding:"10px 14px",textAlign:"center",fontSize:11,color:C.t2,background:C.sf}}>Mostrando los 300 más recientes de {hFiltered.length}. Usa la búsqueda para encontrar un folio específico.</div>}
+          </>}
+        </div>}
       </div>;
     })()}
 
