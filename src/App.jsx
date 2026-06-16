@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -11466,13 +11466,14 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   const canCreateOC = isSec(role) || role === "admin" || role === "karla";
   const statusBadge = (st) => {
     const map = {
-      open: {color: C.ok, icon: "🟢", label: "Abierta"},
-      in_progress: {color: C.ac, icon: "🔄", label: "En proceso"},
-      completed: {color: C.t3, icon: "✅", label: "Completada"},
-      cancelled: {color: C.dn, icon: "❌", label: "Cancelada"}
+      open: {color: C.ok, Icon: CircleIcon, weight: "fill", label: "Abierta"},
+      in_progress: {color: C.ac, Icon: ArrowsClockwiseIcon, weight: "bold", label: "En proceso"},
+      completed: {color: C.t3, Icon: CheckCircleIcon, weight: "fill", label: "Completada"},
+      cancelled: {color: C.dn, Icon: XCircleIcon, weight: "fill", label: "Cancelada"}
     };
-    const m = map[st] || {color: C.t3, icon: "⚪", label: st};
-    return <span style={{fontSize:11,fontWeight:700,color:m.color,background:m.color+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{m.icon} {m.label}</span>;
+    const m = map[st] || {color: C.t3, Icon: CircleIcon, weight: "regular", label: st};
+    const BIcon = m.Icon;
+    return <span style={{fontSize:11,fontWeight:700,color:m.color,background:m.color+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4}}><BIcon size={11} weight={m.weight}/>{m.label}</span>;
   };
 
   if (selectedOC) {
@@ -11500,37 +11501,37 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const allPendingReady = pendingOrders.every(o => o.stage === "salidas" || o.stage === "maq_received");
     const sharedFolioType = hasShared ? (selectedOC.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
     const sharedFolioColor = sharedFolioType === "factura" ? "#5856d6" : "#34c759";
-    const sharedFolioIcon = sharedFolioType === "factura" ? "📄" : "📋";
+    const SharedFolioIcon = sharedFolioType === "factura" ? FileTextIcon : ClipboardTextIcon;
     return <div>
       <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
       <div style={{background:C.bg,borderRadius:12,padding:16,border:"1px solid "+C.bd,borderLeft:isWeb?"4px solid "+WEB_BLUE:undefined,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
           <div>
             {isWeb ? <>
-              <div style={{fontSize:22,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3}}>🛒 {cartFolio}</div>
-              <div style={{fontSize:11,color:C.t3,marginTop:2}}>📝 {selectedOC.id}</div>
+              <div style={{fontSize:22,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3,display:"flex",alignItems:"center",gap:6}}><ShoppingCartIcon size={21} weight="bold"/>{cartFolio}</div>
+              <div style={{fontSize:11,color:C.t3,marginTop:2,display:"flex",alignItems:"center",gap:4}}><NotePencilIcon size={11}/>{selectedOC.id}</div>
               <div style={{fontSize:14,fontWeight:700,marginTop:6}}>{selectedOC.client}</div>
             </> : <>
-              <div style={{fontSize:20,fontWeight:800,color:C.ac}}>🛒 {selectedOC.id}</div>
+              <div style={{fontSize:20,fontWeight:800,color:C.ac,display:"flex",alignItems:"center",gap:6}}><ShoppingCartIcon size={19} weight="bold"/>{selectedOC.id}</div>
               <div style={{fontSize:14,fontWeight:700,marginTop:4}}>{selectedOC.client}</div>
             </>}
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
             {statusBadge(selectedOC.status)}
-            {isWeb && <span style={{fontSize:11,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",letterSpacing:0.3}}>🌐 Pedido web</span>}
-            {hasShared && <span style={{fontSize:11,fontWeight:700,color:sharedFolioColor,background:sharedFolioColor+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{sharedFolioIcon} {selectedOC.shared_invoice_folio} compartido</span>}
-            {isLocked && <span style={{fontSize:11,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap"}} title={selectedOC.folios_lock_reason||"OC bloqueada por folios pre-asignados"}>🔒 Bloqueada</span>}
+            {isWeb && <span style={{fontSize:11,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",letterSpacing:0.3,display:"inline-flex",alignItems:"center",gap:4}}><GlobeIcon size={11} weight="bold"/>Pedido web</span>}
+            {hasShared && <span style={{fontSize:11,fontWeight:700,color:sharedFolioColor,background:sharedFolioColor+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace",display:"inline-flex",alignItems:"center",gap:4}}><SharedFolioIcon size={11} weight="bold"/>{selectedOC.shared_invoice_folio} compartido</span>}
+            {isLocked && <span style={{fontSize:11,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"3px 8px",borderRadius:6,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4}} title={selectedOC.folios_lock_reason||"OC bloqueada por folios pre-asignados"}><LockIcon size={11} weight="bold"/>Bloqueada</span>}
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:8,marginTop:14}}>
-          {selectedOC.vendedor && <div><div style={{fontSize:10,color:C.t2}}>👤 Vendedor</div><div style={{fontSize:13,fontWeight:600}}>{selectedOC.vendedor}</div></div>}
-          {ocAgent && <div><div style={{fontSize:10,color:C.t2}}>👤 Contacto</div><div style={{fontSize:13,fontWeight:600}}>{ocAgent}</div></div>}
-          {selectedOC.delivery_date && <div><div style={{fontSize:10,color:C.t2}}>📅 Entrega</div><div style={{fontSize:13,fontWeight:600}}>{fD(selectedOC.delivery_date)}</div></div>}
-          {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2}}>💰 Total</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(selectedOC.total)}</div></div>}
+          {selectedOC.vendedor && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><UserIcon size={10} weight="bold"/>Vendedor</div><div style={{fontSize:13,fontWeight:600}}>{selectedOC.vendedor}</div></div>}
+          {ocAgent && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><UserIcon size={10} weight="bold"/>Contacto</div><div style={{fontSize:13,fontWeight:600}}>{ocAgent}</div></div>}
+          {selectedOC.delivery_date && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={10} weight="bold"/>Entrega</div><div style={{fontSize:13,fontWeight:600}}>{fD(selectedOC.delivery_date)}</div></div>}
+          {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><CurrencyDollarIcon size={10} weight="bold"/>Total</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(selectedOC.total)}</div></div>}
           <div><div style={{fontSize:10,color:C.t2}}>Productos</div><div style={{fontSize:13,fontWeight:700}}>{ocOrders.length}{invoicedCount>0?<span style={{fontSize:10,color:C.t2,fontWeight:500}}> · {invoicedCount} facturado{invoicedCount!==1?"s":""}</span>:null}</div></div>
         </div>
         {selectedOC.notes && <div style={{marginTop:10,padding:"8px 10px",background:C.bd+"40",borderRadius:6,fontSize:12,color:C.t2}}>{selectedOC.notes}</div>}
-        {isLocked && selectedOC.folios_lock_reason && <div style={{marginTop:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"30",borderRadius:6,fontSize:11,color:C.wn}}>🔒 <strong>Razón del bloqueo:</strong> {selectedOC.folios_lock_reason}</div>}
+        {isLocked && selectedOC.folios_lock_reason && <div style={{marginTop:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"30",borderRadius:6,fontSize:11,color:C.wn}}><LockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Razón del bloqueo:</strong> {selectedOC.folios_lock_reason}</div>}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"0 0 10px",flexWrap:"wrap",gap:8}}>
         <h3 style={{fontSize:14,fontWeight:800,margin:0,textTransform:"uppercase"}}>Productos ({ocOrders.length})</h3>
@@ -11546,12 +11547,12 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {canAssignFolio && allPendingReady && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px",background:"#5856d6",backgroundImage:"linear-gradient(135deg, #5856d6, #af52de)"}} title="Plan matriz: crea N facturas con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, etc.). Cobertura parcial permitida."><SquaresFourIcon size={14} weight="bold"/>Plan matriz</button>}
         </div>
       </div>
-      {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}>🌐 Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
+      {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}><GlobeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
       {/* v10.58.40 Día 1: vista del plan matriz si existe */}
       {selectedOC && selectedOC.matrix_plan && <OCMatrixPlanView matrixPlan={selectedOC.matrix_plan} ocOrders={ocOrders} role={role} onCancelLine={(line, group, order)=>onCancelMatrixLine && onCancelMatrixLine(line, group, order, selectedOC)} onCancelGroup={(group)=>onCancelMatrixGroup && onCancelMatrixGroup(group, selectedOC)} busy={false}/>}
       {ocOrders.length === 0
         ? <div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
-            <div style={{fontSize:36}}>📋</div>
+            <div style={{display:"flex",justifyContent:"center"}}><ClipboardTextIcon size={36} color={C.t3}/></div>
             <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:8}}>Esta OC no tiene productos todavía</div>
             {(canAddProduct||canMoveExisting) && <div style={{fontSize:11,color:C.t2,marginTop:4}}>{canAddProduct?'Click en "+ Agregar Producto Nuevo" para crear el primero, o en ':'Click en '}"📦 Agregar Producto Existente" para mover una orden del cliente que ya esté en el sistema.</div>}
           </div>
@@ -11577,7 +11578,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · Read-only` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño`}</p>
     {complexOCs.length === 0
       ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
-          <div style={{fontSize:48}}>📋</div>
+          <div style={{display:"flex",justifyContent:"center"}}><ClipboardTextIcon size={46} color={C.t3}/></div>
           <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin Órdenes de Compra complejas</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{canCreateOC?"Click en \"+ Nueva OC\" para crear la primera":"Las OCs aparecerán aquí cuando se cree una con varios productos"}</div>
         </div>
@@ -11590,37 +11591,37 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
             const hasShared = !!po.shared_invoice_folio;
             const sFType = hasShared ? (po.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
             const sFColor = sFType === "factura" ? "#5856d6" : "#34c759";
-            const sFIcon = sFType === "factura" ? "📄" : "📋";
+            const SFIcon = sFType === "factura" ? FileTextIcon : ClipboardTextIcon;
             // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
             const isWeb = po.is_web_oc === true;
             const cartFolio = isWeb ? getCartFolio(po) : null;
             return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",borderLeft:"4px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac)),boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                 {isWeb ? <div>
-                  <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3}}>🛒 {cartFolio}</div>
-                  <div style={{fontSize:10,color:C.t3,marginTop:2}}>📝 {po.id}</div>
-                </div> : <div style={{fontSize:14,fontWeight:800,color:C.ac}}>🛒 {po.id}</div>}
+                  <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3,display:"flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={16} weight="bold"/>{cartFolio}</div>
+                  <div style={{fontSize:10,color:C.t3,marginTop:2,display:"flex",alignItems:"center",gap:4}}><NotePencilIcon size={10}/>{po.id}</div>
+                </div> : <div style={{fontSize:14,fontWeight:800,color:C.ac,display:"flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={14} weight="bold"/>{po.id}</div>}
                 {statusBadge(po.status)}
               </div>
               <div style={{fontSize:13,fontWeight:600,marginTop:6}}>{po.client}</div>
-              {ocAgent&&<div style={{marginTop:3}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><span style={{fontSize:9,opacity:.8}}>👤</span>{ocAgent}</span></div>}
+              {ocAgent&&<div style={{marginTop:3}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><UserIcon size={9} weight="bold" style={{opacity:.8}}/>{ocAgent}</span></div>}
               {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
-                {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3}}>🌐 Pedido web</span>}
-                {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"'Geist Mono',monospace"}}>{sFIcon} {po.shared_invoice_folio}</span>}
-                {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"2px 6px",borderRadius:4}} title={po.folios_lock_reason||"OC bloqueada"}>🔒 Bloqueada</span>}
+                {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3,display:"inline-flex",alignItems:"center",gap:3}}><GlobeIcon size={10} weight="bold"/>Pedido web</span>}
+                {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"'Geist Mono',monospace",display:"inline-flex",alignItems:"center",gap:3}}><SFIcon size={10} weight="bold"/>{po.shared_invoice_folio}</span>}
+                {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={po.folios_lock_reason||"OC bloqueada"}><LockIcon size={10} weight="bold"/>Bloqueada</span>}
               </div>}
               <div style={{display:"flex",gap:10,marginTop:8,fontSize:11,color:C.t2,flexWrap:"wrap"}}>
                 <span><strong style={{color:C.tx}}>{products.length}</strong> productos</span>
-                {po.delivery_date && <span>📅 {fD(po.delivery_date)}</span>}
+                {po.delivery_date && <span style={{display:"inline-flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={11} weight="bold"/>{fD(po.delivery_date)}</span>}
                 {po.total > 0 && <span style={{color:C.ok,fontWeight:700}}>{fmt(po.total)}</span>}
               </div>
               {/* v10.32.3 — Info adicional en cards históricas (completed/cancelled) */}
               {historicoTab && po.status === "completed" && po.completed_at && (
-                <div style={{fontSize:10,color:C.t3,marginTop:6}}>✅ Completada {fDT(po.completed_at)}{po.completed_by?" · por "+po.completed_by:""}</div>
+                <div style={{fontSize:10,color:C.t3,marginTop:6}}><CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Completada {fDT(po.completed_at)}{po.completed_by?" · por "+po.completed_by:""}</div>
               )}
               {historicoTab && po.status === "cancelled" && po.cancelled_at && (
                 <div style={{fontSize:10,color:C.t3,marginTop:6}}>
-                  ❌ Cancelada {fDT(po.cancelled_at)}{po.cancelled_by?" · por "+po.cancelled_by:""}
+                  <XCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Cancelada {fDT(po.cancelled_at)}{po.cancelled_by?" · por "+po.cancelled_by:""}
                   {po.cancellation_reason && <div style={{fontSize:9,fontStyle:"italic",marginTop:2,color:C.dn}}>"{po.cancellation_reason}"</div>}
                 </div>
               )}
@@ -11643,11 +11644,11 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
               const yTotal = months.reduce((s,m)=>s+histTree[y][m].filter(po=>po.status==="completed").reduce((s2,po)=>s2+(parseFloat(po.total)||0),0), 0);
               return <div key={y} style={{marginBottom:8}}>
                 <button onClick={()=>setOpenHistYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-                  <span style={{fontSize:18}}>{yOpen?"📂":"📁"}</span>
+                  {yOpen?<FolderOpenIcon size={18} weight="fill" color={C.ac}/>:<FolderIcon size={18} weight="fill" color={C.ac}/>}
                   <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
                   <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yOCs} OC{yOCs!==1?"s":""}</span>
                   {yTotal>0&&<span style={{fontSize:11,color:C.ok,fontWeight:700}}>{fmt(yTotal)}</span>}
-                  <span style={{fontSize:12,color:C.t3}}>{yOpen?"▲":"▼"}</span>
+                  {yOpen?<CaretUpIcon size={12} weight="bold" color={C.t3}/>:<CaretDownIcon size={12} weight="bold" color={C.t3}/>}
                 </button>
                 {yOpen&&<div style={{paddingLeft:12,marginTop:4}}>
                   {months.map(m => {
@@ -11659,12 +11660,12 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                     const mCancel = mOCs.filter(po=>po.status==="cancelled").length;
                     return <div key={m} style={{marginBottom:4}}>
                       <button onClick={()=>setOpenHistMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?"#ec489908":C.bg,border:"0.5px solid "+(mOpen?"#ec489920":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-                        <span style={{fontSize:15}}>{mOpen?"📂":"📁"}</span>
+                        {mOpen?<FolderOpenIcon size={15} weight="fill" color="#ec4899"/>:<FolderIcon size={15} weight="fill" color="#ec4899"/>}
                         <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{OC_MONTHS[mi]} {y}</span>
                         <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mOCs.length} OC{mOCs.length!==1?"s":""}</span>
-                        {mCancel>0&&<span style={{fontSize:10,color:C.dn,fontWeight:600}}>❌ {mCancel}</span>}
+                        {mCancel>0&&<span style={{fontSize:10,color:C.dn,fontWeight:600,display:"inline-flex",alignItems:"center",gap:2}}><XCircleIcon size={10} weight="fill"/>{mCancel}</span>}
                         {mTotal>0&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(mTotal)}</span>}
-                        <span style={{fontSize:11,color:C.t3}}>{mOpen?"▲":"▼"}</span>
+                        {mOpen?<CaretUpIcon size={11} weight="bold" color={C.t3}/>:<CaretDownIcon size={11} weight="bold" color={C.t3}/>}
                       </button>
                       {mOpen&&<div style={{paddingLeft:8,marginTop:6,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginBottom:8}}>
                         {mOCs.map(renderOCCard)}
@@ -11766,7 +11767,7 @@ function CreateOCModal({onCreate, onClose}){
   };
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
     <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
-      <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,margin:"0 0 4px",color:C.ac}}>🛒 Nueva Orden de Compra</h2>
+      <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,margin:"0 0 4px",color:C.ac,display:"flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={18} weight="bold"/>Nueva Orden de Compra</h2>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 18px"}}>Crea una OC para agrupar varios productos del mismo cliente</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div>
@@ -11775,11 +11776,11 @@ function CreateOCModal({onCreate, onClose}){
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
-            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>📧 Email</label>
+            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}><EnvelopeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Email</label>
             <input value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com" type="email" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
           </div>
           <div>
-            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>📱 WhatsApp</label>
+            <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}><WhatsappLogoIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>WhatsApp</label>
             <input value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678" type="tel" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
           </div>
         </div>
