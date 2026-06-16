@@ -1125,6 +1125,15 @@ function orderResponsible(o){
   return base;
 }
 
+// v10.64.1 fix — destino de notificación del responsable. Si el responsable efectivo es un
+// vendedor con usuario (maquila→vendedor en orderResponsible), la notif debe ir a su USERNAME
+// (o.agent, p.ej. "genaro"), NO al literal "vendedor" que ningún usuario escucha
+// (loadNotifications filtra .eq(target_role, username)). Para roles reales devuelve el rol tal cual.
+function responsibleNotifyTarget(o, role){
+  if(role==="vendedor") return (o?.agent||"").trim().toLowerCase() || null;
+  return role;
+}
+
 const TERMINAL_STAGES = ["delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected"];
 
 function getTopPriority(activeOrders) {
@@ -3579,7 +3588,10 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
   // que para miembros es 0. Sin esto, admin ajusta sobre EVA y ve "$0 → $5,000" cuando en
   // realidad el saldo del pool es $32k → $37k.
   const baseBalance=Number(client?.pool_balance||client?.current_balance||0);
-  const isMember=client && client.is_pool_leader===false;
+  // v10.64.1 fix — el caller (CoronaModal) SIEMPRE pasa un LÍDER, así que el viejo
+  // is_pool_leader===false era siempre false → banner muerto. Lo correcto: avisar cuando el
+  // líder TIENE sub-cuentas (el ajuste afecta a todo el pool, no solo a este cliente).
+  const affectsPool=client && Array.isArray(client.pool_members) && client.pool_members.length>0;
   const preview=valid?(baseBalance+n):baseBalance;
   const submit=async()=>{
     if(!canSubmit) return;
@@ -3591,11 +3603,11 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px"}}><ChartBarIcon size={17} weight="bold"/>Ajuste manual de saldo</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{client?.name}</div>
-      {isMember && <div style={{padding:"10px 12px",background:"#ff950015",border:"1.5px solid #ff950050",borderRadius:8,marginBottom:12,fontSize:11,color:"#a85a00",lineHeight:1.5}}>
-        <WarningIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este ajuste afecta al <b>pool de {client?.leader_name}</b>, NO solo a {client?.name}. Las otras sub-cuentas del pool verán el mismo nuevo saldo. Si querías aislar el ajuste, no se puede — el saldo es compartido.
+      {affectsPool && <div style={{padding:"10px 12px",background:"#ff950015",border:"1.5px solid #ff950050",borderRadius:8,marginBottom:12,fontSize:11,color:"#a85a00",lineHeight:1.5}}>
+        <WarningIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este ajuste afecta a <b>TODO el pool</b>, NO solo a {client?.name}: comparte saldo con {client?.pool_members?.join(", ")}. Todas las sub-cuentas verán el mismo nuevo saldo (es compartido).
       </div>}
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>{isMember?"Pool actual":"Actual"}</div><div style={{fontSize:16,fontWeight:800}}>${baseBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>{affectsPool?"Saldo del pool":"Actual"}</div><div style={{fontSize:16,fontWeight:800}}>${baseBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
         <div style={{fontSize:24,color:C.t2,alignSelf:"center"}}>→</div>
         <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Después</div><div style={{fontSize:16,fontWeight:800,color:preview<0?C.dn:C.ok}}>${preview.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
       </div>
@@ -4241,18 +4253,20 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   };
 
   const divideEqualBetweenN = () => {
-    if (!totalQty || !totalConIva || splits.length < 2) return;
+    if (!totalQty || !totalSinIva || splits.length < 2) return;
     const N = splits.length;
-    // Distribuir cantidad y monto CON IVA, con residuo al último split
+    // v10.64.1 fix — repartir SIN IVA (que es lo que valida el backend), con residuo al último,
+    // y convertir a CON IVA por split según su doc_type (factura lleva IVA; remisión/corona no).
+    // Antes repartía CON IVA a TODOS sin mirar doc_type → inflaba remisión/corona ~16% y bloqueaba Crear.
     const qtyBase = Math.floor(totalQty / N);
-    const amountBaseConIva = Math.round((totalConIva / N) * 100) / 100;
+    const baseSinIva = Math.round((totalSinIva / N) * 100) / 100;
     const newSplits = splits.map((s, i) => {
       const isLast = i === N - 1;
       const qty = isLast ? totalQty - qtyBase * (N - 1) : qtyBase;
-      const amountConIva = isLast
-        ? Math.round((totalConIva - amountBaseConIva * (N - 1)) * 100) / 100
-        : amountBaseConIva;
-      return {...s, qty, amountConIva};
+      const splitSinIva = isLast
+        ? Math.round((totalSinIva - baseSinIva * (N - 1)) * 100) / 100
+        : baseSinIva;
+      return {...s, qty, amountConIva: sinIvaToConIva(splitSinIva, s.doc_type)};
     });
     setSplits(newSplits);
   };
@@ -5674,7 +5688,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
     });
     if (!allValid) return false;
     const sum = paymentRefs.reduce((s,r) => s + (Number(r.amount)||0), 0);
-    if (paymentStatus === "paid") return Math.abs(sum - totalDisplay) <= 0.01;
+    if (paymentStatus === "paid") return Math.round(sum*100) === Math.round(totalDisplay*100); // v10.64.1 — centavos exactos (igual que el picker), antes tolerancia 0.01 dejaba pasar ±1 centavo
     if (paymentStatus === "partial") return sum > 0 && sum < totalDisplay;
     return true;
   })();
@@ -6092,7 +6106,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     });
     if (!allValid) return false;
     const sum = paymentRefs.reduce((s,r) => s + (Number(r.amount)||0), 0);
-    if (paymentStatus === "paid") return Math.abs(sum - totalDisplay) <= 0.01;
+    if (paymentStatus === "paid") return Math.round(sum*100) === Math.round(totalDisplay*100); // v10.64.1 — centavos exactos (igual que el picker), antes tolerancia 0.01 dejaba pasar ±1 centavo
     if (paymentStatus === "partial") return sum > 0 && sum < totalDisplay;
     return true;
   })();
@@ -10466,7 +10480,10 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
         setConfirmModal(null);
         try {
           // v10.28.2 — usar db.notify para que addNotification también deje copy en audit admin
-          await db.notify(resp.role, order.id, "admin_attention", msg, null, "admin");
+          // v10.64.1 — rutear al vendedor por username, no por el literal "vendedor"
+          const target = responsibleNotifyTarget(order, resp.role);
+          if(!target){ showToast("❌ No se pudo notificar: responsable sin usuario", "error"); return; }
+          await db.notify(target, order.id, "admin_attention", msg, null, "admin");
           showToast("📣 Notificación enviada a " + resp.name);
         } catch (e) {
           showToast("❌ No se pudo notificar: " + (e?.message || "error"), "error");
@@ -12099,6 +12116,7 @@ export default function PrintFlow() {
   const [clientConfirmModal,setClientConfirmModal]=useState(null); // 🆕 v10.13.0 — Modal de confirmación cliente similar
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
+  const assignMachineLock=useRef(false); // v10.64.1 — lock SÍNCRONO real para reentrada de assignMachine (actionLoading es async y se leía stale del closure)
   const [showMoreMenu,setShowMoreMenu]=useState(false);
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
   const showToast=useCallback((message,type="success")=>setToast({message,type}),[]);
@@ -12182,7 +12200,14 @@ export default function PrintFlow() {
     archiveLoadedRef.current=true;
     setArchiveLoaded(true);
     const all=await db.loadOrders(false);
-    setOrders(all);
+    // v10.64.1 fix — preservar el enriquecimiento de splits (has_splits/splits/splits_alive_count)
+    // que reload() ya computó; antes setOrders(all) crudo lo borraba de TODAS las órdenes y reabría
+    // transitoriamente "Facturar por partes" en órdenes ya divididas.
+    setOrders(prev=>{
+      const enrichedById={};
+      for(const o of prev){ if(o&&(o.has_splits!==undefined||o.splits)) enrichedById[o.id]={splits:o.splits,has_splits:o.has_splits,splits_alive_count:o.splits_alive_count}; }
+      return all.map(o=>enrichedById[o.id]?{...o,...enrichedById[o.id]}:o);
+    });
   },[]);
 
   useEffect(() => { if (user) reload(); }, [user, reload]);
@@ -12777,7 +12802,8 @@ export default function PrintFlow() {
   const nudgeDiag=useCallback(async({o,diag})=>{
     try{
       const msg="📣 "+userDisplayName(user)+" pide atención: "+(o.production_number||o.id)+" · "+(o.client||"")+" — "+diag.text+(o.due_date?" · entrega "+fD(o.due_date):"");
-      const roles=diag.respRole==="both"?["produccion","preprensa"]:[diag.respRole];
+      // v10.64.1 — si respRole es "vendedor", rutear por username del agente (no al literal que nadie escucha)
+      const roles=diag.respRole==="both"?["produccion","preprensa"]:[responsibleNotifyTarget(o,diag.respRole)];
       for(const rr of roles){ if(rr&&rr!==user) await db.notify(rr,o.id,"admin_attention",msg,null,user); }
       showToast("📣 Recordatorio enviado a "+diag.respName);
     }catch(e){console.error("[nudgeDiag]",e);showToast("❌ "+(e?.message||"error"),"error")}
@@ -12786,7 +12812,11 @@ export default function PrintFlow() {
     try{
       const lines=rows.slice(0,8).map(r=>"• "+(r.o.production_number||r.o.id)+" "+(r.o.client||"")+": "+r.diag.text);
       const msg="📣 "+userDisplayName(user)+" — tienes "+rows.length+" bloqueo"+(rows.length===1?"":"s")+" en la Torre de Control:\n"+lines.join("\n")+(rows.length>8?"\n…y "+(rows.length-8)+" más":"");
-      await db.notify(respRole,rows[0].o.id,"admin_attention",msg,null,user);
+      // v10.64.1 — el grupo está agrupado por respName (único por vendedor), así que rows[0].o
+      // identifica al vendedor del batch; rutear por username si es vendedor.
+      const target=responsibleNotifyTarget(rows[0].o,respRole);
+      if(!target){ showToast("❌ No se pudo notificar: responsable sin usuario","error"); return; }
+      await db.notify(target,rows[0].o.id,"admin_attention",msg,null,user);
       showToast("📣 Recordatorio enviado a "+respName+" ("+rows.length+")");
     }catch(e){console.error("[nudgeBatch]",e);showToast("❌ "+(e?.message||"error"),"error")}
   },[user,showToast]);
@@ -13210,7 +13240,10 @@ export default function PrintFlow() {
   const assignMachine=useCallback(async(oid,mid)=>{
     // v10.58.64 M5: guard de reentrada REAL — setActionLoading no es síncrono, un
     // doble-drop alcanzaba a correr 2 veces y duplicaba/triplicaba el machine_log.
-    if(actionLoading)return;
+    // v10.64.1 fix — actionLoading se leía STALE del closure (no estaba en deps), así que dos
+    // drops síncronos pasaban ambos. Lock síncrono vía useRef (set/check atómico, sin async).
+    if(assignMachineLock.current)return;
+    assignMachineLock.current=true;
     const isManual=mid==="vm_manual";
     const mach=MACHINES.find(x=>x.id===mid);
     const isPreprensa=mach?.type==="preprensa";
@@ -13218,7 +13251,7 @@ export default function PrintFlow() {
     const label=isManual?"📦 Empaque":(mach?.name||mid);
     const stageColor=isManual?"#af52de":isPreprensa?"#0891b2":"#ff9500";
     const o=orders.find(x=>x.id===oid);
-    if(!o)return;
+    if(!o){assignMachineLock.current=false;return;}
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
     // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
@@ -13285,7 +13318,7 @@ export default function PrintFlow() {
       }
       showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label);
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
-    finally{setActionLoading(null)}
+    finally{setActionLoading(null);assignMachineLock.current=false}
   },[user,userLogin,orders,showToast,reload]);
 
   const sendMaquila=useCallback(async(oid,prov,phone,email,note)=>{
@@ -13603,7 +13636,10 @@ export default function PrintFlow() {
         const noCost=o.order_type==="maquila"&&(!Number(o.maq_cost)||Number(o.maq_cost)<=0);
         const missing=(noPrice||noCost)?" — falta capturar "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y "):"";
         const msg="📣 "+userDisplayName(user)+" pide atención: "+(o.production_number||o.id)+" · "+(o.client||"")+" · "+(SM[o.stage]?.l||o.stage)+missing+(o.due_date?" · entrega "+fD(o.due_date):"");
-        await db.notify(resp.role,id,"admin_attention",msg,null,user);
+        // v10.64.1 — rutear al vendedor por username (no al literal "vendedor")
+        const target=responsibleNotifyTarget(o,resp.role);
+        if(!target){showToast("❌ No se pudo notificar: responsable sin usuario","error");return}
+        await db.notify(target,id,"admin_attention",msg,null,user);
         showToast("📣 Recordatorio enviado a "+resp.name+" (in-app + Telegram)");
       }catch(e){console.error("[nudge]",e);showToast("❌ No se pudo notificar: "+(e?.message||"error"),"error")}})();
       return;
