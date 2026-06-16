@@ -7531,7 +7531,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:640,width:"100%",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}>📦 Agregar Producto Existente</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><PackageIcon size={17} weight="bold"/>Agregar Producto Existente</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>
         Órdenes de producción del cliente <strong>{oc?.client||"—"}</strong> que aún no tienen folio fiscal. Las órdenes seleccionadas se moverán a esta OC ({oc?.id}). Si están en otra OC, se mueven (y la OC origen se limpia automáticamente si queda vacía).
       </p>
@@ -7574,7 +7574,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
                 </div>
                 <div style={{fontSize:10,color:C.t2,marginTop:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                   <span>Stage: <strong>{SM[o.stage]?.l||o.stage}</strong></span>
-                  {o.due_date && <span>· 📅 {fD(o.due_date)}</span>}
+                  {o.due_date && <span style={{display:"inline-flex",alignItems:"center",gap:3}}>·<CalendarDotsIcon size={10} weight="bold"/>{fD(o.due_date)}</span>}
                   {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}}>Actualmente en {o.purchase_order_id}</span>}
                   {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t3,padding:"1px 6px",borderRadius:4,fontSize:9}}>Sin OC</span>}
                 </div>
@@ -7590,7 +7590,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleConfirm} disabled={saving||selectedIds.size===0} style={{...bt(selectedIds.size>0?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:saving||selectedIds.size===0?"default":"pointer",opacity:saving?.6:1}}>
-            {saving ? "Moviendo..." : `📦 Agregar ${selectedIds.size>0?selectedIds.size+" ":""}orden${selectedIds.size!==1?"es":""}`}
+            {saving ? "Moviendo..." : <><PackageIcon size={13} weight="bold"/>Agregar {selectedIds.size>0?selectedIds.size+" ":""}orden{selectedIds.size!==1?"es":""}</>}
           </button>
         </div>
       </div>
@@ -7699,16 +7699,16 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
   // v10.58.15 — role=dialog para accessibility
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div role="dialog" aria-modal="true" aria-labelledby="moveorder-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
-      <h3 id="moveorder-modal-title" style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}>↔️ Mover orden a otra OC</h3>
+      <h3 id="moveorder-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}><ArrowsLeftRightIcon size={17} weight="bold"/>Mover orden a otra OC</h3>
       <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}{order?.production_number?" · "+order.production_number:""}</div>
-        {fromOC && <div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:4}}>Desde 🛒 {fromOC}</div>}
+        {fromOC && <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.ac,fontWeight:600,marginTop:4}}>Desde <ShoppingCartIcon size={11} weight="bold"/>{fromOC}</div>}
       </div>
 
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        <button onClick={()=>setMode("existing")} style={{...bs(mode==="existing"?C.ac:C.sf,mode==="existing"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="existing"?"none":"0.5px solid "+C.bd}}>📁 OC existente</button>
-        <button onClick={()=>setMode("new")} style={{...bs(mode==="new"?C.ac:C.sf,mode==="new"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="new"?"none":"0.5px solid "+C.bd}}>➕ Crear OC nueva</button>
+        <button onClick={()=>setMode("existing")} style={{...bs(mode==="existing"?C.ac:C.sf,mode==="existing"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="existing"?"none":"0.5px solid "+C.bd}}><FolderOpenIcon size={13} weight="bold"/>OC existente</button>
+        <button onClick={()=>setMode("new")} style={{...bs(mode==="new"?C.ac:C.sf,mode==="new"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="new"?"none":"0.5px solid "+C.bd}}><PlusIcon size={13} weight="bold"/>Crear OC nueva</button>
       </div>
 
       {mode==="existing" && <div>
@@ -7745,15 +7745,15 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
                 };
                 return <button key={po.id} onClick={handleSelect} style={{textAlign:"left",padding:"10px 12px",border:"1.5px solid "+(selected?C.ac:(sameClient?C.bd:"#ff950040")),borderRadius:10,background:selected?C.acL:(sameClient?C.bg:"#ff950008"),cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:13,fontWeight:800,color:C.ac}}>🛒 {po.id}</span>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:13,fontWeight:800,color:C.ac}}><ShoppingCartIcon size={13} weight="bold"/>{po.id}</span>
                     {selected
-                      ? <span style={{fontSize:11,color:C.ac,fontWeight:700}}>✓ Seleccionada</span>
+                      ? <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:C.ac,fontWeight:700}}><CheckIcon size={11} weight="bold"/>Seleccionada</span>
                       : sameClient
-                        ? <span style={{fontSize:10,color:"#34c759",fontWeight:700}}>✓ Mismo cliente</span>
-                        : <span style={{fontSize:10,color:"#ff9500",fontWeight:700}}>⚠️ Cliente distinto</span>}
+                        ? <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#34c759",fontWeight:700}}><CheckIcon size={10} weight="bold"/>Mismo cliente</span>
+                        : <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#ff9500",fontWeight:700}}><WarningIcon size={10} weight="fill"/>Cliente distinto</span>}
                   </div>
                   <div style={{fontSize:12,fontWeight:600,marginTop:2,color:C.tx}}>{po.client}</div>
-                  {(po.delivery_date||po.vendedor) && <div style={{fontSize:10,color:C.t2,marginTop:2}}>{po.delivery_date?"📅 "+fD(po.delivery_date):""}{po.delivery_date&&po.vendedor?" · ":""}{po.vendedor?"👤 "+po.vendedor:""}</div>}
+                  {(po.delivery_date||po.vendedor) && <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,marginTop:2,flexWrap:"wrap"}}>{po.delivery_date?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={10} weight="bold"/>{fD(po.delivery_date)}</span>:null}{po.delivery_date&&po.vendedor?<span>·</span>:null}{po.vendedor?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><UserIcon size={10} weight="bold"/>{po.vendedor}</span>:null}</div>}
                 </button>;
               })}
         </div>
@@ -7771,9 +7771,9 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
             onSelect={(c)=>setNewOC(p=>({...p,client:c.name,client_id:c.id}))}
           />
           {newOC.client_id
-            ? <div style={{fontSize:10,color:C.ok,marginTop:4,fontWeight:600}}>✓ Cliente vinculado por ID</div>
+            ? <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.ok,marginTop:4,fontWeight:600}}><CheckIcon size={11} weight="bold"/>Cliente vinculado por ID</div>
             : newOC.client.trim()
-              ? <div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Cliente sin vincular — quedará como texto libre. Mejor selecciónalo del autocomplete.</div>
+              ? <div style={{display:"flex",alignItems:"flex-start",gap:4,fontSize:10,color:C.wn,marginTop:4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>Cliente sin vincular — quedará como texto libre. Mejor selecciónalo del autocomplete.</div>
               : null}
         </div>
         <div>
@@ -7795,7 +7795,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.ac:"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmit?"pointer":"not-allowed"}}>{saving?"⏳ Moviendo...":"↔️ Mover"}</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.ac:"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Moviendo...</>:<><ArrowsLeftRightIcon size={14} weight="bold"/>Mover</>}</button>
       </div>
     </div>
   </div>;
