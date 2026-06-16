@@ -1270,7 +1270,7 @@ const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadiu
 function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
   return <div style={{position:"relative",display:"flex",alignItems:"center",...wrapStyle}}>
     <MagnifyingGlassIcon size={iconSize} weight="bold" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.ph,pointerEvents:"none"}}/>
-    <input {...rest} style={{...style,paddingLeft:32,boxSizing:"border-box"}}/>
+    <input {...rest} data-pf-search="1" style={{...style,paddingLeft:32,boxSizing:"border-box"}}/>
   </div>;
 }
 
@@ -8340,8 +8340,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3),transition:"box-shadow .16s ease,transform .12s ease"}}
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",position:"relative",transition:"box-shadow .16s ease,transform .12s ease"}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+    {/* v10.65.1 — VARIANTE A (impeccable critique): el indicador de etapa/urgencia deja de ser
+        raya lateral (side-tab, tell de AI + color-only) y pasa a un punto de estado discreto;
+        el chip de etapa con icono+label sigue siendo el indicador primario (a11y). */}
+    {!compact&&<div title={o.priority==="urgente"?"Urgente":(st?.lt||o.stage)} style={{position:"absolute",top:13,right:13,width:9,height:9,borderRadius:"50%",background:(o.priority==="urgente"?C.dn:st?.c||C.t3),boxShadow:"0 0 0 2.5px "+C.card,zIndex:1}}/>}
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><DotsSixVerticalIcon size={13} color={C.ac}/><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
     {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
@@ -12228,6 +12232,27 @@ export default function PrintFlow() {
   },[]);
 
   useEffect(() => { if (user) reload(); }, [user, reload]);
+
+  // v10.65.1 — atajos de teclado (impeccable critique P1, para uso diario de alto volumen):
+  // "/" enfoca la búsqueda visible · "n" nueva orden (sec/admin) · "?" muestra los atajos.
+  // No dispara cuando se está escribiendo en un campo.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target, tag = t?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t?.isContentEditable) return;
+      if (e.key === "/") {
+        const s = [...document.querySelectorAll("[data-pf-search]")].find(el => el.offsetParent !== null);
+        if (s) { e.preventDefault(); s.focus(); }
+      } else if ((e.key === "n" || e.key === "N") && (isSec(user) || user === "admin")) {
+        e.preventDefault(); setEditO(null); setView("form");
+      } else if (e.key === "?") {
+        showToast("Atajos: / buscar · n nueva orden · Esc cerrar", "info");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [user]);
 
   // v10.43.29 — Global: cualquier <input type="number"> pierde foco al hacer scroll del mouse.
   // Evita errores humanos comunes (cambiar precio/cantidad sin querer al rolar la rueda).
