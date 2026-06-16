@@ -1456,7 +1456,7 @@ function OrderChangeHistory({orderId}) {
           <div style={{color:C.t3,fontSize:9}}>
             <span style={{color:rc[r.changed_by]||C.t3,fontWeight:600}}>{r.changed_by}</span>
             {" · "}{fDT(r.changed_at)}
-            {r.stage_at_change&&<span> · {SM[r.stage_at_change]?.l||r.stage_at_change}</span>}
+            {r.stage_at_change&&<span> · <StageLbl stage={r.stage_at_change} size={9}/></span>}
           </div>
         </div>)}
       </div>:<div style={{fontSize:10,color:C.t3,padding:"6px 0"}}>Sin cambios registrados todavía.</div>}
@@ -2222,9 +2222,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <div style={{fontSize:(o.cart_folio||o.web_folio)?10:9,color:C.t3,marginTop:(o.cart_folio||o.web_folio)?2:0}}>{o.id}</div>
           <div style={{fontSize:20,fontWeight:800}}>{o.production_number||o.client}</div>
           <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
-            <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{st?.l}</span>
+            <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
             {o.source==="web"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,background:"#06b6d412",color:"#06b6d4",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}><GlobeIcon size={11} weight="bold"/>Web{o.web_order_ref?" · "+o.web_order_ref:""}</span>}
-            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600}}>{PM[o.priority].l}</span>}
+            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
             {o.has_post_invoice_edits&&<span style={{background:"#ff950015",color:"#ff9500",padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada post-factura</span>}
           </div>
         </div>
@@ -2322,7 +2322,7 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
   const total=co.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
   const byType={};co.forEach(o=>{const k=o.product_type||"?";byType[k]=(byType[k]||0)+1}); // v10.34.2 fix #7 — fallback consistente con línea 2391
   const hp=role==="produccion"||role==="preprensa"||role==="german";
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><UserIcon size={18} weight="bold"/>{clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:"#06b6d4",letterSpacing:0.3,marginBottom:1,display:"flex",alignItems:"center",gap:4}}><ShoppingCartIcon size={11} weight="bold"/>{o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759",marginBottom:1,display:"flex",alignItems:"center",gap:4}}>{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{o.invoice_folio}</div>}<div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600}}>{SM[o.stage]?.l}</span></div>{!hp&&(o.price||o.maq_price)&&<div style={{fontSize:14,fontWeight:700}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><UserIcon size={18} weight="bold"/>{clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:"#06b6d4",letterSpacing:0.3,marginBottom:1,display:"flex",alignItems:"center",gap:4}}><ShoppingCartIcon size={11} weight="bold"/>{o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?"#5856d6":"#34c759",marginBottom:1,display:"flex",alignItems:"center",gap:4}}>{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{o.invoice_folio}</div>}<div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={9}/></span></div>{!hp&&(o.price||o.maq_price)&&<div style={{fontSize:14,fontWeight:700}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
 }
 function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose}) {
   useEscClose(onClose);
@@ -2387,7 +2387,7 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
       <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
       <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
       {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
-      <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: {SM[order?.stage]?.l||order?.stage}</div>
+      <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: <StageLbl stage={order?.stage}/></div>
     </div>
     <div style={{marginBottom:16}}>
       <label style={lbl}>Razón del regreso (obligatorio)</label>
@@ -2549,7 +2549,6 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                   const color=isProd?"#10b981":isSale?"#16a34a":C.t2;
                   const HIcon=isProd?PackageIcon:isSale?ShoppingCartIcon:null;
                   const label=isProd?(o.stock_loaded?"a Stock":"a Stock (pendiente)"):(isSale?"desde Stock":"—");
-                  const stageLabel=SM[o.stage]?.l||o.stage;
                   return <div key={o.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
@@ -2561,7 +2560,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                         <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
                         {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
                         <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
-                        <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: {stageLabel} · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
+                        <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: <StageLbl stage={o.stage} size={9}/> · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
                       {/* v10.46.2 FIX — null check explícito permite mostrar ventas $0 (regalos/cortesía) */}
                       {o.price!==null&&o.price!==undefined&&<div style={{textAlign:"right",marginLeft:8}}>
@@ -3662,7 +3661,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
         <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
         <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
         {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
-        <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: <strong>{SM[order?.stage]?.l||order?.stage}</strong></div>
+        <div style={{fontSize:10,color:C.t3,marginTop:4}}>Stage actual: <strong><StageLbl stage={order?.stage}/></strong></div>
       </div>
 
       {options.length===1?(
@@ -6234,7 +6233,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
             </>;
           })()}
         </div>
-        <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden mantiene su stage actual ({SM[order?.stage]?.l||order?.stage}). Solo se asigna el folio fiscal sin entregarla todavía.</p>
+        <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden mantiene su stage actual (<StageLbl stage={order?.stage}/>). Solo se asigna el folio fiscal sin entregarla todavía.</p>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}><CaretLeftIcon size={13} weight="bold"/>Atrás</button>
           <button onClick={handleConfirm} disabled={busy} style={{...bt("#ff9500"),flex:1,justifyContent:"center",opacity:busy?0.6:1}}>{busy?<><HourglassIcon size={14} weight="bold"/>Asignando...</>:<><LightningIcon size={14} weight="fill"/>Confirmar Folio</>}</button>
@@ -6718,7 +6717,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
         <div style={{fontSize:isWeekView?10:9,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.client}</div>
         {isWeekView&&<div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:1}}>
-          <span style={{fontSize:isWeekView?8:7,color:st?.c,fontWeight:600}}>{st?.l}</span>
+          <span style={{fontSize:isWeekView?8:7,color:st?.c,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={isWeekView?8:7}/></span>
           {o.priority==="urgente"&&<span style={{fontSize:7,color:C.dn,fontWeight:800,display:"inline-flex",alignItems:"center"}}><CircleIcon size={7} weight="fill"/></span>}
         </div>
       </div>})}
@@ -6780,7 +6779,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
             </div>
             <div style={{textAlign:"right"}}>
               {editOrder.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{editOrder.production_number}</div>}
-              <div style={{background:(SM[editOrder.stage]?.c||C.t3)+"15",color:SM[editOrder.stage]?.c,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:600,marginTop:2}}>{SM[editOrder.stage]?.l}</div>
+              <div style={{background:(SM[editOrder.stage]?.c||C.t3)+"15",color:SM[editOrder.stage]?.c,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:600,marginTop:2,display:"inline-flex",alignItems:"center"}}><StageLbl stage={editOrder.stage} size={9}/></div>
             </div>
           </div>
         </div>
@@ -6896,7 +6895,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{staleOrders.slice(0,8).map(o=>
           <div key={o.id} style={{background:C.dn+"08",borderRadius:8,padding:"4px 10px",fontSize:10,border:"0.5px solid "+C.dn+"20"}}>
             <span style={{fontWeight:600}}>{o.client}</span>
-            <span style={{color:C.t2,marginLeft:4}}>{SM[o.stage]?.l}</span>
+            <span style={{color:C.t2,marginLeft:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
             <span style={{color:C.dn,marginLeft:4,fontWeight:600}}>{getStale(o)?.lb}</span>
           </div>
         )}</div>
@@ -7585,7 +7584,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
                   {o.quantity && <span style={{fontSize:11,color:C.t2}}>· {Number(o.quantity).toLocaleString()} pzas</span>}
                 </div>
                 <div style={{fontSize:10,color:C.t2,marginTop:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                  <span>Stage: <strong>{SM[o.stage]?.l||o.stage}</strong></span>
+                  <span>Stage: <strong><StageLbl stage={o.stage}/></strong></span>
                   {o.due_date && <span style={{display:"inline-flex",alignItems:"center",gap:3}}>·<CalendarDotsIcon size={10} weight="bold"/>{fD(o.due_date)}</span>}
                   {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}}>Actualmente en {o.purchase_order_id}</span>}
                   {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t3,padding:"1px 6px",borderRadius:4,fontSize:9}}>Sin OC</span>}
