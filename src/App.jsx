@@ -3647,7 +3647,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2"}}>↩️ Regresar Orden</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0891b2",display:"flex",alignItems:"center",gap:6}}><ArrowUUpLeftIcon size={17} weight="bold"/>Regresar Orden</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>Elige el stage destino y captura la razón. El área responsable del destino será notificada.</p>
       <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
@@ -3688,7 +3688,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
 
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#0891b2":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Regresando...":"↩️ Regresar Orden"}</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?"#0891b2":"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Regresando...</>:<><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar Orden</>}</button>
       </div>
     </div>
   </div>;
@@ -3708,7 +3708,7 @@ function CancelOrderModal({order,onConfirm,onClose}) {
     finally{ setBusy(false); }
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn}}>❌ Cancelar Orden</h3>
+    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.dn,display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={17} weight="bold"/>Cancelar Orden</h3>
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
       <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
@@ -3716,7 +3716,7 @@ function CancelOrderModal({order,onConfirm,onClose}) {
     </div>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Esta acción es permanente. La orden quedará marcada como cancelada y no se podrá revertir.</p>
     <div style={{marginBottom:16}}><label style={lbl}>Motivo de cancelación (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se cancela esta orden?" disabled={busy}/></div>
-    <div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>No, conservar</button><button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?"⏳ Cancelando...":"❌ Sí, Cancelar Orden"}</button></div>
+    <div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>No, conservar</button><button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Cancelando...</>:<><XCircleIcon size={14} weight="bold"/>Sí, Cancelar Orden</>}</button></div>
   </div></div>;
 }
 
@@ -3726,12 +3726,12 @@ function StartMaintenanceModal({machine,onConfirm,onClose}) {
   const [notes,setNotes]=useState("");
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>🔧 Mantenimiento — {machine?.name}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={17} weight="bold"/>Mantenimiento — {machine?.name}</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La máquina dejará de aceptar órdenes hasta que se repare</p>
       <div style={{marginBottom:16}}><label style={lbl}>¿Qué problema tiene? (opcional)</label><textarea style={{...inp,minHeight:60,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Describe la falla..."/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>onConfirm(notes||null)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}>🔧 Poner en Mantenimiento</button>
+        <button onClick={()=>onConfirm(notes||null)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}><WrenchIcon size={14} weight="bold"/>Poner en Mantenimiento</button>
       </div>
     </div>
   </div>;
@@ -3743,14 +3743,14 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
   const elapsed=started?Math.round((Date.now()-started.getTime())/3600000):0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px"}}>✅ Quitar Mantenimiento — {machine?.name}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><CheckCircleIcon size={17} weight="bold"/>Quitar Mantenimiento — {machine?.name}</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>En mantenimiento desde: {started?fDT(record.started_at):"-"}</p>
-      <p style={{fontSize:12,color:C.wn,margin:"0 0 4px",fontWeight:600}}>⏱ {elapsed<24?elapsed+"h":Math.floor(elapsed/24)+"d "+elapsed%24+"h"} fuera de servicio</p>
+      <p style={{fontSize:12,color:C.wn,margin:"0 0 4px",fontWeight:600}}><ClockIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{elapsed<24?elapsed+"h":Math.floor(elapsed/24)+"d "+elapsed%24+"h"} fuera de servicio</p>
       {record?.notes&&<p style={{fontSize:11,color:C.t3,margin:"0 0 14px",fontStyle:"italic"}}>Motivo: {record.notes}</p>}
       <div style={{marginBottom:16}}><label style={lbl}>Costo total del mantenimiento (obligatorio)</label><input style={inp} type="number" step=".01" min="0" value={cost} onChange={e=>setCost(e.target.value)} placeholder="$0.00"/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if((!cost&&cost!=="0")||parseFloat(cost)<0)return alert("Ingresa un costo válido (0 o mayor)");onConfirm(cost)}} style={{...bt(C.ok),flex:1,justifyContent:"center"}}>✅ Máquina Reparada</button>
+        <button onClick={()=>{if((!cost&&cost!=="0")||parseFloat(cost)<0)return alert("Ingresa un costo válido (0 o mayor)");onConfirm(cost)}} style={{...bt(C.ok),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Máquina Reparada</button>
       </div>
     </div>
   </div>;
@@ -3764,14 +3764,14 @@ function PlateModal({order,machine,onConfirm,onClose}) {
   const [busy,setBusy]=useState(false);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px"}}>💿 Registrar Placas — CTP</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={17} weight="bold"/>Registrar Placas — CTP</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>→ {machine?.name||"CTP"}</p>
       <div style={{marginBottom:14}}>
         <label style={lbl}>Tamaño de placa (obligatorio)</label>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setSize("chica")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="chica"?"#0891b2":C.bd),background:size==="chica"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="chica"?700:500,color:size==="chica"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif"}}>📏 Chica</button>
-          <button onClick={()=>setSize("grande")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="grande"?"#0891b2":C.bd),background:size==="grande"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="grande"?700:500,color:size==="grande"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif"}}>📐 Grande</button>
+          <button onClick={()=>setSize("chica")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="chica"?"#0891b2":C.bd),background:size==="chica"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="chica"?700:500,color:size==="chica"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><RulerIcon size={13} weight="bold"/>Chica</button>
+          <button onClick={()=>setSize("grande")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="grande"?"#0891b2":C.bd),background:size==="grande"?"#0891b212":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="grande"?700:500,color:size==="grande"?"#0891b2":C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><RulerIcon size={16} weight="bold"/>Grande</button>
         </div>
       </div>
       <div style={{marginBottom:16}}>
@@ -3787,7 +3787,7 @@ function PlateModal({order,machine,onConfirm,onClose}) {
           setBusy(true);
           try{ await onConfirm(size,parseInt(qty,10)); }
           finally{ setBusy(false); }
-        }} disabled={busy} style={{...bt(busy?"#9ca3af":"#0891b2"),flex:1,justifyContent:"center",opacity:busy?.6:1,cursor:busy?"wait":"pointer"}}>{busy?"⏳ Registrando...":"✅ Registrar y Asignar"}</button>
+        }} disabled={busy} style={{...bt(busy?"#9ca3af":"#0891b2"),flex:1,justifyContent:"center",opacity:busy?.6:1,cursor:busy?"wait":"pointer"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y Asignar</>}</button>
       </div>
     </div>
   </div>;
