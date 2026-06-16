@@ -3302,26 +3302,26 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   const canAdjust=user==="admin";
 
   const tipoColor=t=>t==="DEPOSITO"?"#10b981":t==="CONSUMO"?"#dc2626":t==="REVERSO"?"#0891b2":"#f59e0b";
-  const tipoIcon=t=>t==="DEPOSITO"?"💰":t==="CONSUMO"?"📤":t==="REVERSO"?"↩️":"📊";
+  const TipoIcon=t=>t==="DEPOSITO"?CurrencyDollarIcon:t==="CONSUMO"?ExportIcon:t==="REVERSO"?ArrowUUpLeftIcon:ChartBarIcon;
 
   // v10.58.15 — role=dialog para accessibility
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div role="dialog" aria-modal="true" aria-label="Saldos a favor Corona" style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
-          <h3 style={{fontSize:17,fontWeight:800,margin:0}}>🎱 Apartado Corona — Saldo a favor</h3>
+          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><DiamondIcon size={17} weight="fill"/>Apartado Corona — Saldo a favor</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} cliente{clients.length===1?"":"s"} con saldo · {clients.reduce((s,c)=>s+(Array.isArray(c.pool_members)?c.pool_members.length:0),0)} sub-cuentas en pools</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
-          {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt("#10b981"),padding:"7px 12px",fontSize:12}}>🎱 + Nueva OC a Crédito</button>}
-          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+          {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt("#10b981"),padding:"7px 12px",fontSize:12}}><DiamondIcon size={13} weight="fill"/>+ Nueva OC a Crédito</button>}
+          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
         </div>
       </div>
 
       {loadingClients?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
        clients.length===0?<div style={{padding:40,textAlign:"center"}}>
-         <div style={{fontSize:36}}>💼</div>
+         <WalletIcon size={34} color={C.ph}/>
          <div style={{fontSize:13,fontWeight:600,marginTop:8}}>Sin clientes con saldo a favor todavía</div>
          <div style={{fontSize:11,color:C.t2,marginTop:6,maxWidth:380,margin:"6px auto 0"}}>Para activar un cliente: <code>UPDATE cobranza.clients SET billing_mode='anticipo' WHERE id=…</code>. Los depósitos los registra Lucero en CobranzaFlow.</div>
        </div>:
@@ -3335,7 +3335,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?"#0891b210":"transparent",cursor:"pointer",borderLeft:sel?"3px solid #0891b2":"3px solid transparent",fontFamily:"'Geist',sans-serif"}}>
                <div style={{fontSize:12,fontWeight:700,color:sel?"#0891b2":C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
                <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
-               {hasMembers&&<div style={{fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}>🔗 incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
+               {hasMembers&&<div style={{display:"flex",alignItems:"center",gap:3,fontSize:9,color:"#0891b2",marginTop:2,fontWeight:600}}><LinkIcon size={9} weight="bold"/>incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
                <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:"#10b981"}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
              </button>;
            })}
@@ -3358,11 +3358,11 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                </div>
              </div>
              {selIsMember && <div style={{padding:"8px 12px",background:"#0891b210",border:"1px solid #0891b240",borderRadius:8,fontSize:11,color:"#0891b2",marginBottom:12,lineHeight:1.5}}>
-               📎 Estás viendo el saldo y movimientos del <b>pool de {selected.leader_name}</b>. {selected.name} comparte este saldo con las otras sub-cuentas. Cualquier movimiento aquí afecta a todo el pool.
+               <PaperclipIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Estás viendo el saldo y movimientos del <b>pool de {selected.leader_name}</b>. {selected.name} comparte este saldo con las otras sub-cuentas. Cualquier movimiento aquí afecta a todo el pool.
              </div>}
              <div style={{display:"flex",gap:8,marginBottom:12}}>
-               {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>📊 Ajuste manual</button>}
-               <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}>🔄 Recargar</button>
+               {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}><ChartBarIcon size={12} weight="bold"/>Ajuste manual</button>}
+               <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}><ArrowsClockwiseIcon size={12} weight="bold"/>Recargar</button>
                <div style={{flex:1}}/>
                <div style={{fontSize:10,color:C.t2,alignSelf:"center"}}>Lucero registra depósitos y cobra facturas Corona pendientes en CobranzaFlow</div>
              </div>
@@ -3374,7 +3374,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                   const color=tipoColor(m.tipo);
                   return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:700,color}}>{tipoIcon(m.tipo)} {m.tipo}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{(()=>{const TI=TipoIcon(m.tipo);return <TI size={12} weight="bold"/>})()}{m.tipo}</div>
                       {m.referencia&&<div style={{fontSize:11,marginTop:2}}>{m.referencia}</div>}
                       {m.notas&&<div style={{fontSize:10,color:C.t2,marginTop:2,fontStyle:"italic"}}>{m.notas}</div>}
                       <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}{m.periodo?" · "+m.periodo:""}</div>
@@ -3466,7 +3466,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:560,width:"96%",maxHeight:"90vh",overflowY:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>🎱 Registrar OC a Crédito Corona</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><DiamondIcon size={17} weight="fill"/>Registrar OC a Crédito Corona</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Captura una nueva OC a crédito con su folio fiscal ya emitido. Tesorería será notificada automáticamente.</p>
 
       <div style={{marginBottom:12}}>
@@ -3475,7 +3475,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
           <option value="">{loadingClients?"Cargando…":(stockClients.length===0?"— sin clientes anticipo —":"Selecciona…")}</option>
           {stockClients.map(c=><option key={c.id} value={c.id}>{c.is_pool_leader?"🎱":"↳"} {c.name}{!c.is_pool_leader&&c.leader_name?" (sub-cuenta de "+c.leader_name+")":""} · saldo {c.is_pool_leader?"":"compartido "}(sin IVA): ${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</option>)}
         </select>
-        {!loadingClients&&stockClients.length===0&&<div style={{fontSize:10,color:C.wn,marginTop:4}}>⚠️ Aún no hay clientes anticipo configurados. Pide a admin que active el cliente o que lo agregue a un pool existente.</div>}
+        {!loadingClients&&stockClients.length===0&&<div style={{display:"flex",alignItems:"flex-start",gap:4,fontSize:10,color:C.wn,marginTop:4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>Aún no hay clientes anticipo configurados. Pide a admin que active el cliente o que lo agregue a un pool existente.</div>}
       </div>
 
       <div style={{marginBottom:10}}>
@@ -3495,8 +3495,8 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
           />
           <button type="button" onClick={()=>{if(suggestedFolio)setFolioFiscal(suggestedFolio)}} disabled={!suggestedFolio} style={{...bt(C.sf,C.tx),padding:"0 14px",border:"0.5px solid "+C.bd,whiteSpace:"nowrap",opacity:suggestedFolio?1:0.5,cursor:suggestedFolio?"pointer":"not-allowed"}}>→ Usar {suggestedFolio||"…"}</button>
         </div>
-        {folioFiscal&&!folioValid&&<div style={{fontSize:10,color:C.dn,marginTop:4}}>⚠️ Formato inválido. Esperado: D-XXXX o R-XXXX</div>}
-        {folioIsLower&&<div style={{fontSize:10,color:"#ff9500",marginTop:4,fontWeight:600}}>⚠️ Este folio es menor al último registrado ({suggestedFolio}). Continuará válido si está realmente emitido.</div>}
+        {folioFiscal&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginTop:4}}><WarningIcon size={11} weight="fill"/>Formato inválido. Esperado: D-XXXX o R-XXXX</div>}
+        {folioIsLower&&<div style={{display:"flex",alignItems:"flex-start",gap:4,fontSize:10,color:"#ff9500",marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>Este folio es menor al último registrado ({suggestedFolio}). Continuará válido si está realmente emitido.</div>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -3524,7 +3524,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       </div>;
       })()}
 
-      {!dueDateValid&&dueDate&&<div style={{fontSize:10,color:C.dn,marginBottom:8}}>⚠️ La fecha de pago debe ser futura.</div>}
+      {!dueDateValid&&dueDate&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:8}}><WarningIcon size={11} weight="fill"/>La fecha de pago debe ser futura.</div>}
 
       <div style={{marginBottom:14}}>
         <label style={lbl}>Notas (opcional)</label>
@@ -3533,7 +3533,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
 
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={!valid||busy} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:(valid&&!busy)?1:.4,cursor:(valid&&!busy)?"pointer":"not-allowed"}}>{busy?"Guardando…":"💾 Registrar OC a Crédito"}</button>
+        <button onClick={submit} disabled={!valid||busy} style={{...bt("#10b981"),flex:1,justifyContent:"center",opacity:(valid&&!busy)?1:.4,cursor:(valid&&!busy)?"pointer":"not-allowed"}}>{busy?"Guardando…":<><FloppyDiskIcon size={14} weight="bold"/>Registrar OC a Crédito</>}</button>
       </div>
     </div>
   </div>;
@@ -3563,10 +3563,10 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:460,width:"94%"}}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>📊 Ajuste manual de saldo</h3>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px"}}><ChartBarIcon size={17} weight="bold"/>Ajuste manual de saldo</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{client?.name}</div>
       {isMember && <div style={{padding:"10px 12px",background:"#ff950015",border:"1.5px solid #ff950050",borderRadius:8,marginBottom:12,fontSize:11,color:"#a85a00",lineHeight:1.5}}>
-        ⚠️ Este ajuste afecta al <b>pool de {client?.leader_name}</b>, NO solo a {client?.name}. Las otras sub-cuentas del pool verán el mismo nuevo saldo. Si querías aislar el ajuste, no se puede — el saldo es compartido.
+        <WarningIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este ajuste afecta al <b>pool de {client?.leader_name}</b>, NO solo a {client?.name}. Las otras sub-cuentas del pool verán el mismo nuevo saldo. Si querías aislar el ajuste, no se puede — el saldo es compartido.
       </div>}
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
         <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>{isMember?"Pool actual":"Actual"}</div><div style={{fontSize:16,fontWeight:800}}>${baseBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
