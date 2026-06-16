@@ -8400,7 +8400,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:14,cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}</div>
+            <div style={{color:C.tx,fontWeight:700,fontSize:compact?12:15,letterSpacing:"-0.01em",cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}</div>
             {!hp&&vOwns&&!compact&&(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
             {!compact&&!hp&&vOwns&&o.client_phone&&<div style={{fontSize:10,color:"#25d366",marginTop:1}}><WhatsappLogoIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.client_lada||"+52"} {o.client_phone}</div>}
             <div style={{color:C.t2,fontSize:compact?10:11,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
