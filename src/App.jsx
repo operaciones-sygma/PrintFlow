@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
+// v10.62.0 — secciones del Sidebar (agrupacion por categoria/utilidad). Cada nav item
+// lleva un campo g con su seccion; el render agrupa por estas en este orden.
+const NAV_SECTIONS=[["op","Operación"],["com","Comercial"],["ctrl","Control"],["reg","Registros"]];
 import { createClient } from "@supabase/supabase-js";
 
 // ═══ SUPABASE CONNECTION ═══
@@ -13991,25 +13994,25 @@ export default function PrintFlow() {
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
   const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a"};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
-  const navs=[{id:"pipeline",i:"📊",l:"Dashboard"},{id:"tasks",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
+  const navs=[{id:"pipeline",g:"op",i:"📊",l:"Dashboard"},{id:"tasks",g:"op",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
   // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
-  if(user==="admin")navs.unshift({id:"torre",i:"🗼",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
+  if(user==="admin")navs.unshift({id:"torre",g:"op",i:"🗼",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
   // v10.58.22: Karla también puede ver Datos Pendientes (vista incluye "Sin precio" con botón Editar Precio)
-  if(user==="secretaria"||user==="karla")navs.push({id:"health",i:"📝",l:"Datos Pendientes"});
-  if(isSec(user)||user==="admin")navs.push({id:"form",i:"➕",l:"Nueva"});
-  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",i:"📝",l:"Órdenes de Compra"});
-  if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
-  if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
-  navs.push({id:"calendar",i:"📅",l:"Entregas"});
-  navs.push({id:"orders",i:"📋",l:"Todas"});
-  navs.push({id:"archive",i:"🗂️",l:"Archivo"});
-  if(user==="admin")navs.push({id:"analytics",i:"📊",l:"Analytics"});
-  if(user==="admin")navs.push({id:"wip",i:"💰",l:"Dinero en Proceso"}); // v10.27.0
-  if(user==="admin")navs.push({id:"health",i:"🩺",l:"Salud Operativa"}); // v10.28.0
-  if(user==="admin"||user==="karla")navs.push({id:"audit",i:"📑",l:"Auditoría"});
-  if(user==="preprensa"||user==="german")navs.push({id:"storage",i:"📁",l:"Archivos"});
-  if(user==="german"||user==="admin")navs.push({id:"chemicals",i:"🧪",l:"Químicos"});
+  if(user==="secretaria"||user==="karla")navs.push({id:"health",g:"op",i:"📝",l:"Datos Pendientes"});
+  if(isSec(user)||user==="admin")navs.push({id:"form",g:"com",i:"➕",l:"Nueva"});
+  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",g:"com",i:"📝",l:"Órdenes de Compra"});
+  if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",g:"com",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
+  if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",g:"op",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
+  navs.push({id:"calendar",g:"op",i:"📅",l:"Entregas"});
+  navs.push({id:"orders",g:"reg",i:"📋",l:"Todas"});
+  navs.push({id:"archive",g:"reg",i:"🗂️",l:"Archivo"});
+  if(user==="admin")navs.push({id:"analytics",g:"ctrl",i:"📊",l:"Analytics"});
+  if(user==="admin")navs.push({id:"wip",g:"ctrl",i:"💰",l:"Dinero en Proceso"}); // v10.27.0
+  if(user==="admin")navs.push({id:"health",g:"ctrl",i:"🩺",l:"Salud Operativa"}); // v10.28.0
+  if(user==="admin"||user==="karla")navs.push({id:"audit",g:"ctrl",i:"📑",l:"Auditoría"});
+  if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",i:"📁",l:"Archivos"});
+  if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",i:"🧪",l:"Químicos"});
 
   const MAX_VISIBLE=5;
   const visibleNavs=[];/* v10.60.0 — la navegación vive ahora en el Sidebar lateral */
@@ -14043,7 +14046,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {!sbCollapsed&&<><span style={{fontWeight:800,fontSize:15.5,letterSpacing:.3,whiteSpace:"nowrap"}}>PrintFlow</span><div style={{width:7,height:7,borderRadius:"50%",background:connected===null?"#ff9500":connected?C.ok:C.dn,marginLeft:"auto",flexShrink:0}} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."}/></>}
         </div>
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
-          {navs.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}
+          {NAV_SECTIONS.map(([g,label],si)=>{const items=navs.filter(n=>n.g===g);if(!items.length)return null;return <div key={g} style={{display:"flex",flexDirection:"column",gap:2}}>{sbCollapsed?(si>0&&<div style={{height:1,background:C.bd,margin:"7px 10px 5px"}}/>):<div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 11px",margin:si===0?"2px 0 4px":"14px 0 4px"}}>{label}</div>}{items.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}</div>;})}
         </div>
         <div style={{borderTop:"0.5px solid "+C.bd,padding:"8px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           {!sbCollapsed&&<div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}><div style={{width:27,height:27,borderRadius:8,background:(rC[user]||C.ac)+"1a",color:rC[user]||C.ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(userName||rL[user]||"?").charAt(0).toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{userName||rL[user]}</div><div style={{fontSize:9.5,color:C.t3}}>{rL[user]}</div></div></div>}
