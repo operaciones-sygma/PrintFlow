@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -3800,10 +3800,10 @@ function PlateModal({order,machine,onConfirm,onClose}) {
 // Drop-in replacement de PaymentStatusPicker — la onChange retorna (status, refs).
 function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const METHODS = [
-    {id: "transferencia", l: "Transferencia", i: "🏦", c: "#10b981"},
-    {id: "tarjeta", l: "Tarjeta", i: "💳", c: "#5856d6"},
-    {id: "cheque", l: "Cheque", i: "📃", c: "#ff9500"},
-    {id: "otro", l: "Otro", i: "📝", c: "#8e8e93"}
+    {id: "transferencia", l: "Transferencia", Icon: BankIcon, c: "#10b981"},
+    {id: "tarjeta", l: "Tarjeta", Icon: CreditCardIcon, c: "#5856d6"},
+    {id: "cheque", l: "Cheque", Icon: MoneyIcon, c: "#ff9500"},
+    {id: "otro", l: "Otro", Icon: NotePencilIcon, c: "#8e8e93"}
   ];
   const totalDisplay = invoiceType === "factura" ? Math.round((orderTotal || 0) * 116) / 100 : (orderTotal || 0);
   const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -3843,17 +3843,17 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
     <>
       <div style={{marginBottom: 12}}>
         <label style={{...lbl, fontSize: 10, color: "#5856d6", fontWeight: 700, marginBottom: 4}}>
-          💰 ESTADO DE PAGO *
+          <CurrencyDollarIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>ESTADO DE PAGO *
         </label>
         <div style={{display: "flex", gap: 6}}>
-          <button onClick={() => onChange("unpaid", [])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "unpaid" ? "#ff9500" : C.bd), background: status === "unpaid" ? "#ff950015" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "unpaid" ? "#ff9500" : C.t2, fontFamily: "'Geist',sans-serif"}}>
-            ⏳ No pagada
+          <button onClick={() => onChange("unpaid", [])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "unpaid" ? "#ff9500" : C.bd), background: status === "unpaid" ? "#ff950015" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "unpaid" ? "#ff9500" : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
+            <HourglassIcon size={13} weight="bold"/>No pagada
           </button>
-          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? "#5856d6" : C.bd), background: status === "partial" ? "#5856d615" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? "#5856d6" : C.t2, fontFamily: "'Geist',sans-serif"}}>
-            🔶 Parcial
+          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? "#5856d6" : C.bd), background: status === "partial" ? "#5856d615" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? "#5856d6" : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
+            <CircleHalfIcon size={13} weight="bold"/>Parcial
           </button>
-          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? "#34c759" : C.bd), background: status === "paid" ? "#34c75915" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? "#34c759" : C.t2, fontFamily: "'Geist',sans-serif"}}>
-            ✅ Pagada
+          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? "#34c759" : C.bd), background: status === "paid" ? "#34c75915" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? "#34c759" : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
+            <CheckCircleIcon size={13} weight="bold"/>Pagada
           </button>
         </div>
       </div>
@@ -3864,8 +3864,8 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           <div role="status" aria-live="polite" aria-atomic="true" style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "8px 10px", background: "#fff", borderRadius: 8, border: "0.5px solid " + C.bd}}>
             <div style={{fontSize: 11, color: C.t2}}>Total {invoiceType === "factura" ? "(con IVA)" : "(sin IVA)"}: <b style={{color: C.tx, fontSize: 13}}>${fmtMx(totalDisplay)}</b></div>
             <div style={{fontSize: 11, color: sumOverPaid ? C.dn : sumExactPaid ? C.ok : C.t2}}>
-              {sumOverPaid ? <>⚠️ Excede ${fmtMx(sum - totalDisplay)}</> :
-               sumExactPaid ? <>✓ Cubierto</> :
+              {sumOverPaid ? <><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:2}}/>Excede ${fmtMx(sum - totalDisplay)}</> :
+               sumExactPaid ? <><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Cubierto</> :
                <>Capturado: <b>${fmtMx(sum)}</b> · Falta <b>${fmtMx(sumRemaining)}</b></>}
             </div>
           </div>
@@ -3879,21 +3879,24 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
             return (
             <div key={idx} role="group" aria-label={`Pago ${idx + 1}`} aria-invalid={!valid} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (valid ? C.bd : "#ff950040")}}>
               <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8}}>
-                <div style={{fontSize: 11, fontWeight: 700, color: "#5856d6"}}>💳 Pago #{idx + 1}{!valid && <span style={{marginLeft: 6, fontSize: 10, color: "#ff9500"}}>· incompleto</span>}</div>
+                <div style={{fontSize: 11, fontWeight: 700, color: "#5856d6"}}><CreditCardIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pago #{idx + 1}{!valid && <span style={{marginLeft: 6, fontSize: 10, color: "#ff9500"}}>· incompleto</span>}</div>
                 {list.length > 1 && (
-                  <button onClick={() => removeRef(idx)} aria-label={"Eliminar pago " + (idx + 1)} style={{padding: "4px 8px", borderRadius: 6, border: "1px solid " + C.dn + "40", background: C.dn + "10", color: C.dn, fontSize: 10, fontWeight: 700, cursor: "pointer"}}>
-                    🗑️ Eliminar
+                  <button onClick={() => removeRef(idx)} aria-label={"Eliminar pago " + (idx + 1)} style={{padding: "4px 8px", borderRadius: 6, border: "1px solid " + C.dn + "40", background: C.dn + "10", color: C.dn, fontSize: 10, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4}}>
+                    <TrashIcon size={11} weight="bold"/>Eliminar
                   </button>
                 )}
               </div>
 
               <label style={{...lbl, fontSize: 10, marginTop: 0}}>Método *</label>
               <div role="radiogroup" aria-label={`Método de pago ${idx + 1}`} aria-invalid={!r.method} style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 8}}>
-                {METHODS.map(m => (
-                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left"}}>
-                    {m.i} {m.l}
+                {METHODS.map(m => {
+                  const MIcon = m.Icon;
+                  return (
+                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left", display: "inline-flex", alignItems: "center", gap: 6}}>
+                    <MIcon size={13} weight="bold"/>{m.l}
                   </button>
-                ))}
+                  );
+                })}
               </div>
 
               <div style={{display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8}}>
@@ -3903,7 +3906,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 </div>
                 <div>
                   <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.dn : C.t2}}>
-                    🔗 Ref bancaria {needsBankRef ? "*" : "(opcional)"}
+                    <LinkIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ref bancaria {needsBankRef ? "*" : "(opcional)"}
                   </label>
                   <input type="text" value={r.bank_reference || ""} onChange={e => updateRef(idx, {bank_reference: e.target.value})} aria-invalid={bankRefMissing} aria-label={`Referencia bancaria del pago ${idx + 1}`} placeholder={
                     r.method === "transferencia" ? "Folio SPEI" :
@@ -3917,20 +3920,20 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
             );
           })}
 
-          <button onClick={addRef} style={{width: "100%", padding: "10px", borderRadius: 8, border: "1.5px dashed " + C.ac, background: C.acL, color: C.ac, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Geist',sans-serif", marginTop: 4}}>
-            ➕ Agregar otro pago
+          <button onClick={addRef} style={{width: "100%", padding: "10px", borderRadius: 8, border: "1.5px dashed " + C.ac, background: C.acL, color: C.ac, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'Geist',sans-serif", marginTop: 4, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6}}>
+            <PlusIcon size={13} weight="bold"/>Agregar otro pago
           </button>
 
           {status === "paid" && !sumExactPaid && (
             <div style={{fontSize: 11, color: sumOverPaid ? C.dn : "#ff9500", marginTop: 8, padding: "6px 10px", background: (sumOverPaid ? C.dn : "#ff9500") + "10", borderRadius: 8, fontWeight: 600}}>
               {sumOverPaid
-                ? <>⚠️ El total capturado excede el total de la factura. Reduce alguno de los pagos.</>
-                : <>⚠️ Para "Pagada", la suma debe ser igual al total. Te faltan ${fmtMx(sumRemaining)}.</>}
+                ? <><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>El total capturado excede el total de la factura. Reduce alguno de los pagos.</>
+                : <><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Para "Pagada", la suma debe ser igual al total. Te faltan ${fmtMx(sumRemaining)}.</>}
             </div>
           )}
           {status === "partial" && (sumOverPaid || sum >= totalDisplay) && (
             <div style={{fontSize: 11, color: C.dn, marginTop: 8, padding: "6px 10px", background: C.dn + "10", borderRadius: 8, fontWeight: 600}}>
-              ⚠️ Suma de pagos cubre el total. Si cubre, usa "Pagada" en lugar de "Parcial".
+              <WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Suma de pagos cubre el total. Si cubre, usa "Pagada" en lugar de "Parcial".
             </div>
           )}
         </div>
@@ -3938,7 +3941,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
 
       {status === "unpaid" && (
         <div style={{background: "#e0f2fe", border: "1px solid #0ea5e9", borderRadius: 8, padding: "8px 12px", marginTop: 8, fontSize: 11, color: "#075985", lineHeight: 1.5}}>
-          💡 <strong>Sin pago capturado:</strong> la factura/remisión irá a CobranzaFlow como pendiente. Si el cliente paga en efectivo, Tesorería (Lucero) generará el vale de caja.
+          <LightbulbIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Sin pago capturado:</strong> la factura/remisión irá a CobranzaFlow como pendiente. Si el cliente paga en efectivo, Tesorería (Lucero) generará el vale de caja.
         </div>
       )}
     </>
@@ -3968,18 +3971,18 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
   const validPrice=Number.isFinite(numPrice)&&numPrice>0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
     <div role="dialog" aria-modal="true" aria-labelledby="pricecapture-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
-      <h3 id="pricecapture-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>💰 Capturar precio antes de entregar</h3>
+      <h3 id="pricecapture-modal-title" style={{fontSize:16,fontWeight:800,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><CurrencyDollarIcon size={17} weight="bold"/>Capturar precio antes de entregar</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product||order?.product_type||""}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>{order?.production_number||""} · {order?.quantity||0} pzas</p>
 
       <div style={{background:"#ff950010",border:"1px solid #ff950040",borderRadius:10,padding:12,marginBottom:16}}>
-        <div style={{fontSize:12,color:"#ff9500",fontWeight:700,marginBottom:4}}>⚠️ Esta orden no tiene precio capturado</div>
+        <div style={{fontSize:12,color:"#ff9500",fontWeight:700,marginBottom:4}}><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Esta orden no tiene precio capturado</div>
         <div style={{fontSize:11,color:C.t2,lineHeight:1.4}}>Captura el precio que se le cobra al cliente para que CobranzaFlow la vea correctamente.</div>
       </div>
 
-      <label style={{...lbl,marginTop:4}}>{isMaq?"💰 Precio al cliente (maquila)":"💰 Precio"} (MXN)</label>
+      <label style={{...lbl,marginTop:4}}><CurrencyDollarIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{isMaq?"Precio al cliente (maquila)":"Precio"} (MXN)</label>
       <input style={{...inp,fontSize:16,fontWeight:700}} type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} placeholder="0.00" autoFocus disabled={busy}/>
-      {validPrice && <div style={{fontSize:11,color:C.ok,marginTop:6}}>✓ ${numPrice.toLocaleString("es-MX",{minimumFractionDigits:2})}{isMaq?" (precio cliente)":""}</div>}
+      {validPrice && <div style={{fontSize:11,color:C.ok,marginTop:6}}><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>${numPrice.toLocaleString("es-MX",{minimumFractionDigits:2})}{isMaq?" (precio cliente)":""}</div>}
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
@@ -3993,7 +3996,7 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
         }}
           disabled={!validPrice||busy}
           style={{...bt(C.ok),flex:2,justifyContent:"center",opacity:(!validPrice||busy)?0.5:1,cursor:(!validPrice||busy)?"not-allowed":"pointer"}}>
-          {busy?"⏳":"💰 Capturar y continuar"}
+          {busy?<HourglassIcon size={14} weight="bold"/>:<><CurrencyDollarIcon size={14} weight="bold"/>Capturar y continuar</>}
         </button>
       </div>
 
@@ -4005,10 +4008,10 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
           catch(e){console.error("[PriceCaptureModal onSkip]:",e)}
           finally{setBusy(false)}
         }} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Geist',sans-serif"}}>
-          💤 Sin precio, continuar a asignar folio <span style={{fontSize:10,opacity:0.7}}>(precio se agregará después)</span>
+          <FastForwardIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Sin precio, continuar a asignar folio <span style={{fontSize:10,opacity:0.7}}>(precio se agregará después)</span>
         </button>
         {/* v10.49.2 fix#5 — texto preciso: el folio se asigna en el siguiente paso (InvoiceModal), no aquí */}
-        <div style={{fontSize:10,color:C.wn,marginTop:6,lineHeight:1.4}}>⚠️ Al continuar sin precio, podrás asignar el folio en el siguiente paso. La factura se creará en CobranzaFlow automáticamente cuando captures el precio después.</div>
+        <div style={{fontSize:10,color:C.wn,marginTop:6,lineHeight:1.4}}><WarningIcon size={10} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Al continuar sin precio, podrás asignar el folio en el siguiente paso. La factura se creará en CobranzaFlow automáticamente cuando captures el precio después.</div>
       </div>
     </div>
   </div>;
