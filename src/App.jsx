@@ -11965,6 +11965,9 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
     return w(b)-w(a)||groups[b].length-groups[a].length;
   });
   const healthyBy={};healthy.forEach(r=>{const resp=orderResponsible(r.o);const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(healthyBy[k]=healthyBy[k]||[]).push(r)});
+  // v10.70.1 — agrupar las "en espera" (snooze) por responsable, para saber a quién volver a preguntar
+  const snoozedBy={};snoozedRows.forEach(r=>{const resp=orderResponsible(r.o);const k=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):"Otros";(snoozedBy[k]=snoozedBy[k]||[]).push(r)});
+  const snoozedPersonOrder=Object.keys(snoozedBy).sort((a,b)=>snoozedBy[b].length-snoozedBy[a].length);
   const sevColor={red:C.dn,orange:"#f59e0b",yellow:"#eab308"};
   // v10.58.65: incluir a los vendedores con usuario (Genaro) — sus maquilas ahora se
   // les atribuyen, así que deben aparecer en el semáforo (derivado del Set, sin duplicar).
@@ -12081,20 +12084,23 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
       <button onClick={()=>setShowSnoozed(s=>!s)} style={{...bs(C.sf,C.t2),fontSize:11,padding:"6px 12px",marginBottom:6}}>
         <BellSlashIcon size={12} weight="bold"/>En espera ({snoozedRows.length}) {showSnoozed?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}
       </button>
-      {showSnoozed&&snoozedRows.map(({o})=>(
-        <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6,opacity:0.85}}>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
-            <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
-            <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
-            <div style={{marginLeft:"auto",display:"flex",gap:4}}>
-              <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}><EyeIcon size={13}/></button>
-              <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
+      {showSnoozed&&snoozedPersonOrder.map(person=><div key={person} style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,margin:"6px 2px 5px",fontSize:11,fontWeight:700,color:C.t2}}><UserIcon size={12} weight="bold"/>{person}<span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:8,fontWeight:700}}>{snoozedBy[person].length}</span></div>
+        {snoozedBy[person].map(({o})=>(
+          <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6,opacity:0.85}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
+              <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
+              <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
+              <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+                <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}><EyeIcon size={13}/></button>
+                <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
+              </div>
             </div>
+            <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:11,color:C.t2,marginTop:3}}><BellSlashIcon size={12} weight="bold" style={{flexShrink:0}}/>{o.snooze_reason} <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:11,color:C.t2,marginTop:3}}><BellSlashIcon size={12} weight="bold" style={{flexShrink:0}}/>{o.snooze_reason} <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
-        </div>
-      ))}
+        ))}
+      </div>)}
     </div>}
   </div>;
 }
