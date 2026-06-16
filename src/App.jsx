@@ -20,14 +20,19 @@ const STANDARD_SIZES=[{id:"pliego",label:"Pliego",w:70.0,h:95.0,group:"Imprenta"
 const SS_BY_ID=Object.fromEntries(STANDARD_SIZES.map(sz=>[sz.id,sz]));
 // v10.33.1 fix #3 — si el ID no existe en STANDARD_SIZES (legacy/corrupto), mostrar raw con icono de alerta
 const ssLabel=id=>SS_BY_ID[id]?.label||(id?"⚠️ "+id:"");
-const PRIOS=[{id:"urgente",l:"🔴 Urgente",c:"#ff3b30"},{id:"normal",l:"🟡 Normal",c:"#ff9500"},{id:"baja",l:"🟢 Baja",c:"#34c759"}];
+const PRIOS=[{id:"urgente",l:"🔴 Urgente",lt:"Urgente",Icon:FireIcon,c:"#ff3b30"},{id:"normal",l:"🟡 Normal",lt:"Normal",Icon:CircleIcon,c:"#ff9500"},{id:"baja",l:"🟢 Baja",lt:"Baja",Icon:CircleIcon,c:"#34c759"}];
 const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
 const AGENTS=["Manuel","Genaro","Marcelo"];
 const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Barniz Máquina","Doblez","Intercalado","Grapado","Perforado","Plastificado","Suajado","Botado","Forma Suelta","Blocks","Engomado Superior","Engomado Lateral"];
-const INT_FLOW=[{id:"draft",l:"📝 Validar",c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",c:"#ec4899",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",c:"#8b5cf6",who:"german"},{id:"proof_client",l:"👤 Aprobación",c:"#f59e0b",who:"preprensa"},{id:"ctp",l:"💿 CTP",c:"#0891b2",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",c:"#06b6d4",who:"produccion"},{id:"ready",l:"✅ Lista",c:"#34c759",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",c:"#ff9500",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",c:"#e67e22",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",c:"#32ade6",who:"produccion"},{id:"packaging",l:"📦 Empaque",c:"#af52de",who:"produccion"},{id:"salidas",l:"📤 Salidas",c:"#16a34a",who:"karla"},{id:"delivered",l:"✅ Entregada",c:"#34c759",who:null}];
-const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",c:"#32ade6",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",c:"#34c759",who:null}];
-const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",c:"#ff3b30",who:null},{id:"stocked",l:"📦 En Stock",c:"#10b981",who:null}];
+const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#ec4899",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#8b5cf6",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#f59e0b",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#0891b2",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#06b6d4",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#34c759",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#ff9500",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#e67e22",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#32ade6",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#af52de",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#16a34a",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#34c759",who:null}];
+const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#32ade6",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#34c759",who:null}];
+const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#10b981",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
+// v10.61.0 — Badge de etapa/prioridad con icono Phosphor. `l` (con emoji) se conserva
+// para contextos de string (toasts, CSV, impresión, timeline, opciones); el badge JSX
+// usa Icon+lt vía estos helpers.
+const StageLbl=({stage,size=11})=>{const s=SM[stage];const I=s?.Icon;return <>{I?<I size={size} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{s?.lt||stage}</>;};
+const PrioLbl=({priority,size=10})=>{const p=PM[priority];const I=p?.Icon;return <>{I?<I size={size} weight={priority==="urgente"?"fill":"bold"} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{p?.lt||priority}</>;};
 // v10.26.0 — Devuelve órdenes de una máquina ordenadas por position (0=activa, 1+=cola)
 const getMachineQueue=(orders,machineId)=>orders.filter(o=>o.current_machine===machineId&&o.machine_queue_position!=null).sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));
 // v10.27.0 — Zonas del workflow para WIPDashboard (Dinero en Proceso)
@@ -160,12 +165,12 @@ function getTaskFilters(role){
 }
 
 const WORKFLOW_ZONES=[
-  {id:"captura",label:"📝 Captura",color:"#aeaeb2",stages:["draft","maq_created"]},
-  {id:"preprensa",label:"🎨 Pre-prensa",color:"#ec4899",stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
-  {id:"produccion",label:"⚙️ Producción",color:"#ff9500",stages:["ready","in_production"]},
-  {id:"maquila_ext",label:"🚚 Maquila Externa",color:"#e67e22",stages:["maquila_out","maq_sent","maq_in_progress"]},
-  {id:"regreso_maq",label:"📥 Regreso Maquila",color:"#32ade6",stages:["maquila_in","maq_received"]},
-  {id:"salida",label:"📤 Salida",color:"#16a34a",stages:["packaging","salidas"]}
+  {id:"captura",label:"📝 Captura",labelT:"Captura",Icon:NotePencilIcon,color:"#aeaeb2",stages:["draft","maq_created"]},
+  {id:"preprensa",label:"🎨 Pre-prensa",labelT:"Pre-prensa",Icon:PaletteIcon,color:"#ec4899",stages:["design","proof_printing","proof_client","ctp","placas_listas"]},
+  {id:"produccion",label:"⚙️ Producción",labelT:"Producción",Icon:GearIcon,color:"#ff9500",stages:["ready","in_production"]},
+  {id:"maquila_ext",label:"🚚 Maquila Externa",labelT:"Maquila Externa",Icon:TruckIcon,color:"#e67e22",stages:["maquila_out","maq_sent","maq_in_progress"]},
+  {id:"regreso_maq",label:"📥 Regreso Maquila",labelT:"Regreso Maquila",Icon:DownloadSimpleIcon,color:"#32ade6",stages:["maquila_in","maq_received"]},
+  {id:"salida",label:"📤 Salida",labelT:"Salida",Icon:ExportIcon,color:"#16a34a",stages:["packaging","salidas"]}
 ];
 
 const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
