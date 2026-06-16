@@ -8672,9 +8672,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const inProd=orders.filter(o=>o.stage==="in_production");
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
-  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({});
+  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true});
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
+  // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
+  useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
   const activeMaint=mid=>maintenance.find(m=>m.machine_id===mid&&!m.ended_at);
 
   const drop=(mid,e)=>{e.preventDefault();setDO(null);const oid=e.dataTransfer.getData("orderId");if(!oid)return;const o=orders.find(x=>x.id===oid);if(!o)return;
@@ -8694,6 +8696,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const catIcon={offset:GearIcon,digital:PrinterIcon,acabados:WrenchIcon};
   const catCount=type=>inProd.filter(o=>{const m=MACHINES.find(x=>x.id===o.current_machine);return m?.type===type}).length;
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
+  // v10.68.0 — envio directo a maquina (sin arrastrar) desde la card de Listas
+  const machinesByType=t=>MACHINES.filter(m=>m.type===t&&m.status==="active"&&m.id!=="vm_manual");
+  const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
 
   const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
@@ -8751,6 +8756,14 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           </div>
         </div>
         {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
+        <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8}}>
+          <select value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:600,color:C.tx,background:C.sf,border:"1px solid "+C.bd,borderRadius:8,padding:"6px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+            <option value="">→ Enviar a máquina</option>
+            <optgroup label="Offset">{machinesByType("offset").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+            <optgroup label="Acabados">{machinesByType("acabados").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+            <optgroup label="Digital">{machinesByType("digital").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+          </select>
+        </div>
       </div>)}</div>
     </div>}
 
