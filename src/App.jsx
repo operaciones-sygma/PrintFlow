@@ -190,6 +190,9 @@ const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).fo
 const fD=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short"})};
 const fDT=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})};
 const parseDate=d=>{if(!d)return null;const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s)};
+// v10.64.3 — "vencida" = pasó el FIN del día de entrega (no el mediodía que da parseDate). Una
+// orden que entrega HOY no está vencida hasta que el día termina. Consistente con el chip Retrasos.
+const isOverdue=d=>{if(!d)return false;const due=new Date(String(d).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()};
 const pct=(c,p)=>p>0?Math.round(((p-c)/p)*100):0;
 const fmtM=m=>{if(!m&&m!==0)return "—";const h=Math.floor(m/60);return h>0?h+"h "+(m%60)+"m":m+"m"};
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
@@ -1140,7 +1143,7 @@ function getTopPriority(activeOrders) {
   let topScore = -1, topOrder = null;
   activeOrders.forEach(o => {
     let score = 0;
-    if (o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date()) score += 1000;
+    if (o.due_date && isOverdue(o.due_date)) score += 1000;
     else if (o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000)) score += 500;
     const st = getStale(o);
     if (st?.lv === "critical") score += 300;
@@ -1156,7 +1159,7 @@ function getIncompleteData(orders) {
   const active = orders.filter(o => !TERMINAL_STAGES.includes(o.stage));
   const fileStages = ["proof_printing","proof_client","ctp","placas_listas","ready","in_production","packaging","salidas"];
   return {
-    vencidas: active.filter(o => o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date()),
+    vencidas: active.filter(o => o.due_date && isOverdue(o.due_date)),
     sinFecha: active.filter(o => !o.due_date),
     sinPrecio: active.filter(o => o.order_type === "maquila" ? (!o.maq_price || Number(o.maq_price) === 0) : (!o.price || Number(o.price) === 0)),
     sinCantidad: active.filter(o => !o.quantity || Number(o.quantity) === 0),
@@ -2903,7 +2906,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         payment_status: paymentStatus,
         payment_refs: refsForBackend,
         due_date: null,
-        agent: agent || userLogin,
+        agent: agent || null, // v10.64.3 — "Sin asignar" NO se atribuye al captador (era agent||userLogin)
         notes: notes.trim() || null,
         actor: userLogin || "sistema",
         client_agent: clientAgent.trim() || null // v10.59.2 C3 — contacto del cliente comprador
@@ -3470,7 +3473,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const folioClean=folioFiscal.trim().toUpperCase();
   const isFactura=folioClean.startsWith("D-");
   const isRemision=folioClean.startsWith("R-");
-  const folioValid=(isFactura||isRemision)&&/^[DR]-\d+$/.test(folioClean);
+  const folioValid=(isFactura||isRemision)&&/^[DR]-[1-9]\d*$/.test(folioClean); // v10.64.3 — sin cero a la izquierda (consistente con Invoice/Split/Matrix)
   // v10.43.28 — determinar qué sugerencia mostrar (default D- si aún no escribió nada)
   const suggestedType=isRemision?"remision":"factura";
   const suggestedFolio=suggestion[suggestedType];
@@ -5652,7 +5655,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   // v10.43.10 — type 'no_folio' (Corona) salta toda la lógica de folio fiscal
   // v10.46.0 — type 'stock_load' (Cuadra) también salta lógica de folio
   const isNoFolio=type==="no_folio";
-  const folioRegex=type==="factura"?/^D-\d+$/:/^R-\d+$/;
+  const folioRegex=type==="factura"?/^D-[1-9]\d*$/:/^R-[1-9]\d*$/; // v10.64.3 — sin cero a la izquierda (consistente con SplitInvoice/Matrix; 0 folios reales con cero inicial)
   const folioPrefix=type==="factura"?"D-":"R-";
   const folioValid=(isNoFolio||isStockLoad)?true:(folio&&folioRegex.test(folio));
   const folioNum=(!isNoFolio&&!isStockLoad&&folioValid)?parseInt(folio.split("-")[1],10):0;
@@ -6082,7 +6085,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     {id:"otro",l:"Otro (especificar)"}
   ];
 
-  const folioRegex=type==="factura"?/^D-\d+$/:/^R-\d+$/;
+  const folioRegex=type==="factura"?/^D-[1-9]\d*$/:/^R-[1-9]\d*$/; // v10.64.3 — sin cero a la izquierda (consistente con SplitInvoice/Matrix; 0 folios reales con cero inicial)
   const folioPrefix=type==="factura"?"D-":"R-";
   const folioValid=folio&&folioRegex.test(folio);
   const folioNum=folioValid?parseInt(folio.split("-")[1],10):0;
@@ -6841,7 +6844,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const myOrders=orders;
   const created=myOrders.filter(o=>new Date(o.created_at)>=wa);const delivered=myOrders.filter(o=>(o.deliveredAt||o.delivered_at)&&new Date(o.deliveredAt||o.delivered_at)>=wa);
   const rev=delivered.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
-  const late=myOrders.filter(o=>o.due_date&&parseDate(o.due_date)<now&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
+  const late=myOrders.filter(o=>o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
   const St=({l,v,c=C.tx})=><div style={{background:C.bg,borderRadius:10,padding:10,flex:"1 1 90px",textAlign:"center"}}><div style={{fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div></div>;
 
   // Extended stats for admin
@@ -8313,7 +8316,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
 // ─── ORDER CARD ────────────────────────────────────
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
-  const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&parseDate(o.due_date)<new Date()&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
+  const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
   const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
   // v10.58.50: el gate de ownership es para VENDEDOR (no operar órdenes ajenas).
@@ -8631,7 +8634,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               {!hp&&oOwns&&(o.price||o.maq_price)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}
             </div>
           </div>
-          {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{parseDate(o.due_date)<new Date()?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
+          {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{isOverdue(o.due_date)?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
         </div>})}
     </div>})}
   </div>;
@@ -8692,7 +8695,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
     {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
     {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
-    {o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+    {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
   </div>;
 
   return <div>
@@ -8736,7 +8739,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           </div>
         </div>
-        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
@@ -8815,7 +8818,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-                            {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+                            {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                           </div>
                         </div>)}
                       </div>}
@@ -8869,7 +8872,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
-              {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+              {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
             </div>)}
           </div>
         </div>
@@ -8899,7 +8902,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{dropConfirm.order.client}</div>
           <div style={{fontSize:11,color:C.t2}}>{dropConfirm.order.product_type}{dropConfirm.order.quantity?" · "+Number(dropConfirm.order.quantity).toLocaleString()+" pzas":""}</div>
           {dropConfirm.order.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:700,marginTop:4,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
-          {dropConfirm.order.due_date&&<div style={{fontSize:10,color:new Date(dropConfirm.order.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(dropConfirm.order.due_date)}</div>}
+          {dropConfirm.order.due_date&&<div style={{fontSize:10,color:isOverdue(dropConfirm.order.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(dropConfirm.order.due_date)}</div>}
           {dropConfirm.order.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>#{dropConfirm.order.production_number}</div>}
           <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
             {dropConfirm.fromMachine&&<><span style={{fontSize:12,fontWeight:600,color:C.dn}}>{dropConfirm.fromMachine.name}</span><span style={{fontSize:14}}>→</span></>}
@@ -8945,7 +8948,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
-        {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
       </div>)}</div>
     </div>}
 
@@ -8980,7 +8983,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                 {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,marginBottom:3,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</div>}
                 <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{activa.client}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
-                {activa.due_date&&<div style={{fontSize:9,color:parseDate(activa.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(activa.due_date)}</div>}
+                {activa.due_date&&<div style={{fontSize:9,color:isOverdue(activa.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(activa.due_date)}</div>}
               </div>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6,paddingLeft:2}}>
                 {activa.current_machine==="pp_proc"&&<button onClick={()=>onAction(activa.id,"advance","placas_listas")} style={bs("#06b6d4")}><ClipboardTextIcon size={13} weight="bold"/>Placas Listas</button>}
@@ -9005,7 +9008,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                 <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
                   <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                   <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-                  {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+                  {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                 </div>
               </div>)}
             </div>}
@@ -10391,7 +10394,9 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   // este return null interno seguía bloqueándole la vista (pantalla en blanco para Karla).
   if (role !== "admin" && role !== "secretaria" && role !== "karla") return null;
 
-  const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage)), [orders]);
+  // v10.64.3 — excluir snoozed (parkeados desde la Torre), consistente con la Torre, para no
+  // inflar los contadores de Salud Operativa con órdenes que el admin ya difirió a propósito.
+  const active = useMemo(() => orders.filter(o => !TERMINAL_STAGES.includes(o.stage) && !snoozeActive(o)), [orders]);
 
   // v10.58.24: listado de órdenes sin precio para Karla/Lupita/admin.
   // hasPrice: precio o maq_price > 0.
@@ -10405,7 +10410,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
 
   const orderMoney = (o) => o.order_type === "maquila" ? Number(o.maq_price) || 0 : Number(o.price) || 0;
   // v10.28.1 — slice(0,10) tolera due_date con timestamp legacy (e.g. "2026-05-17T00:00:00Z")
-  const isVencida = (o) => o.due_date && new Date(String(o.due_date).slice(0,10) + "T12:00:00") < new Date();
+  const isVencida = (o) => o.due_date && isOverdue(o.due_date);
   const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000);
 
   const topPriority = useMemo(() => getTopPriority(active), [active]);
@@ -12355,6 +12360,7 @@ export default function PrintFlow() {
       supabase.removeChannel(channel);
       // v10.58.6: limpiar debounce pendiente al desmontar
       if (reloadDebounceRef.current) { clearTimeout(reloadDebounceRef.current); reloadDebounceRef.current = null; }
+      if (notifDebounceRef.current) { clearTimeout(notifDebounceRef.current); notifDebounceRef.current = null; } // v10.64.3 — limpiar también el debounce de notifs
     };
   }, [user, notifKey]);
 
@@ -13151,6 +13157,7 @@ export default function PrintFlow() {
     const opts=getRevertOptions(o.stage,user);
     if(!opts.includes(targetStage)){showToast("❌ Stage destino no permitido para tu rol","error");return}
     setActionLoading(id);
+    autoFixRef.current.delete(id); // v10.64.3 — al revertir, liberar el guard para que el auto-advance vuelva a dispararse si la orden se re-valida en draft
     try{
       const now=new Date().toISOString();
       const fromLabel=SM[o.stage]?.l||o.stage;
@@ -13859,14 +13866,9 @@ export default function PrintFlow() {
           await db.addTimeline(id,"🔄 Devuelta a Lista (desde "+fromMachine+")",userLogin||user,"#007aff","ready");
           // State local
           const now=new Date();
-          const ml=Array.isArray(o.machine_log)?o.machine_log.slice():[];
-          ml.forEach((e,i)=>{
-            if(e&&!e.ended){
-              const s=e.started?new Date(e.started):null;
-              const valid=s&&!isNaN(s.getTime());
-              ml[i]={...e,ended:now.toISOString(),minutes:valid?Math.round((now-s)/60000):0};
-            }
-          });
+          // v10.64.3 — usar closeML (aplica el cap >1440min→null igual que el server) en vez del
+          // loop manual, que dejaba minutos gigantes en un log estancado hasta el reload.
+          const ml=closeML(o);
           const newTL=[...(o.timeline||[]),{action:"🔄 Devuelta a Lista (desde "+fromMachine+")",date:now.toISOString(),by:userLogin||user,color:"#007aff"}];
           setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_queue_position:null,machine_log:ml,timeline:newTL}:x));
           // v10.26.0 — Si había siguiente en cola y ahora se promueve, abrir su log
@@ -14188,7 +14190,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:"#0891b2",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
@@ -14294,7 +14296,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             const newBal=Number(result?.new_stock||0);
             const prodName=result?.product_name||"";
             const tlMsg="📦 Cargado a stock Cuadra"+(prodName?" · "+prodName:"")+" · +"+qty+" pzas · stock después: "+newBal;
-            const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
+            // v10.64.3 — stock_load NO es entrega: stage "stocked" (no "delivered", que la
+            // contaba como revenue entregado de forma transitoria hasta el reload).
+            const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"stocked";
             // v10.46.8 — usar stocked_at (no invoiced_at) — la orden NO fue facturada
             // v10.46.10 M4 — limpiar invoiced_at explícitamente (backend lo deja NULL en load_order_to_stock)
             setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,stage:newStage,delivered_at:new Date().toISOString(),stocked_at:new Date().toISOString(),invoiced_at:null,invoiced_by:user,stock_loaded:true,client_product_id:cuadraProductId,timeline:addTL(o,tlMsg,{to:newStage})}:o));
