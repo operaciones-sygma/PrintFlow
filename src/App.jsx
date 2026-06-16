@@ -7107,7 +7107,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // Replica specs del producto. NO toca: cliente, production_number, due_date, stage, image actual, billing_mode.
     // v10.45.1 — `stock_role` y `client_product_id` solo se replican si el CLIENTE ACTUAL es stock (Cuadra).
     // Si replicamos de una orden Cuadra a un cliente normal, esos campos NO se aplican (form quedaría inconsistente).
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","image_url","image_url_2","image"];
+    // v10.64.1 fix — NO replicar la imagen/artwork: contradecía el comentario de arriba y el hint
+    // de la UI, y pisaba silenciosamente el artwork recién adjuntado (riesgo de imprimir el diseño
+    // equivocado). Replicar = specs del producto, NO el arte. La imagen se adjunta por orden.
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes"];
     // v10.46.10 M2 — detectar si el source tiene SKU pero NO se va a replicar (cross-cliente),
     // para informar al usuario en lugar de copiar/omitir silenciosamente.
     let skuOmitted=false;
