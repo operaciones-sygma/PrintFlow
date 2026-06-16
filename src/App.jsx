@@ -1376,7 +1376,7 @@ function FlowDiagram({currentStage,orderType,onClose}) {
                 {i<flow.length-1 && <div style={{width:2,height:20,background:done?C.ok:C.bd}}/>}
               </div>
               <div style={{flex:1,padding:"6px 0"}}>
-                <div style={{fontSize:13,fontWeight:active?700:500,color:active?s.c:done?C.ok:C.tx}}>{s.l}</div>
+                <div style={{fontSize:13,fontWeight:active?700:500,color:active?s.c:done?C.ok:C.tx,display:"inline-flex",alignItems:"center"}}><StageLbl stage={s.id} size={13}/></div>
                 {active && <div style={{fontSize:11,color:C.t2}}>← Estás aquí</div>}
               </div>
             </div>
@@ -8605,10 +8605,10 @@ function Pipeline({orders,role,onAction}) {
     {staleC>0&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}><WarningIcon size={15} weight="fill" style={{flexShrink:0}}/>{staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
     <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}><FactoryIcon size={13} weight="bold"/>Internas ({intO.length})</div>
     <DualScroll style={{display:"flex",gap:6,paddingBottom:10,marginBottom:16}}>
-      {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
+      {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c,display:"inline-flex",alignItems:"center"}}><StageLbl stage={st.id} size={10}/></div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
       <div style={{minWidth:90,flex:"0 0 auto",background:C.ok+"08",borderRadius:14,padding:12,borderTop:"3px solid "+C.ok,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:22,fontWeight:800,color:C.ok}}>{delC}</div><div style={{fontSize:9,color:C.t2}}>Entregadas</div></div>
     </DualScroll>
-    {maqO.length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}><TruckIcon size={13} weight="bold"/>Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c}}>{st.l}</div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
+    {maqO.length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#e67e22",textTransform:"uppercase",marginBottom:8}}><TruckIcon size={13} weight="bold"/>Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,borderTop:"3px solid "+st.c}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c,display:"inline-flex",alignItems:"center"}}><StageLbl stage={st.id} size={10}/></div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
   </div>;
 }
 
@@ -10020,7 +10020,7 @@ function WIPDashboard({ orders, role, onAction }) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: zone.color }}>{zone.label}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: zone.color, display:"inline-flex", alignItems:"center", gap:6 }}>{zone.Icon && <zone.Icon size={14} weight="bold"/>}{zone.labelT}</span>
                 <span style={{ fontSize: 11, color: C.t3 }}>{zone.count} órd</span>
                 {zone.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: C.t3 }}><ClockIcon size={11}/>{zone.avgDays.toFixed(1)}d prom</span>}
                 {zone.withoutPrice > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 11, color: "#ff9500", fontWeight: 600 }}><WarningIcon size={11} weight="fill"/>{zone.withoutPrice} sin precio</span>}
@@ -10054,7 +10054,7 @@ function WIPDashboard({ orders, role, onAction }) {
                       borderBottom: "0.5px solid " + C.bd
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: stage.color }}>{stage.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: stage.color, display:"inline-flex", alignItems:"center" }}><StageLbl stage={stage.id} size={12}/></span>
                         <span style={{ fontSize: 10, color: C.t3 }}>{stage.count} órd</span>
                         {stage.avgDays > 0 && <span style={{ display:"inline-flex", alignItems:"center", gap:3, fontSize: 10, color: C.t3 }}><ClockIcon size={10}/>{stage.avgDays.toFixed(1)}d</span>}
                       </div>
@@ -10181,7 +10181,7 @@ function WIPDashboard({ orders, role, onAction }) {
                     {o.production_number || "—"} · {(o.client || "—").trim()}
                   </span>
                   <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
-                    {SM[o.stage]?.l || o.stage} · {daysAgo(o.created_at)} días
+                    <StageLbl stage={o.stage} size={10}/> · {daysAgo(o.created_at)} días
                   </div>
                 </div>
                 <button
@@ -10549,7 +10549,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
             {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
             {isUrgente(topPriority) && <span style={{ color: "#ff9500", fontWeight: 600 }}>URGENTE · </span>}
-            {SM[topPriority.stage]?.l || topPriority.stage} · {orderResponsible(topPriority)?.name || "—"}
+            <StageLbl stage={topPriority.stage} size={10}/> · {orderResponsible(topPriority)?.name || "—"}
             {(() => {
               const lastAct = topPriority.timeline?.length > 0 ? topPriority.timeline[topPriority.timeline.length - 1].date : topPriority.created_at;
               const h = hoursAgo(lastAct);
@@ -10599,7 +10599,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                     {o.order_type === "maquila" && <span style={{ marginLeft: 6, fontSize: 9, color: "#e67e22", background: "#e67e2218", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>MAQUILA</span>}
                   </div>
                   <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
-                    {SM[o.stage]?.l || o.stage}
+                    <StageLbl stage={o.stage} size={10}/>
                     {o.agent && <> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>{o.agent}</>}
                     {o.created_by && o.created_by !== o.agent && <> · por {o.created_by}</>}
                     {" · "}
@@ -10678,7 +10678,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                     fontSize: 10, color: C.t2, padding: "3px 0", cursor: "pointer", display: "flex", justifyContent: "space-between"
                   }}>
                     <span>{o.production_number || "—"} · {(o.client || "—").trim().substring(0, 18)}</span>
-                    <span>{SM[o.stage]?.l || o.stage}</span>
+                    <span style={{display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
                   </div>
                 ))}
               </div>
@@ -10707,7 +10707,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                 <CircleIcon size={8} weight="fill" color={o._stale.lv === "critical" ? "#ff3b30" : "#ff9500"}/>{o.production_number || "—"}
               </span>
               <span style={{ color: C.t2 }}>{(o.client || "—").trim().substring(0, 22)}</span>
-              <span style={{ color: C.t3 }}>{SM[o.stage]?.l || o.stage}</span>
+              <span style={{ color: C.t3, display:"inline-flex", alignItems:"center" }}><StageLbl stage={o.stage} size={10}/></span>
               <span style={{ color: C.t3 }}>{o._stale.lb}</span>
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -10756,7 +10756,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
                   {section.list.slice(0, 10).map(o => (
                     <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd, gap: 8 }}>
                       <span onClick={() => onAction(o.id, "detail")} style={{ cursor: "pointer", color: C.t2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim().substring(0, 22)} · {SM[o.stage]?.l || o.stage}
+                        <strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim().substring(0, 22)} · <StageLbl stage={o.stage} size={10}/>
                       </span>
                       <button onClick={() => onAction(o.id, "edit")} style={{ fontSize: 10, padding: "3px 8px", background: section.color, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>
                         <NotePencilIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Editar
@@ -11260,7 +11260,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
                 <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
                 {o.invoice_folio&&<div style={{fontSize:10,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
                 {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
-                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4}}>{SM[o.stage]?.l||o.stage}</div>}
+                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
                 <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
               </div>;
             });
@@ -11299,7 +11299,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
       <div style={{padding:"14px 22px",overflowY:"auto",flex:1}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
           {isCancelled?<span style={{fontSize:11,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><XCircleIcon size={11} weight="fill"/>CANCELADA{order.nc_emitted?" · NC emitida":""}</span>
-          :<span style={{fontSize:11,color:stClr,fontWeight:700,background:stClr+"15",padding:"4px 10px",borderRadius:6}}>{SM[order.stage]?.l||order.stage}</span>}
+          :<span style={{fontSize:11,color:stClr,fontWeight:700,background:stClr+"15",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center"}}><StageLbl stage={order.stage}/></span>}
           {order.priority&&order.priority!=="normal"&&<span style={{fontSize:11,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"4px 10px",borderRadius:6}}>{order.priority.toUpperCase()}</span>}
           {order.invoice_folio&&<span style={{fontSize:11,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}>{order.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{order.invoice_folio}{order.invoice_pre_assigned?<LightningIcon size={10} weight="fill"/>:null}</span>}
           {order.source==="web"&&<span style={{fontSize:11,color:"#06b6d4",fontWeight:700,background:"#06b6d415",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><GlobeIcon size={11} weight="bold"/>Web</span>}
@@ -11869,7 +11869,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
         <span style={{fontSize:10,color:C.t3}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
         {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:"#5856d6",background:"#5856d612",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
-        <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
+        <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
         {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.ok,marginLeft:"auto"}}>{fmt(m)}</span>}
       </div>
       <div style={{fontSize:12,fontWeight:700,color:diag.sev==="red"?C.dn:"#b45309",marginTop:4}}>{diag.text}</div>
@@ -11954,7 +11954,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
             {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer"}}>
               <b>{r.o.production_number||r.o.id}</b>
               <span style={{color:C.t2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.o.client}</span>
-              <span style={{color:C.t3,fontSize:10}}>{SM[r.o.stage]?.l||r.o.stage}</span>
+              <span style={{color:C.t3,fontSize:10,display:"inline-flex",alignItems:"center"}}><StageLbl stage={r.o.stage} size={10}/></span>
               {r.o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:3,color:C.t3,fontSize:10}}><CalendarDotsIcon size={11}/>{fD(r.o.due_date)}</span>}
             </div>)}
             {healthyBy[name].length>15&&<div style={{fontSize:10,color:C.t3,padding:"4px 10px"}}>…y {healthyBy[name].length-15} más</div>}
@@ -11975,7 +11975,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <span style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
             <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
-            <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5}}>{SM[o.stage]?.l||o.stage}</span>
+            <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
             <div style={{marginLeft:"auto",display:"flex",gap:4}}>
               <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}><EyeIcon size={13}/></button>
               <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
