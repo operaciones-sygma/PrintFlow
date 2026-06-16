@@ -1206,7 +1206,7 @@ const calcDeliveryDate=(startDate,method,finishes)=>{
   return d.toISOString().slice(0,10);
 };
 
-const C={bg:"#ffffff",canvas:"#f5f5f7",card:"#ffffff",sf:"#f4f4f6",bd:"#e7e7ec",bdSt:"#d8d8de",tx:"#1a1a1f",t2:"#6c6c75",t3:"#9a9aa2",ph:"#bcbcc4",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)"};
+const C={bg:"#ffffff",canvas:"#f5f5f7",card:"#ffffff",sf:"#f4f4f6",bd:"#e7e7ec",bdSt:"#d8d8de",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)"};
 // 🌐 v10.12.0 Sub-fase C — Azul saturado para badges de OCs web (distinto del cian #06b6d4 usado en cart_folio)
 const WEB_BLUE="#3b82f6";
 const FNT="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap";
@@ -8756,13 +8756,14 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           </div>
         </div>
         {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
-        <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8}}>
-          <select value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:600,color:C.tx,background:C.sf,border:"1px solid "+C.bd,borderRadius:8,padding:"6px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
-            <option value="">→ Enviar a máquina</option>
+        <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8,position:"relative"}}>
+          <select aria-label={"Enviar la orden de "+o.client+" a una máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:9,padding:"7px 26px 7px 10px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}>
+            <option value="">Enviar a máquina…</option>
             <optgroup label="Offset">{machinesByType("offset").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
             <optgroup label="Acabados">{machinesByType("acabados").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
             <optgroup label="Digital">{machinesByType("digital").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
           </select>
+          <CaretDownIcon size={12} weight="bold" color={C.ac} style={{position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
         </div>
       </div>)}</div>
     </div>}
@@ -8778,14 +8779,15 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         {["offset","acabados","digital"].map(type=>{const ms=MACHINES.filter(m=>m.type===type&&m.status==="active"&&m.id!=="vm_manual");if(!ms.length)return null;
           const cnt=catCount(type);const isCol=collapsed[type];
           return <div key={type} style={{marginBottom:20}}>
-            <div onClick={()=>toggle(type)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:cc[type]+"10",borderRadius:isCol?"12px":"12px 12px 0 0",cursor:"pointer",border:"1px solid "+cc[type]+"25",borderBottom:isCol?"1px solid "+cc[type]+"25":"none"}}>
+            <div onClick={()=>toggle(type)} onMouseEnter={e=>e.currentTarget.style.background=cc[type]+"1c"} onMouseLeave={e=>e.currentTarget.style.background=cc[type]+"10"} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:cc[type]+"10",borderRadius:isCol?"12px":"12px 12px 0 0",cursor:"pointer",border:"1px solid "+cc[type]+"25",borderBottom:isCol?"1px solid "+cc[type]+"25":"none",transition:"background .12s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 {(()=>{const CI=catIcon[type];return CI?<CI size={17} weight="bold" color={cc[type]} style={{flexShrink:0}}/>:null})()}<span style={{fontSize:14,fontWeight:800,color:cc[type]}}>{catLabel[type]}</span>
                 <span style={{fontSize:10,color:C.t2}}>{ms.length} máquinas</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
                 {cnt>0&&<div style={{background:cc[type],color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{cnt} en producción</div>}
-                <span style={{fontSize:14,color:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
+                {isCol&&<span style={{fontSize:10,fontWeight:600,color:cc[type]}}>clic para abrir</span>}
+                <span style={{fontSize:14,color:isCol?cc[type]:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
               </div>
             </div>
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
@@ -14200,7 +14202,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
       </div>
 
-      <div style={{boxSizing:"border-box",width:"100%",maxWidth:(view==="board"&&(user==="produccion"||user==="admin"))?"none":(view==="form"?820:(["pipeline","tasks","orders","archive","oc","chemicals"].includes(view)?"none":(["wip","health","torre","audit","analytics"].includes(view)?1680:1300))),margin:"0 auto",padding:"14px 16px"}}>
+      <div style={{boxSizing:"border-box",width:"100%",maxWidth:(view==="board"&&(user==="produccion"||user==="admin"))?"none":(view==="form"?820:(["tasks","orders","oc","chemicals"].includes(view)?"none":(["pipeline","archive","wip","health","torre","audit","analytics"].includes(view)?1680:1300))),margin:"0 auto",padding:"14px 16px"}}>
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{filteredMyTasks.length} pendiente{filteredMyTasks.length!==1?"s":""}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color="#007aff"/>}
