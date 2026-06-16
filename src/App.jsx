@@ -12797,6 +12797,7 @@ export default function PrintFlow() {
   const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick]);
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
+    // 🔒 v10.64.0 — NO re-agregar "production_number": el folio es inmutable (corte híbrido).
     const editableFields=["order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
     // v10.58.26: defense-in-depth — si la orden original tenía folio pre-asignado y el actor
