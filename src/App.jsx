@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
+// v10.63.0 — pulido visual: paleta de stages/prioridades desaturada (matiz preservado),
+// sombras unificadas a tokens C.sh1/2/3, cards first-level a sombra-sin-borde + hover
+// canonico (StatCard/KPI tiles/box OC/board cards), radios de modales a 20, disabled a C.bdSt.
 // v10.62.0 — secciones del Sidebar (agrupacion por categoria/utilidad). Cada nav item
 // lleva un campo g con su seccion; el render agrupa por estas en este orden.
 const NAV_SECTIONS=[["op","Operación"],["com","Comercial"],["ctrl","Control"],["reg","Registros"]];
@@ -23,13 +26,13 @@ const STANDARD_SIZES=[{id:"pliego",label:"Pliego",w:70.0,h:95.0,group:"Imprenta"
 const SS_BY_ID=Object.fromEntries(STANDARD_SIZES.map(sz=>[sz.id,sz]));
 // v10.33.1 fix #3 — si el ID no existe en STANDARD_SIZES (legacy/corrupto), mostrar raw con icono de alerta
 const ssLabel=id=>SS_BY_ID[id]?.label||(id?"⚠️ "+id:"");
-const PRIOS=[{id:"urgente",l:"🔴 Urgente",lt:"Urgente",Icon:FireIcon,c:"#ff3b30"},{id:"normal",l:"🟡 Normal",lt:"Normal",Icon:CircleIcon,c:"#ff9500"},{id:"baja",l:"🟢 Baja",lt:"Baja",Icon:CircleIcon,c:"#34c759"}];
+const PRIOS=[{id:"urgente",l:"🔴 Urgente",lt:"Urgente",Icon:FireIcon,c:"#c84a3f"},{id:"normal",l:"🟡 Normal",lt:"Normal",Icon:CircleIcon,c:"#c07d2e"},{id:"baja",l:"🟢 Baja",lt:"Baja",Icon:CircleIcon,c:"#3a9e6a"}];
 const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
 const AGENTS=["Manuel","Genaro","Marcelo"];
 const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Barniz Máquina","Doblez","Intercalado","Grapado","Perforado","Plastificado","Suajado","Botado","Forma Suelta","Blocks","Engomado Superior","Engomado Lateral"];
-const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#ec4899",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#8b5cf6",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#f59e0b",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#0891b2",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#06b6d4",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#34c759",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#ff9500",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#e67e22",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#32ade6",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#af52de",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#16a34a",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#34c759",who:null}];
-const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#e67e22",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#ff9500",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#32ade6",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#34c759",who:null}];
-const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#06b6d4",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#ff3b30",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#10b981",who:null}];
+const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
+const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
+const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#2f9aad",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#2f9e7a",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 // v10.61.0 — Badge de etapa/prioridad con icono Phosphor. `l` (con emoji) se conserva
 // para contextos de string (toasts, CSV, impresión, timeline, opciones); el badge JSX
@@ -1271,7 +1274,7 @@ function Toast({message,type="success",onDone}) {
     background:bg,color:"#fff",
     padding:"12px 24px",borderRadius:14,
     fontSize:13,fontWeight:600,fontFamily:"'Geist',sans-serif",
-    boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:9999,
+    boxShadow:C.sh3,zIndex:9999,
     display:"flex",alignItems:"center",gap:8,
     animation:"toastIn .3s ease",
     // v10.36.1 #2 — mensajes largos del backend RAISE necesitan wrap/word-break
@@ -1337,7 +1340,7 @@ function Login({onLogin}) {
           <input style={inp} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" onKeyDown={e=>e.key==="Enter"&&submit()}/>
         </div>
         {error && <div style={{color:C.dn,fontSize:12,fontWeight:600,marginBottom:12}}>{error}</div>}
-        <button onClick={submit} disabled={loading} style={{...bt(loading?"#d1d1d6":C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?<><HourglassIcon size={15} weight="bold"/>Verificando...</>:"Entrar"}</button>
+        <button onClick={submit} disabled={loading} style={{...bt(loading?C.bdSt:C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?<><HourglassIcon size={15} weight="bold"/>Verificando...</>:"Entrar"}</button>
       </div>
     </div>
   );
@@ -1678,7 +1681,7 @@ function WakeupModal({user, userLogin, items, onAck}){
   useEffect(()=>{ if(matched) onAck(); },[matched,onAck]);
   const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
   return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:16,backdropFilter:"blur(3px)"}}>
-    <div style={{background:C.bg,borderRadius:24,padding:28,maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.4)"}}>
+    <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:C.sh3}}>
       <div style={{fontSize:30,fontWeight:900,color:C.tx,lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}><SunIcon size={28} weight="fill" color="#f59e0b"/>Buenos días, {userDisplayName(user)}</div>
       <div style={{fontSize:12,color:C.t2,marginTop:4,textTransform:"capitalize"}}>{today}</div>
       <div style={{fontSize:14,fontWeight:700,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:12,padding:"10px 14px",marginTop:14}}>
@@ -1730,14 +1733,14 @@ function ClientInput({value,onChange,onSelect,clients}) {
     },250);
     return()=>debounceRef.current&&clearTimeout(debounceRef.current);
   },[value]);
-  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
+  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
 }
 
 // 🆕 v10.13.0 — Modal de confirmación de cliente similar (typeahead)
 function ClientConfirmModal({open,typed,matches,onResolve}) {
   if(!open)return null;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>onResolve("cancel")}>
-    <div role="dialog" aria-modal="true" aria-label="Confirmar cliente similar" style={{background:C.bg,borderRadius:14,padding:24,maxWidth:520,width:"90%",boxShadow:"0 12px 40px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
+    <div role="dialog" aria-modal="true" aria-label="Confirmar cliente similar" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
       <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -1778,7 +1781,7 @@ function QuickNotes({notes=[],onAdd,role}) {
           const isMe=n.by===role;
           return <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start",marginBottom:6}}>
             <div style={{fontSize:9,color:rc[n.by]||C.t3,fontWeight:600,marginBottom:1}}>{rN[n.by]||n.by}</div>
-            <div style={{background:isMe?"#007aff":"#fff",color:isMe?"#fff":C.tx,padding:"6px 10px",borderRadius:10,fontSize:11,maxWidth:"85%",lineHeight:1.4,boxShadow:"0 1px 2px rgba(0,0,0,0.06)"}}>{n.text}</div>
+            <div style={{background:isMe?"#007aff":"#fff",color:isMe?"#fff":C.tx,padding:"6px 10px",borderRadius:10,fontSize:11,maxWidth:"85%",lineHeight:1.4,boxShadow:C.sh1}}>{n.text}</div>
             <div style={{fontSize:8,color:C.t3,marginTop:1}}>{fDT(n.date)}</div>
           </div>;
         })}
@@ -1802,7 +1805,7 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
   const rc={produccion:"#007aff",preprensa:"#ec4899",german:"#0891b2",secretaria:"#5856d6",vendedor:"#d97706",admin:C.ok,sistema:C.t3};
   const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   return <div style={{position:"fixed",inset:0,zIndex:998}} onClick={onClose}>
-    <div style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:"0 12px 40px rgba(0,0,0,.15)",width:360,maxHeight:"70vh",overflow:"hidden",border:"0.5px solid "+C.bd}} onClick={e=>e.stopPropagation()}>
+    <div style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:C.sh3,width:360,maxHeight:"70vh",overflow:"hidden",border:"0.5px solid "+C.bd}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid "+C.bd}}>
         <span style={{fontSize:14,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}><BellRingingIcon size={15} weight="fill"/>Notificaciones</span>
         <div style={{display:"flex",gap:4}}>
@@ -2349,7 +2352,7 @@ function MaqModal({onSend,onClose,providers=[]}) {
     <div style={{marginBottom:10,position:"relative"}}>
       <label style={lbl}>Proveedor *</label>
       <input style={inp} value={p} onChange={e=>{setP(e.target.value);setShowAC(true)}} onFocus={()=>setShowAC(true)} onBlur={()=>setTimeout(()=>setShowAC(false),200)} placeholder="Nombre del proveedor"/>
-      {showAC&&matches.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:50,border:"0.5px solid "+C.bd,marginTop:4}}>
+      {showAC&&matches.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4}}>
         <div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>Proveedores anteriores</div>
         {matches.map((pv,i)=><div key={i} onMouseDown={()=>selProv(pv)} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
           <div style={{fontSize:12,fontWeight:600}}>{pv.name}</div>
@@ -4502,7 +4505,7 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, onConfirm, onCl
   const orderLabel = order ? (order.production_number || line?.order_id || "?") : (line?.order_id || "?");
   const folioLabel = group?.folio || (group?.doc_type === "corona_saldo" ? "(corona_saldo)" : "?");
   return <div onClick={e=>!busy&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:20,maxWidth:500,width:"100%"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:500,width:"100%"}}>
       <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 4px",color:C.dn}}>
         {isLine ? <><ScissorsIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Cancelar línea del plan matriz</> : <><XIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Cancelar factura completa del plan matriz</>}
       </h3>
@@ -7013,7 +7016,7 @@ function PantoneInput({label, value, onChange}) {
       </div>}
       <div style={{position:"relative"}}>
         <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} placeholder="Buscar Pantone (ej. 186 C, Reflex Blue)..."/>
-        {open && results.length > 0 && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:10,maxHeight:240,overflowY:"auto"}}>
+        {open && results.length > 0 && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
           {results.map(r => (
             <div key={r.code} onMouseDown={e=>{e.preventDefault();addPantone(r.code)}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:"0.5px solid "+C.bd,fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
               <div style={{width:24,height:24,borderRadius:12,background:r.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
@@ -7317,7 +7320,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:700,margin:"0 auto"}}>
     {/* v10.59.0 — Modal: registrar nuevo AGENTE (contacto del cliente) con su contacto */}
     {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={()=>setNewAgentOpen(false)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:380,width:"100%",boxShadow:"0 20px 50px rgba(0,0,0,.35)"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:22,maxWidth:380,width:"100%",boxShadow:C.sh3}}>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx}}><UserPlusIcon size={18} weight="bold"/>Nuevo agente</div>
         <div style={{fontSize:11,color:C.t2,margin:"4px 0 14px"}}>Contacto de <b style={{color:C.tx}}>{f.client||"este cliente"}</b>. Captura su celular o correo (al menos uno).</div>
         <input style={{...inp,marginBottom:8}} value={newAgent.name} onChange={e=>setNewAgent(a=>({...a,name:e.target.value}))} placeholder="Nombre del agente"/>
@@ -7440,7 +7443,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             autoComplete="off"
           />
           <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:10,color:C.t3,pointerEvents:"none"}}>{prodTypeOpen?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}</span>
-          {prodTypeOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:"0 4px 12px rgba(0,0,0,0.08)"}}>
+          {prodTypeOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:C.sh3}}>
             {matches.map((t,i)=><div key={t} onMouseDown={e=>{e.preventDefault();s("product_type",t);setProdTypeOpen(false)}} onMouseEnter={()=>setProdTypeHl(i)} style={{padding:"8px 12px",cursor:"pointer",fontSize:12,borderBottom:"0.5px solid "+C.bd,background:i===hl?C.ac+"15":(f.product_type===t?C.ac+"08":"transparent")}}>{t}</div>)}
             {matches.length===0&&q&&<div style={{padding:"8px 12px",fontSize:11,color:C.t3,fontStyle:"italic"}}>Sin coincidencias en lista — se guardará como "{f.product_type}"</div>}
             <div onMouseDown={e=>{
@@ -7477,7 +7480,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><NotePencilIcon size={12} weight="bold"/><span>Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:9,fontWeight:500}}>(USO INTERNO)</span></span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
     <div style={{padding:"12px 20px 16px"}}>
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?"#d1d1d6":!canSubmit&&tried?"#d1d1d6":isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?"#e67e22":C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
     </div>
     {/* v10.45.0 — Modal replicar orden anterior */}
     {replicateOpen&&<ReplicateFromOrderModal clientId={f.client_id} clientName={f.client} onReplicate={applyReplicate} onClose={()=>setReplicateOpen(false)}/>}
@@ -7611,7 +7614,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={handleConfirm} disabled={saving||selectedIds.size===0} style={{...bt(selectedIds.size>0?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:saving||selectedIds.size===0?"default":"pointer",opacity:saving?.6:1}}>
+          <button onClick={handleConfirm} disabled={saving||selectedIds.size===0} style={{...bt(selectedIds.size>0?C.ac:C.bdSt),fontSize:12,padding:"8px 14px",cursor:saving||selectedIds.size===0?"default":"pointer",opacity:saving?.6:1}}>
             {saving ? "Moviendo..." : <><PackageIcon size={13} weight="bold"/>Agregar {selectedIds.size>0?selectedIds.size+" ":""}orden{selectedIds.size!==1?"es":""}</>}
           </button>
         </div>
@@ -7817,7 +7820,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.ac:"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Moviendo...</>:<><ArrowsLeftRightIcon size={14} weight="bold"/>Mover</>}</button>
+        <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.ac:C.bdSt),flex:1,justifyContent:"center",cursor:canSubmit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Moviendo...</>:<><ArrowsLeftRightIcon size={14} weight="bold"/>Mover</>}</button>
       </div>
     </div>
   </div>;
@@ -8274,8 +8277,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
         {activeMode === "simple"
-          ? <button onClick={submitSimple} disabled={!canSubmitSimple} style={{...bt(canSubmitSimple?(preAssignedMode?C.wn:tColor):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSimple?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Asignando...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar {tLabel}</>:<><FileTextIcon size={14} weight="bold"/>Asignar {tLabel}</>}</button>
-          : <button onClick={submitSplit} disabled={!canSubmitSplit} style={{...bt(canSubmitSplit?(preAssignedMode?C.wn:"#5856d6"):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSplit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Dividiendo...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar en {splitGroups.length} facturas</>:<><ArrowsSplitIcon size={14} weight="bold"/>Dividir en {splitGroups.length} facturas</>}</button>
+          ? <button onClick={submitSimple} disabled={!canSubmitSimple} style={{...bt(canSubmitSimple?(preAssignedMode?C.wn:tColor):C.bdSt),flex:1,justifyContent:"center",cursor:canSubmitSimple?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Asignando...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar {tLabel}</>:<><FileTextIcon size={14} weight="bold"/>Asignar {tLabel}</>}</button>
+          : <button onClick={submitSplit} disabled={!canSubmitSplit} style={{...bt(canSubmitSplit?(preAssignedMode?C.wn:"#5856d6"):C.bdSt),flex:1,justifyContent:"center",cursor:canSubmitSplit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Dividiendo...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar en {splitGroups.length} facturas</>:<><ArrowsSplitIcon size={14} weight="bold"/>Dividir en {splitGroups.length} facturas</>}</button>
         }
       </div>
     </div>
@@ -8410,7 +8413,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         const incomplete=noPrice||noCost;
         return <>
           {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
-          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?"#d1d1d6":"#32ade6")} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
+          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:"#32ade6")} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
@@ -8584,7 +8587,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
       </div>
       {d.orders.map(o=>{const days=getDays(o);const st=SM[o.stage];const hp=role==="produccion"||role==="preprensa"||role==="german";const oOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
         const urgColor=days>=14?C.dn:days>=7?C.wn:days>=3?"#e67e22":C.ok;
-        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",borderLeft:"3px solid "+urgColor,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",borderLeft:"3px solid "+urgColor,boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
               <div style={{fontSize:12,fontWeight:700}}>{o.client}</div>
@@ -8694,7 +8697,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           <div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>Órdenes Listas</div><div style={{fontSize:10,color:C.t2}}>Arrastra a máquinas, Empaque o Salidas</div></div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok)}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok),transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -8837,7 +8840,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?"#16a34a":C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
-            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
               {o.due_date&&<div style={{fontSize:9,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
@@ -8912,7 +8915,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div style={{background:"#0891b2",color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{readyCtp.length}</div>
         <div><div style={{fontSize:13,fontWeight:700,color:"#0891b2"}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:"#0891b2")}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:"#0891b2"),transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
@@ -9184,7 +9187,7 @@ function StorageTab({orders,onReload}) {
     {oldFiles.length>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:14,padding:16,marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:8}}><TrashIcon size={13} weight="bold"/>Limpieza Masiva — Archivos +30 días</div>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Hay {oldFiles.length} archivo{oldFiles.length>1?"s":""} de órdenes con más de 30 días.</p>
-      <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?"#d1d1d6":C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:cleaned>0?<><CheckCircleIcon size={14} weight="bold"/>{cleaned} borrados</>:<><TrashIcon size={14} weight="bold"/>Borrar Todos los Antiguos ({oldFiles.length})</>}</button>
+      <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?C.bdSt:C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:cleaned>0?<><CheckCircleIcon size={14} weight="bold"/>{cleaned} borrados</>:<><TrashIcon size={14} weight="bold"/>Borrar Todos los Antiguos ({oldFiles.length})</>}</button>
     </div>}
     {oldFiles.length===0&&<div style={{background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:14,padding:16,marginBottom:16,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:14,fontWeight:700,color:C.ok}}><CheckCircleIcon size={15} weight="fill"/>Sin archivos antiguos</div><div style={{fontSize:11,color:C.t2,marginTop:4}}>Todos los archivos tienen menos de 30 días</div></div>}
 
@@ -9224,7 +9227,7 @@ function StorageTab({orders,onReload}) {
           <div style={{fontSize:10,color:C.t2}}>{orphans.length} archivo{orphans.length>1?"s":""} sin referencia en BD · {fmtBytes(orphans.reduce((s,f)=>s+f.size,0))}</div>
           <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Estos archivos están en Storage pero no apuntan a ninguna orden. Pueden borrarse de forma segura.</div>
         </div>
-        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?"#d1d1d6":C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><TrashIcon size={14} weight="bold"/>Limpiar Todos ({orphans.length})</>}</button>
+        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?C.bdSt:C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><TrashIcon size={14} weight="bold"/>Limpiar Todos ({orphans.length})</>}</button>
       </div>
       <div style={{maxHeight:200,overflowY:"auto",marginTop:8}}>
         {orphans.slice(0,20).map(f=><div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:10}}>
@@ -9398,7 +9401,7 @@ function Archive({orders,role,onAction,userLogin}) {
                     {wOpen&&<div style={{paddingLeft:8,marginTop:4,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:6}}>
                       {wOrders.map(o=>{
                         const st=SM[o.stage];const isMaq=o.order_type==="maquila";const isCancelled=o.stage.includes("cancelled");
-                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",borderLeft:"3px solid "+(st?.c||C.ok),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",borderLeft:"3px solid "+(st?.c||C.ok),boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
                           {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:"#06b6d4",letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
                           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:3}}>{o.web_folio}</div>}
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
@@ -10251,7 +10254,7 @@ function ClientMergeModal({onClose, showToast, userLogin}) {
     {sel&&<div style={{fontSize:10,color:C.t2,marginTop:3}}>RFC: {sel.rfc||"—"} · {sel.billing_mode||"normal"}</div>}
   </div>;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,.35)"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:C.sh3}}>
       <div style={{fontSize:17,fontWeight:800,color:C.tx,display:"flex",alignItems:"center",gap:6}}><LinkIcon size={17} weight="bold"/>Fusionar clientes duplicados</div>
       <div style={{fontSize:11,color:C.t2,margin:"4px 0 16px"}}>Reasigna TODO del duplicado al cliente que conservas y lo desactiva. Ej: "UVEG" → "UNIVERSIDAD VIRTUAL DEL ESTADO".</div>
       <div style={{display:"flex",gap:12,marginBottom:14}}>
@@ -10265,7 +10268,7 @@ function ClientMergeModal({onClose, showToast, userLogin}) {
       {both&&keep.billing_mode!==merge.billing_mode&&<div style={{fontSize:11,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:8,padding:"8px 10px",marginBottom:12}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Tienen billing_mode distinto ({keep.billing_mode} vs {merge.billing_mode}). Asegúrate de conservar el correcto (ej. el de Corona/anticipo si aplica).</div>}
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
-        <button onClick={doMerge} disabled={!both||busy} style={{flex:1,padding:11,borderRadius:10,border:"none",background:both&&!busy?C.dn:"#d1d1d6",color:"#fff",fontWeight:700,cursor:both&&!busy?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>{busy?<><HourglassIcon size={14} weight="bold"/>Fusionando...</>:<><LinkIcon size={14} weight="bold"/>Fusionar</>}</button>
+        <button onClick={doMerge} disabled={!both||busy} style={{flex:1,padding:11,borderRadius:10,border:"none",background:both&&!busy?C.dn:C.bdSt,color:"#fff",fontWeight:700,cursor:both&&!busy?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>{busy?<><HourglassIcon size={14} weight="bold"/>Fusionando...</>:<><LinkIcon size={14} weight="bold"/>Fusionar</>}</button>
       </div>
     </div>
   </div>;
@@ -10326,7 +10329,7 @@ function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-        <button onClick={submit} disabled={!valid||busy} style={{...bt(valid&&!busy?C.dn:"#d1d1d6"),flex:1,justifyContent:"center",cursor:valid&&!busy?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><BroomIcon size={14} weight="bold"/>Limpiar</>}</button>
+        <button onClick={submit} disabled={!valid||busy} style={{...bt(valid&&!busy?C.dn:C.bdSt),flex:1,justifyContent:"center",cursor:valid&&!busy?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><BroomIcon size={14} weight="bold"/>Limpiar</>}</button>
       </div>
     </div>
   </div>;
@@ -10335,10 +10338,10 @@ function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
 function StatCard({ label, value, subValue, color }) {
   return (
     <div style={{
-      background: "#fff",
-      border: "1px solid " + C.bd,
+      background: C.card,
+      boxShadow: C.sh2,
       borderLeft: "4px solid " + color,
-      borderRadius: 12,
+      borderRadius: 14,
       padding: "12px 16px"
     }}>
       <div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>
@@ -11066,23 +11069,23 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       )}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-      <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+tColor,border:"1px solid "+C.bd}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+tColor,boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total emitidos</div>
         <div style={{fontSize:22,fontWeight:800,color:tColor}}>{total}</div>
       </div>
-      <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+(gaps.length?C.dn:C.ok),border:"1px solid "+C.bd}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(gaps.length?C.dn:C.ok),boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
         <div style={{fontSize:22,fontWeight:800,color:gaps.length?C.dn:C.ok}}>{gaps.length}</div>
       </div>
-      <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+(duplicates.length?C.dn:C.ok),border:"1px solid "+C.bd}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(duplicates.length?C.dn:C.ok),boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
         <div style={{fontSize:22,fontWeight:800,color:duplicates.length?C.dn:C.ok}}>{duplicates.length}</div>
       </div>
-      <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+(sharedCount?C.ok:C.t3),border:"1px solid "+C.bd}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(sharedCount?C.ok:C.t3),boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Compartidos</div>
         <div style={{fontSize:22,fontWeight:800,color:sharedCount?C.ok:C.t3}}>{sharedCount}</div>
       </div>
-      <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.t3,border:"1px solid "+C.bd}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.t3,boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
         <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest?prefix+"-"+oldest:"—"}{latest&&latest!==oldest?<><br/>↓<br/>{prefix+"-"+latest}</>:""}</div>
       </div>
@@ -11226,23 +11229,23 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.ac,border:"1px solid "+C.bd}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.ac,boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total P-XXXX</div>
             <div style={{fontSize:22,fontWeight:800,color:C.ac}}>{totalPN}</div>
           </div>
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+(pnGaps.length?C.dn:C.ok),border:"1px solid "+C.bd}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(pnGaps.length?C.dn:C.ok),boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
             <div style={{fontSize:22,fontWeight:800,color:pnGaps.length?C.dn:C.ok}}>{pnGaps.length}</div>
           </div>
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid #5856d6",border:"1px solid "+C.bd}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid #5856d6",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div>
             <div style={{fontSize:22,fontWeight:800,color:"#5856d6"}}>{invoicedCount}</div>
           </div>
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.dn,border:"1px solid "+C.bd}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.dn,boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div>
             <div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCount}</div>
           </div>
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",borderLeft:"4px solid "+C.t3,border:"1px solid "+C.bd}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.t3,boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
             <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
           </div>
@@ -11526,7 +11529,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const SharedFolioIcon = sharedFolioType === "factura" ? FileTextIcon : ClipboardTextIcon;
     return <div>
       <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
-      <div style={{background:C.bg,borderRadius:12,padding:16,border:"1px solid "+C.bd,borderLeft:isWeb?"4px solid "+WEB_BLUE:undefined,marginBottom:14}}>
+      <div style={{background:C.card,borderRadius:14,padding:16,boxShadow:C.sh2,borderLeft:isWeb?"4px solid "+WEB_BLUE:undefined,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
           <div>
             {isWeb ? <>
@@ -11559,10 +11562,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         <h3 style={{fontSize:14,fontWeight:800,letterSpacing:"-0.005em",margin:0}}>Productos ({ocOrders.length})</h3>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {/* v10.39.0 — botón renombrado: "Agregar producto" → "Agregar Producto Nuevo" */}
-          {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar Producto Nuevo</button>}
+          {canAddProductHere && <button onClick={canAddProduct?()=>onAddProduct(selectedOC):undefined} disabled={!canAddProduct} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"")} style={{...bt(canAddProduct?C.ac:C.bdSt),fontSize:12,padding:"8px 14px",cursor:canAddProduct?"pointer":"not-allowed"}}>+ Agregar Producto Nuevo</button>}
           {/* v10.39.0 — botón nuevo: agregar orden de producción existente del mismo cliente a esta OC */}
           {/* v10.43.8 — Karla incluida vía canMoveExisting (puede mover existentes pero no crear nuevas) */}
-          {canMoveExistingHere && <button onClick={canMoveExisting?()=>onAddExisting(selectedOC):undefined} disabled={!canMoveExisting} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canMoveExisting?"#16a34a":"#d1d1d6"),fontSize:12,padding:"8px 14px",cursor:canMoveExisting?"pointer":"not-allowed"}}><PackageIcon size={14} weight="bold"/>Agregar Producto Existente</button>}
+          {canMoveExistingHere && <button onClick={canMoveExisting?()=>onAddExisting(selectedOC):undefined} disabled={!canMoveExisting} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canMoveExisting?"#16a34a":C.bdSt),fontSize:12,padding:"8px 14px",cursor:canMoveExisting?"pointer":"not-allowed"}}><PackageIcon size={14} weight="bold"/>Agregar Producto Existente</button>}
           {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt("#5856d6"),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados."><ReceiptIcon size={14} weight="bold"/>Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales."><LockIcon size={14} weight="bold"/>Pre-asignar folio</button>}
           {/* v10.58.36 — Plan matriz: N facturas con porciones por orden (caso KFC) */}
@@ -11788,7 +11791,7 @@ function CreateOCModal({onCreate, onClose}){
     }
   };
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+    <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:C.sh3}}>
       <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",color:C.ac,display:"flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={18} weight="bold"/>Nueva Orden de Compra</h2>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 18px"}}>Crea una OC para agrupar varios productos del mismo cliente</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -11962,7 +11965,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
             {open?<CaretUpIcon size={11} color={C.t3}/>:<CaretDownIcon size={11} color={C.t3}/>}
           </button>
           {open&&<div style={{marginTop:4}}>
-            {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer"}}>
+            {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer",transition:"background .12s"}} onMouseEnter={e=>e.currentTarget.style.background=C.acL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <b>{r.o.production_number||r.o.id}</b>
               <span style={{color:C.t2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.o.client}</span>
               <span style={{color:C.t3,fontSize:10,display:"inline-flex",alignItems:"center"}}><StageLbl stage={r.o.stage} size={10}/></span>
@@ -14069,7 +14072,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
               {moreActive&&<div style={{width:4,height:4,borderRadius:"50%",background:C.ac,marginTop:1}}/>}
             </button>
-            {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:997}} onClick={()=>setShowMoreMenu(false)}/><div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.bg,borderRadius:14,boxShadow:"0 12px 40px -8px rgba(0,0,0,0.18), 0 0 0 0.5px rgba(0,0,0,0.04)",border:"0.5px solid "+C.bd,zIndex:998,minWidth:220,overflow:"hidden",animation:"menuFade 0.18s ease-out"}}>
+            {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:997}} onClick={()=>setShowMoreMenu(false)}/><div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.bg,borderRadius:14,boxShadow:C.sh3,border:"0.5px solid "+C.bd,zIndex:998,minWidth:220,overflow:"hidden",animation:"menuFade 0.18s ease-out"}}>
               <div style={{padding:"12px 16px 8px",fontSize:10,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:0.6}}>Más vistas</div>
               {moreNavs.map((n,i)=><button key={n.id} onClick={()=>navClick(n.id)} onMouseEnter={e=>{if(view!==n.id)e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{if(view!==n.id)e.currentTarget.style.background="transparent"}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",background:view===n.id?C.acL:"transparent",color:view===n.id?C.ac:C.tx,cursor:"pointer",fontSize:12.5,fontWeight:view===n.id?700:500,fontFamily:"'Geist',sans-serif",textAlign:"left",transition:"background 0.12s"}}><span style={{fontSize:14,width:18,textAlign:"center"}}>{n.i}</span>{n.l}</button>)}
             </div></>}
@@ -14130,7 +14133,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:"#0891b2",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:parseDate(o.due_date)<new Date()?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
