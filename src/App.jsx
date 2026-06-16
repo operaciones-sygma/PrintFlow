@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
+// v10.64.0 — CORTE HÍBRIDO: folio de producción 100% automático/consecutivo (lo asigna
+// el RPC atómico next_production_number al guardar). Ya NO es editable (form read-only,
+// fuera de editableFields, sin pre-llenado, create() siempre via RPC). Requiere la migración
+// de los folios anteriores P-NNNN -> H-NNNN (ver c:\tmp\printflow-cutover.md) para resetear
+// la serie a P-0001. Los folios D-/R- (invoice_folio) siguen editables (alphaERP).
 // v10.63.0 — pulido visual: paleta de stages/prioridades desaturada (matiz preservado),
 // sombras unificadas a tokens C.sh1/2/3, cards first-level a sombra-sin-borde + hover
 // canonico (StatCard/KPI tiles/box OC/board cards), radios de modales a 20, disabled a C.bdSt.
@@ -7186,10 +7191,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [advMode,setAdvMode]=useState(false);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
   useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(x)&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes) */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
-  const pnSetRef=useRef(false);
-  useEffect(()=>{if(!editOrder?.id&&nextPN&&!pnSetRef.current){pnSetRef.current=true;s("production_number",nextPN)}},[nextPN,editOrder]);
-  // 🆕 v10.14.0 — Folio P-XXXX editable para Lupita/Admin/Vendedor (NO Karla/Producción/etc)
-  const canEditProductionNumber = !editOrder?.id && (isSec(role) || role === "admin");
+  // v10.64.0 — corte híbrido: ya no se pre-llena el folio en el form. Lo asigna el RPC atómico
+  // al guardar (serie 100% consecutiva). El form solo muestra "Asignado automáticamente".
+  // v10.64.0 — corte híbrido: el folio de producción ya NO es editable por nadie. Es 100%
+  // automático/consecutivo (lo asigna el RPC atómico al guardar). El form solo lo muestra.
+  const canEditProductionNumber = false;
   const [pnValidation, setPnValidation] = useState({valid: true, message: null, existing: null});
   const pnValidateTimerRef = useRef(null);
   useEffect(() => {
@@ -12502,15 +12508,15 @@ export default function PrintFlow() {
     // v10.34.3 — Respetar el folio que el usuario escribió (validado en vivo por validate_production_number en OrderForm).
     // RPC next_production_number solo como fallback si el campo está vacío o con formato inválido.
     // El UNIQUE INDEX idx_orders_production_number_unique es la red atómica final contra colisiones.
-    let assignedPN=(f.production_number||"").trim();
-    // v10.34.4 fix #5 — exigir 4+ dígitos (convención P-XXXX), no aceptar "P-3" o "P-99" como válido
-    if(!assignedPN||!/^P-\d{4,}$/.test(assignedPN)){
-      try{
-        const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
-        if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
-        assignedPN=rpcPN;
-      }catch(e){if(e?.message==="folio_failed")return;throw e}
-    }
+    // v10.64.0 — corte híbrido: el folio de producción SIEMPRE lo genera el RPC atómico
+    // (next_production_number: advisory-lock + UNIQUE INDEX). Ya NO se respeta ningún folio
+    // tecleado — la serie es 100% consecutiva generada por PrintFlow desde P-0001.
+    let assignedPN;
+    try{
+      const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
+      if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
+      assignedPN=rpcPN;
+    }catch(e){if(e?.message==="folio_failed")return;throw e}
     // v10.43.5 — Si el cliente no viene del typeahead (client_id NULL), crearlo/encontrarlo en cobranza
     // para que la próxima búsqueda lo encuentre con sus datos. Match por RFC primero, luego nombre.
     let resolvedClientId=f.client_id||null;
@@ -12791,7 +12797,7 @@ export default function PrintFlow() {
   const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick]);
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
-    const editableFields=["order_type","priority","production_number","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
+    const editableFields=["order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
     // v10.58.26: defense-in-depth — si la orden original tenía folio pre-asignado y el actor
     // NO es admin, quitar price/maq_price del payload aunque el frontend los haya enviado.
