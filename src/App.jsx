@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -99,9 +99,9 @@ function getTaskFilters(role){
   // v10.54.6 — Limpieza de ruido visual: 🐢 Estancadas y 💰 Sin precio se muestran
   // condicionalmente según el rol que realmente actúa sobre esa info.
   const common=[
-    {key:"urgent",emoji:"🔥",label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
+    {key:"urgent",Icon:FireIcon,label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
     // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
-    {key:"late",emoji:"⏰",label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
+    {key:"late",Icon:AlarmIcon,label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
   ];
   const isOperative=role==="produccion"||role==="preprensa"||role==="german";
   // v10.54.6 — 🐢 Estancadas: solo roles que actúan sobre WIP atorado (no Lupita ni vendedor).
@@ -110,51 +110,51 @@ function getTaskFilters(role){
   // v10.43.21 + v10.54.6 — 💰 Sin precio: solo roles que capturan precios.
   // Excluidos: operativos (producción/preprensa/germán) y Lupita (precio lo pone Karla).
   const showPrice = !isOperative && !isSec(role);
-  const baseWithStale = showStale ? [...common, {key:"stale",emoji:"🐢",label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)}] : common;
-  const base = showPrice ? [...baseWithStale, {key:"no_price",emoji:"💰",label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0}] : baseWithStale;
+  const baseWithStale = showStale ? [...common, {key:"stale",Icon:HourglassIcon,label:"Estancadas",color:"#ea580c",predicate:o=>!!getStale(o)}] : common;
+  const base = showPrice ? [...baseWithStale, {key:"no_price",Icon:CurrencyDollarIcon,label:"Sin precio",color:"#16a34a",predicate:o=>!o.price||Number(o.price)===0}] : baseWithStale;
   if(role==="karla")return[...base,
-    {key:"salidas",emoji:"📤",label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
-    {key:"maq_received",emoji:"📥",label:"Maquila recibida",color:"#32ade6",predicate:o=>o.stage==="maq_received"},
-    {key:"oc_pending",emoji:"📋",label:"OC pendiente folio",color:"#8b5cf6",predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
-    {key:"pre_assigned",emoji:"🔒",label:"Pre-asignados",color:"#06b6d4",predicate:o=>!!o.invoice_pre_assigned},
+    {key:"salidas",Icon:ExportIcon,label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
+    {key:"maq_received",Icon:DownloadSimpleIcon,label:"Maquila recibida",color:"#32ade6",predicate:o=>o.stage==="maq_received"},
+    {key:"oc_pending",Icon:ClipboardTextIcon,label:"OC pendiente folio",color:"#8b5cf6",predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
+    {key:"pre_assigned",Icon:LockIcon,label:"Pre-asignados",color:"#06b6d4",predicate:o=>!!o.invoice_pre_assigned},
   ];
   if(role==="produccion")return[...base,
-    {key:"no_machine",emoji:"🖱️",label:"Sin máquina",color:"#007aff",predicate:o=>o.stage==="ready"&&!o.current_machine},
-    {key:"in_production",emoji:"⚙️",label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
-    {key:"maquila_in",emoji:"📥",label:"Maquila regresó",color:"#32ade6",predicate:o=>o.stage==="maquila_in"},
-    {key:"packaging",emoji:"📦",label:"Empaque pendiente",color:"#af52de",predicate:o=>o.stage==="packaging"},
+    {key:"no_machine",Icon:MouseIcon,label:"Sin máquina",color:"#007aff",predicate:o=>o.stage==="ready"&&!o.current_machine},
+    {key:"in_production",Icon:GearIcon,label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
+    {key:"maquila_in",Icon:DownloadSimpleIcon,label:"Maquila regresó",color:"#32ade6",predicate:o=>o.stage==="maquila_in"},
+    {key:"packaging",Icon:PackageIcon,label:"Empaque pendiente",color:"#af52de",predicate:o=>o.stage==="packaging"},
   ];
   if(role==="preprensa")return[...base,
-    {key:"drafts",emoji:"📝",label:"Drafts",color:"#aeaeb2",predicate:o=>o.stage==="draft"},
-    {key:"design",emoji:"🎨",label:"En diseño",color:"#ec4899",predicate:o=>o.stage==="design"},
-    {key:"waiting_client",emoji:"👤",label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+    {key:"drafts",Icon:NotePencilIcon,label:"Drafts",color:"#aeaeb2",predicate:o=>o.stage==="draft"},
+    {key:"design",Icon:PaletteIcon,label:"En diseño",color:"#ec4899",predicate:o=>o.stage==="design"},
+    {key:"waiting_client",Icon:UserIcon,label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
   ];
   // v10.43.19 — Germán: chips de su flujo CTP/placas
   if(role==="german")return[...base,
-    {key:"proof_printing",emoji:"🖨️",label:"Imprimir prueba",color:"#5856d6",predicate:o=>o.stage==="proof_printing"},
-    {key:"ctp",emoji:"🛠️",label:"CTP pendiente",color:"#0891b2",predicate:o=>o.stage==="ctp"},
-    {key:"placas",emoji:"✅",label:"Placas listas",color:"#34c759",predicate:o=>o.stage==="placas_listas"},
+    {key:"proof_printing",Icon:PrinterIcon,label:"Imprimir prueba",color:"#5856d6",predicate:o=>o.stage==="proof_printing"},
+    {key:"ctp",Icon:WrenchIcon,label:"CTP pendiente",color:"#0891b2",predicate:o=>o.stage==="ctp"},
+    {key:"placas",Icon:CheckCircleIcon,label:"Placas listas",color:"#34c759",predicate:o=>o.stage==="placas_listas"},
   ];
   // v10.43.19 — Secretaria (Lupita): captura + esperar cliente + salida
   // v10.54.8 — agregado 🚚 Maquilas (pedido de Marcelo): todas las maquila activas
   // para que Lupita coordine con proveedores externos sin tener que filtrar manualmente.
   if(isSec(role))return[...base,
-    {key:"drafts",emoji:"📝",label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"||o.stage==="maq_created"},
-    {key:"maquilas",emoji:"🚚",label:"Maquilas",color:"#e67e22",predicate:o=>o.order_type==="maquila"&&!o.stage.includes("cancelled")&&!o.stage.includes("delivered")&&!o.stage.includes("stocked")},
-    {key:"proof_client",emoji:"🎯",label:"Prueba cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
-    {key:"salidas",emoji:"📤",label:"En salida",color:"#16a34a",predicate:o=>o.stage==="salidas"},
+    {key:"drafts",Icon:NotePencilIcon,label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"||o.stage==="maq_created"},
+    {key:"maquilas",Icon:TruckIcon,label:"Maquilas",color:"#e67e22",predicate:o=>o.order_type==="maquila"&&!o.stage.includes("cancelled")&&!o.stage.includes("delivered")&&!o.stage.includes("stocked")},
+    {key:"proof_client",Icon:TargetIcon,label:"Prueba cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+    {key:"salidas",Icon:ExportIcon,label:"En salida",color:"#16a34a",predicate:o=>o.stage==="salidas"},
   ];
   // v10.43.19 — Vendedor: por estado agrupado de sus órdenes
   if(role==="vendedor")return[...base,
-    {key:"design_zone",emoji:"🎨",label:"En diseño",color:"#ec4899",predicate:o=>["design","proof_printing","proof_client","ctp","placas_listas"].includes(o.stage)},
-    {key:"production_zone",emoji:"⚙️",label:"En producción",color:"#ff9500",predicate:o=>["ready","in_production"].includes(o.stage)},
-    {key:"delivery_zone",emoji:"📤",label:"Lista entrega",color:"#16a34a",predicate:o=>["packaging","salidas"].includes(o.stage)},
+    {key:"design_zone",Icon:PaletteIcon,label:"En diseño",color:"#ec4899",predicate:o=>["design","proof_printing","proof_client","ctp","placas_listas"].includes(o.stage)},
+    {key:"production_zone",Icon:GearIcon,label:"En producción",color:"#ff9500",predicate:o=>["ready","in_production"].includes(o.stage)},
+    {key:"delivery_zone",Icon:ExportIcon,label:"Lista entrega",color:"#16a34a",predicate:o=>["packaging","salidas"].includes(o.stage)},
   ];
   if(role==="admin")return[...base,
-    {key:"maquila_ext",emoji:"🚚",label:"Maquila externa",color:"#e67e22",predicate:o=>["maquila_out","maq_sent","maq_in_progress","maquila_in"].includes(o.stage)},
-    {key:"proof_client",emoji:"🎯",label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
-    {key:"in_production",emoji:"⚙️",label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
-    {key:"salidas",emoji:"📤",label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
+    {key:"maquila_ext",Icon:TruckIcon,label:"Maquila externa",color:"#e67e22",predicate:o=>["maquila_out","maq_sent","maq_in_progress","maquila_in"].includes(o.stage)},
+    {key:"proof_client",Icon:TargetIcon,label:"Esperando cliente",color:"#ec4899",predicate:o=>o.stage==="proof_client"},
+    {key:"in_production",Icon:GearIcon,label:"En máquina",color:"#ff9500",predicate:o=>o.stage==="in_production"},
+    {key:"salidas",Icon:ExportIcon,label:"Salidas",color:"#16a34a",predicate:o=>o.stage==="salidas"},
   ];
   return base;
 }
@@ -3589,7 +3589,7 @@ function CreditAdjustModal({client, userLogin, onSave, onClose}) {
   </div>;
 }
 
-// v10.41.0 — Chips redondos para filtrar "Mis Pendientes" con emoji + label + counter.
+// v10.41.0 — Chips redondos para filtrar "Mis Pendientes" con icono Phosphor + label + counter.
 // Multi-select OR: si N chips activos, muestra órdenes que matchean al menos uno.
 // Si 0 activos, muestra todos. Cuenta se calcula sobre las tasks PRE-filter para
 // que el usuario siempre vea cuántas hay potencialmente en cada categoría.
@@ -3599,6 +3599,7 @@ function TaskFilterChips({filters,tasks,activeFilters,onToggle}){
     {filters.map(f=>{
       const count=tasks.filter(o=>{try{return f.predicate(o)}catch{return false}}).length;
       const isActive=activeFilters.has(f.key);
+      const FIcon=f.Icon;
       return <button key={f.key} onClick={()=>onToggle(f.key)}
         style={{
           display:"inline-flex",alignItems:"center",gap:6,
@@ -3612,7 +3613,7 @@ function TaskFilterChips({filters,tasks,activeFilters,onToggle}){
           opacity:count===0&&!isActive?.5:1,
         }}
         title={count===0?"Sin órdenes en esta categoría":f.label+" — "+count+" orden"+(count!==1?"es":"")}>
-        <span style={{fontSize:14}}>{f.emoji}</span>
+        {FIcon?<FIcon size={14} weight={isActive?"fill":"bold"}/>:null}
         <span>{f.label}</span>
         <span style={{
           background:isActive?f.color:C.bd+"60",
