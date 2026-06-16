@@ -1622,7 +1622,11 @@ function diagnoseOrder(o){
   if(o.order_type!=="maquila"&&noPrice&&stage!=="salidas")
     return R("no_price","💰 Sin precio capturado","karla","Karla",{action:"edit"});
   if(!o.due_date)
-    return R("no_date","📅 Sin fecha de entrega comprometida","secretaria","Lupita",{action:"edit"});
+    // v10.70.2 (Marcelo): la fecha de entrega la compromete QUIEN VENDIÓ la orden. Si es de un
+    // vendedor con usuario (agent, ej. Genaro) le toca a él, NO a Lupita. _maqRole/_maqName ya
+    // resuelven vendedor-con-usuario↔Lupita desde o.agent; responsibleNotifyTarget rutea el
+    // "Recordar"/Telegram al username del agente. Caso H-3683 (interna de Genaro, sin fecha).
+    return R("no_date","📅 Sin fecha de entrega comprometida",_maqRole,_maqName,{action:"edit"});
   return null;
 }
 
