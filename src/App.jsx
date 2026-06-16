@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -8043,8 +8043,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:modalMaxWidth,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:preAssignedMode?C.wn:C.ac}}>{preAssignedMode?"🔒":"📄"} {preAssignedMode?"Pre-asignar":"Asignar"} folio fiscal a {oc?.id}</h3>
-      {preAssignedMode && <p style={{fontSize:11,color:C.wn,margin:"0 0 12px",fontWeight:600}}>⚠️ La OC quedará bloqueada para nuevos productos y movimientos hasta que se complete el ciclo fiscal.</p>}
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:preAssignedMode?C.wn:C.ac,display:"flex",alignItems:"center",gap:6}}>{preAssignedMode?<LockIcon size={17} weight="bold"/>:<FileTextIcon size={17} weight="bold"/>}{preAssignedMode?"Pre-asignar":"Asignar"} folio fiscal a {oc?.id}</h3>
+      {preAssignedMode && <p style={{fontSize:11,color:C.wn,margin:"0 0 12px",fontWeight:600}}><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>La OC quedará bloqueada para nuevos productos y movimientos hasta que se complete el ciclo fiscal.</p>}
 
       <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:700}}>{oc?.client}</div>
@@ -8058,15 +8058,15 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
       {/* v10.51.0 — Toggle Simple/Split */}
       <div style={{display:"flex",gap:6,marginBottom:14,padding:4,background:C.sf,borderRadius:10}}>
-        <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>📄 Asignación simple</button>
-        <button onClick={()=>setActiveMode("split")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="split"?C.bg:"transparent",color:activeMode==="split"?"#5856d6":C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="split"?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>🔀 Dividir en N facturas</button>
+        <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><FileTextIcon size={14} weight="bold"/>Asignación simple</button>
+        <button onClick={()=>setActiveMode("split")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="split"?C.bg:"transparent",color:activeMode==="split"?"#5856d6":C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="split"?"0 1px 3px rgba(0,0,0,0.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><ArrowsSplitIcon size={14} weight="bold"/>Dividir en N facturas</button>
       </div>
 
       {activeMode === "simple" && <>
         {/* v10.57.1: aviso Corona en modo simple — facturas quedan pendientes */}
         {isCorona && (
           <div style={{background:"#0891b210",border:"1.5px solid #0891b240",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#075985",lineHeight:1.5}}>
-            💡 <strong>Cliente Corona:</strong> las facturas quedarán <strong>pendientes</strong> en CobranzaFlow para que Lucero cobre. El modo simple NO captura pagos. Si quieres capturar transferencia/cheque al facturar, usa <strong>Dividir en N facturas</strong> (con 1 grupo está bien). Para descontar saldo Corona, usa "Aplicar saldo" al entregar cada orden.
+            <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Cliente Corona:</strong> las facturas quedarán <strong>pendientes</strong> en CobranzaFlow para que Lucero cobre. El modo simple NO captura pagos. Si quieres capturar transferencia/cheque al facturar, usa <strong>Dividir en N facturas</strong> (con 1 grupo está bien). Para descontar saldo Corona, usa "Aplicar saldo" al entregar cada orden.
           </div>
         )}
         <div style={{marginBottom:14}}>
@@ -8075,7 +8075,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             {["factura","remision"].map(t=>{
               const c = t==="factura"?"#5856d6":"#34c759";
               const sel = invoiceType===t;
-              return <button key={t} onClick={()=>setInvoiceType(t)} style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?"📄 Factura (D-)":"📋 Remisión (R-)"}</button>;
+              return <button key={t} onClick={()=>setInvoiceType(t)} style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Factura (D-)</>:<><ClipboardTextIcon size={13} weight="bold"/>Remisión (R-)</>}</button>;
             })}
           </div>
         </div>
@@ -8083,8 +8083,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         <div style={{marginBottom:14}}>
           <label style={lbl}>Modo de asignación</label>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>setMode("shared")} style={{...bs(mode==="shared"?C.ac:C.sf,mode==="shared"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="shared"?"none":"0.5px solid "+C.bd}}>📄 Un folio compartido</button>
-            <button onClick={()=>setMode("consecutive")} style={{...bs(mode==="consecutive"?C.ac:C.sf,mode==="consecutive"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="consecutive"?"none":"0.5px solid "+C.bd}}>🔢 {pendingCount} folios consecutivos</button>
+            <button onClick={()=>setMode("shared")} style={{...bs(mode==="shared"?C.ac:C.sf,mode==="shared"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="shared"?"none":"0.5px solid "+C.bd}}><FileTextIcon size={13} weight="bold"/>Un folio compartido</button>
+            <button onClick={()=>setMode("consecutive")} style={{...bs(mode==="consecutive"?C.ac:C.sf,mode==="consecutive"?"#fff":C.t2),flex:1,justifyContent:"center",border:mode==="consecutive"?"none":"0.5px solid "+C.bd}}><ListNumbersIcon size={13} weight="bold"/>{pendingCount} folios consecutivos</button>
           </div>
           <div style={{fontSize:10,color:C.t2,marginTop:6}}>{mode==="shared"?"Todos los productos pendientes reciben el mismo folio (1 sola factura/remisión).":"Cada producto pendiente recibe un folio consecutivo (N facturas/remisiones)."}</div>
         </div>
@@ -8093,7 +8093,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
           <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
           <input style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
           {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
-          {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}>⚠️ Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
+          {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
         </div>
 
         {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>
@@ -8107,7 +8107,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
       {activeMode === "split" && <>
         <div style={{background:"#5856d610",border:"1px solid #5856d630",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#5856d6",lineHeight:1.5}}>
-          🔀 <strong>Modo dividir:</strong> arrastra órdenes entre columnas para agruparlas. Cada columna = 1 factura/remisión con su propio folio y pagos. <strong>Todas las órdenes deben quedar asignadas</strong>.
+          <ArrowsSplitIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Modo dividir:</strong> arrastra órdenes entre columnas para agruparlas. Cada columna = 1 factura/remisión con su propio folio y pagos. <strong>Todas las órdenes deben quedar asignadas</strong>.
         </div>
 
         {/* v10.57.1: el bridge auto-consume está OFF. Banner azul informativo para Corona —
@@ -8115,7 +8115,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             descontar saldo, usa "Aplicar saldo" en cada orden al entregar. */}
         {isCorona && (
           <div style={{background:"#0891b210",border:"1.5px solid #0891b240",borderRadius:10,padding:10,marginBottom:14,fontSize:11,color:"#075985",lineHeight:1.5}}>
-            💡 <strong>Cliente Corona (anticipo):</strong> el bridge automático YA NO consume saldo al facturar (v10.57.0). Captura los pagos como con cualquier cliente — quedarán en CobranzaFlow para que Lucero cobre. Si quieres descontar saldo Corona, usa "Aplicar saldo · sin folio" en cada orden al entregar.
+            <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Cliente Corona (anticipo):</strong> el bridge automático YA NO consume saldo al facturar (v10.57.0). Captura los pagos como con cualquier cliente — quedarán en CobranzaFlow para que Lucero cobre. Si quieres descontar saldo Corona, usa "Aplicar saldo · sin folio" en cada orden al entregar.
             {typeof coronaInfo?.current_balance === "number" && (
               <div style={{marginTop:6,fontWeight:700}}>
                 Saldo a favor del pool: <span style={{fontFamily:"'Geist Mono',monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
@@ -8127,7 +8127,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         {/* Órdenes sin asignar (panel superior, solo visible si hay) */}
         {unassignedOrders.length > 0 && (
           <div style={{background:"#ff950010",border:"1px dashed #ff9500",borderRadius:10,padding:10,marginBottom:14}}>
-            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:8}}>⚠️ {unassignedOrders.length} órdenes sin asignar — arrástralas a un grupo</div>
+            <div style={{fontSize:11,fontWeight:700,color:"#ff9500",marginBottom:8}}><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{unassignedOrders.length} órdenes sin asignar — arrástralas a un grupo</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {unassignedOrders.map(o=>(
                 <div key={o.id}
@@ -8158,9 +8158,9 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                 onDrop={e=>{const oid = e.dataTransfer.getData("split-order-id"); if(oid){moveOrderToGroup(oid, gIdx);} setDragOrderId(null);}}
                 style={{background:C.bg,border:"1.5px solid "+(dragOrderId?groupColor:C.bd),borderRadius:12,padding:10,minHeight:200}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <div style={{fontSize:11,fontWeight:700,color:groupColor}}>{g.doc_type==="factura"?"📄":"📋"} Factura #{gIdx+1}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:groupColor,display:"flex",alignItems:"center",gap:4}}>{g.doc_type==="factura"?<FileTextIcon size={12} weight="bold"/>:<ClipboardTextIcon size={12} weight="bold"/>}Factura #{gIdx+1}</div>
                   {splitGroups.length > 1 && (
-                    <button onClick={()=>removeGroup(gIdx)} aria-label={`Eliminar grupo ${gIdx+1}`} style={{padding:"2px 6px",borderRadius:6,border:"1px solid "+C.dn+"40",background:C.dn+"10",color:C.dn,fontSize:10,fontWeight:700,cursor:"pointer"}}>🗑️</button>
+                    <button onClick={()=>removeGroup(gIdx)} aria-label={`Eliminar grupo ${gIdx+1}`} style={{padding:"2px 6px",borderRadius:6,border:"1px solid "+C.dn+"40",background:C.dn+"10",color:C.dn,fontSize:10,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><TrashIcon size={11} weight="bold"/></button>
                   )}
                 </div>
 
@@ -8216,7 +8216,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                 {/* Multi-pago opcional por grupo */}
                 {g.order_ids.length > 0 && subtotal > 0 && (
                   <details style={{fontSize:11}}>
-                    <summary style={{cursor:"pointer",color:"#5856d6",fontWeight:600,padding:"4px 0"}}>💰 Pagos {g.payment_status!=="unpaid" && g.payment_refs.length > 0 ? `(${g.payment_refs.length})` : "(opcional)"}</summary>
+                    <summary style={{cursor:"pointer",color:"#5856d6",fontWeight:600,padding:"4px 0"}}><CurrencyDollarIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Pagos {g.payment_status!=="unpaid" && g.payment_refs.length > 0 ? `(${g.payment_refs.length})` : "(opcional)"}</summary>
                     <div style={{marginTop:6}}>
                       <MultiPaymentPicker
                         status={g.payment_status}
@@ -8234,12 +8234,12 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         </div>
 
         {/* Botón agregar grupo */}
-        <button onClick={addGroup} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed "+C.ac,background:C.acL,color:C.ac,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:12}}>➕ Agregar otra factura</button>
+        <button onClick={addGroup} style={{width:"100%",padding:"10px",borderRadius:10,border:"1.5px dashed "+C.ac,background:C.acL,color:C.ac,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:12,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><PlusIcon size={13} weight="bold"/>Agregar otra factura</button>
 
         {/* Estado de validación */}
         {!splitValidation.ok && (
           <div style={{fontSize:11,color:"#ff9500",marginBottom:12,padding:"6px 10px",background:"#ff950010",borderRadius:8,fontWeight:600}}>
-            ⚠️ {splitValidation.reason}
+            <WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{splitValidation.reason}
           </div>
         )}
       </>}
@@ -8252,8 +8252,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
         {activeMode === "simple"
-          ? <button onClick={submitSimple} disabled={!canSubmitSimple} style={{...bt(canSubmitSimple?(preAssignedMode?C.wn:tColor):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSimple?"pointer":"not-allowed"}}>{saving?"⏳ Asignando...":(preAssignedMode?"🔒 Pre-asignar":"📄 Asignar")+" "+tLabel}</button>
-          : <button onClick={submitSplit} disabled={!canSubmitSplit} style={{...bt(canSubmitSplit?(preAssignedMode?C.wn:"#5856d6"):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSplit?"pointer":"not-allowed"}}>{saving?"⏳ Dividiendo...":(preAssignedMode?"🔒 Pre-asignar":"🔀 Dividir")+" en "+splitGroups.length+" facturas"}</button>
+          ? <button onClick={submitSimple} disabled={!canSubmitSimple} style={{...bt(canSubmitSimple?(preAssignedMode?C.wn:tColor):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSimple?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Asignando...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar {tLabel}</>:<><FileTextIcon size={14} weight="bold"/>Asignar {tLabel}</>}</button>
+          : <button onClick={submitSplit} disabled={!canSubmitSplit} style={{...bt(canSubmitSplit?(preAssignedMode?C.wn:"#5856d6"):"#d1d1d6"),flex:1,justifyContent:"center",cursor:canSubmitSplit?"pointer":"not-allowed"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Dividiendo...</>:preAssignedMode?<><LockIcon size={14} weight="bold"/>Pre-asignar en {splitGroups.length} facturas</>:<><ArrowsSplitIcon size={14} weight="bold"/>Dividir en {splitGroups.length} facturas</>}</button>
         }
       </div>
     </div>
