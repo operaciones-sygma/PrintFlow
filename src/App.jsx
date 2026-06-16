@@ -10947,6 +10947,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   const [search,setSearch]=useState("");
   const [statusChip,setStatusChip]=useState("all"); // 'all'|'gap'|'duplicate'|'cancelled'|'preassigned' (folios) | 'all'|'gap'|'cancelled'|'invoiced'|'no_folio' (production)
   const [showH,setShowH]=useState(false); // v10.70.0 — apartado histórico H-XXXX (pre-corte) colapsable
+  const [hStatusChip,setHStatusChip]=useState("all"); // v10.70.3 — chips de status del consecutivo H- (independiente del P-)
   const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
@@ -11348,40 +11349,73 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     })()}
 
     {tab==="production"&&(()=>{
-      // v10.70.0 — Apartado histórico: folios de producción H-XXXX (la serie vieja renombrada en el corte).
-      // Se separa a propósito del consecutivo P- nuevo (que arranca en P-0001). Ignora el filtro de fecha
-      // porque la serie H- es histórica/congelada (casi siempre > 90 días); sí respeta la búsqueda.
+      // v10.70.3 — Apartado histórico H-XXXX como AUDITORÍA COMPLETA (gaps + stats + chips + búsqueda),
+      // con las mismas funciones que el consecutivo P-. Serie vieja (pre-corte), separada a propósito.
+      // Ignora el filtro de fecha (histórica/congelada); respeta la búsqueda global y su propio chip.
       const parseHN=p=>{const m=String(p||"").match(/H-(\d+)/);return m?parseInt(m[1],10):null};
-      const hAll=orders.filter(o=>o.production_number&&o.production_number.startsWith("H-")&&!(o.client&&o.client.startsWith("[SISTEMA]")));
-      const hFiltered=(sq?hAll.filter(o=>normSearch(o.production_number||"").includes(sq)||normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)):hAll).sort((a,b)=>(parseHN(b.production_number)||0)-(parseHN(a.production_number)||0));
-      const hShown=hFiltered.slice(0,300);
+      const hOrders=orders.filter(o=>o.production_number&&o.production_number.startsWith("H-")&&!(o.client&&o.client.startsWith("[SISTEMA]")));
+      const byNumH={};hOrders.forEach(o=>{const n=parseHN(o.production_number);if(n!==null){if(!byNumH[n])byNumH[n]=[];byNumH[n].push(o)}});
+      const numsH=Object.keys(byNumH).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
+      const minH=numsH.length?numsH[0]:0,maxH=numsH.length?numsH[numsH.length-1]:0;
+      const hSeq=[];const hGaps=[];
+      if(numsH.length&&(maxH-minH)<=4000){for(let i=minH;i<=maxH;i++){if(byNumH[i])hSeq.push({n:i,orders:byNumH[i]});else{hSeq.push({n:i,orders:[],gap:true});hGaps.push(i)}}}
+      else{numsH.forEach(n=>hSeq.push({n,orders:byNumH[n]}))}
+      const totalHN=numsH.length;
+      const cancelledCountH=hOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
+      const invoicedCountH=hOrders.filter(o=>o.invoice_folio).length;
+      const matchesHChip=(item)=>{if(hStatusChip==="all")return true;if(hStatusChip==="gap")return !!item.gap;if(hStatusChip==="cancelled")return item.orders?.some(o=>o.cancelled_at||o.stage?.includes("cancelled"));if(hStatusChip==="invoiced")return item.orders?.some(o=>o.invoice_folio);if(hStatusChip==="no_folio")return item.orders?.some(o=>!o.invoice_folio&&!(o.cancelled_at||o.stage?.includes("cancelled")));return true};
+      const matchesHSearch=(item)=>{if(!sq)return true;if(normSearch("H-"+item.n).includes(sq))return true;if(item.orders?.some(o=>normSearch(o.client||"").includes(sq)||normSearch(o.invoice_folio||"").includes(sq)))return true;return false};
+      const filteredHSeq=hSeq.filter(it=>matchesHChip(it)&&matchesHSearch(it));
       return <div style={{marginTop:18}}>
         <div onClick={()=>setShowH(!showH)} onMouseEnter={e=>e.currentTarget.style.background=C.bd+"45"} onMouseLeave={e=>e.currentTarget.style.background=C.sf} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"11px 14px",background:C.sf,borderRadius:showH?"12px 12px 0 0":12,border:"1px solid "+C.bd,transition:"background .12s"}}>
           <ClockCounterClockwiseIcon size={16} weight="bold" color={C.t2}/>
           <div style={{fontSize:14,fontWeight:800,color:C.tx}}>Histórico de producción <span style={{color:C.t2,fontWeight:600}}>(pre-corte · H-XXXX)</span></div>
-          <span style={{fontSize:11,color:C.t2,background:C.bg,padding:"2px 9px",borderRadius:10,fontWeight:700}}>{hFiltered.length}</span>
+          <span style={{fontSize:11,color:C.t2,background:C.bg,padding:"2px 9px",borderRadius:10,fontWeight:700}}>{totalHN}</span>
+          {hGaps.length>0&&<span style={{fontSize:11,color:C.dn,background:C.dn+"12",padding:"2px 9px",borderRadius:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={11} weight="fill"/>{hGaps.length} gap{hGaps.length===1?"":"s"}</span>}
           {!showH&&<span style={{fontSize:11,fontWeight:600,color:C.ac}}>clic para ver</span>}
           <span style={{marginLeft:"auto",fontSize:13,color:C.t2,transform:showH?"rotate(0)":"rotate(-90deg)",transition:"transform .2s",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
         </div>
-        {showH&&<div style={{background:C.bg,borderRadius:"0 0 12px 12px",border:"1px solid "+C.bd,borderTop:"none",maxHeight:520,overflowY:"auto"}}>
-          {hShown.length===0?<div style={{padding:"24px",textAlign:"center",color:C.t3,fontSize:12}}>{sq?"Sin folios H-XXXX que coincidan con la búsqueda":"No hay folios H-XXXX cargados. Carga el archivo histórico completo arriba para verlos."}</div>:<>
-            {hShown.map((o,i)=>{
-              const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
-              const stClr=SM[o.stage]?.c||C.t3;
-              return <div key={"h-"+i} onClick={()=>setSelectedProdOrder(o)}
-                style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
-                onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
-                onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent")}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.t2,minWidth:90}}><ClockCounterClockwiseIcon size={12} weight="bold"/>{o.production_number}</div>
-                {o.order_type==="maquila"&&<div style={{fontSize:9,color:"#e67e22",fontWeight:700,background:"#e67e2215",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
-                <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
-                {o.invoice_folio&&<div style={{fontSize:10,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
-                {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
-                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
-                <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
-              </div>;
-            })}
-            {hFiltered.length>300&&<div style={{padding:"10px 14px",textAlign:"center",fontSize:11,color:C.t2,background:C.sf}}>Mostrando los 300 más recientes de {hFiltered.length}. Usa la búsqueda para encontrar un folio específico.</div>}
+        {showH&&<div style={{background:C.bg,borderRadius:"0 0 12px 12px",border:"1px solid "+C.bd,borderTop:"none",padding:14}}>
+          {totalHN===0?<div style={{padding:"20px",textAlign:"center",color:C.t3,fontSize:12}}>No hay folios H-XXXX cargados. Carga el archivo histórico completo (botón de arriba) para auditar la serie vieja.</div>:<>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:8,marginBottom:12}}>
+              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total H-XXXX</div><div style={{fontSize:22,fontWeight:800,color:C.t2}}>{totalHN}</div></div>
+              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(hGaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div><div style={{fontSize:22,fontWeight:800,color:hGaps.length?C.dn:C.ok}}>{hGaps.length}</div></div>
+              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid #5856d666",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div><div style={{fontSize:22,fontWeight:800,color:"#5856d6"}}>{invoicedCountH}</div></div>
+              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.dn+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div><div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCountH}</div></div>
+              <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}><div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div><div style={{fontSize:14,fontWeight:800}}>H-{minH} → H-{maxH}</div></div>
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+              {[{id:"all",l:"Todos",c:C.ac},{id:"gap",l:<><WarningIcon size={11} weight="fill"/>Solo gaps</>,c:C.dn},{id:"cancelled",l:"Canceladas",c:C.dn},{id:"invoiced",l:<><FileTextIcon size={11} weight="bold"/>Con folio fiscal</>,c:"#5856d6"},{id:"no_folio",l:<><CurrencyDollarIcon size={11} weight="bold"/>Sin folio</>,c:"#10b981"}].map(chip=>
+                <button key={chip.id} onClick={()=>setHStatusChip(chip.id)} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:14,border:"1px solid "+(hStatusChip===chip.id?chip.c:C.bd),background:hStatusChip===chip.id?chip.c+"15":"transparent",color:hStatusChip===chip.id?chip.c:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{chip.l}</button>
+              )}
+            </div>
+            {filteredHSeq.length===0?<div style={{textAlign:"center",padding:"24px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}><MagnifyingGlassIcon size={28} color={C.ph}/><div style={{fontSize:12,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div></div>:<div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd,maxHeight:460,overflowY:"auto"}}>
+              {filteredHSeq.map(item=>{
+                if(item.gap){
+                  return <div key={"hgap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:90}}><WarningIcon size={13} weight="fill"/>H-{item.n}</div>
+                    <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
+                  </div>;
+                }
+                return item.orders.map((o,i)=>{
+                  const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
+                  const stClr=SM[o.stage]?.c||C.t3;
+                  return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
+                    style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?"#5856d610":"transparent")}}>
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.t2,minWidth:90}}><ClockCounterClockwiseIcon size={12} weight="bold"/>H-{item.n}</div>
+                    {o.order_type==="maquila"&&<div style={{fontSize:9,color:"#e67e22",fontWeight:700,background:"#e67e2215",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
+                    <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
+                    {o.invoice_folio&&<div style={{fontSize:10,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
+                    {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
+                    {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
+                    <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
+                  </div>;
+                });
+              })}
+            </div>}
+            <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}><strong style={{color:C.tx}}>Cómo interpretar:</strong> es la serie VIEJA de producción (renombrada a H- en el corte). Los <strong>gaps</strong> son números faltantes — folios viejos borrados o que no se migraron al archivo cargado. Las <strong>canceladas</strong> conservan su H-XXXX. Carga el archivo histórico completo para que la serie esté completa. Click en una orden para ver detalles.</div>
           </>}
         </div>}
       </div>;
