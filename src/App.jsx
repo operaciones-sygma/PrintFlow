@@ -1238,6 +1238,14 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
+// v10.61.5 — input de búsqueda con icono Phosphor (lupa) a la izquierda en vez de
+// emoji en el placeholder. wrapStyle controla el layout del contenedor (flex/width).
+function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
+  return <div style={{position:"relative",display:"flex",alignItems:"center",...wrapStyle}}>
+    <MagnifyingGlassIcon size={iconSize} weight="bold" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.ph,pointerEvents:"none"}}/>
+    <input {...rest} style={{...style,paddingLeft:32,boxSizing:"border-box"}}/>
+  </div>;
+}
 
 const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento, borra el viejo y sube tu archivo preparado para prueba de color",design:"Prepara los archivos. Borra el documento anterior y sube el archivo listo. Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada",maq_received:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada"}};
 
@@ -2481,7 +2489,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
       {loading?<div style={{padding:40,textAlign:"center",color:C.t2}}>Cargando…</div>:
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
           {tab==="products"&&<>
-            <input style={{...inp,marginBottom:10}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="🔍 Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
+            <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
             {filtered.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>{products.length===0?"Sin productos en catálogo todavía":"Sin coincidencias"}</div>:
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(p=>
@@ -2535,7 +2543,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           )}
           {/* v10.46.0 — Tab Historial: órdenes Cuadra (production + sale), filtrables por cliente + búsqueda */}
           {tab==="history"&&<>
-            <input style={{...inp,marginBottom:10}} value={filterHistory} onChange={e=>setFilterHistory(e.target.value)} placeholder="🔍 Filtrar por cliente, P-folio o producto" aria-label="Filtrar historial de órdenes Cuadra"/>
+            <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterHistory} onChange={e=>setFilterHistory(e.target.value)} placeholder="Filtrar por cliente, P-folio o producto" aria-label="Filtrar historial de órdenes Cuadra"/>
             {history.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin órdenes Cuadra registradas todavía</div>:(()=>{
               // v10.46.2 FIX — accent-insensitive (Dipticos == Dípticos), consistente con OrderForm.normForSearch
               const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -2905,7 +2913,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
         {/* Catálogo */}
         <div style={{borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd}}>
-            <input style={{...inp,fontSize:12}} placeholder="🔍 Buscar producto..." value={search} onChange={e=>setSearch(e.target.value)} disabled={busy}/>
+            <SearchInput style={{...inp,fontSize:12}} placeholder="Buscar producto..." value={search} onChange={e=>setSearch(e.target.value)} disabled={busy}/>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
             {filtered.length===0 ? <div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Sin productos con stock disponible</div> :
@@ -3199,7 +3207,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
         <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd}}>
-        <input style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="🔍 Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <SearchInput style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
       </div>
       {loading?<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:40,color:C.t2}}><HourglassIcon size={14} weight="bold"/>Cargando órdenes…</div>
       :orders.length===0?<div style={{padding:"40px 20px",textAlign:"center",color:C.t2,fontSize:12}}>
@@ -7723,7 +7731,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
       </div>
 
       {mode==="existing" && <div>
-        <input style={inp} placeholder="🔍 Buscar por OC-XXXX o cliente..." value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
+        <SearchInput style={inp} placeholder="Buscar por OC-XXXX o cliente..." value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
         <div style={{maxHeight:280,overflowY:"auto",marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
           {candidates.length === 0
             ? <div style={{textAlign:"center",padding:"20px",color:C.t3,fontSize:12}}>Sin OCs candidatas{search?" para \""+search+"\"":""}</div>
@@ -11045,7 +11053,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     </div>
     {/* v10.43.18 QW1 — Búsqueda por folio o cliente */}
     <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-      <input style={{...inp,flex:1,minWidth:200,padding:"7px 12px",fontSize:12}} placeholder="🔍 Buscar por folio o cliente..." value={search} onChange={e=>setSearch(e.target.value)}/>
+      <SearchInput wrapStyle={{flex:1,minWidth:200}} style={{...inp,padding:"7px 12px",fontSize:12}} placeholder="Buscar por folio o cliente..." value={search} onChange={e=>setSearch(e.target.value)}/>
       {search&&<button onClick={()=>setSearch("")} style={{...bt(C.sf,C.t2),padding:"6px 10px",fontSize:11,border:"0.5px solid "+C.bd,display:"inline-flex",alignItems:"center",gap:5}}><XIcon size={12} weight="bold"/>Limpiar</button>}
     </div>
     {/* v10.43.18 QW2 — Chips de filtro por status */}
@@ -11205,7 +11213,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Serie P-XXXX en el periodo seleccionado · Click en una orden para ver detalles y folio fiscal asignado</p>
         {/* QW1 búsqueda */}
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-          <input style={{...inp,flex:1,minWidth:200,padding:"7px 12px",fontSize:12}} placeholder="🔍 Buscar por P-XXXX, cliente o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          <SearchInput wrapStyle={{flex:1,minWidth:200}} style={{...inp,padding:"7px 12px",fontSize:12}} placeholder="Buscar por P-XXXX, cliente o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
           {search&&<button onClick={()=>setSearch("")} style={{...bt(C.sf,C.t2),padding:"6px 10px",fontSize:11,border:"0.5px solid "+C.bd,display:"inline-flex",alignItems:"center",gap:5}}><XIcon size={12} weight="bold"/>Limpiar</button>}
         </div>
         {/* QW2 chips */}
@@ -14066,9 +14074,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
         {/* v10.43.23 — minWidth:0 permite que la sección se comprima (input shrink) en vez de envolver a 2da fila */}
         <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,flexShrink:1}}>
-          {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap"}}>👤 Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap"}}>📋 Todas</button></div>}
+          {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={11} weight="bold"/>Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><ListBulletsIcon size={11} weight="bold"/>Todas</button></div>}
           {/* v10.43.23 — search comprimible: minWidth:90, flexShrink:1 → se adapta al espacio sin tirar el layout */}
-          <input style={{...inp,width:160,minWidth:90,flexShrink:1,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="🔍 Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          <SearchInput wrapStyle={{width:160,minWidth:90,flexShrink:1}} style={{...inp,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
           {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button onClick={()=>setInventoryOpen(true)} title="Inventario Cuadra (producción a stock + venta)" style={{...bs("#10b981"),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
           {(user==="admin"||user==="secretaria"||user==="karla")&&<button onClick={()=>setCoronaOpen(true)} title="Apartado Corona (saldo a favor)" style={{...bs("#0891b2"),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
