@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon } from "@phosphor-icons/react";
+import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon } from "@phosphor-icons/react";
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 import { createClient } from "@supabase/supabase-js";
@@ -5172,7 +5172,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   if(eligibleOrders.length === 0) {
     return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520}}>
-        <h3 style={{fontSize:16,margin:"0 0 12px"}}>📊 Plan matriz de facturación</h3>
+        <h3 style={{fontSize:16,margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación</h3>
         <p style={{fontSize:13,color:C.t2}}>Esta OC no tiene órdenes elegibles para plan matriz. Requieren: stage salidas o maq_received, sin folio, sin splits/grupos previos, con precio y cantidad capturados.</p>
         <div style={{marginTop:14,textAlign:"right"}}>
           <button onClick={onClose} style={bt(C.sf,C.t2)}>Cerrar</button>
@@ -5183,7 +5183,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
 
   return <div onClick={()=>safeClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6"}}>📊 Plan matriz de facturación · {oc?.id}</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:"#5856d6",display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación · {oc?.id}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
         Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
       </p>
@@ -5217,7 +5217,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{oc?.client}</div>
             <div style={{fontSize:10,color:C.t2,marginTop:2}}>{eligibleOrders.length} órdenes elegibles</div>
             {isCorona && <div style={{display:"inline-block",marginTop:6,padding:"2px 8px",background:"#10b98115",border:"1px solid #10b98140",borderRadius:6,fontSize:10,color:"#10b981",fontWeight:700}}>
-              💎 Cliente Corona · saldo: ${fmtMx(coronaBalance)} (sin IVA)
+              <DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>Cliente Corona · saldo: ${fmtMx(coronaBalance)} (sin IVA)
             </div>}
           </div>
           <div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
@@ -5231,7 +5231,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             </div>
             <div style={{textAlign:"right",minWidth:150}}>
               <div style={{fontSize:9,color:heroColor,textTransform:"uppercase",fontWeight:700}}>
-                {pOver ? "⚠ REBASADO POR" : (pFull ? "✓ COMPLETO" : "POR ASIGNAR")}
+                {pOver ? <><WarningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>REBASADO POR</> : (pFull ? <><CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>COMPLETO</> : "POR ASIGNAR")}
               </div>
               <div style={{fontSize:24,fontWeight:900,color:heroColor,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>
                 ${fmtMx(pOver ? -pRemaining : pRemaining)}
@@ -5259,18 +5259,18 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         <button onClick={()=>setCaptureMode("qty")}
           style={{...bs(captureMode==="qty"?"#5856d6":C.bg, captureMode==="qty"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="qty"?"none":"0.5px solid "+C.bd}}
           title="Karla teclea piezas, sistema calcula el monto proporcional. Útil cuando el cliente manda hoja con cantidades por destino.">
-          🔢 Cantidad (pzas)
+          <ListNumbersIcon size={12} weight="bold"/>Cantidad (pzas)
         </button>
         <button onClick={()=>setCaptureMode("amount")}
           style={{...bs(captureMode==="amount"?"#5856d6":C.bg, captureMode==="amount"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="amount"?"none":"0.5px solid "+C.bd}}
           title="Karla teclea el monto, sistema calcula las piezas proporcionales. La unidad depende del tipo de cada columna: factura = CON IVA (como la hoja del cliente), remisión y saldo Corona = SIN IVA. Cada celda muestra c/IVA o s/IVA.">
-          💰 Monto ($)
+          <CurrencyDollarIcon size={12} weight="bold"/>Monto ($)
         </button>
         <span style={{fontSize:10,color:C.t2,fontStyle:"italic",marginLeft:4}}>· se recuerda tu preferencia</span>
         {/* v10.58.44: el rótulo decía "(con IVA)" global pero solo aplica a facturas —
             remisión/corona se capturan SIN IVA. La unidad real la marca cada celda. */}
         {captureMode==="amount"&&<span style={{fontSize:10,color:"#5856d6",fontWeight:600,marginLeft:4,background:"#5856d610",padding:"3px 8px",borderRadius:6}}>
-          📄 Factura: monto CON IVA (como la hoja del cliente) · 📋 Remisión / 💎 Saldo: SIN IVA
+          <FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Factura: monto CON IVA (como la hoja del cliente) · <ClipboardTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Remisión / <DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Saldo: SIN IVA
         </span>}
       </div>
 
@@ -5353,7 +5353,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                       <input type="checkbox" checked={g.pre_assigned}
                         onChange={e=>updateGroup(i, {pre_assigned: e.target.checked})}
                         style={{accentColor:"#ff9500"}}/>
-                      🔒 Pre-asignada
+                      <LockIcon size={10} weight="bold"/>Pre-asignada
                     </label>
                     {g.pre_assigned && (
                       <input value={g.reason||""} placeholder="razón (3+ chars)"
@@ -5373,7 +5373,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         disabled={!(parseFloat(g.totalTarget||0) > 0)}
                         title="Prorratear este total entre las órdenes según su disponible (las celdas quedan editables para ajuste fino)"
                         style={{...bs("#5856d6"),padding:"4px 8px",fontSize:10,opacity:(parseFloat(g.totalTarget||0)>0)?1:0.4}}>
-                        ➗ Repartir
+                        <DivideIcon size={11} weight="bold"/>Repartir
                       </button>
                     </div>
                   </div>
@@ -5409,7 +5409,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                           {qtyLeft > 0 && <span style={{marginLeft:4,fontWeight:500}}>· {qtyLeft.toLocaleString("es-MX")} pend</span>}
                           {qtyOverAvail && <span style={{marginLeft:4,fontWeight:500}}>· sobran {((t?.qtySum||0) - availQty).toLocaleString("es-MX")}</span>}
                         </div>
-                        {ex.qty > 0 && <div style={{fontSize:9,color:C.wn,marginTop:2,fontWeight:600}}>⚠ {ex.qty.toLocaleString("es-MX")} pzas ya en otro plan</div>}
+                        {ex.qty > 0 && <div style={{fontSize:9,color:C.wn,marginTop:2,fontWeight:600}}><WarningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>{ex.qty.toLocaleString("es-MX")} pzas ya en otro plan</div>}
                         <div style={{fontSize:9,marginTop:2,color:C.t2}}>
                           $ disp: <b style={{color: moneyLeft < -0.01 ? C.dn : (moneyLeft <= 0.01 && (t?.amountSumSinIva||0) > 0 ? C.ok : C.tx)}}>${fmtMx(Math.max(moneyLeft,0))}</b> de ${fmtMx(moneyAvail)} s/IVA
                           {moneyLeft < -0.01 && <span style={{color:C.dn,fontWeight:700}}> · excede ${fmtMx(-moneyLeft)}</span>}
@@ -5479,7 +5479,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                     </div>
                     <div style={{fontSize:9,color:C.t2}}>{colQty.toLocaleString("es-MX")} pzas</div>
                     {hasTarget && (cuadra
-                      ? <div style={{fontSize:9,fontWeight:800,color:C.ok}}>CUADRA ✓</div>
+                      ? <div style={{fontSize:9,fontWeight:800,color:C.ok}}>CUADRA <CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginLeft:1}}/></div>
                       : <div style={{fontSize:9,fontWeight:700,color:C.wn}}>{diff>0?"sobran":"faltan"} ${fmtMx(Math.abs(diff))}</div>)}
                   </td>
                 );
@@ -5492,7 +5492,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       {/* Validación */}
       {validation.length > 0 && (
         <div style={{background:"#ff950010",border:"1px solid "+C.wn+"40",borderRadius:8,padding:10,marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.wn,marginBottom:4}}>⚠ {validation.length} {validation.length===1?"error":"errores"}:</div>
+          <div style={{fontSize:11,fontWeight:700,color:C.wn,marginBottom:4}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{validation.length} {validation.length===1?"error":"errores"}:</div>
           {validation.slice(0,6).map((e,i) => <div key={i} style={{fontSize:10,color:C.wn}}>• {e}</div>)}
           {validation.length > 6 && <div style={{fontSize:10,color:C.t2}}>... y {validation.length-6} más</div>}
         </div>
@@ -5501,7 +5501,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       {coronaTotal > 0 && (
         <div style={{background:coronaTotal<=coronaBalance?"#10b98110":"#ff3b3010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+(coronaTotal<=coronaBalance?"#10b98140":C.dn+"40")}}>
           <div style={{fontSize:11,fontWeight:700,color:coronaTotal<=coronaBalance?"#10b981":C.dn}}>
-            {coronaTotal<=coronaBalance ? "✓" : "⚠"} Saldo Corona: ${fmtMx(coronaTotal)} requerido / ${fmtMx(coronaBalance)} disponible
+            {coronaTotal<=coronaBalance ? <CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/> : <WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>}Saldo Corona: ${fmtMx(coronaTotal)} requerido / ${fmtMx(coronaBalance)} disponible
           </div>
         </div>
       )}
@@ -5512,7 +5512,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         </button>
         <button onClick={handleSubmit} disabled={!canSubmit}
           style={{...bt(canSubmit?"#5856d6":C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {saving ? "Creando..." : `📊 Crear ${groups.length} ${groups.length===1?"factura":"facturas"}`}
+          {saving ? "Creando..." : <><ChartBarIcon size={14} weight="bold"/>Crear {groups.length} {groups.length===1?"factura":"facturas"}</>}
         </button>
       </div>
     </div>
