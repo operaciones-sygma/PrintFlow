@@ -11284,19 +11284,19 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:560,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <h3 style={{fontSize:18,fontWeight:800,margin:0,color:C.ac}}>📋 {order.production_number}</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order.order_type==="maquila"?"🚚 Maquila completa":"🏭 Producción interna"}</div>
+          <h3 style={{fontSize:18,fontWeight:800,margin:0,color:C.ac,display:"flex",alignItems:"center",gap:6}}><ClipboardTextIcon size={18} weight="bold"/>{order.production_number}</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order.order_type==="maquila"?<><TruckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Maquila completa</>:<><FactoryIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Producción interna</>}</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}>✕</button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={14} weight="bold"/></button>
       </div>
       <div style={{padding:"14px 22px",overflowY:"auto",flex:1}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-          {isCancelled?<span style={{fontSize:11,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"4px 10px",borderRadius:6}}>❌ CANCELADA{order.nc_emitted?" · NC emitida":""}</span>
+          {isCancelled?<span style={{fontSize:11,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><XCircleIcon size={11} weight="fill"/>CANCELADA{order.nc_emitted?" · NC emitida":""}</span>
           :<span style={{fontSize:11,color:stClr,fontWeight:700,background:stClr+"15",padding:"4px 10px",borderRadius:6}}>{SM[order.stage]?.l||order.stage}</span>}
           {order.priority&&order.priority!=="normal"&&<span style={{fontSize:11,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"4px 10px",borderRadius:6}}>{order.priority.toUpperCase()}</span>}
-          {order.invoice_folio&&<span style={{fontSize:11,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"4px 10px",borderRadius:6}}>{order.invoice_type==="factura"?"📄":"📋"} {order.invoice_folio}{order.invoice_pre_assigned?" ⚡":""}</span>}
-          {order.source==="web"&&<span style={{fontSize:11,color:"#06b6d4",fontWeight:700,background:"#06b6d415",padding:"4px 10px",borderRadius:6}}>🌐 Web</span>}
-          {order.stock_role&&<span style={{fontSize:11,color:"#10b981",fontWeight:700,background:"#10b98115",padding:"4px 10px",borderRadius:6}}>{order.stock_role==="production"?"📦 a Stock":"🛒 desde Stock"}</span>}
+          {order.invoice_folio&&<span style={{fontSize:11,color:"#5856d6",fontWeight:700,background:"#5856d615",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}>{order.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{order.invoice_folio}{order.invoice_pre_assigned?<LightningIcon size={10} weight="fill"/>:null}</span>}
+          {order.source==="web"&&<span style={{fontSize:11,color:"#06b6d4",fontWeight:700,background:"#06b6d415",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}><GlobeIcon size={11} weight="bold"/>Web</span>}
+          {order.stock_role&&<span style={{fontSize:11,color:"#10b981",fontWeight:700,background:"#10b98115",padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:4}}>{order.stock_role==="production"?<><PackageIcon size={11} weight="bold"/>a Stock</>:<><ShoppingCartIcon size={11} weight="bold"/>desde Stock</>}</span>}
         </div>
 
         <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
@@ -11316,7 +11316,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
         <Row label="Precio (sin IVA)" value={order.price?"$"+Number(order.price).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
         <Row label="Maquila costo" value={order.maq_cost?"$"+Number(order.maq_cost).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
         <Row label="Maquila precio" value={order.maq_price?"$"+Number(order.maq_price).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
-        <Row label="Pagada al facturar" value={order.payment_status?(order.payment_status==="paid"?"✅ Pagada · "+(order.payment_method||""):(order.payment_status==="partial"?"🔶 Parcial $"+Number(order.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2}):"⏳ No pagada (CXC)")):null}/>
+        <Row label="Pagada al facturar" value={order.payment_status?(order.payment_status==="paid"?<><CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Pagada · {order.payment_method||""}</>:(order.payment_status==="partial"?<><CircleHalfIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Parcial ${Number(order.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</>:<><HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>No pagada (CXC)</>)):null}/>
         <Row label="Bank reference" value={order.bank_reference}/>
 
         <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Folio fiscal</div>
@@ -11324,7 +11324,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
           ?<>
             <Row label="Folio" value={order.invoice_folio} color="#5856d6"/>
             <Row label="Tipo" value={order.invoice_type==="factura"?"Factura (CFDI)":"Remisión"}/>
-            <Row label="Pre-asignado" value={order.invoice_pre_assigned?"⚡ Sí · "+(order.invoice_reason||""):"No"}/>
+            <Row label="Pre-asignado" value={order.invoice_pre_assigned?<><LightningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Sí · {order.invoice_reason||""}</>:"No"}/>
             <Row label="Asignado" value={order.invoiced_at?fDT(order.invoiced_at):null}/>
             <Row label="Por" value={order.invoiced_by==="secretaria"?"Lupita":(order.invoiced_by||null)}/>
           </>
@@ -11362,7 +11362,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
       </div>
       <div style={{padding:"12px 22px",borderTop:"0.5px solid "+C.bd,display:"flex",gap:8}}>
         {/* v10.43.18 QW4 — saltar a la orden en pipeline */}
-        {onNavigateToOrder&&<button onClick={()=>{onNavigateToOrder(order.id);onClose();}} style={{...bt(C.ac),flex:1,justifyContent:"center"}}>📊 Ver en pipeline</button>}
+        {onNavigateToOrder&&<button onClick={()=>{onNavigateToOrder(order.id);onClose();}} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><ChartBarIcon size={14} weight="bold"/>Ver en pipeline</button>}
         <button onClick={onClose} style={{...bt(C.sf,C.tx),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
       </div>
     </div>
