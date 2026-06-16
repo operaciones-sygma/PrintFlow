@@ -8340,12 +8340,11 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",position:"relative",transition:"box-shadow .16s ease,transform .12s ease"}}
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:"box-shadow .16s ease,transform .12s ease"}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
-    {/* v10.65.1 — VARIANTE A (impeccable critique): el indicador de etapa/urgencia deja de ser
-        raya lateral (side-tab, tell de AI + color-only) y pasa a un punto de estado discreto;
-        el chip de etapa con icono+label sigue siendo el indicador primario (a11y). */}
-    {!compact&&<div title={o.priority==="urgente"?"Urgente":(st?.lt||o.stage)} style={{position:"absolute",top:13,right:13,width:9,height:9,borderRadius:"50%",background:(o.priority==="urgente"?C.dn:st?.c||C.t3),boxShadow:"0 0 0 2.5px "+C.card,zIndex:1}}/>}
+    {/* v10.65.1 — VARIANTE B (impeccable critique): el acento de etapa/urgencia deja de ser raya
+        lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
+        style, 1.5px al ~40%); el chip de etapa con icono+label sigue como indicador primario (a11y). */}
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><DotsSixVerticalIcon size={13} color={C.ac}/><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
     {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
