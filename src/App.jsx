@@ -2162,27 +2162,27 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto",textAlign:"center"}}>
       <div style={{fontSize:28,fontWeight:800,marginBottom:4}}>{o.production_number||o.id}</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:4}}>{o.client} · {o.product_type}</div>
-      {isMaq&&<div style={{fontSize:10,color:"#e67e22",fontWeight:600,marginBottom:4}}>🚚 Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
+      {isMaq&&<div style={{fontSize:10,color:"#e67e22",fontWeight:600,marginBottom:4}}><TruckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
 
       {/* v10.53.0 — info de versión */}
       {o.needs_reprint && (
         <div style={{margin:"8px 0",padding:"8px 12px",background:"#fee2e2",border:"1.5px solid #dc2626",borderRadius:10,fontSize:11,color:"#991b1b",fontWeight:700,lineHeight:1.4}}>
-          ⚠️ EDITADA DESPUÉS DE IMPRIMIR<br/>
+          <WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>EDITADA DESPUÉS DE IMPRIMIR<br/>
           <span style={{fontWeight:500,fontSize:10}}>La copia física en planta está obsoleta. Reimprime y reemplaza.</span>
         </div>
       )}
       {wasPrinted && !o.needs_reprint && (
         <div style={{margin:"6px 0",padding:"4px 10px",background:"#dcfce7",border:"1px solid #16a34a40",borderRadius:8,fontSize:10,color:"#15803d",lineHeight:1.4}}>
-          ✓ Última impresión: v{o.print_version} · {lastPrintStr} · {o.last_printed_by}
+          <CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Última impresión: v{o.print_version} · {lastPrintStr} · {o.last_printed_by}
         </div>
       )}
       {/* v10.58.63: el hint refleja versión-por-contenido — sin cambios reimprime la MISMA
           versión (no "será vN+1" engañoso); editada sí sube. */}
       {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&(o.needs_reprint?" (cambió desde la última → será v"+((o.print_version||0)+1)+")":" (sin cambios → se reimprime v"+(o.print_version||0)+")")}</div>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":"#5856d6"),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🖨️ Imprimir — Versión Completa"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(con precio y contactos)</span></button>}
-        {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🏭 Imprimir — Copia Producción"}<span style={{fontSize:10,fontWeight:400,marginLeft:6,opacity:.8}}>(sin precio ni contactos)</span></button>}
-        {isFloor&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?"⏳ Registrando...":"🖨️ Imprimir Orden"}</button>}
+        {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":"#5856d6"),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir — Versión Completa</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(con precio y contactos)</span></button>}
+        {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><FactoryIcon size={14} weight="bold"/>Imprimir — Copia Producción</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(sin precio ni contactos)</span></button>}
+        {isFloor&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir Orden</>}</button>}
         <button onClick={onClose} disabled={printing} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
       </div>
     </div>
