@@ -8776,7 +8776,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               </div>
             </div>
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fill,minmax(190px,1fr))",gap:10}}>
                 {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
                   return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
                     style={{background:inMaint?"#ff950008":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid #ff950040":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
@@ -8963,8 +8963,8 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
       </div>)}</div>
     </div>}
 
-    {/* CTP & Procesadora machines */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+    {/* CTP & Procesadora machines — con 2 máquinas se fuerzan 2 columnas (minmax 0,1fr nunca colapsa a 1 ni desborda); 3+ vuelve responsivo */}
+    <div style={{display:"grid",gridTemplateColumns:ppMachines.length<=2?"repeat("+ppMachines.length+",minmax(0,1fr))":"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
       {ppMachines.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="ctp");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
         return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
           style={{background:inMaint?"#ff950008":isD?"#0891b212":C.bg,borderRadius:14,padding:16,border:inMaint?"2px solid #ff950040":isD?"2px solid #0891b2":hasWork?"1.5px solid #0891b240":"1.5px dashed "+C.bd,minHeight:120,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px #0891b215":"none",opacity:inMaint&&!hasWork?0.7:1}}>
