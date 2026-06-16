@@ -1284,7 +1284,7 @@ function FirstTimeHint({hintKey,text,color=C.ac,role}) {
   const dismiss=e=>{e.stopPropagation();setShow(false);try{localStorage.setItem(storageKey,"1")}catch{}};
   if(!show)return null;
   return <div style={{background:color+"10",border:"1.5px solid "+color+"30",borderRadius:10,padding:"8px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8,animation:"toastIn .3s ease"}}>
-    <span style={{fontSize:11,color,fontWeight:600,flex:1,lineHeight:1.4}}>💡 {text}</span>
+    <span style={{fontSize:11,color,fontWeight:600,flex:1,lineHeight:1.4}}><LightbulbIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{text}</span>
     <button onClick={dismiss} style={{background:color+"20",border:"none",color,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0}}>Entendido</button>
   </div>;
 }
@@ -1321,7 +1321,7 @@ function Login({onLogin}) {
           <input style={inp} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" onKeyDown={e=>e.key==="Enter"&&submit()}/>
         </div>
         {error && <div style={{color:C.dn,fontSize:12,fontWeight:600,marginBottom:12}}>{error}</div>}
-        <button onClick={submit} disabled={loading} style={{...bt(loading?"#d1d1d6":C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?"⏳ Verificando...":"Entrar"}</button>
+        <button onClick={submit} disabled={loading} style={{...bt(loading?"#d1d1d6":C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?<><HourglassIcon size={15} weight="bold"/>Verificando...</>:"Entrar"}</button>
       </div>
     </div>
   );
@@ -1358,13 +1358,13 @@ function FlowDiagram({currentStage,orderType,onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}>
       <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:460,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 16px",textAlign:"center"}}>{orderType==="maquila"?"🚚 Flujo Maquila":"🏭 Flujo Producción"}</h3>
+        <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 16px",textAlign:"center"}}>{orderType==="maquila"?<><TruckIcon size={16} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Flujo Maquila</>:<><FactoryIcon size={16} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Flujo Producción</>}</h3>
         {flow.map((s,i) => {
           const done=i<ci, active=i===ci;
           return (
             <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:i<flow.length-1?4:0}}>
               <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:32}}>
-                <div style={{width:28,height:28,borderRadius:"50%",background:done?C.ok:active?s.c:C.sf,color:done||active?"#fff":C.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?14:12,fontWeight:700,border:active?"3px solid "+s.c:"none",boxShadow:active?"0 0 0 4px "+s.c+"20":"none"}}>{done?"✓":i+1}</div>
+                <div style={{width:28,height:28,borderRadius:"50%",background:done?C.ok:active?s.c:C.sf,color:done||active?"#fff":C.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:done?14:12,fontWeight:700,border:active?"3px solid "+s.c:"none",boxShadow:active?"0 0 0 4px "+s.c+"20":"none"}}>{done?<CheckIcon size={14} weight="bold"/>:i+1}</div>
                 {i<flow.length-1 && <div style={{width:2,height:20,background:done?C.ok:C.bd}}/>}
               </div>
               <div style={{flex:1,padding:"6px 0"}}>
@@ -1397,7 +1397,7 @@ function LiveTimer({started}) {
   useEffect(()=>{if(!started)return;const t=new Date(started);if(isNaN(t.getTime()))return;const c=()=>Math.round((Date.now()-t.getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
   if(!started) return null;
   const t=new Date(started);if(isNaN(t.getTime())) return null;
-  return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"'Geist Mono',monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6}}>⏱ {fmtM(el)}</span>;
+  return <span style={{fontSize:10,color:"#007aff",fontWeight:700,fontFamily:"'Geist Mono',monospace",background:"#007aff10",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>{fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
   const [op,setOp]=useState(false);
