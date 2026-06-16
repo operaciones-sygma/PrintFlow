@@ -1777,8 +1777,8 @@ function QuickNotes({notes=[],onAdd,role}) {
 
 // ─── NOTIFICATIONS ────────────────────────────────
 function NotificationBell({count,onClick}) {
-  return <button onClick={onClick} style={{position:"relative",background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 6px"}} title="Notificaciones">
-    🔔{count>0&&<div style={{position:"absolute",top:0,right:0,background:C.dn,color:"#fff",width:16,height:16,borderRadius:"50%",fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{count>9?"9+":count}</div>}
+  return <button onClick={onClick} style={{position:"relative",background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 6px",display:"inline-flex",alignItems:"center",color:C.tx}} title="Notificaciones">
+    <BellRingingIcon size={18} weight={count>0?"fill":"regular"}/>{count>0&&<div style={{position:"absolute",top:0,right:0,background:C.dn,color:"#fff",width:16,height:16,borderRadius:"50%",fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{count>9?"9+":count}</div>}
   </button>;
 }
 function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDeleteAll,role}) {
@@ -1788,26 +1788,26 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
   return <div style={{position:"fixed",inset:0,zIndex:998}} onClick={onClose}>
     <div style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:"0 12px 40px rgba(0,0,0,.15)",width:360,maxHeight:"70vh",overflow:"hidden",border:"0.5px solid "+C.bd}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid "+C.bd}}>
-        <span style={{fontSize:14,fontWeight:800}}>🔔 Notificaciones</span>
+        <span style={{fontSize:14,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}><BellRingingIcon size={15} weight="fill"/>Notificaciones</span>
         <div style={{display:"flex",gap:4}}>
           <button onClick={onReadAll} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd}}>Leídas</button>
-          {notifications.length>0&&<button onClick={onDeleteAll} style={{...bs(C.sf,C.dn),boxShadow:"0 0 0 0.5px "+C.bd}}>🗑️ Borrar todas</button>}
+          {notifications.length>0&&<button onClick={onDeleteAll} style={{...bs(C.sf,C.dn),boxShadow:"0 0 0 0.5px "+C.bd}}><TrashIcon size={12} weight="bold"/>Borrar todas</button>}
         </div>
       </div>
       <div style={{overflowY:"auto",maxHeight:"calc(70vh - 56px)"}}>
-        {notifications.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{fontSize:32}}>✅</div><div style={{fontSize:12,marginTop:8}}>Sin notificaciones</div></div>
+        {notifications.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><CheckCircleIcon size={32} weight="fill" color={C.ok}/></div><div style={{fontSize:12,marginTop:8}}>Sin notificaciones</div></div>
         :notifications.map(n=><div key={n.id} onClick={()=>!n.read&&onRead(n.id)} style={{padding:"12px 16px",borderBottom:"0.5px solid "+C.bd,background:n.read?"transparent":"#007aff06",cursor:n.read?"default":"pointer"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</div>
-              {n.reason&&<div style={{fontSize:11,color:C.wn,marginTop:2,fontStyle:"italic"}}>💬 Motivo: {n.reason}</div>}
+              {n.reason&&<div style={{fontSize:11,color:C.wn,marginTop:2,fontStyle:"italic"}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</div>}
               <div style={{fontSize:9,color:C.t3,marginTop:3}}>
                 <span style={{color:rc[n.by_user]||C.t3,fontWeight:600}}>{rN[n.by_user]||n.by_user}</span> · {fDT(n.created_at)}
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
               {!n.read&&<div style={{width:8,height:8,borderRadius:"50%",background:"#007aff"}}/>}
-              <button onClick={e=>{e.stopPropagation();onDelete(n.id)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.t3,padding:"2px 4px"}} title="Borrar">✕</button>
+              <button onClick={e=>{e.stopPropagation();onDelete(n.id)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.t3,padding:"2px 4px",display:"inline-flex",alignItems:"center"}} title="Borrar"><XIcon size={13} weight="bold"/></button>
             </div>
           </div>
         </div>)}
