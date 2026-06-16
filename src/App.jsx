@@ -8322,11 +8322,11 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {o.needs_reprint&&!compact&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}><PrinterIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
-          <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600}}>{st?.l}</span>
+          <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
           {o.source==="web"&&<span style={{background:"#06b6d412",color:"#06b6d4",padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}><GlobeIcon size={11} weight="bold"/>Web</span>}
           {o.stock_role==="production"&&<span style={{background:"#10b98112",color:"#10b981",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>a Stock</span>}
           {o.stock_role==="sale"&&<span style={{background:"#16a34a12",color:"#16a34a",padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Venta desde stock — sale del inventario para entregar al cliente"><ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>desde Stock</span>}
-          {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700}}>{PM[o.priority].l}</span>}
+          {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
           {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>RETRASO</span>}
           {stale&&<span style={{background:(stale.lv==="critical"?C.dn:C.wn)+"12",color:stale.lv==="critical"?C.dn:C.wn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}>{stale.lb}</span>}
@@ -8580,7 +8580,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               <div style={{fontSize:12,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:10,color:C.t2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
               <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
-                <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>{st?.l}</span>
+                <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
                 {o.order_type==="maquila"?<span style={{background:"#e67e22"+"12",color:"#e67e22",padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila completa</span>:<span style={{background:"#32ade6"+"12",color:"#32ade6",padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila parcial</span>}
                 {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
                 {days>=14&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={10} weight="fill"/>+14 días</span>}
@@ -9401,7 +9401,7 @@ function Archive({orders,role,onAction,userLogin}) {
                             {isCancelled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><XIcon size={9} weight="bold"/>Cancelada</span>}
                             {isCancelled&&o.invoice_folio&&!o.nc_emitted&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}} title="Nota de crédito pendiente de emitir"><HourglassIcon size={9} weight="bold"/>NC pendiente</span>}
                             {o.has_post_invoice_edits&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:"#ff950015",color:"#ff9500",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><WarningIcon size={9} weight="fill"/>Editada post-factura</span>}
-                            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>{PM[o.priority].l}</span>}
+                            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority} size={9}/></span>}
                             {isMaq&&<span style={{background:"#e67e2215",color:"#e67e22",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Maquila</span>}
                           </div>
                           <div style={{fontSize:12,fontWeight:700,textDecoration:isCancelled?"line-through":"none",color:isCancelled?C.t3:C.tx}}>{o.client}</div>
@@ -9813,7 +9813,7 @@ function Analytics({orders,onReload}) {
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
           <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><WarningIcon size={13} weight="fill"/>Órdenes Estancadas</div>
           {orders.filter(o=>getStale(o)).map(o=>{const s=getStale(o);return <div key={o.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"0.5px solid "+C.bd}}>
-            <div><div style={{fontSize:11,fontWeight:600}}>{o.client}</div><div style={{fontSize:9,color:C.t3}}>{SM[o.stage]?.l} · {o.product_type}</div></div>
+            <div><div style={{fontSize:11,fontWeight:600}}>{o.client}</div><div style={{fontSize:9,color:C.t3}}><StageLbl stage={o.stage} size={9}/> · {o.product_type}</div></div>
             <span style={{background:(s.lv==="critical"?C.dn:C.wn)+"15",color:s.lv==="critical"?C.dn:C.wn,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:700,alignSelf:"center"}}>{s.lb}</span>
           </div>})}
           {orders.filter(o=>getStale(o)).length===0&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 0",color:C.ok,fontSize:12}}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
