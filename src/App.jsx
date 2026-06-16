@@ -1057,6 +1057,10 @@ const db = {
   },
 };
 const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
+// v10.64.4 — horas HÁBILES transcurridas: NO cuenta sábados ni domingos (días completos).
+// Para "estancadas": una orden parada el viernes no acumula días durante el fin de semana.
+// Itera por día (incremento a medianoche local → seguro ante DST) restando el fin de semana.
+const bizHoursAgo=d=>{if(!d)return 0;const start=new Date(d).getTime();const now=Date.now();if(now<=start)return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<now&&guard++<420){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(now,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return Math.round((now-start-weekendMs)/3600000);};
 // v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
 // v10.43.2 FIX M5 — Cobertura de UNIQUE constraints (doble click).
 const humanizeStockError=err=>{
@@ -1077,7 +1081,7 @@ const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // v10.49.4 — Si la orden está EN MÁQUINA (current_machine NOT NULL), NO se considera estancada.
 // Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
 // aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina).
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=hoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
 
 // v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
 const STAGE_RESPONSIBLE = {
@@ -10435,7 +10439,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       if (isUrgente(o)) r.urgentes += 1;
       // v10.28.1 — fallback: si created_at también es null, tratar como muy estancada (999h) para no ocultar el problema
       const lastAct = o.timeline?.length > 0 ? o.timeline[o.timeline.length - 1].date : o.created_at;
-      const h = lastAct ? hoursAgo(lastAct) : 999;
+      const h = lastAct ? bizHoursAgo(lastAct) : 999; // v10.64.4 — horas hábiles (sin fines de semana)
       if (h > r.horasSinActividad) r.horasSinActividad = h;
     });
     return Object.values(map).sort((a, b) => b.vencidas - a.vencidas || b.urgentes - a.urgentes);
@@ -10595,12 +10599,12 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           </div>
           <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
             {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
-            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T12:00:00").getTime()) / 86400000)} día(s) · </span>}
+            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T23:59:59").getTime()) / 86400000)} día(s) · </span>}
             {isUrgente(topPriority) && <span style={{ color: "#ff9500", fontWeight: 600 }}>URGENTE · </span>}
             <StageLbl stage={topPriority.stage} size={10}/> · {orderResponsible(topPriority)?.name || "—"}
             {(() => {
               const lastAct = topPriority.timeline?.length > 0 ? topPriority.timeline[topPriority.timeline.length - 1].date : topPriority.created_at;
-              const h = hoursAgo(lastAct);
+              const h = bizHoursAgo(lastAct); // v10.64.4 — horas hábiles (sin fines de semana)
               return h >= 24 ? <> · {h}h sin actividad</> : null;
             })()}
           </div>
