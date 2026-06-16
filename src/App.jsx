@@ -6423,21 +6423,21 @@ function PriceEditorModal({priceForm,setPriceForm,onSave,saving,onClose}) {
   </div>;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
     <div style={{background:C.bg,borderRadius:20,maxWidth:480,width:"100%",maxHeight:"85vh",overflow:"auto",padding:24}} onClick={e=>e.stopPropagation()}>
-      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px"}}>⚙️ Configurar Precios de Químicos</h3>
+      <h3 style={{fontSize:16,fontWeight:800,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><GearIcon size={17} weight="bold"/>Configurar Precios de Químicos</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 16px"}}>Estos valores se usan para calcular costos automáticamente. Actualiza cuando cambien los precios de proveedor.</p>
-      <div style={{fontSize:12,fontWeight:700,color:"#0891b2",marginBottom:8}}>🧪 Precios de Químicos</div>
+      <div style={{fontSize:12,fontWeight:700,color:"#0891b2",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><FlaskIcon size={13} weight="bold"/>Precios de Químicos</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         <PF label="Revelador ($/20L)" field="revelador_20l"/>
         <PF label="Reforzador ($/20L)" field="reforzador_20l"/>
         <PF label="Evaporación (ml/día)" field="evaporacion_ml_dia"/>
         <PF label="IVA (%)" field="iva_pct"/>
       </div>
-      <div style={{fontSize:12,fontWeight:700,color:"#6366f1",marginBottom:8}}>📋 Costo Material de Placas</div>
+      <div style={{fontSize:12,fontWeight:700,color:"#6366f1",marginBottom:8,display:"flex",alignItems:"center",gap:5}}><ClipboardTextIcon size={13} weight="bold"/>Costo Material de Placas</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         <PF label="Placa chica ($)" field="placa_chica_material"/>
         <PF label="Placa grande ($)" field="placa_grande_material"/>
       </div>
-      <div style={{fontSize:12,fontWeight:700,color:C.t2,marginBottom:8}}>📏 Dimensiones de Placas (mm)</div>
+      <div style={{fontSize:12,fontWeight:700,color:C.t2,marginBottom:8,display:"flex",alignItems:"center",gap:5}}><RulerIcon size={13} weight="bold"/>Dimensiones de Placas (mm)</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:20}}>
         <PF label="Chica ancho" field="placa_chica_ancho_mm"/>
         <PF label="Chica alto" field="placa_chica_alto_mm"/>
@@ -6446,7 +6446,7 @@ function PriceEditorModal({priceForm,setPriceForm,onSave,saving,onClose}) {
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={onSave} disabled={saving} style={{...bt("#16a34a"),flex:1,justifyContent:"center"}}>{saving?"⏳ Guardando...":"💾 Guardar Precios"}</button>
+        <button onClick={onSave} disabled={saving} style={{...bt("#16a34a"),flex:1,justifyContent:"center"}}>{saving?<><HourglassIcon size={14} weight="bold"/>Guardando...</>:<><FloppyDiskIcon size={14} weight="bold"/>Guardar Precios</>}</button>
       </div>
     </div>
   </div>;
@@ -10234,20 +10234,20 @@ function ClientMergeModal({onClose, showToast, userLogin}) {
   </div>;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={onClose}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,padding:22,maxWidth:560,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,.35)"}}>
-      <div style={{fontSize:17,fontWeight:800,color:C.tx}}>🔗 Fusionar clientes duplicados</div>
+      <div style={{fontSize:17,fontWeight:800,color:C.tx,display:"flex",alignItems:"center",gap:6}}><LinkIcon size={17} weight="bold"/>Fusionar clientes duplicados</div>
       <div style={{fontSize:11,color:C.t2,margin:"4px 0 16px"}}>Reasigna TODO del duplicado al cliente que conservas y lo desactiva. Ej: "UVEG" → "UNIVERSIDAD VIRTUAL DEL ESTADO".</div>
       <div style={{display:"flex",gap:12,marginBottom:14}}>
-        {pick("✅ CONSERVAR (canónico)",keepText,setKeepText,keep,setKeep,C.ok)}
-        {pick("❌ FUSIONAR (duplicado)",mergeText,setMergeText,merge,setMerge,C.dn)}
+        {pick(<><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>CONSERVAR (canónico)</>,keepText,setKeepText,keep,setKeep,C.ok)}
+        {pick(<><XCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>FUSIONAR (duplicado)</>,mergeText,setMergeText,merge,setMerge,C.dn)}
       </div>
       {preview&&<div style={{background:C.sf,borderRadius:10,padding:"10px 14px",fontSize:12,color:C.t2,marginBottom:14}}>
         <b style={{color:C.tx}}>Se reasignarán del duplicado:</b><br/>
         {preview.ordenes} órdenes · {preview.ocs} OCs · {preview.facturas} facturas · {preview.vales} vales · {preview.ledger_corona} mov. Corona · {preview.productos_stock} productos · {preview.agentes} agentes
       </div>}
-      {both&&keep.billing_mode!==merge.billing_mode&&<div style={{fontSize:11,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:8,padding:"8px 10px",marginBottom:12}}>⚠️ Tienen billing_mode distinto ({keep.billing_mode} vs {merge.billing_mode}). Asegúrate de conservar el correcto (ej. el de Corona/anticipo si aplica).</div>}
+      {both&&keep.billing_mode!==merge.billing_mode&&<div style={{fontSize:11,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:8,padding:"8px 10px",marginBottom:12}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Tienen billing_mode distinto ({keep.billing_mode} vs {merge.billing_mode}). Asegúrate de conservar el correcto (ej. el de Corona/anticipo si aplica).</div>}
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
-        <button onClick={doMerge} disabled={!both||busy} style={{flex:1,padding:11,borderRadius:10,border:"none",background:both&&!busy?C.dn:"#d1d1d6",color:"#fff",fontWeight:700,cursor:both&&!busy?"pointer":"not-allowed"}}>{busy?"⏳ Fusionando...":"🔗 Fusionar"}</button>
+        <button onClick={doMerge} disabled={!both||busy} style={{flex:1,padding:11,borderRadius:10,border:"none",background:both&&!busy?C.dn:"#d1d1d6",color:"#fff",fontWeight:700,cursor:both&&!busy?"pointer":"not-allowed",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}>{busy?<><HourglassIcon size={14} weight="bold"/>Fusionando...</>:<><LinkIcon size={14} weight="bold"/>Fusionar</>}</button>
       </div>
     </div>
   </div>;
@@ -10285,7 +10285,7 @@ function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
 
   return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac}}>🧹 Limpieza histórico de impresiones</h3>
+      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",color:C.ac,display:"flex",alignItems:"center",gap:6}}><BroomIcon size={17} weight="bold"/>Limpieza histórico de impresiones</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",lineHeight:1.5}}>
         Borra del histórico (<code>print_audit</code>) las impresiones más viejas que el periodo indicado.
         Los datos actuales en cada orden (<code>print_version</code>, <code>last_printed_by</code>) no se ven afectados.
@@ -10293,7 +10293,7 @@ function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
 
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:14,fontSize:11}}>
         <div style={{color:C.t2}}>Histórico actual:</div>
-        <div style={{fontSize:18,fontWeight:800,color:C.tx,marginTop:2}}>{currentCount===null?"⏳ cargando...":currentCount===1?"1 row":currentCount+" rows"}</div>
+        <div style={{fontSize:18,fontWeight:800,color:C.tx,marginTop:2}}>{currentCount===null?<><HourglassIcon size={16} weight="bold" style={{verticalAlign:"-3px",marginRight:4}}/>cargando...</>:currentCount===1?"1 row":currentCount+" rows"}</div>
       </div>
 
       <label style={{...lbl,marginBottom:4}}>Conservar últimos N meses</label>
@@ -10303,12 +10303,12 @@ function PrintAuditCleanupModal({onClose, showToast, userLogin}) {
       {!valid && months && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Debe ser un número entre 3 y 120</div>}
 
       {result && <div style={{background:"#dcfce7",border:"1px solid #16a34a",borderRadius:10,padding:10,marginTop:12,fontSize:11,color:"#15803d"}}>
-        ✅ <strong>{result.rows_deleted}</strong> rows borradas · fecha de corte: {new Date(result.cutoff_date).toLocaleDateString("es-MX")}
+        <CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/><strong>{result.rows_deleted}</strong> rows borradas · fecha de corte: {new Date(result.cutoff_date).toLocaleDateString("es-MX")}
       </div>}
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-        <button onClick={submit} disabled={!valid||busy} style={{...bt(valid&&!busy?C.dn:"#d1d1d6"),flex:1,justifyContent:"center",cursor:valid&&!busy?"pointer":"not-allowed"}}>{busy?"⏳ Limpiando...":"🧹 Limpiar"}</button>
+        <button onClick={submit} disabled={!valid||busy} style={{...bt(valid&&!busy?C.dn:"#d1d1d6"),flex:1,justifyContent:"center",cursor:valid&&!busy?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><BroomIcon size={14} weight="bold"/>Limpiar</>}</button>
       </div>
     </div>
   </div>;
