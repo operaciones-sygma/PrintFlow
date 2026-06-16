@@ -8757,11 +8757,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     {/* Empty state */}
     {ready.length===0&&inProd.length===0&&inManual.length===0&&inSalidas.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Cuando una orden esté lista, arrástrala aquí</div></div>}
 
-    {/* ═══ TWO-COLUMN LAYOUT: Machines left + Sticky sidebar right ═══ */}
-    <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+    {/* ═══ TWO-COLUMN LAYOUT: Machines left + Sticky sidebar right (envuelve el sidebar debajo cuando el ancho es chico, p.ej. zoom/escala alta en piso) ═══ */}
+    <div style={{display:"flex",flexWrap:"wrap",gap:16,alignItems:"flex-start"}}>
 
-      {/* ── LEFT COLUMN: Machine categories ── */}
-      <div style={{flex:"1 1 0%",minWidth:0}}>
+      {/* ── LEFT COLUMN: Machine categories — flex-basis 600 dispara el wrap del sidebar cuando Inner<876; en pantallas anchas crece a todo el espacio sobrante ── */}
+      <div style={{flex:"1 1 600px",minWidth:0}}>
         {["offset","acabados","digital"].map(type=>{const ms=MACHINES.filter(m=>m.type===type&&m.status==="active"&&m.id!=="vm_manual");if(!ms.length)return null;
           const cnt=catCount(type);const isCol=collapsed[type];
           return <div key={type} style={{marginBottom:20}}>
@@ -8776,7 +8776,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               </div>
             </div>
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
-              <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fill,minmax(190px,1fr))",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fit,minmax(min(240px,100%),1fr))",gap:10}}>
                 {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
                   return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
                     style={{background:inMaint?"#ff950008":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid #ff950040":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
