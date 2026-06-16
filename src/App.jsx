@@ -1715,7 +1715,7 @@ function WakeupModal({user, userLogin, items, onAck}){
       </div>
       <div style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
         {items.map(({o,why,action,late},i)=>(
-          <div key={o.id} style={{border:"1px solid "+(late>3?C.dn+"40":C.bd),borderLeft:"4px solid "+(late>3?C.dn:"#f59e0b"),borderRadius:10,padding:"10px 14px",background:late>3?C.dn+"06":C.bg}}>
+          <div key={o.id} style={{border:"1.5px solid "+(late>3?C.dn:"#f59e0b")+"66",borderRadius:10,padding:"10px 14px",background:late>3?C.dn+"06":C.bg}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
               <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
@@ -6761,7 +6761,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
         {isWeekView&&<span style={{fontSize:9,color:C.t2,fontWeight:600}}>{dn[day.getDay()===0?6:day.getDay()-1]}</span>}
         <span style={{fontSize:isWeekView?12:11,fontWeight:700,color:isT?"#fff":C.tx,background:isT?C.ac:"transparent",width:isWeekView?24:22,height:isWeekView?24:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:isWeekView?0:"auto"}}>{day.getDate()}</span>
       </div>
-      {pend.map(o=>{const st=SM[o.stage];const canEdit=canEditDate(o);return <div key={o.id} onClick={()=>{if(canEdit){setEditOrder(o);setNewDate(o.due_date)}}} style={{background:isLate?C.dn+"10":C.ac+"08",borderRadius:6,padding:isWeekView?"5px 7px":"3px 5px",marginBottom:3,borderLeft:"3px solid "+(o.priority==="urgente"?C.dn:isLate?C.dn:C.ac),cursor:canEdit?"pointer":"default",transition:"all .15s",opacity:canEdit?1:0.7}} onMouseEnter={e=>{if(canEdit)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.1)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+      {pend.map(o=>{const st=SM[o.stage];const canEdit=canEditDate(o);return <div key={o.id} onClick={()=>{if(canEdit){setEditOrder(o);setNewDate(o.due_date)}}} style={{background:isLate?C.dn+"10":C.ac+"08",borderRadius:6,padding:isWeekView?"5px 7px":"3px 5px",marginBottom:3,border:"1.5px solid "+(o.priority==="urgente"?C.dn:isLate?C.dn:C.ac)+"66",cursor:canEdit?"pointer":"default",transition:"all .15s",opacity:canEdit?1:0.7}} onMouseEnter={e=>{if(canEdit)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.1)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
         <div style={{fontSize:isWeekView?10:9,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.client}</div>
         {isWeekView&&<div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:1}}>
@@ -6769,7 +6769,7 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
           {o.priority==="urgente"&&<span style={{fontSize:7,color:C.dn,fontWeight:800,display:"inline-flex",alignItems:"center"}}><CircleIcon size={7} weight="fill"/></span>}
         </div>
       </div>})}
-      {done.map(o=><div key={o.id} style={{background:C.ok+"08",borderRadius:6,padding:isWeekView?"4px 7px":"2px 5px",marginBottom:3,borderLeft:"3px solid "+C.ok,opacity:.6}}>
+      {done.map(o=><div key={o.id} style={{background:C.ok+"08",borderRadius:6,padding:isWeekView?"4px 7px":"2px 5px",marginBottom:3,border:"1.5px solid "+C.ok+"66",opacity:.6}}>
         <div style={{fontSize:isWeekView?9:8,color:C.ok,fontWeight:600}}><CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.client}</div>
       </div>)}
       {!pend.length&&!done.length&&<div style={{color:C.ph,fontSize:9,textAlign:"center",marginTop:isWeekView?20:10}}>—</div>}
@@ -8536,7 +8536,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     </div>}
 
     {/* Banner especial: pedido web en draft, visible para pre-prensa y admin */}
-    {!compact&&o.source==="web"&&o.stage==="draft"&&(role==="preprensa"||role==="admin")&&!o.validated_by_preprensa&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"12px 14px",background:"#fff8e1",borderRadius:10,border:"1px solid #ffe082",borderLeft:"4px solid #ff9800"}}>
+    {!compact&&o.source==="web"&&o.stage==="draft"&&(role==="preprensa"||role==="admin")&&!o.validated_by_preprensa&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"12px 14px",background:"#fff8e1",borderRadius:10,border:"1px solid #ffe082"}}>
       <div style={{fontSize:11,fontWeight:800,color:"#e65100",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
         <GlobeIcon size={12} weight="bold"/>Pedido web — Acción requerida
       </div>
@@ -8628,7 +8628,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
       </div>
       {d.orders.map(o=>{const days=getDays(o);const st=SM[o.stage];const hp=role==="produccion"||role==="preprensa"||role==="german";const oOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
         const urgColor=days>=14?C.dn:days>=7?C.wn:days>=3?"#e67e22":C.ok;
-        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",borderLeft:"3px solid "+urgColor,boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",border:"1.5px solid "+urgColor+"66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
               <div style={{fontSize:12,fontWeight:700}}>{o.client}</div>
@@ -8697,7 +8697,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
 
   const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",borderLeft:"3px solid "+(o.priority==="urgente"?C.dn:borderColor),boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
       {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
@@ -8738,7 +8738,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           <div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>Órdenes Listas</div><div style={{fontSize:10,color:C.t2}}>Arrastra a máquinas, Empaque o Salidas</div></div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok),transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?"#32ade6":C.ok)+"66",transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -8881,7 +8881,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?"#16a34a":C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
-            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",borderLeft:"3px solid #16a34a",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid #16a34a66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
               {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
@@ -8956,7 +8956,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div style={{background:"#0891b2",color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{readyCtp.length}</div>
         <div><div style={{fontSize:13,fontWeight:700,color:"#0891b2"}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,borderLeft:"4px solid "+(o.priority==="urgente"?C.dn:"#0891b2"),transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:"#0891b2")+"66",transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
@@ -8991,7 +8991,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                 {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
               </div>
               <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
-                style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",borderLeft:"3px solid "+(activa.priority==="urgente"?C.dn:"#0891b2")}}>
+                style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",border:"1.5px solid "+(activa.priority==="urgente"?C.dn:"#0891b2")+"66"}}>
                 {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,marginBottom:3,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</div>}
                 <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{activa.client}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
@@ -9442,7 +9442,7 @@ function Archive({orders,role,onAction,userLogin}) {
                     {wOpen&&<div style={{paddingLeft:8,marginTop:4,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:6}}>
                       {wOrders.map(o=>{
                         const st=SM[o.stage];const isMaq=o.order_type==="maquila";const isCancelled=o.stage.includes("cancelled");
-                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",borderLeft:"3px solid "+(st?.c||C.ok),boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",border:"1.5px solid "+(st?.c||C.ok)+"66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
                           {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:"#06b6d4",letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
                           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:3}}>{o.web_folio}</div>}
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
@@ -9532,7 +9532,7 @@ function WebCartCard({cartFolio,orders,onApprove,onReject,onApproveCart,onDetail
   const total=orders.reduce((s,o)=>s+(parseFloat(o.price)||0),0);
   const oldest=orders.reduce((min,o)=>{const d=new Date(o.created_at);return !min||d<min?d:min},null);
   const cartBusy=orders.some(o=>actionLoading===o.id);
-  return <div style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4"}}>
+  return <div style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",border:"1.5px solid #06b6d466"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
       <div style={{display:"flex",flexDirection:"column",gap:3,flex:1,minWidth:0}}>
         <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:17,fontWeight:800,color:"#06b6d4",letterSpacing:0.5,lineHeight:1}}><ShoppingCartIcon size={16} weight="bold"/>{cartFolio}</span>
@@ -9601,7 +9601,7 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
           }
           // Sin cart_folio: card individual idéntico al UI previo
           const o=g.orders[0];const busy=actionLoading===o.id;
-          return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",borderLeft:"4px solid #06b6d4",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
+          return <div key={o.id} style={{background:C.bg,borderRadius:14,padding:14,boxShadow:"0 1px 3px rgba(0,0,0,0.04),0 0 0 0.5px rgba(0,0,0,0.06)",border:"1.5px solid #06b6d466",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
             {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,borderRadius:14}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:6}}>
               <div style={{display:"flex",flexDirection:"column",gap:3}}>
@@ -9637,7 +9637,7 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
         {showRejected?<><CaretUpIcon size={11} weight="bold"/>Ocultar Pedidos rechazados ({rejected.length})</>:<><CaretDownIcon size={11} weight="bold"/>Ver Pedidos rechazados ({rejected.length})</>}
       </button>
       {showRejected&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-        {rejected.map(o=><div key={o.id} onClick={()=>onDetail(o.id)} style={{background:C.bg,borderRadius:12,padding:12,cursor:"pointer",borderLeft:"3px solid "+C.dn,opacity:0.7,boxShadow:"0 0 0 0.5px "+C.bd}}>
+        {rejected.map(o=><div key={o.id} onClick={()=>onDetail(o.id)} style={{background:C.bg,borderRadius:12,padding:12,cursor:"pointer",border:"1.5px solid "+C.dn+"66",opacity:0.7,boxShadow:"0 0 0 0.5px "+C.bd}}>
           {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:"#06b6d4",letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?2:4}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:4}}>{o.web_folio}</div>}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -10381,7 +10381,7 @@ function StatCard({ label, value, subValue, color }) {
     <div style={{
       background: C.card,
       boxShadow: C.sh2,
-      borderLeft: "4px solid " + color,
+      border: "1.5px solid " + color + "66",
       borderRadius: 14,
       padding: "12px 16px"
     }}>
@@ -10704,8 +10704,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           return (
           <div key={r.role} style={{
             background: "#fff",
-            border: isMe ? "2px solid #5856d6" : "1px solid " + C.bd,
-            borderLeft: "4px solid " + (r.vencidas > 0 ? "#ff3b30" : r.urgentes > 0 ? "#ff9500" : "#34c759"),
+            border: isMe ? "2px solid #5856d6" : "1.5px solid " + (r.vencidas > 0 ? "#ff3b30" : r.urgentes > 0 ? "#ff9500" : "#34c759") + "66",
             borderRadius: 12,
             padding: 14,
             position: "relative"
@@ -11115,29 +11114,29 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       )}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+tColor,boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+tColor+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total emitidos</div>
         <div style={{fontSize:22,fontWeight:800,color:tColor}}>{total}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(gaps.length?C.dn:C.ok),boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(gaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
         <div style={{fontSize:22,fontWeight:800,color:gaps.length?C.dn:C.ok}}>{gaps.length}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(duplicates.length?C.dn:C.ok),boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(duplicates.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
         <div style={{fontSize:22,fontWeight:800,color:duplicates.length?C.dn:C.ok}}>{duplicates.length}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(sharedCount?C.ok:C.t3),boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedCount?C.ok:C.t3)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Compartidos</div>
         <div style={{fontSize:22,fontWeight:800,color:sharedCount?C.ok:C.t3}}>{sharedCount}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.t3,boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
         <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest?prefix+"-"+oldest:"—"}{latest&&latest!==oldest?<><br/>↓<br/>{prefix+"-"+latest}</>:""}</div>
       </div>
     </div>
     {/* 📄 v10.11.0 Sub-fase B — Sección de folios compartidos (OCs con shared_invoice_folio) */}
-    {sharedOCs.length>0&&<div style={{background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.ok,padding:"12px 14px",marginBottom:14}}>
+    {sharedOCs.length>0&&<div style={{background:C.bg,borderRadius:10,border:"1.5px solid "+C.ok+"66",padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.tx,marginBottom:8,textTransform:"uppercase"}}><FileTextIcon size={12} weight="bold"/>Folios compartidos · {sharedOCs.length} OC{sharedOCs.length!==1?"s":""}</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {sharedOCs.map(po=><div key={po.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:C.sf,borderRadius:8,flexWrap:"wrap"}}>
@@ -11211,7 +11210,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       })}
       </div>;
     })()}
-    <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
+    <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
       <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:"#10b981"}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
     </>}
@@ -11275,23 +11274,23 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.ac,boxShadow:C.sh2}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.ac+"66",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total P-XXXX</div>
             <div style={{fontSize:22,fontWeight:800,color:C.ac}}>{totalPN}</div>
           </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+(pnGaps.length?C.dn:C.ok),boxShadow:C.sh2}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(pnGaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
             <div style={{fontSize:22,fontWeight:800,color:pnGaps.length?C.dn:C.ok}}>{pnGaps.length}</div>
           </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid #5856d6",boxShadow:C.sh2}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid #5856d666",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Con folio fiscal</div>
             <div style={{fontSize:22,fontWeight:800,color:"#5856d6"}}>{invoicedCount}</div>
           </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.dn,boxShadow:C.sh2}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.dn+"66",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div>
             <div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCount}</div>
           </div>
-          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",borderLeft:"4px solid "+C.t3,boxShadow:C.sh2}}>
+          <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
             <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
           </div>
@@ -11326,7 +11325,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             });
           })}
         </div>}
-        <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,borderLeft:"4px solid "+C.t3,fontSize:11,color:C.t2,lineHeight:1.5}}>
+        <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
           <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Click en cualquier orden para ver detalles completos.
         </div>
       </div>;
@@ -11575,7 +11574,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const SharedFolioIcon = sharedFolioType === "factura" ? FileTextIcon : ClipboardTextIcon;
     return <div>
       <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
-      <div style={{background:C.card,borderRadius:14,padding:16,boxShadow:C.sh2,borderLeft:isWeb?"4px solid "+WEB_BLUE:undefined,marginBottom:14}}>
+      <div style={{background:C.card,borderRadius:14,padding:16,boxShadow:C.sh2,border:isWeb?"1.5px solid "+WEB_BLUE+"66":undefined,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
           <div>
             {isWeb ? <>
@@ -11666,7 +11665,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
             // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
             const isWeb = po.is_web_oc === true;
             const cartFolio = isWeb ? getCartFolio(po) : null;
-            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",borderLeft:"4px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac)),boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
+            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",border:"1.5px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac))+"66",boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                 {isWeb ? <div>
                   <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3,display:"flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={16} weight="bold"/>{cartFolio}</div>
@@ -11923,7 +11922,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
   const Row=({r,inCron})=>{
     const {o,diag}=r;
     const m=parseFloat(o.price)||parseFloat(o.maq_price)||0;
-    return <div style={{border:"1px solid "+(diag.sev==="red"?C.dn+"35":C.bd),borderLeft:"4px solid "+sevColor[diag.sev],borderRadius:10,padding:"10px 14px",background:diag.sev==="red"?C.dn+"05":C.bg,marginBottom:6}}>
+    return <div style={{border:"1.5px solid "+sevColor[diag.sev]+"66",borderRadius:10,padding:"10px 14px",background:diag.sev==="red"?C.dn+"05":C.bg,marginBottom:6}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <span style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
         <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
@@ -14229,7 +14228,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color="#0891b2"/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:"#0891b2",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",borderLeft:"4px solid #16a34a",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid #16a34a66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
