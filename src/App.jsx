@@ -1278,6 +1278,9 @@ function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
 const Skel=({w="100%",h=12,r=8,style={}})=><div className="pf-skel" style={{width:w,height:h,borderRadius:r,flexShrink:0,...style}}/>;
 // lista skeleton: n filas tipo registro (avatar + 2 líneas + monto) para listas que cargan
 const SkelRows=({n=5})=><div style={{display:"flex",flexDirection:"column",gap:6,padding:"4px 0"}}>{Array.from({length:n}).map((_,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px"}}><Skel w={34} h={34} r={9}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}><Skel w="55%" h={11}/><Skel w="32%" h={9}/></div><Skel w={52} h={14} r={6}/></div>)}</div>;
+// v10.66.0 — empty state compuesto reutilizable (icono + título + hint que guía + acción opcional).
+// Unifica el patrón ya existente en varias vistas. tone "positive" = estado sano (icono verde fill).
+const EmptyState=({icon:Ic,title,hint,action,tone="neutral"})=>{const pos=tone==="positive";return <div style={{textAlign:"center",padding:"40px 20px"}}>{Ic&&<div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Ic size={46} weight={pos?"fill":"regular"} color={pos?C.ok:C.ph}/></div>}<div style={{fontSize:15,fontWeight:700,color:C.tx}}>{title}</div>{hint&&<div style={{fontSize:12,color:C.t2,marginTop:4,maxWidth:330,marginLeft:"auto",marginRight:"auto",lineHeight:1.45}}>{hint}</div>}{action&&<button onClick={action.onClick} style={{...bt(C.sf,C.t2),marginTop:14,border:"0.5px solid "+C.bd}}>{action.icon&&<action.icon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>}{action.label}</button>}</div>;};
 
 const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento, borra el viejo y sube tu archivo preparado para prueba de color",design:"Prepara los archivos. Borra el documento anterior y sube el archivo listo. Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada",maq_received:"Asigna folio fiscal (D-XXXX factura, R-XXXX remisión) y marca entregada"}};
 
@@ -2522,7 +2525,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
           {tab==="products"&&<>
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
-            {filtered.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>{products.length===0?"Sin productos en catálogo todavía":"Sin coincidencias"}</div>:
+            {filtered.length===0?(products.length===0?<EmptyState icon={PackageIcon} title="Sin productos en stock" hint="Da de alta tu primer producto con Nuevo Producto, o cárgalo desde una orden Cuadra de producción." action={{label:"Nuevo Producto",icon:PlusIcon,onClick:()=>setEditing({mode:"new"})}}/>:<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>):
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(p=>
                   <div key={p.id} style={{padding:"12px 14px",borderRadius:12,background:C.sf,border:"0.5px solid "+C.bd}}>
@@ -2552,7 +2555,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
               </div>
             }
           </>}
-          {tab==="movements"&&(movements.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin movimientos registrados</div>:
+          {tab==="movements"&&(movements.length===0?<EmptyState icon={ListBulletsIcon} title="Sin movimientos todavía" hint="Aquí verás cada entrada y salida de stock cuando cargues producción o registres una venta del catálogo."/>:
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {movements.map(m=>{
                 const prod=products.find(p=>p.id===m.client_product_id);
@@ -2576,7 +2579,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           {/* v10.46.0 — Tab Historial: órdenes Cuadra (production + sale), filtrables por cliente + búsqueda */}
           {tab==="history"&&<>
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterHistory} onChange={e=>setFilterHistory(e.target.value)} placeholder="Filtrar por cliente, P-folio o producto" aria-label="Filtrar historial de órdenes Cuadra"/>
-            {history.length===0?<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin órdenes Cuadra registradas todavía</div>:(()=>{
+            {history.length===0?<EmptyState icon={BooksIcon} title="Sin órdenes Cuadra todavía" hint="Cuando captures órdenes de stock Cuadra (a stock o desde stock) aparecerán aquí con su folio P y fiscal."/>:(()=>{
               // v10.46.2 FIX — accent-insensitive (Dipticos == Dípticos), consistente con OrderForm.normForSearch
               const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
               const q=norm(filterHistory.trim());
@@ -3367,11 +3370,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       </div>
 
       {loadingClients?<SkelRows n={6}/>:
-       clients.length===0?<div style={{padding:40,textAlign:"center"}}>
-         <WalletIcon size={34} color={C.ph}/>
-         <div style={{fontSize:13,fontWeight:600,marginTop:8}}>Sin clientes con saldo a favor todavía</div>
-         <div style={{fontSize:11,color:C.t2,marginTop:6,maxWidth:380,margin:"6px auto 0"}}>Para activar un cliente: <code>UPDATE cobranza.clients SET billing_mode='anticipo' WHERE id=…</code>. Los depósitos los registra Lucero en CobranzaFlow.</div>
-       </div>:
+       clients.length===0?<EmptyState icon={WalletIcon} title="Aún no hay clientes con saldo a favor" hint="Aparecen aquí cuando Lucero registra un depósito en CobranzaFlow o se activa el modo a crédito del cliente."/>:
        <div style={{display:"grid",gridTemplateColumns:"260px 1fr",flex:1,minHeight:0}}>
          <div style={{borderRight:"0.5px solid "+C.bd,overflowY:"auto",padding:"10px 0"}}>
            {clients.map(c=>{
@@ -3415,7 +3414,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              </div>
              <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>Historial (últimos 200)</div>
              {loadingLedger?<div style={{padding:20,textAlign:"center",color:C.t2}}>Cargando ledger…</div>:
-              ledger.length===0?<div style={{padding:20,textAlign:"center",color:C.t2,fontSize:12}}>Sin movimientos todavía</div>:
+              ledger.length===0?<EmptyState icon={ClockCounterClockwiseIcon} title="Sin movimientos todavía" hint="Aquí se listarán los depósitos, cargos por factura Corona y ajustes en cuanto haya movimiento en el saldo de este cliente."/>:
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {ledger.map(m=>{
                   const color=tipoColor(m.tipo);
@@ -3435,7 +3434,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
               </div>
              }
            </>;
-           })():<div style={{padding:30,textAlign:"center",color:C.t2,fontSize:12}}>Selecciona un cliente</div>}
+           })():<EmptyState icon={HandPointingIcon} title="Selecciona un cliente" hint="Elige un cliente de la lista para ver su saldo a favor y el historial de movimientos del apartado Corona."/>}
          </div>
        </div>
       }
@@ -6713,7 +6712,7 @@ function ChemicalPanel({user}) {
     {/* ── History ── */}
     <div style={{marginBottom:16}}>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700,marginBottom:8}}><ClockCounterClockwiseIcon size={14} weight="bold"/>Historial de registros</div>
-      {chemicals.length===0&&plates.length===0?<div style={{textAlign:"center",padding:"20px",color:C.t3}}>Sin registros aún</div>
+      {chemicals.length===0&&plates.length===0?<EmptyState icon={FlaskIcon} title="Sin registros de químicos todavía" hint="Registra el primer tambo de limpieza o reforzador arriba para llevar el control de consumo."/>
       :<div style={{maxHeight:300,overflowY:"auto"}}>
         {chemicals.slice(0,30).map(c=><div key={c.id} style={{padding:"8px 12px",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
@@ -10696,7 +10695,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><UsersIcon size={16} weight="bold"/>Pulso por Responsable</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 24 }}>
         {responsiblePulse.length === 0 && (
-          <div style={{ padding: 20, textAlign: "center", color: C.t3, fontSize: 12 }}>Sin órdenes activas</div>
+          <div style={{gridColumn:"1/-1"}}><EmptyState icon={UsersIcon} title="Sin responsables con carga" hint="No hay órdenes activas asignadas a nadie ahora mismo. El taller está libre."/></div>
         )}
         {responsiblePulse.map(r => {
           // v10.32.0 — destacar card propia cuando Lupita ve su sección
@@ -11229,10 +11228,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const byNum={};
       filteredOrders.forEach(o=>{const n=parsePN(o.production_number);if(n!==null){if(!byNum[n])byNum[n]=[];byNum[n].push(o)}});
       const nums=Object.keys(byNum).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
-      if(nums.length===0)return <div style={{marginTop:24,padding:"20px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,textAlign:"center",color:C.t3}}>
-        <h3 style={{fontSize:14,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 8px",color:C.tx}}><ListBulletsIcon size={15} weight="bold" style={{verticalAlign:"-2px",marginRight:6}}/>Consecutivo de Órdenes de Producción</h3>
-        Sin órdenes de producción en este periodo.
-      </div>;
+      if(nums.length===0)return <div style={{marginTop:24}}><EmptyState icon={ListBulletsIcon} title="Sin órdenes de producción en este periodo" hint="Cambia el filtro de fechas para ver más números de orden P-XXXX."/></div>;
       const min=nums[0],max=nums[nums.length-1];
       const pnSeq=[];const pnGaps=[];
       for(let i=min;i<=max;i++){
@@ -14230,7 +14226,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:"#0891b2",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas");return sal.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.sort(prioSort).map(o=>{return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid #16a34a66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}<button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button></div>})}</div>})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
-        {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
+        {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.length===0?<EmptyState icon={search?MagnifyingGlassIcon:ListBulletsIcon} title={search?"Sin resultados":"Sin órdenes que mostrar"} hint={search?"Prueba con otro término o limpia la búsqueda.":"Las órdenes que captures aparecerán listadas aquí."} action={search?{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}:((user==="admin"||isSec(user))?{label:"Nueva orden",icon:PlusIcon,onClick:()=>{setEditO(null);setView("form")}}:null)}/>:filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
