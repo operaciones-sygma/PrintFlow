@@ -45,6 +45,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.9 — cerrar #9 del 4to re-critique: (a) el combobox de Tipo de Producto ahora se pinta de rojo
+// (errBorder) cuando falta al crear — el campo que más se salta ya queda anclado; (b) el gate de RFC en
+// CreateOCModal pasa de toast pasajero a error inline FIJO (role=alert) + borde rojo en el campo RFC,
+// porque un hard-stop que aborta el guardado debe quedarse visible hasta resolverse.
 // v10.72.8 — P2/P3 restantes del 3er re-critique: se matan los alert() nativos residuales — errores de
 // imagen (too-large/upload) en OrderForm y RFC/resolución de cliente en CreateOCModal — pasan a toast
 // (showToast plomado a CreateOCModal). + sanitizer de precio acepta un solo punto decimal.
@@ -7600,7 +7604,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         return <div style={{position:"relative"}}>
           <input
             ref={prodTypeInputRef}
-            style={{...inp,paddingRight:32}}
+            style={{...inp,paddingRight:32,border:errBorder(!!(f.product_type||"").trim()&&f.product_type!=="Otro")}}
             value={isOtro?"":(f.product_type||"")}
             onChange={e=>{s("product_type",e.target.value);setProdTypeHl(0)}}
             onFocus={()=>{setProdTypeOpen(true);setProdTypeHl(0)}}
@@ -11994,6 +11998,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
 function CreateOCModal({onCreate, onClose, showToast}){
   const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",client_agent:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
+  const [ocErr,setOcErr]=useState(""); // v10.72.9 — error inline del gate de RFC (antes toast pasajero, un hard-stop necesita quedarse fijo)
   // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
   const [clientAgents,setClientAgents]=useState([]);
   useEscClose(onClose);
@@ -12037,7 +12042,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
             const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:resolution.similar_matches});
             if(confirmed==="cancel"){setSaving(false);return}
             if(confirmed==="new"){
-              if(!f.client_rfc.trim()){showToast?.("⚠️ Para crear una razón social NUEVA el RFC es obligatorio.","error");setSaving(false);return}
+              if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);return}
               const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
               if(createErr)throw createErr;
               resolvedClientId=newId;
@@ -12045,7 +12050,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
               resolvedClientId=confirmed;
             }
           }else{
-            if(!f.client_rfc.trim()){showToast?.("⚠️ Para crear una razón social NUEVA el RFC es obligatorio.","error");setSaving(false);return}
+            if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);return}
             // v10.72.2 — confirmación via modal in-app (antes window.confirm nativo).
             const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:[],rfc:f.client_rfc.trim(),contact:f.client_email.trim()||f.client_phone.trim()});
             if(confirmed!=="new"){setSaving(false);return}
@@ -12095,7 +12100,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>RFC</label>
-          <input value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <input value={f.client_rfc} onChange={e=>{s("client_rfc",e.target.value.toUpperCase());setOcErr("")}} placeholder="XAXX010101000" maxLength={13} style={{width:"100%",padding:"10px 12px",border:"1px solid "+(ocErr?C.dn:C.bd),borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Agente (contacto del cliente)</label>
@@ -12118,7 +12123,8 @@ function CreateOCModal({onCreate, onClose, showToast}){
           <textarea value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Detalles del pedido, referencia interna, etc." rows={3} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
         </div>
       </div>
-      <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:20}}>
+      {ocErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginTop:16}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{ocErr}</div>}
+      <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:ocErr?10:20}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.t3),fontSize:13,padding:"10px 18px"}}>Cancelar</button>
         <button onClick={submit} disabled={!canSubmit} style={{...bt(C.ac),fontSize:13,padding:"10px 18px",opacity:canSubmit?1:0.5,cursor:canSubmit?"pointer":"not-allowed"}}>{saving?"Creando...":"Crear OC"}</button>
       </div>
