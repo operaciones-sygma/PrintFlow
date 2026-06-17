@@ -40,6 +40,11 @@ const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","I
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.2 — /impeccable harden (P0 del critique): la confirmación de "crear cliente NUEVO" deja de ser
+// window.confirm nativo y usa el modal in-app ClientConfirmModal (extendido al caso sin-similares:
+// muestra nombre/RFC/contacto + aviso de duplicado), en OrderForm y en creación de OC. El modal de
+// "Nuevo agente" reemplaza sus alert() por error inline. (Los alert() de folio inválido son código
+// muerto: canEditProductionNumber=false.)
 // v10.72.1 — fixes del scan: (HIGH) "Replicar de orden anterior" no copiaba la distribución porque el
 // SELECT del modal no pedía la columna → agregada. (LOW) toggle del checkbox simplificado (desmarcar
 // limpia la lista) + gate con Array.isArray; distribution ahora se trackea en ediciones (notif) y se
@@ -1805,21 +1810,36 @@ function ClientInput({value,onChange,onSelect,clients}) {
 }
 
 // 🆕 v10.13.0 — Modal de confirmación de cliente similar (typeahead)
-function ClientConfirmModal({open,typed,matches,onResolve}) {
+// v10.72.2 — un solo modal in-app para dos casos: (a) hay clientes similares ("¿quisiste decir?"),
+// (b) sin similares -> confirmar NUEVA razón social mostrando nombre/RFC/contacto + aviso de duplicado.
+// Reemplaza el window.confirm nativo en el momento de más riesgo (crear cliente en el ERP compartido).
+function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
   if(!open)return null;
+  const hasMatches=Array.isArray(matches)&&matches.length>0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>onResolve("cancel")}>
-    <div role="dialog" aria-modal="true" aria-label="Confirmar cliente similar" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
-      <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
-      <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
-      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-        {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
-          <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
-        </button>)}
-      </div>
-      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
+    <div role="dialog" aria-modal="true" aria-label={hasMatches?"Confirmar cliente similar":"Confirmar cliente nuevo"} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
+      {hasMatches?<>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
+        <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+          {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
+            <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
+          </button>)}
+        </div>
+      </>:<>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx,marginBottom:6}}><UserPlusIcon size={18} weight="bold"/>Crear cliente nuevo</div>
+        <div style={{fontSize:12.5,color:C.t2,lineHeight:1.5,marginBottom:14}}><strong style={{color:C.tx}}>"{typed}"</strong> no está registrado. Se creará como una <strong style={{color:C.ac}}>NUEVA razón social</strong> en CobranzaFlow.</div>
+        <div style={{background:C.sf,borderRadius:12,padding:"12px 14px",marginBottom:14,display:"flex",flexDirection:"column",gap:9}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600,flexShrink:0}}>Razón social</span><span style={{fontWeight:700,color:C.tx,textAlign:"right"}}>{typed}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600,flexShrink:0}}>RFC</span><span style={{fontWeight:700,color:rfc?C.tx:C.ph,textAlign:"right"}}>{rfc||"sin RFC"}</span></div>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600,flexShrink:0}}>Contacto</span><span style={{fontWeight:700,color:contact?C.tx:C.ph,textAlign:"right"}}>{contact||"sin contacto"}</span></div>
+        </div>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span>Verifica que no sea un <strong>duplicado</strong> escrito de otra forma (acentos, abreviaturas, S.A. de C.V.). Si ya existe, cancela y búscalo por su nombre registrado.</span></div>
+      </>}
+      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={()=>onResolve("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
-        <button onClick={()=>onResolve("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>Crear "{typed}" como nuevo cliente</button>
+        <button onClick={()=>onResolve("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>{hasMatches?`Crear "${typed}" como nuevo`:"Sí, crear cliente nuevo"}</button>
       </div>
     </div>
   </div>;
@@ -7251,6 +7271,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [clientAgents,setClientAgents]=useState([]);
   const [newAgentOpen,setNewAgentOpen]=useState(false);
   const [newAgent,setNewAgent]=useState({name:"",phone:"",email:""});
+  const [newAgentErr,setNewAgentErr]=useState(""); // v10.72.2 — error inline del modal de agente (antes alert())
   useEffect(()=>{
     if(!f.client_id){setClientAgents([]);return}
     let alive=true;
@@ -7386,10 +7407,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
               clean.client_id=confirmed;
             }
           }else{
-            // v10.59.0 — confirmación CONSCIENTE de razón social nueva (Marcelo): aunque no
-            // haya similares, avisar que se crea un cliente nuevo (evita duplicados como UVEG).
-            const okNew=window.confirm("⚠️ \""+clean.client.trim()+"\" no está registrado.\n\n¿Crear como NUEVA razón social?\n\nRFC: "+(clean.client_rfc?.trim()||"—")+"\nContacto: "+(clean.client_email?.trim()||clean.client_phone?.trim()||"—")+"\n\nVerifica que no sea un duplicado con otro nombre.");
-            if(!okNew){setSaving(false);return}
+            // v10.72.2 — confirmación CONSCIENTE de razón social nueva via modal in-app (antes
+            // window.confirm nativo): muestra nombre/RFC/contacto + aviso de duplicado (evita el "OK"
+            // reflejo a duplicados como UVEG en el momento de más riesgo del flujo).
+            const confirmed=await window.__showClientConfirmModal?.({typed:clean.client.trim(),matches:[],rfc:clean.client_rfc?.trim(),contact:clean.client_email?.trim()||clean.client_phone?.trim()});
+            if(confirmed!=="new"){setSaving(false);return}
             const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
             if(createErr)throw createErr;
             clean.client_id=newId;
@@ -7436,18 +7458,20 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
 
   return <div style={{background:C.sf,borderRadius:16,overflow:"hidden",maxWidth:760,margin:"0 auto"}}>
     {/* v10.59.0 — Modal: registrar nuevo AGENTE (contacto del cliente) con su contacto */}
-    {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={()=>setNewAgentOpen(false)}>
+    {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={()=>{setNewAgentErr("");setNewAgentOpen(false)}}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:22,maxWidth:380,width:"100%",boxShadow:C.sh3}}>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx}}><UserPlusIcon size={18} weight="bold"/>Nuevo agente</div>
         <div style={{fontSize:11,color:C.t2,margin:"4px 0 14px"}}>Contacto de <b style={{color:C.tx}}>{f.client||"este cliente"}</b>. Captura su celular o correo (al menos uno).</div>
         <input style={{...inp,marginBottom:8}} value={newAgent.name} onChange={e=>setNewAgent(a=>({...a,name:e.target.value}))} placeholder="Nombre del agente"/>
         <input style={{...inp,marginBottom:8}} value={newAgent.phone} onChange={e=>setNewAgent(a=>({...a,phone:e.target.value}))} placeholder="Celular / WhatsApp"/>
-        <input style={{...inp,marginBottom:14}} value={newAgent.email} onChange={e=>setNewAgent(a=>({...a,email:e.target.value}))} placeholder="Correo"/>
+        <input style={{...inp,marginBottom:newAgentErr?8:14}} value={newAgent.email} onChange={e=>setNewAgent(a=>({...a,email:e.target.value}))} placeholder="Correo"/>
+        {newAgentErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"0e",border:"1px solid "+C.dn+"30",borderRadius:8,padding:"7px 10px",marginBottom:12,lineHeight:1.4}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{newAgentErr}</div>}
         <div style={{display:"flex",gap:8}}>
-          <button type="button" onClick={()=>setNewAgentOpen(false)} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
+          <button type="button" onClick={()=>{setNewAgentErr("");setNewAgentOpen(false)}} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
           <button type="button" onClick={async()=>{
-            if(!newAgent.name.trim()){alert("Nombre del agente requerido");return}
-            if(!newAgent.phone.trim()&&!newAgent.email.trim()){alert("Captura al menos un contacto (celular o correo)");return}
+            if(!newAgent.name.trim()){setNewAgentErr("Nombre del agente requerido");return}
+            if(!newAgent.phone.trim()&&!newAgent.email.trim()){setNewAgentErr("Captura al menos un contacto (celular o correo)");return}
+            setNewAgentErr("");
             try{
               await supabase.rpc("add_client_agent",{p_client_id:f.client_id,p_name:newAgent.name.trim(),p_phone:newAgent.phone.trim()||null,p_email:newAgent.email.trim()||null,p_actor:role||"sistema"});
               const {data}=await supabase.rpc("list_client_agents",{p_client_id:f.client_id});
@@ -7455,7 +7479,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
               s("client_agent",newAgent.name.trim());
               setNewAgentOpen(false);
               showToast?.("✅ Agente registrado");
-            }catch(e){alert("No se pudo registrar: "+(e?.message||"error"))}
+            }catch(e){setNewAgentErr("No se pudo registrar: "+(e?.message||"error"))}
           }} style={{flex:1,padding:11,borderRadius:10,border:"none",background:C.fac,color:"#fff",fontWeight:700,cursor:"pointer"}}>Registrar</button>
         </div>
       </div>
@@ -11993,8 +12017,9 @@ function CreateOCModal({onCreate, onClose}){
             }
           }else{
             if(!f.client_rfc.trim()){alert("⚠️ Para crear una razón social NUEVA el RFC es obligatorio.");setSaving(false);return}
-            const okNew=window.confirm("⚠️ \""+nm+"\" no está registrado.\n\n¿Crear como NUEVA razón social?\n\nRFC: "+(f.client_rfc.trim()||"—")+"\nContacto: "+(f.client_email.trim()||f.client_phone.trim()||"—")+"\n\nVerifica que no sea un duplicado con otro nombre.");
-            if(!okNew){setSaving(false);return}
+            // v10.72.2 — confirmación via modal in-app (antes window.confirm nativo).
+            const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:[],rfc:f.client_rfc.trim(),contact:f.client_email.trim()||f.client_phone.trim()});
+            if(confirmed!=="new"){setSaving(false);return}
             const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
             if(createErr)throw createErr;
             resolvedClientId=newId;
