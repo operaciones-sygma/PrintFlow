@@ -40,6 +40,9 @@ const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","I
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.71.4 — Folio es casilla de pleno derecho en la rejilla de acabados impresa (paridad con Blocks:
+// casilla + detalle inline "(del 1000 al 2000)"); se quita la fila suelta del fondo. Antes Folio no
+// figuraba como opción en la rejilla impresa, solo aparecía como fila al fondo si estaba seleccionado.
 // v10.71.3 — fix: clasificación custom-vs-estándar de acabados ahora canonicaliza con finBase
 // en los 3 sitios del OrderForm (seed/replicate/edit) + filtro "Otros" de impresión startsWith-aware,
 // para que un acabado con sub-detalle ("Plastificado Brillante") NO se duplique en "Otro"/"Otros".
@@ -2128,9 +2131,8 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
         <td style="width:25%"><span class="check${ac("barniz brillante")?" on":""}">✓</span> Barniz Brillante<br/><span class="check${ac("barniz mate")?" on":""}">✓</span> Barniz Mate<br/><span class="check${ac("barniz a registro")?" on":""}">✓</span> Barniz a Registro</td>
         <td style="width:25%"><span class="check${ac("doblez")?" on":""}">✓</span> Doblez<br/><span class="check${ac("intercalado")?" on":""}">✓</span> Intercalado<br/><span class="check${ac("grapado")?" on":""}">✓</span> Grapado</td>
         <td style="width:25%"><span class="check${ac("perforado")?" on":""}">✓</span> Perforado<br/><span class="check${ac("plastificado")||ac("laminado")?" on":""}">✓</span> Plastificado${(ac("plastificado")&&acDetail("plastificado"))?" <strong>("+esc(acDetail("plastificado"))+")</strong>":""}<br/><span class="check${ac("suaje")||ac("suajado")?" on":""}">✓</span> Suajado<br/><span class="check${ac("botado")?" on":""}">✓</span> Botado</td>
-        <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")||ac("block")?" on":""}">✓</span> Blocks${(ac("blocks")&&acDetail("blocks"))?" <strong>("+esc(acDetail("blocks"))+" pzas)</strong>":""}<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
+        <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")||ac("block")?" on":""}">✓</span> Blocks${(ac("blocks")&&acDetail("blocks"))?" <strong>("+esc(acDetail("blocks"))+" pzas)</strong>":""}<br/><span class="check${ac("folio")?" on":""}">✓</span> Folio${(ac("folio")&&acDetail("folio"))?" <strong>(del "+esc(acDetail("folio"))+")</strong>":""}<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
       </tr>
-      ${ac("folio")?`<tr><td colspan="4" class="otros-row"><strong>Folio:</strong> ${acDetail("folio")?"del "+esc(acDetail("folio")):"(rango sin especificar)"}</td></tr>`:""}
       ${customAcabados.length>0?`<tr><td colspan="4" class="otros-row"><strong>Otros:</strong> ${customAcabados.map(esc).join(", ")}</td></tr>`:""}
       </table>`;
       }
