@@ -40,6 +40,9 @@ const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","I
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.71.3 — fix: clasificación custom-vs-estándar de acabados ahora canonicaliza con finBase
+// en los 3 sitios del OrderForm (seed/replicate/edit) + filtro "Otros" de impresión startsWith-aware,
+// para que un acabado con sub-detalle ("Plastificado Brillante") NO se duplique en "Otro"/"Otros".
 const SPECIAL_FIN=["Plastificado","Blocks","Folio"];
 const finBase=x=>{const m=SPECIAL_FIN.find(b=>x.toLowerCase()===b.toLowerCase()||x.toLowerCase().startsWith(b.toLowerCase()+" "));return m||x};
 const finList=s=>String(s||"").split(",").map(x=>x.trim()).filter(Boolean);
@@ -2118,7 +2121,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       // (laminado→Plastificado, suaje→Suajado, block→Blocks, barniz maquina sin acento),
       // si no, ej. "LAMINADO" salía marcado en Plastificado Y duplicado en Otros.
       const ACABADO_ALIASES=["barniz brillante","barniz mate","barniz a registro","doblez","intercalado","grapado","perforado","plastificado","laminado","suaje","suajado","botado","forma suelta","blocks","block","folio","engomado superior","engomado lateral"];
-      const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.some(f=>f===a.toLowerCase()));
+      const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.some(f=>f===a.toLowerCase()||a.toLowerCase().startsWith(f+" ")));
       if(acabados.length>0||hasSpecs){
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Procesos Especiales y Acabados</td></tr>
       <tr>
@@ -7146,7 +7149,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.59.5 — texto CRUDO del acabado "Otro": el input se controla con este estado (sin .trim()
   // por tecla). Antes el value se derivaba de f.finishes con trim → cada espacio se borraba al
   // instante y Lupita no podía escribir "Hot stamping". f.finishes guarda la versión normalizada.
-  const [customFinish,setCustomFinish]=useState(()=>(editOrder?.finishes||"").split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro").join(", "));
+  const [customFinish,setCustomFinish]=useState(()=>(editOrder?.finishes||"").split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(finBase(x))&&x!=="Otro").join(", "));
   // v10.45.0 — Replicar orden anterior (modal con thumbnail + detalles)
   const [replicateOpen,setReplicateOpen]=useState(false);
   const applyReplicate=(src)=>{
@@ -7178,7 +7181,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.59.6 — si la fuente trae acabados, sincronizar el panel "Otro" (customFinish/showOtroFinish)
     // con el acabado custom replicado; si no, no tocar el panel actual.
     if(src.finishes!==null&&src.finishes!==undefined&&src.finishes!==""){
-      const customFins=String(src.finishes).split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(x)&&x!=="Otro");
+      const customFins=String(src.finishes).split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(finBase(x))&&x!=="Otro");
       setCustomFinish(customFins.join(", "));
       setShowOtroFinish(customFins.length>0);
     }
@@ -7239,7 +7242,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   },[orders]);
   const [advMode,setAdvMode]=useState(false);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
-  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(x)&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes) */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
+  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes) */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
   // v10.64.0 — corte híbrido: ya no se pre-llena el folio en el form. Lo asigna el RPC atómico
   // al guardar (serie 100% consecutiva). El form solo muestra "Asignado automáticamente".
   // v10.64.0 — corte híbrido: el folio de producción ya NO es editable por nadie. Es 100%
@@ -7303,7 +7306,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       // interno sigue en clean.agent (Manuel/Genaro) — no se toca.
       if(clean.client?.trim())clean.client_company=clean.client.trim();
       if(clean.client_agent)clean.client_agent=clean.client_agent.trim()||null;
-      if(clean.finishes)clean.finishes=clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").join(", ")||null;
+      // v10.71.3 — dedup por base (Plastificado/Blocks/Folio): evita "Plastificado Brillante, Plastificado Brillante"
+      // si alguna ruta reintrodujo el acabado; conserva la variante con más detalle.
+      if(clean.finishes){const _byBase={},_order=[];clean.finishes.split(",").map(s=>s.trim()).filter(x=>x&&x!=="Otro").forEach(x=>{const b=finBase(x);if(!(b in _byBase)){_byBase[b]=x;_order.push(b)}else if(x.length>_byBase[b].length)_byBase[b]=x});clean.finishes=_order.map(b=>_byBase[b]).join(", ")||null;}
       // 🆕 v10.13.0 — Resolver client_id contra cobranza.clients antes de guardar (solo en creación)
       if(!editOrder?.id&&!clean.client_id&&clean.client?.trim()){
         try{
