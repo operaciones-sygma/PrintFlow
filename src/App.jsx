@@ -40,6 +40,8 @@ const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","I
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.71.7/.8 — impresión: los detalles de Plastificado/Blocks/Folio salen como chip/etiqueta gris
+// (.fin-tag) en vez de "(texto)" en negritas; .8 le sube padding (2px 7px) y separación (6px) al chip.
 // v10.71.6 — BLOCKER fix (scan de bugs): los sub-inputs libres de Blocks/Folio no aceptaban espacios
 // (value={finGetDetail} trimea por tecla). Ahora cada uno tiene su buffer crudo (blocksRaw/folioRaw),
 // re-sincronizado al editar/replicar y reseteado al togglear el chip. + "Otro" rastrea su texto previo
@@ -1969,7 +1971,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .field-val{font-size:12px;font-weight:600;min-height:16px;margin-top:1px}
 .check{display:inline-block;width:11px;height:11px;border:1.5px solid #aaa;margin-right:3px;vertical-align:middle;text-align:center;font-size:9px;line-height:11px;color:transparent}
 .check.on{color:#000;font-weight:bold;border-color:#000}
-.fin-tag{display:inline-block;background:#ededed;border:0.75px solid #b0b0b0;border-radius:3px;padding:0.5px 5px;margin-left:4px;font-size:7.5px;font-weight:700;color:#1a1a1a;letter-spacing:.4px;vertical-align:1px;text-transform:uppercase}
+.fin-tag{display:inline-block;background:#ededed;border:0.75px solid #b0b0b0;border-radius:4px;padding:2px 7px;margin-left:6px;font-size:7.5px;font-weight:700;color:#1a1a1a;letter-spacing:.4px;vertical-align:1px;text-transform:uppercase;line-height:1.3}
 .sig-row{display:flex;gap:16px;margin-top:28px;page-break-inside:avoid}
 .sig-box{flex:1;border-top:1.5px solid #000;padding-top:5px;text-align:center;font-size:7px;color:#999;text-transform:uppercase;letter-spacing:.5px}
 .imp-table td{height:20px}
