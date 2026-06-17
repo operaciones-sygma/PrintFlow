@@ -40,6 +40,10 @@ const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","I
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.1 — fixes del scan: (HIGH) "Replicar de orden anterior" no copiaba la distribución porque el
+// SELECT del modal no pedía la columna → agregada. (LOW) toggle del checkbox simplificado (desmarcar
+// limpia la lista) + gate con Array.isArray; distribution ahora se trackea en ediciones (notif) y se
+// muestra en el modal de Detalle.
 // v10.72.0 — Distribución: nueva columna jsonb `distribution` en orders + checkbox MUY visible en el
 // OrderForm (normal y maquila) que despliega una lista de lugares/direcciones; se imprime como sección
 // "🚚 Distribución" en ambas versiones. Toggle Sencillo/Avanzado rediseñado a control segmentado visible.
@@ -235,7 +239,7 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 // v10.19.0 — Helpers para notificaciones detalladas de edit
 // ============================================================
 // Campos que disparan notificación cuando cambian (con su label legible)
-const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente (contacto)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta"};
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente (contacto)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta",distribution:"Distribución"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
 // v10.58.43 #12: comparar por CONTENIDO — los arrays (pantones) se comparaban por
@@ -266,7 +270,7 @@ function diffOrderFields(before,after){
 // Formatea valores para mostrar en mensaje de notif (Telegram)
 function fmtEditValue(field,v){
   // v10.25.0 — array fields (pantones)
-  if(field==="pantone_front"||field==="pantone_back"){
+  if(field==="pantone_front"||field==="pantone_back"||field==="distribution"){
     if(!Array.isArray(v)||v.length===0)return "—";
     return v.join(", ");
   }
@@ -3270,7 +3274,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
     let alive=true;
     (async()=>{
       try{
-        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, created_at, invoice_folio").order("created_at",{ascending:false}).limit(100);
+        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, distribution, created_at, invoice_folio").order("created_at",{ascending:false}).limit(100);
         if(clientId)q=q.eq("client_id",clientId);
         else if(clientName?.trim()){
           // v10.45.1 FIX: escapar comodines % _ \ en LIKE para evitar matches inesperados con nombres tipo "ABC%Corp"
@@ -7489,13 +7493,13 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {/* v10.72.0 — Distribución: checkbox MUY visible + lista de lugares. Aplica a órdenes normales y de maquila. */}
     {!specsOnly&&<div style={{margin:"12px 20px",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+(f.distribution!=null?C.ios:C.bd),background:f.distribution!=null?C.ios+"0c":C.sf}}>
       <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
-        <input type="checkbox" checked={f.distribution!=null} onChange={e=>s("distribution",e.target.checked?(Array.isArray(f.distribution)&&f.distribution.length?f.distribution:[""]):null)} style={{width:20,height:20,marginTop:1,accentColor:C.ios,cursor:"pointer",flexShrink:0}}/>
+        <input type="checkbox" checked={Array.isArray(f.distribution)} onChange={e=>s("distribution",e.target.checked?[""]:null)} style={{width:20,height:20,marginTop:1,accentColor:C.ios,cursor:"pointer",flexShrink:0}}/>
         <div style={{flex:1}}>
           <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13.5,fontWeight:800,color:f.distribution!=null?C.ios:C.tx}}><TruckIcon size={16} weight="bold"/>Distribución a varios lugares</div>
           <div style={{fontSize:10,color:C.t3,marginTop:1}}>Marca si esta orden se reparte en varias direcciones (ej. Premium Restaurant Brands, Corona)</div>
         </div>
       </label>
-      {f.distribution!=null&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+      {Array.isArray(f.distribution)&&<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
         {f.distribution.map((d,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
           <span style={{fontSize:11,fontWeight:800,color:C.ios,width:18,textAlign:"right",flexShrink:0}}>{i+1}.</span>
           <input style={{...inp,flex:1}} value={d} onChange={e=>{const arr=[...f.distribution];arr[i]=e.target.value;s("distribution",arr)}} placeholder="Lugar y dirección — ej. Sucursal Centro, Av. Juárez 123, León"/>
@@ -11557,6 +11561,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
         <Row label="Cantidad" value={order.quantity?Number(order.quantity).toLocaleString():null}/>
         <Row label="Especificaciones" value={[order.standard_size,order.colors,order.paper_type].filter(Boolean).join(" · ")||null}/>
         <Row label="Acabados" value={order.finishes}/>
+        {Array.isArray(order.distribution)&&order.distribution.filter(Boolean).length>0&&<Row label="Distribución" value={order.distribution.filter(Boolean).join(" · ")}/>}
 
         <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",margin:"14px 0 4px"}}>Importes</div>
         <Row label="Precio (sin IVA)" value={order.price?"$"+Number(order.price).toLocaleString("es-MX",{minimumFractionDigits:2}):null}/>
