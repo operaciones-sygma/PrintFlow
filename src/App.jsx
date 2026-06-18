@@ -45,6 +45,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.20 — (a) Limpieza pool stock Cuadra: solo MANUFACTURERA DE BOTAS CUADRA maneja stock; las otras 5
+// razones a billing_mode=normal sin pool (solo datos, migración aplicada). (b) Feature "nombre interno"
+// (alias) buscable: componente ClientAliasManager (chips + captura inline admin/secretaria), chips en el
+// typeahead (ClientInput) y en el modal de confirmación de cliente. Backend en migración v3.7.7.22 (columna
+// cobranza.clients.aliases + RPCs add/remove/get_client_alias + search_clients_typeahead y
+// resolve_client_for_order ahora matchean por alias y devuelven aliases). Buscar el nombre interno encuentra
+// la razón social correcta; ayuda a secretaria a reconocerla. Se llena con el uso.
 // v10.72.19 — fixes del scan adversarial del batch v10.72.13-18 (6 revisores). (1) HIGH FileUpload: el
 // fallback se disparaba ante cualquier error incluido un rechazo HTTP del servidor (4xx/5xx) → re-transmitía
 // el archivo (50MB) en vano; ahora si hay httpStatus no hace fallback (el server ya lo rechazó). (2) MED
@@ -1878,6 +1885,51 @@ function WakeupModal({user, userLogin, items, onAck}){
   </div>;
 }
 
+// v10.72.20 / DB v3.7.7.22 — "Nombre interno" (alias): chips de los nombres con que el equipo conoce a un
+// cliente + captura inline (agregar/quitar) gateada a admin/secretaria. Ayuda a reconocer la razón social
+// correcta. Los chips se ven para todos; agregar/quitar solo admin/secretaria. Feedback inline (sin showToast).
+function ClientAliasManager({clientId, role, userLogin}){
+  const [aliases,setAliases]=useState(null); // null = cargando
+  const [val,setVal]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const canManage = role==="admin"||role==="secretaria";
+  useEffect(()=>{
+    if(!clientId){setAliases([]);return}
+    let alive=true;
+    supabase.rpc("get_client_aliases",{p_client_id:clientId})
+      .then(({data,error})=>{if(alive)setAliases(error?[]:(data||[]))})
+      .catch(()=>{if(alive)setAliases([])});
+    return()=>{alive=false};
+  },[clientId]);
+  const add=async()=>{
+    const a=val.trim(); if(!a||busy)return;
+    setBusy(true);setErr("");
+    try{ const {data,error}=await supabase.rpc("add_client_alias",{p_client_id:clientId,p_alias:a,p_actor:userLogin||role}); if(error)throw error; setAliases(data||[]); setVal(""); }
+    catch(e){ setErr(e?.message||"No se pudo agregar"); }
+    finally{setBusy(false)}
+  };
+  const remove=async(a)=>{
+    if(busy)return; setBusy(true);setErr("");
+    try{ const {data,error}=await supabase.rpc("remove_client_alias",{p_client_id:clientId,p_alias:a,p_actor:userLogin||role}); if(error)throw error; setAliases(data||[]); }
+    catch(e){ setErr(e?.message||"No se pudo quitar"); }
+    finally{setBusy(false)}
+  };
+  if(aliases===null) return null;                     // cargando
+  if(!canManage && aliases.length===0) return null;   // no-admin sin alias: nada que mostrar
+  return <div style={{margin:"6px 0 10px",padding:"8px 10px",background:C.sf,borderRadius:10,border:"0.5px solid "+C.bd}}>
+    <div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:5,display:"inline-flex",alignItems:"center",gap:4}}><TagIcon size={10} weight="bold"/>Nombre interno</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+      {aliases.map(a=><span key={a} style={{display:"inline-flex",alignItems:"center",gap:4,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"25",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:600}}>{a}{canManage&&<button onClick={()=>remove(a)} disabled={busy} aria-label={"Quitar "+a} style={{background:"none",border:"none",cursor:busy?"wait":"pointer",color:C.ac,padding:0,display:"inline-flex",opacity:busy?.5:1}}><XIcon size={10} weight="bold"/></button>}</span>)}
+      {canManage&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+        <input value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();add()}}} placeholder="+ nombre interno" disabled={busy} style={{...inp,padding:"3px 8px",fontSize:11,width:150,minHeight:0,borderRadius:8}}/>
+        {val.trim()&&<button onClick={add} disabled={busy} style={{background:C.ac,color:"#fff",border:"none",borderRadius:8,padding:"4px 9px",fontSize:10,fontWeight:700,cursor:busy?"wait":"pointer",fontFamily:"'Geist',sans-serif"}}>Agregar</button>}
+      </span>}
+    </div>
+    {err&&<div style={{fontSize:10,color:C.dn,marginTop:4}}>{err}</div>}
+  </div>;
+}
+
 // 🆕 v10.13.0 — Typeahead contra cobranza.clients (RPC search_clients_typeahead)
 function ClientInput({value,onChange,onSelect,clients}) {
   const [show,setShow]=useState(false);
@@ -1899,7 +1951,7 @@ function ClientInput({value,onChange,onSelect,clients}) {
     },250);
     return()=>debounceRef.current&&clearTimeout(debounceRef.current);
   },[value]);
-  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div></div>)}</div>}</div>;
+  return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div>{Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:10,color:C.ac,marginTop:1,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}</div>)}</div>}</div>;
 }
 
 // 🆕 v10.13.0 — Modal de confirmación de cliente similar (typeahead)
@@ -1918,6 +1970,7 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
           {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
             <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
+            {Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:10,color:C.ac,marginTop:2,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}
           </button>)}
         </div>
       </>:<>
@@ -2463,6 +2516,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?C.live:C.ctp)+"15",color:o.plate_status==="existing"?C.live:C.ctp}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
+      {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
       {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
