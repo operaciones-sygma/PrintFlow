@@ -45,6 +45,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.12 — fixes del scan exhaustivo de bugs sobre v10.72.10/11: (a) BLOCKER que YO introduje — v10.72.11
+// relajó el front en los 4 flujos de pago pero solo migré el RPC bulk_sell_from_stock; assign_invoice y
+// assign_folios_split_oc seguían exigiendo bank_reference → facturar D-/R-, folio anticipado o split de OC
+// con método bancario sin ref pasaba el front y reventaba el RPC. Migración bank_ref_optional_invoice_flows_v10_72_12
+// quita ese RAISE en ambos (paridad). (b) load_credit_ledger nunca recibió la exención anon (mismo bug que
+// v3.7.7.19): el ledger Corona salía vacío en PrintFlow → migración load_credit_ledger_anon_exempt_v3_7_7_20.
+// (c) showAdic ahora incluye la columna legacy `image` para auto-expandir la cola al editar órdenes viejas.
 // v10.72.11 — referencia bancaria OPCIONAL (recomendada) en TODOS los flujos de pago. Algunos clientes
 // no dan folio SPEI/voucher (ej. Tiendas Cuadra) y la obligatoriedad bloqueaba la venta. Era regla solo
 // de app (el CHECK de la tabla ya permite bank_reference nulo en cualquier método): se quitó de los 4
@@ -7313,7 +7320,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const formRef=useRef(null); // v10.72.3 — scroll al tope (núcleo obligatorio) si el submit falla por faltantes
   // v10.72.10 — cola "Adicional" (CTP/imágenes/archivo/notas) colapsada por defecto: el piso ve un formulario más corto.
   // Se auto-expande al editar una orden que ya trae datos en esos campos, para no esconderlos.
-  const [showAdic,setShowAdic]=useState(()=>!!(editOrder&&(editOrder.plate_status||editOrder.image_url||editOrder.image_url_2||editOrder.file_url||editOrder.notes)));
+  const [showAdic,setShowAdic]=useState(()=>!!(editOrder&&(editOrder.plate_status||editOrder.image_url||editOrder.image_url_2||editOrder.image||editOrder.file_url||editOrder.notes)));
   useEffect(()=>{
     if(!f.client_id){setClientAgents([]);return}
     let alive=true;
