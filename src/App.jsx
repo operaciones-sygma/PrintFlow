@@ -45,6 +45,14 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.13 — 6 quick wins de robustez del roadmap (barrido multi-lente). Todos S/bajo-riesgo, atacan los
+// fallos que más cuestan en el piso (wifi pobre, pantalla blanca, pérdida silenciosa de datos):
+// (1) ErrorBoundary raíz en main.jsx → un throw en render ya no deja pantalla blanca, sino "Recargar".
+// (2) try/catch en reload() → un blip de red ya no deja spinner infinito (setLoaded nunca corría); toast + UI desbloqueada.
+// (3) .limit(5000) en loadOrders y getNextFolioSuggestion → guard contra truncación silenciosa de PostgREST (1000 filas).
+// (4) loadStock vía RPC atómico load_order_to_stock → antes 2 escrituras sueltas duplicaban el saldo si la 2da fallaba.
+// (5) punto de conexión SIEMPRE visible (antes desaparecía con el sidebar colapsado).
+// (6) loadOrders pre-indexa relacionados por order_id (Map) → de O(n²) a O(n) en cada reload realtime (menos jank).
 // v10.72.12 — fixes del scan exhaustivo de bugs sobre v10.72.10/11: (a) BLOCKER que YO introduje — v10.72.11
 // relajó el front en los 4 flujos de pago pero solo migré el RPC bulk_sell_from_stock; assign_invoice y
 // assign_folios_split_oc seguían exigiendo bank_reference → facturar D-/R-, folio anticipado o split de OC
@@ -494,7 +502,10 @@ function actionDeniedToast(action, order, user, userLogin) {
 const db = {
   async loadOrders(relatedOnly=false) {
     // Always load ALL order rows (fast, lightweight)
-    const { data: orders } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+    // v10.72.13 — .limit(5000) EXPLÍCITO: sin él PostgREST trunca en 1000 filas EN SILENCIO y las órdenes
+    // viejas desaparecen de tablero/CSV/búsqueda. Mismo guard que ya se aplicó a splits (reload ~L12437).
+    // 5000 ordenado por created_at desc cubre años al volumen actual; las recientes (operables) siempre presentes.
+    const { data: orders } = await supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(5000);
     if (!orders) return [];
     if (orders.length === 0) return [];
     // Only load related data (timeline, comments, etc) for target orders
@@ -510,15 +521,20 @@ const db = {
       supabase.from("order_machine_log").select("*").in("order_id", ids).order("started_at"),
       supabase.from("order_notes").select("*").in("order_id", ids).order("created_at"),
     ]);
+    // v10.72.13 — pre-indexar cada tabla relacionada por order_id en un Map (una pasada), en vez de 5
+    // .filter() lineales POR orden en el .map de abajo (O(n²) en CADA reload realtime → jank en el hilo
+    // principal). Las queries ya vienen ordenadas, así que el Map preserva ese orden.
+    const groupBy=(rows)=>{const m=new Map();for(const r of (rows||[])){let a=m.get(r.order_id);if(!a){a=[];m.set(r.order_id,a);}a.push(r);}return m;};
+    const tlBy=groupBy(tl.data), cmBy=groupBy(cm.data), wlBy=groupBy(wl.data), mlBy=groupBy(ml.data), nlBy=groupBy(nl.data);
     return orders.map(o => {
       const hasRelated=idSet.has(o.id);
       return {
       ...o,
-      timeline: hasRelated?(tl.data || []).filter(t => t.order_id === o.id).map(t => ({ action: t.action, date: t.created_at, by: t.by_user, color: t.color, to: t.to_stage||undefined })):[],
-      comments: hasRelated?(cm.data || []).filter(c => c.order_id === o.id).map(c => ({ text: c.text, by: c.by_user, date: c.created_at })):[],
-      waste_log: hasRelated?(wl.data || []).filter(w => w.order_id === o.id).map(w => ({ qty: w.qty, pliegos: w.pliegos, note: w.note, date: w.created_at })):[],
-      machine_log: hasRelated?(ml.data || []).filter(m => m.order_id === o.id).map(m => ({ machine: m.machine_id, started: m.started_at, ended: m.ended_at, minutes: m.minutes, _id: m.id })):[],
-      notes_log: hasRelated?(nl.data || []).filter(n => n.order_id === o.id).map(n => ({ text: n.text, by: n.by_user, date: n.created_at, _id: n.id })):[],
+      timeline: hasRelated?(tlBy.get(o.id)||[]).map(t => ({ action: t.action, date: t.created_at, by: t.by_user, color: t.color, to: t.to_stage||undefined })):[],
+      comments: hasRelated?(cmBy.get(o.id)||[]).map(c => ({ text: c.text, by: c.by_user, date: c.created_at })):[],
+      waste_log: hasRelated?(wlBy.get(o.id)||[]).map(w => ({ qty: w.qty, pliegos: w.pliegos, note: w.note, date: w.created_at })):[],
+      machine_log: hasRelated?(mlBy.get(o.id)||[]).map(m => ({ machine: m.machine_id, started: m.started_at, ended: m.ended_at, minutes: m.minutes, _id: m.id })):[],
+      notes_log: hasRelated?(nlBy.get(o.id)||[]).map(n => ({ text: n.text, by: n.by_user, date: n.created_at, _id: n.id })):[],
     }});
   },
   async saveOrder(o) {
@@ -950,7 +966,7 @@ const db = {
     // 2) Buscar MAX en órdenes existentes (resiliente si contador no se ha actualizado)
     const {data, error} = await supabase.from("orders")
       .select("invoice_folio")
-      .like("invoice_folio", prefix+"%");
+      .like("invoice_folio", prefix+"%").limit(5000); // v10.72.13 — guard de truncación silenciosa (el contador de arriba es la fuente primaria)
     if(!error && data) {
       const re = new RegExp("^"+prefix+"([0-9]+)$");
       data.forEach(r=>{
@@ -12426,6 +12442,7 @@ export default function PrintFlow() {
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
   // When archive loaded: loads everything including related data for historical (full)
   const reload = useCallback(async () => {
+   try {
     const [data, pos, splitsResp, matrixGroupsResp, matrixLinesResp] = await Promise.all([
       db.loadOrders(!archiveLoadedRef.current),
       db.loadPurchaseOrders(),
@@ -12484,6 +12501,13 @@ export default function PrintFlow() {
     setOrders(withSplits);
     setPurchaseOrders(posWithMatrix);
     setLoaded(true);
+   } catch(e) {
+     // v10.72.13 — un blip de red rechazaba el Promise.all → setLoaded(true) nunca corría → SPINNER
+     // INFINITO sin mensaje. Ahora desbloqueamos la UI y avisamos; el realtime reintenta al reconectar.
+     console.error("[reload] Error:",e);
+     setLoaded(true);
+     showToast?.("⚠️ Sin conexión — no se pudieron cargar las órdenes. Revisa tu red.","error");
+   }
   }, []);
 
   // Lazy-load full related data when Archive or Analytics tab is first opened
@@ -13711,14 +13735,15 @@ export default function PrintFlow() {
     if(!Number.isFinite(qty)||qty<=0){showToast("❌ Cantidad inválida en la orden","error");return}
     setActionLoading(id);
     try{
-      // 1) Registra movimiento PRODUCED (también actualiza stock_actual denormalizado)
-      await db.recordStockMovement({client_product_id:o.client_product_id,kind:"PRODUCED",qty,order_id:id,notes:"Producción "+ (o.production_number||""),created_by:userLogin||user});
-      // 2) Update orders después del movimiento (Realtime fluye al final)
-      const {error:uErr}=await supabase.from("orders").update({stage:"stocked",stock_loaded:true}).eq("id",id);
-      if(uErr)throw new Error(uErr.message);
-      await db.addTimeline(id,"📦 Cargada a stock ("+qty+" pzas)",userLogin||user,C.emr);
-      setOrders(p=>p.map(x=>x.id===id?{...x,stage:"stocked",stock_loaded:true,timeline:[...(x.timeline||[]),{action:"📦 Cargada a stock ("+qty+" pzas)",date:new Date().toISOString(),by:userLogin||user,color:C.emr}]}:x));
-      showToast("📦 Cargada a stock — "+qty+" pzas ingresadas al inventario","success");
+      // v10.72.13 — RPC ATÓMICO (movimiento PRODUCED + stage=stocked en UNA transacción server-side).
+      // Antes eran 2 escrituras sueltas: si el 2do UPDATE fallaba por red, el movimiento PRODUCED quedaba
+      // commiteado y el reintento DUPLICABA el saldo del producto. Mismo RPC idempotente que usa la ruta
+      // Cuadra del InvoiceModal (load_order_to_stock). El timeline queda como escritura aparte no-crítica.
+      const result=await db.loadOrderToStock({order_id:id,client_product_id:o.client_product_id,user:userLogin||user});
+      const loaded=Number(result?.qty_loaded||qty)||qty;
+      await db.addTimeline(id,"📦 Cargada a stock ("+loaded+" pzas)",userLogin||user,C.emr);
+      setOrders(p=>p.map(x=>x.id===id?{...x,stage:"stocked",stock_loaded:true,timeline:[...(x.timeline||[]),{action:"📦 Cargada a stock ("+loaded+" pzas)",date:new Date().toISOString(),by:userLogin||user,color:C.emr}]}:x));
+      showToast("📦 Cargada a stock — "+loaded+" pzas ingresadas al inventario","success");
     }catch(e){
       console.error("[loadStock] Error:",e);
       showToast(humanizeStockError(e),"error");
@@ -14413,9 +14438,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 `}</style>
       {/* ═══ SIDEBAR (v10.60.0 redesign) ═══ */}
       <div style={{width:sbCollapsed?64:222,flexShrink:0,height:"100vh",position:"sticky",top:0,background:C.card,borderRight:"0.5px solid "+C.bd,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .18s ease",zIndex:50}}>
-        <div style={{display:"flex",alignItems:"center",gap:9,padding:"15px 16px",minHeight:58,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,padding:"15px 16px",minHeight:58,flexShrink:0,position:"relative"}}>
           <img src={LOGO} alt="" style={{width:30,height:30,borderRadius:8,flexShrink:0}}/>
-          {!sbCollapsed&&<><span style={{fontWeight:800,fontSize:15.5,letterSpacing:.3,whiteSpace:"nowrap"}}>PrintFlow</span><div role="img" aria-label={connected===null?"Conectando":connected?"En tiempo real":"Reconectando"} style={{width:7,height:7,borderRadius:"50%",background:connected===null?C.amb:connected?C.ok:C.dn,marginLeft:"auto",flexShrink:0}} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."}/></>}
+          {!sbCollapsed&&<span style={{fontWeight:800,fontSize:15.5,letterSpacing:.3,whiteSpace:"nowrap"}}>PrintFlow</span>}
+          {/* v10.72.13 — el punto de salud de realtime ahora SIEMPRE visible. Antes vivía dentro del guard
+              !sbCollapsed → con el sidebar colapsado (lo normal del operador heads-down) desaparecía y se
+              quedaba viendo datos viejos sin saber que el socket se cayó. Colapsado = badge sobre el logo. */}
+          <div role="img" aria-label={connected===null?"Conectando":connected?"En tiempo real":"Reconectando"} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."} style={{width:7,height:7,borderRadius:"50%",background:connected===null?C.amb:connected?C.ok:C.dn,flexShrink:0,...(sbCollapsed?{position:"absolute",top:13,left:38,boxShadow:"0 0 0 1.5px "+C.card}:{marginLeft:"auto"})}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
           {NAV_SECTIONS.map(([g,label],si)=>{const items=navs.filter(n=>n.g===g);if(!items.length)return null;return <div key={g} style={{display:"flex",flexDirection:"column",gap:2}}>{sbCollapsed?(si>0&&<div style={{height:1,background:C.bd,margin:"7px 10px 5px"}}/>):<div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 11px",margin:si===0?"2px 0 4px":"14px 0 4px"}}>{label}</div>}{items.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}</div>;})}
