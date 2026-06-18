@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.16 — medium bet del roadmap: subida del archivo de producción HONESTA. Antes el % saltaba por
+// hitos de código (10→30→subir→80→100), así que un PSD/AI de 50MB quedaba "Subiendo 30%" minutos sin saber
+// si avanzaba o murió, y el error era un alert() bloqueante. Ahora: progreso REAL por bytes vía XHR + botón
+// Cancelar (AbortController/xhr.abort) + error inline no-bloqueante. NO se comprime (es print-ready). Vía
+// principal XHR; si falla (contrato/CORS/red) hay fallback automático a supabase.storage.upload (sin romperse).
 // v10.72.15 — medium bet del roadmap (seguridad): el auto-borrado de Storage (archivos/imágenes >30 días)
 // corría en CADA tablet al primer load y calcula el cutoff con el reloj LOCAL del dispositivo. Una tablet con
 // la fecha mal puesta podía borrar archivos de producción que NO tenían 30 días — irreversible. Gateado a una
@@ -7123,25 +7128,60 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
 // ─── FILE UPLOAD ──────────────────────────────────
 function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
-  const [uploading,setUploading]=useState(false);const [progress,setProgress]=useState(0);
+  const [uploading,setUploading]=useState(false);
+  const [progress,setProgress]=useState(0);   // 0..100 = bytes reales; -1 = indeterminado (fallback)
+  const [upInfo,setUpInfo]=useState(null);     // {name, mb} del archivo en curso
+  const [upErr,setUpErr]=useState("");          // v10.72.16 — error inline (antes alert() bloqueante)
+  const xhrRef=useRef(null);
   const maxSize=50*1024*1024; // 50MB
+  // v10.72.16 — progreso HONESTO por bytes + cancelar. supabase-js sube por fetch (no expone ni progreso de
+  // subida ni abort), así que la vía principal es un XHR directo al endpoint REST de Storage. NO se comprime:
+  // es el archivo print-ready (comprimirlo con JPEG lossy arruinaría la calidad). Fallback a supabase-js si el
+  // XHR falla, para que la subida nunca se rompa por un detalle de contrato/CORS.
   const upload=async(e)=>{
-    const file=e.target.files?.[0];if(!file)return;
-    if(file.size>maxSize){alert("Archivo muy grande (máx 50MB)");return}
-    setUploading(true);setProgress(10);
+    const file=e.target.files?.[0]; e.target.value=""; if(!file)return;
+    setUpErr("");
+    if(file.size>maxSize){ setUpErr("Archivo muy grande (máx 50MB). Súbelo comprimido o por partes."); return; }
+    const parts=file.name.split("."); const ext=parts.length>1?parts.pop():"pdf";
+    const path=(orderId||"new-"+Date.now())+"/"+Date.now()+"."+ext;
+    setUploading(true); setProgress(0); setUpInfo({name:file.name,mb:(file.size/1048576).toFixed(1)});
+    const cleanup=()=>{ setUploading(false); setProgress(0); setUpInfo(null); xhrRef.current=null; };
     try{
-      const parts=file.name.split(".");const ext=parts.length>1?parts.pop():"pdf";
-      const path=(orderId||"new-"+Date.now())+"/"+Date.now()+"."+ext;
-      setProgress(30);
-      const{error}=await supabase.storage.from("order-files").upload(path,file,{upsert:true});
-      if(error)throw error;
-      setProgress(80);
-      const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);
-      setProgress(100);
-      onUploaded(urlData.publicUrl,file.name);
-    }catch(err){console.error("[FileUpload] Error al subir archivo:",err);alert("Error al subir: "+(err.message||err))}
-    finally{setUploading(false);setProgress(0);e.target.value=""}
+      // 1) Vía principal: XHR con progreso real por bytes + cancelable
+      await new Promise((resolve,reject)=>{
+        const xhr=new XMLHttpRequest(); xhrRef.current=xhr;
+        xhr.open("POST", import.meta.env.VITE_SUPABASE_URL+"/storage/v1/object/order-files/"+path, true);
+        xhr.setRequestHeader("Authorization","Bearer "+import.meta.env.VITE_SUPABASE_ANON_KEY);
+        xhr.setRequestHeader("apikey",import.meta.env.VITE_SUPABASE_ANON_KEY);
+        xhr.setRequestHeader("x-upsert","true");
+        if(file.type) xhr.setRequestHeader("Content-Type",file.type);
+        xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable) setProgress(Math.round(ev.loaded/ev.total*100)); };
+        xhr.onload=()=>{ (xhr.status>=200&&xhr.status<300)?resolve():reject(new Error("HTTP "+xhr.status)); };
+        xhr.onerror=()=>reject(new Error("network"));
+        xhr.onabort=()=>reject(new DOMException("cancelado","AbortError"));
+        xhr.send(file);
+      });
+    }catch(err){
+      xhrRef.current=null;
+      if(err?.name==="AbortError"){ cleanup(); return; } // cancelado por el usuario: silencioso
+      // 2) Fallback: método probado de supabase-js (sin progreso). Garantiza la subida aunque el XHR falle.
+      console.warn("[FileUpload] XHR falló, usando fallback supabase-js:",err);
+      setProgress(-1);
+      try{
+        const{error}=await supabase.storage.from("order-files").upload(path,file,{upsert:true});
+        if(error) throw error;
+      }catch(err2){
+        console.error("[FileUpload] Error al subir archivo:",err2);
+        cleanup(); setUpErr((err2?.message||"Error al subir el archivo")+". Revisa tu conexión y reintenta.");
+        return;
+      }
+    }
+    // éxito (XHR o fallback)
+    try{ const{data}=supabase.storage.from("order-files").getPublicUrl(path); onUploaded(data.publicUrl,file.name); }
+    catch{ setUpErr("El archivo subió pero no se pudo obtener el enlace. Reintenta."); }
+    cleanup();
   };
+  const cancelUpload=()=>{ try{ xhrRef.current?.abort(); }catch{} };
   const remove=async()=>{
     if(!fileUrl)return;
     try{const path=fileUrl.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}
@@ -7158,11 +7198,23 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
       </div>
       {canUpload&&<button onClick={remove} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><XIcon size={11} weight="bold"/>Quitar</button>}
     </div>
-    :canUpload?<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:uploading?"wait":"pointer",color:uploading?C.ios:C.t2,background:uploading?C.ios+"08":C.bg,position:"relative",overflow:"hidden"}}>
-      {uploading?<><span style={{fontWeight:600,display:"inline-flex",alignItems:"center",gap:4}}><HourglassIcon size={12} weight="bold"/>Subiendo... {progress}%</span><div style={{position:"absolute",bottom:0,left:0,height:3,background:C.ios,borderRadius:2,width:progress+"%",transition:"width .3s"}}/></>:<><UploadSimpleIcon size={14} weight="bold"/>Subir archivo (PDF, AI, PSD — máx 50MB)</>}
-      <input type="file" accept=".pdf,.ai,.psd,.eps,.indd,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar" style={{display:"none"}} onChange={upload} disabled={uploading}/>
+    :uploading?<div style={{border:"1px solid "+C.ios+"40",background:C.ios+"08",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <HourglassIcon size={14} weight="bold" color={C.ios} style={{flexShrink:0}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{upInfo?.name||"Subiendo…"}</div>
+          <div style={{fontSize:10,color:C.t2}}>{progress<0?"Subiendo "+(upInfo?.mb||"")+" MB… (finalizando)":"Subiendo "+(upInfo?.mb||"")+" MB · "+progress+"%"}</div>
+        </div>
+        {progress>=0&&<button type="button" onClick={cancelUpload} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>Cancelar</button>}
+      </div>
+      <div style={{height:5,background:C.bd,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:(progress<0?100:progress)+"%",background:C.ios,borderRadius:3,transition:"width .2s ease",opacity:progress<0?0.6:1}}/></div>
+    </div>
+    :canUpload?<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,background:C.bg}}>
+      <UploadSimpleIcon size={14} weight="bold"/>Subir archivo (PDF, AI, PSD — máx 50MB)
+      <input type="file" accept=".pdf,.ai,.psd,.eps,.indd,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar" style={{display:"none"}} onChange={upload}/>
     </label>
     :<div style={{fontSize:11,color:C.t3,padding:"8px 0"}}>Sin archivo adjunto</div>}
+    {upErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:8,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:8,padding:"7px 10px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{upErr}</div>}
   </div>;
 }
 
