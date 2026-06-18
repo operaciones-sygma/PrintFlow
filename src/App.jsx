@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.18 — medium bet del roadmap: touch targets más grandes para tablets del piso. Botones pequeños
+// de ~27px provocan toques fallidos (reintentar con wifi pobre cuesta). (a) el helper bs ahora tiene
+// minHeight:40 (solo ALTO, sin tocar el ancho → no rompe las filas densas de íconos de la card; además
+// alinea con los bt de la misma fila). (b) los 5 X de cierre de modales + el X del header de detalle pasan
+// a ~40px cuadrados. No se tocó bt (los primarios ya son ~36px y anchos, fáciles de tocar).
 // v10.72.17 — medium bet del roadmap: recuperación de realtime. Antes el .subscribe solo hacía
 // setConnected(status==="SUBSCRIBED"); si el socket se caía (CHANNEL_ERROR/TIMED_OUT/CLOSED) el dot se
 // ponía rojo pero NO recargaba ni al reconectar → alguien podía avanzar/imprimir una orden ya cambiada en
@@ -1385,7 +1390,7 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
 });
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
-const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10});
+const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10,minHeight:40}); // v10.72.18 — touch target ~40px de ALTO (solo minHeight: no cambia el ancho → no rompe las filas densas de íconos; además alinea con los bt de la misma fila)
 // v10.61.5 — input de búsqueda con icono Phosphor (lupa) a la izquierda en vez de
 // emoji en el placeholder. wrapStyle controla el layout del contenedor (flex/width).
 function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
@@ -2445,7 +2450,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
             {o.has_post_invoice_edits&&<span style={{background:C.amb+"15",color:C.amb,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada post-factura</span>}
           </div>
         </div>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:4,display:"inline-flex",alignItems:"center"}}><XIcon size={20} weight="bold"/></button>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
       </div>
       {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt="" onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:"#f5f5f7",cursor:"pointer"}}/>)}</div>})()}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?C.live:C.ctp)+"15",color:o.plate_status==="existing"?C.live:C.ctp}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
@@ -2688,7 +2693,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><PackageIcon size={18} weight="bold"/>Inventario Cuadra</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>Productos en stock · {products.length} SKUs</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center"}}>
         {[{id:"products",ic:PackageIcon,l:"Productos"},{id:"movements",ic:ListBulletsIcon,l:"Movimientos"},{id:"history",ic:BooksIcon,l:"Historial"}].map(t=>
@@ -3122,7 +3127,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
           <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ShoppingCartIcon size={18} weight="bold"/>Carrito de venta — Stock Cuadra</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>Agrega productos, captura el total de la venta y registra los pagos en un solo paso</div>
         </div>
-        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
+        <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",flex:1,minHeight:0,overflow:"hidden"}}>
@@ -3420,7 +3425,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
           <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><ArrowsClockwiseIcon size={18} weight="bold"/>Replicar de orden anterior</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clientName||"—"} · {orders.length} órdenes históricas</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
       </div>
       <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd}}>
         <SearchInput style={{...inp,fontSize:12,padding:"7px 12px"}} placeholder="Buscar por P-XXXX, producto, papel o folio fiscal..." value={search} onChange={e=>setSearch(e.target.value)}/>
@@ -3546,7 +3551,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
           {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt(C.emr),padding:"7px 12px",fontSize:12}}><DiamondIcon size={13} weight="fill"/>+ Nueva OC a Crédito</button>}
-          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={15} weight="bold"/></button>
+          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
         </div>
       </div>
 
@@ -11720,7 +11725,7 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
           <h3 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0,color:C.ac,display:"flex",alignItems:"center",gap:6}}><ClipboardTextIcon size={18} weight="bold"/>{order.production_number}</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{order.order_type==="maquila"?<><TruckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Maquila completa</>:<><FactoryIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Producción interna</>}</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"6px 10px",border:"0.5px solid "+C.bd}}><XIcon size={14} weight="bold"/></button>
+        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={14} weight="bold"/></button>
       </div>
       <div style={{padding:"14px 22px",overflowY:"auto",flex:1}}>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
