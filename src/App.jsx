@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.21 — fixes del scan de la feature alias (overall minor-issues, sin blockers): (a) el aviso
+// "producto compartido con pool" en ProductFormModal ya no aparece cuando el pool quedó con 1 solo cliente
+// (post-limpieza Cuadra decía "0 clientes más usan este stock"); (b) ClientAliasManager avisa "ya existe" al
+// agregar un alias duplicado (antes limpiaba el input en silencio). DB: migración v3.7.7.23 alinea
+// resolve_client_for_order con search_clients_typeahead (ambas filtran merged_into IS NULL). El wildcard de
+// LIKE sin escapar es pre-existente (no regresión), se deja anotado.
 // v10.72.20 — (a) Limpieza pool stock Cuadra: solo MANUFACTURERA DE BOTAS CUADRA maneja stock; las otras 5
 // razones a billing_mode=normal sin pool (solo datos, migración aplicada). (b) Feature "nombre interno"
 // (alias) buscable: componente ClientAliasManager (chips + captura inline admin/secretaria), chips en el
@@ -1905,7 +1911,7 @@ function ClientAliasManager({clientId, role, userLogin}){
   const add=async()=>{
     const a=val.trim(); if(!a||busy)return;
     setBusy(true);setErr("");
-    try{ const {data,error}=await supabase.rpc("add_client_alias",{p_client_id:clientId,p_alias:a,p_actor:userLogin||role}); if(error)throw error; setAliases(data||[]); setVal(""); }
+    try{ const prevLen=(aliases||[]).length; const {data,error}=await supabase.rpc("add_client_alias",{p_client_id:clientId,p_alias:a,p_actor:userLogin||role}); if(error)throw error; setAliases(data||[]); if((data||[]).length===prevLen){setErr("Ese nombre interno ya existe")}else{setVal("")} }
     catch(e){ setErr(e?.message||"No se pudo agregar"); }
     finally{setBusy(false)}
   };
@@ -2935,6 +2941,7 @@ function ProductFormModal({clients, userLogin, onSave, onClose}) {
         {/* v10.48.0 — Aviso si el cliente seleccionado comparte stock con otros del mismo pool */}
         {(()=>{const sel=stockClients.find(c=>c.id===clientId);if(!sel?.stock_pool_id)return null;
           const others=stockClients.filter(c=>c.stock_pool_id===sel.stock_pool_id&&c.id!==sel.id);
+          if(others.length===0)return null; // v10.72.21 — pool con 1 solo cliente (post-limpieza Cuadra) ya no es "compartido"; evita el aviso "0 clientes más"
           return <div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:10,color:C.emr,marginTop:4,padding:"4px 8px",background:C.emr+"08",borderRadius:6,lineHeight:1.4}}><PackageIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Producto compartido con pool <b>{sel.pool_name}</b> · {others.length} clientes más usan este stock</span></div>;
         })()}
       </div>
