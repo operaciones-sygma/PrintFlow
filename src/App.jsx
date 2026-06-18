@@ -45,6 +45,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.15 — medium bet del roadmap (seguridad): el auto-borrado de Storage (archivos/imágenes >30 días)
+// corría en CADA tablet al primer load y calcula el cutoff con el reloj LOCAL del dispositivo. Una tablet con
+// la fecha mal puesta podía borrar archivos de producción que NO tenían 30 días — irreversible. Gateado a una
+// sesión admin + lock diario por equipo (localStorage). El borrado en sí no cambió; solo QUIÉN/CUÁNDO lo dispara.
 // v10.72.14 — medium bet del roadmap: botones de flujo por etapa DENTRO del DetailModal. Es la superficie
 // más tocada del piso: antes el operador abría la orden, decidía avanzarla, y tenía que CERRAR el modal +
 // re-buscar la card para pulsar el botón de etapa (round-trip por orden, peor con wifi). Se extrajo el bloque
@@ -12774,7 +12778,16 @@ export default function PrintFlow() {
 
   // Auto-cleanup: delete files AND images older than 30 days from Supabase Storage (v10.16.0)
   useEffect(() => {
-    if (!loaded || !user) return;
+    // v10.72.15 — GATE a admin + lock diario. Antes corría en CADA tablet al primer load y el cutoff usa el
+    // reloj LOCAL del dispositivo (Date.now): una tablet con la fecha mal puesta (común en el piso) podía borrar
+    // archivos de producción que NO tenían 30 días — irreversible y disparable por cualquiera. Ahora solo lo
+    // dispara una sesión admin, a lo más una vez al día por equipo.
+    if (!loaded || user !== "admin") return;
+    try {
+      const _today = new Date().toISOString().slice(0,10);
+      if (localStorage.getItem("pf-storage-cleanup-day") === _today) return; // ya corrió hoy en este equipo
+      localStorage.setItem("pf-storage-cleanup-day", _today);
+    } catch {}
     const cleanup = async () => {
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
       // v10.28.2 — filtrar por delivered_at / cancelled_at (NO created_at). Antes una orden
