@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.17 — medium bet del roadmap: recuperación de realtime. Antes el .subscribe solo hacía
+// setConnected(status==="SUBSCRIBED"); si el socket se caía (CHANNEL_ERROR/TIMED_OUT/CLOSED) el dot se
+// ponía rojo pero NO recargaba ni al reconectar → alguien podía avanzar/imprimir una orden ya cambiada en
+// otra estación. Ahora: (a) al reconectar se recarga una vez para alcanzar los cambios perdidos; (b) polling
+// de respaldo cada 20s mientras connected===false (gentle, se apaga al volver). El cliente de Supabase ya
+// reintenta el socket solo, así que NO se hace resubscribe manual (evita tormentar al servidor).
 // v10.72.16 — medium bet del roadmap: subida del archivo de producción HONESTA. Antes el % saltaba por
 // hitos de código (10→30→subir→80→100), así que un PSD/AI de 50MB quedaba "Subiendo 30%" minutos sin saber
 // si avanzaba o murió, y el error era un alert() bloqueante. Ahora: progreso REAL por bytes vía XHR + botón
@@ -12732,6 +12738,7 @@ export default function PrintFlow() {
   // Realtime subscription — reload when any client makes changes
   // Use ref to avoid recreating channel when reload changes (archiveLoaded toggle)
   const reloadRef=useRef(reload);reloadRef.current=reload;
+  const wasDownRef=useRef(false); // v10.72.17 — ¿el realtime estuvo caído? para recargar al reconectar
   // v10.58.6: trailing debounce de 350ms agrupa múltiples postgres_changes en un solo reload.
   // Antes: cada change disparaba reload completo → si Karla hacía 2 acciones rápidas, el reload
   // de la 1ra podía sobreescribir el optimistic de la 2da (parpadeo + "rebobinado").
@@ -12767,7 +12774,15 @@ export default function PrintFlow() {
       .on("postgres_changes", { event: "*", schema: "public", table: "plate_log" }, () => { setChemKey(k=>k+1); db.loadPlates().then(setPlates); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_notes" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "purchase_orders" }, doReload)
-      .subscribe((status) => { setConnected(status==="SUBSCRIBED"); });
+      .subscribe((status) => {
+        const ok = status==="SUBSCRIBED";
+        setConnected(ok);
+        // v10.72.17 — al RECONECTAR (estuvo caído y volvió), recargar UNA vez para alcanzar los cambios que
+        // se perdieron mientras el socket estuvo abajo. Antes el dot volvía a verde pero los datos quedaban
+        // viejos hasta el siguiente evento → riesgo de avanzar/imprimir una orden ya cambiada en otra estación.
+        if (ok) { if (wasDownRef.current) { wasDownRef.current=false; reloadRef.current(); } }
+        else { wasDownRef.current=true; }
+      });
     return () => {
       supabase.removeChannel(channel);
       // v10.58.6: limpiar debounce pendiente al desmontar
@@ -12775,6 +12790,16 @@ export default function PrintFlow() {
       if (notifDebounceRef.current) { clearTimeout(notifDebounceRef.current); notifDebounceRef.current = null; } // v10.64.3 — limpiar también el debounce de notifs
     };
   }, [user, notifKey]);
+
+  // v10.72.17 — polling de respaldo mientras el realtime esté CAÍDO (connected===false). El cliente de
+  // Supabase reintenta el socket por su cuenta; mientras tanto recargamos cada 20s para no operar con datos
+  // viejos durante el corte. Se apaga solo al reconectar (connected!==false). Gentle (1 reload/20s, sin
+  // backoff agresivo que tormente al servidor).
+  useEffect(() => {
+    if (connected !== false) return; // null = conectando (aún no es "caído"); true = OK
+    const iv = setInterval(() => { reloadRef.current(); }, 20000);
+    return () => clearInterval(iv);
+  }, [connected]);
 
   // v10.15.0 — Bug 3: forzar reload cuando la pestaña regresa al foreground.
   // Cubre el caso de WebSocket throttled por el navegador en pestañas inactivas.
