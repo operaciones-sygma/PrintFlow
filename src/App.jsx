@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.14 — medium bet del roadmap: botones de flujo por etapa DENTRO del DetailModal. Es la superficie
+// más tocada del piso: antes el operador abría la orden, decidía avanzarla, y tenía que CERRAR el modal +
+// re-buscar la card para pulsar el botón de etapa (round-trip por orden, peor con wifi). Se extrajo el bloque
+// de botones de OCard a un componente StageFlowButtons reusable (misma lógica, cero divergencia) y se renderiza
+// también en el modal con el mismo gate de ownership/etapa; al pulsar, cierra el modal y despacha la acción.
 // v10.72.13 — 6 quick wins de robustez del roadmap (barrido multi-lente). Todos S/bajo-riesgo, atacan los
 // fallos que más cuestan en el piso (wifi pobre, pantalla blanca, pérdida silenciosa de datos):
 // (1) ErrorBoundary raíz en main.jsx → un throw en render ya no deja pantalla blanca, sino "Recargar".
@@ -2402,6 +2407,12 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
   const canCancelWithNC=role==="admin"&&o.invoice_folio&&!o.stage.includes("cancelled");
   const dispatch=(action)=>{onClose();if(onAction)onAction(o.id,action)};
+  // v10.72.14 — mismo gate de ownership/etapa que OCard (L8525) para mostrar los botones de flujo en el modal.
+  const _agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
+  const _secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||_agentMatch;
+  const canActFlow=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&isSec(role)));
+  // cierra el modal y despacha (mismo patrón que dispatch, pero forwardea el 3er arg de advance)
+  const flowDispatch=(id,action,arg)=>{onClose();if(onAction)onAction(id,action,arg)};
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
     <div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"92%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
@@ -2472,6 +2483,13 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           Mismo gate vOwns que precios/notas: un vendedor no ve el historial de órdenes ajenas. */}
       {vOwns&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
         <OrderChangeHistory orderId={o.id}/>
+      </div>}
+
+      {/* v10.72.14 — botones de flujo por etapa DENTRO del modal (reusa StageFlowButtons de la card).
+          Elimina el round-trip "cerrar modal → re-buscar card → avanzar". Al pulsar, cierra el modal y despacha. */}
+      {canActFlow&&<div style={{marginTop:14,paddingTop:14,borderTop:"0.5px solid "+C.bd}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}><FlowArrowIcon size={12} weight="bold"/>Acciones de flujo</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>
       </div>}
 
       {/* 🆕 v10.9.0 — Botón prominente "Facturar anticipado" para Karla/Admin */}
@@ -8515,6 +8533,56 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 }
 
 // ─── ORDER CARD ────────────────────────────────────
+// v10.72.14 — Botones de flujo por etapa extraídos de OCard para reusarlos TAMBIÉN en DetailModal.
+// Antes el operador abría la orden en el modal, decidía avanzarla y tenía que CERRAR el modal + re-buscar
+// la card para pulsar el botón de etapa (un round-trip por orden, peor con wifi pobre). Solo dependen de
+// o/role/onAction + helpers de módulo (bt/isSec/getRevertOptions/recProof) → extracción limpia, misma lógica.
+function StageFlowButtons({o,role,onAction}){
+  return <>
+      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={bt(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
+      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
+      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
+      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
+      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
+      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt(C.cart)}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
+      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
+      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
+      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista</button>}
+      {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
+      {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
+      {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
+          Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
+      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt(C.ctp)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar</button>}
+      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt(C.maqin)}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
+      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ios)}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
+      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:C.maqin,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
+      {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
+      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
+      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
+      {o.stage==="maq_in_progress"&&(()=>{
+        // v10.49.1 punto 3 — Mostrar badge naranja si faltan precio cliente o costo proveedor.
+        // El advance() los valida y bloquea, pero el badge avisa antes para que se complete antes de click.
+        const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
+        const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
+        const incomplete=noPrice||noCost;
+        return <>
+          {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
+          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
+        </>;
+      })()}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {/* v10.58.34 — Facturar por partes para maquila */}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+  </>;
+}
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
@@ -8610,48 +8678,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
     {!compact&&canAct&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
       {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
-      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={bt(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
-      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
-      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
-      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
-      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
-      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt(C.cart)}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
-      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
-      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
-      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista</button>}
-      {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
-      {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
-      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
-      {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
-          Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
-      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt(C.ctp)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar</button>}
-      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt(C.maqin)}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
-      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ios)}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
-      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:C.maqin,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
-      {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
-      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
-      {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
-      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
-      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
-      {o.stage==="maq_in_progress"&&(()=>{
-        // v10.49.1 punto 3 — Mostrar badge naranja si faltan precio cliente o costo proveedor.
-        // El advance() los valida y bloquea, pero el badge avisa antes para que se complete antes de click.
-        const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
-        const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
-        const incomplete=noPrice||noCost;
-        return <>
-          {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
-          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
-        </>;
-      })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
-      {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      <StageFlowButtons o={o} role={role} onAction={onAction}/>
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
         {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,C.fac)} title="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
