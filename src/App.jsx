@@ -45,6 +45,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.19 — fixes del scan adversarial del batch v10.72.13-18 (6 revisores). (1) HIGH FileUpload: el
+// fallback se disparaba ante cualquier error incluido un rechazo HTTP del servidor (4xx/5xx) → re-transmitía
+// el archivo (50MB) en vano; ahora si hay httpStatus no hace fallback (el server ya lo rechazó). (2) MED
+// FileUpload: guard uploadingRef contra subidas solapadas que pisaban xhrRef/estado. (3) MED Storage cleanup:
+// sanity del reloj local (año fuera de 2025-2035 → se omite la limpieza, que es borrado irreversible).
+// No tocados (cosmético/operativo, a validar en uso): bs minHeight infla botones diminutos; hints de tablero
+// en el modal; stage de maquila optimista en loadStock (self-healing, requiere ver el RPC con MCP).
 // v10.72.18 — medium bet del roadmap: touch targets más grandes para tablets del piso. Botones pequeños
 // de ~27px provocan toques fallidos (reintentar con wifi pobre cuesta). (a) el helper bs ahora tiene
 // minHeight:40 (solo ALTO, sin tocar el ancho → no rompe las filas densas de íconos de la card; además
@@ -7144,6 +7151,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
   const [upInfo,setUpInfo]=useState(null);     // {name, mb} del archivo en curso
   const [upErr,setUpErr]=useState("");          // v10.72.16 — error inline (antes alert() bloqueante)
   const xhrRef=useRef(null);
+  const uploadingRef=useRef(false); // v10.72.19 — guard anti-race entre subidas solapadas (más fiable que el state)
   const maxSize=50*1024*1024; // 50MB
   // v10.72.16 — progreso HONESTO por bytes + cancelar. supabase-js sube por fetch (no expone ni progreso de
   // subida ni abort), así que la vía principal es un XHR directo al endpoint REST de Storage. NO se comprime:
@@ -7151,12 +7159,14 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
   // XHR falla, para que la subida nunca se rompa por un detalle de contrato/CORS.
   const upload=async(e)=>{
     const file=e.target.files?.[0]; e.target.value=""; if(!file)return;
+    if(uploadingRef.current)return; // v10.72.19 — ya hay una subida en curso; no solapar (evita pisar xhrRef/estado)
     setUpErr("");
     if(file.size>maxSize){ setUpErr("Archivo muy grande (máx 50MB). Súbelo comprimido o por partes."); return; }
     const parts=file.name.split("."); const ext=parts.length>1?parts.pop():"pdf";
     const path=(orderId||"new-"+Date.now())+"/"+Date.now()+"."+ext;
+    uploadingRef.current=true;
     setUploading(true); setProgress(0); setUpInfo({name:file.name,mb:(file.size/1048576).toFixed(1)});
-    const cleanup=()=>{ setUploading(false); setProgress(0); setUpInfo(null); xhrRef.current=null; };
+    const cleanup=()=>{ uploadingRef.current=false; setUploading(false); setProgress(0); setUpInfo(null); xhrRef.current=null; };
     try{
       // 1) Vía principal: XHR con progreso real por bytes + cancelable
       await new Promise((resolve,reject)=>{
@@ -7167,7 +7177,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
         xhr.setRequestHeader("x-upsert","true");
         if(file.type) xhr.setRequestHeader("Content-Type",file.type);
         xhr.upload.onprogress=(ev)=>{ if(ev.lengthComputable) setProgress(Math.round(ev.loaded/ev.total*100)); };
-        xhr.onload=()=>{ (xhr.status>=200&&xhr.status<300)?resolve():reject(new Error("HTTP "+xhr.status)); };
+        xhr.onload=()=>{ (xhr.status>=200&&xhr.status<300)?resolve():reject(Object.assign(new Error("HTTP "+xhr.status),{httpStatus:xhr.status})); };
         xhr.onerror=()=>reject(new Error("network"));
         xhr.onabort=()=>reject(new DOMException("cancelado","AbortError"));
         xhr.send(file);
@@ -7175,8 +7185,11 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
     }catch(err){
       xhrRef.current=null;
       if(err?.name==="AbortError"){ cleanup(); return; } // cancelado por el usuario: silencioso
-      // 2) Fallback: método probado de supabase-js (sin progreso). Garantiza la subida aunque el XHR falle.
-      console.warn("[FileUpload] XHR falló, usando fallback supabase-js:",err);
+      // v10.72.19 — si el servidor RESPONDIÓ y rechazó (4xx/5xx), NO hacer fallback: usaría el mismo anon key +
+      // mismo path → fallaría igual y re-transmitiría el archivo (50MB de preprensa) en vano. Mostrar el error.
+      if(err?.httpStatus){ console.error("[FileUpload] el servidor rechazó la subida:",err); cleanup(); setUpErr("El servidor rechazó el archivo (código "+err.httpStatus+"). Reintenta."); return; }
+      // 2) Fallback SOLO para fallos de transporte/CORS (onerror). Garantiza la subida si el XHR no es el problema.
+      console.warn("[FileUpload] XHR falló (transporte), usando fallback supabase-js:",err);
       setProgress(-1);
       try{
         const{error}=await supabase.storage.from("order-files").upload(path,file,{upsert:true});
@@ -12872,6 +12885,9 @@ export default function PrintFlow() {
     } catch {}
     const cleanup = async () => {
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+      // v10.72.19 — sanity del reloj LOCAL: si el año está groseramente mal (fuera de 2025-2035), el cutoff
+      // sería absurdo y BORRARÍA archivos que no debe (irreversible: borra de Storage + nulea columnas). Abortar.
+      const _yr=new Date().getFullYear(); if(_yr<2025||_yr>2035){ console.warn("[storage-cleanup] reloj local sospechoso ("+_yr+"); se omite la limpieza"); return; }
       // v10.28.2 — filtrar por delivered_at / cancelled_at (NO created_at). Antes una orden
       // creada hace 35 días y entregada ayer perdía archivos a las 24h en vez de los 30 días post-entrega.
       const cols = "id,file_url,file_name,image_url,image_url_2,stage";
