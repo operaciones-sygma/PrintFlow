@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.22 — Agente: contacto ahora OPCIONAL (requisito suave). Antes la tabla (CHECK) y add_client_agent
+// exigían celular o correo; ahora se permite agente name-only (migración v3.7.7.24: drop del CHECK +
+// add_client_agent relajado). El modal "Nuevo agente" ya no obliga contacto. A cambio, al seleccionar en el
+// form un agente que SÍ existe pero NO tiene celular ni correo, sale una advertencia ámbar muy visible con un
+// botón "Agregar contacto" (reabre el modal pre-llenado → add_client_agent actualiza el contacto por dedup de
+// nombre). Caso de uso: las 3 personas de Premium/KFC (Ana Karen, Edgar Ortega, Eduardo) registradas sin contacto.
 // v10.72.21 — fixes del scan de la feature alias (overall minor-issues, sin blockers): (a) el aviso
 // "producto compartido con pool" en ProductFormModal ya no aparece cuando el pool quedó con 1 solo cliente
 // (post-limpieza Cuadra decía "0 clientes más usan este stock"); (b) ClientAliasManager avisa "ya existe" al
@@ -7687,7 +7693,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onClick={()=>{setNewAgentErr("");setNewAgentOpen(false)}}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:22,maxWidth:380,width:"100%",boxShadow:C.sh3}}>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx}}><UserPlusIcon size={18} weight="bold"/>Nuevo agente</div>
-        <div style={{fontSize:11,color:C.t2,margin:"4px 0 14px"}}>Contacto de <b style={{color:C.tx}}>{f.client||"este cliente"}</b>. Captura su celular o correo (al menos uno).</div>
+        <div style={{fontSize:11,color:C.t2,margin:"4px 0 14px"}}>Contacto de <b style={{color:C.tx}}>{f.client||"este cliente"}</b>. El celular/correo es <b style={{color:C.tx}}>opcional</b> pero recomendado para poder contactarlo.</div>
         <input style={{...inp,marginBottom:8}} value={newAgent.name} onChange={e=>setNewAgent(a=>({...a,name:e.target.value}))} placeholder="Nombre del agente"/>
         <input style={{...inp,marginBottom:8}} value={newAgent.phone} onChange={e=>setNewAgent(a=>({...a,phone:e.target.value}))} placeholder="Celular / WhatsApp"/>
         <input style={{...inp,marginBottom:newAgentErr?8:14}} value={newAgent.email} onChange={e=>setNewAgent(a=>({...a,email:e.target.value}))} placeholder="Correo"/>
@@ -7696,8 +7702,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           <button type="button" onClick={()=>{setNewAgentErr("");setNewAgentOpen(false)}} style={{flex:1,padding:11,borderRadius:10,border:"1px solid "+C.bd,background:C.bg,color:C.tx,cursor:"pointer",fontWeight:600}}>Cancelar</button>
           <button type="button" onClick={async()=>{
             if(!newAgent.name.trim()){setNewAgentErr("Nombre del agente requerido");return}
-            if(!newAgent.phone.trim()&&!newAgent.email.trim()){setNewAgentErr("Captura al menos un contacto (celular o correo)");return}
-            setNewAgentErr("");
+            setNewAgentErr(""); // v10.72.22 — contacto OPCIONAL; si queda sin celular/correo, el form avisa al seleccionarlo
             try{
               await supabase.rpc("add_client_agent",{p_client_id:f.client_id,p_name:newAgent.name.trim(),p_phone:newAgent.phone.trim()||null,p_email:newAgent.email.trim()||null,p_actor:role||"sistema"});
               const {data}=await supabase.rpc("list_client_agents",{p_client_id:f.client_id});
@@ -7731,6 +7736,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
 }} onSelect={selC} clients={clients}/></div></FC><FC label="Agente"><input style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Contacto del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
       <datalist id="pf-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
       {f.client_id&&(f.client_agent||"").trim()&&!clientAgents.some(a=>(a.name||"").trim().toLowerCase()===(f.client_agent||"").trim().toLowerCase())&&<button type="button" onClick={()=>{setNewAgent({name:(f.client_agent||"").trim(),phone:"",email:""});setNewAgentOpen(true)}} style={{marginTop:4,fontSize:10,fontWeight:600,color:C.fac,background:C.fac+"10",border:"1px solid "+C.fac+"30",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}><UserPlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Registrar "{(f.client_agent||"").trim()}" como agente</button>}</FC></div>
+    {/* v10.72.22 — advertencia VISIBLE si el agente seleccionado existe pero no tiene celular ni correo.
+        Requisito suave: el agente se registra sin contacto, pero esto empuja a Lupita/vendedor a completarlo. */}
+    {(()=>{const sa=(f.client_agent||"").trim()&&clientAgents.find(a=>(a.name||"").trim().toLowerCase()===(f.client_agent||"").trim().toLowerCase());if(!sa||(sa.phone||"").trim()||(sa.email||"").trim())return null;return <div role="alert" style={{display:"flex",alignItems:"center",gap:9,margin:"0 20px 12px",padding:"10px 12px",background:C.amb+"15",border:"1.5px solid "+C.amb+"55",borderRadius:10}}><WarningIcon size={17} weight="fill" color={C.amb} style={{flexShrink:0}}/><div style={{flex:1,fontSize:11.5,fontWeight:600,color:"#92400e",lineHeight:1.35}}>El agente <b>{sa.name}</b> no tiene celular ni correo. Captúralo para poder contactarlo.</div><button type="button" onClick={()=>{setNewAgent({name:sa.name,phone:"",email:""});setNewAgentOpen(true)}} style={{...bs(C.amb),flexShrink:0,fontSize:11,gap:4}}><UserPlusIcon size={12} weight="bold"/>Agregar contacto</button></div>;})()}
     {/* v10.49.1 punto 2 — Banner naranja visible cuando se está creando un cliente nuevo SIN contacto.
         v10.49.3 F6 — role=alert para screen readers (WCAG SC 4.1.3 Status Messages). */}
     {showContactWarn&&<div role="alert" aria-live="polite" style={{padding:"10px 20px",background:C.amb+"15",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"start",gap:10}}>
