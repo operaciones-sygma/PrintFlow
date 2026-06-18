@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.11 — referencia bancaria OPCIONAL (recomendada) en TODOS los flujos de pago. Algunos clientes
+// no dan folio SPEI/voucher (ej. Tiendas Cuadra) y la obligatoriedad bloqueaba la venta. Era regla solo
+// de app (el CHECK de la tabla ya permite bank_reference nulo en cualquier método): se quitó de los 4
+// refValid (picker MultiPaymentPicker + 3 padres + facturación split) y del RPC bulk_sell_from_stock.
+// El label pasa de "*" a "(recomendada)" y ya no se pinta en rojo; quien sí tiene ref la sigue capturando
+// (le sirve a la conciliación bancaria de CobranzaFlow). Migración: bank_ref_optional_bulk_sell_v10_72_11.
 // v10.72.10 — 3 pulidos baratos del critique: (a) #4 — CreateOCModal usa el helper inp (mismo borde/
 // padding que el form principal), RFC incluido (conserva su borde rojo de error); (b) #9 — el gate de
 // "RFC obligatorio" enfoca solo el campo RFC (rfcRef) además del error inline; (c) #8 parcial — la cola
@@ -3010,7 +3016,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const refValid = (r) => {
     if (!r.method) return false;
     if (!(Number(r.amount) > 0)) return false;
-    if (["transferencia","tarjeta","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) return false;
+    // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
     return true;
   };
   const allRefsValid = paymentRefs.length===0 || paymentRefs.every(refValid);
@@ -3999,7 +4005,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const refValid = (r) => {
     if (!r.method) return false;
     if (!(Number(r.amount) > 0)) return false;
-    if (["transferencia", "tarjeta", "cheque"].includes(r.method) && !(r.bank_reference || "").trim()) return false;
+    // v10.72.11 — ref bancaria OPCIONAL (recomendada): ya no bloquea (algunos clientes no la dan, ej. Tiendas Cuadra)
     return true;
   };
   const allRefsValid = list.length > 0 && list.every(refValid);
@@ -4043,7 +4049,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           {list.map((r, idx) => {
             const valid = refValid(r);
             const needsBankRef = ["transferencia","tarjeta","cheque"].includes(r.method);
-            const bankRefMissing = needsBankRef && !(r.bank_reference || "").trim();
+            const bankRefMissing = false; // v10.72.11 — ref bancaria opcional (recomendada): no bloquea ni se marca en rojo
             const amountMissing = !(Number(r.amount) > 0);
             return (
             <div key={idx} role="group" aria-label={`Pago ${idx + 1}`} aria-invalid={!valid} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (valid ? C.bd : C.amb+"40")}}>
@@ -4075,7 +4081,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 </div>
                 <div>
                   <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.dn : C.t2}}>
-                    <LinkIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ref bancaria {needsBankRef ? "*" : "(opcional)"}
+                    <LinkIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ref bancaria {needsBankRef ? "(recomendada)" : "(opcional)"}
                   </label>
                   <input type="text" value={r.bank_reference || ""} onChange={e => updateRef(idx, {bank_reference: e.target.value})} aria-invalid={bankRefMissing} aria-label={`Referencia bancaria del pago ${idx + 1}`} placeholder={
                     r.method === "transferencia" ? "Folio SPEI" :
@@ -5816,7 +5822,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
     const allValid = paymentRefs.every(r => {
       if (!r.method) return false;
       if (!(Number(r.amount) > 0)) return false;
-      if (["transferencia","tarjeta","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) return false;
+      // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
       return true;
     });
     if (!allValid) return false;
@@ -6234,7 +6240,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     const allValid = paymentRefs.every(r => {
       if (!r.method) return false;
       if (!(Number(r.amount) > 0)) return false;
-      if (["transferencia","tarjeta","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) return false;
+      // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
       return true;
     });
     if (!allValid) return false;
@@ -8192,9 +8198,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         for (const r of g.payment_refs) {
           if (!r.method) return {ok:false, reason:`Grupo ${i+1}: pago sin método`};
           if (!(Number(r.amount)>0)) return {ok:false, reason:`Grupo ${i+1}: pago sin monto`};
-          if (["transferencia","tarjeta","tarjeta_credito","cheque"].includes(r.method) && !(r.bank_reference||"").trim()) {
-            return {ok:false, reason:`Grupo ${i+1}: ref bancaria requerida`};
-          }
+          // v10.72.11 — ref bancaria opcional (recomendada): ya no se exige en facturación split de OC
         }
       } else if (g.payment_status === "paid" || g.payment_status === "partial") {
         return {ok:false, reason:`Grupo ${i+1}: marca pagada/parcial sin capturar pagos`};
