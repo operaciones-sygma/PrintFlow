@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.10 — 3 pulidos baratos del critique: (a) #4 — CreateOCModal usa el helper inp (mismo borde/
+// padding que el form principal), RFC incluido (conserva su borde rojo de error); (b) #9 — el gate de
+// "RFC obligatorio" enfoca solo el campo RFC (rfcRef) además del error inline; (c) #8 parcial — la cola
+// "Adicional" (CTP/imágenes/archivo/notas) arranca colapsada (toggle con caret); se auto-expande al
+// editar una orden que ya trae datos en esos campos. Ninguno es obligatorio → no oculta validación.
 // v10.72.9 — cerrar #9 del 4to re-critique: (a) el combobox de Tipo de Producto ahora se pinta de rojo
 // (errBorder) cuando falta al crear — el campo que más se salta ya queda anclado; (b) el gate de RFC en
 // CreateOCModal pasa de toast pasajero a error inline FIJO (role=alert) + borde rojo en el campo RFC,
@@ -7300,6 +7305,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [newAgent,setNewAgent]=useState({name:"",phone:"",email:""});
   const [newAgentErr,setNewAgentErr]=useState(""); // v10.72.2 — error inline del modal de agente (antes alert())
   const formRef=useRef(null); // v10.72.3 — scroll al tope (núcleo obligatorio) si el submit falla por faltantes
+  // v10.72.10 — cola "Adicional" (CTP/imágenes/archivo/notas) colapsada por defecto: el piso ve un formulario más corto.
+  // Se auto-expande al editar una orden que ya trae datos en esos campos, para no esconderlos.
+  const [showAdic,setShowAdic]=useState(()=>!!(editOrder&&(editOrder.plate_status||editOrder.image_url||editOrder.image_url_2||editOrder.file_url||editOrder.notes)));
   useEffect(()=>{
     if(!f.client_id){setClientAgents([]);return}
     let alive=true;
@@ -7660,7 +7668,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN{financialsLocked&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {/* v10.72.3 — divisor de jerarquía: separa el núcleo obligatorio de la cola "adicional" (CTP / Imágenes / Notas) */}
-    {!specsOnly&&<div style={{padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:9,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span><div style={{flex:1,height:1,background:C.bd}}/></div>}
+    {!specsOnly&&<button type="button" onClick={()=>setShowAdic(v=>!v)} aria-expanded={showAdic} style={{width:"100%",padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textAlign:"left"}}><CaretRightIcon size={11} weight="bold" style={{color:C.t3,transform:showAdic?"rotate(90deg)":"none",transition:"transform .15s ease"}}/><span style={{fontSize:9,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span>{!showAdic&&<span style={{fontSize:9,fontWeight:600,color:C.t3,letterSpacing:.2}}>· CTP · imágenes · archivo · notas</span>}<div style={{flex:1,height:1,background:C.bd}}/></button>}
+    {showAdic&&<>
     {!isMaq&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><DiscIcon size={12} weight="bold"/>Placa CTP</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="new_ctp"?"":"new_ctp")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="new_ctp"?C.ctp:C.bd),background:f.plate_status==="new_ctp"?C.ctp+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="new_ctp"?700:500,color:f.plate_status==="new_ctp"?C.ctp:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="new_ctp"?"✓ ":""}<PlusIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Nueva CTP</button>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}<ArrowsClockwiseIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ya existe (reutilizar)</button>
@@ -7669,6 +7678,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><img src={val} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+(idx+1)+"-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s(slot,urlData.publicUrl);if(idx===0)s("image",null)}catch(err){console.error("[image upload "+slot+"]",err);showToast?.("⚠️ Error al subir imagen: "+(err?.message||err),"error")}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
     {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={()=>{s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><NotePencilIcon size={12} weight="bold"/><span>Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:9,fontWeight:500}}>(USO INTERNO)</span></span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
+    </>}
     <div style={{padding:"12px 20px 16px"}}>
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
       <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?C.maq:C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
@@ -11999,6 +12009,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
   const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",client_agent:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
   const [ocErr,setOcErr]=useState(""); // v10.72.9 — error inline del gate de RFC (antes toast pasajero, un hard-stop necesita quedarse fijo)
+  const rfcRef=useRef(null); // v10.72.10 — para enfocar/traer a la vista el campo RFC cuando el gate dispara
   // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
   const [clientAgents,setClientAgents]=useState([]);
   useEscClose(onClose);
@@ -12042,7 +12053,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
             const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:resolution.similar_matches});
             if(confirmed==="cancel"){setSaving(false);return}
             if(confirmed==="new"){
-              if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);return}
+              if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
               const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
               if(createErr)throw createErr;
               resolvedClientId=newId;
@@ -12050,7 +12061,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
               resolvedClientId=confirmed;
             }
           }else{
-            if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);return}
+            if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
             // v10.72.2 — confirmación via modal in-app (antes window.confirm nativo).
             const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:[],rfc:f.client_rfc.trim(),contact:f.client_email.trim()||f.client_phone.trim()});
             if(confirmed!=="new"){setSaving(false);return}
@@ -12091,36 +12102,36 @@ function CreateOCModal({onCreate, onClose, showToast}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
             <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}><EnvelopeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Email</label>
-            <input value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com" type="email" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+            <input value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com" type="email" style={inp}/>
           </div>
           <div>
             <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}><WhatsappLogoIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>WhatsApp</label>
-            <input value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678" type="tel" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+            <input value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678" type="tel" style={inp}/>
           </div>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>RFC</label>
-          <input value={f.client_rfc} onChange={e=>{s("client_rfc",e.target.value.toUpperCase());setOcErr("")}} placeholder="XAXX010101000" maxLength={13} style={{width:"100%",padding:"10px 12px",border:"1px solid "+(ocErr?C.dn:C.bd),borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <input ref={rfcRef} value={f.client_rfc} onChange={e=>{s("client_rfc",e.target.value.toUpperCase());setOcErr("")}} placeholder="XAXX010101000" maxLength={13} style={{...inp,border:ocErr?"1.5px solid "+C.dn+"60":"none"}}/>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Agente (contacto del cliente)</label>
-          <input value={f.client_agent} onChange={e=>s("client_agent",e.target.value)} placeholder="ej. Eva, Jorge" list="oc-client-agents" autoComplete="off" style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <input value={f.client_agent} onChange={e=>s("client_agent",e.target.value)} placeholder="ej. Eva, Jorge" list="oc-client-agents" autoComplete="off" style={inp}/>
           <datalist id="oc-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Vendedor</label>
-          <select value={f.vendedor} onChange={e=>s("vendedor",e.target.value)} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}>
+          <select value={f.vendedor} onChange={e=>s("vendedor",e.target.value)} style={inp}>
             <option value="">— Sin asignar —</option>
             {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Fecha de entrega (opcional)</label>
-          <input type="date" value={f.delivery_date} onChange={e=>s("delivery_date",e.target.value)} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box"}}/>
+          <input type="date" value={f.delivery_date} onChange={e=>s("delivery_date",e.target.value)} style={inp}/>
         </div>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Notas (opcional)</label>
-          <textarea value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Detalles del pedido, referencia interna, etc." rows={3} style={{width:"100%",padding:"10px 12px",border:"1px solid "+C.bd,borderRadius:8,fontSize:13,background:C.bg,color:C.tx,boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+          <textarea value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Detalles del pedido, referencia interna, etc." rows={3} style={{...inp,resize:"vertical"}}/>
         </div>
       </div>
       {ocErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginTop:16}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{ocErr}</div>}
