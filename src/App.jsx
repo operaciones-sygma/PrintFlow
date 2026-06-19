@@ -45,6 +45,17 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.26 — fixes del scan exhaustivo (16 hallazgos, 0 blockers). DB (2 migraciones): (HIGH) el content_hash
+// de impresión (peek_print_version + register_print) ignoraba sin_empaque_sygma → la reimpresión white-label
+// salía con hash idéntico a la copia con logo, sin fila en print_audit y contradiciendo el "v+1" del modal;
+// ahora el flag entra al hash en AMBAS funciones. (MED) distribution estaba peor (ni trigger ni hash): ahora
+// fuerza needs_reprint (auto_detect_post_print_edit) y entra al hash. (LOW) log_order_field_changes recupera
+// paridad con TRACKED_EDIT_FIELDS (client_agent + distribution en order_change_log). (LOW) bridge
+// sync_invoice_from_orders: COALESCE(bank_reference) en notes single-pay (con 'otro'+sin-ref el notes
+// colapsaba a NULL). (INFO) lock_production_number con SET search_path. Frontend: (LOW) "Duplicar orden" ya NO
+// hereda sin_empaque_sygma (coherente con replicaFields: white-label es decisión explícita por orden); (LOW)
+// esc() en los <img src> de la plantilla de impresión (único punto sin escaping). Deuda RLS (37 policies
+// always-true) y reprint de client/order_type quedan documentados, no tocados.
 // v10.72.25 — "Sin empaque SYGMA": badge "Sin logo SYGMA" (rojo + borde + tooltip) en la card del tablero
 // (OCard), junto al chip de etapa, para que producción lo vea de un vistazo. Copy alineado a "logo" (más claro
 // que "marca", que era ambiguo): recuadro impreso "EMPACAR SIN LOGOS DE SYGMA", placeholder del logo "SIN LOGO",
@@ -2328,11 +2339,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       h+=`<div class="product-images">
         <div style="flex:1;text-align:center">
           <div class="ptitle">${imgs.length>1?"Imagen 1 (Frente)":"Imagen del Producto"}</div>
-          <img src="${imgs[0]}" alt="" onerror="this.style.display='none'"/>
+          <img src="${esc(imgs[0])}" alt="" onerror="this.style.display='none'"/>
         </div>
         ${imgs[1]?`<div style="flex:1;text-align:center">
           <div class="ptitle">Imagen 2 (Vuelta)</div>
-          <img src="${imgs[1]}" alt="" onerror="this.style.display='none'"/>
+          <img src="${esc(imgs[1])}" alt="" onerror="this.style.display='none'"/>
         </div>`:""}
       </div>`;
     }
@@ -13960,7 +13971,7 @@ export default function PrintFlow() {
     // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
     try{
     await db.saveOrder(dup);
