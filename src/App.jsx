@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.23 — feature "Sin empaque de SYGMA": columna orders.sin_empaque_sygma (migración, default false).
+// Checkbox grande y MUY visible (rojo) en el OrderForm, aplica a órdenes internas y de maquila; default
+// apagado. Si se activa = la orden se empaca SIN logos/marca de SYGMA (trabajo white-label para imprenta
+// externa). La ORDEN IMPRESA lo refleja: oculta el logo (header-logo muestra "SIN MARCA" en vez del logo) +
+// un recuadro rojo "EMPACAR SIN MARCA SYGMA" muy visible bajo el header. Banner en el DetailModal. Persistencia
+// completa (empty/dbCols/editableFields/replicaFields/TRACKED_EDIT_FIELDS/fmtEditValue), igual que distribution.
 // v10.72.22 — Agente: contacto ahora OPCIONAL (requisito suave). Antes la tabla (CHECK) y add_client_agent
 // exigían celular o correo; ahora se permite agente name-only (migración v3.7.7.24: drop del CHECK +
 // add_client_agent relajado). El modal "Nuevo agente" ya no obliga contacto. A cambio, al seleccionar en el
@@ -348,7 +354,7 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 // v10.19.0 — Helpers para notificaciones detalladas de edit
 // ============================================================
 // Campos que disparan notificación cuando cambian (con su label legible)
-const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente (contacto)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta",distribution:"Distribución"};
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente (contacto)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta",distribution:"Distribución",sin_empaque_sygma:"Sin empaque SYGMA"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
 // v10.58.43 #12: comparar por CONTENIDO — los arrays (pantones) se comparaban por
@@ -383,6 +389,7 @@ function fmtEditValue(field,v){
     if(!Array.isArray(v)||v.length===0)return "—";
     return v.join(", ");
   }
+  if(field==="sin_empaque_sygma")return v?"Sí (empaque sin marca SYGMA)":"No";
   if(v==null||v==="")return"(vacío)";
   if(field==="due_date")return fD(v);
   if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
@@ -591,7 +598,7 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded","distribution"];
+    const dbCols=["id","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded","distribution","sin_empaque_sygma"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -2244,13 +2251,23 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     // v10.52.0 — logo desde /public/sygma-logo.png con fallback a SYGMA_LOGO data URL
     // v10.52.1 — badge web + indicador OC split
     const logoSrc=window.location.origin+"/sygma-logo.png";
+    // v10.72.23 — "Sin empaque SYGMA": ocultar el logo en la orden impresa (white-label para imprenta externa)
+    const logoHtml=o.sin_empaque_sygma?'<div style="font-size:9px;font-weight:700;color:#9ca3af;text-align:center;line-height:1.4;letter-spacing:.5px">SIN<br>MARCA</div>':`<img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/>`;
     const isWebOrder=o.source==="web";
     const isOcSplit=!!o.oc_invoice_group_id; // orden pertenece a grupo OC split (v10.51.0)
     h+=`<div class="header">
-      <div class="header-logo"><img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/></div>
+      <div class="header-logo">${logoHtml}</div>
       <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isProd?'<div class="copy-badge">Copia Producción</div>':''}${isWebOrder?'<div style="font-size:8px;color:#fff;background:#06b6d4;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
       <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
+
+    // v10.72.23 — recuadro de aviso "sin marca SYGMA" (white-label) — muy visible, debajo del header
+    if(o.sin_empaque_sygma){
+      h+=`<div style="margin-top:6px;border:2.5px solid #b91c1c;background:#fef2f2;border-radius:4px;padding:7px 12px;display:flex;align-items:center;gap:9px">
+        <div style="font-size:19px;line-height:1">⚠️</div>
+        <div><div style="font-size:12.5px;font-weight:800;color:#b91c1c;letter-spacing:.5px">EMPACAR SIN MARCA SYGMA</div><div style="font-size:9px;color:#7f1d1d;margin-top:1px">Trabajo para imprenta externa. Empacar SIN logotipos ni identificación de SYGMA / Padilla Hnos.</div></div>
+      </div>`;
+    }
 
     // ═══ FECHAS + TIPO PROCESO ═══
     h+=`<table style="margin-top:-1px"><tr>
@@ -2524,6 +2541,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
       </div>
+      {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN marca SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt="" onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:"#f5f5f7",cursor:"pointer"}}/>)}</div>})()}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?C.live:C.ctp)+"15",color:o.plate_status==="existing"?C.live:C.ctp}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
@@ -7407,7 +7425,7 @@ function PantoneChips({codes}) {
 
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null};
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [showMoreFin,setShowMoreFin]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
   const [stockProducts,setStockProducts]=useState([]);
@@ -7456,7 +7474,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.64.1 fix — NO replicar la imagen/artwork: contradecía el comentario de arriba y el hint
     // de la UI, y pisaba silenciosamente el artwork recién adjuntado (riesgo de imprimir el diseño
     // equivocado). Replicar = specs del producto, NO el arte. La imagen se adjunta por orden.
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution"];
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution","sin_empaque_sygma"];
     // v10.46.10 M2 — detectar si el source tiene SKU pero NO se va a replicar (cross-cliente),
     // para informar al usuario en lugar de copiar/omitir silenciosamente.
     let skuOmitted=false;
@@ -7765,6 +7783,17 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         </div>)}
         <button type="button" onClick={()=>s("distribution",[...f.distribution,""])} style={{alignSelf:"flex-start",marginTop:2,padding:"7px 13px",borderRadius:8,border:"1.5px dashed "+C.ios+"70",background:C.ios+"10",color:C.ios,cursor:"pointer",fontSize:11.5,fontWeight:700,fontFamily:"'Geist',sans-serif"}}><PlusIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Agregar lugar</button>
       </div>}
+    </div>}
+    {/* v10.72.23 — "Sin empaque de SYGMA": checkbox MUY visible. Aplica a órdenes internas y de maquila. */}
+    {!specsOnly&&<div style={{margin:"12px 20px",padding:"12px 14px",borderRadius:12,border:"2px solid "+(f.sin_empaque_sygma?C.dn:C.bd),background:f.sin_empaque_sygma?C.dn+"0e":C.sf}}>
+      <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+        <input type="checkbox" checked={!!f.sin_empaque_sygma} onChange={e=>s("sin_empaque_sygma",e.target.checked)} style={{width:22,height:22,marginTop:1,accentColor:C.dn,cursor:"pointer",flexShrink:0}}/>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:f.sin_empaque_sygma?C.dn:C.tx}}><PackageIcon size={17} weight="bold"/>Sin empaque de SYGMA</div>
+          <div style={{fontSize:10.5,color:C.t3,marginTop:2,lineHeight:1.4}}>Actívalo si esta orden es para una <b>imprenta externa</b>: se empaca <b>SIN logos ni marca de SYGMA</b>, y la orden impresa oculta el logo y muestra un aviso.</div>
+        </div>
+      </label>
+      {f.sin_empaque_sygma&&<div role="alert" style={{marginTop:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.dn,background:C.dn+"10",border:"1px solid "+C.dn+"30",borderRadius:8,padding:"6px 10px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Esta orden se empaca SIN marca de SYGMA (trabajo white-label).</div>}
     </div>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
     {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:C.ctp+"10",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
@@ -13382,7 +13411,7 @@ export default function PrintFlow() {
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     // 🔒 v10.64.0 — NO re-agregar "production_number": el folio es inmutable (corte híbrido).
-    const editableFields=["order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back","distribution"];
+    const editableFields=["order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back","distribution","sin_empaque_sygma"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
     // v10.58.26: defense-in-depth — si la orden original tenía folio pre-asignado y el actor
     // NO es admin, quitar price/maq_price del payload aunque el frontend los haya enviado.
