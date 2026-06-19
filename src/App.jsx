@@ -45,6 +45,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.25 — "Sin empaque SYGMA": badge "Sin logo SYGMA" (rojo + borde + tooltip) en la card del tablero
+// (OCard), junto al chip de etapa, para que producción lo vea de un vistazo. Copy alineado a "logo" (más claro
+// que "marca", que era ambiguo): recuadro impreso "EMPACAR SIN LOGOS DE SYGMA", placeholder del logo "SIN LOGO",
+// banner del detalle y aviso del checkbox a "sin logo de SYGMA", notif a "empaque sin logo SYGMA".
 // v10.72.24 — fixes del scan de "Sin empaque SYGMA" (overall needs-attention, 1 HIGH): (1) HIGH — al marcar
 // el flag en una orden YA IMPRESA no se forzaba needs_reprint, así que producción se quedaba con la copia CON
 // logo de SYGMA (la fuga exacta que la feature evita). Migración sin_empaque_sygma_triggers_v10_72_24: el
@@ -54,8 +58,8 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.72.23 — feature "Sin empaque de SYGMA": columna orders.sin_empaque_sygma (migración, default false).
 // Checkbox grande y MUY visible (rojo) en el OrderForm, aplica a órdenes internas y de maquila; default
 // apagado. Si se activa = la orden se empaca SIN logos/marca de SYGMA (trabajo white-label para imprenta
-// externa). La ORDEN IMPRESA lo refleja: oculta el logo (header-logo muestra "SIN MARCA" en vez del logo) +
-// un recuadro rojo "EMPACAR SIN MARCA SYGMA" muy visible bajo el header. Banner en el DetailModal. Persistencia
+// externa). La ORDEN IMPRESA lo refleja: oculta el logo (header-logo muestra "SIN LOGO" en vez del logo) +
+// un recuadro rojo "EMPACAR SIN LOGOS DE SYGMA" muy visible bajo el header. Banner en el DetailModal. Persistencia
 // completa (empty/dbCols/editableFields/replicaFields/TRACKED_EDIT_FIELDS/fmtEditValue), igual que distribution.
 // v10.72.22 — Agente: contacto ahora OPCIONAL (requisito suave). Antes la tabla (CHECK) y add_client_agent
 // exigían celular o correo; ahora se permite agente name-only (migración v3.7.7.24: drop del CHECK +
@@ -395,7 +399,7 @@ function fmtEditValue(field,v){
     if(!Array.isArray(v)||v.length===0)return "—";
     return v.join(", ");
   }
-  if(field==="sin_empaque_sygma")return v?"Sí (empaque sin marca SYGMA)":"No";
+  if(field==="sin_empaque_sygma")return v?"Sí (empaque sin logo SYGMA)":"No";
   if(v==null||v==="")return"(vacío)";
   if(field==="due_date")return fD(v);
   if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
@@ -2258,7 +2262,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     // v10.52.1 — badge web + indicador OC split
     const logoSrc=window.location.origin+"/sygma-logo.png";
     // v10.72.23 — "Sin empaque SYGMA": ocultar el logo en la orden impresa (white-label para imprenta externa)
-    const logoHtml=o.sin_empaque_sygma?'<div style="font-size:9px;font-weight:700;color:#9ca3af;text-align:center;line-height:1.4;letter-spacing:.5px">SIN<br>MARCA</div>':`<img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/>`;
+    const logoHtml=o.sin_empaque_sygma?'<div style="font-size:9px;font-weight:700;color:#9ca3af;text-align:center;line-height:1.4;letter-spacing:.5px">SIN<br>LOGO</div>':`<img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/>`;
     const isWebOrder=o.source==="web";
     const isOcSplit=!!o.oc_invoice_group_id; // orden pertenece a grupo OC split (v10.51.0)
     h+=`<div class="header">
@@ -2267,11 +2271,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
-    // v10.72.23 — recuadro de aviso "sin marca SYGMA" (white-label) — muy visible, debajo del header
+    // v10.72.23 — recuadro de aviso "sin logo SYGMA" (white-label) — muy visible, debajo del header
     if(o.sin_empaque_sygma){
       h+=`<div style="margin-top:6px;border:2.5px solid #b91c1c;background:#fef2f2;border-radius:4px;padding:7px 12px;display:flex;align-items:center;gap:9px">
         <div style="font-size:19px;line-height:1">⚠️</div>
-        <div><div style="font-size:12.5px;font-weight:800;color:#b91c1c;letter-spacing:.5px">EMPACAR SIN MARCA SYGMA</div><div style="font-size:9px;color:#7f1d1d;margin-top:1px">Trabajo para imprenta externa. Empacar SIN logotipos ni identificación de SYGMA / Padilla Hnos.</div></div>
+        <div><div style="font-size:12.5px;font-weight:800;color:#b91c1c;letter-spacing:.5px">EMPACAR SIN LOGOS DE SYGMA</div><div style="font-size:9px;color:#7f1d1d;margin-top:1px">Trabajo para imprenta externa. Empacar SIN logotipos ni identificación de SYGMA / Padilla Hnos.</div></div>
       </div>`;
     }
 
@@ -2547,7 +2551,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
       </div>
-      {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN marca SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
+      {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt="" onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:"#f5f5f7",cursor:"pointer"}}/>)}</div>})()}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?C.live:C.ctp)+"15",color:o.plate_status==="existing"?C.live:C.ctp}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
@@ -7799,7 +7803,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           <div style={{fontSize:10.5,color:C.t3,marginTop:2,lineHeight:1.4}}>Actívalo si esta orden es para una <b>imprenta externa</b>: se empaca <b>SIN logos ni marca de SYGMA</b>, y la orden impresa oculta el logo y muestra un aviso.</div>
         </div>
       </label>
-      {f.sin_empaque_sygma&&<div role="alert" style={{marginTop:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.dn,background:C.dn+"10",border:"1px solid "+C.dn+"30",borderRadius:8,padding:"6px 10px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Esta orden se empaca SIN marca de SYGMA (trabajo white-label).</div>}
+      {f.sin_empaque_sygma&&<div role="alert" style={{marginTop:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.dn,background:C.dn+"10",border:"1px solid "+C.dn+"30",borderRadius:8,padding:"6px 10px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Esta orden se empaca SIN logo de SYGMA (trabajo white-label).</div>}
     </div>}
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
     {!editOrder&&!specsOnly&&!hideC&&(f.client?.trim()||f.client_id)&&<div style={{padding:"10px 20px",background:C.ctp+"10",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
@@ -8820,6 +8824,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
+          {o.sin_empaque_sygma&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:800,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.dn+"45"}} title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)"><PackageIcon size={11} weight="bold"/>Sin logo SYGMA</span>}
           {o.source==="web"&&<span style={{background:C.cart+"12",color:C.cart,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}><GlobeIcon size={11} weight="bold"/>Web</span>}
           {o.stock_role==="production"&&<span style={{background:C.emr+"12",color:C.emr,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>a Stock</span>}
           {o.stock_role==="sale"&&<span style={{background:C.sal+"12",color:C.sal,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Venta desde stock — sale del inventario para entregar al cliente"><ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>desde Stock</span>}
