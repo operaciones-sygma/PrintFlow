@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.24 — fixes del scan de "Sin empaque SYGMA" (overall needs-attention, 1 HIGH): (1) HIGH — al marcar
+// el flag en una orden YA IMPRESA no se forzaba needs_reprint, así que producción se quedaba con la copia CON
+// logo de SYGMA (la fuga exacta que la feature evita). Migración sin_empaque_sygma_triggers_v10_72_24: el
+// trigger auto_detect_post_print_edit ahora incluye sin_empaque_sygma en v_critical_changed. (2) MED — el
+// trigger de auditoría inmutable log_order_field_changes ahora registra cambios del flag. (3) LOW — quitado
+// de replicaFields: white-label debe ser decisión EXPLÍCITA por orden, no heredarse al replicar.
 // v10.72.23 — feature "Sin empaque de SYGMA": columna orders.sin_empaque_sygma (migración, default false).
 // Checkbox grande y MUY visible (rojo) en el OrderForm, aplica a órdenes internas y de maquila; default
 // apagado. Si se activa = la orden se empaca SIN logos/marca de SYGMA (trabajo white-label para imprenta
@@ -7474,7 +7480,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.64.1 fix — NO replicar la imagen/artwork: contradecía el comentario de arriba y el hint
     // de la UI, y pisaba silenciosamente el artwork recién adjuntado (riesgo de imprimir el diseño
     // equivocado). Replicar = specs del producto, NO el arte. La imagen se adjunta por orden.
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution","sin_empaque_sygma"];
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
     // v10.46.10 M2 — detectar si el source tiene SKU pero NO se va a replicar (cross-cliente),
     // para informar al usuario en lugar de copiar/omitir silenciosamente.
     let skuOmitted=false;
