@@ -4243,7 +4243,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           {list.map((r, idx) => {
             const valid = refValid(r);
             const needsBankRef = ["transferencia","tarjeta","cheque"].includes(r.method);
-            const bankRefMissing = false; // v10.72.11 — ref bancaria opcional (recomendada): no bloquea ni se marca en rojo
+            // v10.72.27 — ref bancaria sigue siendo OPCIONAL (Tiendas Cuadra/Corona no la dan),
+            // pero ahora reactivamos feedback VISUAL en ámbar para que Karla VEA que está
+            // omitiendo el folio y decida conscientemente. NO bloquea el submit (refValid sigue
+            // retornando true sin ref). Cierra la observabilidad que el audit de bank_reference
+            // opcional levantó (CobranzaFlow v3.7.7.22 conclusión). El control hard sobre
+            // auto-conciliación ambigua vive server-side en try_match_payment_to_bank (v3.7.7.21).
+            const bankRefMissing = needsBankRef && !(r.bank_reference || "").trim();
             const amountMissing = !(Number(r.amount) > 0);
             return (
             <div key={idx} role="group" aria-label={`Pago ${idx + 1}`} aria-invalid={!valid} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (valid ? C.bd : C.amb+"40")}}>
@@ -4274,15 +4280,35 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                   <input type="number" step="0.01" value={r.amount} onChange={e => updateRef(idx, {amount: e.target.value})} placeholder="0.00" aria-invalid={amountMissing} aria-label={`Monto del pago ${idx + 1}`} style={{...inp, fontSize: 13, fontWeight: 700}}/>
                 </div>
                 <div>
-                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.dn : C.t2}}>
+                  {/* v10.72.27 — label en AMBAR (no rojo) + icono Warning cuando falta ref
+                      para metodo bancario. Comunica "estas omitiendo el folio" sin convertirlo
+                      en error tecnico (aria-invalid=false porque NO es invalid: es opcional). */}
+                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.amb : C.t2}}>
                     <LinkIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ref bancaria {needsBankRef ? "(recomendada)" : "(opcional)"}
+                    {bankRefMissing && (
+                      <WarningIcon size={10} weight="fill" style={{verticalAlign:"-2px",marginLeft:4}} aria-hidden="true" title="Sin folio, Lucero tendrá que conciliar manualmente. Solo omite si el cliente NO te dio voucher/SPEI."/>
+                    )}
                   </label>
-                  <input type="text" value={r.bank_reference || ""} onChange={e => updateRef(idx, {bank_reference: e.target.value})} aria-invalid={bankRefMissing} aria-label={`Referencia bancaria del pago ${idx + 1}`} placeholder={
-                    r.method === "transferencia" ? "Folio SPEI" :
-                    r.method === "tarjeta" ? "Voucher" :
-                    r.method === "cheque" ? "Banco-Núm cheque" :
-                    "Referencia"
-                  } maxLength={100} style={{...inp, fontSize: 11, fontFamily: "monospace"}}/>
+                  <input
+                    type="text"
+                    value={r.bank_reference || ""}
+                    onChange={e => updateRef(idx, {bank_reference: e.target.value})}
+                    aria-label={`Referencia bancaria del pago ${idx + 1}`}
+                    title={bankRefMissing ? "Sin folio, Lucero tendrá que conciliar manualmente. Solo omite si el cliente NO te dio voucher/SPEI." : undefined}
+                    placeholder={
+                      r.method === "transferencia" ? "Folio SPEI" :
+                      r.method === "tarjeta" ? "Voucher" :
+                      r.method === "cheque" ? "Banco-Núm cheque" :
+                      "Referencia"
+                    }
+                    maxLength={100}
+                    style={{
+                      ...inp,
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                      ...(bankRefMissing ? { borderColor: C.amb, background: C.amb + "08" } : {}),
+                    }}
+                  />
                 </div>
               </div>
             </div>
