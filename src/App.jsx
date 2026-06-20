@@ -4185,7 +4185,9 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const sumRemaining = (totalCents - sumCents) / 100;
 
   const addRef = () => {
-    onChange(status, [...list, {method: null, amount: "", bank_reference: ""}]);
+    // v10.72.28: incluir bank_ref_omitted_intentional default false para que el flag viaje
+    // bien por el array al RPC (multi-pay propaga per-pago al bridge -> cobranza.payments).
+    onChange(status, [...list, {method: null, amount: "", bank_reference: "", bank_ref_omitted_intentional: false}]);
   };
   const updateRef = (idx, patch) => {
     const next = list.map((r, i) => i === idx ? {...r, ...patch} : r);
@@ -4218,10 +4220,10 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           <button onClick={() => onChange("unpaid", [])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "unpaid" ? C.amb : C.bd), background: status === "unpaid" ? C.amb+"15" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "unpaid" ? C.amb : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
             <HourglassIcon size={13} weight="bold"/>No pagada
           </button>
-          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? C.fac : C.bd), background: status === "partial" ? C.fac+"15" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? C.fac : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
+          <button onClick={() => onChange("partial", list.length > 0 ? list : [{method: null, amount: "", bank_reference: "", bank_ref_omitted_intentional: false}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "partial" ? C.fac : C.bd), background: status === "partial" ? C.fac+"15" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "partial" ? C.fac : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
             <CircleHalfIcon size={13} weight="bold"/>Parcial
           </button>
-          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: ""}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? C.live : C.bd), background: status === "paid" ? C.live+"15" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? C.live : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
+          <button onClick={() => onChange("paid", list.length > 0 ? list : [{method: null, amount: "", bank_reference: "", bank_ref_omitted_intentional: false}])} style={{flex: 1, padding: "10px 8px", borderRadius: 8, border: "1.5px solid " + (status === "paid" ? C.live : C.bd), background: status === "paid" ? C.live+"15" : C.bg, fontSize: 12, fontWeight: 600, cursor: "pointer", color: status === "paid" ? C.live : C.t2, fontFamily: "'Geist',sans-serif", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5}}>
             <CheckCircleIcon size={13} weight="bold"/>Pagada
           </button>
         </div>
@@ -4243,13 +4245,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
           {list.map((r, idx) => {
             const valid = refValid(r);
             const needsBankRef = ["transferencia","tarjeta","cheque"].includes(r.method);
-            // v10.72.27 — ref bancaria sigue siendo OPCIONAL (Tiendas Cuadra/Corona no la dan),
-            // pero ahora reactivamos feedback VISUAL en ámbar para que Karla VEA que está
-            // omitiendo el folio y decida conscientemente. NO bloquea el submit (refValid sigue
-            // retornando true sin ref). Cierra la observabilidad que el audit de bank_reference
-            // opcional levantó (CobranzaFlow v3.7.7.22 conclusión). El control hard sobre
-            // auto-conciliación ambigua vive server-side en try_match_payment_to_bank (v3.7.7.21).
-            const bankRefMissing = needsBankRef && !(r.bank_reference || "").trim();
+            const refEmpty = needsBankRef && !(r.bank_reference || "").trim();
+            // v10.72.27 — feedback ÁMBAR cuando falta ref para método bancario.
+            // v10.72.28 — distingue INTENCION: si Karla marca el checkbox
+            // "Cliente no proporcionó folio", el ámbar desaparece (decisión consciente).
+            // Sin marca: ámbar (Karla puede estar omitiendo por descuido). NO bloquea submit.
+            const intentional = !!r.bank_ref_omitted_intentional;
+            const bankRefMissing = refEmpty && !intentional;
             const amountMissing = !(Number(r.amount) > 0);
             return (
             <div key={idx} role="group" aria-label={`Pago ${idx + 1}`} aria-invalid={!valid} style={{background: "#fff", borderRadius: 10, padding: 10, marginBottom: 8, border: "1px solid " + (valid ? C.bd : C.amb+"40")}}>
@@ -4282,8 +4284,10 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 <div>
                   {/* v10.72.27 — label en AMBAR (no rojo) + icono Warning cuando falta ref
                       para metodo bancario. Comunica "estas omitiendo el folio" sin convertirlo
-                      en error tecnico (aria-invalid=false porque NO es invalid: es opcional). */}
-                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.amb : C.t2}}>
+                      en error tecnico (aria-invalid=false porque NO es invalid: es opcional).
+                      v10.72.28 — si el checkbox "Cliente no proporciono folio" esta marcado,
+                      el ambar desaparece (decision consciente, no descuido). */}
+                  <label style={{...lbl, fontSize: 10, marginTop: 0, color: bankRefMissing ? C.amb : (refEmpty && intentional ? C.t2 : C.t2)}}>
                     <LinkIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ref bancaria {needsBankRef ? "(recomendada)" : "(opcional)"}
                     {bankRefMissing && (
                       <WarningIcon size={10} weight="fill" style={{verticalAlign:"-2px",marginLeft:4}} aria-hidden="true" title="Sin folio, Lucero tendrá que conciliar manualmente. Solo omite si el cliente NO te dio voucher/SPEI."/>
@@ -4292,7 +4296,12 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                   <input
                     type="text"
                     value={r.bank_reference || ""}
-                    onChange={e => updateRef(idx, {bank_reference: e.target.value})}
+                    onChange={e => {
+                      const v = e.target.value;
+                      // v10.72.28: si el usuario empieza a teclear ref, desactiva el flag intencional
+                      // (la ref real prevalece sobre la marca "no proporciono").
+                      updateRef(idx, v.trim() ? { bank_reference: v, bank_ref_omitted_intentional: false } : { bank_reference: v });
+                    }}
                     aria-label={`Referencia bancaria del pago ${idx + 1}`}
                     title={bankRefMissing ? "Sin folio, Lucero tendrá que conciliar manualmente. Solo omite si el cliente NO te dio voucher/SPEI." : undefined}
                     placeholder={
@@ -4309,6 +4318,32 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                       ...(bankRefMissing ? { borderColor: C.amb, background: C.amb + "08" } : {}),
                     }}
                   />
+                  {/* v10.72.28 — checkbox para persistir la INTENCION cuando no hay ref.
+                      Visible solo cuando: metodo bancario + ref vacia. Cuando se marca:
+                      ambar desaparece + flag se propaga via RPC -> bridge -> cobranza.payments
+                      para que Lucero distinga error operativo de omision legitima del cliente. */}
+                  {refEmpty && (
+                    <label style={{
+                      display: "flex", alignItems: "flex-start", gap: 6,
+                      marginTop: 4, fontSize: 10,
+                      color: intentional ? C.ok : C.amb,
+                      cursor: "pointer", userSelect: "none",
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={intentional}
+                        onChange={e => updateRef(idx, { bank_ref_omitted_intentional: e.target.checked })}
+                        style={{ marginTop: 1, accentColor: C.ok }}
+                        aria-label={`Cliente no proporcionó folio para el pago ${idx + 1}`}
+                      />
+                      <span>
+                        Cliente no proporcionó folio
+                        <span style={{ color: C.t2, fontWeight: 400, marginLeft: 4 }}>
+                          (ej. Tiendas Cuadra, Corona — registra la omisión como intencional para que Lucero no la cuestione en conciliación)
+                        </span>
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
             </div>
