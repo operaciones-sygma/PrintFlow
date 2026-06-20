@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.27 — fix (reporte de Genaro): el vendedor NO podía guardar el COSTO DE PROVEEDOR (maq_cost) en
+// maquilas. Causa: el handler update hacía `delete safeUpdate.maq_cost` para todo vendedor (regla vieja
+// v10.58.41 "no comerciales"), aunque el form SÍ deja escribir el costo y el banner financialsLocked promete
+// "Puedes editar costo proveedor". Genaro escribía el costo y al guardar se borraba en silencio. Ahora el
+// vendedor-dueño (agent===él) SÍ guarda maq_cost; sigue bloqueado el precio al CLIENTE (price/maq_price) y los
+// datos de cliente. La visibilidad del botón "Editar Maquila" ya funcionaba para sus propias órdenes (agentMatch).
 // v10.72.26 — fixes del scan exhaustivo (16 hallazgos, 0 blockers). DB (2 migraciones): (HIGH) el content_hash
 // de impresión (peek_print_version + register_print) ignoraba sin_empaque_sygma → la reimpresión white-label
 // salía con hash idéntico a la copia con logo, sin fila en print_audit y contradiciendo el "v+1" del modal;
@@ -13470,14 +13476,15 @@ export default function PrintFlow() {
       if(user==="vendedor" && "agent" in safeUpdate && safeUpdate.agent !== originalOrder.agent){
         delete safeUpdate.agent;
       }
-      // v10.58.41 — Genaro (vendedor) NUNCA edita campos COMERCIALES, ni antes de facturar.
-      // Decisión de Marcelo: "todo menos comerciales". Edita specs/cantidad/fecha/notas,
-      // pero NO precio/maquila/cliente. (price/maq_price ya cubiertos arriba si pre-asignado;
-      // esto lo extiende a vendedor SIEMPRE, sin importar folio.)
+      // v10.58.41 — Genaro (vendedor) NO edita PRECIOS AL CLIENTE ni datos de cliente.
+      // v10.72.27 — pero SÍ el COSTO DE PROVEEDOR (maq_cost): es operativo, no comercial, y Genaro es quien
+      // trata con el maquilador (lo pidió Marcelo). El strip de maq_cost contradecía al propio form: el banner
+      // financialsLocked ya dice "Puedes editar costo proveedor; precio cliente bloqueado" y el input "Costo"
+      // nunca estuvo deshabilitado — Genaro escribía el costo y al guardar se borraba en silencio. Se sigue
+      // bloqueando price/maq_price (precio al CLIENTE) + datos de cliente.
       if(user==="vendedor"){
         delete safeUpdate.price;
         delete safeUpdate.maq_price;
-        delete safeUpdate.maq_cost;
         if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) delete safeUpdate.client_id;
         if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
         if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
