@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.28 — fix (continuación reporte de Genaro): "no me aparece el botón de editar" en H-3562. Causa real:
+// el DetailModal (el modal que abre Genaro al tocar la orden) solo mostraba "Editar" para role==="admin"; el
+// costo de maquila salía como fila de SOLO-LECTURA y el botón "Editar Maquila" vivía únicamente en la card del
+// tablero. Ahora el modal muestra "Editar Maquila"/"Editar" también al DUEÑO (vendedor agent / secretaria),
+// con los mismos gates de la card. Junto con v10.72.27 (guardar maq_cost), Genaro ya puede capturar el costo.
 // v10.72.27 — fix (reporte de Genaro): el vendedor NO podía guardar el COSTO DE PROVEEDOR (maq_cost) en
 // maquilas. Causa: el handler update hacía `delete safeUpdate.maq_cost` para todo vendedor (regla vieja
 // v10.58.41 "no comerciales"), aunque el form SÍ deja escribir el costo y el banner financialsLocked promete
@@ -2549,6 +2554,14 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const canActFlow=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&isSec(role)));
   // cierra el modal y despacha (mismo patrón que dispatch, pero forwardea el 3er arg de advance)
   const flowDispatch=(id,action,arg)=>{onClose();if(onAction)onAction(id,action,arg)};
+  // v10.72.28 — botón Editar TAMBIÉN en el modal para el DUEÑO (no solo admin). Genaro abría el detalle de su
+  // maquila y no hallaba cómo capturar el costo: el botón "Editar Maquila" vivía solo en la card del tablero,
+  // y aquí el costo salía como fila de solo-lectura. Mismos gates que OCard (maquila: isSec+owner; interna:
+  // secretaria en draft / vendedor pre-producción). El handler update ya bloquea precios al cliente.
+  const _ownEdit=role==="secretaria"||!o.created_by||o.created_by===userLogin||_agentMatch;
+  const _canEditOwner=(isMaq&&isSec(role)&&_ownEdit&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&canEditWebOrder(o,role))
+    ||(!isMaq&&isSec(role)&&_ownEdit&&o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&canEditWebOrder(o,role))
+    ||(!isMaq&&role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft");
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
     <div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"92%",maxHeight:"85vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
@@ -2657,6 +2670,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <div style={{display:"flex",gap:8,marginTop:16}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
+        {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
         {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
       </div>
     </div>
