@@ -3226,8 +3226,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     if (!canSubmit) return;
     setBusy(true);
     try {
+      // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
+      // (CRÍTICO: sin esto la marca de "cliente no proporciono folio" se pierde
+      // y Lucero ve "Sin folio (revisar)" siempre).
       const refsForBackend = paymentStatus==="unpaid" ? null
-        : paymentRefs.map(r=>({method:r.method, amount:Number(r.amount), bank_reference:r.bank_reference||null}));
+        : paymentRefs.map(toBackendRef);
       const result = await db.bulkSellFromStock({
         items: cart.map(c=>({client_product_id:c.client_product_id, qty:c.qty})),
         total_amount: totalNum,
@@ -4162,11 +4165,27 @@ function PlateModal({order,machine,onConfirm,onClose}) {
   </div>;
 }
 
+// v10.72.29 — Helper compartido para serializar un payment ref del state local al
+// payload que se manda al backend (assign_invoice, bulk_sell_from_stock,
+// assign_folios_split_oc, bridge sync_invoice_from_orders). CRÍTICO incluir
+// bank_ref_omitted_intentional: si se omite, toda la feature v10.72.28/v3.7.7.23-24
+// queda inerte (el backend hace COALESCE(_, false) y siempre persiste false en
+// cobranza.payments). Único lugar donde se decide la serialización.
+function toBackendRef(r) {
+  return {
+    method: r.method,
+    amount: Number(r.amount),
+    bank_reference: (r.bank_reference || "").trim() || null,
+    notes: (r.notes || "").trim() || null,
+    bank_ref_omitted_intentional: !!r.bank_ref_omitted_intentional,
+  };
+}
+
 // v10.29.0 + v10.30.0 — Selector de estado de pago al asignar folio (3 opciones: no pagada / parcial / pagada)
 // v10.50.0 — MultiPaymentPicker: soporta capturar varios pagos al asignar folio.
-// Cada pago es {method, amount, bank_reference, notes}. Karla puede agregar/eliminar pagos.
-// Para status=paid suma debe coincidir con total. Para partial suma debe ser < total.
-// Drop-in replacement de PaymentStatusPicker — la onChange retorna (status, refs).
+// Cada pago es {method, amount, bank_reference, notes, bank_ref_omitted_intentional}.
+// Karla puede agregar/eliminar pagos. Para status=paid suma debe coincidir con total.
+// Para partial suma debe ser < total. Drop-in replacement de PaymentStatusPicker.
 function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const METHODS = [
     {id: "transferencia", l: "Transferencia", Icon: BankIcon, c: C.emr},
@@ -4269,7 +4288,17 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 {METHODS.map(m => {
                   const MIcon = m.Icon;
                   return (
-                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => updateRef(idx, {method: m.id, bank_reference: m.id === r.method ? r.bank_reference : ""})} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left", display: "inline-flex", alignItems: "center", gap: 6}}>
+                  <button key={m.id} role="radio" aria-checked={r.method === m.id} onClick={() => {
+                    // v10.72.29 — al cambiar a método no-bancario, resetear bank_ref_omitted_intentional
+                    // (no aplica si no necesita ref). Sin esto, el flag persistia en state y se
+                    // propagaba al backend dando una marca semánticamente incorrecta.
+                    const newIsBank = ["transferencia","tarjeta","cheque"].includes(m.id);
+                    updateRef(idx, {
+                      method: m.id,
+                      bank_reference: m.id === r.method ? r.bank_reference : "",
+                      bank_ref_omitted_intentional: newIsBank ? !!r.bank_ref_omitted_intentional : false,
+                    });
+                  }} style={{padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + (r.method === m.id ? m.c : C.bd), background: r.method === m.id ? m.c + "15" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.method === m.id ? m.c : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left", display: "inline-flex", alignItems: "center", gap: 6}}>
                     <MIcon size={13} weight="bold"/>{m.l}
                   </button>
                   );
@@ -6148,12 +6177,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
       // v10.50.0 — Si hay paymentRefs (multi-pago), pasarlo en lugar de campos individuales.
       // El handler externo (App raíz) decidirá cómo pasarlo a db.assignInvoice.
       if(paymentStatus==="paid"||paymentStatus==="partial"){
-        const refsClean=paymentRefs.map(r=>({
-          method:r.method,
-          amount:Number(r.amount),
-          bank_reference:(r.bank_reference||"").trim()||null,
-          notes:(r.notes||"").trim()||null
-        }));
+        // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
+        const refsClean=paymentRefs.map(toBackendRef);
         await onConfirm(type,folio,paymentStatus,null,null,null,null,refsClean);
       }else{
         // status === "unpaid" → no refs
@@ -6526,13 +6551,9 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     setBusy(true);
     try{
       // v10.57.0 — Multi-pay refs si paid/partial
+      // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
       if(paymentStatus==="paid"||paymentStatus==="partial"){
-        const refsClean=paymentRefs.map(r=>({
-          method:r.method,
-          amount:Number(r.amount),
-          bank_reference:(r.bank_reference||"").trim()||null,
-          notes:(r.notes||"").trim()||null
-        }));
+        const refsClean=paymentRefs.map(toBackendRef);
         await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,refsClean);
       }else{
         await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null);
@@ -8575,15 +8596,12 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     if (!canSubmitSplit) return;
     setSaving(true);
     try {
+      // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional + notes
       const payload = splitGroups.map(g=>({
         doc_type: g.doc_type,
         folio: g.folio.toUpperCase(),
         order_ids: g.order_ids,
-        payment_refs: g.payment_status === "unpaid" ? [] : g.payment_refs.map(r=>({
-          method: r.method,
-          amount: Number(r.amount),
-          bank_reference: r.bank_reference || null
-        }))
+        payment_refs: g.payment_status === "unpaid" ? [] : g.payment_refs.map(toBackendRef)
       }));
       await onConfirmSplit(payload, preAssignedMode, reason.trim() || null);
     } finally { setSaving(false); }
