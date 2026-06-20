@@ -4331,6 +4331,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                       // (la ref real prevalece sobre la marca "no proporciono").
                       updateRef(idx, v.trim() ? { bank_reference: v, bank_ref_omitted_intentional: false } : { bank_reference: v });
                     }}
+                    onBlur={e => {
+                      // v10.72.29 P3-6: trim on blur. Si user pega "   " (puros espacios),
+                      // el state queda con whitespace pero refEmpty=true → checkbox reaparece y
+                      // toBackendRef serializa null (via .trim()||null). Limpiamos visualmente.
+                      const trimmed = (e.target.value || "").trim();
+                      if (trimmed !== e.target.value) updateRef(idx, { bank_reference: trimmed });
+                    }}
                     aria-label={`Referencia bancaria del pago ${idx + 1}`}
                     title={bankRefMissing ? "Sin folio, Lucero tendrá que conciliar manualmente. Solo omite si el cliente NO te dio voucher/SPEI." : undefined}
                     placeholder={
