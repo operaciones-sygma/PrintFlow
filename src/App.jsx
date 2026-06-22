@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon } from "@phosphor-icons/react";
 // v10.71.1 — C (tema) al tope para evitar TDZ: muchos const de nivel superior (filtros, NAV, mapas de color) lo referencian via C.token desde la tokenizacion v10.71.0.
-const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)"};
+const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
 // v10.64.0 — CORTE HÍBRIDO: folio de producción 100% automático/consecutivo (lo asigna
@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.32 — /impeccable polish: (1) motion — 3 barras de progreso pasan de animar width (layout thrash) a
+// transform: scaleX en GPU, con easing ease-out-quint (incluida la ProgressBar del OCard, en cada card del
+// tablero); el detector bajó layout-transition de 6→3 (las 3 restantes son legítimas: 2 barras con piso
+// minWidth/minHeight + el colapso del sidebar). (2) DRY — el transition de hover de las cards (duplicado en
+// 6 lugares) se tokeniza a C.tCard con el mismo ease-out unificado. Cierra el P2 de motion del critique.
 // v10.72.31 — /impeccable colorize: neutros tintados hacia el slate de marca (C.ac #4a6572, frío). Mata el
 // blanco puro (#ffffff → #fcfdfe en bg/card) y unifica superficies/bordes con un undertone slate sutil
 // (canvas #f5f5f7→#f0f3f7, sf→#eff2f6, bd→#e4e8ee). Cumple la ley "never #fff; tint every neutral toward the
@@ -1653,7 +1658,7 @@ function GuideBanner({text,color=C.ac}) {
 }
 function ProgressBar({order}) {
   const {cur,tot,pct:p}=getProgress(order); const s=SM[order.stage];
-  return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.t2}}>Progreso</span><span style={{fontSize:9,color:s?.c,fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:p+"%",height:"100%",background:s?.c||C.ac,borderRadius:4,transition:"width .5s"}}/></div></div>;
+  return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.t2}}>Progreso</span><span style={{fontSize:9,color:s?.c,fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:"100%",height:"100%",background:s?.c||C.ac,borderRadius:4,transformOrigin:"left",transform:"scaleX("+(p/100)+")",transition:"transform .5s cubic-bezier(.22,1,.36,1)"}}/></div></div>;
 }
 function LiveTimer({started}) {
   const [el,setEl]=useState(0);
@@ -5730,7 +5735,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         </div>
         {/* Barra de progreso */}
         <div style={{marginTop:8,height:8,background:C.bg,borderRadius:6,overflow:"hidden",border:"0.5px solid "+C.bd}}>
-          <div style={{height:"100%",width:pPct+"%",background:barColor,borderRadius:6,transition:"width 0.25s ease, background 0.25s ease"}}/>
+          <div style={{height:"100%",width:"100%",background:barColor,borderRadius:6,transformOrigin:"left",transform:"scaleX("+(pPct/100)+")",transition:"transform 0.25s cubic-bezier(.22,1,.36,1), background 0.25s ease"}}/>
         </div>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
           <span style={{fontSize:9,color:C.t2}}>{Math.round(pPct)}% asignado</span>
@@ -7468,7 +7473,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
         </div>
         {progress>=0&&<button type="button" onClick={cancelUpload} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>Cancelar</button>}
       </div>
-      <div style={{height:5,background:C.bd,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:(progress<0?100:progress)+"%",background:C.ios,borderRadius:3,transition:"width .2s ease",opacity:progress<0?0.6:1}}/></div>
+      <div style={{height:5,background:C.bd,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:"100%",background:C.ios,borderRadius:3,transformOrigin:"left",transform:"scaleX("+((progress<0?100:progress)/100)+")",transition:"transform .2s cubic-bezier(.22,1,.36,1)",opacity:progress<0?0.6:1}}/></div>
     </div>
     :canUpload?<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,background:C.bg}}>
       <UploadSimpleIcon size={14} weight="bold"/>Subir archivo (PDF, AI, PSD — máx 50MB)
@@ -8926,7 +8931,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:"box-shadow .16s ease,transform .12s ease"}}
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:C.tCard}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
     {/* v10.65.1 — VARIANTE B (impeccable critique): el acento de etapa/urgencia deja de ser raya
         lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
@@ -9174,7 +9179,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
       </div>
       {d.orders.map(o=>{const days=getDays(o);const st=SM[o.stage];const hp=role==="produccion"||role==="preprensa"||role==="german";const oOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
         const urgColor=days>=14?C.dn:days>=7?C.wn:days>=3?C.maq:C.ok;
-        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",border:"1.5px solid "+urgColor+"66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",border:"1.5px solid "+urgColor+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
               <div style={{fontSize:12,fontWeight:700}}>{o.client}</div>
@@ -9289,7 +9294,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           <div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>Órdenes Listas</div><div style={{fontSize:10,color:C.t2}}>Arrastra a máquinas, Empaque o Salidas</div></div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -9442,7 +9447,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
-            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
               {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
@@ -9517,7 +9522,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div style={{background:C.ctp,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{readyCtp.length}</div>
         <div><div style={{fontSize:13,fontWeight:700,color:C.ctp}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:C.ctp)+"66",transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:C.ctp)+"66",transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
@@ -10003,7 +10008,7 @@ function Archive({orders,role,onAction,userLogin}) {
                     {wOpen&&<div style={{paddingLeft:8,marginTop:4,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:6}}>
                       {wOrders.map(o=>{
                         const st=SM[o.stage];const isMaq=o.order_type==="maquila";const isCancelled=o.stage.includes("cancelled");
-                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",border:"1.5px solid "+(st?.c||C.ok)+"66",boxShadow:C.sh2,transition:"box-shadow .16s ease,transform .12s ease"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",border:"1.5px solid "+(st?.c||C.ok)+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
                           {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:C.cart,letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
                           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:3}}>{o.web_folio}</div>}
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
