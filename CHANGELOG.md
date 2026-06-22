@@ -5,6 +5,75 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.39 — Pase de polish del header: campana alineada + estados hover + a11y (/impeccable polish)
+
+`/impeccable polish` sobre el header (cierre del trabajo del shell). Detalles que separan "shippeado"
+de "pulido", sin cambios funcionales. Build + sintaxis verdes.
+
+- **Campana alineada al cluster.** Era ~26px (más chica que sus 3 vecinos de 40px y por debajo del
+  touch target). Ahora 40px con `borderRadius:10`, y el badge de conteo se ancla al ÍCONO (no a la
+  esquina del botón) con un anillo (`box-shadow`) que lo separa del fondo. Hover ghost (`C.bd`).
+- **Estados hover faltantes.** Los botones de acción (Inventario, Corona, CSV, Salir) no tenían
+  feedback de hover (`bs` es estático). Helper compartido `hoverLift` → leve elevación con sombra,
+  animada por el transition global de `box-shadow`.
+- **Accesibilidad.** `aria-label` en los botones icon-only (campana con conteo, Inventario, Corona,
+  CSV); antes solo tenían `title` (tooltip, no siempre anunciado por lectores de pantalla).
+- **Divisores.** De 20 a 24px para cubrir mejor la fila de 40px del header.
+
+---
+
+## v10.72.38 — Header del shell agrupado en 3 clusters + badge de rol sin duplicar (/impeccable layout)
+
+`/impeccable layout` sobre el header (continuación del critique del shell). El header era una
+fila plana de 8 controles con `gap:6` uniforme (spacing monótono, sin jerarquía) y el badge de
+rol repetía el footer del Sidebar. Sin cambios funcionales. Build + sintaxis verdes.
+
+### Qué cambió
+
+- **3 clusters con divisores y ritmo.** Los controles se agrupan por intención: **Ver/buscar**
+  (filtro + búsqueda), **Acciones** (campana + Inventario + Corona + CSV) y **Sesión** (Salir).
+  Spacing tight dentro de cada cluster (`gap:6`) y suelto entre clusters (`gap:8` + una línea
+  vertical `C.bdSt` de 20px). Antes todo competía con el mismo peso.
+- **Badge de rol solo con el Sidebar colapsado.** Con el Sidebar expandido el footer ya muestra
+  nombre + rol, así que el badge del header era duplicado: ahora se oculta. Con el Sidebar
+  COLAPSADO el footer esconde la identidad, así que el badge reaparece (única identidad visible).
+  Gateado con `sbCollapsed`.
+- **Se conserva** el comportamiento anti-wrap de v10.43.23: `nowrap` + `minWidth:0` + `flexShrink`
+  en el cluster de búsqueda → la búsqueda se comprime y las acciones no caen a 2da fila <1500px.
+
+---
+
+## v10.72.37 — Higiene del shell: borrado del nav viejo muerto + vocabulario de íconos unificado (/impeccable critique)
+
+`/impeccable critique` del shell + navegación (Sidebar + Header + contenedor de layout)
+puntuó 27/40. El piso era Consistencia (heurística #4, 2/40), arrastrada por dos cosas:
+código muerto de la migración v10.60.0 y un vocabulario de íconos doble. Esta tanda cierra
+los 2 P1 del critique. Sin cambios funcionales (salvo los chips de rol, que mejoran de
+emoji a dot de color). Build + sintaxis verdes, −15 líneas netas. Re-critique: 27 → 28
+(#4 Consistency 2 → 3, P1 2 → 0). Snapshots en `.impeccable/critique/`.
+
+### Qué se limpió
+
+- **Shell viejo muerto eliminado.** El nav superior + el menú hamburguesa "Más vistas" del
+  header vivían muertos desde v10.60.0 (`visibleNavs`/`moreNavs` eran `[]`). Borrados, junto
+  con `MAX_VISIBLE`/`moreActive` y el estado `showMoreMenu`. El header ahora ancla las acciones
+  a la derecha (`flex-end`).
+- **Vocabulario de íconos unificado a Phosphor.** Quitado el campo emoji `i:` de los 16 `navs`
+  (el Sidebar ya resolvía el ícono vía `NAV_ICON[id]`; el emoji solo se consumía en el código
+  muerto). Los chips "Ver como rol" del admin pasan de emoji de círculo (🟣🔵🩷) a un dot de
+  color con `rC[rol]` + `UserIcon`.
+- **`maxWidth` por vista declarativo.** El ternario anidado de 4 niveles que calculaba el ancho
+  del contenedor se reemplazó por un mapa `VIEW_MAXW` (default 1300, `"none"` = ancho completo,
+  `board` por rol). Agregar o re-anchar una vista ahora es una línea en el mapa.
+
+### Backlog diferido (triado en el critique)
+
+- Header: agrupar los 8 controles con separadores + quitar el badge de rol duplicado (P2).
+- Atajos de teclado + command palette ⌘K alimentado por `navs` (P2).
+- Landmarks semánticos `<nav>/<header>/<main>` + `aria-current` (P3).
+
+---
+
 ## v10.58.22 + v10.58.23 — Override CFDI cross-client + hardening fiscal (scan adversarial)
 
 Reportado por Marcelo (chat producción): Karla no podía mover órdenes de

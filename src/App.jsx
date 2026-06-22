@@ -15,7 +15,7 @@ const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIco
 // v10.62.0 — secciones del Sidebar (agrupacion por categoria/utilidad). Cada nav item
 // lleva un campo g con su seccion; el render agrupa por estas en este orden.
 const NAV_SECTIONS=[["op","Operación"],["com","Comercial"],["ctrl","Control"],["reg","Registros"]];
-// v10.72.19 — ancho máximo del contenedor por vista (antes era un ternario anidado en línea, ilegible).
+// v10.72.37 — ancho máximo del contenedor por vista (antes era un ternario anidado en línea, ilegible).
 // Default 1300. "none" = ancho completo. board depende del rol (ver cómputo de mw en el render).
 const VIEW_MAXW={form:820,tasks:"none",orders:"none",oc:"none",chemicals:"none",pipeline:1680,archive:1680,wip:1680,health:1680,torre:1680,audit:1680,analytics:1680};
 import { createClient } from "@supabase/supabase-js";
@@ -1498,6 +1498,8 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10,minHeight:40}); // v10.72.18 — touch target ~40px de ALTO (solo minHeight: no cambia el ancho → no rompe las filas densas de íconos; además alinea con los bt de la misma fila)
+// v10.72.39 — /impeccable polish: handlers de hover compartidos (leve elevación) para los botones de acción del header. El transition global de box-shadow lo anima; en leave vuelve a sin sombra.
+const hoverLift={onMouseEnter:e=>{e.currentTarget.style.boxShadow="0 2px 8px -2px rgba(26,26,31,.22)"},onMouseLeave:e=>{e.currentTarget.style.boxShadow="none"}};
 // v10.72.30 — /impeccable extract: vocabulario ÚNICO de badges. Reemplaza decenas de <span> inline con estilos
 // derivados (cada uno con padding/radio/peso ligeramente distinto). `tone` da el rol semántico: context=gris
 // (recede), danger=rojo, warn=ámbar, success, info, identity=slate. `color` permite un tinte puntual (ej. color
@@ -2130,8 +2132,10 @@ function QuickNotes({notes=[],onAdd,role}) {
 
 // ─── NOTIFICATIONS ────────────────────────────────
 function NotificationBell({count,onClick}) {
-  return <button onClick={onClick} style={{position:"relative",background:"none",border:"none",cursor:"pointer",fontSize:18,padding:"4px 6px",display:"inline-flex",alignItems:"center",color:C.tx}} title="Notificaciones">
-    <BellRingingIcon size={18} weight={count>0?"fill":"regular"}/>{count>0&&<div style={{position:"absolute",top:0,right:0,background:C.dn,color:"#fff",width:16,height:16,borderRadius:"50%",fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{count>9?"9+":count}</div>}
+  // v10.72.39 — /impeccable polish: alto 40px (alinea con los bs vecinos del cluster + touch target),
+  // badge anclado al ícono (no a la esquina del botón) con anillo para separarlo del fondo, hover ghost, aria-label con conteo.
+  return <button onClick={onClick} aria-label={count>0?"Notificaciones, "+count+" sin leer":"Notificaciones"} title="Notificaciones" onMouseEnter={e=>{e.currentTarget.style.background=C.bd+"55"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}} style={{background:"transparent",border:"none",cursor:"pointer",minHeight:40,padding:"0 9px",borderRadius:10,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.tx,flexShrink:0}}>
+    <span style={{position:"relative",display:"inline-flex"}}><BellRingingIcon size={18} weight={count>0?"fill":"regular"}/>{count>0&&<div style={{position:"absolute",top:-6,right:-7,background:C.dn,color:"#fff",minWidth:16,height:16,padding:"0 3px",boxSizing:"border-box",borderRadius:8,fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 0 1.5px "+C.card}}>{count>9?"9+":count}</div>}</span>
   </button>;
 }
 function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDeleteAll,role}) {
@@ -14803,7 +14807,7 @@ export default function PrintFlow() {
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
   const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a"};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
-  // v10.72.19 — sin emoji `i:`; el ícono lo resuelve NAV_ICON[id] (Phosphor) en el render del Sidebar. Vocabulario único.
+  // v10.72.37 — sin emoji `i:`; el ícono lo resuelve NAV_ICON[id] (Phosphor) en el render del Sidebar. Vocabulario único.
   const navs=[{id:"pipeline",g:"op",l:"Dashboard"},{id:"tasks",g:"op",l:"Pendientes ("+myTasks.length+")"}];
   // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
   if(user==="admin")navs.unshift({id:"torre",g:"op",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
@@ -14824,7 +14828,7 @@ export default function PrintFlow() {
   if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",l:"Químicos"});
 
-  // v10.72.19 — eliminado el shell viejo (visibleNavs/moreNavs/menú "Más vistas"): muerto desde v10.60.0, la navegación vive en el Sidebar.
+  // v10.72.37 — eliminado el shell viejo (visibleNavs/moreNavs/menú "Más vistas"): muerto desde v10.60.0, la navegación vive en el Sidebar.
   const navClick=(id)=>{setView(id);if(id!=="form")setEditO(null)};
 
   return (
@@ -14872,24 +14876,34 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       </div>
       {/* ═══ COLUMNA PRINCIPAL ═══ */}
       <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
-      {/* v10.43.23 — header compacto: outer nowrap + minWidth:0 en secciones para evitar que las acciones (📦/🎱/CSV/Salir) caigan a 2da fila con admin en pantallas <1500px */}
-      <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"nowrap",gap:6,minWidth:0}}>
-        {/* v10.72.19 — el nav superior viejo se eliminó (vivía muerto desde v10.60.0); la navegación es el Sidebar. El header solo lleva acciones, ancladas a la derecha. */}
-        {/* v10.43.23 — minWidth:0 permite que la sección se comprima (input shrink) en vez de envolver a 2da fila */}
+      {/* v10.72.38 — /impeccable layout: header en 3 clusters (Ver/buscar · Acciones · Sesión) con divisores;
+          ritmo tight-dentro (gap 6) / suelto-entre (gap 8 + línea). nowrap+minWidth:0+flexShrink en el cluster
+          de búsqueda evitan que las acciones caigan a 2da fila <1500px (regla original v10.43.23). */}
+      <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"nowrap",gap:8,minWidth:0}}>
+        {/* Cluster 1 — Ver / buscar (qué datos ves) */}
         <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,flexShrink:1}}>
           {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={11} weight="bold"/>Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><ListBulletsIcon size={11} weight="bold"/>Todas</button></div>}
-          {/* v10.43.23 — search comprimible: minWidth:90, flexShrink:1 → se adapta al espacio sin tirar el layout */}
           <SearchInput wrapStyle={{width:160,minWidth:90,flexShrink:1}} style={{...inp,padding:"7px 12px",fontSize:11,borderRadius:10,boxShadow:"0 0 0 0.5px "+C.bd}} placeholder="Buscar orden..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
+        <div style={{width:1,height:24,background:C.bdSt,flexShrink:0}}/>
+        {/* Cluster 2 — Acciones (alertas + lanzadores + export) */}
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
-          {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button onClick={()=>setInventoryOpen(true)} title="Inventario Cuadra (producción a stock + venta)" style={{...bs(C.emr),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
-          {(user==="admin"||user==="secretaria"||user==="karla")&&<button onClick={()=>setCoronaOpen(true)} title="Apartado Corona (saldo a favor)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
-          {(user==="admin"||isSec(user))&&<button title="Exportar CSV" onClick={()=>{const csvOrdersRaw=viewOrders;
+          {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button {...hoverLift} onClick={()=>setInventoryOpen(true)} aria-label="Inventario Cuadra (producción a stock y venta)" title="Inventario Cuadra (producción a stock + venta)" style={{...bs(C.emr),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
+          {(user==="admin"||user==="secretaria"||user==="karla")&&<button {...hoverLift} onClick={()=>setCoronaOpen(true)} aria-label="Apartado Corona (saldo a favor)" title="Apartado Corona (saldo a favor)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
+          {(user==="admin"||isSec(user))&&<button {...hoverLift} aria-label="Exportar CSV" title="Exportar CSV" onClick={()=>{const csvOrdersRaw=viewOrders;
         /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
         const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio","TamañoEstándar"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||"",o.standard_size?ssLabel(o.standard_size):""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={{...bs(C.ac),padding:"6px 9px",flexShrink:0}}><DownloadSimpleIcon size={16} weight="bold"/></button>}
-          <div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600,flexShrink:0}}>{rL[user]}</div>
+        </div>
+        <div style={{width:1,height:24,background:C.bdSt,flexShrink:0}}/>
+        {/* Cluster 3 — Sesión */}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {/* v10.72.38 — badge de rol SOLO con el Sidebar colapsado: ahí el footer del Sidebar oculta nombre/rol,
+              así que el badge es la única identidad visible. Con Sidebar expandido era duplicado (lo quita el critique). */}
+          {sbCollapsed&&<div style={{background:rC[user]+"12",color:rC[user],padding:"4px 10px",borderRadius:8,fontSize:10,fontWeight:600,flexShrink:0}}>{rL[user]}</div>}
           {/* v10.41.1 #1 — limpiar también taskFilters y adminRoleFilter para evitar state stale entre sesiones */}
-          <button onClick={()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setWakeupItems(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd,flexShrink:0}}>Salir</button>
+          <button {...hoverLift} onClick={()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setWakeupItems(null)}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd,flexShrink:0}}>Salir</button>
         </div>
       </div>
 
@@ -14904,7 +14918,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {/* v10.41.0 — Admin: dropdown para "ver pendientes como otro rol" */}
           {user==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
             <span style={{fontSize:11,color:C.t2,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={12} weight="bold"/>Ver como rol:</span>
-            {/* v10.72.19 — dot de color con rC[rol] en vez de emoji de círculo. Vocabulario de íconos unificado a Phosphor. */}
+            {/* v10.72.37 — dot de color con rC[rol] en vez de emoji de círculo. Vocabulario de íconos unificado a Phosphor. */}
             {[{v:"",l:"Admin (todo)"},{v:"karla",l:"Karla"},{v:"produccion",l:"Gerardo"},{v:"preprensa",l:"Noemí"},{v:"german",l:"Germán"},{v:"secretaria",l:"Lupita"},{v:"vendedor",l:"Vendedor"}].map(opt=>(
               <button key={opt.v} onClick={()=>{setAdminRoleFilter(opt.v);setTaskFilters(new Set())}}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
