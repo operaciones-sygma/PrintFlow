@@ -45,6 +45,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.35 — /impeccable (P3 del critique del DetailModal): (1) los 4 badges del header del modal (etapa, Web,
+// prioridad, post-factura) migrados al componente <Badge> — cierra la deriva residual. (2) a11y/token: alt real
+// en las imágenes de producto ("Imagen N — <producto>") + el fondo de la imagen usa C.sf en vez del #f5f5f7
+// hardcodeado (que quedó desfasado tras el colorize de neutros). Pulidos chicos, paridad visual.
 // v10.72.34 — /impeccable layout (critique del DetailModal, P2): la barra de acciones (Cerrar/Editar/Imprimir)
 // se fija STICKY al fondo del modal. Antes vivía después de ~20 filas de lectura (Cliente/Producto/Specs/Fiscal/
 // Archivo/Notas/Historial) → para actuar había que scrollear todo. Ahora siempre alcanzable: barra normal en
@@ -2610,16 +2614,16 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <div style={{fontSize:(o.cart_folio||o.web_folio)?10:9,color:C.t3,marginTop:(o.cart_folio||o.web_folio)?2:0}}>{o.id}</div>
           <div style={{fontSize:20,fontWeight:800}}>{o.production_number||o.client}</div>
           <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
-            <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
-            {o.source==="web"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,background:C.cart+"12",color:C.cart,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}}><GlobeIcon size={11} weight="bold"/>Web{o.web_order_ref?" · "+o.web_order_ref:""}</span>}
-            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
-            {o.has_post_invoice_edits&&<span style={{background:C.amb+"15",color:C.amb,padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada post-factura</span>}
+            <Badge color={st?.c||C.t3}><StageLbl stage={o.stage} size={10}/></Badge>
+            {o.source==="web"&&<Badge color={C.cart} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
+            {o.priority!=="normal"&&PM[o.priority]&&<Badge color={PM[o.priority].c}><PrioLbl priority={o.priority}/></Badge>}
+            {o.has_post_invoice_edits&&<Badge tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={11} weight="fill"/>}>Editada post-factura</Badge>}
           </div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
       </div>
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
-      {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt="" onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:"#f5f5f7",cursor:"pointer"}}/>)}</div>})()}
+      {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt={"Imagen "+(i+1)+" — "+(o.product_type||o.product||o.id)} onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:C.sf,cursor:"pointer"}}/>)}</div>})()}
       {o.plate_status&&<div style={{display:"inline-block",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700,marginBottom:10,background:(o.plate_status==="existing"?C.live:C.ctp)+"15",color:o.plate_status==="existing"?C.live:C.ctp}}>{o.plate_status==="existing"?<><ArrowsClockwiseIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Placa ya existe (auto-salta CTP)</>:<><PlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Nueva placa CTP requerida</>}</div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
