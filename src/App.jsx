@@ -15,6 +15,9 @@ const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIco
 // v10.62.0 — secciones del Sidebar (agrupacion por categoria/utilidad). Cada nav item
 // lleva un campo g con su seccion; el render agrupa por estas en este orden.
 const NAV_SECTIONS=[["op","Operación"],["com","Comercial"],["ctrl","Control"],["reg","Registros"]];
+// v10.72.19 — ancho máximo del contenedor por vista (antes era un ternario anidado en línea, ilegible).
+// Default 1300. "none" = ancho completo. board depende del rol (ver cómputo de mw en el render).
+const VIEW_MAXW={form:820,tasks:"none",orders:"none",oc:"none",chemicals:"none",pipeline:1680,archive:1680,wip:1680,health:1680,torre:1680,audit:1680,analytics:1680};
 import { createClient } from "@supabase/supabase-js";
 
 // ═══ SUPABASE CONNECTION ═══
@@ -45,6 +48,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.36 — aclaración margen vs markup en maquila (reporte de Marcelo: "23% vs 30%, ¿cuál es?"). El badge
+// "% Ganancia" del OrderForm de maquila siempre fue margen sobre VENTA ((precio−costo)/precio). Para que nadie lo
+// confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
+// y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
+// dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
 // v10.72.35 — /impeccable (P3 del critique del DetailModal): (1) los 4 badges del header del modal (etapa, Web,
 // prioridad, post-factura) migrados al componente <Badge> — cierra la deriva residual. (2) a11y/token: alt real
 // en las imágenes de producto ("Imagen N — <producto>") + el fondo de la imagen usa C.sf en vez del #f5f5f7
@@ -7772,6 +7780,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     return () => pnValidateTimerRef.current && clearTimeout(pnValidateTimerRef.current);
   }, [f.production_number, canEditProductionNumber, nextPN, editOrder?.id]);
   const isMaq=f.order_type==="maquila";const margin=isMaq&&f.maq_cost&&f.maq_price?pct(parseFloat(f.maq_cost),parseFloat(f.maq_price)):null;
+  // v10.72.36 — markup sobre costo, para aclarar la confusion "23% vs 30%": margin=ganancia/precio (sobre venta), maqMarkup=ganancia/costo (sobre costo). Mismo $ de ganancia, distinta base.
+  const maqMarkup=isMaq&&Number(f.maq_cost)>0&&Number(f.maq_price)>0?Math.round(((Number(f.maq_price)-Number(f.maq_cost))/Number(f.maq_cost))*100):null;
   const submit=async()=>{
     setTried(true);if(!canSubmit){formRef.current?.scrollIntoView({behavior:"smooth",block:"start"});return;}
     // v10.34.4 fix #5 — flush debounce: si hay validación pendiente, ejecutarla sincrónicamente antes de seguir
@@ -8063,7 +8073,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!specsOnly&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><UserIcon size={12} weight="bold"/>Agente / Vendedor</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} onClick={()=>s("agent",a)} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{a}</button>)}<button onClick={()=>s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:12,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>Otro...</button></div>{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>s("agent",e.target.value||"otro")} placeholder="Nombre del agente"/>}</div>}
     {/* v10.58.26: banner si folio pre-asignado bloquea precios */}
     {financialsLocked&&<div style={{margin:"12px 20px",padding:"10px 14px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:11,color:"#9a3412",lineHeight:1.4,display:"flex",alignItems:"flex-start",gap:8}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:1}}/><span><strong>Folio fiscal pre-asignado ({editOrder?.invoice_folio}).</strong> Puedes editar costo proveedor y datos operativos, pero <strong>precio cliente está bloqueado</strong> para no alterar la facturación. Solo admin puede modificar precios en órdenes ya facturadas.</span></div>}
-    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.maq,textTransform:"uppercase"}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} placeholder="$0"/></FC><FC label={financialsLocked?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente <LockIcon size={11} weight="bold"/></span>:"Precio cliente"} br><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.maq_price} onChange={e=>!financialsLocked&&s("maq_price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></FC><FC label="% Ganancia"><div style={{padding:10,background:"#fff",borderRadius:12,fontSize:18,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center"}}>{margin!==null?margin+"%":"—"}</div></FC></div></>}
+    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:10,fontWeight:600,color:C.maq,textTransform:"uppercase"}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} placeholder="$0"/></FC><FC label={financialsLocked?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente <LockIcon size={11} weight="bold"/></span>:"Precio cliente"} br><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.maq_price} onChange={e=>!financialsLocked&&s("maq_price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></FC><FC label="% Ganancia"><div title={"Margen sobre el PRECIO DE VENTA: ganancia ÷ precio cliente = (precio − costo) ÷ precio."+(maqMarkup!=null?"\n\nEjemplo: cobras "+fmt(f.maq_price)+" con costo "+fmt(f.maq_cost)+" → ganas "+fmt(Number(f.maq_price)-Number(f.maq_cost))+".\n• "+margin+"% sobre venta (esta tarjeta)\n• "+maqMarkup+"% sobre costo (cuanto le subiste al proveedor)\n\nMismo dinero de ganancia, distinta base. El de venta siempre sale mas bajo.":"")} style={{padding:10,background:"#fff",borderRadius:12,fontSize:18,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center",cursor:"help"}}>{margin!==null?margin+"%":"—"}</div><div style={{fontSize:8.5,color:C.t3,textAlign:"center",marginTop:4,lineHeight:1.35}}>margen s/ venta{maqMarkup!=null?<> · <b style={{color:C.t2,fontWeight:700}}>{maqMarkup}%</b> s/ costo</>:null}</div></FC></div></>}
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN{financialsLocked&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {/* v10.72.3 — divisor de jerarquía: separa el núcleo obligatorio de la cola "adicional" (CTP / Imágenes / Notas) */}
@@ -10308,7 +10318,7 @@ function Analytics({orders,onReload}) {
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
         <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>Ingresos Totales</span>} v={fmt(totalRev)} s={orders.length+" órdenes"} c={C.ok} big/>
         <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FactoryIcon size={10} weight="bold"/>Producción Interna</span>} v={fmt(tR)} s={intOrders.length+" órdenes"} c={C.ac} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TruckIcon size={10} weight="bold"/>Maquila</span>} v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)+" ("+(mR>0?Math.round(((mR-mC)/mR)*100):0)+"%)"} c={C.maq} big/>
+        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TruckIcon size={10} weight="bold"/>Maquila</span>} v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)+" ("+(mR>0?Math.round(((mR-mC)/mR)*100):0)+"% s/venta)"} c={C.maq} big/>
         <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TicketIcon size={10} weight="bold"/>Ticket Promedio</span>} v={fmt(avgTicket)} s={del.length+" entregadas"} c={C.fac} big/>
       </div>
 
@@ -12802,7 +12812,6 @@ export default function PrintFlow() {
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
   const assignMachineLock=useRef(false); // v10.64.1 — lock SÍNCRONO real para reentrada de assignMachine (actionLoading es async y se leía stale del closure)
-  const [showMoreMenu,setShowMoreMenu]=useState(false);
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
   const showToast=useCallback((message,type="success")=>setToast({message,type}),[]);
   // 🆕 v10.13.0 — Registrar hook global para que OrderForm.submit pueda esperar la resolución del modal de cliente similar
@@ -14794,31 +14803,29 @@ export default function PrintFlow() {
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
   const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a"};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
-  const navs=[{id:"pipeline",g:"op",i:"📊",l:"Dashboard"},{id:"tasks",g:"op",i:"📌",l:"Pendientes ("+myTasks.length+")"}];
+  // v10.72.19 — sin emoji `i:`; el ícono lo resuelve NAV_ICON[id] (Phosphor) en el render del Sidebar. Vocabulario único.
+  const navs=[{id:"pipeline",g:"op",l:"Dashboard"},{id:"tasks",g:"op",l:"Pendientes ("+myTasks.length+")"}];
   // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
-  if(user==="admin")navs.unshift({id:"torre",g:"op",i:"🗼",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
+  if(user==="admin")navs.unshift({id:"torre",g:"op",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
   // v10.58.22: Karla también puede ver Datos Pendientes (vista incluye "Sin precio" con botón Editar Precio)
-  if(user==="secretaria"||user==="karla")navs.push({id:"health",g:"op",i:"📝",l:"Datos Pendientes"});
-  if(isSec(user)||user==="admin")navs.push({id:"form",g:"com",i:"➕",l:"Nueva"});
-  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",g:"com",i:"📝",l:"Órdenes de Compra"});
-  if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",g:"com",i:"🌐",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
-  if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",g:"op",i:user==="german"?"💿":"🏭",l:user==="karla"?"Folios":"Tablero"});
-  navs.push({id:"calendar",g:"op",i:"📅",l:"Entregas"});
-  navs.push({id:"orders",g:"reg",i:"📋",l:"Todas"});
-  navs.push({id:"archive",g:"reg",i:"🗂️",l:"Archivo"});
-  if(user==="admin")navs.push({id:"analytics",g:"ctrl",i:"📊",l:"Analytics"});
-  if(user==="admin")navs.push({id:"wip",g:"ctrl",i:"💰",l:"Dinero en Proceso"}); // v10.27.0
-  if(user==="admin")navs.push({id:"health",g:"ctrl",i:"🩺",l:"Salud Operativa"}); // v10.28.0
-  if(user==="admin"||user==="karla")navs.push({id:"audit",g:"ctrl",i:"📑",l:"Auditoría"});
-  if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",i:"📁",l:"Archivos"});
-  if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",i:"🧪",l:"Químicos"});
+  if(user==="secretaria"||user==="karla")navs.push({id:"health",g:"op",l:"Datos Pendientes"});
+  if(isSec(user)||user==="admin")navs.push({id:"form",g:"com",l:"Nueva"});
+  if(isSec(user)||user==="admin"||user==="karla")navs.push({id:"oc",g:"com",l:"Órdenes de Compra"});
+  if(user==="secretaria"||user==="admin")navs.push({id:"web_orders",g:"com",l:"Pedidos Web"+(webPendingCount?" ("+webPendingCount+")":"")});
+  if(user==="produccion"||user==="admin"||user==="karla"||user==="german")navs.push({id:"board",g:"op",l:user==="karla"?"Folios":"Tablero"});
+  navs.push({id:"calendar",g:"op",l:"Entregas"});
+  navs.push({id:"orders",g:"reg",l:"Todas"});
+  navs.push({id:"archive",g:"reg",l:"Archivo"});
+  if(user==="admin")navs.push({id:"analytics",g:"ctrl",l:"Analytics"});
+  if(user==="admin")navs.push({id:"wip",g:"ctrl",l:"Dinero en Proceso"}); // v10.27.0
+  if(user==="admin")navs.push({id:"health",g:"ctrl",l:"Salud Operativa"}); // v10.28.0
+  if(user==="admin"||user==="karla")navs.push({id:"audit",g:"ctrl",l:"Auditoría"});
+  if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",l:"Archivos"});
+  if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",l:"Químicos"});
 
-  const MAX_VISIBLE=5;
-  const visibleNavs=[];/* v10.60.0 — la navegación vive ahora en el Sidebar lateral */
-  const moreNavs=[];
-  const moreActive=moreNavs.some(n=>n.id===view);
-  const navClick=(id)=>{setView(id);if(id!=="form")setEditO(null);setShowMoreMenu(false)};
+  // v10.72.19 — eliminado el shell viejo (visibleNavs/moreNavs/menú "Más vistas"): muerto desde v10.60.0, la navegación vive en el Sidebar.
+  const navClick=(id)=>{setView(id);if(id!=="form")setEditO(null)};
 
   return (
     <div style={{minHeight:"100vh",background:C.canvas,fontFamily:"'Geist',sans-serif",color:C.tx,display:"flex",alignItems:"flex-start",fontVariantNumeric:"tabular-nums"}}>
@@ -14866,25 +14873,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* ═══ COLUMNA PRINCIPAL ═══ */}
       <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",minHeight:"100vh"}}>
       {/* v10.43.23 — header compacto: outer nowrap + minWidth:0 en secciones para evitar que las acciones (📦/🎱/CSV/Salir) caigan a 2da fila con admin en pantallas <1500px */}
-      <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"nowrap",gap:6,minWidth:0}}>
-        {/* logo + nav movidos al Sidebar lateral (v10.60.0) */}
-        <div style={{display:"flex",gap:3,alignItems:"center",flexShrink:0}}>
-          {visibleNavs.map(n=><button key={n.id} onClick={()=>navClick(n.id)} style={{background:view===n.id?C.acL:"transparent",border:"none",color:view===n.id?C.ac:C.t2,padding:"7px 11px",borderRadius:10,cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{n.i} {n.l}</button>)}
-          {moreNavs.length>0&&<div style={{position:"relative"}}>
-            <button onClick={()=>setShowMoreMenu(!showMoreMenu)} title="Más vistas" style={{background:moreActive?C.acL:"transparent",border:"none",color:moreActive?C.ac:C.t2,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap",display:"flex",flexDirection:"column",alignItems:"center",gap:3,transition:"background 0.15s, color 0.15s"}} onMouseEnter={e=>{if(!moreActive){e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!moreActive){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>
-              <div style={{display:"flex",flexDirection:"column",gap:3,width:14}}>
-                <div style={{height:1.5,background:"currentColor",borderRadius:1}}/>
-                <div style={{height:1.5,background:"currentColor",borderRadius:1,width:10}}/>
-                <div style={{height:1.5,background:"currentColor",borderRadius:1}}/>
-              </div>
-              {moreActive&&<div style={{width:4,height:4,borderRadius:"50%",background:C.ac,marginTop:1}}/>}
-            </button>
-            {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:997}} onClick={()=>setShowMoreMenu(false)}/><div style={{position:"absolute",top:"calc(100% + 6px)",right:0,background:C.bg,borderRadius:14,boxShadow:C.sh3,border:"0.5px solid "+C.bd,zIndex:998,minWidth:220,overflow:"hidden",animation:"menuFade 0.18s ease-out"}}>
-              <div style={{padding:"12px 16px 8px",fontSize:10,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:0.6}}>Más vistas</div>
-              {moreNavs.map((n,i)=><button key={n.id} onClick={()=>navClick(n.id)} onMouseEnter={e=>{if(view!==n.id)e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{if(view!==n.id)e.currentTarget.style.background="transparent"}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px",border:"none",background:view===n.id?C.acL:"transparent",color:view===n.id?C.ac:C.tx,cursor:"pointer",fontSize:12.5,fontWeight:view===n.id?700:500,fontFamily:"'Geist',sans-serif",textAlign:"left",transition:"background 0.12s"}}><span style={{fontSize:14,width:18,textAlign:"center"}}>{n.i}</span>{n.l}</button>)}
-            </div></>}
-          </div>}
-        </div>
+      <div style={{borderBottom:"0.5px solid "+C.bd,padding:"8px 16px",display:"flex",justifyContent:"flex-end",alignItems:"center",flexWrap:"nowrap",gap:6,minWidth:0}}>
+        {/* v10.72.19 — el nav superior viejo se eliminó (vivía muerto desde v10.60.0); la navegación es el Sidebar. El header solo lleva acciones, ancladas a la derecha. */}
         {/* v10.43.23 — minWidth:0 permite que la sección se comprima (input shrink) en vez de envolver a 2da fila */}
         <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0,flexShrink:1}}>
           {hasFilter&&<div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,flexShrink:0}}><button onClick={()=>setOrderFilter("mine")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:orderFilter==="mine"?C.ac:"transparent",color:orderFilter==="mine"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={11} weight="bold"/>Mis Órdenes</button><button onClick={()=>setOrderFilter("all")} style={{padding:"5px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:orderFilter==="all"?C.ac:"transparent",color:orderFilter==="all"?"#fff":C.t2,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}><ListBulletsIcon size={11} weight="bold"/>Todas</button></div>}
@@ -14903,7 +14893,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </div>
       </div>
 
-      <div style={{boxSizing:"border-box",width:"100%",maxWidth:(view==="board"&&(user==="produccion"||user==="admin"))?"none":(view==="form"?820:(["tasks","orders","oc","chemicals"].includes(view)?"none":(["pipeline","archive","wip","health","torre","audit","analytics"].includes(view)?1680:1300))),margin:"0 auto",padding:"14px 16px"}}>
+      <div style={{boxSizing:"border-box",width:"100%",maxWidth:view==="board"?((user==="produccion"||user==="admin")?"none":1300):(VIEW_MAXW[view]??1300),margin:"0 auto",padding:"14px 16px"}}>
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{filteredMyTasks.length} pendiente{filteredMyTasks.length!==1?"s":""}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color={C.ios}/>}
@@ -14913,10 +14903,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {user==="karla"&&<FirstTimeHint role={user} hintKey="tasks-karla" text="Aquí verás órdenes listas para entrega (Salidas y Maquila Recibida). Click '📄 Asignar Folio y Entregar' para elegir Factura (D-) o Remisión (R-) y cerrar la orden." color="#a855f7"/>}
           {/* v10.41.0 — Admin: dropdown para "ver pendientes como otro rol" */}
           {user==="admin"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
-            <span style={{fontSize:11,color:C.t2,fontWeight:600}}>👤 Ver como rol:</span>
-            {[{v:"",l:"Admin (todo)"},{v:"karla",l:"🟣 Karla"},{v:"produccion",l:"🔵 Gerardo"},{v:"preprensa",l:"🩷 Noemí"},{v:"german",l:"🩵 Germán"},{v:"secretaria",l:"🟪 Lupita"},{v:"vendedor",l:"🟠 Vendedor"}].map(opt=>(
+            <span style={{fontSize:11,color:C.t2,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={12} weight="bold"/>Ver como rol:</span>
+            {/* v10.72.19 — dot de color con rC[rol] en vez de emoji de círculo. Vocabulario de íconos unificado a Phosphor. */}
+            {[{v:"",l:"Admin (todo)"},{v:"karla",l:"Karla"},{v:"produccion",l:"Gerardo"},{v:"preprensa",l:"Noemí"},{v:"german",l:"Germán"},{v:"secretaria",l:"Lupita"},{v:"vendedor",l:"Vendedor"}].map(opt=>(
               <button key={opt.v} onClick={()=>{setAdminRoleFilter(opt.v);setTaskFilters(new Set())}}
-                style={{padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:999,border:"1px solid "+(adminRoleFilter===opt.v?C.ac:C.bd),background:adminRoleFilter===opt.v?C.acL:C.bg,color:adminRoleFilter===opt.v?C.ac:C.t2,fontSize:11,fontWeight:adminRoleFilter===opt.v?700:500,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+                {opt.v&&<span style={{width:8,height:8,borderRadius:"50%",background:rC[opt.v]||C.t3,flexShrink:0}}/>}
                 {opt.l}
               </button>
             ))}
