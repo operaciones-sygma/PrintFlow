@@ -45,6 +45,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.33 — cierre de seguridad del scan (DB-only, sin cambios de UI). Fix #2 (decisión de Marcelo: los tres):
+// client, client_company y order_type ahora disparan needs_reprint al cambiar tras imprimir (trigger
+// auto_detect_post_print_edit) y entran al content_hash (peek_print_version + register_print) — antes cambiar
+// cliente/tipo en una orden ya impresa dejaba la hoja en piso equivocada SIN avisar. Fix #3: REVOKE de los grants
+// residuales de anon/authenticated sobre cobranza.client_agents (defensa en profundidad; el acceso ya iba 100%
+// por RPCs SECURITY DEFINER y ningún código lee la tabla directo). Deuda RLS (#1, auth real) sigue documentada.
 // v10.72.32 — /impeccable polish: (1) motion — 3 barras de progreso pasan de animar width (layout thrash) a
 // transform: scaleX en GPU, con easing ease-out-quint (incluida la ProgressBar del OCard, en cada card del
 // tablero); el detector bajó layout-transition de 6→3 (las 3 restantes son legítimas: 2 barras con piso
