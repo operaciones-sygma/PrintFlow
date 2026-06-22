@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.29 — /impeccable distill (card del tablero): JERARQUÍA POR COLOR en la fila de badges del OCard.
+// Los badges de CONTEXTO (Web, a Stock, desde Stock, Prueba, archivo, Placa/CTP, creado-por) pasan a gris tenue
+// (C.sf/C.t2); etapa, prioridad y EXCEPCIONES (RETRASO, atorada, Falta precio/costo, Sin logo SYGMA) conservan
+// color para RESALTAR. No se oculta ni se quita NINGÚN badge (opción B de Marcelo: todo visible, solo menos
+// ruido visual). Ataca el "muro de badges" (critique P1) sin perder información.
 // v10.72.28 — fix (continuación reporte de Genaro): "no me aparece el botón de editar" en H-3562. Causa real:
 // el DetailModal (el modal que abre Genaro al tocar la orden) solo mostraba "Editar" para role==="admin"; el
 // costo de maquila salía como fila de SOLO-LECTURA y el botón "Editar Maquila" vivía únicamente en la card del
@@ -8942,9 +8947,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
           {o.sin_empaque_sygma&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:800,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.dn+"45"}} title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)"><PackageIcon size={11} weight="bold"/>Sin logo SYGMA</span>}
-          {o.source==="web"&&<span style={{background:C.cart+"12",color:C.cart,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}><GlobeIcon size={11} weight="bold"/>Web</span>}
-          {o.stock_role==="production"&&<span style={{background:C.emr+"12",color:C.emr,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>a Stock</span>}
-          {o.stock_role==="sale"&&<span style={{background:C.sal+"12",color:C.sal,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Venta desde stock — sale del inventario para entregar al cliente"><ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>desde Stock</span>}
+          {o.source==="web"&&<span style={{background:C.sf,color:C.t2,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}><GlobeIcon size={11} weight="bold"/>Web</span>}
+          {o.stock_role==="production"&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>a Stock</span>}
+          {o.stock_role==="sale"&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Venta desde stock — sale del inventario para entregar al cliente"><ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>desde Stock</span>}
           {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
           {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>RETRASO</span>}
@@ -8958,11 +8963,11 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             if(!noPrice&&!noCost)return null;
             return <span title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" style={{background:C.amb+"15",color:C.amb,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700,border:"1px solid "+C.amb+"40"}}><CurrencyDollarIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</span>;
           })()}
-          {o.proof_approved&&<span style={{background:C.ok+"12",color:C.ok,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Prueba</span>}
-          {o.file_url&&<span style={{background:C.ios+"12",color:C.ios,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center"}}><PaperclipIcon size={11} weight="bold"/></span>}
-          {o.plate_status==="existing"&&!compact&&<span style={{background:C.live+"15",color:C.live,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Reutiliza placa existente — saltó CTP"><ArrowsClockwiseIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Placa</span>}
-          {o.plate_status==="new_ctp"&&!compact&&<span style={{background:C.ctp+"15",color:C.ctp,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}} title="Requiere nueva placa CTP"><PlusIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>CTP</span>}
-          {o.created_by&&(()=>{const stdU=["produccion","preprensa","german","admin"];if(stdU.includes(o.created_by))return null;if(o.created_by==="secretaria")return <span style={{background:C.fac+"12",color:C.fac,padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Lupita</span>;return <span style={{background:"#d9770612",color:"#d97706",padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}><TagIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.created_by}</span>})()}
+          {o.proof_approved&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Prueba</span>}
+          {o.file_url&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center"}}><PaperclipIcon size={11} weight="bold"/></span>}
+          {o.plate_status==="existing"&&!compact&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Reutiliza placa existente — saltó CTP"><ArrowsClockwiseIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Placa</span>}
+          {o.plate_status==="new_ctp"&&!compact&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Requiere nueva placa CTP"><PlusIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>CTP</span>}
+          {o.created_by&&(()=>{const stdU=["produccion","preprensa","german","admin"];if(stdU.includes(o.created_by))return null;if(o.created_by==="secretaria")return <span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Lupita</span>;return <span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}><TagIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.created_by}</span>})()}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
