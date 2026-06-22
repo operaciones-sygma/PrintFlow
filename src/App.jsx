@@ -45,6 +45,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.30 — /impeccable extract: componente Badge único (BADGE_TONES + <Badge tone=…>) que reemplaza los
+// <span> inline del badge-row del OCard (10 badges migrados: contexto/danger/warn/identity). Mata la deriva de
+// estilos (cada badge ya no define su propio padding/radio/peso a mano) y hace que la jerarquía por color del
+// distill sea sistemática (tone=context → gris; tone=danger → rojo). stage/priority se dejan (ya usan
+// StageLbl/PrioLbl). El resto de la app (DetailModal, listas) puede migrar incremental reusando <Badge>.
 // v10.72.29 — /impeccable distill (card del tablero): JERARQUÍA POR COLOR en la fila de badges del OCard.
 // Los badges de CONTEXTO (Web, a Stock, desde Stock, Prueba, archivo, Placa/CTP, creado-por) pasan a gris tenue
 // (C.sf/C.t2); etapa, prioridad y EXCEPCIONES (RETRASO, atorada, Falta precio/costo, Sin logo SYGMA) conservan
@@ -1461,6 +1466,13 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10,minHeight:40}); // v10.72.18 — touch target ~40px de ALTO (solo minHeight: no cambia el ancho → no rompe las filas densas de íconos; además alinea con los bt de la misma fila)
+// v10.72.30 — /impeccable extract: vocabulario ÚNICO de badges. Reemplaza decenas de <span> inline con estilos
+// derivados (cada uno con padding/radio/peso ligeramente distinto). `tone` da el rol semántico: context=gris
+// (recede), danger=rojo, warn=ámbar, success, info, identity=slate. `color` permite un tinte puntual (ej. color
+// de etapa). `strong` sube el peso (excepción fuerte). Migrado el badge-row del OCard; el resto puede migrar
+// incremental (DetailModal, vistas de lista) reusando este mismo componente.
+const BADGE_TONES={context:{bg:C.sf,fg:C.t2,fw:600},identity:{bg:C.acL,fg:C.ac,fw:600},danger:{bg:C.dn+"15",fg:C.dn,fw:700},warn:{bg:C.amb+"15",fg:C.amb,fw:700},success:{bg:C.ok+"12",fg:C.ok,fw:700},info:{bg:C.ios+"12",fg:C.ios,fw:700}};
+function Badge({tone="context",color,icon,title,strong,children,style}){const t=BADGE_TONES[tone]||BADGE_TONES.context;return <span title={title} style={{display:"inline-flex",alignItems:"center",gap:children!=null?4:0,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:strong?800:(t.fw||600),lineHeight:1.45,whiteSpace:"nowrap",background:color?color+"15":t.bg,color:color||t.fg,...style}}>{icon}{children}</span>;}
 // v10.61.5 — input de búsqueda con icono Phosphor (lupa) a la izquierda en vez de
 // emoji en el placeholder. wrapStyle controla el layout del contenedor (flex/width).
 function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
@@ -8946,14 +8958,14 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
-          {o.sin_empaque_sygma&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:800,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.dn+"45"}} title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)"><PackageIcon size={11} weight="bold"/>Sin logo SYGMA</span>}
-          {o.source==="web"&&<span style={{background:C.sf,color:C.t2,padding:"2px 7px",borderRadius:5,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}} title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"}><GlobeIcon size={11} weight="bold"/>Web</span>}
-          {o.stock_role==="production"&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Producción a stock — no se entrega al cliente, ingresa al inventario interno"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>a Stock</span>}
-          {o.stock_role==="sale"&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Venta desde stock — sale del inventario para entregar al cliente"><ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>desde Stock</span>}
+          {o.sin_empaque_sygma&&<Badge tone="danger" strong title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)" icon={<PackageIcon size={11} weight="bold"/>}>Sin logo SYGMA</Badge>}
+          {o.source==="web"&&<Badge tone="context" title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"} icon={<GlobeIcon size={11} weight="bold"/>}>Web</Badge>}
+          {o.stock_role==="production"&&<Badge tone="context" title="Producción a stock — no se entrega al cliente, ingresa al inventario interno" icon={<PackageIcon size={11} weight="bold"/>}>a Stock</Badge>}
+          {o.stock_role==="sale"&&<Badge tone="context" title="Venta desde stock — sale del inventario para entregar al cliente" icon={<ShoppingCartIcon size={11} weight="bold"/>}>desde Stock</Badge>}
           {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
-          {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
-          {late&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>RETRASO</span>}
-          {stale&&<span style={{background:(stale.lv==="critical"?C.dn:C.wn)+"12",color:stale.lv==="critical"?C.dn:C.wn,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700}}>{stale.lb}</span>}
+          {o.production_number&&<Badge tone="identity">#{o.production_number}</Badge>}
+          {late&&<Badge tone="danger" icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>}
+          {stale&&<Badge tone={stale.lv==="critical"?"danger":"warn"}>{stale.lb}</Badge>}
           {/* v10.58.50: badge "falta costo/precio" de maquila visible para TODOS los roles
               y desde maq_created (antes vivía dentro del bloque de botones — Karla veía
               maquilas atoradas sin saber POR QUÉ; P-3562 estuvo 2 semanas así). */}
@@ -8961,13 +8973,13 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
             const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
             if(!noPrice&&!noCost)return null;
-            return <span title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" style={{background:C.amb+"15",color:C.amb,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:700,border:"1px solid "+C.amb+"40"}}><CurrencyDollarIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</span>;
+            return <Badge tone="warn" title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>;
           })()}
-          {o.proof_approved&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Prueba</span>}
-          {o.file_url&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,display:"inline-flex",alignItems:"center"}}><PaperclipIcon size={11} weight="bold"/></span>}
-          {o.plate_status==="existing"&&!compact&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Reutiliza placa existente — saltó CTP"><ArrowsClockwiseIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Placa</span>}
-          {o.plate_status==="new_ctp"&&!compact&&<span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:10,fontWeight:600}} title="Requiere nueva placa CTP"><PlusIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>CTP</span>}
-          {o.created_by&&(()=>{const stdU=["produccion","preprensa","german","admin"];if(stdU.includes(o.created_by))return null;if(o.created_by==="secretaria")return <span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Lupita</span>;return <span style={{background:C.sf,color:C.t2,padding:"2px 6px",borderRadius:5,fontSize:9,fontWeight:600}}><TagIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.created_by}</span>})()}
+          {o.proof_approved&&<Badge tone="context" icon={<CheckIcon size={10} weight="bold"/>}>Prueba</Badge>}
+          {o.file_url&&<Badge tone="context" icon={<PaperclipIcon size={11} weight="bold"/>}/>}
+          {o.plate_status==="existing"&&!compact&&<Badge tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>}
+          {o.plate_status==="new_ctp"&&!compact&&<Badge tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>}
+          {o.created_by&&(()=>{const stdU=["produccion","preprensa","german","admin"];if(stdU.includes(o.created_by))return null;if(o.created_by==="secretaria")return <Badge tone="context">Lupita</Badge>;return <Badge tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>})()}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
