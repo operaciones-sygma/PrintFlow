@@ -45,6 +45,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // v10.71.2 — acabados con sub-detalle (Plastificado mate/brillante, Blocks cantidad, Folio rango).
 // El detalle viaja DENTRO del propio acabado en el string finishes ("Plastificado Brillante",
 // "Blocks 50", "Folio 1000 al 2000"), sin columnas nuevas. Helpers para detectar/leer/setear.
+// v10.72.34 — /impeccable layout (critique del DetailModal, P2): la barra de acciones (Cerrar/Editar/Imprimir)
+// se fija STICKY al fondo del modal. Antes vivía después de ~20 filas de lectura (Cliente/Producto/Specs/Fiscal/
+// Archivo/Notas/Historial) → para actuar había que scrollear todo. Ahora siempre alcanzable: barra normal en
+// órdenes cortas, pegada al fondo en las largas, con borde+sombra para flotar sobre el contenido.
 // v10.72.33 — cierre de seguridad del scan (DB-only, sin cambios de UI). Fix #2 (decisión de Marcelo: los tres):
 // client, client_company y order_type ahora disparan needs_reprint al cambiar tras imprimir (trigger
 // auto_detect_post_print_edit) y entran al content_hash (peek_print_version + register_print) — antes cambiar
@@ -2700,7 +2704,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         <button onClick={()=>dispatch("cancel_with_nc")} style={{...bt(C.dn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><XIcon size={14} weight="bold"/>Cancelar Orden (con NC)</button>
       </div>}
 
-      <div style={{display:"flex",gap:8,marginTop:16}}>
+      {/* v10.72.34 — /impeccable layout: barra de acciones STICKY al fondo del modal (antes había que scrollear
+          ~20 filas para Editar/Imprimir). marginLeft/Right negativos para que abarque todo el ancho bajo el
+          padding; borde+sombra arriba para flotar sobre el contenido que scrollea detrás. */}
+      <div style={{position:"sticky",bottom:0,display:"flex",gap:8,marginTop:16,marginLeft:-24,marginRight:-24,padding:"14px 24px 0",background:C.bg,borderTop:"0.5px solid "+C.bd,boxShadow:"0 -6px 14px -10px rgba(26,26,31,.18)",zIndex:2}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
         {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
