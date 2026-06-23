@@ -7761,9 +7761,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [newAgent,setNewAgent]=useState({name:"",phone:"",email:""});
   const [newAgentErr,setNewAgentErr]=useState(""); // v10.72.2 — error inline del modal de agente (antes alert())
   const formRef=useRef(null); // v10.72.3 — scroll al tope (núcleo obligatorio) si el submit falla por faltantes
-  // v10.72.10 — cola "Adicional" (CTP/imágenes/archivo/notas) colapsada por defecto: el piso ve un formulario más corto.
-  // Se auto-expande al editar una orden que ya trae datos en esos campos, para no esconderlos.
-  const [showAdic,setShowAdic]=useState(()=>!!(editOrder&&(editOrder.plate_status||editOrder.image_url||editOrder.image_url_2||editOrder.image||editOrder.file_url||editOrder.notes)));
+  // v10.72.10 — cola "Adicional" (CTP/imágenes/archivo/notas) colapsable con caret.
+  // v10.58.x — Marcelo: arranca EXPANDIDA por default (antes colapsada). Sigue siendo colapsable manualmente.
+  const [showAdic,setShowAdic]=useState(true);
   useEffect(()=>{
     if(!f.client_id){setClientAgents([]);return}
     let alive=true;
@@ -14971,10 +14971,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
           {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button {...hoverLift} onClick={()=>setInventoryOpen(true)} aria-label="Inventario Cuadra (producción a stock y venta)" title="Inventario Cuadra (producción a stock + venta)" style={{...bs(C.emr),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
           {(user==="admin"||user==="secretaria"||user==="karla")&&<button {...hoverLift} onClick={()=>setCoronaOpen(true)} aria-label="Apartado Corona (saldo a favor)" title="Apartado Corona (saldo a favor)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
-          {(user==="admin"||isSec(user))&&<button {...hoverLift} aria-label="Exportar CSV" title="Exportar CSV" onClick={()=>{const csvOrdersRaw=viewOrders;
-        /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
-        const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
-        const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio","TamañoEstándar"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||"",o.standard_size?ssLabel(o.standard_size):""]});const out="\uFEFF"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()}} style={{...bs(C.ac),padding:"6px 9px",flexShrink:0}}><DownloadSimpleIcon size={16} weight="bold"/></button>}
+          {(user==="admin"||isSec(user))&&<button {...hoverLift} aria-label="Exportar CSV" title="Exportar CSV" onClick={exportCSV} style={{...bs(C.ac),padding:"6px 9px",flexShrink:0}}><DownloadSimpleIcon size={16} weight="bold"/></button>}
         </div>
         <div style={{width:1,height:24,background:C.bdSt,flexShrink:0}}/>
         {/* Cluster 3 — Sesión */}

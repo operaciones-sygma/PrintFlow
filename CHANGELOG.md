@@ -5,6 +5,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.41 — Unificar el CSV duplicado (cleanup de la deuda de v10.72.40)
+
+v10.72.40 dejó la lógica de "Exportar CSV" (44 columnas) en DOS lugares: el botón del header
+(inline) y `exportCSV` (para el command palette). Riesgo de divergencia si alguien cambiaba
+columnas en una sola copia.
+
+Ahora el botón del header llama `onClick={exportCSV}`: **una sola fuente**. El blob inline traía
+BOM (`﻿`) + emoji + acentos que no se dejaban re-matchear de forma segura desde el editor;
+se resolvió con un reemplazo por script sobre los bytes reales (anclas ASCII + no-greedy), con
+guarda de "exactamente 1 match". Sin cambios funcionales (la exportación es idéntica). −2 KB.
+Build verde.
+
+---
+
 ## v10.72.40 — Command palette (Ctrl/⌘+K): navegación + acciones por teclado (/impeccable craft)
 
 `/impeccable craft` (shape → confirmar → build → verificar). Resuelve el eje más bajo del critique
