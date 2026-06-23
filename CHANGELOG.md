@@ -5,6 +5,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.40 — Command palette (Ctrl/⌘+K): navegación + acciones por teclado (/impeccable craft)
+
+`/impeccable craft` (shape → confirmar → build → verificar). Resuelve el eje más bajo del critique
+del shell (#7 Eficiencia = 2): cambiar de vista deja de ser solo mouse→Sidebar. Build verde;
+verificación adversarial de 3 agentes (correctness/a11y/regresión): 0 regresiones, 3 hallazgos
+corregidos. Decisión de alcance: SOLO palette (sin hotkeys g+letra), por la base de usuarios
+(no power-users de teclado) y para no arriesgar disparos accidentales. Las acciones del header
+quedaron como comandos también.
+
+### Qué entró
+
+- **Componente `CommandPalette`.** Overlay (Ctrl/⌘+K o click en la pista del header). Input con
+  autofocus, lista agrupada por las secciones del Sidebar (Operación/Comercial/Control/Registros)
+  + grupo **Acciones**. Búsqueda sin acentos/case. Patrón combobox+listbox accesible
+  (`role=dialog/listbox/option`, `aria-activedescendant`, `aria-selected`, grupos con `role=group`).
+  Teclado: `↑↓ Home End` navegan, `Enter` ejecuta, `Esc`/backdrop cierran. popIn heredado del
+  CSS global de `[role=dialog]`; respeta reduced-motion.
+- **Pista visible `⌘K`** (pill con `CommandIcon` + atajo platform-aware: "Ctrl K" en Windows,
+  "⌘K" en Mac) al inicio del header. También cierra el hueco de Ayuda (#10): la gente lo descubre.
+- **Acciones** gateadas por rol igual que el header: Inventario Cuadra, Apartado Corona,
+  Exportar CSV, Cerrar sesión. La navegación lista todas las vistas del rol.
+- **Listener global `Ctrl/⌘+K`** con `preventDefault` (toggle); state `paletteOpen`. Único atajo
+  global es un combo con modificador → no interfiere con la captura de texto.
+- **`logout` extraído** (DRY: header + palette). `paletteOpen` overlay en z-index 2000 (sobre los
+  modales de 1000, debajo de toasts).
+
+### Deuda conocida (cleanup pendiente)
+
+- **CSV duplicado:** la lógica de exportación (44 columnas) vive en DOS lugares (el botón inline
+  del header y `exportCSV` que usa el palette). El blob trae BOM `﻿` + emoji + acentos que no
+  se dejó re-matchear de forma segura para unificar; quedaron idénticos. Unificar en un solo
+  `exportCSV` cuando se retoque ese botón (candidato a v10.72.41).
+- **Foco al cerrar** no se restaura al trigger (menor). **Abrir el palette sobre otro modal** es un
+  caso borde no bloqueado (el z-index 2000 lo deja usable).
+
+---
+
 ## v10.72.39 — Pase de polish del header: campana alineada + estados hover + a11y (/impeccable polish)
 
 `/impeccable polish` sobre el header (cierre del trabajo del shell). Detalles que separan "shippeado"
