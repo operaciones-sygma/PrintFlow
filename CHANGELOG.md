@@ -5,6 +5,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.44 — Dashboard: label "Tu Semana" para vendedor + hint de orientación (/impeccable, quick wins)
+
+Auditoría multi-agente del Dashboard (WeeklyReport + Pipeline + MaquilaTracker). Veredicto: **vista
+madura**; los 2 hallazgos "alto valor" salieron inflados y se descartaron con criterio:
+- El "header duplica el WeeklyReport" era FALSO (header = total/activas actual; WeeklyReport = flujo
+  semanal; métricas distintas; y el header es el único conteo para producción/Karla que NO ven el
+  WeeklyReport).
+- El "scroll horizontal esconde etapas" es un patrón estándar de kanban; el rework a grid/vertical
+  es grande y discutible, y este Pipeline es vista de solo-lectura donde mostrar el embudo completo
+  (incl. etapas vacías) es el punto. Descartado (como el panel lateral del DetailModal).
+
+Solo 2 wins genuinos:
+- **Vendedor: "Tu Semana"** en vez de "Resumen Semanal" en el WeeklyReport. El vendedor ve sus stats
+  filtradas; el título genérico sonaba company-wide y podía leerse como bajo desempeño de la empresa.
+- **Hint de orientación** para producción en el Dashboard (las otras vistas ya tenían FirstTimeHint;
+  esta no): "Vista general; tu trabajo se mueve en el Tablero". Se muestra una vez, descartable.
+
+Sin cambios funcionales. Build verde.
+
+---
+
 ## v10.72.43 — Tablero: legibilidad de cola + modal de drop accesible (/impeccable, quick wins)
 
 Auditoría multi-agente del Tablero (Kanban). Veredicto: **board maduro, la mayoría de hallazgos
