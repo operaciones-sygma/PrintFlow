@@ -5,6 +5,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.42 — DetailModal: acciones de flujo sticky + densidad + a11y + consistencia (/impeccable)
+
+Auditoría multi-agente del DetailModal (estado actual, post v10.72.34/35). Decisión: **mantener el
+modal, NO convertir a panel lateral** (un slide-over en monitores de 1280px deja el tablero detrás
+demasiado angosto para servir de contexto, rompe focus-trap, y la barra sticky de v10.72.34 ya
+resolvió el peor problema). Se aplicó el set de mejoras puntuales (Tier A+B). Cambios verificados
+por review adversarial (7 hallazgos: 6 falsos positivos / patrón ya shippeado, 1 real corregido).
+Sin cambios funcionales de negocio. Build verde.
+
+### Acciones (el fix real al "acciones enterradas")
+
+- **Acciones de flujo del rol a la barra sticky.** Los StageFlowButtons (avanzar/validar) vivían en un
+  bloque a media altura; ahora son una fila propia DENTRO de la barra sticky de abajo → Gerardo/Noemí
+  ven su acción primaria SIEMPRE sin scroll. Mismo gate (canActFlow) y handler (flowDispatch), solo
+  cambió la ubicación.
+
+### Densidad y a11y
+
+- Modal **520 → 600px** (más aire horizontal). Notas largas: `max-height` + scroll interno + `word-break`
+  (URLs no desbordan).
+- **Filas semánticas:** componente `Row` de `<div>` a `<dl>/<dt>/<dd>` (lector de pantalla asocia
+  label↔valor; `margin:0` porque la app va sin preflight).
+- **Foco de modal:** enfoca el dialog al abrir (anuncia su `aria-label`) y restaura el foco al cerrar.
+  `aria-label` en la X y en el dialog.
+
+### Consistencia
+
+- `plate_status` y `payment_status` → `<Badge>` (los que quedaron sin migrar en v10.72.35).
+- **Headers de sección:** texto unificado a slate (`C.ac`); el ícono conserva su color de dominio
+  (camión naranja = maquila, etc.) → mata el "arcoíris" sin perder wayfinding.
+
+---
+
 ## v10.72.41 — Unificar el CSV duplicado (cleanup de la deuda de v10.72.40)
 
 v10.72.40 dejó la lógica de "Exportar CSV" (44 columnas) en DOS lugares: el botón del header
