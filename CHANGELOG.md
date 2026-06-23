@@ -5,6 +5,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+## v10.72.43 — Tablero: legibilidad de cola + modal de drop accesible (/impeccable, quick wins)
+
+Auditoría multi-agente del Tablero (Kanban). Veredicto: **board maduro, la mayoría de hallazgos
+descartados con criterio** — el "touch no soportado" (large) asumía que Gerardo usa tablet; Marcelo
+confirmó **desktop+mouse**, así que el drag-drop nativo está perfecto y se descarta entero. El
+"Digital colapsado por default es fricción" también se descartó: Marcelo lo quiere **minimizado y al
+último a propósito** (ya es el orden actual). La migración de chips a `<Badge>` se saltó: los chips
+del board son apretados a propósito (`padding 1px 5px`) para densidad heads-down; `<Badge>` los
+bloatearía. Solo se aplicaron los wins que sí ayudan al heads-down:
+
+- **Legibilidad de la cola "En espera":** de `fontSize:8`/`C.t3`/`opacity:0.85` a `9px`/`C.t2`/opacidad
+  completa. Gerardo ya no tiene que acercarse a leer las posiciones de la cola.
+- **Modal de confirmación de drop:** + `role="dialog"` + `aria-modal` + `aria-label` → hereda el popIn
+  del CSS global (antes aparecía de golpe) y se anuncia como diálogo.
+
+Sin cambios funcionales. Build verde.
+
+---
+
 ## v10.72.42 — DetailModal: acciones de flujo sticky + densidad + a11y + consistencia (/impeccable)
 
 Auditoría multi-agente del DetailModal (estado actual, post v10.72.34/35). Decisión: **mantener el

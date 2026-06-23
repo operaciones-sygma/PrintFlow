@@ -9471,12 +9471,13 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                       </div>}
                       {/* v10.26.0 — Cola en espera */}
                       {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
-                        <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
+                        {/* v10.72.43 — legibilidad de la cola: 8→9px + t2 (antes el operador tenía que acercarse a leer las posiciones) */}
+                        <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
                         {enEspera.map(o=><div key={o.id} draggable
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
-                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
+                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",cursor:"grab"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                             <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3}}><DotsSixVerticalIcon size={11}/>#{o.machine_queue_position}</span>
                             <div style={{display:"flex",gap:3}}>
@@ -9564,7 +9565,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
 
     {/* Drop confirmation modal */}
     {dropConfirm&&(()=>{const queueCount=orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").length;const totalMins=(orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").reduce((s,o)=>s+(o.estimated_hours||0),0)*60);return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-      <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:420,width:"90%",textAlign:"center"}}>
+      <div role="dialog" aria-modal="true" aria-label={(dropConfirm.fromMachine?"Mover":"Asignar")+" orden a máquina"} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:420,width:"90%",textAlign:"center"}}>
         <div style={{marginBottom:8}}>{dropConfirm.fromMachine?<ArrowsClockwiseIcon size={34} weight="bold" color={C.ac}/>:<FactoryIcon size={34} weight="bold" color={C.ac}/>}</div>
         <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{dropConfirm.fromMachine?"¿Mover de máquina?":"¿Asignar a máquina?"}</h3>
         <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:12,textAlign:"left"}}>
