@@ -2492,18 +2492,19 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
       const acabados=(o.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);
       const ac=a=>acabados.some(x=>x.toLowerCase()===a.toLowerCase()||x.toLowerCase().startsWith(a.toLowerCase()+" "));
       const acDetail=a=>{const e=acabados.find(x=>x.toLowerCase().startsWith(a.toLowerCase()+" "));return e?e.slice(a.length).trim():""};
-      // v10.58.61: "Otros" debe excluir también los SINÓNIMOS que ya marcan una casilla
-      // (laminado→Plastificado, suaje→Suajado, block→Blocks, barniz maquina sin acento),
-      // si no, ej. "LAMINADO" salía marcado en Plastificado Y duplicado en Otros.
-      const ACABADO_ALIASES=["barniz brillante","barniz mate","barniz a registro","doblez","intercalado","grapado","perforado","plastificado","laminado","suaje","suajado","botado","forma suelta","blocks","block","folio","engomado superior","engomado lateral"];
+      // v10.72.47: lo escrito en "Otro" es FIEL — NO se auto-mapea a casillas por sinónimo.
+      // Antes (v10.58.61) "laminado"/"suaje"/"block" palomeaban Plastificado/Suajado/Blocks y se
+      // ocultaban de "Otros", PERDIENDO el detalle (ej. "Laminado Mate" → Plastificado ✓ sin "mate").
+      // Ahora esos términos salen LITERALES en "Otros"; las casillas solo se marcan con el nombre canónico.
+      const ACABADO_ALIASES=["barniz brillante","barniz mate","barniz a registro","doblez","intercalado","grapado","perforado","plastificado","suajado","botado","forma suelta","blocks","folio","engomado superior","engomado lateral"];
       const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.some(f=>f===a.toLowerCase()||a.toLowerCase().startsWith(f+" ")));
       if(acabados.length>0||hasSpecs){
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Procesos Especiales y Acabados</td></tr>
       <tr>
         <td style="width:25%"><span class="check${ac("barniz brillante")?" on":""}">✓</span> Barniz Brillante<br/><span class="check${ac("barniz mate")?" on":""}">✓</span> Barniz Mate<br/><span class="check${ac("barniz a registro")?" on":""}">✓</span> Barniz a Registro</td>
         <td style="width:25%"><span class="check${ac("doblez")?" on":""}">✓</span> Doblez<br/><span class="check${ac("intercalado")?" on":""}">✓</span> Intercalado<br/><span class="check${ac("grapado")?" on":""}">✓</span> Grapado</td>
-        <td style="width:25%"><span class="check${ac("perforado")?" on":""}">✓</span> Perforado<br/><span class="check${ac("plastificado")||ac("laminado")?" on":""}">✓</span> Plastificado${(ac("plastificado")&&acDetail("plastificado"))?" <span class='fin-tag'>"+esc(acDetail("plastificado"))+"</span>":""}<br/><span class="check${ac("suaje")||ac("suajado")?" on":""}">✓</span> Suajado<br/><span class="check${ac("botado")?" on":""}">✓</span> Botado</td>
-        <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")||ac("block")?" on":""}">✓</span> Blocks${(ac("blocks")&&acDetail("blocks"))?" <span class='fin-tag'>"+esc(acDetail("blocks"))+"</span>":""}<br/><span class="check${ac("folio")?" on":""}">✓</span> Folio${(ac("folio")&&acDetail("folio"))?" <span class='fin-tag'>"+esc(acDetail("folio"))+"</span>":""}<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
+        <td style="width:25%"><span class="check${ac("perforado")?" on":""}">✓</span> Perforado<br/><span class="check${ac("plastificado")?" on":""}">✓</span> Plastificado${(ac("plastificado")&&acDetail("plastificado"))?" <span class='fin-tag'>"+esc(acDetail("plastificado"))+"</span>":""}<br/><span class="check${ac("suajado")?" on":""}">✓</span> Suajado<br/><span class="check${ac("botado")?" on":""}">✓</span> Botado</td>
+        <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")?" on":""}">✓</span> Blocks${(ac("blocks")&&acDetail("blocks"))?" <span class='fin-tag'>"+esc(acDetail("blocks"))+"</span>":""}<br/><span class="check${ac("folio")?" on":""}">✓</span> Folio${(ac("folio")&&acDetail("folio"))?" <span class='fin-tag'>"+esc(acDetail("folio"))+"</span>":""}<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
       </tr>
       ${customAcabados.length>0?`<tr><td colspan="4" class="otros-row"><strong>Otros:</strong> ${customAcabados.map(esc).join(", ")}</td></tr>`:""}
       </table>`;
