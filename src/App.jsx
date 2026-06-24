@@ -255,10 +255,14 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 const SPECIAL_FIN=["Plastificado","Blocks","Folio"];
 const finBase=x=>{const m=SPECIAL_FIN.find(b=>x.toLowerCase()===b.toLowerCase()||x.toLowerCase().startsWith(b.toLowerCase()+" "));return m||x};
 const finList=s=>String(s||"").split(",").map(x=>x.trim()).filter(Boolean);
-const finHas=(s,base)=>finList(s).some(x=>x===base||x.toLowerCase().startsWith(base.toLowerCase()+" "));
+// v10.72.49: comparación canónica case-INSENSITIVE (alinea chips, rehidratación e impresión).
+// Antes el clause exacto era `x===base` (case-sensitive): un canónico en minúscula (ej. "doblez"
+// tecleado en "Otro") palomeaba en la impresión pero NO encendía el chip ni se reconocía al rehidratar.
+const finIsCanon=x=>{const b=finBase(x).toLowerCase();return FINISHES.some(f=>f.toLowerCase()===b);};
+const finHas=(s,base)=>finList(s).some(x=>x.toLowerCase()===base.toLowerCase()||x.toLowerCase().startsWith(base.toLowerCase()+" "));
 const finGetDetail=(s,base)=>{const e=finList(s).find(x=>x.toLowerCase().startsWith(base.toLowerCase()+" "));return e?e.slice(base.length).trim():""};
-const finWith=(s,base,detail)=>{const arr=finList(s).filter(x=>!(x===base||x.toLowerCase().startsWith(base.toLowerCase()+" ")));arr.push(detail?base+" "+detail:base);return arr.join(", ")};
-const finWithout=(s,base)=>finList(s).filter(x=>!(x===base||x.toLowerCase().startsWith(base.toLowerCase()+" "))).join(", ");
+const finWith=(s,base,detail)=>{const arr=finList(s).filter(x=>!(x.toLowerCase()===base.toLowerCase()||x.toLowerCase().startsWith(base.toLowerCase()+" ")));arr.push(detail?base+" "+detail:base);return arr.join(", ")};
+const finWithout=(s,base)=>finList(s).filter(x=>!(x.toLowerCase()===base.toLowerCase()||x.toLowerCase().startsWith(base.toLowerCase()+" "))).join(", ");
 const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#2f9aad",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#2f9e7a",who:null}];
@@ -7711,7 +7715,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.59.5 — texto CRUDO del acabado "Otro": el input se controla con este estado (sin .trim()
   // por tecla). Antes el value se derivaba de f.finishes con trim → cada espacio se borraba al
   // instante y Lupita no podía escribir "Hot stamping". f.finishes guarda la versión normalizada.
-  const [customFinish,setCustomFinish]=useState(()=>(editOrder?.finishes||"").split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(finBase(x))&&x!=="Otro").join(", "));
+  const [customFinish,setCustomFinish]=useState(()=>(editOrder?.finishes||"").split(",").map(x=>x.trim()).filter(x=>x&&!finIsCanon(x)&&x!=="Otro").join(", "));
   // v10.71.6 — buffer de texto CRUDO para los sub-inputs libres de Blocks/Folio. Sin esto,
   // value={finGetDetail(...)} hacía .trim() por tecla y borraba los espacios al escribir
   // ("EN BLOCKS DE 100" -> "ENBLOCKSDE100"). Mismo patrón que customFinish para "Otro".
@@ -7748,7 +7752,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.59.6 — si la fuente trae acabados, sincronizar el panel "Otro" (customFinish/showOtroFinish)
     // con el acabado custom replicado; si no, no tocar el panel actual.
     if(src.finishes!==null&&src.finishes!==undefined&&src.finishes!==""){
-      const customFins=String(src.finishes).split(",").map(x=>x.trim()).filter(x=>x&&!FINISHES.includes(finBase(x))&&x!=="Otro");
+      const customFins=String(src.finishes).split(",").map(x=>x.trim()).filter(x=>x&&!finIsCanon(x)&&x!=="Otro");
       setCustomFinish(customFins.join(", "));
       setShowOtroFinish(customFins.length>0);
     }
