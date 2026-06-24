@@ -53,6 +53,21 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.57 — fixes de la auditoría adversarial de la Fase 2 (4 auditores, needs-fixes). HIGH: (1) el botón
+// "Aplicar folio" ahora SÍ se le muestra a KARLA en órdenes delivered (estaba dentro del gate canAct, false ahí
+// → solo admin lo veía pese a ser ella la operadora primaria); bloque dedicado fuera de canAct para role==karla.
+// (2) RPC v2 valida cliente + monto de la factura preexistente antes de "vincular" → rechaza si el folio ya
+// existe para OTRO cliente/monto (evita ligar a factura ajena por folio mal tecleado). MED: guards splits/OC en
+// el RPC (el bridge los saltaba en silencio); verificación FINAL post-UPDATE de que la factura quedó en cobranza
+// (RAISE→revierte si no, anti folio-fantasma); back-link source_order_id; toast con el monto autoritativo del RPC.
+// v10.72.56 — Fase 2: APLICAR el folio fiscal REAL a las órdenes históricas atrasadas (import-historico). RPC
+// nuevo public.assign_historic_folio(p_order_id,p_folio,p_user): acepta stage delivered SOLO si created_by=
+// 'import-historico', deriva el tipo del prefijo (D-=factura/R-=remisión), NO autogenera (captura el folio Alpha
+// real), exige precio>0, valida formato + folio-no-reutilizado; deja que el bridge cree la factura en cobranza o
+// la SALTE si el folio ya existe (idempotente, respaldado por el índice UNIQUE). UI: botón Receipt en la card de
+// las 37 sin folio (admin/karla) → HistoricFolioModal (captura folio + preview con/sin IVA + mensaje 'vinculada'
+// vs 'creada'). NO cambia el stage. SEGURO con clientes overlap: capturar el folio real ya existente → el bridge
+// lo vincula sin duplicar (el doble-cobro solo pasaría acuñando uno nuevo, que NO se hace).
 // v10.72.55 — habilitar EDICIÓN de las 37 órdenes históricas atrasadas (created_by='import-historico', stage=
 // delivered) que no tenían botón Editar porque el gate exigía (folio || !delivered). Se relaja el gate del botón
 // Editar en el DetailModal (:2843) y la card (:9170) SOLO para created_by==='import-historico' (llave robusta, no
@@ -2867,6 +2882,48 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
 function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose}) {
   useEscClose(onClose);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, cancelar</button><button onClick={onConfirm} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center"}}>{confirmLabel}</button></div></div></div>;
+}
+// v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
+// Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
+function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) {
+  useEscClose(onClose);
+  const [folio,setFolio]=useState("");
+  const [busy,setBusy]=useState(false);
+  const f=(folio||"").trim().toUpperCase();
+  const isD=/^D-[0-9]+$/.test(f); const isR=/^R-[0-9]+$/.test(f);
+  const valid=isD||isR;
+  const base=order.order_type==="maquila"?Number(order.maq_price||0):Number(order.price||0);
+  const total=isD?Math.round(base*1.16*100)/100:base;
+  const submit=async()=>{
+    if(!valid||busy||base<=0)return;
+    setBusy(true);
+    try{
+      const {data,error}=await supabase.rpc("assign_historic_folio",{p_order_id:order.id,p_folio:f,p_user:userLogin||user});
+      if(error)throw error;
+      const tipo=data?.type==="factura"?"factura":"remisión";
+      if(data?.result==="linked")showToast("✓ Folio "+f+" vinculado a la factura ya registrada en CobranzaFlow ("+fmt(data.linked_amount||data.amount||total)+")","info");
+      else showToast("✓ Folio "+f+" aplicado — "+tipo+" creada en CobranzaFlow por "+fmt(data.amount||total));
+      onApplied(order.id,{invoice_folio:f,invoice_type:data?.type});
+      onClose();
+    }catch(e){showToast("❌ "+(e?.message||"No se pudo aplicar el folio"),"error")}
+    finally{setBusy(false)}
+  };
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:430,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
+    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><ReceiptIcon size={17} weight="bold"/>Aplicar folio fiscal</h3>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Captura el folio <b>real</b> que ya emitió Alpha para esta orden. Si el cliente aún no la pide, no la captures todavía.</p>
+    <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",marginBottom:14,fontSize:12}}>
+      <div style={{fontWeight:700,color:C.tx}}>{order.client}{order.client_company&&order.client_company!==order.client?" · "+order.client_company:""}</div>
+      <div style={{color:C.t2,marginTop:2}}>{order.production_number} · {(order.product_type||"").replace("🔴 ATRASADA · ","")}</div>
+      <div style={{color:C.t2,marginTop:2}}>Precio base: <b style={{color:base>0?C.tx:C.dn}}>{fmt(base)}</b>{base>0?"":<span style={{color:C.dn}}> · captura el precio primero (Editar)</span>}</div>
+    </div>
+    <label style={lbl}>Folio fiscal</label>
+    <input style={{...inp,textTransform:"uppercase",fontWeight:700,letterSpacing:.5}} value={folio} onChange={e=>setFolio(e.target.value)} placeholder="D-5940 (factura) · R-1230 (remisión)" autoFocus onKeyDown={e=>{if(e.key==="Enter")submit()}}/>
+    {f&&!valid&&<div style={{fontSize:11,color:C.dn,marginTop:6}}>Formato inválido. Usa D-#### (factura) o R-#### (remisión).</div>}
+    {valid&&base>0&&<div style={{fontSize:12,color:C.t2,marginTop:8,background:C.sf,borderRadius:10,padding:"8px 12px"}}>
+      Registra una <b style={{color:C.tx}}>{isD?"factura":"remisión"}</b> en CobranzaFlow por <b style={{color:C.ok}}>{fmt(total)}</b>{isD?<span style={{color:C.t3}}> (base + IVA 16%)</span>:<span style={{color:C.t3}}> (sin IVA)</span>}. Si el folio ya existe, solo se vincula (no se duplica).
+    </div>}
+    <div style={{display:"flex",gap:8,marginTop:18}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={submit} disabled={!valid||busy||base<=0} style={{...bt((valid&&base>0)?C.ok:"#9ca3af"),flex:1,justifyContent:"center",opacity:(valid&&base>0&&!busy)?1:.6,cursor:(valid&&base>0&&!busy)?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Aplicando...</>:<><ReceiptIcon size={14} weight="bold"/>Aplicar folio</>}</button></div>
+  </div></div>;
 }
 function MaqModal({onSend,onClose,providers=[]}) {
   useEscClose(onClose);
@@ -9175,6 +9232,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")}><NotePencilIcon size={15} weight="bold"/></button>}
+        {o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
         {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar"><ArrowUUpLeftIcon size={15} weight="bold"/></button>}
         {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
@@ -9185,6 +9243,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       </div>
     </div>}
 
+    {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
+        tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
+    {!compact&&!canAct&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
@@ -12923,6 +12984,7 @@ export default function PrintFlow() {
   // v10.39.0 — Agregar producto existente a OC: lista órdenes del mismo cliente sin folio
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
+  const [histFolioOrder,setHistFolioOrder]=useState(null); // v10.72.56 — captura de folio fiscal en órdenes históricas (import-historico)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
   const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
@@ -14541,6 +14603,7 @@ export default function PrintFlow() {
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
+    if(action==="apply_historic_folio"){const o=orders.find(x=>x.id===id);if(o)setHistFolioOrder(o);return}
     // v10.58.50: 📣 Recordar al responsable de la etapa (cards sin acción para el rol).
     // Notifica in-app + Telegram (db.notify ya copia a admin) con el bloqueo concreto.
     if(action==="nudge_responsible"){const o=orders.find(x=>x.id===id);if(!o)return;
@@ -15448,6 +15511,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
+      {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
       {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
