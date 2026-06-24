@@ -2490,14 +2490,19 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     // ═══ PROCESOS ESPECIALES Y ACABADOS (solo si hay specs o acabados) ═══
     if(!isMaq&&(hasSpecs||o.finishes)){
       const acabados=(o.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);
-      const ac=a=>acabados.some(x=>x.toLowerCase()===a.toLowerCase()||x.toLowerCase().startsWith(a.toLowerCase()+" "));
+      // v10.72.48: solo los 3 SPECIAL_FIN (con sub-detalle) marcan casilla por prefijo;
+      // el resto exige nombre EXACTO. Así "Doblez especial mariposa" (texto libre) NO palomea Doblez.
+      const SPECIAL_LC=SPECIAL_FIN.map(s=>s.toLowerCase());
+      const ac=a=>{const al=a.toLowerCase();const sp=SPECIAL_LC.includes(al);return acabados.some(x=>{const xl=x.toLowerCase();return xl===al||(sp&&xl.startsWith(al+" "));});};
       const acDetail=a=>{const e=acabados.find(x=>x.toLowerCase().startsWith(a.toLowerCase()+" "));return e?e.slice(a.length).trim():""};
       // v10.72.47: lo escrito en "Otro" es FIEL — NO se auto-mapea a casillas por sinónimo.
       // Antes (v10.58.61) "laminado"/"suaje"/"block" palomeaban Plastificado/Suajado/Blocks y se
       // ocultaban de "Otros", PERDIENDO el detalle (ej. "Laminado Mate" → Plastificado ✓ sin "mate").
       // Ahora esos términos salen LITERALES en "Otros"; las casillas solo se marcan con el nombre canónico.
       const ACABADO_ALIASES=["barniz brillante","barniz mate","barniz a registro","doblez","intercalado","grapado","perforado","plastificado","suajado","botado","forma suelta","blocks","folio","engomado superior","engomado lateral"];
-      const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.some(f=>f===a.toLowerCase()||a.toLowerCase().startsWith(f+" ")));
+      // v10.72.48: excluir de "Otros" SOLO el nombre canónico exacto (finBase ya cubre los SPECIAL con detalle);
+      // un texto libre que solo EMPIECE con un canónico (ej. "Doblez especial mariposa") va LITERAL a "Otros".
+      const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.includes(a.toLowerCase()));
       if(acabados.length>0||hasSpecs){
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Procesos Especiales y Acabados</td></tr>
       <tr>
