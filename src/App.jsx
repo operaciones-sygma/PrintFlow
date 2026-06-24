@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.59 — folios COMPARTIDOS de las históricas (1 factura de Alpha cubre N órdenes de producción). Columna
+// nueva orders.grouped_invoice_folio + RPC public.mark_historic_grouped_folio (marca una orden "hermana" como
+// agrupada en el folio de la orden PRIMARIA; valida que el folio ya exista en cobranza para el mismo cliente; NO
+// crea factura ni toca invoice_folio → no duplica). UI: badge "Agrupada D-XXXX" en card del Archivo y OCard, fila
+// en el detalle, y se OCULTA el botón "Aplicar folio" en las agrupadas (detalle + OCard). Aplicado a las 3 reales:
+// D-5915 (prim H-3621 + H-3622/H-3642), D-5926 (prim H-3623 + H-3624/H-3625), D-5938 (prim H-3676 + H-3677; +
+// se corrigió su monto en cobranza $34,336.01→$45,228.40, que solo traía el primario H-3676 y le faltaba H-3677).
 // v10.72.58 — el botón "Aplicar folio" (folio histórico) ahora también está en la barra de acciones del DETALLE
 // (DetailModal). Causa: las cards del Archivo son COMPACTAS (compact=true → sin fila de botones), así que el botón
 // del OCard nunca se veía ahí; el Archivo es justo donde el usuario abre las 37. dispatch('apply_historic_folio')
@@ -2794,6 +2801,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {vOwns&&o.maquila_provider&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6,marginTop:12,marginBottom:4}}><TruckIcon size={12} weight="bold" color={C.maq}/>Proveedor Maquila</div><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><WhatsappLogoIcon size={11} weight="bold"/>Teléfono</span>} v={o.maquila_phone}/>}{o.maquila_email&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><EnvelopeIcon size={11} weight="bold"/>Email</span>} v={o.maquila_email}/>}</>}
 
       {/* 🆕 v10.9.0 — Sección INFO FISCAL */}
+      {o.grouped_invoice_folio&&!o.invoice_folio&&!hp&&vOwns&&<Row l="Facturada agrupada en" v={<span style={{color:C.fac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.grouped_invoice_folio}</span>}/>}
       {(o.invoice_folio||o.cancellation_reason)&&!hp&&vOwns&&<>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold" color={o.invoice_type==="factura"?C.fac:C.live}/>Info Fiscal</div>
         {o.invoice_folio&&<>
@@ -2869,7 +2877,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
+          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
           {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
@@ -9164,6 +9172,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {o.cart_folio&&!compact&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:16,fontWeight:800,color:C.cart,letterSpacing:0.5,lineHeight:1}}><ShoppingCartIcon size={15} weight="bold"/>{o.cart_folio}</span></div>}
         {o.web_folio&&!compact&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
         {o.invoice_folio&&!compact&&<div style={{fontSize:13,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:C.amb,marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:C.live,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.live+"15",borderRadius:4}}><CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:C.fac,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.fac+"15",borderRadius:4}}><CircleHalfIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
+        {o.grouped_invoice_folio&&!o.invoice_folio&&!compact&&<div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:4}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Facturada agrupada en {o.grouped_invoice_folio}</div>}
         {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
         {o.has_splits&&!compact&&<div style={{fontSize:11,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
           <FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
@@ -9238,7 +9247,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")}><NotePencilIcon size={15} weight="bold"/></button>}
-        {o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
+        {o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
         {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar"><ArrowUUpLeftIcon size={15} weight="bold"/></button>}
         {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
@@ -9251,7 +9260,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
-    {!compact&&!canAct&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
+    {!compact&&!canAct&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
@@ -10239,7 +10248,7 @@ function Archive({orders,role,onAction,userLogin}) {
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
                           <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
                             {o.production_number&&<span style={{fontSize:11,fontWeight:700,color:C.ac,background:C.acL,padding:"2px 6px",borderRadius:4}}>{o.production_number}</span>}
-                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live,background:(o.invoice_type==="factura"?C.fac:C.live)+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?<LightningIcon size={10} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:1}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</span>}
+                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live,background:(o.invoice_type==="factura"?C.fac:C.live)+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?<LightningIcon size={10} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:1}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</span>}{!o.invoice_folio&&o.grouped_invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.t2,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}} title={"Facturada agrupada en "+o.grouped_invoice_folio}><LinkIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Agrupada {o.grouped_invoice_folio}</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
                             <span style={{fontSize:9,color:C.t3}}>{o.id}</span>
