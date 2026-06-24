@@ -53,6 +53,14 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.60 — las 17 históricas SIN folio se mueven a Salidas (entran al Tablero "Pendientes de Folio" + Mis
+// Pendientes de Karla) para trabajarlas con la opción "El cliente no ha pedido factura" + asignar folio. Para que
+// NO se cree un folio equivocado (el flujo normal SUGIERE el siguiente del contador), "Asignar Folio y Entregar"
+// de una import-historico abre el modal de CAPTURA (teclear el folio REAL, sin sugerencia) en vez del InvoiceModal
+// (routing en handleAction deliver_with_invoice). RPC assign_historic_folio v3 acepta salidas/maq_received y cierra
+// a delivered al foliar (como el flujo normal). Se ocultó "Facturar por partes" en históricas; el botón especial
+// "Aplicar folio" queda solo para delivered (en Salidas lo cubre "Asignar Folio y Entregar"→captura). El snooze ya
+// aplicaba en salidas/maq_received.
 // v10.72.59 — folios COMPARTIDOS de las históricas (1 factura de Alpha cubre N órdenes de producción). Columna
 // nueva orders.grouped_invoice_folio + RPC public.mark_historic_grouped_folio (marca una orden "hermana" como
 // agrupada en el folio de la orden PRIMARIA; valida que el folio ya exista en cobranza para el mismo cliente; NO
@@ -2877,7 +2885,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
+          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
           {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
@@ -9119,7 +9127,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
@@ -9136,7 +9144,7 @@ function StageFlowButtons({o,role,onAction}){
       })()}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
@@ -9247,7 +9255,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")}><NotePencilIcon size={15} weight="bold"/></button>}
-        {o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
+        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
         {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar"><ArrowUUpLeftIcon size={15} weight="bold"/></button>}
         {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
@@ -14688,6 +14696,7 @@ export default function PrintFlow() {
       return;
     }
     if(action==="deliver_with_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(o.created_by==="import-historico"){setHistFolioOrder(o);return} // v10.72.60 — históricas: capturar el folio REAL (sin sugerencia del contador), no el flujo normal
       // v10.58.5 — Gate central de rol (antes confiaba solo en visibilidad del botón).
       if(!canExecuteAction("deliver_with_invoice",o,user,userLogin)){showToast(actionDeniedToast("deliver_with_invoice",o,user,userLogin),"error");return}
       // v10.43.32 — Guards defensivos explícitos (mismo set de validaciones que el RPC y la UI).
