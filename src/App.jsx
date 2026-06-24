@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.55 — habilitar EDICIÓN de las 37 órdenes históricas atrasadas (created_by='import-historico', stage=
+// delivered) que no tenían botón Editar porque el gate exigía (folio || !delivered). Se relaja el gate del botón
+// Editar en el DetailModal (:2843) y la card (:9170) SOLO para created_by==='import-historico' (llave robusta, no
+// el prefijo de texto '🔴 ATRASADA'). + se exime la validación de Contacto del OrderForm (:7837) al editar una
+// import-historico (tienen has_contact=0, si no, canSubmit=false). FOLIO-SAFE: update() persiste solo
+// editableFields e invoice_folio NO está ahí → editar no puede tocar folio ni stage. Fase 1 de 2; aplicar folio
+// (Fase 2) irá por RPC dedicado assign_historic_folio tras conciliación humana de los clientes con overlap.
 // v10.72.54 — /impeccable critique P3 (menores del feature): (1) el pill de conteo de la sección usa un chip de
 // SUPERFICIE (C.bg + borde C.bd + texto C.tx) en vez del token de TEXTO C.t3 como fondo; (2) emojis → Phosphor:
 // 🧾 del header de sección → ReceiptIcon, 🧾 del motivo de card y del toast removidos (redundantes con el header/
@@ -2840,7 +2847,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         {canActFlow&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}><span style={{fontSize:9.5,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em",display:"inline-flex",alignItems:"center",gap:4,marginRight:2}}><FlowArrowIcon size={11} weight="bold"/>Flujo</span><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-          {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
+          {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
@@ -7834,7 +7841,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     if(!f.client?.trim())m.push("Razón social");
     if(!f.product_type?.trim()||f.product_type==="Otro")m.push("Tipo de Producto");
     if(f.order_type==="maquila"&&!f.maq_provider?.trim())m.push("Proveedor (Maquila)");
-    if(!hideC&&!specsOnly&&!f.client_email?.trim()&&!f.client_phone?.trim())m.push("Contacto (Email o WhatsApp)");
+    if(!hideC&&!specsOnly&&editOrder?.created_by!=="import-historico"&&!f.client_email?.trim()&&!f.client_phone?.trim())m.push("Contacto (Email o WhatsApp)");
     // v10.59.0 — cliente NUEVO (sin client_id) requiere RFC obligatorio (decisión de Marcelo)
     if(!editOrder&&!f.client_id&&(f.client||"").trim()&&!hideC&&!specsOnly&&!f.client_rfc?.trim())m.push("RFC (razón social nueva)");
     // v10.72.6 — cantidad obligatoria y positiva al crear (evita órdenes con tiraje en blanco/0)
@@ -9167,7 +9174,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,C.fac)} title="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
-        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered"))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.invoice_folio?"Editar (orden facturada)":"Editar"}><NotePencilIcon size={15} weight="bold"/></button>}
+        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")}><NotePencilIcon size={15} weight="bold"/></button>}
         {role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")&&<button onClick={()=>onAction(o.id,"revert")} style={bs(C.sf,C.wn)} title="Regresar"><ArrowUUpLeftIcon size={15} weight="bold"/></button>}
         {!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
