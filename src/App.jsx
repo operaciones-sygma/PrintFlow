@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.58 — el botón "Aplicar folio" (folio histórico) ahora también está en la barra de acciones del DETALLE
+// (DetailModal). Causa: las cards del Archivo son COMPACTAS (compact=true → sin fila de botones), así que el botón
+// del OCard nunca se veía ahí; el Archivo es justo donde el usuario abre las 37. dispatch('apply_historic_folio')
+// cierra el detalle y abre el HistoricFolioModal. (Los botones del OCard de v10.72.56-57 siguen para "Todas".)
 // v10.72.57 — fixes de la auditoría adversarial de la Fase 2 (4 auditores, needs-fixes). HIGH: (1) el botón
 // "Aplicar folio" ahora SÍ se le muestra a KARLA en órdenes delivered (estaba dentro del gate canAct, false ahí
 // → solo admin lo veía pese a ser ella la operadora primaria); bloque dedicado fuera de canAct para role==karla.
@@ -2864,6 +2868,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
+          {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
+          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
           {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
