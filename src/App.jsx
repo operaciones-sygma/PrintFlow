@@ -53,6 +53,12 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.65 — copia impresa de las ventas de stock que consumieron folio P- por el bug: marca de agua "CANCELADO"
+// grande en diagonal + leyenda (caja negra B&N-proof) explicando que el folio de producción se tomó por error del
+// sistema (ya corregido) y queda anulado — no es una orden de producción real; la venta se cobra por su folio
+// fiscal D-/R-. También se tacha el folio P- en el encabezado. Predicado isVoidStockSale = stock_role='sale' &&
+// production_number ~ '^P-' (solo las 43 históricas; las ventas nuevas nacen sin P-, no matchean). Solo afecta la
+// impresión (PrintOrder); cero cambio de datos/flujo. Aplica a ambas copias (administrativa y producción).
 // v10.72.64 — polish del scan adversarial del fix de ventas-de-stock (veredicto safe-ship; 0 blockers/highs/
 // regresión al flujo de producción). MED: los KPIs del Consecutivo (Total→"Producción (P-)", Con folio fiscal,
 // Canceladas) ahora EXCLUYEN stock_role='sale' (no inflan con las 43 ventas que la lista ya tacha como "no
@@ -2365,6 +2371,11 @@ function PrintOrder({order:o,onClose,role,userLogin,onPrintError}) {
   const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const isUrg=o.priority==="urgente";const isNorm=o.priority==="normal"||(!o.priority);const isBaja=o.priority==="baja";
   const isMaq=o.order_type==="maquila";
+  // v10.72.65 — Venta de stock (Cuadra, stock_role='sale') que consumió un folio de PRODUCCIÓN P- por el bug
+  // ya corregido (43 históricas). Su copia impresa lleva marca de agua CANCELADO + leyenda: el folio P se tomó
+  // por error y queda anulado (no es una orden de producción real; la venta se cobra por su folio fiscal D-/R-).
+  // Las ventas nuevas ya nacen sin P- (trigger), así que NO matchean (production_number NULL).
+  const isVoidStockSale=o.stock_role==="sale"&&/^P-/.test(String(o.production_number||""));
   // mode: "full" = con precio y contacto (secretaría/admin), "production" = sin precio ni contacto (para piso)
   // v10.53.0 — async: registra la impresión ANTES de abrir el window para incluir versión + hash en la hoja.
   // v10.53.1 C1 — try/finally global para garantizar setPrinting(false) en TODOS los paths.
@@ -2421,6 +2432,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .vbanner .vs{display:block;font-size:8px;font-weight:600;letter-spacing:1.2px;margin-top:2px;text-transform:uppercase}
 .vbanner.admin{background:#1a1a1a;color:#fff}
 .vbanner.prod{background:#fff;color:#111}
+.vcancel-wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:9;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.vcancel-wm span{font-size:128px;font-weight:900;letter-spacing:10px;color:rgba(178,0,0,.26);border:9px solid rgba(178,0,0,.26);border-radius:14px;padding:4px 46px;transform:rotate(-26deg);text-transform:uppercase;white-space:nowrap;line-height:1;font-family:Arial,Helvetica,sans-serif}
+.vcancel-note{margin-top:6px;border:3px solid #111;background:#fff;border-radius:4px;padding:9px 13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.vcancel-note .vct{font-size:14px;font-weight:900;color:#111;letter-spacing:.6px;text-transform:uppercase;line-height:1.2}
+.vcancel-note .vcd{font-size:9.5px;color:#222;margin-top:3px;line-height:1.55}
 .header-folio{width:140px;border-left:2.5px solid #222;padding:8px 10px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .header-folio .lbl{font-size:8px;font-weight:700;text-transform:uppercase;color:#666;margin-bottom:4px;letter-spacing:1px}
 .header-folio .num{font-size:26px;font-weight:800;color:#c00;line-height:1}
@@ -2512,6 +2528,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   }
 </script>
 <div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>
+${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
 <div id="pf-pageref" style="position:absolute;top:0;left:0;width:1px;height:257mm;visibility:hidden;pointer-events:none"></div>
 <div id="pf-sheet">`;
 
@@ -2526,12 +2543,19 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     h+=`<div class="header">
       <div class="header-logo">${logoHtml}</div>
       <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isWebOrder?'<div style="font-size:8px;color:#fff;background:#06b6d4;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
-      <div class="header-folio"><div class="lbl">Folio</div><div class="num">${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
+      <div class="header-folio"><div class="lbl">Folio</div><div class="num"${isVoidStockSale?' style="text-decoration:line-through;text-decoration-thickness:3px;color:#888"':''}>${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
     // v10.72.62 — banner de VERSIÓN, muy visible y B&N-proof: ADMINISTRATIVA = barra negra sólida (invertida);
     // PRODUCCIÓN = barra blanca con borde. Reemplaza el badge rojo de 8px (que en fotocopia B&N era ilegible).
     h+=`<div class="vbanner ${isProd?'prod':'admin'}"><span class="vt">${isProd?'Copia de Producción':'Copia Administrativa'}</span><span class="vs">${isProd?'Para taller · sin precios ni datos del cliente':'Completa · con precios y datos fiscales'}</span></div>`;
+
+    // v10.72.65 — leyenda de venta de stock que tomó folio P- por el bug (ver isVoidStockSale arriba)
+    if(isVoidStockSale){
+      const pf=esc(o.production_number||"");
+      const ff=o.invoice_folio?esc(o.invoice_folio):null;
+      h+=`<div class="vcancel-note"><div class="vct">⚠ Folio de producción ${pf} CANCELADO — error del sistema</div><div class="vcd">Esta hoja es una <b>VENTA DE STOCK</b> que consumió el folio de producción <b>${pf}</b> por un <b>error del sistema</b>, ya corregido. Las ventas de stock <b>no deben llevar folio de producción</b>: el folio <b>${pf}</b> queda <b>CANCELADO / anulado</b> y esta <b>NO es una orden de producción real</b>.${ff?` El cobro de esta venta corresponde a su folio fiscal <b>${ff}</b>.`:""}</div></div>`;
+    }
 
     // v10.72.23 — recuadro de aviso "sin logo SYGMA" (white-label) — muy visible, debajo del header
     if(o.sin_empaque_sygma){
