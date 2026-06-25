@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.64 — polish del scan adversarial del fix de ventas-de-stock (veredicto safe-ship; 0 blockers/highs/
+// regresión al flujo de producción). MED: los KPIs del Consecutivo (Total→"Producción (P-)", Con folio fiscal,
+// Canceladas) ahora EXCLUYEN stock_role='sale' (no inflan con las 43 ventas que la lista ya tacha como "no
+// producción"). LOW: el chip "Sin folio (saldo Corona)" ya no etiquetaría una venta single (sell_from_stock) como
+// Corona. INFO: SET search_path en la función del trigger trg_stock_sale_strip_pfolio (paridad de hardening).
+// Backlog (low, no se muestra en UI): el JSON de retorno de bulk_sell_from_stock aún trae un production_number
+// fantasma (el P- descartado) — inofensivo porque el toast usa el folio D-/OC-, no el P-.
 // v10.72.63 — BUG (reportado por Marcelo): las VENTAS de stock de Cuadra (stock_role='sale', creadas por el
 // Carrito vía bulk_sell_from_stock/sell_from_stock) consumían un folio de PRODUCCIÓN (P-), contaminando el
 // consecutivo (~43 ventas intercaladas con producción real). El P- pertenece a la orden de PRODUCCIÓN que
@@ -12077,17 +12084,18 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         if(byNum[i])pnSeq.push({n:i,orders:byNum[i]});
         else{pnSeq.push({n:i,orders:[],gap:true});pnGaps.push(i)}
       }
-      const totalPN=nums.length;
-      const cancelledCount=filteredOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
-      const invoicedCount=filteredOrders.filter(o=>o.invoice_folio).length;
       const stockSaleCount=filteredOrders.filter(o=>o.stock_role==="sale").length; // v10.72.63 — ventas de stock con folio P- mal asignado (historico; ya no se crean nuevas)
+      // v10.72.64 — los KPIs de producción EXCLUYEN las ventas de stock (que la lista ya tacha como "no producción"); evita inflar los contadores
+      const totalPN=filteredOrders.filter(o=>o.stock_role!=="sale").length;
+      const cancelledCount=filteredOrders.filter(o=>(o.cancelled_at||o.stage?.includes("cancelled"))&&o.stock_role!=="sale").length;
+      const invoicedCount=filteredOrders.filter(o=>o.invoice_folio&&o.stock_role!=="sale").length;
       // v10.43.18 — aplicar search + chips al pnSeq
       const matchesPnChip=(item)=>{
         if(statusChip==="all")return true;
         if(statusChip==="gap")return !!item.gap;
         if(statusChip==="cancelled")return item.orders?.some(o=>o.cancelled_at||o.stage?.includes("cancelled"));
         if(statusChip==="invoiced")return item.orders?.some(o=>o.invoice_folio);
-        if(statusChip==="no_folio")return item.orders?.some(o=>!o.invoice_folio&&!(o.cancelled_at||o.stage?.includes("cancelled")));
+        if(statusChip==="no_folio")return item.orders?.some(o=>!o.invoice_folio&&!(o.cancelled_at||o.stage?.includes("cancelled"))&&o.stock_role!=="sale");
         return true;
       };
       const matchesPnSearch=(item)=>{
@@ -12114,7 +12122,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:14}}>
           <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.ac+"66",boxShadow:C.sh2}}>
-            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total P-XXXX</div>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Producción (P-)</div>
             <div style={{fontSize:22,fontWeight:800,color:C.ac}}>{totalPN}</div>
           </div>
           <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(pnGaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
