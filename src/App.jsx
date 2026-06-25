@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.61 — hardening del scan exhaustivo (veredicto minor-issues; 0 blockers, 0 regresión al flujo normal).
+// RPC assign_historic_folio v4: (a) rechaza órdenes ya AGRUPADAS (grouped_invoice_folio NOT NULL) → evita doble
+// facturación si el RPC se invoca directo (defensa en profundidad; PrintFlow es anon, la UI ya ocultaba el botón);
+// (b) limpia snooze_* al foliar (consistencia con doAdv/revertOrder). UI: el merge optimista del HistoricFolioModal
+// incluye stage→delivered + delivered_at (la orden sale de Salidas al instante, sin esperar al realtime). Los 2
+// hallazgos de DATOS (D-5927 facturada al 3o LINEA CENTRO ESTACION; D-5915 monto/IVA de H-3642) son PRE-EXISTENTES
+// (no causados por estos RPCs, que validan cliente/monto) → reconciliación humana con Karla/Alpha, no fix a ciegas.
 // v10.72.60 — las 17 históricas SIN folio se mueven a Salidas (entran al Tablero "Pendientes de Folio" + Mis
 // Pendientes de Karla) para trabajarlas con la opción "El cliente no ha pedido factura" + asignar folio. Para que
 // NO se cree un folio equivocado (el flujo normal SUGIERE el siguiente del contador), "Asignar Folio y Entregar"
@@ -2925,7 +2932,7 @@ function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) 
       const tipo=data?.type==="factura"?"factura":"remisión";
       if(data?.result==="linked")showToast("✓ Folio "+f+" vinculado a la factura ya registrada en CobranzaFlow ("+fmt(data.linked_amount||data.amount||total)+")","info");
       else showToast("✓ Folio "+f+" aplicado — "+tipo+" creada en CobranzaFlow por "+fmt(data.amount||total));
-      onApplied(order.id,{invoice_folio:f,invoice_type:data?.type});
+      onApplied(order.id,{invoice_folio:f,invoice_type:data?.type,stage:["salidas","maq_received"].includes(order.stage)?(order.order_type==="maquila"?"maq_delivered":"delivered"):order.stage,delivered_at:new Date().toISOString()}); // v10.72.61 — merge optimista incluye stage (el RPC cierra a delivered al foliar desde salidas)
       onClose();
     }catch(e){showToast("❌ "+(e?.message||"No se pudo aplicar el folio"),"error")}
     finally{setBusy(false)}
