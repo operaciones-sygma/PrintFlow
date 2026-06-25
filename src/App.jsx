@@ -53,6 +53,15 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.63 — BUG (reportado por Marcelo): las VENTAS de stock de Cuadra (stock_role='sale', creadas por el
+// Carrito vía bulk_sell_from_stock/sell_from_stock) consumían un folio de PRODUCCIÓN (P-), contaminando el
+// consecutivo (~43 ventas intercaladas con producción real). El P- pertenece a la orden de PRODUCCIÓN que
+// alimentó el stock, no a la venta (si no, se duplica). FIX: (1) trigger BEFORE INSERT trg_stock_sale_strip_pfolio
+// que anula production_number cuando stock_role='sale' → de hoy en adelante las ventas NO toman P- (y como
+// next_production_number es MAX-based, el número no se consume: lo toma la siguiente producción real). (2) El
+// Consecutivo de Producción muestra las 43 históricas como "VENTA STOCK · FOLIO P ANULADO" (tachadas, no cuentan
+// como producción, conservan el número para no abrir huecos) + stat dedicada. NO se toca CobranzaFlow: las ventas
+// se siguen cobrando por su folio fiscal D-/R- (cuenta por cobrar intacta).
 // v10.72.62 — la orden IMPRESA confundía la versión administrativa (completa) con la de producción (la completa no
 // tenía etiqueta; la de producción solo un badge rojo de 8px, ilegible en fotocopia B&N). Se agregó un BANNER de
 // versión ancho bajo el encabezado, diseñado para BLANCO Y NEGRO: ADMINISTRATIVA = barra NEGRA sólida con texto
@@ -12071,6 +12080,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const totalPN=nums.length;
       const cancelledCount=filteredOrders.filter(o=>o.cancelled_at||o.stage?.includes("cancelled")).length;
       const invoicedCount=filteredOrders.filter(o=>o.invoice_folio).length;
+      const stockSaleCount=filteredOrders.filter(o=>o.stock_role==="sale").length; // v10.72.63 — ventas de stock con folio P- mal asignado (historico; ya no se crean nuevas)
       // v10.43.18 — aplicar search + chips al pnSeq
       const matchesPnChip=(item)=>{
         if(statusChip==="all")return true;
@@ -12119,6 +12129,11 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Canceladas</div>
             <div style={{fontSize:22,fontWeight:800,color:C.dn}}>{cancelledCount}</div>
           </div>
+          {stockSaleCount>0&&<div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Ventas de stock</div>
+            <div style={{fontSize:22,fontWeight:800,color:C.t3}}>{stockSaleCount}</div>
+            <div style={{fontSize:8,color:C.t3,marginTop:1}}>folio P- anulado · no es producción</div>
+          </div>}
           <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
             <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
             <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
@@ -12138,24 +12153,27 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             }
             return item.orders.map((o,i)=>{
               const isCancelled=o.cancelled_at||o.stage?.includes("cancelled");
+              const isStockSale=o.stock_role==="sale"; // v10.72.63 — venta de stock: el folio P- quedó mal asignado, se muestra anulado (la venta se cobra por su D-/R-)
               const stClr=SM[o.stage]?.c||C.t3;
+              const rowBg=isStockSale?C.t3+"10":(isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent"));
               return <div key={item.n+"-"+i} onClick={()=>setSelectedProdOrder(o)}
-                style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent"),display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
+                style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:rowBg,display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.12s"}}
                 onMouseEnter={e=>{e.currentTarget.style.background=C.sf}}
-                onMouseLeave={e=>{e.currentTarget.style.background=isCancelled?C.dn+"08":(o.invoice_folio?C.fac+"10":"transparent")}}>
-                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.ac,minWidth:90}}><ListBulletsIcon size={13} weight="bold"/>P-{item.n}</div>
+                onMouseLeave={e=>{e.currentTarget.style.background=rowBg}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:isStockSale?C.t3:C.ac,minWidth:90,textDecoration:isStockSale?"line-through":"none"}}><ListBulletsIcon size={13} weight="bold"/>P-{item.n}</div>
+                {isStockSale&&<div style={{fontSize:9,color:C.t2,fontWeight:700,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}}>VENTA STOCK · FOLIO P ANULADO</div>}
                 {o.order_type==="maquila"&&<div style={{fontSize:9,color:C.maq,fontWeight:700,background:C.maq+"15",padding:"2px 6px",borderRadius:4}}>MAQ</div>}
                 <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}</div>
                 {o.invoice_folio&&<div style={{fontSize:10,color:C.fac,fontWeight:700,background:C.fac+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</div>}
                 {isCancelled&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA</div>}
-                {!isCancelled&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
+                {!isCancelled&&!isStockSale&&<div style={{fontSize:10,color:stClr,fontWeight:600,background:stClr+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></div>}
                 <div style={{fontSize:10,color:C.t3}}>{o.created_at?fDT(o.created_at):"—"}</div>
               </div>;
             });
           })}
         </div>}
         <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-          <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Click en cualquier orden para ver detalles completos.
+          <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Las <strong style={{color:C.t3}}>ventas de stock</strong> (tachadas) conservan su P-XXXX pero NO son producción: su folio P- queda anulado y la venta se cobra por su folio fiscal D-/R- en CobranzaFlow. Click en cualquier orden para ver detalles completos.
         </div>
       </div>;
     })()}
