@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.67 — Consecutivo de Facturas (AuditoriaView) cruza con la CARTERA ACTIVA de CobranzaFlow para que los
+// folios ya facturados (directo en Alpha / conciliación, sin orden de producción) dejen de salir como GAPS
+// FALSOS. Reemplaza el intento v10.72.66 (revertido en f8b98c7) que mostraba TODA la cartera incl. cancelados/test
+// y reinflaba el rango. DOS correcciones: (1) RPC public.list_consecutive_cobranza_folios filtra status<>'cancelada'
+// → ningún cancelado/test puede reaparecer; (2) el merge solo rellena gaps DENTRO del rango [min..max] de las
+// órdenes (no extiende el consecutivo hacia atrás con folios viejos). Dedup por número (sin duplicados). Las filas
+// de cartera salen con badge azul "EN COBRANZAFLOW · status" (monto/saldo); las reales siguen en rojo FALTANTE.
 // v10.72.65 — copia impresa de las ventas de stock que consumieron folio P- por el bug: marca de agua "CANCELADO"
 // grande en diagonal + leyenda (caja negra B&N-proof) explicando que el folio de producción se tomó por error del
 // sistema (ya corregido) y queda anulado — no es una orden de producción real; la venta se cobra por su folio
@@ -11831,6 +11838,24 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     return ()=>{alive=false};
   },[type,cutoffs]);
 
+  // v10.72.67 — Cruzar el consecutivo con la CARTERA ACTIVA de CobranzaFlow (cobranza.invoices NO cancelados) para
+  // que los folios que ya están en cartera (facturados directo en Alpha / conciliación, sin orden de producción)
+  // dejen de salir como GAPS FALSOS. La RPC excluye cancelados → ningún test/cancelado puede reaparecer. El merge
+  // (abajo) solo rellena gaps DENTRO del rango de las órdenes (no extiende el consecutivo hacia atrás).
+  const [cobranzaFolios,setCobranzaFolios]=useState([]);
+  useEffect(()=>{
+    let alive=true;
+    const startDate=cutoffs.start?cutoffs.start.toISOString().slice(0,10):null;
+    const endDate=cutoffs.end?cutoffs.end.toISOString().slice(0,10):null;
+    supabase.rpc("list_consecutive_cobranza_folios",{p_doc_type:type,p_start_date:startDate,p_end_date:endDate})
+      .then(({data,error})=>{
+        if(!alive)return;
+        if(error){console.warn("[AuditoriaView] list_consecutive_cobranza_folios:",error);setCobranzaFolios([]);return}
+        setCobranzaFolios(data||[]);
+      });
+    return ()=>{alive=false};
+  },[type,cutoffs]);
+
   const folioOrders=useMemo(()=>{
     // Órdenes con folio en public.orders (flujo normal)
     const fromOrders=orders.filter(o=>{
@@ -11862,8 +11887,41 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       coronaAmountWithIva:oc.amount_with_iva,
       coronaInvoiceId:oc.invoice_id
     }));
-    return [...fromOrders,...fromCorona];
-  },[orders,type,cutoffs,coronaOCInvoices]);
+    // v10.72.67 — Folios que viven SOLO en la cartera ACTIVA de CobranzaFlow: se agregan SOLO si (a) su número no
+    // está ya cubierto por orders/Corona (dedup → sin duplicados falsos) y (b) cae DENTRO del rango [min..max] de
+    // las órdenes (NO extiende el consecutivo hacia atrás con folios viejos). La RPC ya excluyó los cancelados.
+    const pf=f=>{const m=String(f||"").match(/[DRC]-(\d+)/);return m?parseInt(m[1],10):null};
+    const baseList=[...fromOrders,...fromCorona];
+    const baseNums=baseList.map(o=>pf(o.invoice_folio)).filter(n=>n!==null);
+    const seen=new Set(baseNums);
+    let fromCobranza=[];
+    if(baseNums.length>0){
+      const baseMin=Math.min(...baseNums), baseMax=Math.max(...baseNums);
+      fromCobranza=(cobranzaFolios||[]).filter(ci=>{
+        const n=pf(ci.doc_number);
+        if(n===null||ci.doc_type!==type||seen.has(n))return false;
+        if(n<baseMin||n>baseMax)return false; // solo rellena gaps INTERNOS; no extiende el rango
+        seen.add(n);return true;
+      }).map(ci=>({
+        id:"COB-"+ci.doc_number,
+        invoice_folio:ci.doc_number,
+        invoice_type:ci.doc_type,
+        invoiced_at:ci.issued_date?ci.issued_date+"T12:00:00":null,
+        client:ci.client_name||"—",
+        production_number:null,
+        purchase_order_id:null,
+        invoiced_by:null,
+        invoice_pre_assigned:false,
+        cancelled_at:null,
+        nc_emitted:false,
+        isCobranza:true,
+        cobranzaStatus:ci.status,
+        cobranzaAmount:ci.amount,
+        cobranzaBalance:ci.balance
+      }));
+    }
+    return [...baseList,...fromCobranza];
+  },[orders,type,cutoffs,coronaOCInvoices,cobranzaFolios]);
   const parseFolio=f=>{const m=String(f||"").match(/[DRC]-(\d+)/);return m?parseInt(m[1],10):null};
   // 📄 v10.11.0 Sub-fase B — Reclasifica duplicados que son folios compartidos legítimos
   // Un grupo de órdenes con el mismo folio se considera "shared" (no duplicado) si:
@@ -11936,9 +11994,9 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     sequence.forEach(item=>{
       if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","","","",""])}
       else{item.orders.forEach(o=>{
-        const origen=o.isCoronaOC?"OC Crédito Corona":"Orden producción";
+        const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?"CobranzaFlow (cartera)":"Orden producción");
         const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
-        const monto=o.isCoronaOC?(o.coronaAmountWithIva||""):"";
+        const monto=o.isCoronaOC?(o.coronaAmountWithIva||""):(o.isCobranza&&o.cobranzaAmount!=null?o.cobranzaAmount:"");
         rows.push([o.invoice_folio,item.status==="duplicate"?"DUPLICADO":(item.status==="shared"?"COMPARTIDO":"OK"),origen,o.client||"",refProd,o.id,o.invoiced_at?fDT(o.invoiced_at):"",o.invoiced_by==="secretaria"?"Lupita":(o.invoiced_by||""),o.invoice_pre_assigned?"SI":"NO",o.cancelled_at?"SI":"NO",monto]);
       })}
     });
@@ -12066,13 +12124,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         return item.orders.map((o,i)=>{
           // v10.43.30 — Corona OC: fondo verdoso + badge + no click navega (no es orden)
           const isCorona=o.isCoronaOC;
-          const baseBg=isCorona?C.emr+"08":(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent"));
-          return <div key={item.n+"-"+i} onClick={isCorona?undefined:()=>setSelectedProdOrder(o)}
-            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:isCorona?"default":"pointer",transition:"background 0.12s"}}
-            onMouseEnter={e=>{if(!isCorona)e.currentTarget.style.background=C.sf}}
-            onMouseLeave={e=>{if(!isCorona)e.currentTarget.style.background=baseBg}}>
+          const isCob=o.isCobranza; // v10.72.67 — folio que vive solo en la cartera activa de CobranzaFlow
+          const noNav=isCorona||isCob; // ninguno es orden de producción → no navega
+          const baseBg=isCorona?C.emr+"08":(isCob?C.ios+"08":(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent")));
+          return <div key={item.n+"-"+i} onClick={noNav?undefined:()=>setSelectedProdOrder(o)}
+            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:noNav?"default":"pointer",transition:"background 0.12s"}}
+            onMouseEnter={e=>{if(!noNav)e.currentTarget.style.background=C.sf}}
+            onMouseLeave={e=>{if(!noNav)e.currentTarget.style.background=baseBg}}>
             <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.invoice_folio}</div>
             {isCorona&&<div style={{fontSize:10,color:C.emr,fontWeight:700,background:C.emr+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
+            {isCob&&<div style={{fontSize:10,color:C.ios,fontWeight:700,background:C.ios+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>}
             {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
             {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
             {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
@@ -12082,6 +12143,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
             {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</div>}
             {isCorona&&o.coronaAmountWithIva&&<div style={{fontSize:10,color:C.emr,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</div>}
+            {isCob&&o.cobranzaAmount!=null&&<div style={{fontSize:10,color:C.ios,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?" · saldo $"+Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2}):""}</div>}
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
           </div>;
         });
@@ -12089,7 +12151,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>;
     })()}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
+      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas <b style={{color:C.ios}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) pero sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango, no se traen folios viejos ni cancelados). Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o no existe en Alpha. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
     </>}
 
