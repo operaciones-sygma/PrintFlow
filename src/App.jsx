@@ -53,6 +53,9 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.71 — fix latente (hallado en el scan de v10.72.70): deleteTopFile (botón borrar del Top-5 de la vista
+// Storage) siempre nulaba image_url; si la imagen borrada era la 2a (image_url_2), dejaba esa columna apuntando a
+// un archivo ya borrado (404). Ahora detecta por el path cuál de las dos columnas corresponde. Flujo manual admin.
 // v10.72.70 — IMÁGENES DE LA ORDEN SE CONSERVAN PARA SIEMPRE (antes se borraban a los 30 días). El auto-cleanup
 // diario ya solo borra el ARCHIVO DE PRODUCCIÓN pesado (file_url, PSD/AI/PDF print-ready); las imágenes
 // (image_url/image_url_2) ya no se borran: a los 30 días post-entrega se COMPRIMEN a baja resolución (640px,
@@ -10115,7 +10118,13 @@ function StorageTab({orders,onReload}) {
     try{
       await supabase.storage.from("order-files").remove([f.path]);
       if(f.order){
-        const upd=f.isImage?{image_url:null}:{file_url:null,file_name:null};
+        // v10.72.71 — al borrar una imagen del Top-5, distinguir image_url vs image_url_2 por el path (antes
+        // siempre nulaba image_url → si la borrada era la 2a imagen, dejaba image_url_2 colgando a un archivo borrado).
+        let upd;
+        if(f.isImage){
+          const pathOf=u=>{const s=(u||"").split("/order-files/")[1];return s?decodeURIComponent(s):null};
+          upd = pathOf(f.order.image_url_2)===f.path ? {image_url_2:null} : {image_url:null};
+        } else { upd={file_url:null,file_name:null}; }
         await supabase.from("orders").update(upd).eq("id",f.order.id);
       }
       setRefreshKey(k=>k+1);
