@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.68 — Consecutivo: folios cancelados en AlphaERP (que NO salen en los exports de "vigentes", por eso no
+// están en cartera) ahora se muestran con badge gris "CANCELADA EN ALPHA" en vez de rojo FALTANTE. Tabla nueva
+// cobranza.consecutive_external_folios (ampliable) + RPC list_consecutive_cobranza_folios v3 agrega columna kind
+// ('cartera'|'externa'). Sembrados D-5809/5813/5861/5872 (verificados por Karla). El gotcha de fondo: los exports
+// de Alpha que da Marcelo son "Todas excepto canceladas" → un folio ausente del export puede estar cancelado, no
+// inexistente. (Acompaña: 4 facturas directas de Alpha asignadas a cobranza — D-5948 venta-stock Manufacturera
+// $84k, D-5950 Tiendas, D-5955 Fabrica, D-5956 Instituto — clientes sin orden pendiente en PrintFlow.)
 // v10.72.67 — Consecutivo de Facturas (AuditoriaView) cruza con la CARTERA ACTIVA de CobranzaFlow para que los
 // folios ya facturados (directo en Alpha / conciliación, sin orden de producción) dejen de salir como GAPS
 // FALSOS. Reemplaza el intento v10.72.66 (revertido en f8b98c7) que mostraba TODA la cartera incl. cancelados/test
@@ -11917,7 +11924,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         isCobranza:true,
         cobranzaStatus:ci.status,
         cobranzaAmount:ci.amount,
-        cobranzaBalance:ci.balance
+        cobranzaBalance:ci.balance,
+        cobranzaKind:ci.kind
       }));
     }
     return [...baseList,...fromCobranza];
@@ -11994,7 +12002,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     sequence.forEach(item=>{
       if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","","","",""])}
       else{item.orders.forEach(o=>{
-        const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?"CobranzaFlow (cartera)":"Orden producción");
+        const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?(o.cobranzaKind==='externa'?"Cancelada en AlphaERP":"CobranzaFlow (cartera)"):"Orden producción");
         const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
         const monto=o.isCoronaOC?(o.coronaAmountWithIva||""):(o.isCobranza&&o.cobranzaAmount!=null?o.cobranzaAmount:"");
         rows.push([o.invoice_folio,item.status==="duplicate"?"DUPLICADO":(item.status==="shared"?"COMPARTIDO":"OK"),origen,o.client||"",refProd,o.id,o.invoiced_at?fDT(o.invoiced_at):"",o.invoiced_by==="secretaria"?"Lupita":(o.invoiced_by||""),o.invoice_pre_assigned?"SI":"NO",o.cancelled_at?"SI":"NO",monto]);
@@ -12126,14 +12134,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           const isCorona=o.isCoronaOC;
           const isCob=o.isCobranza; // v10.72.67 — folio que vive solo en la cartera activa de CobranzaFlow
           const noNav=isCorona||isCob; // ninguno es orden de producción → no navega
-          const baseBg=isCorona?C.emr+"08":(isCob?C.ios+"08":(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent")));
+          const baseBg=isCorona?C.emr+"08":(isCob?(o.cobranzaKind==='externa'?C.t3+"14":C.ios+"08"):(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent")));
           return <div key={item.n+"-"+i} onClick={noNav?undefined:()=>setSelectedProdOrder(o)}
             style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:noNav?"default":"pointer",transition:"background 0.12s"}}
             onMouseEnter={e=>{if(!noNav)e.currentTarget.style.background=C.sf}}
             onMouseLeave={e=>{if(!noNav)e.currentTarget.style.background=baseBg}}>
             <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.invoice_folio}</div>
             {isCorona&&<div style={{fontSize:10,color:C.emr,fontWeight:700,background:C.emr+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
-            {isCob&&<div style={{fontSize:10,color:C.ios,fontWeight:700,background:C.ios+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>}
+            {isCob&&(o.cobranzaKind==='externa'
+              ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real."><XCircleIcon size={10} weight="bold"/>CANCELADA EN ALPHA</div>
+              : <div style={{fontSize:10,color:C.ios,fontWeight:700,background:C.ios+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
             {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
             {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
             {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
@@ -12143,7 +12153,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
             {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</div>}
             {isCorona&&o.coronaAmountWithIva&&<div style={{fontSize:10,color:C.emr,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</div>}
-            {isCob&&o.cobranzaAmount!=null&&<div style={{fontSize:10,color:C.ios,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?" · saldo $"+Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2}):""}</div>}
+            {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<div style={{fontSize:10,color:C.ios,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?" · saldo $"+Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2}):""}</div>}
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
           </div>;
         });
@@ -12151,7 +12161,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>;
     })()}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas <b style={{color:C.ios}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) pero sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango, no se traen folios viejos ni cancelados). Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o no existe en Alpha. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
+      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas <b style={{color:C.ios}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango). Las filas grises <b>CANCELADA EN ALPHA</b> son folios cancelados en AlphaERP (no salen en los exports de "vigentes"; verificados aparte) — están contabilizados, NO son faltantes. Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o un folio cancelado que aún no marcamos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
     </>}
 
