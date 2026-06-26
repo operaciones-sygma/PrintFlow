@@ -9745,10 +9745,14 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:C.sal}}><ExportIcon size={14} weight="bold"/>Salidas</span>
             </div>
-            {inSalidas.length>0&&<div style={{background:C.sal,color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inSalidas.length}</div>}
+            {role!=="produccion"&&inSalidas.length>0&&<div style={{background:C.sal,color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inSalidas.length}</div>}
           </div>
           <div style={{padding:10,minHeight:60}}>
-            {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
+            {/* 🆕 v10.72.50 — produccion ve Salidas como BUZÓN: puede arrastrar/soltar para enviar, pero NO ve la lista acumulada (salidas es área de Karla, no de su flujo). Admin/Karla sí ven la lista. */}
+            {role==="produccion"?<div style={{textAlign:"center",padding:"14px 6px",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:500,lineHeight:1.45}}>
+              {dO==="vm_salidas"?<><DownloadSimpleIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar para enviar a Salidas</>:<><ExportIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Buzón · arrastra aquí una orden de Empaque para enviarla a Salidas</>}
+            </div>
+            :inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
             :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
