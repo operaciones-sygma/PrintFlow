@@ -53,6 +53,13 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.72 — consecutivo: nuevo badge gris "PAGADA EN ALPHA" (status_label='pagada_alpha' en la tabla
+// consecutive_external_folios) para folios que se emitieron Y YA SE COBRARON directo en AlphaERP sin pasar por el
+// sistema — no son deuda ni faltante. Sembradas 14 (D-5792/5794/5796/5797/5799/5829/5830/5898/5901/5919/5920/5924
+// + R-1186/1213). Además se capturaron en CobranzaFlow las 2 remisiones que SÍ eran deuda viva no registrada:
+// R-1229 JORGE CARLIN (parcial $15,158, se recreó el cliente borrado) + R-1231 ANDRES MATA ($828). Resultado:
+// rojos FALTANTE en D-5791..5965/R-1184..1232 bajan de 18 a 2 (solo D-5952/D-5957, que esperan que Karla folie
+// sus órdenes pendientes en PrintFlow). Badge: icono CheckCircle (vs XCircle de cancelada/auto_zero).
 // v10.72.71 — fix latente (hallado en el scan de v10.72.70): deleteTopFile (botón borrar del Top-5 de la vista
 // Storage) siempre nulaba image_url; si la imagen borrada era la 2a (image_url_2), dejaba esa columna apuntando a
 // un archivo ya borrado (404). Ahora detecta por el path cuál de las dos columnas corresponde. Flujo manual admin.
@@ -12058,7 +12065,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     sequence.forEach(item=>{
       if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","","","",""])}
       else{item.orders.forEach(o=>{
-        const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?(o.cobranzaKind==='externa'?(o.cobranzaStatus==='auto_zero'?"Auto-factura $0 (PADILLA)":"Cancelada en AlphaERP"):"CobranzaFlow (cartera)"):"Orden producción");
+        const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?(o.cobranzaKind==='externa'?(o.cobranzaStatus==='auto_zero'?"Auto-factura $0 (PADILLA)":o.cobranzaStatus==='pagada_alpha'?"Pagada directo en Alpha":"Cancelada en AlphaERP"):"CobranzaFlow (cartera)"):"Orden producción");
         const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
         const monto=o.isCoronaOC?(o.coronaAmountWithIva||""):(o.isCobranza&&o.cobranzaAmount!=null?o.cobranzaAmount:"");
         rows.push([o.invoice_folio,item.status==="duplicate"?"DUPLICADO":(item.status==="shared"?"COMPARTIDO":"OK"),origen,o.client||"",refProd,o.id,o.invoiced_at?fDT(o.invoiced_at):"",o.invoiced_by==="secretaria"?"Lupita":(o.invoiced_by||""),o.invoice_pre_assigned?"SI":"NO",o.cancelled_at?"SI":"NO",monto]);
@@ -12198,7 +12205,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             <div style={{fontSize:14,fontWeight:800,color:tColor,minWidth:80}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.invoice_folio}</div>
             {isCorona&&<div style={{fontSize:10,color:C.emr,fontWeight:700,background:C.emr+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
             {isCob&&(o.cobranzaKind==='externa'
-              ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}><XCircleIcon size={10} weight="bold"/>{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':'CANCELADA EN ALPHA'}</div>
+              ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':o.cobranzaStatus==='pagada_alpha'?'Factura emitida y YA PAGADA directo en AlphaERP, sin pasar por PrintFlow/CobranzaFlow. No es deuda ni faltante real; se documenta en el consecutivo.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}>{o.cobranzaStatus==='pagada_alpha'?<CheckCircleIcon size={10} weight="bold"/>:<XCircleIcon size={10} weight="bold"/>}{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':o.cobranzaStatus==='pagada_alpha'?'PAGADA EN ALPHA':'CANCELADA EN ALPHA'}</div>
               : <div style={{fontSize:10,color:C.ios,fontWeight:700,background:C.ios+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
             {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
             {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
