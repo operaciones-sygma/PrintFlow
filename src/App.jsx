@@ -53,6 +53,14 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.70 — IMÁGENES DE LA ORDEN SE CONSERVAN PARA SIEMPRE (antes se borraban a los 30 días). El auto-cleanup
+// diario ya solo borra el ARCHIVO DE PRODUCCIÓN pesado (file_url, PSD/AI/PDF print-ready); las imágenes
+// (image_url/image_url_2) ya no se borran: a los 30 días post-entrega se COMPRIMEN a baja resolución (640px,
+// JPEG q0.45) una sola vez, ocupando ~10% del espacio pero suficientes para identificar/repetir la orden de un
+// vistazo (el print las muestra a ≤180px). Marca de hecho: columna nueva orders.images_archived_at (evita
+// recomprimir a diario y degradarlas). Helper compressBlobHard (canvas, como compressImg pero agresivo). Tope de
+// 80 órdenes/corrida para no saturar el navegador del admin; el backlog se pone al día en días sucesivos. La
+// vista Storage manual no cambia (su limpieza masiva siempre fue solo de archivos de producción).
 // v10.72.69 — Consecutivo: las auto-facturas internas de PADILLA en $0 (no caben en cartera por CHECK amount>0)
 // ahora salen con badge gris "AUTO-FACTURA $0" en vez de rojo FALTANTE, igual que las canceladas. Se reusó la
 // tabla cobranza.consecutive_external_folios con status_label='auto_zero'; el badge se elige por status_label
@@ -1641,6 +1649,33 @@ const compressImg = (file, maxDim=1920, q=0.92) => new Promise((resolve) => {
   img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
   img.src = url;
 });
+// v10.72.70 — Comprime AGRESIVO un Blob de imagen YA subido (archivado >30 días): resize a maxDim px + JPEG
+// calidad baja, para conservar la imagen de la orden ocupando lo mínimo (suficiente para identificarla/repetirla;
+// el print la muestra a ≤180px). A diferencia de compressImg, recibe un Blob (descargado de Storage) y NO conserva
+// el original: si no es imagen procesable o la compresión no reduce tamaño, devuelve null (el llamador deja el original).
+const compressBlobHard = (blob, maxDim=640, q=0.45) => new Promise((resolve) => {
+  try {
+    if (!blob || !/^image\/(jpe?g|png|webp)$/i.test(blob.type||"")) { resolve(null); return; }
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width:w, height:h } = img;
+        if (!w || !h) { URL.revokeObjectURL(url); resolve(null); return; }
+        // Si ya está dentro del target (p.ej. una imagen YA archivada que se reprocesa porque su hermana falla red),
+        // NO re-encodear: evita generation loss acumulativo. Una imagen ≤maxDim ya cumple el objetivo de espacio.
+        if (w <= maxDim && h <= maxDim) { URL.revokeObjectURL(url); resolve(null); return; }
+        const r = Math.min(maxDim/w, maxDim/h); w = Math.round(w*r); h = Math.round(h*r);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        canvas.toBlob(out => { URL.revokeObjectURL(url); resolve(out && out.size < blob.size ? out : null); }, "image/jpeg", q);
+      } catch { URL.revokeObjectURL(url); resolve(null); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  } catch { resolve(null); }
+});
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10,minHeight:40}); // v10.72.18 — touch target ~40px de ALTO (solo minHeight: no cambia el ancho → no rompe las filas densas de íconos; además alinea con los bt de la misma fila)
@@ -2876,7 +2911,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
       </div>
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
-      {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt={"Imagen "+(i+1)+" — "+(o.product_type||o.product||o.id)} onClick={()=>window.open(src,"_blank")} title="Click para ver en tamaño original" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:C.sf,cursor:"pointer"}}/>)}</div>})()}
+      {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><img key={i} src={src} alt={"Imagen "+(i+1)+" — "+(o.product_type||o.product||o.id)} onClick={()=>window.open(src,"_blank")} title="Click para ampliar" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:C.sf,cursor:"pointer"}}/>)}</div>})()}
       {o.plate_status&&<div style={{marginBottom:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (auto-salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
       <Row l="Nombre" v={o.client}/>
@@ -9993,6 +10028,12 @@ function StorageTab({orders,onReload}) {
             const p=o.image_url.split("/order-files/")[1];
             if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}
           }
+          // v10.72.70 — image_url_2 ahora es permanente (las imágenes ya no se borran): indexarla también
+          // para que la limpieza de huérfanos NO ofrezca borrar las segundas imágenes (vuelta).
+          if(o.image_url_2){
+            const p=o.image_url_2.split("/order-files/")[1];
+            if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}
+          }
         });
         // Recolectar todos los archivos con path completo
         let totalBytes=0;
@@ -10111,7 +10152,7 @@ function StorageTab({orders,onReload}) {
       <div style={{flex:"1 1 200px",minWidth:180,background:C.dsn+"08",border:"1px solid "+C.dsn+"20",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.dsn,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><CameraIcon size={11} weight="bold"/>Imágenes Referencia</div>
         <div style={{fontSize:20,fontWeight:800,color:C.dsn}}>{breakdown.img.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.img.bytes)}</span></div>
-        <div style={{fontSize:9,color:C.t3,marginTop:2}}>Fotos para visualizar el producto</div>
+        <div style={{fontSize:9,color:C.t3,marginTop:2}}>Se conservan siempre · se comprimen tras 30 días</div>
       </div>
     </div>
 
@@ -13524,7 +13565,9 @@ export default function PrintFlow() {
     });
   }, [orders, loaded, user]);
 
-  // Auto-cleanup: delete files AND images older than 30 days from Supabase Storage (v10.16.0)
+  // Auto-archivado diario (v10.72.70): a los 30 días post-entrega/cancelación borra el ARCHIVO DE PRODUCCIÓN
+  // pesado (file_url) PERO conserva las imágenes de la orden, comprimiéndolas a baja resolución una sola vez
+  // (antes —v10.16.0— también se borraban las imágenes; Marcelo prefiere conservarlas para identificar/repetir).
   useEffect(() => {
     // v10.72.15 — GATE a admin + lock diario. Antes corría en CADA tablet al primer load y el cutoff usa el
     // reloj LOCAL del dispositivo (Date.now): una tablet con la fecha mal puesta (común en el piso) podía borrar
@@ -13539,43 +13582,56 @@ export default function PrintFlow() {
     const cleanup = async () => {
       const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
       // v10.72.19 — sanity del reloj LOCAL: si el año está groseramente mal (fuera de 2025-2035), el cutoff
-      // sería absurdo y BORRARÍA archivos que no debe (irreversible: borra de Storage + nulea columnas). Abortar.
+      // sería absurdo y tocaría archivos que no debe (borrar file_url es irreversible). Abortar.
       const _yr=new Date().getFullYear(); if(_yr<2025||_yr>2035){ console.warn("[storage-cleanup] reloj local sospechoso ("+_yr+"); se omite la limpieza"); return; }
       // v10.28.2 — filtrar por delivered_at / cancelled_at (NO created_at). Antes una orden
       // creada hace 35 días y entregada ayer perdía archivos a las 24h en vez de los 30 días post-entrega.
-      const cols = "id,file_url,file_name,image_url,image_url_2,stage";
+      const cols = "id,file_url,file_name,image_url,image_url_2,images_archived_at,stage";
       const [delQ, cancQ] = await Promise.all([
         supabase.from("orders").select(cols).in("stage", ["delivered","maq_delivered"]).lt("delivered_at", cutoff),
         supabase.from("orders").select(cols).in("stage", ["cancelled","maq_cancelled"]).lt("cancelled_at", cutoff)
       ]);
       const old = [...(delQ.data||[]), ...(cancQ.data||[])];
       if (old.length === 0) return;
+
+      // (A) Borrar SOLO el ARCHIVO DE PRODUCCIÓN (file_url: PSD/AI/PDF print-ready, pesado). Las imágenes ya NO se
+      //     borran (v10.72.70) → aquí no se tocan image_url/image_url_2.
       for (const o of old) {
-        if (!o.file_url && !o.image_url && !o.image_url_2) continue; // saltar órdenes sin nada que limpiar
+        if (!o.file_url) continue;
         try {
-          const updates = {};
-          // Limpiar archivo de producción (file_url)
-          if (o.file_url) {
-            const path = o.file_url.split("/order-files/")[1];
-            if (path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
-            updates.file_url = null;
-            updates.file_name = null;
-          }
-          // Limpiar imagen de referencia (image_url) — v10.16.0
-          if (o.image_url) {
-            const imgPath = o.image_url.split("/order-files/")[1];
-            if (imgPath) await supabase.storage.from("order-files").remove([decodeURIComponent(imgPath)]);
-            updates.image_url = null;
-          }
-          // Limpiar segunda imagen (image_url_2) — v10.22.0
-          if (o.image_url_2) {
-            const imgPath2 = o.image_url_2.split("/order-files/")[1];
-            if (imgPath2) await supabase.storage.from("order-files").remove([decodeURIComponent(imgPath2)]);
-            updates.image_url_2 = null;
-          }
-          if (Object.keys(updates).length) await supabase.from("orders").update(updates).eq("id", o.id);
+          const path = o.file_url.split("/order-files/")[1];
+          if (path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+          await supabase.from("orders").update({ file_url: null, file_name: null }).eq("id", o.id);
         } catch {}
       }
+
+      // (B) Comprimir las IMÁGENES a baja resolución una sola vez (images_archived_at marca hecho → no recomprime a
+      //     diario, lo cual las degradaría). Tope por corrida para no saturar el navegador del admin; el backlog se
+      //     pone al día en días sucesivos. Si interrumpen la sesión, cada orden completada ya quedó marcada.
+      const CAP = 80;
+      const pending = old.filter(o => !o.images_archived_at && (o.image_url || o.image_url_2));
+      let done = 0;
+      for (const o of pending.slice(0, CAP)) {
+        let ok = true;
+        try {
+          for (const col of ["image_url", "image_url_2"]) {
+            const u = o[col]; if (!u) continue;
+            const raw = u.split("/order-files/")[1]; if (!raw) continue;
+            const p = decodeURIComponent(raw);
+            const { data: blob, error: dErr } = await supabase.storage.from("order-files").download(p);
+            if (dErr || !blob) { ok = false; continue; } // fallo de red: reintentar mañana (no marcar archivado)
+            if (blob.size && blob.size < 60*1024) continue; // ya es chica: no vale la pena recomprimir
+            const small = await compressBlobHard(blob, 640, 0.45);
+            if (!small) continue; // no es imagen procesable o no redujo: dejar el original tal cual
+            const { error: uErr } = await supabase.storage.from("order-files")
+              .upload(p, small, { upsert: true, contentType: "image/jpeg", cacheControl: "3600" });
+            if (uErr) ok = false;
+          }
+          // Solo marcar archivado si TODO lo presente se procesó sin error de red.
+          if (ok) { await supabase.from("orders").update({ images_archived_at: new Date().toISOString() }).eq("id", o.id); done++; }
+        } catch {}
+      }
+      if (done > 0) console.log("[storage-archive] imágenes comprimidas en " + done + " órdenes; faltan ~" + Math.max(0, pending.length - done));
       reload();
     };
     cleanup();
