@@ -9527,7 +9527,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const inProd=orders.filter(o=>o.stage==="in_production");
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
-  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true});
+  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:role==="produccion"});
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
@@ -9738,21 +9738,23 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           </div>
         </div>
 
-        {/* SALIDAS */}
+        {/* SALIDAS — v10.72.51: sección colapsable. Arranca MINIMIZADA para produccion (Gerardo) para
+            que no le haga ruido visual, pero puede expandirla con clic para ver la lista. Admin abierta
+            por default. El contador queda visible siempre; la zona de drop funciona aunque esté colapsada. */}
         <div onDragOver={e=>{e.preventDefault();setDO("vm_salidas")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_salidas",e)}
           style={{borderRadius:14,border:dO==="vm_salidas"?"2px solid "+C.sal:"1.5px solid "+C.sal+"40",background:dO==="vm_salidas"?C.sal+"12":C.sal+"06",transition:"all .15s",overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",borderBottom:"1px solid "+C.sal+"20",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div onClick={()=>toggle("salidas")} style={{padding:"10px 14px",borderBottom:collapsed.salidas?"none":"1px solid "+C.sal+"20",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:C.sal}}><ExportIcon size={14} weight="bold"/>Salidas</span>
             </div>
-            {role!=="produccion"&&inSalidas.length>0&&<div style={{background:C.sal,color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inSalidas.length}</div>}
-          </div>
-          <div style={{padding:10,minHeight:60}}>
-            {/* 🆕 v10.72.50 — produccion ve Salidas como BUZÓN: puede arrastrar/soltar para enviar, pero NO ve la lista acumulada (salidas es área de Karla, no de su flujo). Admin/Karla sí ven la lista. */}
-            {role==="produccion"?<div style={{textAlign:"center",padding:"14px 6px",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:500,lineHeight:1.45}}>
-              {dO==="vm_salidas"?<><DownloadSimpleIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar para enviar a Salidas</>:<><ExportIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Buzón · arrastra aquí una orden de Empaque para enviarla a Salidas</>}
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              {inSalidas.length>0&&<div style={{background:C.sal,color:"#fff",minWidth:22,height:22,padding:"0 6px",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inSalidas.length}</div>}
+              {collapsed.salidas&&<span style={{fontSize:10,fontWeight:600,color:C.sal}}>{dO==="vm_salidas"?"Soltar aquí":"clic para ver"}</span>}
+              <span style={{fontSize:14,color:collapsed.salidas?C.sal:C.t2,transition:"transform .2s",transform:collapsed.salidas?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
             </div>
-            :inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
+          </div>
+          {!collapsed.salidas&&<div style={{padding:10,minHeight:60}}>
+            {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
             :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
@@ -9760,7 +9762,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
               {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
             </div>)}
-          </div>
+          </div>}
         </div>
 
         {/* MAQUILA */}
