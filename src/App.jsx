@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.82 — los 2 P3 que quedaban del re-critique: (1) al cambiar de tab ya NO se borra la búsqueda (search es
+// texto agnóstico folio/cliente; solo los chips resetean porque difieren por tab) → cruzar un cliente entre tabs ya
+// no pierde la query. (2) Discoverability de la card "Compartidos" (la única clickeable entre 4 inertes): el hint
+// pasa a pill de acento + hover con elevación (translateY + sombra) para que lea como botón.
 // v10.72.81 — /impeccable layout (P2 del re-critique): las filas densas del consecutivo (folio + hasta 3 badges +
 // cliente + P-XXXX + OC + monto + capturó, ~10 elementos en un flex-wrap) envolvían irregular a 1280px y rompían el
 // escaneo tipo tabla. Ahora 2 LÍNEAS: línea 1 escaneable (folio · estado · cliente que trunca · fecha), línea 2
@@ -12181,10 +12185,10 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     <h2 style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}><FilesIcon size={19} weight="bold"/>Auditoría</h2>
     <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados · Read-only</p>
     {/* v10.43.16 — Tabs principales: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX) */}
-    {/* v10.43.20 FIX M15 — reset search y statusChip al cambiar de tab (los chips son distintos por tab) */}
+    {/* v10.72.82 — al cambiar de tab solo resetea statusChip (los chips difieren por tab); el search se PRESERVA (es texto agnóstico folio/cliente, para cruzar entre tabs sin perder la query). Antes (v10.43.20) reseteaba ambos. */}
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
       {[{id:"folios",ic:FileTextIcon,l:"Folios Fiscales (D- / R-)"},{id:"production",ic:ListBulletsIcon,l:"Órdenes de Producción (P-XXXX)"}].map(t=>
-        <button key={t.id} onClick={()=>{if(tab!==t.id){setTab(t.id);setSearch("");setStatusChip("all")}}}
+        <button key={t.id} onClick={()=>{if(tab!==t.id){setTab(t.id);setStatusChip("all")}}} /* v10.72.82 — preservar search al cambiar tab (es texto agnóstico: folio/cliente); solo los chips resetean porque difieren por tab */
           style={{display:"inline-flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
           {(()=>{const TI=t.ic;return <TI size={14} weight="bold"/>})()}{t.l}
         </button>
@@ -12230,8 +12234,9 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
         <div style={{fontSize:22,fontWeight:800,color:duplicates.length?C.dn:C.ok}}>{duplicates.length}</div>
       </div>
-      <div onClick={sharedOCs.length?()=>setShowShared(true):undefined} title={sharedOCs.length?"Ver folios compartidos y sus órdenes vinculadas":undefined} onMouseEnter={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok}:undefined} onMouseLeave={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok+"66"}:undefined} style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedOCs.length?C.ok:C.t3)+"66",boxShadow:C.sh2,cursor:sharedOCs.length?"pointer":"default",transition:"border-color .15s"}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4}}>Compartidos{sharedOCs.length>0&&<span style={{fontSize:9,color:C.ac,fontWeight:800,display:"inline-flex",alignItems:"center",gap:1}}>VER<CaretRightIcon size={8} weight="bold"/></span>}</div>
+      {/* v10.72.82 — discoverability: entre 4 cards inertes esta es la única clickeable. Hint en pill de acento + hover con elevación (translateY+sombra) para que lea como botón. */}
+      <div onClick={sharedOCs.length?()=>setShowShared(true):undefined} title={sharedOCs.length?"Ver folios compartidos y sus órdenes vinculadas":undefined} onMouseEnter={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok;e.currentTarget.style.boxShadow="0 4px 12px -4px "+C.ok+"55";e.currentTarget.style.transform="translateY(-1px)"}:undefined} onMouseLeave={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok+"66";e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}:undefined} style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedOCs.length?C.ok:C.t3)+"66",boxShadow:C.sh2,cursor:sharedOCs.length?"pointer":"default",transition:"border-color .15s, box-shadow .15s, transform .15s"}}>
+        <div style={{fontSize:10,color:C.t2,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4}}>Compartidos{sharedOCs.length>0&&<span style={{fontSize:8.5,color:C.ac,fontWeight:800,background:C.ac+"14",padding:"1px 5px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:2,textTransform:"uppercase",letterSpacing:.3}}>Ver<CaretRightIcon size={8} weight="bold"/></span>}</div>
         <div style={{fontSize:22,fontWeight:800,color:sharedOCs.length?C.ok:C.t3}}>{sharedOCs.length}</div>
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
