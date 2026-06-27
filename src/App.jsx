@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.75 — /impeccable clarify (P2 del critique de Auditoría): la fila roja FALTANTE pasa de "FALTANTE ·
+// Verificar en AlphaERP" (genérico, sin salida) a una tarea con contexto: muestra los folios vecinos ya
+// registrados con su fecha (la ventana donde buscar en Alpha) + subtexto que nombra las 2 causas ("¿cancelado o
+// sin capturar?"). Helper gapBracket(n) busca el folio cubierto anterior/siguiente en la secuencia ordenada.
 // v10.72.74 — /impeccable colorize (P1 del critique de Auditoría): contrato de color semántico para los badges del
 // consecutivo. Antes 4 verdes + 3 azulados con significados distintos colisionaban. Ahora 4 niveles, diferenciando
 // los sub-casos por ICONO+ETIQUETA (no por matiz): VERDE (C.ok)=contabilizado/en-sistema (COMPARTIDO, EN
@@ -12226,13 +12230,21 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
         <div style={{fontSize:10,color:C.t2,marginTop:4}}>Limpia búsqueda o cambia el chip de status</div>
       </div>;
+      // v10.72.75 — /impeccable clarify (P2): la fila FALTANTE da CONTEXTO. Los folios vecinos ya registrados (con
+      // fecha) que bracketean el hueco le dicen a Karla la ventana donde buscar en Alpha; el subtexto nombra las 2
+      // causas posibles (cancelado en Alpha o sin capturar) en vez del genérico "Verificar en AlphaERP".
+      const fShort=(d)=>{try{return new Date(d).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}catch{return""}};
+      const coveredDated=sequence.filter(it=>it.status!=="gap").map(it=>({n:it.n,folio:prefix+"-"+it.n,date:(it.orders||[]).map(o=>o.invoiced_at).find(Boolean)||null}));
+      const gapBracket=(n)=>{let prev=null,next=null;for(const c of coveredDated){if(c.n<n)prev=c;else if(c.n>n){next=c;break;}}return {prev,next};};
       return <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd}}>
       {filteredSeq.map(item=>{
         if(item.status==="gap"){
+          const bk=gapBracket(item.n);
           return <div key={"gap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}><WarningIcon size={13} weight="fill"/>{prefix}-{item.n}</div>
             <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
-            <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>Verificar en AlphaERP</div>
+            {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t3}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
+            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>Búscalo en Alpha: ¿cancelado o sin capturar?</div>
           </div>;
         }
         return item.orders.map((o,i)=>{
