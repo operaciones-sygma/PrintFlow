@@ -53,6 +53,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.73 — Auditoría fix visual: la sección "Folios compartidos" (que listaba TODAS las OCs inline y ocupaba
+// mucho espacio) se movió a un MODAL que se abre desde la stat-card "Compartidos" (ahora clickeable, con hint VER).
+// Cada folio compartido es clickeable y se expande para mostrar sus órdenes de producción vinculadas (P-XXXX ·
+// producto · cantidad), con navegación a la OC y a cada orden. Componente SharedFoliosModal (useEscClose → cierra
+// con Esc); la stat-card cuenta y gatea por sharedOCs.length (coherente con lo que muestra el modal).
 // v10.72.72 — consecutivo: nuevo badge gris "PAGADA EN ALPHA" (status_label='pagada_alpha' en la tabla
 // consecutive_external_folios) para folios que se emitieron Y YA SE COBRARON directo en AlphaERP sin pasar por el
 // sistema — no son deuda ni faltante. Sembradas 14 (D-5792/5794/5796/5797/5799/5829/5830/5898/5901/5919/5920/5924
@@ -11871,6 +11876,47 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
 }
 
 // ─── AUDITORIA DE FOLIOS (v10.9.1) ─── Gap detection + duplicados en secuencia D/R
+// v10.72.73 — Modal de Folios compartidos (se abre desde la stat-card "Compartidos" de Auditoría). Cada folio
+// compartido es clickeable y expande sus órdenes de producción vinculadas. Componente aparte para que useEscClose
+// monte/desmonte con el modal (cerrar con Esc) y el estado expandido se resetee al reabrir.
+function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNavigateToOrder, onClose}){
+  useEscClose(onClose);
+  const [expanded,setExpanded]=useState(null);
+  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Folios compartidos" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:660,width:"96%",maxHeight:"85vh",overflowY:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800}}><FileTextIcon size={17} weight="bold"/>Folios compartidos · {sharedOCs.length} OC{sharedOCs.length!==1?"s":""}</div>
+        <button onClick={onClose} aria-label="Cerrar" style={{width:36,height:36,borderRadius:10,border:"0.5px solid "+C.bd,background:C.sf,color:C.t2,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><XIcon size={16} weight="bold"/></button>
+      </div>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 16px"}}>Una sola factura de Alpha cubre varias órdenes de producción. Toca un folio para ver sus órdenes vinculadas.</p>
+      {sharedOCs.length===0?<div style={{fontSize:12,color:C.t3,textAlign:"center",padding:"24px 0"}}>No hay folios compartidos en este periodo.</div>:
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {sharedOCs.map(po=>{
+          const isOpen=expanded===po.id;
+          const linked=folioOrders.filter(o=>o.purchase_order_id===po.id&&o.invoice_folio===po.shared_invoice_folio);
+          return <div key={po.id} style={{border:"1px solid "+(isOpen?C.ok+"66":C.bd),borderRadius:12,overflow:"hidden",transition:"border-color .15s"}}>
+            <div onClick={()=>setExpanded(isOpen?null:po.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",background:isOpen?C.ok+"10":C.sf,cursor:"pointer",flexWrap:"wrap"}}>
+              <CaretRightIcon size={12} weight="bold" style={{color:C.t2,transform:isOpen?"rotate(90deg)":"none",transition:"transform .15s",flexShrink:0}}/>
+              <span style={{fontSize:14,fontWeight:800,color:tColor,fontFamily:"'Geist Mono',monospace"}}>{po.shared_invoice_folio}</span>
+              <button onClick={e=>{e.stopPropagation();onClose();onNavigateToOC&&onNavigateToOC(po.id)}} title="Ir a la OC" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,color:C.ac,background:C.ac+"12",border:"none",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><ShoppingCartIcon size={11} weight="bold"/>{po.id}</button>
+              <span style={{fontSize:11,fontWeight:600,color:C.tx,flex:"1 1 auto",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.client}</span>
+              <span style={{fontSize:10,color:C.t2,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}><strong>{po.orderCount}</strong> orden{po.orderCount!==1?"es":""}{po.folios_locked&&<><LockIcon size={9} weight="bold"/>bloqueada</>}</span>
+            </div>
+            {isOpen&&<div style={{borderTop:"1px solid "+C.bd,padding:"2px 12px 6px",background:C.bg}}>
+              {linked.length===0?<div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 0"}}>Sin órdenes en este periodo.</div>:
+                linked.map(o=><div key={o.id} onClick={onNavigateToOrder?()=>{onClose();onNavigateToOrder(o.id)}:undefined} title={onNavigateToOrder?"Ir a la orden de producción":undefined} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"0.5px solid "+C.bd,cursor:onNavigateToOrder?"pointer":"default",fontSize:11}}>
+                  <span style={{fontWeight:800,color:C.ac,minWidth:62,fontFamily:"'Geist Mono',monospace"}}>{o.production_number||"—"}</span>
+                  <span style={{flex:1,minWidth:0,color:C.tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.product||o.product_type||"—"}</span>
+                  {o.quantity!=null&&<span style={{color:C.t2,flexShrink:0}}>×{Number(o.quantity).toLocaleString("es-MX")}</span>}
+                  {onNavigateToOrder&&<CaretRightIcon size={11} weight="bold" style={{color:C.t3,flexShrink:0}}/>}
+                </div>)}
+            </div>}
+          </div>;
+        })}
+      </div>}
+    </div>
+  </div>;
+}
 function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrder}){
   const [filter,setFilter]=useState("90d");
   const [type,setType]=useState("factura");
@@ -11883,6 +11929,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   const [statusChip,setStatusChip]=useState("all"); // 'all'|'gap'|'duplicate'|'cancelled'|'preassigned' (folios) | 'all'|'gap'|'cancelled'|'invoiced'|'no_folio' (production)
   const [showH,setShowH]=useState(false); // v10.70.0 — apartado histórico H-XXXX (pre-corte) colapsable
   const [hStatusChip,setHStatusChip]=useState("all"); // v10.70.3 — chips de status del consecutivo H- (independiente del P-)
+  const [showShared,setShowShared]=useState(false); // v10.72.73 — modal de folios compartidos (antes sección inline que ocupaba mucho); el estado de expansión vive dentro de SharedFoliosModal
   const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
@@ -12003,7 +12050,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     (purchaseOrders||[]).forEach(po=>{if(po.shared_invoice_folio)s.add(po.shared_invoice_folio)});
     return s;
   },[purchaseOrders]);
-  const {sequence,gaps,duplicates,total,latest,oldest,sharedCount}=useMemo(()=>{
+  const {sequence,gaps,duplicates,total,latest,oldest}=useMemo(()=>{ // v10.72.73 — sharedCount ya no se desestructura: la card de Compartidos cuenta por sharedOCs.length (coherente con el modal)
     const map={};
     folioOrders.forEach(o=>{
       const n=parseFolio(o.invoice_folio);
@@ -12133,27 +12180,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
         <div style={{fontSize:22,fontWeight:800,color:duplicates.length?C.dn:C.ok}}>{duplicates.length}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedCount?C.ok:C.t3)+"66",boxShadow:C.sh2}}>
-        <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Compartidos</div>
-        <div style={{fontSize:22,fontWeight:800,color:sharedCount?C.ok:C.t3}}>{sharedCount}</div>
+      <div onClick={sharedOCs.length?()=>setShowShared(true):undefined} title={sharedOCs.length?"Ver folios compartidos y sus órdenes vinculadas":undefined} onMouseEnter={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok}:undefined} onMouseLeave={sharedOCs.length?e=>{e.currentTarget.style.borderColor=C.ok+"66"}:undefined} style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(sharedOCs.length?C.ok:C.t3)+"66",boxShadow:C.sh2,cursor:sharedOCs.length?"pointer":"default",transition:"border-color .15s"}}>
+        <div style={{fontSize:10,color:C.t2,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4}}>Compartidos{sharedOCs.length>0&&<span style={{fontSize:9,color:C.ac,fontWeight:800,display:"inline-flex",alignItems:"center",gap:1}}>VER<CaretRightIcon size={8} weight="bold"/></span>}</div>
+        <div style={{fontSize:22,fontWeight:800,color:sharedOCs.length?C.ok:C.t3}}>{sharedOCs.length}</div>
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
         <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest?prefix+"-"+oldest:"—"}{latest&&latest!==oldest?<><br/>↓<br/>{prefix+"-"+latest}</>:""}</div>
       </div>
     </div>
-    {/* 📄 v10.11.0 Sub-fase B — Sección de folios compartidos (OCs con shared_invoice_folio) */}
-    {sharedOCs.length>0&&<div style={{background:C.bg,borderRadius:10,border:"1.5px solid "+C.ok+"66",padding:"12px 14px",marginBottom:14}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.tx,marginBottom:8,textTransform:"uppercase"}}><FileTextIcon size={12} weight="bold"/>Folios compartidos · {sharedOCs.length} OC{sharedOCs.length!==1?"s":""}</div>
-      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {sharedOCs.map(po=><div key={po.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",background:C.sf,borderRadius:8,flexWrap:"wrap"}}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:800,color:C.ac}}><ShoppingCartIcon size={12} weight="bold"/>{po.id}</span>
-          <span style={{fontSize:13,fontWeight:700,color:tColor,fontFamily:"'Geist Mono',monospace"}}>{po.shared_invoice_folio}</span>
-          <span style={{fontSize:11,fontWeight:600,color:C.tx}}>{po.client}</span>
-          <span style={{fontSize:10,color:C.t2,marginLeft:"auto"}}><strong>{po.orderCount}</strong> orden{po.orderCount!==1?"es":""} · {po.folios_locked?<><LockIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>bloqueada</>:"abierta"}</span>
-        </div>)}
-      </div>
-    </div>}
+    {/* v10.72.73 — la sección inline de folios compartidos se movió a un MODAL (se abre desde la stat-card "Compartidos"); listaba todas las OCs inline y ocupaba demasiado espacio. El modal está al final del componente. */}
     {(()=>{
       // v10.43.18 — aplicar search + chips al sequence
       const matchesChip=(item)=>{
@@ -12224,7 +12260,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>;
     })()}
     <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos, ver sección dedicada arriba). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas <b style={{color:C.ios}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango). Las filas grises <b>CANCELADA EN ALPHA</b> (cancelados en AlphaERP, no salen en los exports de "vigentes") y <b>AUTO-FACTURA $0</b> (auto-facturas internas de PADILLA en $0, no caben en cartera) están contabilizadas, NO son faltantes. Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o un folio cancelado que aún no marcamos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
+      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos — toca la tarjeta <b>Compartidos</b> para ver el detalle por folio). Las filas con badge <b style={{color:C.emr}}>🎱 OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas <b style={{color:C.ios}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango). Las filas grises <b>CANCELADA EN ALPHA</b> (cancelados en AlphaERP, no salen en los exports de "vigentes"), <b>AUTO-FACTURA $0</b> (auto-facturas internas de PADILLA en $0, no caben en cartera) y <b>PAGADA EN ALPHA</b> (facturadas y ya cobradas directo en Alpha, sin pasar por el sistema) están contabilizadas, NO son faltantes. Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o un folio cancelado que aún no marcamos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
     </div>
     </>}
 
@@ -12423,6 +12459,9 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         </div>}
       </div>;
     })()}
+
+    {/* v10.72.73 — Modal de Folios compartidos (se abre desde la stat-card "Compartidos"); componente arriba. Gate por tab por defensa (showShared solo se setea desde el tab folios). */}
+    {tab==="folios"&&showShared&&<SharedFoliosModal sharedOCs={sharedOCs} folioOrders={folioOrders} tColor={tColor} onNavigateToOC={onNavigateToOC} onNavigateToOrder={onNavigateToOrder} onClose={()=>setShowShared(false)}/>}
 
     {selectedProdOrder&&<ProductionOrderDetailModal order={selectedProdOrder} purchaseOrders={purchaseOrders} onNavigateToOC={onNavigateToOC} onNavigateToOrder={onNavigateToOrder} onClose={()=>setSelectedProdOrder(null)}/>}
   </div>;
