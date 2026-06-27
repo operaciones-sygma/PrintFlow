@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.78 — /impeccable polish (pase final del arco de Auditoría): (a) el toggle "¿Qué significan los badges?" gana
+// estado hover (fondo C.sf + color C.tx) y mejor touch target (padding 5×9, radius 8); (b) mientras concilia, el
+// número de "Gaps detectados" se atenúa (opacity .45, transición .25s) → ata el loading state a la métrica afectada:
+// el conteo provisional se "asienta" a la vista del usuario en vez de saltar en seco. Cierra el arco v10.72.74-78.
 // v10.72.77 — /impeccable distill (P3 del critique de Auditoría): la leyenda "Cómo interpretar" (un párrafo de ~150
 // palabras al fondo, no escaneable) se reemplazó por una CLAVE compacta colapsable ARRIBA de la lista, agrupada por
 // el contrato de color (verde=contabilizado/en-sistema, gris=inerte, ámbar=revisar, rojo=acción). Default cerrada
@@ -12205,7 +12209,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(gaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
-        <div style={{fontSize:22,fontWeight:800,color:gaps.length?C.dn:C.ok}}>{gaps.length}</div>
+        <div style={{fontSize:22,fontWeight:800,color:gaps.length?C.dn:C.ok,opacity:reconciling?0.45:1,transition:"opacity .25s ease"}} title={reconciling?"Conciliando… el conteo aún puede bajar":undefined}>{gaps.length}</div>
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(duplicates.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
@@ -12233,7 +12237,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     {/* v10.72.73 — la sección inline de folios compartidos se movió a un MODAL (se abre desde la stat-card "Compartidos"); listaba todas las OCs inline y ocupaba demasiado espacio. El modal está al final del componente. */}
     {/* v10.72.77 — /impeccable distill: clave de badges colapsable, agrupada por el contrato de color (verde/gris/ámbar/rojo). Reemplaza el párrafo-leyenda de ~150 palabras que vivía al fondo; default cerrada (la mayoría ya conoce los badges). */}
     <div style={{marginBottom:12}}>
-      <button onClick={()=>setShowKey(s=>!s)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"4px 0"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+      <button onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
       {showKey&&<div style={{marginTop:6,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",gap:11}}>
         {[
           {dot:C.ok,tier:"Contabilizado · en el sistema",items:[["COMPARTIDO","1 factura cubre varias órdenes de una OC"],["EN COBRANZAFLOW","ya en cartera, facturada directo en Alpha"],["OC CRÉDITO CORONA","OC a crédito Corona, no orden de producción"]]},
