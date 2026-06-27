@@ -53,6 +53,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.80 — /impeccable harden (P1 del re-critique): el conteo de "Gaps detectados" era accionable antes de ser
+// confiable. El polish v10.72.78 solo lo atenuaba (.45) pero el entero rojo seguía ahí para que Marcelo lo viera y
+// escalara, o quedaba rojo a fuerza completa al fallar la conciliación. Ahora, mientras concilia se muestra un reloj
+// (placeholder, no el número) y el borde de la card es neutro; al fallar, un "?" + tooltip. El número rojo/verde
+// definitivo solo aparece cuando los 2 RPCs resolvieron. minHeight evita layout shift al intercambiar icono↔número.
 // v10.72.79 — /impeccable distill (P2 del re-critique, score 28→34): consistencia entre tabs. El tab Producción
 // gana la misma CLAVE de badges colapsable que Folios (comparte showKey), reflejando SUS colores reales (FALTANTE/
 // CANCELADA rojo, folio fiscal índigo, venta-stock gris); se quitó su párrafo "Cómo interpretar". La sub-sección H-
@@ -12212,9 +12217,10 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Total emitidos</div>
         <div style={{fontSize:22,fontWeight:800,color:tColor}}>{total}</div>
       </div>
-      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(gaps.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
+      <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+((reconciling||reconcileError)?C.t3:(gaps.length?C.dn:C.ok))+"66",boxShadow:C.sh2,transition:"border-color .25s ease"}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Gaps detectados</div>
-        <div style={{fontSize:22,fontWeight:800,color:gaps.length?C.dn:C.ok,opacity:reconciling?0.45:1,transition:"opacity .25s ease"}} title={reconciling?"Conciliando… el conteo aún puede bajar":undefined}>{gaps.length}</div>
+        {/* v10.72.80 — harden P1: mientras concilia (o si falla) NO mostrar el entero rojo provisional, que es accionable antes de ser confiable. Placeholder (reloj/"?") + borde neutro hasta que el dato cuadre. minHeight evita layout shift. */}
+        <div style={{fontSize:22,fontWeight:800,color:reconcileError?C.t3:(gaps.length?C.dn:C.ok),display:"flex",alignItems:"center",minHeight:27}} title={reconcileError?"Conteo no confiable: falló la conciliación, reintenta arriba":reconciling?"Conciliando con CobranzaFlow… el conteo aún no es definitivo":undefined}>{reconcileError?<span style={{color:C.t3}}>?</span>:reconciling?<HourglassIcon size={17} weight="bold" color={C.t3}/>:gaps.length}</div>
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+(duplicates.length?C.dn:C.ok)+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Duplicados</div>
