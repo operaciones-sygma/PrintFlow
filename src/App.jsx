@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.81 — /impeccable layout (P2 del re-critique): las filas densas del consecutivo (folio + hasta 3 badges +
+// cliente + P-XXXX + OC + monto + capturó, ~10 elementos en un flex-wrap) envolvían irregular a 1280px y rompían el
+// escaneo tipo tabla. Ahora 2 LÍNEAS: línea 1 escaneable (folio · estado · cliente que trunca · fecha), línea 2
+// muteada con la metadata secundaria (producción · PO · monto/saldo · capturó). Las filas simples siguen en 1 línea.
 // v10.72.80 — /impeccable harden (P1 del re-critique): el conteo de "Gaps detectados" era accionable antes de ser
 // confiable. El polish v10.72.78 solo lo atenuaba (.45) pero el entero rojo seguía ahí para que Marcelo lo viera y
 // escalara, o quedaba rojo a fuerza completa al fallar la conciliación. Ahora, mientras concilia se muestra un reloj
@@ -12317,26 +12321,35 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
           const noNav=isCorona||isCob; // ninguno es orden de producción → no navega
           // v10.72.74 — contrato de color: verde=contabilizado/en-sistema (Corona, cartera, compartido), gris=inerte/externo, ámbar=atención, rojo=acción.
           const baseBg=isCorona?C.ok+"08":(isCob?(o.cobranzaKind==='externa'?C.t3+"14":C.ok+"08"):(item.status==="duplicate"?C.wn+"15":(item.status==="shared"?C.ok+"10":"transparent")));
+          // v10.72.81 — /impeccable layout (P2 del re-critique): fila en 2 LÍNEAS. Línea 1 escaneable (folio · estado ·
+          // cliente · fecha; el cliente trunca para NO envolver). Línea 2 muteada con la metadata secundaria (producción ·
+          // OC · monto · capturó). Las filas simples se quedan en 1 línea; solo las ricas ganan la 2ª → escaneo tipo tabla.
+          const hasMeta=o.production_number||(isCorona&&(o.coronaPoRef||o.coronaAmountWithIva))||(isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null)||o.invoiced_by;
           return <div key={item.n+"-"+i} onClick={noNav?undefined:()=>setSelectedProdOrder(o)}
-            style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",cursor:noNav?"default":"pointer",transition:"background 0.12s"}}
+            style={{padding:"8px 14px",borderBottom:"1px solid "+C.bd,background:baseBg,cursor:noNav?"default":"pointer",transition:"background 0.12s"}}
             onMouseEnter={e=>{if(!noNav)e.currentTarget.style.background=C.sf}}
             onMouseLeave={e=>{if(!noNav)e.currentTarget.style.background=baseBg}}>
-            <div style={{fontSize:14,fontWeight:800,color:C.tx,minWidth:80}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3,color:C.t2}}/>{o.invoice_folio}</div>
-            {isCorona&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
-            {isCob&&(o.cobranzaKind==='externa'
-              ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':o.cobranzaStatus==='pagada_alpha'?'Factura emitida y YA PAGADA directo en AlphaERP, sin pasar por PrintFlow/CobranzaFlow. No es deuda ni faltante real; se documenta en el consecutivo.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}>{o.cobranzaStatus==='pagada_alpha'?<CheckCircleIcon size={10} weight="bold"/>:<XCircleIcon size={10} weight="bold"/>}{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':o.cobranzaStatus==='pagada_alpha'?'PAGADA EN ALPHA':'CANCELADA EN ALPHA'}</div>
-              : <div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
-            {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4}}>DUPLICADO</div>}
-            {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
-            {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic"}}>↳ mismo folio</div>}
-            {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}}><LightningIcon size={10} weight="fill"/>ANTICIPADO</div>}
-            {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
-            <div style={{fontSize:12,color:C.tx,fontWeight:600}}>{o.client}</div>
-            {o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{o.production_number}</div>}
-            {isCorona&&o.coronaPoRef&&<div style={{fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</div>}
-            {isCorona&&o.coronaAmountWithIva&&<div style={{fontSize:10,color:C.ok,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</div>}
-            {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<div style={{fontSize:10,color:C.ios,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?" · saldo $"+Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2}):""}</div>}
-            <div style={{fontSize:10,color:C.t3,marginLeft:"auto"}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}{o.invoiced_by?" · "+(o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by):""}</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{fontSize:14,fontWeight:800,color:C.tx,minWidth:80,flexShrink:0}}><TIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3,color:C.t2}}/>{o.invoice_folio}</div>
+              {isCorona&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><DiamondIcon size={10} weight="fill"/>OC CRÉDITO CORONA</div>}
+              {isCob&&(o.cobranzaKind==='externa'
+                ? <div style={{fontSize:10,color:C.t2,fontWeight:700,background:C.t3+"22",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title={o.cobranzaStatus==='auto_zero'?'Auto-factura interna de PADILLA en $0. No entra a cartera (CHECK amount>0). Contabilizada en el consecutivo, NO es un faltante real.':o.cobranzaStatus==='pagada_alpha'?'Factura emitida y YA PAGADA directo en AlphaERP, sin pasar por PrintFlow/CobranzaFlow. No es deuda ni faltante real; se documenta en el consecutivo.':'Folio cancelado en AlphaERP (verificado por Karla). No sale en los exports de vigentes; por eso no está en cartera. Contabilizado en el consecutivo, NO es un faltante real.'}>{o.cobranzaStatus==='pagada_alpha'?<CheckCircleIcon size={10} weight="bold"/>:<XCircleIcon size={10} weight="bold"/>}{o.cobranzaStatus==='auto_zero'?'AUTO-FACTURA $0':o.cobranzaStatus==='pagada_alpha'?'PAGADA EN ALPHA':'CANCELADA EN ALPHA'}</div>
+                : <div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"18",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title="Factura registrada en CobranzaFlow (cartera), sin orden de producción en PrintFlow — ya no es un faltante real"><ReceiptIcon size={10} weight="bold"/>EN COBRANZAFLOW{o.cobranzaStatus?" · "+String(o.cobranzaStatus).toUpperCase():""}</div>)}
+              {item.status==="duplicate"&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>DUPLICADO</div>}
+              {item.status==="shared"&&i===0&&<div style={{fontSize:10,color:C.ok,fontWeight:700,background:C.ok+"20",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><FileTextIcon size={10} weight="bold"/>COMPARTIDO · {item.orders.length} órdenes</div>}
+              {item.status==="shared"&&i>0&&<div style={{fontSize:10,color:C.t3,fontWeight:600,fontStyle:"italic",flexShrink:0}}>↳ mismo folio</div>}
+              {o.invoice_pre_assigned&&<div style={{fontSize:10,color:C.wn,fontWeight:700,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}}><LightningIcon size={10} weight="fill"/>ANTICIPADO</div>}
+              {o.cancelled_at&&<div style={{fontSize:10,color:C.dn,fontWeight:700,background:C.dn+"15",padding:"2px 6px",borderRadius:4,flexShrink:0}}>CANCELADA{o.nc_emitted?" · NC":""}</div>}
+              <div style={{fontSize:12,color:C.tx,fontWeight:600,flex:"1 1 auto",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}</div>
+              <div style={{fontSize:10,color:C.t3,flexShrink:0}}>{o.invoiced_at?fDT(o.invoiced_at):"—"}</div>
+            </div>
+            {hasMeta&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:3,fontSize:10,color:C.t3}}>
+              {o.production_number&&<span style={{color:C.ac,fontWeight:600}}>{o.production_number}</span>}
+              {isCorona&&o.coronaPoRef&&<span style={{fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</span>}
+              {isCorona&&o.coronaAmountWithIva&&<span style={{color:C.ok,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</span>}
+              {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<span style={{color:C.t2,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?<span style={{color:C.dn,fontWeight:700}}> · saldo ${Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2})}</span>:null}</span>}
+              {o.invoiced_by&&<span style={{marginLeft:"auto",flexShrink:0}}>capturó {o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by}</span>}
+            </div>}
           </div>;
         });
       })}
