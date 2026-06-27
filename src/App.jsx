@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.77 — /impeccable distill (P3 del critique de Auditoría): la leyenda "Cómo interpretar" (un párrafo de ~150
+// palabras al fondo, no escaneable) se reemplazó por una CLAVE compacta colapsable ARRIBA de la lista, agrupada por
+// el contrato de color (verde=contabilizado/en-sistema, gris=inerte, ámbar=revisar, rojo=acción). Default cerrada
+// ("¿Qué significan los badges?"). Al quitar el muro del fondo, la lista vuelve a ser el cierre de pantalla (peak-end).
 // v10.72.76 — /impeccable harden (P3 del critique de Auditoría): la conciliación async ya no se vive como "los
 // números se mueven solos" ni se traga errores. Estado loading/error por cada RPC (Corona + cartera CobranzaFlow):
 // mientras cargan se muestra "Conciliando con CobranzaFlow…"; si una fuente falla, banner rojo con aviso explícito
@@ -11945,6 +11949,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   const [showH,setShowH]=useState(false); // v10.70.0 — apartado histórico H-XXXX (pre-corte) colapsable
   const [hStatusChip,setHStatusChip]=useState("all"); // v10.70.3 — chips de status del consecutivo H- (independiente del P-)
   const [showShared,setShowShared]=useState(false); // v10.72.73 — modal de folios compartidos (antes sección inline que ocupaba mucho); el estado de expansión vive dentro de SharedFoliosModal
+  const [showKey,setShowKey]=useState(false); // v10.72.77 — clave de badges colapsable (distill: reemplaza el párrafo-leyenda del fondo)
   const normSearch=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const sq=normSearch(search.trim());
   const cutoffs=useMemo(()=>{
@@ -12226,6 +12231,24 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       ? <div style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:C.t2,fontWeight:600,marginBottom:14,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Conciliando con CobranzaFlow… el conteo de gaps puede bajar en un momento.</div>
       : null}
     {/* v10.72.73 — la sección inline de folios compartidos se movió a un MODAL (se abre desde la stat-card "Compartidos"); listaba todas las OCs inline y ocupaba demasiado espacio. El modal está al final del componente. */}
+    {/* v10.72.77 — /impeccable distill: clave de badges colapsable, agrupada por el contrato de color (verde/gris/ámbar/rojo). Reemplaza el párrafo-leyenda de ~150 palabras que vivía al fondo; default cerrada (la mayoría ya conoce los badges). */}
+    <div style={{marginBottom:12}}>
+      <button onClick={()=>setShowKey(s=>!s)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"4px 0"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+      {showKey&&<div style={{marginTop:6,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",gap:11}}>
+        {[
+          {dot:C.ok,tier:"Contabilizado · en el sistema",items:[["COMPARTIDO","1 factura cubre varias órdenes de una OC"],["EN COBRANZAFLOW","ya en cartera, facturada directo en Alpha"],["OC CRÉDITO CORONA","OC a crédito Corona, no orden de producción"]]},
+          {dot:C.t3,tier:"Contabilizado · inerte (nada que hacer)",items:[["CANCELADA EN ALPHA","cancelada en Alpha; no sale en vigentes"],["AUTO-FACTURA $0","auto-factura interna de PADILLA en $0"],["PAGADA EN ALPHA","facturada y ya cobrada directo en Alpha"]]},
+          {dot:C.wn,tier:"Revisar",items:[["DUPLICADO","mismo folio en varias órdenes sin razón fiscal"],["ANTICIPADO","folio asignado antes de entregar"]]},
+          {dot:C.dn,tier:"Acción",items:[["FALTANTE","hueco real: espera folio, o cancelado/sin capturar en Alpha"]]},
+        ].map((g,gi)=><div key={gi}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><span style={{width:9,height:9,borderRadius:3,background:g.dot,flexShrink:0}}/><span style={{fontSize:10,fontWeight:800,color:C.tx,textTransform:"uppercase",letterSpacing:.3}}>{g.tier}</span></div>
+          <div style={{display:"flex",flexDirection:"column",gap:2,paddingLeft:15}}>
+            {g.items.map((it,ii)=><div key={ii} style={{fontSize:11,color:C.t2,lineHeight:1.45}}><b style={{color:C.tx,fontWeight:700}}>{it[0]}</b> · {it[1]}</div>)}
+          </div>
+        </div>)}
+        <div style={{fontSize:10,color:C.t3,borderTop:"1px solid "+C.bd,paddingTop:8}}>Para una auditoría a fondo, exporta el CSV y compáralo contra AlphaERP.</div>
+      </div>}
+    </div>
     {(()=>{
       // v10.43.18 — aplicar search + chips al sequence
       const matchesChip=(item)=>{
@@ -12304,9 +12327,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       })}
       </div>;
     })()}
-    <div style={{marginTop:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-      <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números faltantes en la secuencia — pueden ser folios cancelados en AlphaERP o capturas omitidas en PrintFlow. Los <strong>duplicados</strong> indican que el mismo folio se asignó a varias órdenes sin razón fiscal válida (alerta — debería estar bloqueado). Los <strong>compartidos</strong> son folios legítimamente asignados a varias órdenes de una misma OC (1 factura agrupa N productos — toca la tarjeta <b>Compartidos</b> para ver el detalle por folio). Las filas con badge verde <b style={{color:C.ok}}>OC CRÉDITO CORONA</b> son OCs a Crédito Corona (no órdenes de producción) — ya no aparecen como gaps falsos. Las filas verdes <b style={{color:C.ok}}>EN COBRANZAFLOW</b> son facturas que ya están en la cartera (CobranzaFlow) sin orden de producción en PrintFlow — facturadas directo en Alpha; <b>ya no son faltantes reales</b> (solo se rellenan dentro del rango). Las filas grises <b>CANCELADA EN ALPHA</b> (cancelados en AlphaERP, no salen en los exports de "vigentes"), <b>AUTO-FACTURA $0</b> (auto-facturas internas de PADILLA en $0, no caben en cartera) y <b>PAGADA EN ALPHA</b> (facturadas y ya cobradas directo en Alpha, sin pasar por el sistema) están contabilizadas, NO son faltantes. Lo que sigue en rojo <b>FALTANTE</b> sí amerita revisión: o es una orden que aún espera folio, o un folio cancelado que aún no marcamos. Para auditoría completa, exporta el CSV y compáralo contra el reporte de AlphaERP.
-    </div>
+    {/* v10.72.77 — leyenda movida a la clave colapsable "¿Qué significan los badges?" (arriba de la lista). Se quitó el muro de ~150 palabras del fondo; ahora la lista cierra la pantalla (mejor peak-end). */}
     </>}
 
     {tab==="production"&&(()=>{
