@@ -53,6 +53,10 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.76 — /impeccable harden (P3 del critique de Auditoría): la conciliación async ya no se vive como "los
+// números se mueven solos" ni se traga errores. Estado loading/error por cada RPC (Corona + cartera CobranzaFlow):
+// mientras cargan se muestra "Conciliando con CobranzaFlow…"; si una fuente falla, banner rojo con aviso explícito
+// (los FALTANTE pueden ser falsos: ya en cartera o cancelados) + botón Reintentar (reconNonce re-dispara los effects).
 // v10.72.75 — /impeccable clarify (P2 del critique de Auditoría): la fila roja FALTANTE pasa de "FALTANTE ·
 // Verificar en AlphaERP" (genérico, sin salida) a una tarea con contexto: muestra los folios vecinos ya
 // registrados con su fecha (la ventana donde buscar en Alpha) + subtexto que nombra las 2 causas ("¿cancelado o
@@ -11952,37 +11956,48 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   },[filter]);
   // v10.43.30 — Cargar OC a Crédito Corona (cobranza.invoices source='corona_oc_credit')
   // que NO viven en public.orders. Sin esto, esos folios aparecen como GAPS falsos.
+  // v10.72.76 — /impeccable harden (P3): estado de carga/error de la conciliación. Sin esto, los 2 RPCs cargaban
+  // async y los gaps "se movían solos"; peor, si un RPC FALLABA se tragaba el error (set [] + console.warn) y mostraba
+  // GAPS FALSOS sin avisar. Ahora: indicador "conciliando…" + banner de error con reintento.
   const [coronaOCInvoices,setCoronaOCInvoices]=useState([]);
+  const [coronaState,setCoronaState]=useState({loading:true,error:false});
+  const [reconNonce,setReconNonce]=useState(0); // reintento manual de la conciliación
   useEffect(()=>{
     let alive=true;
+    setCoronaState({loading:true,error:false});
     const startDate=cutoffs.start?cutoffs.start.toISOString().slice(0,10):null;
     const endDate=cutoffs.end?cutoffs.end.toISOString().slice(0,10):null;
     supabase.rpc("list_corona_oc_invoices",{p_doc_type:type,p_start_date:startDate,p_end_date:endDate})
       .then(({data,error})=>{
         if(!alive)return;
-        if(error){console.warn("[AuditoriaView] list_corona_oc_invoices:",error);setCoronaOCInvoices([]);return}
-        setCoronaOCInvoices(data||[]);
+        if(error){console.warn("[AuditoriaView] list_corona_oc_invoices:",error);setCoronaOCInvoices([]);setCoronaState({loading:false,error:true});return}
+        setCoronaOCInvoices(data||[]);setCoronaState({loading:false,error:false});
       });
     return ()=>{alive=false};
-  },[type,cutoffs]);
+  },[type,cutoffs,reconNonce]);
 
   // v10.72.67 — Cruzar el consecutivo con la CARTERA ACTIVA de CobranzaFlow (cobranza.invoices NO cancelados) para
   // que los folios que ya están en cartera (facturados directo en Alpha / conciliación, sin orden de producción)
   // dejen de salir como GAPS FALSOS. La RPC excluye cancelados → ningún test/cancelado puede reaparecer. El merge
   // (abajo) solo rellena gaps DENTRO del rango de las órdenes (no extiende el consecutivo hacia atrás).
   const [cobranzaFolios,setCobranzaFolios]=useState([]);
+  const [cobranzaState,setCobranzaState]=useState({loading:true,error:false});
   useEffect(()=>{
     let alive=true;
+    setCobranzaState({loading:true,error:false});
     const startDate=cutoffs.start?cutoffs.start.toISOString().slice(0,10):null;
     const endDate=cutoffs.end?cutoffs.end.toISOString().slice(0,10):null;
     supabase.rpc("list_consecutive_cobranza_folios",{p_doc_type:type,p_start_date:startDate,p_end_date:endDate})
       .then(({data,error})=>{
         if(!alive)return;
-        if(error){console.warn("[AuditoriaView] list_consecutive_cobranza_folios:",error);setCobranzaFolios([]);return}
-        setCobranzaFolios(data||[]);
+        if(error){console.warn("[AuditoriaView] list_consecutive_cobranza_folios:",error);setCobranzaFolios([]);setCobranzaState({loading:false,error:true});return}
+        setCobranzaFolios(data||[]);setCobranzaState({loading:false,error:false});
       });
     return ()=>{alive=false};
-  },[type,cutoffs]);
+  },[type,cutoffs,reconNonce]);
+  const reconciling=coronaState.loading||cobranzaState.loading;
+  const reconcileError=coronaState.error||cobranzaState.error;
+  const retryReconcile=()=>setReconNonce(n=>n+1);
 
   const folioOrders=useMemo(()=>{
     // Órdenes con folio en public.orders (flujo normal)
@@ -12200,6 +12215,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest?prefix+"-"+oldest:"—"}{latest&&latest!==oldest?<><br/>↓<br/>{prefix+"-"+latest}</>:""}</div>
       </div>
     </div>
+    {/* v10.72.76 — harden: estado de conciliación. Mientras cargan los RPCs el conteo de gaps es provisional; si una fuente falla, aviso explícito (gaps falsos posibles) + reintento, en vez de tragarse el error. */}
+    {reconcileError
+      ? <div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:C.dn+"0c",border:"1px solid "+C.dn+"35",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+          <WarningIcon size={15} weight="fill" color={C.dn} style={{flexShrink:0}}/>
+          <span style={{fontSize:11.5,color:C.tx,fontWeight:600,flex:"1 1 240px",minWidth:0,lineHeight:1.45}}>No se pudo conciliar con CobranzaFlow. El conteo de gaps puede estar inflado: algunos folios marcados <b style={{color:C.dn}}>FALTANTE</b> quizá ya estén en cartera o cancelados.</span>
+          <button onClick={retryReconcile} style={{...bs(C.dn),flexShrink:0}}><ArrowsClockwiseIcon size={13} weight="bold"/>Reintentar</button>
+        </div>
+      : reconciling
+      ? <div style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:C.t2,fontWeight:600,marginBottom:14,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Conciliando con CobranzaFlow… el conteo de gaps puede bajar en un momento.</div>
+      : null}
     {/* v10.72.73 — la sección inline de folios compartidos se movió a un MODAL (se abre desde la stat-card "Compartidos"); listaba todas las OCs inline y ocupaba demasiado espacio. El modal está al final del componente. */}
     {(()=>{
       // v10.43.18 — aplicar search + chips al sequence
