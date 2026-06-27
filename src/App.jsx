@@ -53,6 +53,11 @@ const FINISHES_REST=FINISHES.filter(x=>!FINISHES_TOP.includes(x));
 // confunda con el markup sobre costo, ahora muestra una leyenda "margen s/ venta · X% s/ costo" debajo del número
 // y un tooltip que explica ambas bases con el ejemplo en pesos de la propia orden. El Stat "Maquila" del
 // dashboard Financiero también etiqueta su % como "s/venta". Cero cambio de cálculo.
+// v10.72.79 — /impeccable distill (P2 del re-critique, score 28→34): consistencia entre tabs. El tab Producción
+// gana la misma CLAVE de badges colapsable que Folios (comparte showKey), reflejando SUS colores reales (FALTANTE/
+// CANCELADA rojo, folio fiscal índigo, venta-stock gris); se quitó su párrafo "Cómo interpretar". La sub-sección H-
+// pasa de muro de párrafo a una nota compacta de contexto (serie vieja + hint de badges). Cierra los 2 "idiomas de
+// explicación" que el re-critique marcó (Lupita, que vive en el tab P-, ya no recibe la versión de 2ª clase).
 // v10.72.78 — /impeccable polish (pase final del arco de Auditoría): (a) el toggle "¿Qué significan los badges?" gana
 // estado hover (fondo C.sf + color C.tx) y mejor touch target (padding 5×9, radius 8); (b) mientras concilia, el
 // número de "Gaps detectados" se atenúa (opacity .45, transición .25s) → ata el loading state a la métrica afectada:
@@ -12418,6 +12423,19 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             <div style={{fontSize:14,fontWeight:800}}>P-{min} → P-{max}</div>
           </div>
         </div>
+        {/* v10.72.79 — /impeccable distill (P2): clave de badges colapsable (antes párrafo "Cómo interpretar" al fondo); comparte showKey con Folios. Refleja los colores reales del tab Producción. */}
+        <div style={{marginBottom:12}}>
+          <button onClick={()=>setShowKey(s=>!s)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf;e.currentTarget.style.color=C.tx}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}} style={{display:"inline-flex",alignItems:"center",gap:5,background:"transparent",border:"none",color:C.t2,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",padding:"5px 9px",borderRadius:8,marginLeft:-9,transition:"background .12s, color .12s"}}>¿Qué significan los badges?{showKey?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+          {showKey&&<div style={{marginTop:6,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",gap:7}}>
+            {[
+              [C.dn,"FALTANTE","número de producción borrado (no es cancelada)"],
+              [C.dn,"CANCELADA","conserva su P-XXXX, no es un hueco"],
+              [C.fac,"Con folio fiscal D-/R-","ya pasó por facturación"],
+              [C.t3,"VENTA STOCK · FOLIO P ANULADO","tachada; no es producción, se cobra por su folio fiscal D-/R-"],
+            ].map((it,ii)=><div key={ii} style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:11,lineHeight:1.45}}><span style={{width:9,height:9,borderRadius:3,background:it[0],flexShrink:0,marginTop:3}}/><div><b style={{color:C.tx,fontWeight:700}}>{it[1]}</b> <span style={{color:C.t2}}>· {it[2]}</span></div></div>)}
+            <div style={{fontSize:10,color:C.t3,borderTop:"1px solid "+C.bd,paddingTop:8}}>Las órdenes vigentes muestran su etapa de producción actual (y MAQ si es maquila).</div>
+          </div>}
+        </div>
         {filteredPnSeq.length===0?<div style={{textAlign:"center",padding:"30px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
           <MagnifyingGlassIcon size={30} color={C.ph}/>
           <div style={{fontSize:13,fontWeight:600,color:C.tx,marginTop:6}}>Sin resultados con los filtros actuales</div>
@@ -12451,9 +12469,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             });
           })}
         </div>}
-        <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}>
-          <strong style={{color:C.tx}}>Cómo interpretar:</strong> los <strong>gaps</strong> son números de producción faltantes — usualmente porque la orden se borró completamente. Las <strong>canceladas</strong> mantienen su P-XXXX (no son gaps). Las que tienen <strong>folio fiscal</strong> ya pasaron por facturación (D-/R-). Las <strong style={{color:C.t3}}>ventas de stock</strong> (tachadas) conservan su P-XXXX pero NO son producción: su folio P- queda anulado y la venta se cobra por su folio fiscal D-/R- en CobranzaFlow. Click en cualquier orden para ver detalles completos.
-        </div>
+        {/* v10.72.79 — leyenda movida a la clave colapsable de arriba (distill P2). */}
       </div>;
     })()}
 
@@ -12524,7 +12540,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
                 });
               })}
             </div>}
-            <div style={{marginTop:10,padding:"10px 14px",background:C.bg,borderRadius:10,border:"1.5px solid "+C.t3+"66",fontSize:11,color:C.t2,lineHeight:1.5}}><strong style={{color:C.tx}}>Cómo interpretar:</strong> es la serie VIEJA de producción (renombrada a H- en el corte). Los <strong>gaps</strong> son números faltantes — folios viejos borrados o que no se migraron al archivo cargado. Las <strong>canceladas</strong> conservan su H-XXXX. Carga el archivo histórico completo para que la serie esté completa. Click en una orden para ver detalles.</div>
+            {/* v10.72.79 — nota compacta (distill P2): contexto de la serie vieja + hint de badges, sin el muro de párrafo. */}
+            <div style={{marginTop:10,padding:"9px 12px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd,fontSize:10.5,color:C.t2,lineHeight:1.5}}>Serie <b style={{color:C.tx}}>vieja</b> de producción (renombrada H- en el corte). <b style={{color:C.dn}}>FALTANTE</b> = folio borrado o no migrado; <b style={{color:C.dn}}>CANCELADA</b> = conserva su H-. Carga el archivo histórico completo para completar la serie.</div>
           </>}
         </div>}
       </div>;
