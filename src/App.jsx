@@ -4,6 +4,11 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.72.86 — Devoluciones/Cancelaciones: perf/pulido de los pickers (scan exhaustivo). Las miniaturas usan
+// loading="lazy"+decoding="async" y el cap baja a 30 (antes 60) → ya no descarga decenas de imágenes full-res al
+// entrar; file_url no-imagen (PDF) ya no se intenta como <img>; los chips muestran folio en vez de UUID crudo.
+// DIFERIDO documentado (exposición CERO hoy): espejar AND return_covered_by_folio IS NULL en los RPCs
+// assign_folio_to_oc / assign_folios_split_oc (el frontend ya filtra; re-transcribir esas RPCs críticas no compensa).
 // v10.72.85 — Devoluciones/Cancelaciones: los pickers de selección ahora muestran tarjetas CON MINIATURA de la
 // orden (componente OrderPickCard, reusa el thumbnail del modal Replicar) en grid, para distinguir visualmente.
 // v10.72.84 — Devoluciones/Cancelaciones: patch del scan funcional (4to workflow). DevolucionesView preserva
@@ -12008,13 +12013,15 @@ function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNa
 // (thumbnail con cadena de fallback image_url→image_url_2→image→file_url y placeholder si la imagen no carga).
 function OrderPickCard({o, selected, onToggle, accent}){
   const [imgErr,setImgErr]=useState(false);
-  const img=o.image_url||o.image_url_2||o.image||o.file_url||null;
+  // v10.72.86 — file_url solo si es imagen (no PDF → evita fetch fallido + parpadeo)
+  const fu=/\.(png|jpe?g|webp|gif|avif)$/i.test(o.file_url||"")?o.file_url:null;
+  const img=o.image_url||o.image_url_2||o.image||fu||null;
   const dstr=(o.delivered_at||o.created_at)?fD(o.delivered_at||o.created_at):null;
   return (
     <label style={{display:"flex",alignItems:"center",gap:10,padding:8,borderRadius:11,border:"1.5px solid "+(selected?accent:C.bd),background:selected?accent+"0e":C.bg,cursor:"pointer",transition:"border-color .12s, background .12s"}}>
       <input type="checkbox" checked={selected} onChange={onToggle} style={{width:16,height:16,accentColor:accent,cursor:"pointer",flexShrink:0}}/>
       <div style={{width:56,height:56,borderRadius:8,background:C.sf,border:"0.5px solid "+C.bd,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-        {img&&!imgErr?<img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={()=>setImgErr(true)}/>:<FileTextIcon size={20} color={C.ph}/>}
+        {img&&!imgErr?<img src={img} alt="" loading="lazy" decoding="async" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={()=>setImgErr(true)}/>:<FileTextIcon size={20} color={C.ph}/>}
       </div>
       <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
         <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
@@ -12040,7 +12047,7 @@ function DevolucionesView({orders, role, userLogin, onCreateReturn, onDetail}){
   // Devolvibles: entregadas, no devueltas ya, no canceladas (los re-trabajos nacen en 'design' → no aparecen, sin cadenas).
   // Devolvibles deben tener cobertura fiscal (folio propio o de re-trabajo previo); el RPC rechaza huérfanas, aquí no las ofrecemos.
   const candidates=useMemo(()=>orders.filter(o=>(o.stage==="delivered"||o.stage==="maq_delivered")&&!o.returned_at&&!o.cancelled_at&&(o.invoice_folio||o.return_covered_by_folio)).filter(matchO).sort((a,b)=>String(b.delivered_at||b.created_at||"").localeCompare(String(a.delivered_at||a.created_at||""))),[orders,sq]);
-  const shownCands=candidates.slice(0,60);
+  const shownCands=candidates.slice(0,30);
   const history=useMemo(()=>orders.filter(o=>o.returned_at).filter(matchO).sort((a,b)=>String(b.returned_at||"").localeCompare(String(a.returned_at||""))),[orders,sq]);
   const byId=useMemo(()=>{const m={};orders.forEach(o=>{m[o.id]=o});return m},[orders]);
   const toggle=id=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
@@ -12060,7 +12067,7 @@ function DevolucionesView({orders, role, userLogin, onCreateReturn, onDetail}){
         {candidates.length>shownCands.length&&<div style={{fontSize:10.5,color:C.t3,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
         <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la devolución (ej. error de corte, color fuera de tono)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
         {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
-          {[...sel].map(id=>{const o=byId[id];return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+C.bd,borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||id}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
+          {[...sel].map(id=>{const o=byId[id];return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+C.bd,borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||o?.invoice_folio||"(s/folio)"}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
         </div>}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,gap:10,flexWrap:"wrap"}}>
           <span style={{fontSize:11,color:sel.size>0?C.ac:C.t3,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":""):"Ninguna seleccionada"}</span>
@@ -12101,7 +12108,7 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   const isCancelled=o=>o.stage==="cancelled"||o.stage==="maq_cancelled"||!!o.cancelled_at;
   // Cancelables: no canceladas ya, no devueltas, no pedidos web sin aprobar. (Activas y entregadas/facturadas → con NC.)
   const candidates=useMemo(()=>orders.filter(o=>!isCancelled(o)&&!o.returned_at&&o.stage!=="web_pending"&&o.stage!=="web_rejected").filter(matchO).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))),[orders,sq]);
-  const shownCands=candidates.slice(0,60);
+  const shownCands=candidates.slice(0,30);
   const history=useMemo(()=>orders.filter(isCancelled).filter(matchO).sort((a,b)=>String(b.cancelled_at||"").localeCompare(String(a.cancelled_at||""))),[orders,sq]);
   const toggle=id=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
   const selObjs=[...sel].map(id=>orders.find(o=>o.id===id)).filter(Boolean);
@@ -12126,7 +12133,7 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
         <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la cancelación (mín. 5 caracteres)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
         {blockedByRole&&<div style={{fontSize:11,color:C.dn,fontWeight:600,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={13} weight="fill"/>{selLinked} con vínculo fiscal requieren nota de crédito — solo Dirección puede cancelarlas. Quítalas de la selección.</div>}
         {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
-          {[...sel].map(id=>{const o=orders.find(x=>x.id===id);return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+(o&&o.invoice_folio?C.fac:C.bd),borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||id}{o&&o.invoice_folio?" · "+o.invoice_folio:""}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
+          {[...sel].map(id=>{const o=orders.find(x=>x.id===id);return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+(o&&o.invoice_folio?C.fac:C.bd),borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||o?.invoice_folio||"(s/folio)"}{o?.production_number&&o.invoice_folio?" · "+o.invoice_folio:""}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
         </div>}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,gap:10,flexWrap:"wrap"}}>
           <span style={{fontSize:11,color:sel.size>0?C.dn:C.t3,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":"")+(selWithFolio>0?" · "+selWithFolio+" con folio (NC)":""):"Ninguna seleccionada"}</span>
