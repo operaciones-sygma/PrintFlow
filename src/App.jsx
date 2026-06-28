@@ -3,7 +3,12 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 // v10.71.1 — C (tema) al tope para evitar TDZ: muchos const de nivel superior (filtros, NAV, mapas de color) lo referencian via C.token desde la tokenizacion v10.71.0.
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
-const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon};
+const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.72.83 — SISTEMA DE DEVOLUCIONES Y CANCELACIONES. Devoluciones (re-trabajo): RPC create_return clona
+// una orden editable que COMPARTE el folio SIN 2ª factura (price=0, return_covered_by_folio, deliver_covered).
+// Cancelaciones: RPC cancel_order_safe rutea por vínculo con cobranza (folio/grupo/splits/matriz/compartido) y
+// admin-gatea los vinculados. Guards de BD anti doble-cobro: guard_no_folio / guard_no_split / guard_no_matrix_line
+// on covered. Endurecido tras 2 workflows adversariales (cierre de hallazgos). Ver memoria printflow-devoluciones.
 // v10.64.0 — CORTE HÍBRIDO: folio de producción 100% automático/consecutivo (lo asigna
 // el RPC atómico next_production_number al guardar). Ya NO es editable (form read-only,
 // fuera de editableFields, sin pre-llenado, create() siempre via RPC). Requiere la migración
@@ -17,7 +22,7 @@ const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIco
 const NAV_SECTIONS=[["op","Operación"],["com","Comercial"],["ctrl","Control"],["reg","Registros"]];
 // v10.72.37 — ancho máximo del contenedor por vista (antes era un ternario anidado en línea, ilegible).
 // Default 1300. "none" = ancho completo. board depende del rol (ver cómputo de mw en el render).
-const VIEW_MAXW={form:820,tasks:"none",orders:"none",oc:"none",chemicals:"none",pipeline:1680,archive:1680,wip:1680,health:1680,torre:1680,audit:1680,analytics:1680};
+const VIEW_MAXW={form:820,tasks:"none",orders:"none",oc:"none",chemicals:"none",pipeline:1680,archive:1680,wip:1680,health:1680,torre:1680,audit:1680,analytics:1680,devoluciones:1680,cancelaciones:1680};
 import { createClient } from "@supabase/supabase-js";
 
 // ═══ SUPABASE CONNECTION ═══
@@ -1196,6 +1201,30 @@ const db = {
   // Marca NC como pendiente; el seguimiento de NC emitida se gestiona en v10.9.1.
   async cancelInvoicedOrder(orderId, reason, byUser) {
     const {data, error} = await supabase.rpc("cancel_invoiced_order", {
+      p_order_id: orderId,
+      p_reason: reason,
+      p_user: byUser
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
+  // 🆕 v10.72.83 — Devolución (re-trabajo por defecto): marca la(s) orden(es) como devuelta(s) y crea una orden
+  // NUEVA idéntica (editable) por cada una, enlazada y compartiendo el folio fiscal SIN crear 2ª factura
+  // (la nueva queda sin invoice_folio → el bridge no dispara). Atómico. Devuelve las órdenes nuevas.
+  async createReturn(orderIds, reason, byUser) {
+    const {data, error} = await supabase.rpc("create_return", {
+      p_order_ids: orderIds,
+      p_reason: reason,
+      p_user: byUser
+    });
+    if(error) throw new Error(error.message);
+    return data; // setof orders (las nuevas)
+  },
+  // 🆕 v10.72.83 — Cancelación segura (autoritativa): el RPC rutea por todos los vectores de vínculo con
+  // cobranza (folio propio, grupo OC, splits vivos, líneas matriz, folio compartido) y admin-gatea los
+  // vinculados server-side (cierra el bypass del no-admin que cancelaba facturas vía UPDATE directo).
+  async cancelOrderSafe(orderId, reason, byUser) {
+    const {data, error} = await supabase.rpc("cancel_order_safe", {
       p_order_id: orderId,
       p_reason: reason,
       p_user: byUser
@@ -2930,7 +2959,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
-  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
+  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!o.return_covered_by_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
   const canCancelWithNC=role==="admin"&&o.invoice_folio&&!o.stage.includes("cancelled");
   const dispatch=(action)=>{onClose();if(onAction)onAction(o.id,action)};
   // v10.72.14 — mismo gate de ownership/etapa que OCard (L8525) para mostrar los botones de flujo en el modal.
@@ -5533,6 +5562,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const eligibleOrders = useMemo(() =>
     (ocOrders || []).filter(o =>
       !o.invoice_folio &&
+      !o.return_covered_by_folio &&  // v10.72.83 — re-trabajo cubierto: no se factura por plan matriz (evita doble cobro)
       !o.oc_invoice_group_id &&
       !o.has_splits &&  // sin splits individuales activos
       ["salidas","maq_received"].includes(o.stage) &&
@@ -8873,7 +8903,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   // maq_delivered/stocked) — antes el modal contaba "6 pendientes" pero el backend
   // contestaba "OC sin órdenes pendientes": contador contradictorio + dead-end.
   const pendingOrders = useMemo(()=>
-    ocOrders.filter(o=>!o.invoice_folio && !o.stage.includes("cancelled") && !o.stage.includes("delivered") && o.stage!=="stocked"),
+    ocOrders.filter(o=>!o.invoice_folio && !o.return_covered_by_folio && !o.stage.includes("cancelled") && !o.stage.includes("delivered") && o.stage!=="stocked"),
     [ocOrders]);
   const invoicedOrders = useMemo(()=>
     ocOrders.filter(o=>o.invoice_folio),
@@ -9298,9 +9328,10 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
@@ -9315,9 +9346,10 @@ function StageFlowButtons({o,role,onAction}){
           <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!(role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
@@ -9375,6 +9407,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         </div>}
         {o.has_post_invoice_edits&&!compact&&<div style={{fontSize:10,color:C.amb,fontWeight:600,marginBottom:4,padding:"3px 8px",background:C.amb+"10",borderRadius:6,display:"inline-block",border:"1px solid "+C.amb+"25"}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada después de facturar</div>}
         {o.needs_reprint&&!compact&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}><PrinterIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
+        {/* 🔁 v10.72.83 — DEVUELTA (re-trabajo): la venta sigue vigente, se rehízo en otra orden */}
+        {o.returned_at&&!compact&&<div style={{fontSize:10,color:C.wn,fontWeight:800,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.wn+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1.5px solid "+C.wn+"55"}} title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")}><ArrowUUpLeftIcon size={11} weight="bold"/>DEVUELTA</div>}
+        {o.returned_from_order_id&&!compact&&<div style={{fontSize:10,color:C.ac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.acL,borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.ac+"40"}} title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)"><ArrowUUpLeftIcon size={11} weight="bold"/>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
@@ -11958,6 +11993,150 @@ function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNa
     </div>
   </div>;
 }
+// ═══ 🔁 v10.72.83 — DEVOLUCIONES (re-trabajo) ═══
+// Marca órdenes entregadas como DEVUELTA y crea una orden nueva idéntica (editable) por cada una,
+// enlazada y compartiendo el folio fiscal SIN 2ª factura (la nueva nace sin invoice_folio → el bridge no dispara).
+// Selección múltiple + motivo + historial + búsqueda inteligente (cliente/folio/P-/producto/motivo).
+function DevolucionesView({orders, role, userLogin, onCreateReturn, onDetail}){
+  const [sel,setSel]=useState(new Set());
+  const [reason,setReason]=useState("");
+  const [q,setQ]=useState("");
+  const [busy,setBusy]=useState(false);
+  const nrm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const sq=nrm(q.trim());
+  const matchO=o=>!sq||[o.client,o.client_company,o.production_number,o.invoice_folio,o.product_type,o.product,o.return_reason,o.return_covered_by_folio].some(f=>nrm(f).includes(sq));
+  // Devolvibles: entregadas, no devueltas ya, no canceladas (los re-trabajos nacen en 'design' → no aparecen, sin cadenas).
+  // Devolvibles deben tener cobertura fiscal (folio propio o de re-trabajo previo); el RPC rechaza huérfanas, aquí no las ofrecemos.
+  const candidates=useMemo(()=>orders.filter(o=>(o.stage==="delivered"||o.stage==="maq_delivered")&&!o.returned_at&&!o.cancelled_at&&(o.invoice_folio||o.return_covered_by_folio)).filter(matchO).sort((a,b)=>String(b.delivered_at||b.created_at||"").localeCompare(String(a.delivered_at||a.created_at||""))),[orders,sq]);
+  const shownCands=candidates.slice(0,60);
+  const history=useMemo(()=>orders.filter(o=>o.returned_at).filter(matchO).sort((a,b)=>String(b.returned_at||"").localeCompare(String(a.returned_at||""))),[orders,sq]);
+  const byId=useMemo(()=>{const m={};orders.forEach(o=>{m[o.id]=o});return m},[orders]);
+  const toggle=id=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
+  const canSubmit=sel.size>0&&reason.trim().length>=3&&!busy;
+  const submit=async()=>{ if(!canSubmit)return; setBusy(true); try{ await onCreateReturn([...sel],reason); }finally{ setBusy(false); setSel(new Set()); setReason(""); } };
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",maxWidth:700}}>Registra una devolución (re-trabajo): la orden se marca <b>DEVUELTA</b> y se crea una orden nueva idéntica y editable que comparte el folio fiscal — <b>la misma venta, sin cobrar de nuevo</b>. Puedes seleccionar varias a la vez.</p>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
+      <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
+        <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><PlusIcon size={14} weight="bold" color={C.ac}/>Registrar devolución</div>
+        {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?"Sin órdenes entregadas que coincidan.":"No hay órdenes entregadas para devolver."}</div>:
+        <div style={{border:"1px solid "+C.bd,borderRadius:10,overflow:"hidden",maxHeight:340,overflowY:"auto"}}>
+          {shownCands.map(o=>(
+            <label key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer",background:sel.has(o.id)?C.acL:"transparent"}}>
+              <input type="checkbox" checked={sel.has(o.id)} onChange={()=>toggle(o.id)} style={{width:16,height:16,accentColor:C.ac,cursor:"pointer",flexShrink:0}}/>
+              <span style={{fontSize:12,fontWeight:800,color:C.ac,minWidth:58,flexShrink:0}}>{o.production_number||"—"}</span>
+              {o.invoice_folio?<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"15",padding:"1px 6px",borderRadius:4,flexShrink:0}}>{o.invoice_folio}</span>:<span style={{fontSize:10,color:C.t3,flexShrink:0}}>sin folio</span>}
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}{o.client_company?" · "+o.client_company:""}</span>
+              <span style={{fontSize:10,color:C.t3,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString("es-MX"):""}</span>
+              <span style={{fontSize:10,color:C.t3,flexShrink:0}}>{o.delivered_at?fD(o.delivered_at):""}</span>
+            </label>
+          ))}
+        </div>}
+        {candidates.length>shownCands.length&&<div style={{fontSize:10.5,color:C.t3,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
+        <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la devolución (ej. error de corte, color fuera de tono)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
+        {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
+          {[...sel].map(id=>{const o=byId[id];return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+C.bd,borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||id}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
+        </div>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,color:sel.size>0?C.ac:C.t3,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":""):"Ninguna seleccionada"}</span>
+          <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.ac:C.bdSt),opacity:canSubmit?1:.7,cursor:canSubmit?"pointer":"not-allowed"}}><ArrowUUpLeftIcon size={14} weight="bold"/>{busy?"Procesando…":"Registrar devolución"+(sel.size>1?" ("+sel.size+")":"")}</button>
+        </div>
+        <div style={{fontSize:10.5,color:C.t2,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={12} weight="bold" color={C.t3}/>Se crea una orden nueva editable por cada selección (al devolver una, se abre para completar specs; en lote, ábrelas desde el historial). Cada re-trabajo requiere re-adjuntar su archivo de producción. No se genera una 2ª factura.</div>
+      </div>
+      <div style={{fontSize:13,fontWeight:800,color:C.tx,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><ClockCounterClockwiseIcon size={14} weight="bold" color={C.t2}/>Historial de devoluciones <span style={{fontSize:11,fontWeight:600,color:C.t3}}>· {history.length}</span></div>
+      {history.length===0?<div style={{fontSize:12,color:C.t3,padding:"14px 0"}}>{sq?"Sin devoluciones que coincidan con la búsqueda.":"Aún no hay devoluciones registradas."}</div>:
+      <div style={{background:C.card,borderRadius:14,boxShadow:C.sh2,overflow:"hidden"}}>
+        {history.map(o=>{const rep=o.replacement_order_id?byId[o.replacement_order_id]:null;return(
+          <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>
+            <span style={{fontSize:10,fontWeight:800,color:C.wn,background:C.wn+"12",padding:"2px 7px",borderRadius:5,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0,border:"1px solid "+C.wn+"45"}}><ArrowUUpLeftIcon size={10} weight="bold"/>DEVUELTA</span>
+            <span onClick={()=>onDetail(o.id)} style={{fontSize:12.5,fontWeight:800,color:C.ac,cursor:"pointer",flexShrink:0}} title="Ver detalle">{o.production_number||o.id}</span>
+            {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.fac,flexShrink:0}}>{o.invoice_folio}</span>}
+            <span style={{flex:1,minWidth:140,fontSize:12,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}{o.client_company?" · "+o.client_company:""}</span>
+            {rep?<span onClick={()=>onDetail(rep.id)} style={{fontSize:11,fontWeight:700,color:C.ok,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3,flexShrink:0}} title="Ver orden rehecha"><ArrowsClockwiseIcon size={11} weight="bold"/>rehecha {rep.production_number||""}</span>:(o.replacement_order_id?<span style={{fontSize:10.5,color:C.t3,flexShrink:0}}>rehecha (carga archivo)</span>:null)}
+            <span style={{fontSize:10.5,color:C.t3,flexShrink:0,marginLeft:"auto"}}>{o.returned_at?fD(o.returned_at):""}{o.returned_by?" · "+o.returned_by:""}</span>
+            {o.return_reason&&<div style={{flexBasis:"100%",fontSize:11,color:C.t2,fontStyle:"italic",paddingLeft:2}}>{o.return_reason}</div>}
+          </div>
+        )})}
+      </div>}
+    </div>
+  );
+}
+
+// ═══ ❌ v10.72.83 — CANCELACIONES ═══
+// Cancela órdenes (con folio → NC pendiente admin-only + cascade a CobranzaFlow vía trigger; sin folio → cancelación directa).
+// Selección múltiple + motivo + historial + búsqueda inteligente.
+function CancelacionesView({orders, role, onCancelOrders, onDetail}){
+  const [sel,setSel]=useState(new Set());
+  const [reason,setReason]=useState("");
+  const [q,setQ]=useState("");
+  const [busy,setBusy]=useState(false);
+  const nrm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const sq=nrm(q.trim());
+  const matchO=o=>!sq||[o.client,o.client_company,o.production_number,o.invoice_folio,o.product_type,o.product,o.cancellation_reason].some(f=>nrm(f).includes(sq));
+  const isCancelled=o=>o.stage==="cancelled"||o.stage==="maq_cancelled"||!!o.cancelled_at;
+  // Cancelables: no canceladas ya, no devueltas, no pedidos web sin aprobar. (Activas y entregadas/facturadas → con NC.)
+  const candidates=useMemo(()=>orders.filter(o=>!isCancelled(o)&&!o.returned_at&&o.stage!=="web_pending"&&o.stage!=="web_rejected").filter(matchO).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))),[orders,sq]);
+  const shownCands=candidates.slice(0,60);
+  const history=useMemo(()=>orders.filter(isCancelled).filter(matchO).sort((a,b)=>String(b.cancelled_at||"").localeCompare(String(a.cancelled_at||""))),[orders,sq]);
+  const toggle=id=>setSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n});
+  const selObjs=[...sel].map(id=>orders.find(o=>o.id===id)).filter(Boolean);
+  const selWithFolio=selObjs.filter(o=>o.invoice_folio).length;
+  // Gate amplio: folio propio o grupo OC (vínculo visible en el order); matriz/compartido los enforcea cancel_order_safe server-side.
+  const selLinked=selObjs.filter(o=>o.invoice_folio||o.oc_invoice_group_id||o.has_splits).length;
+  const blockedByRole=role!=="admin"&&selLinked>0;
+  const canSubmit=sel.size>0&&reason.trim().length>=5&&!busy&&!blockedByRole;
+  const submit=async()=>{ if(!canSubmit)return; setBusy(true); try{ const failed=await onCancelOrders([...sel],reason); setSel(new Set(failed||[])); if(!(failed&&failed.length))setReason(""); }finally{ setBusy(false); } };
+  return (
+    <div>
+      <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",maxWidth:700}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección). Sin folio: cancelación directa.</p>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
+      <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
+        <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={14} weight="bold" color={C.dn}/>Cancelar órdenes</div>
+        {shownCands.length===0?<div style={{fontSize:12,color:C.t3,padding:"18px 0",textAlign:"center"}}>{sq?"Sin órdenes cancelables que coincidan.":"No hay órdenes cancelables."}</div>:
+        <div style={{border:"1px solid "+C.bd,borderRadius:10,overflow:"hidden",maxHeight:340,overflowY:"auto"}}>
+          {shownCands.map(o=>(
+            <label key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer",background:sel.has(o.id)?C.dn+"0c":"transparent"}}>
+              <input type="checkbox" checked={sel.has(o.id)} onChange={()=>toggle(o.id)} style={{width:16,height:16,accentColor:C.dn,cursor:"pointer",flexShrink:0}}/>
+              <span style={{fontSize:12,fontWeight:800,color:C.ac,minWidth:58,flexShrink:0}}>{o.production_number||"—"}</span>
+              {o.invoice_folio?<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"15",padding:"1px 6px",borderRadius:4,flexShrink:0}} title="Tiene folio: requiere NC (Dirección)">{o.invoice_folio}</span>:<span style={{fontSize:10,color:C.t3,flexShrink:0}}>sin folio</span>}
+              <span style={{flex:1,minWidth:0,fontSize:12,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}{o.client_company?" · "+o.client_company:""}</span>
+              <span style={{fontSize:10,color:C.t3,flexShrink:0,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{SM[o.stage]?.l||o.stage}</span>
+              <span style={{fontSize:10,color:C.t3,flexShrink:0}}>{o.created_at?fD(o.created_at):""}</span>
+            </label>
+          ))}
+        </div>}
+        {candidates.length>shownCands.length&&<div style={{fontSize:10.5,color:C.t3,marginTop:6}}>Mostrando {shownCands.length} de {candidates.length}. Usa la búsqueda para acotar.</div>}
+        <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo de la cancelación (mín. 5 caracteres)…" rows={2} style={{width:"100%",boxSizing:"border-box",marginTop:12,padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,resize:"vertical"}}/>
+        {blockedByRole&&<div style={{fontSize:11,color:C.dn,fontWeight:600,marginTop:8,display:"flex",alignItems:"center",gap:5}}><WarningCircleIcon size={13} weight="fill"/>{selLinked} con vínculo fiscal requieren nota de crédito — solo Dirección puede cancelarlas. Quítalas de la selección.</div>}
+        {sel.size>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:10,padding:"8px 10px",background:C.sf,borderRadius:10,border:"1px solid "+C.bd}}>
+          {[...sel].map(id=>{const o=orders.find(x=>x.id===id);return <span key={id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,background:C.bg,border:"1px solid "+(o&&o.invoice_folio?C.fac:C.bd),borderRadius:999,padding:"3px 4px 3px 9px",color:C.tx}}>{o?.production_number||id}{o&&o.invoice_folio?" · "+o.invoice_folio:""}<XIcon size={12} weight="bold" style={{cursor:"pointer",color:C.t3}} onClick={()=>toggle(id)} title="Quitar"/></span>})}
+        </div>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:11,color:sel.size>0?C.dn:C.t3,fontWeight:600}}>{sel.size>0?sel.size+" seleccionada"+(sel.size!==1?"s":"")+(selWithFolio>0?" · "+selWithFolio+" con folio (NC)":""):"Ninguna seleccionada"}</span>
+          <button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:C.bdSt),opacity:canSubmit?1:.7,cursor:canSubmit?"pointer":"not-allowed"}}><XCircleIcon size={14} weight="bold"/>{busy?"Procesando…":"Cancelar"+(sel.size>1?" ("+sel.size+")":"")}</button>
+        </div>
+      </div>
+      <div style={{fontSize:13,fontWeight:800,color:C.tx,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><ClockCounterClockwiseIcon size={14} weight="bold" color={C.t2}/>Historial de cancelaciones <span style={{fontSize:11,fontWeight:600,color:C.t3}}>· {history.length}</span></div>
+      {history.length===0?<div style={{fontSize:12,color:C.t3,padding:"14px 0"}}>{sq?"Sin cancelaciones que coincidan con la búsqueda.":"Aún no hay cancelaciones registradas."}</div>:
+      <div style={{background:C.card,borderRadius:14,boxShadow:C.sh2,overflow:"hidden"}}>
+        {history.map(o=>(
+          <div key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>
+            <span style={{fontSize:10,fontWeight:800,color:C.dn,background:C.dn+"10",padding:"2px 7px",borderRadius:5,display:"inline-flex",alignItems:"center",gap:3,flexShrink:0,border:"1px solid "+C.dn+"40"}}><XCircleIcon size={10} weight="bold"/>CANCELADA</span>
+            <span onClick={()=>onDetail(o.id)} style={{fontSize:12.5,fontWeight:800,color:C.ac,cursor:"pointer",flexShrink:0}} title="Ver detalle">{o.production_number||o.id}</span>
+            {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.nc_emitted?C.ok:C.wn,flexShrink:0}} title={o.nc_emitted?"NC emitida":"NC pendiente"}>{o.invoice_folio} · {o.nc_emitted?"NC ✓":"NC pend."}</span>}
+            <span style={{flex:1,minWidth:140,fontSize:12,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}{o.client_company?" · "+o.client_company:""}</span>
+            <span style={{fontSize:10.5,color:C.t3,flexShrink:0,marginLeft:"auto"}}>{o.cancelled_at?fD(o.cancelled_at):""}{o.cancelled_by?" · "+o.cancelled_by:""}</span>
+            {o.cancellation_reason&&<div style={{flexBasis:"100%",fontSize:11,color:C.t2,fontStyle:"italic",paddingLeft:2}}>{o.cancellation_reason}</div>}
+          </div>
+        ))}
+      </div>}
+    </div>
+  );
+}
+
 function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrder}){
   const [filter,setFilter]=useState("90d");
   const [type,setType]=useState("factura");
@@ -15000,6 +15179,39 @@ export default function PrintFlow() {
     }catch(e){console.error("[changeDate] Error:",e);showToast("❌ No se pudo cambiar fecha: "+(e?.message||"error desconocido"),"error");reload()}
   },[user,userLogin,orders,showToast,reload]);
 
+  // 🆕 v10.72.83 — Devolución (re-trabajo): RPC create_return + abre la(s) orden(es) nueva(s) para capturar/ajustar y mandar a producción.
+  const doCreateReturn=useCallback(async(ids,reason)=>{
+    if(!ids?.length||!reason||reason.trim().length<3){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 3 caracteres)","error");return;}
+    try{
+      const nuevas=await db.createReturn(ids, reason.trim(), userLogin||user);
+      await reload();
+      const pns=(nuevas||[]).map(n=>n.production_number).filter(Boolean).join(", ");
+      showToast("✅ Devolución registrada · nueva"+((nuevas||[]).length!==1?"s":"")+": "+(pns||"—"));
+      // Solo auto-abrir cuando es UNA: en lote, quedan en la lista (cada una requiere re-adjuntar archivo de producción).
+      if((nuevas||[]).length===1){ setEditO(nuevas[0]); setView("form"); }
+    }catch(e){ console.error("[doCreateReturn]",e); await reload(); showToast("❌ No se pudo registrar la devolución: "+(e?.message||"error"),"error"); }
+  },[user,userLogin]);
+
+  // 🆕 v10.72.83 — Cancelación multi: rutea por orden (con folio → cancel_invoiced_order NC admin-only;
+  // sin folio → cancelación directa). Error aislado por orden (no aborta el lote). El trigger
+  // sync_cancellation_to_cobranza cancela/prorratea la factura en CobranzaFlow cuando hay folio.
+  const doCancelOrders=useCallback(async(ids,reason)=>{
+    if(!ids?.length||!reason||reason.trim().length<5){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 5 caracteres)","error");return;}
+    const r=reason.trim(); let ok=0; const fail=[]; const failIds=[];
+    for(const id of ids){
+      const o=orders.find(x=>x.id===id);
+      try{
+        // RPC autoritativo: rutea por vínculo con cobranza (folio/grupo/splits/matriz/compartido) y admin-gatea los vinculados.
+        await db.cancelOrderSafe(id, r, userLogin||user);
+        ok++;
+      }catch(e){ fail.push(((o&&o.production_number)||id)+": "+(e?.message||"error")); failIds.push(id); }
+    }
+    await reload();
+    if(fail.length){ showToast("Canceladas "+ok+" · "+fail.length+" con error: "+fail.join(" | "),"error"); }
+    else { showToast("✅ "+ok+" orden"+(ok!==1?"es":"")+" cancelada"+(ok!==1?"s":"")); }
+    return failIds; // preserva la selección de las fallidas para reintentar
+  },[user,userLogin,orders]);
+
   const handleAction=useCallback((id,action,payload)=>{
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
@@ -15064,6 +15276,7 @@ export default function PrintFlow() {
       // Gate: alineado con assign_invoice_splits backend (admin/karla only)
       if(user!=="admin"&&user!=="karla"){showToast("❌ Solo admin o Karla pueden facturar por partes.","error");return}
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+      if(o.return_covered_by_folio){showToast("❌ Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrégalo con 'Entregar (cubierta)', no se factura por partes (evita doble cobro).","error");return}
       if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Solo en stage salidas o maq_received.","error");return}
       if(!o.production_number){showToast("❌ La orden no tiene número de producción.","error");return}
       const priceField=o.order_type==="maquila"?o.maq_price:o.price;
@@ -15079,6 +15292,7 @@ export default function PrintFlow() {
       if(!canExecuteAction("deliver_with_invoice",o,user,userLogin)){showToast(actionDeniedToast("deliver_with_invoice",o,user,userLogin),"error");return}
       // v10.43.32 — Guards defensivos explícitos (mismo set de validaciones que el RPC y la UI).
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+      if(o.return_covered_by_folio){showToast("❌ Re-trabajo cubierto por "+o.return_covered_by_folio+" — usa 'Entregar (cubierta)', no genera folio (evita doble cobro).","error");return}
       if(!["salidas","maq_received"].includes(o.stage)){showToast("❌ Esta orden no está en stage de salida (actual: "+o.stage+").","error");return}
       if(!o.production_number){showToast("❌ La orden no tiene número de producción (P-XXXX). Asígnalo antes de entregar.","error");return}
       // v10.49.0 punto 1 — Si la orden no tiene precio capturado, mostrar PriceCaptureModal ANTES de InvoiceModal.
@@ -15097,11 +15311,30 @@ export default function PrintFlow() {
       if(!o.invoice_folio){console.error("[deliver_only] Orden sin invoice_folio, debería usar deliver_with_invoice");return}
       setDeliverOnlyModal(o);
     }
+    // 🆕 v10.72.83 — Entregar re-trabajo cubierto (devolución): SIN folio nuevo (ya lo cubre return_covered_by_folio).
+    // Evita que Karla le asigne un 2º folio fiscal (doble cobro). Reusa el rol de deliver_only.
+    if(action==="deliver_covered"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(!canExecuteAction("deliver_only",o,user,userLogin)){showToast(actionDeniedToast("deliver_only",o,user,userLogin),"error");return}
+      if(!o.return_covered_by_folio){showToast("❌ Esta orden no es un re-trabajo cubierto","error");return}
+      if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio propio; usa Marcar como Entregada","error");return}
+      (async()=>{try{
+        const newStage=o.order_type==="maquila"?"maq_delivered":"delivered";
+        const now=new Date().toISOString();
+        const tlMsg="✅ Entregada · re-trabajo cubierto por "+o.return_covered_by_folio+" (sin folio nuevo)";
+        const {error}=await supabase.from("orders").update({stage:newStage,delivered_at:now,current_machine:null,machine_queue_position:null}).eq("id",id);
+        if(error)throw new Error(error.message);
+        await db.addTimeline(id,tlMsg,user,C.ok);
+        setOrders(p=>p.map(x=>x.id===id?{...x,stage:newStage,delivered_at:now,timeline:addTL(x,tlMsg,{to:newStage})}:x));
+        await db.notifySecs(id,"delivery","✅ "+(o.production_number||"")+" entregada · "+(o.client||"")+" · re-trabajo cubierto por "+o.return_covered_by_folio,null,user,o.created_by);
+        showToast("✅ Entregada (re-trabajo cubierto · sin folio nuevo)");
+      }catch(e){console.error("[deliver_covered] Error:",e);showToast("❌ "+(e?.message||"No se pudo entregar"),"error");reload();}})();
+    }
     // 🆕 v10.9.0 — Asignar folio anticipado (Karla/Admin desde DetailModal)
     if(action==="pre_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
       // v10.58.5 — Gate via ACTION_ROLES (antes era check inline string-comparado).
       if(!canExecuteAction("pre_invoice",o,user,userLogin)){showToast(actionDeniedToast("pre_invoice",o,user,userLogin),"error");return}
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado","error");return}
+      if(o.return_covered_by_folio){showToast("❌ Re-trabajo cubierto por "+o.return_covered_by_folio+" — no se le asigna folio (evita doble cobro). Usa 'Entregar (cubierta)'.","error");return}
       const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
       if(isFinal){showToast("❌ No se puede facturar anticipado en stage final: "+o.stage,"error");return}
       // Nota: la validación de datos completos (incluyendo production_number) la hace el PreInvoiceModal
@@ -15325,6 +15558,12 @@ export default function PrintFlow() {
         showToast("❌ No se puede cancelar: la orden tiene folio "+o.invoice_folio+" asignado.","error");
         return;
       }
+      // v10.72.83 — vínculo fiscal sin folio propio (grupo OC / splits vivos): la cancelación cascada a
+      // CobranzaFlow requiere Dirección. (Matriz/compartido los enforcea cancel_order_safe en el flujo masivo.)
+      if((o.oc_invoice_group_id||o.has_splits)&&user!=="admin"){
+        showToast("❌ Esta orden tiene vínculo fiscal (grupo OC / factura por partes) — solo Dirección puede cancelarla con nota de crédito.","error");
+        return;
+      }
       setCancelModal(o);
     }
     // ↔️ v10.11.0 Sub-fase A — Abrir modal de mover orden entre OCs (defensa en profundidad: el botón ya gatea pero validamos también aquí)
@@ -15436,6 +15675,10 @@ export default function PrintFlow() {
   if(user==="admin")navs.push({id:"wip",g:"ctrl",l:"Dinero en Proceso"}); // v10.27.0
   if(user==="admin")navs.push({id:"health",g:"ctrl",l:"Salud Operativa"}); // v10.28.0
   if(user==="admin"||user==="karla")navs.push({id:"audit",g:"ctrl",l:"Auditoría"});
+  // v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones: ventanas dedicadas con historial + búsqueda.
+  // Roles alineados con los RPCs: create_return = admin/secretaria/karla/preprensa; cancelar = admin/secretaria/karla.
+  if(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")navs.push({id:"devoluciones",g:"reg",l:"Devoluciones"});
+  if(user==="admin"||user==="secretaria"||user==="karla")navs.push({id:"cancelaciones",g:"reg",l:"Cancelaciones"});
   if(user==="preprensa"||user==="german")navs.push({id:"storage",g:"reg",l:"Archivos"});
   if(user==="german"||user==="admin")navs.push({id:"chemicals",g:"reg",l:"Químicos"});
 
@@ -15576,7 +15819,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/><Kanban orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas"&&!snoozeActive(o)).sort(prioSort);const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice").sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+o.snoozed_by:""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":"deliver_with_invoice")}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>}</button>{!o.invoice_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está esperando factura del cliente, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><ReceiptIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>Esperan factura del cliente <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa hasta que el cliente la pida</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>o.stage==="salidas"&&!snoozeActive(o)).sort(prioSort);const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice").sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{o.price&&<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(o.price)}</div>}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+o.snoozed_by:""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está esperando factura del cliente, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><ReceiptIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>Esperan factura del cliente <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa hasta que el cliente la pida</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
         {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.length===0?<EmptyState icon={search?MagnifyingGlassIcon:ListBulletsIcon} title={search?"Sin resultados":"Sin órdenes que mostrar"} hint={search?"Prueba con otro término o limpia la búsqueda.":"Las órdenes que captures aparecerán listadas aquí."} action={search?{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}:((user==="admin"||isSec(user))?{label:"Nueva orden",icon:PlusIcon,onClick:()=>{setEditO(null);setView("form")}}:null)}/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
@@ -15586,6 +15829,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
         {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
+        {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
+        {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
+        {view==="cancelaciones"&&(user==="admin"||user==="secretaria"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para gestionar cancelaciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden a cancelar y ver el historial</p></div>:<CancelacionesView orders={orders} role={user} onCancelOrders={doCancelOrders} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FolderIcon size={18} weight="bold"/>Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FlaskIcon size={18} weight="bold"/>Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
