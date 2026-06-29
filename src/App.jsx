@@ -4,6 +4,12 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.72.87 — FACTURAR A UN TERCERO (Fase 1): al asignar folio por orden (InvoiceModal/PreInvoiceModal) se puede
+// dirigir la factura/remisión a una razón social distinta del cliente productor, capturando/seleccionando su
+// RFC/cel/correo (búsqueda inteligente search_clients_typeahead). Destinatario de cobranza = bill_to_client_id (col
+// nueva); el puente sync_invoice_from_orders usa COALESCE(bill_to_client_id, client_id, resolve_client). RPCs nuevos
+// upsert_billing_client + set_order_bill_to (pre-step, guards Corona/OC-split/post-folio). RFC obligatorio en factura,
+// opcional en remisión. OC/split y terceros Corona = Fase 2 (bloqueados). Ver memoria printflow-bill-to-tercero.
 // v10.72.86 — Devoluciones/Cancelaciones: perf/pulido de los pickers (scan exhaustivo). Las miniaturas usan
 // loading="lazy"+decoding="async" y el cap baja a 30 (antes 60) → ya no descarga decenas de imágenes full-res al
 // entrar; file_url no-imagen (PDF) ya no se intenta como <img>; los chips muestran folio en vez de UUID crudo.
@@ -1119,6 +1125,22 @@ const db = {
     });
     if(error) throw new Error(error.message);
     return data;
+  },
+  // 🆕 v10.72.87 — Facturar a un tercero: alta/selección + enriquecimiento de la razón social destinataria.
+  async upsertBillingClient(clientId, name, rfc, email, whatsapp, byUser) {
+    const {data, error} = await supabase.rpc("upsert_billing_client", {
+      p_client_id: clientId || null, p_name: name || null, p_rfc: rfc || null,
+      p_email: email || null, p_whatsapp: whatsapp || null, p_actor: byUser
+    });
+    if(error) throw new Error(error.message);
+    return data; // uuid de la razón social
+  },
+  // Fija el destinatario tercero en la orden ANTES de asignar folio (el puente sync_invoice_from_orders lo lee).
+  async setOrderBillTo(orderId, billToClientId, byUser) {
+    const {error} = await supabase.rpc("set_order_bill_to", {
+      p_order_id: orderId, p_bill_to_client_id: billToClientId || null, p_actor: byUser
+    });
+    if(error) throw new Error(error.message);
   },
   // 🌐 v10.12.0 Sub-fase B — Aprueba en lote todas las órdenes web_pending de un carrito (cart_folio).
   // RPC atómica: asigna stage='draft', P-XXXX por orden, timeline a cada una.
@@ -2371,6 +2393,76 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
       </div>
     </div>
   </div>;
+}
+// 🆕 v10.72.87 — "Facturar a un tercero": el destinatario fiscal/cobranza puede diferir del cliente de la orden.
+// Reusa ClientInput (búsqueda inteligente nombre/RFC/alias) + alta de razón social nueva. Avisa al padre vía onChange:
+//   null (apagado) | {incomplete:true} (encendido sin completar) | {client_id,name,rfc} | {name,rfc,email,whatsapp,isNew}
+function BillToSection({invoiceType, onChange, accent=C.ac}){
+  const LBL={fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:3};
+  const [on,setOn]=useState(false);
+  const [picked,setPicked]=useState(null);
+  const [mode,setMode]=useState("pick");
+  const [q,setQ]=useState("");
+  const [nf,setNf]=useState({name:"",rfc:"",email:"",whatsapp:""});
+  const [pickErr,setPickErr]=useState("");
+  const [simMatches,setSimMatches]=useState([]);
+  const isFactura=invoiceType==="factura";
+  useEffect(()=>{
+    if(!on){ onChange(null); return; }
+    if(picked){ onChange({client_id:picked.id, name:picked.name, rfc:picked.rfc}); return; }
+    if(mode==="new"){
+      const name=nf.name.trim(), rfc=nf.rfc.trim();
+      if(name && (!isFactura || rfc)){ onChange({name, rfc:rfc||null, email:nf.email.trim()||null, whatsapp:nf.whatsapp.trim()||null, isNew:true}); return; }
+    }
+    onChange({incomplete:true});
+  },[on,picked,mode,nf.name,nf.rfc,nf.email,nf.whatsapp,isFactura]);
+  // v10.72.87 — elegir tercero: bloquea Corona/anticipo (lo rechaza set_order_bill_to) con aviso inmediato.
+  const pick=c=>{ if(c?.billing_mode==='anticipo'){ setPickErr((c.name||"Esa razón social")+" es Corona/anticipo — no se puede facturar como tercero (Fase 1)."); return; } setPickErr(""); setPicked({id:c.id,name:c.name,rfc:c.rfc}); setQ(c.name); };
+  // v10.72.87 — nudge anti-duplicado: al crear razón social nueva, avisa si ya hay parecidas (paridad con el alta de cliente).
+  useEffect(()=>{
+    if(!on||mode!=="new"){ setSimMatches([]); return; }
+    const name=nf.name.trim();
+    if(name.length<3){ setSimMatches([]); return; }
+    const t=setTimeout(async()=>{ try{ const {data}=await supabase.rpc("search_clients_typeahead",{p_query:name,p_limit:5}); setSimMatches(data||[]); }catch{ setSimMatches([]); } },350);
+    return ()=>clearTimeout(t);
+  },[on,mode,nf.name]);
+  const reset=()=>{ setPicked(null); setQ(""); setNf({name:"",rfc:"",email:"",whatsapp:""}); setPickErr(""); setSimMatches([]); };
+  return (
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
+      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
+        <input type="checkbox" checked={on} onChange={e=>{setOn(e.target.checked); if(!e.target.checked) reset();}} style={{width:16,height:16,accentColor:accent,cursor:"pointer"}}/>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.tx,display:"inline-flex",alignItems:"center",gap:6}}><UsersIcon size={13} weight="bold" color={accent}/>Facturar a un tercero <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>(razón social distinta a la de la orden)</span></span>
+      </label>
+      {on&&<div style={{marginTop:10}}>
+        {!picked&&<>
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <button type="button" onClick={()=>setMode("pick")} style={{...bs(mode==="pick"?accent+"15":C.sf,mode==="pick"?accent:C.t2),fontSize:11,border:"1px solid "+(mode==="pick"?accent+"40":C.bd)}}><MagnifyingGlassIcon size={11} weight="bold"/>Buscar existente</button>
+            <button type="button" onClick={()=>setMode("new")} style={{...bs(mode==="new"?accent+"15":C.sf,mode==="new"?accent:C.t2),fontSize:11,border:"1px solid "+(mode==="new"?accent+"40":C.bd)}}><UserPlusIcon size={11} weight="bold"/>Crear nueva</button>
+          </div>
+          {mode==="pick"
+            ? <ClientInput value={q} onChange={setQ} onSelect={pick} clients={[]}/>
+            : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{gridColumn:"1 / -1"}}><label style={LBL}>Razón social *</label><input style={inp} value={nf.name} onChange={e=>setNf(v=>({...v,name:e.target.value}))} placeholder="Nombre / empresa"/></div>
+                <div><label style={LBL}>RFC{isFactura?" *":" (opcional)"}</label><input style={{...inp,...(isFactura&&!nf.rfc.trim()?{borderColor:C.dn+"66"}:{})}} value={nf.rfc} onChange={e=>setNf(v=>({...v,rfc:e.target.value.toUpperCase()}))} placeholder={isFactura?"Requerido para factura":"Opcional"}/></div>
+                <div><label style={LBL}>Celular</label><input style={inp} value={nf.whatsapp} onChange={e=>setNf(v=>({...v,whatsapp:e.target.value}))} placeholder="WhatsApp"/></div>
+                <div style={{gridColumn:"1 / -1"}}><label style={LBL}>Correo</label><input style={inp} value={nf.email} onChange={e=>setNf(v=>({...v,email:e.target.value}))} placeholder="correo@…"/></div>
+                {isFactura&&!nf.rfc.trim()&&<div style={{gridColumn:"1 / -1",fontSize:10.5,color:C.dn,fontWeight:600}}>El RFC es obligatorio para factura.</div>}
+              </div>}
+          {pickErr&&<div style={{fontSize:10.5,color:C.dn,fontWeight:600,marginTop:6,display:"flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>{pickErr}</div>}
+          {mode==="new"&&simMatches.length>0&&<div style={{marginTop:8,background:C.amb+"10",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"8px 10px"}}>
+            <div style={{fontSize:10.5,color:"#9a3412",fontWeight:700,marginBottom:5,display:"flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>Ya existe(n) razón(es) parecida(s) — ¿es alguna? (evita duplicar en el ERP)</div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>{simMatches.map(c=><button key={c.id} type="button" onClick={()=>pick(c)} style={{...bs(C.bg,C.tx),fontSize:11,textAlign:"left",justifyContent:"flex-start",border:"1px solid "+C.bd,padding:"5px 9px"}}><span style={{fontWeight:700}}>{c.name}</span>{c.rfc?<span style={{color:C.t2,marginLeft:6}}>· {c.rfc}</span>:null}</button>)}</div>
+          </div>}
+        </>}
+        {picked&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:accent+"0e",border:"1px solid "+accent+"40",borderRadius:10}}>
+          <UsersIcon size={14} weight="bold" color={accent}/>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{picked.name}</div><div style={{fontSize:10.5,color:C.t2}}>{picked.rfc||"sin RFC"}</div></div>
+          <button type="button" onClick={()=>{setPicked(null);setQ("");}} style={{...bs(C.sf,C.t2),fontSize:10.5,padding:"4px 9px",border:"1px solid "+C.bd}}><XIcon size={11} weight="bold"/>Cambiar</button>
+        </div>}
+        <div style={{fontSize:10.5,color:C.t2,marginTop:8,lineHeight:1.4}}>La factura/remisión y su cobranza quedan a nombre de este tercero; la producción sigue a nombre del cliente de la orden.</div>
+      </div>}
+    </div>
+  );
 }
 function CommentLog({comments=[],onAdd,role}) {
   const [text,setText]=useState("");const [show,setShow]=useState(false);
@@ -6477,6 +6569,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [bankReference,setBankReference]=useState(""); // v10.35.0
   // v10.50.0 — multi-payment refs (array de {method, amount, bank_reference})
   const [paymentRefs,setPaymentRefs]=useState([]);
+  const [billTo,setBillTo]=useState(null); // v10.72.87 — facturar a un tercero (null | {incomplete} | {client_id,...} | {name,rfc,...,isNew})
   // v10.43.0 — Corona: detectar billing_mode del cliente al montar
   const [coronaInfo,setCoronaInfo]=useState(null); // {billing_mode, current_balance} o null
   // v10.58.5 F1: trackear si el coronaInfo viene del FALLBACK (timeout/error de red) o de
@@ -6655,13 +6748,14 @@ function InvoiceModal({order,onConfirm,onClose}) {
       }
       // v10.50.0 — Si hay paymentRefs (multi-pago), pasarlo en lugar de campos individuales.
       // El handler externo (App raíz) decidirá cómo pasarlo a db.assignInvoice.
+      if(billTo&&billTo.incomplete){ alert("Completa o quita la razón social del tercero (Facturar a un tercero)."); return; }
       if(paymentStatus==="paid"||paymentStatus==="partial"){
         // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
         const refsClean=paymentRefs.map(toBackendRef);
-        await onConfirm(type,folio,paymentStatus,null,null,null,null,refsClean);
+        await onConfirm(type,folio,paymentStatus,null,null,null,null,refsClean,billTo);
       }else{
         // status === "unpaid" → no refs
-        await onConfirm(type,folio,paymentStatus,null,null,null,null,null);
+        await onConfirm(type,folio,paymentStatus,null,null,null,null,null,billTo);
       }
     }finally{
       setBusy(false);
@@ -6809,9 +6903,11 @@ function InvoiceModal({order,onConfirm,onClose}) {
           })()
           :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
         )}
+        {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid} style={{...bt(type==="factura"?C.fac:(type==="remision"?C.live:(isStockLoad?C.emr:C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid)?0.4:1}}>Continuar →</button>
+          <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete)} style={{...bt(type==="factura"?C.fac:(type==="remision"?C.live:(isStockLoad?C.emr:C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete))?0.4:1}}>Continuar →</button>
         </div>
       </> : <>
         {/* v10.46.0 — Branch específico de preview para Cuadra 'stock_load' */}
@@ -6864,6 +6960,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
             <div style={{fontSize:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>{folio}</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"})</div>
           </div>
+          {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
           <div style={{background:paymentStatus==="paid"?C.live+"10":paymentStatus==="partial"?C.fac+"10":C.amb+"10",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?C.live+"40":paymentStatus==="partial"?C.fac+"40":C.amb+"40")}}>
             <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
             {/* v10.50.1 F1 — Si hay paymentRefs (multi-pago), mostrar info correcta en lugar de null */}
@@ -6911,6 +7008,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [folio,setFolio]=useState("");
   const [reason,setReason]=useState("");
   const [reasonOther,setReasonOther]=useState("");
+  const [billTo,setBillTo]=useState(null); // v10.72.87 — facturar a un tercero
   const [busy,setBusy]=useState(false);
   useEffect(()=>{ busyRef.current = busy; }, [busy]);
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
@@ -7013,7 +7111,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const paymentExplicit = paymentStatus === "unpaid" || paymentStatus === "paid" || paymentStatus === "partial";
   const paymentValid = paymentExplicit && (paymentStatus === "unpaid" || refsValid);
 
-  const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid;
+  const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid&&!(billTo&&billTo.incomplete);
 
   const handleProceed=()=>{
     if(!canProceed)return;
@@ -7031,11 +7129,12 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     try{
       // v10.57.0 — Multi-pay refs si paid/partial
       // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
+      if(billTo&&billTo.incomplete){ alert("Completa o quita la razón social del tercero (Facturar a un tercero)."); return; }
       if(paymentStatus==="paid"||paymentStatus==="partial"){
         const refsClean=paymentRefs.map(toBackendRef);
-        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,refsClean);
+        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,refsClean,billTo);
       }else{
-        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null);
+        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null,billTo);
       }
     }finally{
       setBusy(false);
@@ -7123,7 +7222,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           </div>}
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
-
+        {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:16}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!canProceed} style={{...bt(C.amb),flex:1,justifyContent:"center",opacity:!canProceed?0.4:1}}>Continuar →</button>
@@ -7134,6 +7234,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}><LightningIcon size={24} weight="fill"/>{folio}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{type==="factura"?"Factura":"Remisión"} · Razón: {finalReason}</div>
         </div>
+        {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
         <div style={{background:paymentStatus==="paid"?C.live+"10":paymentStatus==="partial"?C.fac+"10":C.amb+"10",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?C.live+"40":paymentStatus==="partial"?C.fac+"40":C.amb+"40")}}>
           <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
           {/* v10.50.1 F1 — Soporte multi-pago en confirmación PreInvoiceModal */}
@@ -9421,6 +9522,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {/* 🔁 v10.72.83 — DEVUELTA (re-trabajo): la venta sigue vigente, se rehízo en otra orden */}
         {o.returned_at&&!compact&&<div style={{fontSize:10,color:C.wn,fontWeight:800,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.wn+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1.5px solid "+C.wn+"55"}} title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")}><ArrowUUpLeftIcon size={11} weight="bold"/>DEVUELTA</div>}
         {o.returned_from_order_id&&!compact&&<div style={{fontSize:10,color:C.ac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.acL,borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.ac+"40"}} title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)"><ArrowUUpLeftIcon size={11} weight="bold"/>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</div>}
+        {/* 🆕 v10.72.87 — facturado a un tercero distinto del cliente productor */}
+        {o.bill_to_client_id&&!compact&&<div style={{fontSize:10,color:C.fac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.fac+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.fac+"40"}} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"}><UsersIcon size={11} weight="bold"/>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
           <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
@@ -15202,6 +15305,19 @@ export default function PrintFlow() {
     }catch(e){console.error("[changeDate] Error:",e);showToast("❌ No se pudo cambiar fecha: "+(e?.message||"error desconocido"),"error");reload()}
   },[user,userLogin,orders,showToast,reload]);
 
+  // 🆕 v10.72.87 — Facturar a un tercero: fija el destinatario en la orden ANTES de asignar el folio.
+  // billTo = null | {incomplete} | {client_id,name,rfc} (existente) | {name,rfc,email,whatsapp,isNew} (nueva).
+  const applyBillTo=useCallback(async(orderId, billTo)=>{
+    if(billTo && !billTo.incomplete){
+      let id=billTo.client_id;
+      if(!id && billTo.name){ id=await db.upsertBillingClient(null, billTo.name, billTo.rfc, billTo.email, billTo.whatsapp, userLogin||user); }
+      if(id){ await db.setOrderBillTo(orderId, id, userLogin||user); return; }
+    }
+    // Sin tercero: limpiar un bill_to OBSOLETO si quedó de un intento previo fallido (evita mal-atribución en el reintento).
+    const cur=orders.find(o=>o.id===orderId);
+    if(cur?.bill_to_client_id){ await db.setOrderBillTo(orderId, null, userLogin||user); }
+  },[user,userLogin,orders]);
+
   // 🆕 v10.72.83 — Devolución (re-trabajo): RPC create_return + abre la(s) orden(es) nueva(s) para capturar/ajustar y mandar a producción.
   const doCreateReturn=useCallback(async(ids,reason)=>{
     if(!ids?.length||!reason||reason.trim().length<3){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 3 caracteres)","error");return null;}
@@ -15940,7 +16056,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         onClose={()=>setPriceCaptureModal(null)}/>;
       })()}
 
-      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId,paymentRefs)=>{
+      {invoiceModal&&<InvoiceModal order={invoiceModal} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId,paymentRefs,billTo)=>{
         try{
           // v10.46.0 — Cuadra "stock_load": cargar a inventario sin folio fiscal
           if(invoiceType==="stock_load"){
@@ -15986,6 +16102,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // con verify_actor_role que busca en public.users.username. Hoy funcionaba por casualidad
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
+          await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
           await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs si multi-pago.
           // Antes el timeline + optimistic mostraban "null" porque paymentMethod/Amount/bankRef quedan null en flow multi-pay.
@@ -16097,10 +16214,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }}
         onClose={()=>setSplitInvoiceModal(null)}/>}
       {/* 🆕 v10.9.0 — Modal de folio anticipado (Karla asigna antes de producir) */}
-      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs)=>{
+      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs,billTo)=>{
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
+          await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
           await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs para timeline y optimistic update.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
