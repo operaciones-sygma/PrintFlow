@@ -4,6 +4,11 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.72.88 — Facturar a tercero: endurecimiento tras scan exhaustivo (11 hallazgos) + fix bug PRE-EXISTENTE de
+//   cancelación (FOR UPDATE con agregado en sync_cancellation_to_cobranza). BD: trigger choke-point grupo OC,
+//   puente resuelve merged_into del tercero, merge_clients re-apunta bill_to, post-edit orphan respeta tercero,
+//   no pisa assigned_seller del tercero. Frontend: RFC exigido en tercero existente, badge optimista, key={type}
+//   limpia al cambiar tipo, catch revierte tercero huérfano, oculto en grupo OC.
 // v10.72.87 — FACTURAR A UN TERCERO (Fase 1): al asignar folio por orden (InvoiceModal/PreInvoiceModal) se puede
 // dirigir la factura/remisión a una razón social distinta del cliente productor, capturando/seleccionando su
 // RFC/cel/correo (búsqueda inteligente search_clients_typeahead). Destinatario de cobranza = bill_to_client_id (col
@@ -2409,7 +2414,10 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
   const isFactura=invoiceType==="factura";
   useEffect(()=>{
     if(!on){ onChange(null); return; }
-    if(picked){ onChange({client_id:picked.id, name:picked.name, rfc:picked.rfc}); return; }
+    if(picked){
+      if(isFactura && !(picked.rfc && String(picked.rfc).trim())){ onChange({incomplete:true}); return; } // v10.72.88 (#3): factura exige RFC también en tercero EXISTENTE
+      onChange({client_id:picked.id, name:picked.name, rfc:picked.rfc}); return;
+    }
     if(mode==="new"){
       const name=nf.name.trim(), rfc=nf.rfc.trim();
       if(name && (!isFactura || rfc)){ onChange({name, rfc:rfc||null, email:nf.email.trim()||null, whatsapp:nf.whatsapp.trim()||null, isNew:true}); return; }
@@ -2456,7 +2464,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
         </>}
         {picked&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:accent+"0e",border:"1px solid "+accent+"40",borderRadius:10}}>
           <UsersIcon size={14} weight="bold" color={accent}/>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{picked.name}</div><div style={{fontSize:10.5,color:C.t2}}>{picked.rfc||"sin RFC"}</div></div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{picked.name}</div>{picked.rfc?<div style={{fontSize:10.5,color:C.t2}}>{picked.rfc}</div>:<div style={{fontSize:10.5,fontWeight:700,color:isFactura?C.dn:C.t2}}>{isFactura?"Sin RFC — requerido para factura":"sin RFC"}</div>}</div>
           <button type="button" onClick={()=>{setPicked(null);setQ("");}} style={{...bs(C.sf,C.t2),fontSize:10.5,padding:"4px 9px",border:"1px solid "+C.bd}}><XIcon size={11} weight="bold"/>Cambiar</button>
         </div>}
         <div style={{fontSize:10.5,color:C.t2,marginTop:8,lineHeight:1.4}}>La factura/remisión y su cobranza quedan a nombre de este tercero; la producción sigue a nombre del cliente de la orden.</div>
@@ -6904,7 +6912,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
         )}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete)} style={{...bt(type==="factura"?C.fac:(type==="remision"?C.live:(isStockLoad?C.emr:C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete))?0.4:1}}>Continuar →</button>
@@ -7223,7 +7231,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:16}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!canProceed} style={{...bt(C.amb),flex:1,justifyContent:"center",opacity:!canProceed?0.4:1}}>Continuar →</button>
@@ -15311,11 +15319,12 @@ export default function PrintFlow() {
     if(billTo && !billTo.incomplete){
       let id=billTo.client_id;
       if(!id && billTo.name){ id=await db.upsertBillingClient(null, billTo.name, billTo.rfc, billTo.email, billTo.whatsapp, userLogin||user); }
-      if(id){ await db.setOrderBillTo(orderId, id, userLogin||user); return; }
+      if(id){ await db.setOrderBillTo(orderId, id, userLogin||user); return {client_id:id, name:billTo.name||null, rfc:billTo.rfc||null}; } // v10.72.88: devuelve lo aplicado para el optimistic
     }
     // Sin tercero: limpiar un bill_to OBSOLETO si quedó de un intento previo fallido (evita mal-atribución en el reintento).
     const cur=orders.find(o=>o.id===orderId);
     if(cur?.bill_to_client_id){ await db.setOrderBillTo(orderId, null, userLogin||user); }
+    return null;
   },[user,userLogin,orders]);
 
   // 🆕 v10.72.83 — Devolución (re-trabajo): RPC create_return + abre la(s) orden(es) nueva(s) para capturar/ajustar y mandar a producción.
@@ -16102,7 +16111,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // con verify_actor_role que busca en public.users.username. Hoy funcionaba por casualidad
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
-          await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
+          const appliedBillTo=await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
           await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs si multi-pago.
           // Antes el timeline + optimistic mostraban "null" porque paymentMethod/Amount/bankRef quedan null en flow multi-pay.
@@ -16121,7 +16130,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
           const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
           const tlMsg="📄 Asignado folio "+folio+" ("+(invoiceType==="factura"?"Factura":"Remisión")+") · "+SM[newStage]?.l+payLabel;
-          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
+          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,stage:newStage,delivered_at:new Date().toISOString(),bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg,{to:newStage})}:o));
           await db.addTimeline(invoiceModal.id,tlMsg,user,C.ok);
           // Notify admin + secretaria + vendedor creator
           const notifMsg="📄 "+folio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
@@ -16147,6 +16156,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           setInvoiceModal(null);setAllowNoPriceForOrder(null);
         }catch(e){
           console.error("[assignInvoice] Error:",e);
+          // v10.72.88 (#9): si este intento fijó un tercero pero el folio falló, revertir el bill_to huérfano (applyBillTo commiteó en tx aparte) para no re-facturar al tercero por otra vía.
+          if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(invoiceModal.id, null, userLogin||user); }catch(_){} }
           showToast("❌ "+(e?.message||"No se pudo asignar folio"),"error");
           reload();
         }
@@ -16218,7 +16229,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
-          await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
+          const appliedBillTo=await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
           await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs para timeline y optimistic update.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
@@ -16235,7 +16246,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           const payLabel=payLabelMulti
             ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
           const tlMsg="⚡ Folio anticipado "+folio+" asignado ("+(invoiceType==="factura"?"Factura":"Remisión")+") · Razón: "+reason+payLabel;
-          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,timeline:addTL(o,tlMsg)}:o));
+          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg)}:o));
           await db.addTimeline(preInvoiceModal.id,tlMsg,user,C.amb);
           // Notificaciones a Lupita + Vendedor + Marcelo
           const notifMsg="⚡ Folio anticipado "+folio+" asignado a "+(preInvoiceModal.client||"")+" — "+(preInvoiceModal.product_type||"")+" · "+(preInvoiceModal.production_number||"");
@@ -16250,6 +16261,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           setPreInvoiceModal(null);
         }catch(e){
           console.error("[assignPreInvoice] Error:",e);
+          // v10.72.88 (#9): revertir bill_to huérfano si el folio anticipado falló (applyBillTo commiteó aparte).
+          if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(preInvoiceModal.id, null, userLogin||user); }catch(_){} }
           showToast("❌ "+(e?.message||"No se pudo asignar folio anticipado"),"error");
           reload();
         }
