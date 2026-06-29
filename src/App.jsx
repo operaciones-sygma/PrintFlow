@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.72.89 — Facturar a tercero: 3er scan (3 LOW). Frontend: cambiar tipo factura↔remisión ahora confirma si hay
+//   tercero capturado (no se descarta callado). BD: CHECK chk_no_ocgroup_with_billto (total) + trigger TOCTOU
+//   guard_bill_to_valid_at_folio (re-valida que el tercero no sea Corona/inactivo al momento del folio).
 // v10.72.88 — Facturar a tercero: endurecimiento tras scan exhaustivo (11 hallazgos) + fix bug PRE-EXISTENTE de
 //   cancelación (FOR UPDATE con agregado en sync_cancellation_to_cobranza). BD: trigger choke-point grupo OC,
 //   puente resuelve merged_into del tercero, merge_clients re-apunta bill_to, post-edit orphan respeta tercero,
@@ -6782,7 +6785,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
     // Karla podía perder N pagos capturados por click accidental al ver el folio del otro tipo.
     const handleTypeClick=()=>{
       if(t===type)return; // mismo tipo, no-op
-      const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference;
+      const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference||(billTo&&!billTo.incomplete);
       if(hasWork && !window.confirm("Al cambiar el tipo se perderán los pagos y datos capturados. ¿Continuar?"))return;
       setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
     };
@@ -7183,7 +7186,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {(()=>{
             const switchType=(t)=>{
               if(t===type)return;
-              const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference;
+              const hasWork=paymentRefs.length>0||paymentStatus||folio||bankReference||(billTo&&!billTo.incomplete);
               if(hasWork && !window.confirm("Al cambiar el tipo se perderán los pagos y datos capturados. ¿Continuar?"))return;
               setType(t);setFolio("");setWarnLow(false);setPaymentStatus(null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);
             };
