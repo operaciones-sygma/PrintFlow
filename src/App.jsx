@@ -2984,7 +2984,7 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
       <tr><td style="width:40%"><div class="field-lbl">Facturar a</div><div class="field-val">${esc(o.client_company||o.client||"")}</div></td>
       <td style="width:25%"><div class="field-lbl">R.F.C.</div><div class="field-val">${esc(o.client_rfc||"")}</div></td>
       <td style="width:20%"><div class="field-lbl">Agente / Vendedor</div><div class="field-val">${esc(o.agent||"")}</div></td>
-      <td style="width:15%"><div class="field-lbl">Precio</div><div class="field-val" style="font-weight:800;font-size:14px">${o.price?fmt(o.price):""}</div></td></tr>
+      <td style="width:15%"><div class="field-lbl">Precio</div><div class="field-val" style="font-weight:800;font-size:14px">${(isMaq?o.maq_price:o.price)?fmt(isMaq?o.maq_price:o.price):""}</div></td></tr>
       <tr><td colspan="2"><div class="field-lbl">Email</div><div class="field-val">${esc(o.client_email||"")}</div></td>
       <td><div class="field-lbl">Cotización</div><div class="field-val"></div></td>
       <td><div class="field-lbl">Estado de Pago</div><div class="field-val">${payBadge||"—"}</div></td></tr>
