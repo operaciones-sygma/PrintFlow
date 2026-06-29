@@ -4,6 +4,13 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.0 — FACTURAR A UN TERCERO · FASE 2 (OC con folio compartido): "facturar TODA la OC a un tercero" (1 folio
+//   compartido = 1 CFDI = 1 RFC). BD: purchase_orders.shared_bill_to_*, RPC set_oc_bill_to (gate admin/karla +
+//   bloqueos Corona/web/grupos/post-folio), puente sync_invoice_from_oc resuelve el tercero (merged_into), triggers
+//   TOCTOU (revalida tercero+productores+web) / anti-grupos / anti-consecutivo, merge_clients re-apunta. Frontend:
+//   control en AssignOCFolioModal (solo "un folio compartido") + db.setOcBillTo + orquestación con rollback + badge.
+//   Endurecido tras workflow adversarial (4 hallazgos: HIGH consecutivo→productor cerrado). Ganancias gratis:
+//   cancelación/post-edit/portal heredan el tercero (leen invoices.client_id). 8 pruebas rollback.
 // v10.72.89 — Facturar a tercero: 3er scan (3 LOW). Frontend: cambiar tipo factura↔remisión ahora confirma si hay
 //   tercero capturado (no se descarta callado). BD: CHECK chk_no_ocgroup_with_billto (total) + trigger TOCTOU
 //   guard_bill_to_valid_at_folio (re-valida que el tercero no sea Corona/inactivo al momento del folio).
@@ -1147,6 +1154,13 @@ const db = {
   async setOrderBillTo(orderId, billToClientId, byUser) {
     const {error} = await supabase.rpc("set_order_bill_to", {
       p_order_id: orderId, p_bill_to_client_id: billToClientId || null, p_actor: byUser
+    });
+    if(error) throw new Error(error.message);
+  },
+  // 🆕 Fase 2 — fija el tercero a NIVEL OC ANTES de asignar el folio compartido (el puente sync_invoice_from_oc lo lee).
+  async setOcBillTo(ocId, billToClientId, byUser) {
+    const {error} = await supabase.rpc("set_oc_bill_to", {
+      p_oc_id: ocId, p_bill_to_client_id: billToClientId || null, p_actor: byUser
     });
     if(error) throw new Error(error.message);
   },
@@ -9004,7 +9018,10 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   // ===== SIMPLE MODE state =====
   const [invoiceType, setInvoiceType] = useState("factura");
   const [mode, setMode] = useState("shared");
+  const [billTo, setBillTo] = useState(null); // 🆕 Fase 2 — facturar TODA la OC a un tercero (solo modo "shared")
   const [folioStart, setFolioStart] = useState("");
+  // 🆕 Fase 2 (#4) — no dejar un tercero colgado si la OC resulta Corona o si se cambia a modo consecutivo (ahí no aplica tercero).
+  useEffect(()=>{ if(isCorona || mode!=="shared") setBillTo(null); }, [isCorona, mode]);
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
 
   // Sugerencias de folio para ambos tipos (compartidas entre simple y split)
@@ -9046,7 +9063,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   }, [folioValid, startNum, mode, pendingCount, prefix]);
 
   const canSubmitSimple = !saving && folioValid && pendingCount > 0
-    && (!preAssignedMode || reason.trim().length > 0);
+    && (!preAssignedMode || reason.trim().length > 0)
+    && (mode !== "shared" || !(billTo && billTo.incomplete)); // 🆕 Fase 2 — no permitir submit con tercero a medio capturar
 
   // ===== SPLIT MODE state =====
   // splitGroups: [{doc_type, folio, order_ids[], payment_status, payment_refs[]}]
@@ -9182,7 +9200,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     if (!canSubmitSimple) return;
     setSaving(true);
     try {
-      await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null);
+      await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null, (!isCorona && mode==="shared") ? billTo : null);
     } finally { setSaving(false); }
   };
   const submitSplit = async()=>{
@@ -9266,6 +9284,9 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             : <div style={{fontSize:13,lineHeight:1.5}}>Se asignarán <span style={{fontFamily:"'Geist Mono',monospace",color:tColor,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" ... "+preview[preview.length-1]}</span> ({preview.length} folios)</div>
           }
         </div>}
+
+        {/* 🆕 Fase 2 — Facturar TODA la OC a un tercero (solo modo "un folio compartido" = 1 CFDI = 1 RFC) */}
+        {mode==="shared" && !isCorona && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={invoiceType} onChange={setBillTo} accent={tColor}/></div>}
       </>}
 
       {activeMode === "split" && <>
@@ -12101,6 +12122,7 @@ function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNa
               <span style={{fontSize:14,fontWeight:800,color:tColor,fontFamily:"'Geist Mono',monospace"}}>{po.shared_invoice_folio}</span>
               <button onClick={e=>{e.stopPropagation();onClose();onNavigateToOC&&onNavigateToOC(po.id)}} title="Ir a la OC" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,color:C.ac,background:C.ac+"12",border:"none",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><ShoppingCartIcon size={11} weight="bold"/>{po.id}</button>
               <span style={{fontSize:11,fontWeight:600,color:C.tx,flex:"1 1 auto",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.client}</span>
+              {po.shared_bill_to_name&&<span title={"Facturada a tercero: "+po.shared_bill_to_name+(po.shared_bill_to_rfc?" · "+po.shared_bill_to_rfc:"")} style={{fontSize:9.5,fontWeight:700,color:C.fac,background:C.fac+"14",borderRadius:6,padding:"2px 6px",display:"inline-flex",alignItems:"center",gap:3,flexShrink:0,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><UsersIcon size={9} weight="bold"/>{po.shared_bill_to_name}</span>}
               <span style={{fontSize:10,color:C.t2,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}><strong>{po.orderCount}</strong> orden{po.orderCount!==1?"es":""}{po.folios_locked&&<><LockIcon size={9} weight="bold"/>bloqueada</>}</span>
             </div>
             {isOpen&&<div style={{borderTop:"1px solid "+C.bd,padding:"2px 12px 6px",background:C.bg}}>
@@ -14411,19 +14433,32 @@ export default function PrintFlow() {
   },[user,userLogin,showToast,reload]);
 
   // 📄 v10.11.0 Sub-fase B — Asigna folio(s) a las órdenes pendientes de una OC vía RPC atómica
-  const assignFolioToOC=useCallback(async(ocId,invoiceType,mode,folioStart,preAssigned,reason)=>{
+  const assignFolioToOC=useCallback(async(ocId,invoiceType,mode,folioStart,preAssigned,reason,billTo)=>{
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/karla asignan folios fiscales a OCs
     if(!canExecuteAction("assignFolioToOC",null,user,userLogin)){showToast(actionDeniedToast("assignFolioToOC",null,user,userLogin),"error");return null}
     try{
       const actor=userLogin||user;
-      const result=await db.assignFolioToOC(ocId,invoiceType,mode,folioStart,preAssigned,reason,actor);
-      const icon=preAssigned?"🔒":"📄";
-      const verb=preAssigned?"pre-asignado(s)":"asignado(s)";
-      const folioPreview=Array.isArray(result?.folios)?(result.folios.length===1?result.folios[0]:result.folios[0]+"..."+result.folios[result.folios.length-1]):"";
-      showToast(icon+" "+result.count+" folio(s) "+verb+" a "+ocId+(folioPreview?" ("+folioPreview+")":""));
-      setFolioOCModal(null);
-      reload();
-      return result;
+      // 🆕 Fase 2 — fija el tercero a NIVEL OC ANTES del folio (solo modo shared; el puente sync_invoice_from_oc lo lee).
+      let ocBillToSet=false;
+      if(billTo && !billTo.incomplete){
+        let id=billTo.client_id;
+        if(!id && billTo.name){ id=await db.upsertBillingClient(null, billTo.name, billTo.rfc, billTo.email, billTo.whatsapp, actor); }
+        if(id){ await db.setOcBillTo(ocId, id, actor); ocBillToSet=true; }
+      }
+      try{
+        const result=await db.assignFolioToOC(ocId,invoiceType,mode,folioStart,preAssigned,reason,actor);
+        const icon=preAssigned?"🔒":"📄";
+        const verb=preAssigned?"pre-asignado(s)":"asignado(s)";
+        const folioPreview=Array.isArray(result?.folios)?(result.folios.length===1?result.folios[0]:result.folios[0]+"..."+result.folios[result.folios.length-1]):"";
+        showToast(icon+" "+result.count+" folio(s) "+verb+" a "+ocId+(folioPreview?" ("+folioPreview+")":""));
+        setFolioOCModal(null);
+        reload();
+        return result;
+      }catch(e){
+        // 🆕 Fase 2 — el folio falló pero el tercero quedó fijado (RPC aparte): revertirlo para no dejar la OC marcada.
+        if(ocBillToSet){ try{ await db.setOcBillTo(ocId, null, actor); }catch(_){} }
+        throw e;
+      }
     }catch(e){console.error("[assignFolioToOC] Error:",e);showToast("❌ No se pudo asignar: "+(e?.message||"error desconocido"),"error");return null}
   },[user,userLogin,showToast,reload]);
 
@@ -16021,7 +16056,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={(targetOCId,forceCrossClient)=>moveOrderToOC(moveModal.id,targetOCId,forceCrossClient)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
-      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
+      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason,billTo)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason,billTo)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
