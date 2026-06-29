@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.1 — Fase 2 scan round-2 (1 MED + 2 LOW): cierra el "doble tercero" (set_oc_bill_to y set_order_bill_to
+//   ahora mutuamente excluyentes → una OC no queda atascada con tercero por-orden + tercero OC) + pre-filtro UI
+//   en AssignOCFolioModal. Diferido documentado: due_date consolidado usa MAX (pre-existente, criterio de aging).
 // v10.73.0 — FACTURAR A UN TERCERO · FASE 2 (OC con folio compartido): "facturar TODA la OC a un tercero" (1 folio
 //   compartido = 1 CFDI = 1 RFC). BD: purchase_orders.shared_bill_to_*, RPC set_oc_bill_to (gate admin/karla +
 //   bloqueos Corona/web/grupos/post-folio), puente sync_invoice_from_oc resuelve el tercero (merged_into), triggers
@@ -9049,6 +9052,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     ocOrders.filter(o=>o.invoice_folio),
     [ocOrders]);
   const pendingCount = pendingOrders.length;
+  // 🆕 Fase 2 — una OC no puede mezclar tercero POR ORDEN (Fase 1) con tercero a NIVEL OC; pre-filtro UI (el backend además lo rechaza).
+  const ocHasPerOrderBillTo = useMemo(()=>pendingOrders.some(o=>o.bill_to_client_id), [pendingOrders]);
 
   const prefix = invoiceType==="factura" ? "D-" : "R-";
   const startNum = parseFolioNum(folioStart);
@@ -9286,7 +9291,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         </div>}
 
         {/* 🆕 Fase 2 — Facturar TODA la OC a un tercero (solo modo "un folio compartido" = 1 CFDI = 1 RFC) */}
-        {mode==="shared" && !isCorona && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={invoiceType} onChange={setBillTo} accent={tColor}/></div>}
+        {mode==="shared" && !isCorona && !ocHasPerOrderBillTo && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={invoiceType} onChange={setBillTo} accent={tColor}/></div>}
+        {mode==="shared" && !isCorona && ocHasPerOrderBillTo && <div style={{marginBottom:14,padding:"9px 12px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:11,color:"#9a3412",fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill"/>Hay órdenes con "Facturar a tercero" por orden en esta OC; quítalo primero para facturar toda la OC a un tercero.</div>}
       </>}
 
       {activeMode === "split" && <>
