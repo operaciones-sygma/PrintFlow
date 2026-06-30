@@ -528,6 +528,9 @@ const finHas=(s,base)=>finList(s).some(x=>x.toLowerCase()===base.toLowerCase()||
 const finGetDetail=(s,base)=>{const e=finList(s).find(x=>x.toLowerCase().startsWith(base.toLowerCase()+" "));return e?e.slice(base.length).trim():""};
 const finWith=(s,base,detail)=>{const arr=finList(s).filter(x=>!(x.toLowerCase()===base.toLowerCase()||x.toLowerCase().startsWith(base.toLowerCase()+" ")));arr.push(detail?base+" "+detail:base);return arr.join(", ")};
 const finWithout=(s,base)=>finList(s).filter(x=>!(x.toLowerCase()===base.toLowerCase()||x.toLowerCase().startsWith(base.toLowerCase()+" "))).join(", ");
+// v10.73.4 — equivalencia en kg para productos vendidos por kilo (client_products.specs.sell_unit='kg').
+// Convierte un conteo de UNIDADES a kg (units/units_per_kg). Devuelve null si el producto NO es 'kg' (default seguro).
+const kgEquiv=(units,specs)=>{const upk=Number(specs&&specs.units_per_kg);if(!specs||specs.sell_unit!=="kg"||!(upk>0))return null;return (Math.abs(Number(units)||0)/upk).toLocaleString(undefined,{maximumFractionDigits:1})+" kg";};
 const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#2f9aad",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#2f9e7a",who:null}];
@@ -3466,6 +3469,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?C.emr:C.dn}}>{p.stock_actual}</div>
                         <div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>en stock</div>
+                        {kgEquiv(p.stock_actual,p.specs)&&<div style={{fontSize:10,color:C.emr,fontWeight:700,marginTop:1}}>≈{kgEquiv(p.stock_actual,p.specs)}</div>}
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:10}}>
@@ -3499,6 +3503,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                   </div>
                   <div style={{textAlign:"right",marginLeft:10}}>
                     <div style={{fontSize:14,fontWeight:800,color}}>{m.qty>0?"+":""}{m.qty}</div>
+                    {kgEquiv(m.qty,prod?.specs)&&<div style={{fontSize:9,color:C.t2}}>≈{kgEquiv(m.qty,prod?.specs)}</div>}
                     <div style={{fontSize:9,color:C.t2}}>saldo: {m.balance_after}</div>
                   </div>
                 </div>;
@@ -3516,6 +3521,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
               if(filt.length===0)return <div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>;
               return <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {filt.map(o=>{
+                  const _hpSpecs=products.find(p=>p.id===o.client_product_id)?.specs; // v10.73.4 — equiv kg si es producto vendido por kilo
                   const isProd=o.stock_role==="production";
                   const isSale=o.stock_role==="sale";
                   const color=isProd?C.emr:isSale?C.sal:C.t2;
@@ -3531,7 +3537,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                         </div>
                         <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
                         {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
-                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}</div>
+                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}{kgEquiv(o.quantity,_hpSpecs)?" ≈ "+kgEquiv(o.quantity,_hpSpecs):""}</div>
                         <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: <StageLbl stage={o.stage} size={9}/> · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
                       {/* v10.46.2 FIX — null check explícito permite mostrar ventas $0 (regalos/cortesía) */}
@@ -3897,7 +3903,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
               return <div key={p.id} style={{padding:10,borderRadius:8,background:inCart?C.sal+"10":C.sf,border:"1px solid "+(inCart?C.sal:C.bd),marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:C.emr}}>{p.stock_actual}</b></div>
+                  <div style={{fontSize:10,color:C.t2,marginTop:2}}>{p.sku?p.sku+" · ":""}stock: <b style={{color:C.emr}}>{p.stock_actual}</b>{kgEquiv(p.stock_actual,p.specs)?<> · ≈<b style={{color:C.emr}}>{kgEquiv(p.stock_actual,p.specs)}</b></>:null}</div>
                 </div>
                 {inCart
                   ? <button onClick={()=>removeFromCart(p.id)} disabled={busy} style={{...bt(C.dn+"15",C.dn),padding:"4px 8px",fontSize:10,border:"0.5px solid "+C.dn+"40"}}>Quitar</button>
@@ -4060,7 +4066,10 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
     return ()=>{alive=false};
   },[isPooled,product.stock_pool_id]);
   const n=parseInt(qty,10);
-  const validQty=Number.isFinite(n)&&n>0&&n<=product.stock_actual;
+  // v10.73.4 — ruta legacy (HOY inalcanzable desde la UI). Guard defensivo: bloquear venta de productos
+  // vendidos por KILO aquí — este flujo manda qty crudo sin conversión kg→unidades. Forzar el Carrito de venta.
+  const isKgSell=product.specs?.sell_unit==="kg";
+  const validQty=!isKgSell&&Number.isFinite(n)&&n>0&&n<=product.stock_actual;
   const validDestClient=!isPooled||!!destClientId;
   // Resuelve los dos valores según el modo activo
   const computedUnit=priceMode==="unit"
@@ -4077,6 +4086,7 @@ function SellFromStockModal({product, userLogin, onSell, onClose}) {
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px"}}><ShoppingCartIcon size={17} weight="bold"/>Vender desde Stock</h3>
       <div style={{fontSize:12,color:C.t2,marginBottom:10}}>{product.name}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,fontSize:11}}>Saldo disponible: <b style={{color:C.emr,fontSize:14}}>{product.stock_actual}</b></div>
+      {isKgSell&&<div style={{display:"flex",alignItems:"flex-start",gap:6,padding:10,background:C.amb+"15",border:"1px solid "+C.amb+"50",borderRadius:8,marginBottom:10,fontSize:11,color:C.amb,fontWeight:600,lineHeight:1.4}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Este producto se vende por KILOS (con conversión a unidades). Usa el <b>Carrito de venta</b> del inventario, no esta venta individual.</div>}
       {/* v10.48.0 — Dropdown obligatorio cliente destino para productos pooled */}
       {isPooled&&<div style={{marginBottom:10,padding:10,background:C.emr+"08",borderRadius:10,border:"1px solid "+C.emr+"30"}}>
         <label style={{...lbl,marginTop:0}} htmlFor="sell-dest-client">Cliente que recibe la venta *</label>
