@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.4 — Impresión: el AGENTE (contacto del cliente, o.client_agent) ahora sale en TODAS las hojas junto a la
+//   razón social. Antes solo en la Completa (como "Atención/Contacto"); ahora también en la Copia Producción, y
+//   relabeleado a "Agente" en ambas (normal y maquila comparten estos bloques). Pedido por el usuario.
 // v10.73.3 — Facturar a tercero: scan HOLÍSTICO del feature completo (6 hallazgos). HIGH cerrado: pedido WEB/MP +
 //   tercero por orden (F1) facturaba/cobraba al RFC del tercero (F1 no bloqueaba web como F2) → bloqueo en 3 capas.
 //   MED: move_order_to_oc no vigilaba la exclusión de tercero (podía dejar una OC sin foliar) → guard. Frontend:
@@ -2860,14 +2863,15 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
 
     // ═══ DATOS DEL CLIENTE ═══
     if(isProd){
-      // Production copy: only client name, no contacts
-      h+=`<table style="margin-top:-1px"><tr><td class="section-title">Cliente</td></tr>
-      <tr><td><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td></tr></table>`;
+      // Production copy: client name + agente (contacto del cliente). Sin teléfono/email (datos de contacto sensibles).
+      h+=`<table style="margin-top:-1px"><tr><td colspan="2" class="section-title">Cliente</td></tr>
+      <tr><td style="width:62%"><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
+      <td style="width:38%"><div class="field-lbl">Agente</div><div class="field-val">${esc(o.client_agent||"—")}</div></td></tr></table>`;
     } else {
       // Full copy: all client data
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos del Cliente</td></tr>
       <tr><td style="width:35%"><div class="field-lbl">Nombre o Denominación</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
-      <td style="width:25%"><div class="field-lbl">Atención / Contacto</div><div class="field-val">${esc(o.client_agent||"")}</div></td>
+      <td style="width:25%"><div class="field-lbl">Agente</div><div class="field-val">${esc(o.client_agent||"—")}</div></td>
       <td style="width:20%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.client_phone?esc((o.client_lada||"+52")+" "+o.client_phone):""}</div></td>
       <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:10px">${esc(o.client_email||"")}</div></td></tr></table>`;
     }
