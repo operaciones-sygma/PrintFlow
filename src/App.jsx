@@ -4,6 +4,8 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.5 — Impresión: alineadas las leyendas de la Copia Producción tras agregar el Agente (el banner decía
+//   "sin datos del cliente" y el botón "sin contactos" — ahora "sin datos fiscales", que es lo que de verdad omite).
 // v10.73.4 — Impresión: el AGENTE (contacto del cliente, o.client_agent) ahora sale en TODAS las hojas junto a la
 //   razón social. Antes solo en la Completa (como "Atención/Contacto"); ahora también en la Copia Producción, y
 //   relabeleado a "Agente" en ambas (normal y maquila comparten estos bloques). Pedido por el usuario.
@@ -2833,7 +2835,7 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
 
     // v10.72.62 — banner de VERSIÓN, muy visible y B&N-proof: ADMINISTRATIVA = barra negra sólida (invertida);
     // PRODUCCIÓN = barra blanca con borde. Reemplaza el badge rojo de 8px (que en fotocopia B&N era ilegible).
-    h+=`<div class="vbanner ${isProd?'prod':'admin'}"><span class="vt">${isProd?'Copia de Producción':'Copia Administrativa'}</span><span class="vs">${isProd?'Para taller · sin precios ni datos del cliente':'Completa · con precios y datos fiscales'}</span></div>`;
+    h+=`<div class="vbanner ${isProd?'prod':'admin'}"><span class="vt">${isProd?'Copia de Producción':'Copia Administrativa'}</span><span class="vs">${isProd?'Para taller · sin precios ni datos fiscales':'Completa · con precios y datos fiscales'}</span></div>`;
 
     // v10.72.65 — leyenda de venta de stock que tomó folio P- por el bug (ver isVoidStockSale arriba)
     if(isVoidStockSale){
@@ -3074,7 +3076,7 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
       {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&(o.needs_reprint?" (cambió desde la última → será v"+((o.print_version||0)+1)+")":" (sin cambios → se reimprime v"+(o.print_version||0)+")")}</div>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
         {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":C.fac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir — Administrativa (Completa)</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(con precio y contactos)</span></button>}
-        {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><FactoryIcon size={14} weight="bold"/>Imprimir — Copia Producción</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(sin precio ni contactos)</span></button>}
+        {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><FactoryIcon size={14} weight="bold"/>Imprimir — Copia Producción</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(sin precio ni datos fiscales)</span></button>}
         {isFloor&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir Orden</>}</button>}
         <button onClick={onClose} disabled={printing} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
       </div>
