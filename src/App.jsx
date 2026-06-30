@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.15 — /impeccable harden OCard (re-critique P1 #2, a11y): aria-label en los 6 iconos de utilidad (duplicar/
+//   imprimir/flujo/editar/folio-histórico/mover; title solo no es accessible name confiable) + aria-expanded/aria-label
+//   en el toggle "+N" de badges + role=group "Acciones de la orden" en el cluster. Aditivo, cero cambio visual.
 // v10.73.14 — /impeccable distill OCard (re-critique P1, bloque fiscal): los 5 banners de flag full-width a medida
 //   (Editada-tras-facturar, REIMPRIMIR, DEVUELTA, Re-trabajo, Facturar-a-tercero) pasan a UNA fila de chips Badge con
 //   tonos semánticos, ordenados por urgencia, demotados bajo el folio/pago. Mata 5 divs bespoke, agrupa, rankea.
@@ -9685,8 +9688,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           {bT1}{bT2}
           {bT3.length>0&&(badgesOpen
-            ? <>{bT3}<button onClick={e=>{e.stopPropagation();setBadgesOpen(false);}} title="Ocultar etiquetas" style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",borderRadius:6,background:C.sf,color:C.t2,border:"none",cursor:"pointer"}}><CaretUpIcon size={10} weight="bold"/></button></>
-            : <button onClick={e=>{e.stopPropagation();setBadgesOpen(true);}} title={bT3.length+" etiqueta"+(bT3.length===1?"":"s")+" más"} style={{display:"inline-flex",alignItems:"center",gap:2,padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:600,lineHeight:1.45,background:C.sf,color:C.t2,border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><PlusIcon size={9} weight="bold"/>{bT3.length}</button>)}
+            ? <>{bT3}<button onClick={e=>{e.stopPropagation();setBadgesOpen(false);}} title="Ocultar etiquetas" aria-expanded={true} aria-label="Ocultar etiquetas" style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",borderRadius:6,background:C.sf,color:C.t2,border:"none",cursor:"pointer"}}><CaretUpIcon size={10} weight="bold"/></button></>
+            : <button onClick={e=>{e.stopPropagation();setBadgesOpen(true);}} title={bT3.length+" etiqueta"+(bT3.length===1?"":"s")+" más"} aria-expanded={false} aria-label={"Mostrar "+bT3.length+" etiqueta"+(bT3.length===1?"":"s")+" más"} style={{display:"inline-flex",alignItems:"center",gap:2,padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:600,lineHeight:1.45,background:C.sf,color:C.t2,border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><PlusIcon size={9} weight="bold"/>{bT3.length}</button>)}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
@@ -9747,15 +9750,15 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {!compact&&canAct&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
       {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span role="status" aria-live="polite" style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
       <StageFlowButtons o={o} role={role} onAction={onAction}/>
-      <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+      <div role="group" aria-label="Acciones de la orden" style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
-        {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,C.fac)} title="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
-        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
-        <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
-        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")}><NotePencilIcon size={15} weight="bold"/></button>}
-        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)"><ReceiptIcon size={15} weight="bold"/></button>}
+        {!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns))&&<button onClick={()=>onAction(o.id,"duplicate")} style={bs(C.sf,C.fac)} title="Duplicar" aria-label="Duplicar"><CopySimpleIcon size={15} weight="bold"/></button>}
+        <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir" aria-label="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
+        <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo" aria-label="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
+        {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")} aria-label="Editar orden"><NotePencilIcon size={15} weight="bold"/></button>}
+        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)" aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
-        {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
+        {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC" aria-label="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
             salen del muro de iconos a un menú "⋯ Más" con ETIQUETAS de texto + divisor antes de Borrar. Antes eran
             iconos rojos de 15px casi idénticos (label solo en hover) → riesgo de mis-click en acciones con consecuencia fiscal. */}
