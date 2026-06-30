@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.8 — /impeccable layout OCard (P1 banners verticales): el bloque de estado fiscal + flags (folio, agrupada,
+//   splits, post-edit, reimprimir, devuelta, re-trabajo, tercero) se MUEVE debajo del cliente/producto (antes se
+//   apilaba arriba y sepultaba el "para quién/qué"). Orden de lectura: etapa+alertas → cliente/producto → fiscal → progreso.
 // v10.73.7 — /impeccable distill OCard (P1 jerarquía de badges): la fila de ~16 chips de igual peso pasa a 3 TIERS
 //   (T1 alertas → T2 identidad → T3 metadata). T1+T2 siempre; T3 colapsa tras un chip "+N" expandible. Quita el
 //   o.id redundante (queda solo como fallback si no hay #folio). Sube el score de escaneabilidad de la card.
@@ -9627,6 +9630,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   if(o.plate_status==="existing"&&!compact) bT3.push(<Badge key="plate" tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>);
   if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
   if(o.created_by){const stdU=["produccion","preprensa","german","admin"];if(!stdU.includes(o.created_by)) bT3.push(o.created_by==="secretaria"?<Badge key="cb" tone="context">Lupita</Badge>:<Badge key="cb" tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>);}
+  // v10.73.8 — /impeccable layout: ¿hay alguna fila de estado fiscal/flag? (ahora se renderizan como bloque DEBAJO del cliente)
+  const hasFiscalRows=!compact&&(o.cart_folio||o.web_folio||o.invoice_folio||(o.grouped_invoice_folio&&!o.invoice_folio)||o.has_splits||o.has_post_invoice_edits||o.needs_reprint||o.returned_at||o.returned_from_order_id||o.bill_to_client_id);
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
@@ -9640,36 +9645,6 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     <div style={{display:"flex",gap:10}}>
       {(o.image_url||o.image_url_2||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<div style={{position:"relative",flexShrink:0}}><img src={o.image_url||o.image_url_2||o.image||o.file_url} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10}}/>{o.image_url&&o.image_url_2&&<div style={{position:"absolute",bottom:-2,right:-2,background:C.fac,color:"#fff",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:700,boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}>+1</div>}</div>}
       <div style={{flex:1,minWidth:0}}>
-        {o.cart_folio&&!compact&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:16,fontWeight:800,color:C.cart,letterSpacing:0.5,lineHeight:1}}><ShoppingCartIcon size={15} weight="bold"/>{o.cart_folio}</span></div>}
-        {o.web_folio&&!compact&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
-        {o.invoice_folio&&!compact&&<div style={{fontSize:13,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:C.amb,marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:C.live,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.live+"15",borderRadius:4}}><CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:C.fac,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.fac+"15",borderRadius:4}}><CircleHalfIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
-        {o.grouped_invoice_folio&&!o.invoice_folio&&!compact&&<div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:4}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Facturada agrupada en {o.grouped_invoice_folio}</div>}
-        {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
-        {o.has_splits&&!compact&&<div style={{fontSize:11,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
-          <FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
-          <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
-            {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
-              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>#{s.position}</span>
-                {s.doc_type==="corona_saldo"
-                  ? <span style={{color:C.emr}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
-                  : <span style={{color:s.doc_type==="factura"?C.fac:C.live}}>{s.doc_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>}{s.invoice_folio}</span>}
-                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-                {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:9,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
-              </div>
-            ))}
-            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:9,color:C.t2,marginTop:2,fontStyle:"italic"}}>
-              {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
-            </div>}
-          </div>
-        </div>}
-        {o.has_post_invoice_edits&&!compact&&<div style={{fontSize:10,color:C.amb,fontWeight:600,marginBottom:4,padding:"3px 8px",background:C.amb+"10",borderRadius:6,display:"inline-block",border:"1px solid "+C.amb+"25"}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada después de facturar</div>}
-        {o.needs_reprint&&!compact&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}><PrinterIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
-        {/* 🔁 v10.72.83 — DEVUELTA (re-trabajo): la venta sigue vigente, se rehízo en otra orden */}
-        {o.returned_at&&!compact&&<div style={{fontSize:10,color:C.wn,fontWeight:800,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.wn+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1.5px solid "+C.wn+"55"}} title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")}><ArrowUUpLeftIcon size={11} weight="bold"/>DEVUELTA</div>}
-        {o.returned_from_order_id&&!compact&&<div style={{fontSize:10,color:C.ac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.acL,borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.ac+"40"}} title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)"><ArrowUUpLeftIcon size={11} weight="bold"/>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</div>}
-        {/* 🆕 v10.72.87 — facturado a un tercero distinto del cliente productor */}
-        {o.bill_to_client_id&&!compact&&<div style={{fontSize:10,color:C.fac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.fac+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.fac+"40"}} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"}><UsersIcon size={11} weight="bold"/>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           {bT1}{bT2}
           {bT3.length>0&&(badgesOpen
@@ -9689,6 +9664,41 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             {!hp&&vOwns?(o.price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:15,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
           </div>}
         </div>
+        {/* v10.73.8 — /impeccable layout: el bloque de estado fiscal + flags (folio, agrupada, splits, post-edit,
+            reimprimir, devuelta, re-trabajo, tercero) se MUEVE aquí, DEBAJO del cliente/producto. Antes se apilaba
+            ARRIBA y sepultaba el "para quién/qué" bajo hasta ~10 filas. Mismo contenido, orden de lectura corregido. */}
+        {hasFiscalRows&&<div style={{marginTop:7}}>
+        {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:16,fontWeight:800,color:C.cart,letterSpacing:0.5,lineHeight:1}}><ShoppingCartIcon size={15} weight="bold"/>{o.cart_folio}</span></div>}
+        {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
+        {o.invoice_folio&&<div style={{fontSize:13,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:C.amb,marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:C.live,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.live+"15",borderRadius:4}}><CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:C.fac,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.fac+"15",borderRadius:4}}><CircleHalfIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
+        {o.grouped_invoice_folio&&!o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:4}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Facturada agrupada en {o.grouped_invoice_folio}</div>}
+        {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
+        {o.has_splits&&<div style={{fontSize:11,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
+          <FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
+          <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+            {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
+              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>#{s.position}</span>
+                {s.doc_type==="corona_saldo"
+                  ? <span style={{color:C.emr}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
+                  : <span style={{color:s.doc_type==="factura"?C.fac:C.live}}>{s.doc_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>}{s.invoice_folio}</span>}
+                <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:9,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
+              </div>
+            ))}
+            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:9,color:C.t2,marginTop:2,fontStyle:"italic"}}>
+              {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
+            </div>}
+          </div>
+        </div>}
+        {o.has_post_invoice_edits&&<div style={{fontSize:10,color:C.amb,fontWeight:600,marginBottom:4,padding:"3px 8px",background:C.amb+"10",borderRadius:6,display:"inline-block",border:"1px solid "+C.amb+"25"}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada después de facturar</div>}
+        {o.needs_reprint&&<div style={{fontSize:10,color:"#dc2626",fontWeight:700,marginBottom:4,padding:"3px 8px",background:"#fee2e2",borderRadius:6,display:"inline-block",border:"1.5px solid #dc2626"}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}><PrinterIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
+        {/* 🔁 v10.72.83 — DEVUELTA (re-trabajo): la venta sigue vigente, se rehízo en otra orden */}
+        {o.returned_at&&<div style={{fontSize:10,color:C.wn,fontWeight:800,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.wn+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1.5px solid "+C.wn+"55"}} title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")}><ArrowUUpLeftIcon size={11} weight="bold"/>DEVUELTA</div>}
+        {o.returned_from_order_id&&<div style={{fontSize:10,color:C.ac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.acL,borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.ac+"40"}} title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)"><ArrowUUpLeftIcon size={11} weight="bold"/>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</div>}
+        {/* 🆕 v10.72.87 — facturado a un tercero distinto del cliente productor */}
+        {o.bill_to_client_id&&<div style={{fontSize:10,color:C.fac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.fac+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.fac+"40"}} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"}><UsersIcon size={11} weight="bold"/>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</div>}
+        </div>}
         {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
         {!compact&&<ProgressBar order={o}/>}
       </div>
