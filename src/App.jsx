@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.7 — /impeccable distill OCard (P1 jerarquía de badges): la fila de ~16 chips de igual peso pasa a 3 TIERS
+//   (T1 alertas → T2 identidad → T3 metadata). T1+T2 siempre; T3 colapsa tras un chip "+N" expandible. Quita el
+//   o.id redundante (queda solo como fallback si no hay #folio). Sube el score de escaneabilidad de la card.
 // v10.73.6 — "Agregar Producto Existente" a una OC: la lista de texto pasó a un GRID de OrderPickCard con MINIATURA
 //   de cada orden (más fácil de identificar de un vistazo, pedido del usuario tras auditoría de pickers). OrderPickCard
 //   gana prop opcional `extra` (no afecta Devoluciones/Cancelaciones) para conservar el badge "en OC-XXX" + entrega.
@@ -9595,8 +9598,35 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   const guide=GUIDES[role]?.[o.stage];
   const isDraggable=["ready","in_production","maquila_in","packaging"].includes(o.stage);
   const [expanded,setExpanded]=useState(false);
+  const [badgesOpen,setBadgesOpen]=useState(false); // v10.73.7 distill: overflow "+N" de la fila de badges
   const hasContent=((o.timeline?.length>0)||(o.comments?.length>0)||(o.notes_log?.length>0)||(o.waste_log?.length>0));
   const hasSecondary=!compact&&(hasContent||vOwns);
+  // v10.73.7 — /impeccable distill: la fila de badges pasa de ~16 chips de IGUAL peso a 3 TIERS por importancia,
+  // para que el ojo triague de un vistazo. T1 alertas (exigen acción/cuidado) → T2 identidad (qué ES la orden) →
+  // T3 metadata (contexto secundario). T1+T2 siempre visibles; T3 colapsa tras un chip "+N" expandible.
+  const bT1=[], bT2=[], bT3=[];
+  // T1 — alertas (rojo/ámbar, strong, primero: se escanean por el borde izquierdo)
+  if(late) bT1.push(<Badge key="late" tone="danger" strong icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>);
+  if(stale) bT1.push(<Badge key="stale" tone={stale.lv==="critical"?"danger":"warn"} strong>{stale.lb}</Badge>);
+  if(o.priority!=="normal"&&PM[o.priority]) bT1.push(<Badge key="prio" color={PM[o.priority].c} strong><PrioLbl priority={o.priority}/></Badge>);
+  if(o.sin_empaque_sygma) bT1.push(<Badge key="nologo" tone="danger" strong title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)" icon={<PackageIcon size={11} weight="bold"/>}>Sin logo SYGMA</Badge>);
+  if(isMaq&&["maq_created","maq_sent","maq_in_progress"].includes(o.stage)){
+    const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0, noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
+    if(noPrice||noCost) bT1.push(<Badge key="maqfalta" tone="warn" strong title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>);
+  }
+  // T2 — identidad (la etapa es la señal primaria; #folio o, si no hay, el id como fallback)
+  bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>);
+  if(o.production_number) bT2.push(<Badge key="pn" tone="identity">#{o.production_number}</Badge>);
+  else if(o.id) bT2.push(<Badge key="id" tone="context" style={{fontFamily:"'Geist Mono',monospace"}}>{o.id}</Badge>);
+  if(o.stock_role==="production") bT2.push(<Badge key="stockp" tone="context" title="Producción a stock — no se entrega al cliente, ingresa al inventario interno" icon={<PackageIcon size={11} weight="bold"/>}>a Stock</Badge>);
+  if(o.stock_role==="sale") bT2.push(<Badge key="stocks" tone="context" title="Venta desde stock — sale del inventario para entregar al cliente" icon={<ShoppingCartIcon size={11} weight="bold"/>}>desde Stock</Badge>);
+  // T3 — metadata (recede; colapsa tras "+N")
+  if(o.source==="web") bT3.push(<Badge key="web" tone="context" title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"} icon={<GlobeIcon size={11} weight="bold"/>}>Web</Badge>);
+  if(o.proof_approved) bT3.push(<Badge key="proof" tone="context" icon={<CheckIcon size={10} weight="bold"/>}>Prueba</Badge>);
+  if(o.file_url) bT3.push(<Badge key="file" tone="context" title="Tiene archivo adjunto" icon={<PaperclipIcon size={11} weight="bold"/>}>archivo</Badge>);
+  if(o.plate_status==="existing"&&!compact) bT3.push(<Badge key="plate" tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>);
+  if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
+  if(o.created_by){const stdU=["produccion","preprensa","german","admin"];if(!stdU.includes(o.created_by)) bT3.push(o.created_by==="secretaria"?<Badge key="cb" tone="context">Lupita</Badge>:<Badge key="cb" tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>);}
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
@@ -9641,30 +9671,10 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {/* 🆕 v10.72.87 — facturado a un tercero distinto del cliente productor */}
         {o.bill_to_client_id&&!compact&&<div style={{fontSize:10,color:C.fac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.fac+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.fac+"40"}} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"}><UsersIcon size={11} weight="bold"/>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</div>}
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
-          <span style={{fontSize:(o.cart_folio||o.web_folio)?9:10,color:C.t3}}>{o.id}</span>
-          <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:8,fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage}/></span>
-          {o.sin_empaque_sygma&&<Badge tone="danger" strong title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)" icon={<PackageIcon size={11} weight="bold"/>}>Sin logo SYGMA</Badge>}
-          {o.source==="web"&&<Badge tone="context" title={o.web_order_ref?"Ref: "+o.web_order_ref:"Pedido recibido desde sygma.mx"} icon={<GlobeIcon size={11} weight="bold"/>}>Web</Badge>}
-          {o.stock_role==="production"&&<Badge tone="context" title="Producción a stock — no se entrega al cliente, ingresa al inventario interno" icon={<PackageIcon size={11} weight="bold"/>}>a Stock</Badge>}
-          {o.stock_role==="sale"&&<Badge tone="context" title="Venta desde stock — sale del inventario para entregar al cliente" icon={<ShoppingCartIcon size={11} weight="bold"/>}>desde Stock</Badge>}
-          {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority}/></span>}
-          {o.production_number&&<Badge tone="identity">#{o.production_number}</Badge>}
-          {late&&<Badge tone="danger" icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>}
-          {stale&&<Badge tone={stale.lv==="critical"?"danger":"warn"}>{stale.lb}</Badge>}
-          {/* v10.58.50: badge "falta costo/precio" de maquila visible para TODOS los roles
-              y desde maq_created (antes vivía dentro del bloque de botones — Karla veía
-              maquilas atoradas sin saber POR QUÉ; P-3562 estuvo 2 semanas así). */}
-          {isMaq&&["maq_created","maq_sent","maq_in_progress"].includes(o.stage)&&(()=>{
-            const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
-            const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
-            if(!noPrice&&!noCost)return null;
-            return <Badge tone="warn" title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>;
-          })()}
-          {o.proof_approved&&<Badge tone="context" icon={<CheckIcon size={10} weight="bold"/>}>Prueba</Badge>}
-          {o.file_url&&<Badge tone="context" icon={<PaperclipIcon size={11} weight="bold"/>}/>}
-          {o.plate_status==="existing"&&!compact&&<Badge tone="context" title="Reutiliza placa existente — saltó CTP" icon={<ArrowsClockwiseIcon size={10} weight="bold"/>}>Placa</Badge>}
-          {o.plate_status==="new_ctp"&&!compact&&<Badge tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>}
-          {o.created_by&&(()=>{const stdU=["produccion","preprensa","german","admin"];if(stdU.includes(o.created_by))return null;if(o.created_by==="secretaria")return <Badge tone="context">Lupita</Badge>;return <Badge tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>})()}
+          {bT1}{bT2}
+          {bT3.length>0&&(badgesOpen
+            ? <>{bT3}<button onClick={e=>{e.stopPropagation();setBadgesOpen(false);}} title="Ocultar etiquetas" style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",borderRadius:6,background:C.sf,color:C.t2,border:"none",cursor:"pointer"}}><CaretUpIcon size={10} weight="bold"/></button></>
+            : <button onClick={e=>{e.stopPropagation();setBadgesOpen(true);}} title={bT3.length+" etiqueta"+(bT3.length===1?"":"s")+" más"} style={{display:"inline-flex",alignItems:"center",gap:2,padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:600,lineHeight:1.45,background:C.sf,color:C.t2,border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><PlusIcon size={9} weight="bold"/>{bT3.length}</button>)}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
