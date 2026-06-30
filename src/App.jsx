@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.14 — /impeccable distill OCard (re-critique P1, bloque fiscal): los 5 banners de flag full-width a medida
+//   (Editada-tras-facturar, REIMPRIMIR, DEVUELTA, Re-trabajo, Facturar-a-tercero) pasan a UNA fila de chips Badge con
+//   tonos semánticos, ordenados por urgencia, demotados bajo el folio/pago. Mata 5 divs bespoke, agrupa, rankea.
 // v10.73.13 — /impeccable polish OCard (cierre del arco): consolidación de tokens — los fontSize literales que el
 //   typeset dejó pendientes (agente/teléfono/papel/fechas/web_folio/agrupada) pasan a la escala F (renombres sin cambio
 //   de valor). Verificado: focus-visible y prefers-reduced-motion ya cubiertos por el CSS global; detector limpio en OCard.
@@ -9725,13 +9728,16 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             </div>}
           </div>
         </div>}
-        {o.has_post_invoice_edits&&<div style={{fontSize:10,color:C.amb,fontWeight:600,marginBottom:4,padding:"3px 8px",background:C.amb+"10",borderRadius:6,display:"inline-block",border:"1px solid "+C.amb+"25"}} title="Esta orden fue editada después de tener folio fiscal asignado"><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Editada después de facturar</div>}
-        {o.needs_reprint&&<div style={{fontSize:10,color:C.dn,fontWeight:700,marginBottom:4,padding:"3px 8px",background:C.dn+"15",borderRadius:6,display:"inline-block",border:"1.5px solid "+C.dn}} title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."}><PrinterIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>REIMPRIMIR · v{o.print_version||"?"} obsoleta</div>}
-        {/* 🔁 v10.72.83 — DEVUELTA (re-trabajo): la venta sigue vigente, se rehízo en otra orden */}
-        {o.returned_at&&<div style={{fontSize:10,color:C.wn,fontWeight:800,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.wn+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1.5px solid "+C.wn+"55"}} title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")}><ArrowUUpLeftIcon size={11} weight="bold"/>DEVUELTA</div>}
-        {o.returned_from_order_id&&<div style={{fontSize:10,color:C.ac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.acL,borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.ac+"40"}} title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)"><ArrowUUpLeftIcon size={11} weight="bold"/>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</div>}
-        {/* 🆕 v10.72.87 — facturado a un tercero distinto del cliente productor */}
-        {o.bill_to_client_id&&<div style={{fontSize:10,color:C.fac,fontWeight:700,marginBottom:4,marginRight:4,padding:"3px 8px",background:C.fac+"12",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3,border:"1px solid "+C.fac+"40"}} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"}><UsersIcon size={11} weight="bold"/>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</div>}
+        {/* v10.73.14 — /impeccable distill (re-critique P1): los 5 banners de flag full-width a medida pasan a UNA fila
+            de chips Badge con tonos semánticos, ordenados por urgencia (reimprimir/devuelta → info). Demotados bajo el
+            folio/pago (la señal fiscal primaria), agrupados en 1 fila vs 5 apiladas. Mismos datos + títulos. */}
+        {(o.needs_reprint||o.returned_at||o.has_post_invoice_edits||o.returned_from_order_id||o.bill_to_client_id)&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
+          {o.needs_reprint&&<Badge tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>}
+          {o.returned_at&&<Badge tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>}
+          {o.has_post_invoice_edits&&<Badge tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>}
+          {o.returned_from_order_id&&<Badge tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>}
+          {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
+        </div>}
         </div>}
         {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
         {!compact&&<ProgressBar order={o}/>}
