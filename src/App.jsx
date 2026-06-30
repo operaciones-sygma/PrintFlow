@@ -4,6 +4,13 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.2 — FACTURAR A UN TERCERO · FASE 2.5 (plan matriz, tercero POR GRUPO): cada factura de un plan matriz puede
+//   ir a su propio RFC (caso KFC multi-sucursal). BD: oc_invoice_split_groups.bill_to_* + CHECK (corona_saldo sin
+//   tercero); RPC assign_oc_invoice_split_plan acepta bill_to por grupo (guards Corona/RFC/productor + RAISE si
+//   incompleto); puente sync_invoice_from_oc_split_group resuelve el tercero SOLO en RAMA 2 (+ re-valida no-anticipo);
+//   merge_clients re-apunta. Frontend: control "+ Facturar a tercero" por grupo + overlay (BillToSection). Cancelación/
+//   portal heredan el tercero gratis (productor-Corona bloqueado a propósito). Endurecido tras workflow adversarial
+//   (4 LOW). 8 pruebas rollback.
 // v10.73.1 — Fase 2 scan round-2 (1 MED + 2 LOW): cierra el "doble tercero" (set_oc_bill_to y set_order_bill_to
 //   ahora mutuamente excluyentes → una OC no queda atascada con tercero por-orden + tercero OC) + pre-filtro UI
 //   en AssignOCFolioModal. Diferido documentado: due_date consolidado usa MAX (pre-existente, criterio de aging).
@@ -5749,6 +5756,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       doc_type: "factura",
       pre_assigned: false,
       reason: "",
+      bill_to: null, // 🆕 Fase 2.5 — tercero de este grupo (null | {client_id,name,rfc} | {name,rfc,...,isNew} | {incomplete:true})
       // v10.58.38: lines incluye lastEdited para fix del switch doc_type en modo amount
       // lines: {[order_id]: {qty: number, amountConIva: number, lastEdited: 'qty'|'amount'}}
       lines: Object.fromEntries(eligibleOrders.map(o => [o.id, {qty: 0, amountConIva: 0, lastEdited: "qty"}]))
@@ -5758,6 +5766,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [coronaInfo, setCoronaInfo] = useState(null);
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
+  // 🆕 Fase 2.5 — tercero POR GRUPO: edición en overlay (índice del grupo) + borrador local del picker
+  const [billToEditGroup, setBillToEditGroup] = useState(null);
+  const [billToDraft, setBillToDraft] = useState(null);
 
   // v10.58.38: persistir captureMode al cambiar
   useEffect(() => {
@@ -5809,6 +5820,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       const restored = d.groups.map(g => ({
         label: g.label||"", folio: g.folio||"", doc_type: g.doc_type||"factura",
         pre_assigned: !!g.pre_assigned, reason: g.reason||"", totalTarget: g.totalTarget||"",
+        bill_to: g.bill_to||null, // 🆕 Fase 2.5 — preservar el tercero del grupo al restaurar borrador
         lines: Object.fromEntries(eligibleOrders.map(o => {
           const c = (g.lines||{})[o.id];
           return [o.id, c ? {qty:Number(c.qty||0), amountConIva:Number(c.amountConIva||0), lastEdited:(c.lastEdited==="amount"?"amount":"qty")} : {qty:0, amountConIva:0, lastEdited:"qty"}];
@@ -6009,6 +6021,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             doc_type: "factura",
             pre_assigned: false,
             reason: "",
+            bill_to: null,
             // v10.58.39 FIX HIGH #5: lastEdited debe inicializarse aquí también.
             // Antes: solo el initializer (línea ~4042) lo tenía. Si Karla subía N de 2 a 3
             // y capturaba en modo amount en grupo nuevo, el doc_type onChange caía a la rama
@@ -6171,6 +6184,14 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       if(g.pre_assigned && (g.reason||"").trim().length < 3) {
         errors.push(`Factura ${i+1}: razón requerida para pre-asignación (mín 3 chars)`);
       }
+      if(g.doc_type !== "corona_saldo" && g.bill_to) {
+        // Re-derivar la completitud contra el doc_type ACTUAL (no confiar en el snapshot): un tercero sin RFC
+        // capturado en remisión y luego cambiado a factura debe marcar error (espejo del guard del RPC).
+        const btNoRfc = g.doc_type === "factura" && !(g.bill_to.rfc && String(g.bill_to.rfc).trim());
+        if(g.bill_to.incomplete || btNoRfc) {
+          errors.push(`Factura ${i+1}: el tercero requiere RFC para factura (o completa los datos)`);
+        }
+      }
     });
     // Saldo Corona
     if(coronaTotal > 0 && coronaTotal > coronaBalance) {
@@ -6193,6 +6214,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           doc_type: g.doc_type,
           pre_assigned: g.pre_assigned,
           reason: g.pre_assigned ? (g.reason||"").trim() : null,
+          bill_to: g.doc_type === "corona_saldo" ? null : (g.bill_to||null), // 🆕 Fase 2.5 — tercero por grupo
           lines: Object.entries(g.lines)
             .filter(([oid, c]) => Number(c.qty||0) > 0)
             .map(([oid, c]) => ({
@@ -6395,7 +6417,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         updateGroup(i, {
                           doc_type: newType,
                           folio: newType === "corona_saldo" ? "" : (prefixOk ? g.folio : ""),
-                          lines: newLines
+                          lines: newLines,
+                          bill_to: newType === "corona_saldo" ? null : g.bill_to // 🆕 Fase 2.5 — corona_saldo no lleva tercero
                         });
                       }}
                       style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto"}}>
@@ -6407,6 +6430,15 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                       <input value={g.folio||""} placeholder={g.doc_type==="factura"?"D-XXXX":"R-XXXX"}
                         onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
                         style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
+                    )}
+                    {/* 🆕 Fase 2.5 — facturar ESTE grupo a un tercero (razón social distinta del productor) */}
+                    {g.doc_type !== "corona_saldo" && (
+                      <button type="button" onClick={()=>{setBillToDraft(null); setBillToEditGroup(i);}}
+                        title="Dirigir esta factura/remisión a una razón social distinta del cliente productor"
+                        style={{...inp,padding:"4px 8px",fontSize:10,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
+                          ...((g.bill_to && !g.bill_to.incomplete) ? {borderColor:C.fac,color:C.fac,fontWeight:700} : (g.bill_to && g.bill_to.incomplete) ? {borderColor:C.dn,color:C.dn} : {color:C.t2})}}>
+                        <UsersIcon size={10} weight="bold"/>{(g.bill_to && !g.bill_to.incomplete) ? ("→ "+(g.bill_to.name||"Tercero")) : (g.bill_to && g.bill_to.incomplete) ? "Tercero incompleto" : "+ Facturar a tercero"}
+                      </button>
                     )}
                     <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,cursor:"pointer"}}>
                       <input type="checkbox" checked={g.pre_assigned}
@@ -6574,6 +6606,30 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           {saving ? "Creando..." : <><ChartBarIcon size={14} weight="bold"/>Crear {groups.length} {groups.length===1?"factura":"facturas"}</>}
         </button>
       </div>
+
+      {/* 🆕 Fase 2.5 — overlay para elegir el tercero de un grupo (reusa BillToSection; "Guardar" commitea al grupo) */}
+      {billToEditGroup !== null && groups[billToEditGroup] && (
+        <div onClick={()=>setBillToEditGroup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,maxWidth:480,width:"100%",maxHeight:"88vh",overflow:"auto"}}>
+            <div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:13.5,fontWeight:700,display:"flex",alignItems:"center",gap:6,color:C.tx}}>
+              <UsersIcon size={15} weight="bold" color={C.fac}/>Facturar grupo {billToEditGroup+1}{groups[billToEditGroup].label?(" ("+groups[billToEditGroup].label+")"):""} a un tercero
+            </div>
+            {groups[billToEditGroup].bill_to && !groups[billToEditGroup].bill_to.incomplete && (
+              <div style={{margin:"12px 20px 0",padding:"8px 12px",background:C.fac+"0e",border:"1px solid "+C.fac+"40",borderRadius:10,fontSize:11.5,color:C.tx}}>
+                <b>Tercero actual:</b> {groups[billToEditGroup].bill_to.name}{groups[billToEditGroup].bill_to.rfc?(" · "+groups[billToEditGroup].bill_to.rfc):""}
+                <div style={{fontSize:10,color:C.t2,marginTop:2}}>Elige otro abajo y pulsa Guardar para cambiarlo · Cancelar lo conserva · Quitar lo elimina.</div>
+              </div>
+            )}
+            <BillToSection invoiceType={groups[billToEditGroup].doc_type==="factura"?"factura":"remision"} onChange={setBillToDraft} accent={C.fac}/>
+            <div style={{display:"flex",gap:8,padding:"12px 20px",borderTop:"0.5px solid "+C.bd}}>
+              {groups[billToEditGroup].bill_to && <button type="button" onClick={()=>{updateGroup(billToEditGroup,{bill_to:null}); setBillToEditGroup(null);}} style={{...bs(C.sf,C.dn),fontSize:11.5,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Quitar</button>}
+              <div style={{flex:1}}/>
+              <button type="button" onClick={()=>setBillToEditGroup(null)} style={{...bs(C.sf,C.t2),fontSize:11.5,border:"0.5px solid "+C.bd}}>Cancelar</button>
+              <button type="button" disabled={!billToDraft || billToDraft.incomplete} onClick={()=>{updateGroup(billToEditGroup,{bill_to:billToDraft}); setBillToEditGroup(null);}} style={{...bt(C.fac),fontSize:11.5,opacity:(!billToDraft||billToDraft.incomplete)?0.4:1}}>Guardar tercero</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>;
 }
