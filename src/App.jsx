@@ -4,6 +4,10 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.3 — Facturar a tercero: scan HOLÍSTICO del feature completo (6 hallazgos). HIGH cerrado: pedido WEB/MP +
+//   tercero por orden (F1) facturaba/cobraba al RFC del tercero (F1 no bloqueaba web como F2) → bloqueo en 3 capas.
+//   MED: move_order_to_oc no vigilaba la exclusión de tercero (podía dejar una OC sin foliar) → guard. Frontend:
+//   ocultar tercero en pedidos web (F1), F2 mira TODAS las órdenes (no solo pendientes), F2.5 oculta en OC Corona.
 // v10.73.2 — FACTURAR A UN TERCERO · FASE 2.5 (plan matriz, tercero POR GRUPO): cada factura de un plan matriz puede
 //   ir a su propio RFC (caso KFC multi-sucursal). BD: oc_invoice_split_groups.bill_to_* + CHECK (corona_saldo sin
 //   tercero); RPC assign_oc_invoice_split_plan acepta bill_to por grupo (guards Corona/RFC/productor + RAISE si
@@ -6432,7 +6436,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
                     )}
                     {/* 🆕 Fase 2.5 — facturar ESTE grupo a un tercero (razón social distinta del productor) */}
-                    {g.doc_type !== "corona_saldo" && (
+                    {g.doc_type !== "corona_saldo" && !isCorona && (
                       <button type="button" onClick={()=>{setBillToDraft(null); setBillToEditGroup(i);}}
                         title="Dirigir esta factura/remisión a una razón social distinta del cliente productor"
                         style={{...inp,padding:"4px 8px",fontSize:10,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
@@ -6988,7 +6992,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
         )}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete)} style={{...bt(type==="factura"?C.fac:(type==="remision"?C.live:(isStockLoad?C.emr:C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete))?0.4:1}}>Continuar →</button>
@@ -7307,7 +7311,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:16}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!canProceed} style={{...bt(C.amb),flex:1,justifyContent:"center",opacity:!canProceed?0.4:1}}>Continuar →</button>
@@ -9109,7 +9113,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     [ocOrders]);
   const pendingCount = pendingOrders.length;
   // 🆕 Fase 2 — una OC no puede mezclar tercero POR ORDEN (Fase 1) con tercero a NIVEL OC; pre-filtro UI (el backend además lo rechaza).
-  const ocHasPerOrderBillTo = useMemo(()=>pendingOrders.some(o=>o.bill_to_client_id), [pendingOrders]);
+  const ocHasPerOrderBillTo = useMemo(()=>ocOrders.some(o=>o.bill_to_client_id && !o.cancelled_at && !String(o.stage||"").includes("cancelled")), [ocOrders]); // espejo del predicado del backend (incl. órdenes ya facturadas/entregadas)
 
   const prefix = invoiceType==="factura" ? "D-" : "R-";
   const startNum = parseFolioNum(folioStart);
