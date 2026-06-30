@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.11 — /impeccable harden OCard (a11y, cierra el P1 del audit): la card pasa de <div onClick> no enfocable a
+//   role=button + tabIndex + onKeyDown (Enter/Espacio abre el detalle) + aria-label (folio+cliente+etapa) → operable por
+//   teclado. Live-region (role=status) en "Procesando…" + aria-label/title en el "+1" del thumbnail y el reloj de precio.
 // v10.73.10 — /impeccable typeset OCard (P2 escala tipográfica): nueva escala de 5 pasos `F` (title/label/body/meta/
 //   micro) junto a `C`; OCard pasa de 8 tamaños mezclados (varios a 1px) a la escala nombrada en sus elementos de
 //   jerarquía. Cambios de píxel: cart-folio 16→15 y cliente-compact 12→11 (mata los 2 redundantes); el resto solo nombra.
@@ -9656,6 +9659,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
 
   return <div draggable={isDraggable} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)}
     onClick={()=>onAction(o.id,"detail")}
+    role="button" tabIndex={0}
+    aria-label={"Orden "+(o.production_number||o.id||"")+(o.client?", "+o.client:"")+", "+(st?.l||o.stage)+". Enter para abrir el detalle."}
+    onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();onAction(o.id,"detail");}}}
     style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:C.tCard}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
     {/* v10.65.1 — VARIANTE B (impeccable critique): el acento de etapa/urgencia deja de ser raya
@@ -9664,7 +9670,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><DotsSixVerticalIcon size={13} color={C.ac}/><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
     {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
-      {(o.image_url||o.image_url_2||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<div style={{position:"relative",flexShrink:0}}><img src={o.image_url||o.image_url_2||o.image||o.file_url} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10}}/>{o.image_url&&o.image_url_2&&<div style={{position:"absolute",bottom:-2,right:-2,background:C.fac,color:"#fff",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:700,boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}>+1</div>}</div>}
+      {(o.image_url||o.image_url_2||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<div style={{position:"relative",flexShrink:0}}><img src={o.image_url||o.image_url_2||o.image||o.file_url} alt="" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10}}/>{o.image_url&&o.image_url_2&&<div title="2 imágenes adjuntas" aria-label="2 imágenes adjuntas" style={{position:"absolute",bottom:-2,right:-2,background:C.fac,color:"#fff",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:700,boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}>+1</div>}</div>}
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
           {bT1}{bT2}
@@ -9682,7 +9688,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
             {(o.created_at||o.due_date)&&<div style={{fontSize:compact?9:10,marginTop:1,color:C.t3}}>{o.created_at&&<><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{color:late?C.dn:"inherit"}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.due_date)}</span>}</div>}
           </div>
           {!compact&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
-            {!hp&&vOwns?(o.price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
+            {!hp&&vOwns?(o.price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span title="Precio pendiente" aria-label="Precio pendiente" style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
           </div>}
         </div>
         {/* v10.73.8 — /impeccable layout: el bloque de estado fiscal + flags (folio, agrupada, splits, post-edit,
@@ -9726,7 +9732,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     </div>
 
     {!compact&&canAct&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
-      {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
+      {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span role="status" aria-live="polite" style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
       <StageFlowButtons o={o} role={role} onAction={onAction}/>
       <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
         {/* v10.20.0 — Duplicar disponible para admin (siempre) y para secretaria/vendedor con ownership, excepto cancelled */}
