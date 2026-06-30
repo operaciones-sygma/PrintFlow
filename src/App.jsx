@@ -3778,12 +3778,19 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
+    // 🆕 v10.73.3 — venta por KILOS (china blanco): si el producto trae specs.sell_unit='kg',
+    // Karla captura kilos y se convierte a unidades (qty) con units_per_kg (ej. 25kg=2000u → ×80).
+    // El resto de productos sigue en piezas/unidades como hoy. Default seguro: sin specs → unidades.
+    const _kg = p.specs?.sell_unit==="kg";
     setCart([...cart, {
       client_product_id: p.id,
       name: p.name,
       sku: p.sku,
       stock_actual: p.stock_actual,
-      qty: 1,
+      sellUnit: _kg ? "kg" : "u",
+      unitsPerKg: Number(p.specs?.units_per_kg)||null,
+      qtyKg: "",
+      qty: _kg ? 0 : 1,
       stock_pool_id: p.stock_pool_id,
       client_id: p.client_id
     }]);
@@ -3924,13 +3931,20 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                     <div style={{fontSize:12,fontWeight:700,color:C.tx,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
                     <button onClick={()=>removeFromCart(c.client_product_id)} disabled={busy} style={{...bt(C.sf,C.dn),padding:"2px 8px",fontSize:11,border:"0.5px solid "+C.dn+"40"}}><XIcon size={12} weight="bold"/></button>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
+                  {c.sellUnit==="kg" ? <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
+                    <div style={{flex:1}}>
+                      <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Kilos</div>
+                      <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:C.amb+"60")}} type="number" step="0.5" min="0" value={c.qtyKg} placeholder="kg" onChange={e=>{const kg=parseFloat(e.target.value)||0;updateItem(c.client_product_id,{qtyKg:e.target.value,qty:Math.round(kg*(c.unitsPerKg||0))})}} disabled={busy}/>
+                    </div>
+                    <div style={{flex:1.4,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:5,lineHeight:1.4}}>{c.qty>0?<>= <b>{c.qty.toLocaleString()}</b> u · {(c.qty/1000).toLocaleString(undefined,{maximumFractionDigits:2})} millares<br/></>:null}de ~<b>{(c.stock_actual/(c.unitsPerKg||1)).toLocaleString(undefined,{maximumFractionDigits:1})}</b> kg disp.</div>
+                  </div>
+                  : <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11}}>
                     <div style={{flex:1}}>
                       <div style={{color:C.t2,fontSize:9,textTransform:"uppercase",fontWeight:600}}>Cantidad</div>
                       <input style={{...inp,padding:"4px 6px",fontSize:12,border:"1.5px solid "+(qtyOk?C.bd:C.amb+"60")}} type="number" step="1" min="1" max={c.stock_actual} value={c.qty} onChange={e=>updateItem(c.client_product_id,{qty:parseInt(e.target.value,10)||0})} disabled={busy}/>
                     </div>
                     <div style={{flex:1,fontSize:10,color:c.qty>c.stock_actual?C.dn:C.t3,paddingTop:14}}>de <b>{c.stock_actual}</b> disp.</div>
-                  </div>
+                  </div>}
                 </div>;
               })}
             </>}
