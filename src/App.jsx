@@ -4,6 +4,9 @@ import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks 
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.6 — "Agregar Producto Existente" a una OC: la lista de texto pasó a un GRID de OrderPickCard con MINIATURA
+//   de cada orden (más fácil de identificar de un vistazo, pedido del usuario tras auditoría de pickers). OrderPickCard
+//   gana prop opcional `extra` (no afecta Devoluciones/Cancelaciones) para conservar el badge "en OC-XXX" + entrega.
 // v10.73.5 — Impresión: alineadas las leyendas de la Copia Producción tras agregar el Agente (el banner decía
 //   "sin datos del cliente" y el botón "sin contactos" — ahora "sin datos fiscales", que es lo que de verdad omite).
 // v10.73.4 — Impresión: el AGENTE (contacto del cliente, o.client_agent) ahora sale en TODAS las hojas junto a la
@@ -8817,36 +8820,21 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
               Si esperabas ver alguna, verifica que: (1) sea del mismo cliente, (2) no tenga folio asignado, (3) no esté entregada/cancelada.
             </div>
           </div>
-        ) : candidates.map(o => {
-          const isSelected = selectedIds.has(o.id);
-          const inOtherOC = o.purchase_order_id && o.purchase_order_id !== oc.id;
-          return (
-            <div key={o.id}
-              onClick={() => toggle(o.id)}
-              style={{
-                padding:"10px 12px",
-                borderBottom:"1px solid "+C.bd,
-                cursor:"pointer",
-                background: isSelected ? C.ac+"10" : "transparent",
-                display:"flex",alignItems:"center",gap:10,
-              }}>
-              <input type="checkbox" checked={isSelected} onChange={() => toggle(o.id)} onClick={e => e.stopPropagation()} style={{cursor:"pointer"}}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                  {o.production_number && <span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:5,fontSize:10,fontWeight:700}}>#{o.production_number}</span>}
-                  <span style={{fontWeight:700,fontSize:13}}>{o.product_type||"(sin tipo)"}</span>
-                  {o.quantity && <span style={{fontSize:11,color:C.t2}}>· {Number(o.quantity).toLocaleString()} pzas</span>}
-                </div>
-                <div style={{fontSize:10,color:C.t2,marginTop:3,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                  <span>Stage: <strong><StageLbl stage={o.stage}/></strong></span>
-                  {o.due_date && <span style={{display:"inline-flex",alignItems:"center",gap:3}}>·<CalendarDotsIcon size={10} weight="bold"/>{fD(o.due_date)}</span>}
-                  {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}}>Actualmente en {o.purchase_order_id}</span>}
+        ) : (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(255px, 1fr))",gap:8,padding:8}}>
+            {candidates.map(o => {
+              const inOtherOC = o.purchase_order_id && o.purchase_order_id !== oc.id;
+              const extra = (o.due_date || inOtherOC || !o.purchase_order_id) ? (
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginTop:1}}>
+                  {o.due_date && <span style={{fontSize:9,color:C.t2,display:"inline-flex",alignItems:"center",gap:2}}><CalendarDotsIcon size={9} weight="bold"/>{fD(o.due_date)}</span>}
+                  {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}} title={"Actualmente en "+o.purchase_order_id+" — se moverá a esta OC"}>en {o.purchase_order_id}</span>}
                   {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t3,padding:"1px 6px",borderRadius:4,fontSize:9}}>Sin OC</span>}
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              ) : null;
+              return <OrderPickCard key={o.id} o={o} selected={selectedIds.has(o.id)} onToggle={() => toggle(o.id)} accent={C.ac} extra={extra}/>;
+            })}
+          </div>
+        )}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
         <div style={{fontSize:11,color:C.t2}}>
@@ -12233,7 +12221,7 @@ function SharedFoliosModal({sharedOCs, folioOrders, tColor, onNavigateToOC, onNa
 // 🖼️ v10.72.85 — tarjeta seleccionable con miniatura para los pickers de Devoluciones/Cancelaciones.
 // La imagen ayuda a distinguir la orden de un vistazo (pedido del usuario). Reusa el patrón del modal Replicar
 // (thumbnail con cadena de fallback image_url→image_url_2→image→file_url y placeholder si la imagen no carga).
-function OrderPickCard({o, selected, onToggle, accent}){
+function OrderPickCard({o, selected, onToggle, accent, extra}){
   const [imgErr,setImgErr]=useState(false);
   // v10.72.86 — file_url solo si es imagen (no PDF → evita fetch fallido + parpadeo)
   const fu=/\.(png|jpe?g|webp|gif|avif)$/i.test(o.file_url||"")?o.file_url:null;
@@ -12253,6 +12241,7 @@ function OrderPickCard({o, selected, onToggle, accent}){
         </div>
         <div style={{fontSize:12,fontWeight:600,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client||"—"}{o.client_company?" · "+o.client_company:""}</div>
         <div style={{fontSize:10,color:C.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null,dstr].filter(Boolean).join(" · ")}</div>
+        {extra}
       </div>
     </label>
   );
