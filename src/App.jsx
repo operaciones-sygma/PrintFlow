@@ -1758,7 +1758,10 @@ function getIncompleteData(orders) {
     sinTelefono: active.filter(o => !o.client_phone),
     sinEmail: active.filter(o => !o.client_email),
     sinAgente: active.filter(o => !o.agent),
-    maquilaSinProveedor: active.filter(o => o.order_type === "maquila" && !o.maq_provider)
+    maquilaSinProveedor: active.filter(o => o.order_type === "maquila" && !o.maq_provider),
+    // v10.73.5 — maquilas sin COSTO de proveedor capturado (maq_cost). Distinto de "Sin precio"
+    // (que en maquila mira maq_price, el precio al cliente). El costo se necesita para el margen y para recibir.
+    maquilaSinCosto: active.filter(o => o.order_type === "maquila" && (!o.maq_cost || Number(o.maq_cost) === 0))
   };
 }
 
@@ -12131,6 +12134,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           { key: "sinCantidad", label: "Sin cantidad", color: C.amb, list: incomplete.sinCantidad, alwaysExpanded: true },
           { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", color: C.amb, list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
           { key: "maquilaSinProveedor", label: "Maquila sin proveedor", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
+          { key: "maquilaSinCosto", label: "Maquila sin costo (proveedor)", color: C.amb, list: incomplete.maquilaSinCosto, alwaysExpanded: true },
           { key: "sinAgente", label: "Sin agente asignado", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
           { key: "sinTelefono", label: "Sin teléfono cliente", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
           { key: "sinEmail", label: "Sin email cliente", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
