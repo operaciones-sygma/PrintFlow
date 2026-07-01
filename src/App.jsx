@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.16 — /impeccable typeset OCard (re-critique P3): cierra la migración de la escala F en el bloque fiscal —
+//   chips de pago (PAGADA/PARCIAL/anticipado), header y filas de splits, y el timer de máquina pasan de px crudos
+//   (9/10/11) a F.micro/meta/body. Renombres sin cambio de valor; OCard ya usa la escala nombrada de punta a punta.
 // v10.73.15 — /impeccable harden OCard (re-critique P1 #2, a11y): aria-label en los 6 iconos de utilidad (duplicar/
 //   imprimir/flujo/editar/folio-histórico/mover; title solo no es accessible name confiable) + aria-expanded/aria-label
 //   en el toggle "+N" de badges + role=group "Acciones de la orden" en el cluster. Aditivo, cero cambio visual.
@@ -9710,23 +9713,23 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {hasFiscalRows&&<div style={{marginTop:7}}>
         {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:o.web_folio?2:4}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.title,fontWeight:800,color:C.cart,letterSpacing:0.5,lineHeight:1}}><ShoppingCartIcon size={15} weight="bold"/>{o.cart_folio}</span></div>}
         {o.web_folio&&<div style={{fontSize:F.meta,fontWeight:600,color:C.t2,letterSpacing:0.3,marginBottom:4}}>{o.web_folio}</div>}
-        {o.invoice_folio&&<div style={{fontSize:F.label,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:9,color:C.amb,marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:9,color:C.live,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.live+"15",borderRadius:4}}><CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:9,color:C.fac,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.fac+"15",borderRadius:4}}><CircleHalfIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
+        {o.invoice_folio&&<div style={{fontSize:F.label,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.3,marginBottom:4}}>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}{o.invoice_pre_assigned?<span style={{fontSize:F.micro,color:C.amb,marginLeft:6,fontWeight:600}}>(anticipado)</span>:null}{o.payment_status==="paid"&&<span style={{fontSize:F.micro,color:C.live,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.live+"15",borderRadius:4}}><CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PAGADA · {o.payment_method}</span>}{o.payment_status==="partial"&&<span style={{fontSize:F.micro,color:C.fac,marginLeft:6,fontWeight:700,padding:"1px 6px",background:C.fac+"15",borderRadius:4}}><CircleHalfIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>PARCIAL · ${Number(o.payment_amount||0).toLocaleString("es-MX",{maximumFractionDigits:0})}</span>}</div>}
         {o.grouped_invoice_folio&&!o.invoice_folio&&<div style={{fontSize:F.body,fontWeight:700,color:C.t2,marginBottom:4}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Facturada agrupada en {o.grouped_invoice_folio}</div>}
         {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
-        {o.has_splits&&<div style={{fontSize:11,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
+        {o.has_splits&&<div style={{fontSize:F.body,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
           <FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
           <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
             {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
-              <div key={s.id} style={{fontSize:10,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+              <div key={s.id} style={{fontSize:F.meta,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>#{s.position}</span>
                 {s.doc_type==="corona_saldo"
                   ? <span style={{color:C.emr}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
                   : <span style={{color:s.doc_type==="factura"?C.fac:C.live}}>{s.doc_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>}{s.invoice_folio}</span>}
                 <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-                {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:9,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
+                {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:F.micro,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
               </div>
             ))}
-            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:9,color:C.t2,marginTop:2,fontStyle:"italic"}}>
+            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:F.micro,color:C.t2,marginTop:2,fontStyle:"italic"}}>
               {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
             </div>}
           </div>
@@ -9742,7 +9745,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
           {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
         </div>}
         </div>}
-        {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:10,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
+        {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
         {!compact&&<ProgressBar order={o}/>}
       </div>
     </div>
