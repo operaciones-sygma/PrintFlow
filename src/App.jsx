@@ -2210,6 +2210,12 @@ function diagnoseOrder(o){
   const _maqName=_maqByVendor?vendorDisplayName(_maqAg):"Lupita"; // v10.58.67: nombre canónico
   if(isMaqStage&&(noPrice||noCost))
     return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir",_maqRole,_maqName,{money:true,action:"edit"});
+  // v10.73.6 (Marcelo) — maquila YA recibida pero sin COSTO de proveedor: el candado "sin costo no se recibe"
+  // no siempre aplicó (históricos/importados) y quedaron recibidas sin costo. La Torre la avisa igual porque
+  // el costo se necesita para el margen y para facturar bien. Toca al vendedor (o Lupita). Complementa el
+  // apartado "Maquila sin costo" de Salud Operativa (que también cubre maq_received).
+  if(stage==="maq_received"&&noCost)
+    return R("maq_cost","💸 Recibida SIN costo de proveedor capturado"+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · captúralo para el margen",_maqRole,_maqName,{money:true,action:"edit"});
   if(isMaqStage&&!(o.maq_provider||"").trim())
     return R("maq_prov","🏭 Maquila sin proveedor asignado",_maqRole,_maqName,{action:"edit"});
   if(stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)){
@@ -12137,7 +12143,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           { key: "sinCantidad", label: "Sin cantidad", color: C.amb, list: incomplete.sinCantidad, alwaysExpanded: true },
           { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", color: C.amb, list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
           { key: "maquilaSinProveedor", label: "Maquila sin proveedor", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
-          { key: "maquilaSinCosto", label: "Maquila sin costo (proveedor)", color: C.amb, list: incomplete.maquilaSinCosto, alwaysExpanded: true },
+          { key: "maquilaSinCosto", label: "Maquila sin costo (proveedor)", color: "#ff3b30", list: incomplete.maquilaSinCosto, alwaysExpanded: true },
           { key: "sinAgente", label: "Sin agente asignado", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
           { key: "sinTelefono", label: "Sin teléfono cliente", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
           { key: "sinEmail", label: "Sin email cliente", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
