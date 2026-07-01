@@ -7066,7 +7066,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
         )}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:12}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete)} style={{...bt(type==="factura"?C.fac:(type==="remision"?C.live:(isStockLoad?C.emr:C.t3))),flex:1,justifyContent:"center",opacity:(!type||!folioValid||!paymentValid||!stockLoadValid||(billTo&&billTo.incomplete))?0.4:1}}>Continuar →</button>
@@ -7385,7 +7385,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
         <div style={{display:"flex",gap:8,marginTop:16}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleProceed} disabled={!canProceed} style={{...bt(C.amb),flex:1,justifyContent:"center",opacity:!canProceed?0.4:1}}>Continuar →</button>
@@ -9410,7 +9410,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         </div>}
 
         {/* 🆕 Fase 2 — Facturar TODA la OC a un tercero (solo modo "un folio compartido" = 1 CFDI = 1 RFC) */}
-        {mode==="shared" && !isCorona && !ocHasPerOrderBillTo && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"hidden"}}><BillToSection invoiceType={invoiceType} onChange={setBillTo} accent={tColor}/></div>}
+        {mode==="shared" && !isCorona && !ocHasPerOrderBillTo && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection invoiceType={invoiceType} onChange={setBillTo} accent={tColor}/></div>}
         {mode==="shared" && !isCorona && ocHasPerOrderBillTo && <div style={{marginBottom:14,padding:"9px 12px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:11,color:"#9a3412",fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill"/>Hay órdenes con "Facturar a tercero" por orden en esta OC; quítalo primero para facturar toda la OC a un tercero.</div>}
       </>}
 
