@@ -6694,8 +6694,12 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
 
       {/* 🆕 Fase 2.5 — overlay para elegir el tercero de un grupo (reusa BillToSection; "Guardar" commitea al grupo) */}
       {billToEditGroup !== null && groups[billToEditGroup] && (
-        <div onClick={()=>setBillToEditGroup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,maxWidth:480,width:"100%",maxHeight:"88vh",overflow:"auto"}}>
+        /* v10.73.10 — backdrop scrollable + top-aligned y card overflow:visible para que el dropdown de
+            ClientInput (Buscar existente) NO quede recortado por la card. El scroll (pantallas cortas) lo
+            absorbe el backdrop; el dropdown escapa la card y se ve completo. Fix del residual C1-R4 (wthxjhsfy),
+            acotado a ESTE overlay (no toca ClientInput global). */
+        <div onClick={()=>setBillToEditGroup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1200,padding:20,overflowY:"auto"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,maxWidth:480,width:"100%",margin:"auto",overflow:"visible"}}>
             <div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:13.5,fontWeight:700,display:"flex",alignItems:"center",gap:6,color:C.tx}}>
               <UsersIcon size={15} weight="bold" color={C.fac}/>Facturar grupo {billToEditGroup+1}{groups[billToEditGroup].label?(" ("+groups[billToEditGroup].label+")"):""} a un tercero
             </div>
