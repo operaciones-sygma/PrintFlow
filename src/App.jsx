@@ -2210,11 +2210,12 @@ function diagnoseOrder(o){
   const _maqName=_maqByVendor?vendorDisplayName(_maqAg):"Lupita"; // v10.58.67: nombre canónico
   if(isMaqStage&&(noPrice||noCost))
     return R("maq_cost","💸 Falta "+[noPrice&&"precio cliente",noCost&&"costo proveedor"].filter(Boolean).join(" y ")+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · sin esto NO se puede recibir",_maqRole,_maqName,{money:true,action:"edit"});
-  // v10.73.6 (Marcelo) — maquila YA recibida pero sin COSTO de proveedor: el candado "sin costo no se recibe"
-  // no siempre aplicó (históricos/importados) y quedaron recibidas sin costo. La Torre la avisa igual porque
-  // el costo se necesita para el margen y para facturar bien. Toca al vendedor (o Lupita). Complementa el
-  // apartado "Maquila sin costo" de Salud Operativa (que también cubre maq_received).
-  if(stage==="maq_received"&&noCost)
+  // v10.73.9 (Marcelo) — maquila recibida sin COSTO de proveedor. FOLIO PRIMERO: se avisa en la Torre SOLO si
+  // el folio ya está resuelto (invoice_folio||has_splits), para NO tapar el aviso "sin folio → Karla" (facturar
+  // = flujo de caja, prioridad). El caso típico (recibida sin folio) lo atiende Karla vía la regla no_folio de
+  // abajo; el costo faltante queda visible en ROJO en Salud Operativa ("Maquila sin costo", que ya incluye
+  // maq_received). Toca al vendedor (o Lupita). [Antes v10.73.7 disparaba siempre y enmascaraba el folio: wb3zfw71a C3-1.]
+  if(stage==="maq_received"&&noCost&&(o.invoice_folio||o.has_splits))
     return R("maq_cost","💸 Recibida SIN costo de proveedor capturado"+((o.maq_provider||"").trim()?" — proveedor "+o.maq_provider.trim():"")+" · captúralo para el margen",_maqRole,_maqName,{money:true,action:"edit"});
   if(isMaqStage&&!(o.maq_provider||"").trim())
     return R("maq_prov","🏭 Maquila sin proveedor asignado",_maqRole,_maqName,{action:"edit"});
