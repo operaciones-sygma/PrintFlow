@@ -9690,7 +9690,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
     role="button" tabIndex={0}
     aria-label={"Orden "+(o.production_number||o.id||"")+(o.client?", "+o.client:"")+", "+(st?.l||o.stage)+". Enter para abrir el detalle."}
     onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();onAction(o.id,"detail");}}}
-    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:C.tCard}}
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:C.tCard,position:moreOpen?"relative":undefined,zIndex:moreOpen?60:undefined}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
     {/* v10.65.1 — VARIANTE B (impeccable critique): el acento de etapa/urgencia deja de ser raya
         lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
