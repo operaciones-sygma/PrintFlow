@@ -3465,7 +3465,8 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
   useEscClose(onClose);
   const allCo=orders.filter(o=>o.client===clientName).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
   const co=role==="vendedor"?allCo.filter(o=>!o.created_by||o.created_by===userLogin):allCo;
-  const total=co.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+  // 🔧 scan jul-2026 #16/#17: excluir canceladas (no inflan el valor del cliente) + atribuir maq_price en maquila (canónico).
+  const total=co.filter(o=>!String(o.stage||"").includes("cancelled")).reduce((s,o)=>s+(o.order_type==="maquila"?(Number(o.maq_price)||0):(Number(o.price)||0)),0);
   const byType={};co.forEach(o=>{const k=o.product_type||"?";byType[k]=(byType[k]||0)+1}); // v10.34.2 fix #7 — fallback consistente con línea 2391
   const hp=role==="produccion"||role==="preprensa"||role==="german";
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={onClose}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"90%",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}><h3 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><UserIcon size={18} weight="bold"/>{clientName}</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{co.length} orden{co.length!==1?"es":""}{!hp?" · Total: "+fmt(total):""}</p>{Object.keys(byType).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>{Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,c])=><span key={t} style={{background:C.sf,padding:"4px 10px",borderRadius:8,fontSize:11}}>{t} <strong>{c}</strong></span>)}</div>}{co.map(o=><div key={o.id} style={{padding:"8px 0",borderBottom:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between"}}><div>{o.cart_folio&&<div style={{fontSize:11,fontWeight:700,color:C.cart,letterSpacing:0.3,marginBottom:1,display:"flex",alignItems:"center",gap:4}}><ShoppingCartIcon size={11} weight="bold"/>{o.cart_folio}</div>}{o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:1}}>{o.web_folio}</div>}{o.invoice_folio&&<div style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live,marginBottom:1,display:"flex",alignItems:"center",gap:4}}>{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold"/>:<ClipboardTextIcon size={11} weight="bold"/>}{o.invoice_folio}</div>}<div style={{fontSize:9,color:C.t3}}>{o.id} · {fD(o.created_at)}</div><div style={{fontSize:12}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div><span style={{background:(SM[o.stage]?.c||C.t3)+"15",color:SM[o.stage]?.c,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={9}/></span></div>{!hp&&(o.price||o.maq_price)&&<div style={{fontSize:14,fontWeight:700}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}</div>)}<button onClick={onClose} style={{...bt(C.sf,C.t2),width:"100%",justifyContent:"center",marginTop:14,border:"0.5px solid "+C.bd}}>Cerrar</button></div></div>;
@@ -9864,10 +9865,10 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
@@ -9882,10 +9883,10 @@ function StageFlowButtons({o,role,onAction}){
           <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
@@ -14240,11 +14241,17 @@ export default function PrintFlow() {
     // v10.58.43 #29: la query viene por created_at desc (supervivencia al límite);
     // re-ordenar por position para el display
     for (const k in splitsByOrder) splitsByOrder[k].sort((a,b)=>(a.position||0)-(b.position||0));
+    // 🔧 scan jul-2026 #11/#1: marcar órdenes con líneas VIVAS de plan matriz. oc_invoice_group_id NUNCA se puebla
+    // para el plan matriz, así que era código muerto detectarlo por ese campo — se cruza contra oc_invoice_split_lines.
+    const _matrixLines0 = matrixLinesResp?.data || [];
+    const matrixOrderIds = new Set();
+    for (const l of _matrixLines0) { if (!l.cancelled_at) matrixOrderIds.add(l.order_id); }
     const withSplits = data.map(o => {
+      const hml = matrixOrderIds.has(o.id);
       const sps = splitsByOrder[o.id];
-      if (!sps || sps.length === 0) return o;
+      if (!sps || sps.length === 0) return hml ? {...o, has_matrix_lines: true} : o;
       const alive = sps.filter(s => !s.cancelled_at);
-      return {...o, splits: sps, has_splits: alive.length > 0, splits_alive_count: alive.length};
+      return {...o, splits: sps, has_splits: alive.length > 0, splits_alive_count: alive.length, has_matrix_lines: hml};
     });
     // v10.58.40 Día 1: mergear plan matriz en purchaseOrders
     const groupsArr = matrixGroupsResp?.data || [];
@@ -14297,7 +14304,7 @@ export default function PrintFlow() {
     // transitoriamente "Facturar por partes" en órdenes ya divididas.
     setOrders(prev=>{
       const enrichedById={};
-      for(const o of prev){ if(o&&(o.has_splits!==undefined||o.splits)) enrichedById[o.id]={splits:o.splits,has_splits:o.has_splits,splits_alive_count:o.splits_alive_count}; }
+      for(const o of prev){ if(o&&(o.has_splits!==undefined||o.splits||o.has_matrix_lines!==undefined)) enrichedById[o.id]={splits:o.splits,has_splits:o.has_splits,splits_alive_count:o.splits_alive_count,has_matrix_lines:o.has_matrix_lines}; }
       return all.map(o=>enrichedById[o.id]?{...o,...enrichedById[o.id]}:o);
     });
   },[]);
@@ -15055,6 +15062,16 @@ export default function PrintFlow() {
     //   - Cambiar client_id post-folio desincroniza cobranza.invoices vs orders
     //   - Cambiar agent permite reasignar ownership (un vendedor podría apropiarse de orden ajena)
     // Bloqueamos los 3 en edit mode para non-admin.
+    // 🔧 scan jul-2026 #3: el cambio de razón social/RFC en una orden YA facturada también se bloquea para ADMIN
+    // (antes solo non-admin). Cambiarlo desincroniza cobranza.invoices → la CxC/CFDI/portal quedan a nombre del
+    // cliente viejo. La corrección de razón social de una orden facturada se hace en CobranzaFlow. (El bypass por
+    // DevTools sigue dentro de la deuda anon-write global, ver printflow-auth-rls-map.)
+    if(originalOrder?.invoice_folio){
+      if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) delete safeUpdate.client_id;
+      if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
+      if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
+      if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) delete safeUpdate.client_company;
+    }
     if(originalOrder && user!=="admin"){
       if("production_number" in safeUpdate && safeUpdate.production_number !== originalOrder.production_number){
         delete safeUpdate.production_number;
