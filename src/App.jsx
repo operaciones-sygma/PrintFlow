@@ -3445,7 +3445,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
+          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
           {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
@@ -5439,7 +5439,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const coronaBalance = Number(coronaInfo?.current_balance || 0);
 
   // Auto-sugerir folios consecutivos al cargar las sugerencias o al cambiar splits
+  // v10.73.11 — históricas: NO auto-sugerir (el consecutivo interno no aplica; se teclea el folio REAL de Alpha).
   useEffect(()=>{
+    if(isHistoric) return;
     if(!folioSugFactura && !folioSugRemision) return;
     const parseNum = f => {
       const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
@@ -5624,6 +5626,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         Divide UNA orden en varias facturas con cantidades parciales.
         No confundir con "🔀 Dividir en N facturas" del modal de OC (que agrupa órdenes enteras).
       </p>
+      {isHistoric && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span><strong>Orden histórica (Alpha):</strong> en cada parte teclea el <strong>folio REAL que ya emitió Alpha</strong> — el sistema NO lo sugiere (el consecutivo interno no aplica a estas órdenes).</span></div>}
 
       {/* HEADER de contexto */}
       <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14}}>
@@ -10036,7 +10039,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)} title="Imprimir" aria-label="Imprimir"><PrinterIcon size={15} weight="bold"/></button>
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo" aria-label="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")} aria-label="Editar orden"><NotePencilIcon size={15} weight="bold"/></button>}
-        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)" aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
+        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)" aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
         {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC" aria-label="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
@@ -10062,7 +10065,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {!compact&&canAct&&snoozeActive(o)&&snoozeBanner}
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
-    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
+    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
