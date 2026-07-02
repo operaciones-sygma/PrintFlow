@@ -8,6 +8,12 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.26 — Fixes del scan ronda 3 (1 MED + 3 LOW; F2 math salió limpia): (MED) una nota/comentario en una orden
+//   ENTREGADA desaparecía de la UI al llegar el realtime reload (loadOrders relatedOnly omite related de etapas
+//   finales) → reload preserva del estado previo notas/comentarios/timeline de órdenes finales. (LOW) Duplicar ya no
+//   hereda payment_status='paid'/OC/pre-folio de la fuente (reset payment_*/purchase_order_id/invoice_pre_assigned).
+//   (LOW) guard de Replicar ahora también aborta por NOMBRE si el cliente no tiene id. (LOW) DetailModal de una orden
+//   "En espera" muestra banner + "Quitar espera" (antes no había cómo reactivar desde el modal) y oculta el flujo.
 // v10.73.25 — Fixes del scan ronda 2: (HIGH) Duplicar sin guard → doble-clic consumía 2 folios/2 órdenes → lock
 //   síncrono duplicateLock (patrón de assignMachine). (MED) al cambiar de etapa por handlers que no pasan por
 //   doAdv/revert (assignMachine/approveProof/return_to_ready/sendMaquila) las columnas snooze_* quedaban y el
@@ -3391,7 +3397,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           viven aquí arriba (fila propia, siempre visibles) en vez de enterradas a media altura. marginLeft/Right
           negativos para abarcar todo el ancho bajo el padding; borde+sombra arriba para flotar sobre el scroll. */}
       <div style={{position:"sticky",bottom:0,marginTop:16,marginLeft:-24,marginRight:-24,padding:"12px 24px 0",background:C.bg,borderTop:"0.5px solid "+C.bd,boxShadow:"0 -6px 14px -10px rgba(26,26,31,.18)",zIndex:2}}>
-        {canActFlow&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}><span style={{fontSize:9.5,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em",display:"inline-flex",alignItems:"center",gap:4,marginRight:2}}><FlowArrowIcon size={11} weight="bold"/>Flujo</span><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>}
+        {canActFlow&&!snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}><span style={{fontSize:9.5,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em",display:"inline-flex",alignItems:"center",gap:4,marginRight:2}}><FlowArrowIcon size={11} weight="bold"/>Flujo</span><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>}
+        {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
+        {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canActFlow&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
@@ -8548,7 +8556,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // Solo slots vacíos; si la copia falla, cae a la ref original (no perder la imagen).
     const wantImg1=!f.image_url&&!!src.image_url, wantImg2=!f.image_url_2&&!!src.image_url_2;
     if(wantImg1||wantImg2){
-      const cid=f.client_id; // v10.73.25 — si el usuario cambia de cliente durante la copia, NO pisar el form nuevo con el arte de la fuente vieja
+      const cid=f.client_id, cnm=(f.client||"").trim(); // v10.73.25/26 — abortar si cambia de cliente durante la copia (por id, o por NOMBRE si el cliente no tiene id) para no pisar el form nuevo
       setImgUploading(true);
       (async()=>{
         try{
@@ -8556,7 +8564,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             wantImg1?copyStorageImage(src.image_url,"replica"):Promise.resolve(null),
             wantImg2?copyStorageImage(src.image_url_2,"replica"):Promise.resolve(null),
           ]);
-          setF(prev=>{if(prev.client_id!==cid)return prev;const next={...prev};
+          setF(prev=>{if(prev.client_id!==cid||(prev.client||"").trim()!==cnm)return prev;const next={...prev};
             if(wantImg1&&!prev.image_url)next.image_url=u1||src.image_url;
             if(wantImg2&&!prev.image_url_2)next.image_url_2=u2||src.image_url_2;
             return next;});
@@ -14187,7 +14195,14 @@ export default function PrintFlow() {
       const aliveGroups = groups.filter(g => !g.cancelled_at);
       return {...po, matrix_plan: {groups, alive_count: aliveGroups.length, total_count: groups.length}};
     });
-    setOrders(withSplits);
+    // v10.73.26 (#1) — en relatedOnly (archivo no cargado) loadOrders devuelve related=[] para etapas finales;
+    // preservar del estado previo notas/comentarios/timeline/etc. de esas órdenes para que una nota agregada a una
+    // ENTREGADA no desaparezca al llegar el realtime reload. Spread de o primero → conserva el enriquecimiento de splits.
+    if(!archiveLoadedRef.current){
+      const _fin=new Set(["delivered","maq_delivered","cancelled","maq_cancelled","stocked"]);
+      setOrders(prev=>{const pById={};for(const p of prev)if(p)pById[p.id]=p;
+        return withSplits.map(o=>{if(_fin.has(o.stage)){const pr=pById[o.id];if(pr)return{...o,notes_log:pr.notes_log||[],comments:pr.comments||[],timeline:pr.timeline||[],waste_log:pr.waste_log||[],machine_log:pr.machine_log||[]};}return o;});});
+    } else setOrders(withSplits);
     setPurchaseOrders(posWithMatrix);
     setLoaded(true);
    } catch(e) {
@@ -15479,7 +15494,7 @@ export default function PrintFlow() {
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
     // v10.73.25 — reset de snooze_* (#6): un duplicado NUNCA hereda el estado "En espera" de la fuente
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,payment_status:null,payment_method:null,payment_amount:null,bank_reference:null,purchase_order_id:null,invoice_pre_assigned:false,invoice_reason:null,machine_queue_position:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
     // v10.73.23/25 — duplicar los archivos de imagen (incl. arte legacy `image`, #5) para que la copia NO comparta
     // Storage con la original (quitar/cambiar la imagen en una ya no rompe la otra). Si la copia falla, cae a la ref.
