@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.32 — /impeccable critique #3 (la vista bajó 32→31 por el colapso-total: "landing vacío"). Fix: (1) auto-open
+//   ADAPTATIVO de los grupos — abre TODO si hay pocas (≤6 órdenes o ≤2 etapas), si no solo el grupo MÁS URGENTE;
+//   así ves órdenes al entrar sin reintroducir el scroll a alto volumen. (2) grupos ORDENADOS por urgencia (la orden
+//   que vence antes primero), no por STAGE_SEQUENCE. (3) card de verdad adelgazada en la vista: ProgressBar + timer
+//   de máquina gateados con !inEsperaView (en una orden pausada, la barra de avance está detenida = ruido).
 // v10.73.31 — (1) Las órdenes EN ESPERA se OCULTAN del Tablero (Kanban + PreprensaBoard): dejan de hacer ruido
 //   visual en las columnas/pool; reaparecen en su etapa exacta al reactivarlas. Un chip "N en espera →" en la
 //   summary bar del Kanban avisa que hay pausadas y lleva a la vista dedicada (onAction goto_espera → setView).
@@ -5369,6 +5374,8 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 // órdenes ENTERAS a grupos. Este modal divide UNA orden en porciones.
 function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const isMaq = order?.order_type === "maquila";
+  // v10.73.11 — orden histórica (Alpha): los folios los teclea Karla (los REALES de Alpha), NO se sugieren del contador interno.
+  const isHistoric = order?.created_by === "import-historico";
   const totalSinIva = Number(isMaq ? (order?.maq_price||0) : (order?.price||0));
   const totalConIva = Math.round(totalSinIva * 116) / 100;
   const totalQty = Number(order?.quantity || 0);
@@ -9845,7 +9852,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
@@ -9863,7 +9870,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&o.created_by!=="import-historico"&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
@@ -10012,8 +10019,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
           {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
         </div>}
         </div>}
-        {!compact&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
-        {!compact&&<ProgressBar order={o}/>}
+        {!compact&&!inEsperaView&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
+        {!compact&&!inEsperaView&&<ProgressBar order={o}/>}{/* v10.73.32 — en la vista "En espera" no mostrar barra de avance ni timer: la orden está DETENIDA, es ruido */}
       </div>
     </div>
 
@@ -16481,9 +16488,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                : <EmptyState icon={CheckCircleIcon} tone="positive" title="Nada en espera" hint="Las órdenes que pauses aparecerán aquí, agrupadas por etapa."/>)
             : (()=>{
                 const ordIdx=s=>{const i=STAGE_SEQUENCE.indexOf(s);if(i>=0)return i;const j=MAQ_FLOW.findIndex(m=>m.id===s);return j>=0?100+j:200;};
+                const untilMs=o=>o.snooze_until?new Date(String(o.snooze_until).slice(0,10)).getTime():Infinity;
                 const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
-                const stages=Object.keys(byStage).sort((a,b)=>ordIdx(a)-ordIdx(b));
-                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>{const ua=a.snooze_until?new Date(String(a.snooze_until).slice(0,10)).getTime():Infinity;const ub=b.snooze_until?new Date(String(b.snooze_until).slice(0,10)).getTime():Infinity;return ua-ub||(a.client||"").localeCompare(b.client||"");});return <details key={st}>
+                // v10.73.32 (critique #3) — grupos ordenados por URGENCIA (la orden que vence antes primero), luego por flujo.
+                const grpUrg=st=>Math.min(...byStage[st].map(untilMs));
+                const stages=Object.keys(byStage).sort((a,b)=>(grpUrg(a)-grpUrg(b))||(ordIdx(a)-ordIdx(b)));
+                // v10.73.32 — auto-open ADAPTATIVO: abre TODO si hay pocas (≤6 órdenes o ≤2 etapas); si no, solo el grupo más urgente (gi 0). Mata el "landing vacío" sin reintroducir scroll a alto volumen.
+                const openAll=esperaOrders.length<=6||stages.length<=2;
+                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));return <details key={st} open={openAll||gi===0?true:undefined}>
                   <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
                 </details>;})}</div>;
