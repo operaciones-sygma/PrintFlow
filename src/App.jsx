@@ -8,6 +8,10 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.22 — (1) Bandeja de notificaciones ahora muestra la PERSONA (AUTHOR_NAME/AUTHOR_COLOR) en vez del rol,
+//   cerrando la migración de v10.73.21 (ya no quedan mapas rc/rN sueltos). (2) "Replicar de orden anterior" ahora
+//   copia también la imagen 1 (image_url) e imagen 2 (image_url_2) — como "Duplicar orden" (por referencia) — pero
+//   SOLO en slots vacíos para no pisar arte ya adjuntado. Toast avisa "imagen incluida". Pedido de Marcelo (reimpresión).
 // v10.73.21 — (1) Etapa "Lista" renombrada a "Lista para imprimir" (no se confunde con Salidas). (2) Autor de
 //   notas/eventos = la PERSONA logueada (display_name: Genaro, Lupita, Gerardo…) en vez del rol genérico. Mapa
 //   central ROLE_PEOPLE→AUTHOR_NAME/AUTHOR_COLOR con doble clave (rol para datos viejos, nombre para nuevos), aplicado
@@ -2746,8 +2750,6 @@ function CommandPalette({open,onClose,groups}){
 }
 function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDeleteAll,role}) {
   useEscClose(onClose);
-  const rc={produccion:C.ios,preprensa:C.dsn,german:C.ctp,secretaria:C.fac,vendedor:"#d97706",admin:C.ok,sistema:C.t3};
-  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   return <div style={{position:"fixed",inset:0,zIndex:998}} onClick={onClose}>
     <div style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:C.sh3,width:360,maxHeight:"70vh",overflow:"hidden",border:"0.5px solid "+C.bd}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid "+C.bd}}>
@@ -2765,7 +2767,7 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
               <div style={{fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</div>
               {n.reason&&<div style={{fontSize:11,color:C.wn,marginTop:2,fontStyle:"italic"}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</div>}
               <div style={{fontSize:9,color:C.t3,marginTop:3}}>
-                <span style={{color:rc[n.by_user]||C.t3,fontWeight:600}}>{rN[n.by_user]||n.by_user}</span> · {fDT(n.created_at)}
+                <span style={{color:AUTHOR_COLOR[n.by_user]||C.t3,fontWeight:600}}>{AUTHOR_NAME[n.by_user]||n.by_user}</span> · {fDT(n.created_at)}
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
@@ -8473,13 +8475,14 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // Replica specs del producto. NO toca: cliente, production_number, due_date, stage, image actual, billing_mode.
     // v10.45.1 — `stock_role` y `client_product_id` solo se replican si el CLIENTE ACTUAL es stock (Cuadra).
     // Si replicamos de una orden Cuadra a un cliente normal, esos campos NO se aplican (form quedaría inconsistente).
-    // v10.64.1 fix — NO replicar la imagen/artwork: contradecía el comentario de arriba y el hint
-    // de la UI, y pisaba silenciosamente el artwork recién adjuntado (riesgo de imprimir el diseño
-    // equivocado). Replicar = specs del producto, NO el arte. La imagen se adjunta por orden.
+    // v10.73.22 — Marcelo pidió que en reimpresiones SÍ se copie el arte (imagen 1 y 2). Se copian image_url/
+    // image_url_2 igual que "Duplicar orden" (por referencia), PERO solo en slots VACÍOS: si el usuario ya adjuntó
+    // una imagen en el form, NO se pisa (preserva la intención del fix v10.64.1 contra clobber silencioso del arte).
     const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
     // v10.46.10 M2 — detectar si el source tiene SKU pero NO se va a replicar (cross-cliente),
     // para informar al usuario en lugar de copiar/omitir silenciosamente.
     let skuOmitted=false;
+    const imgCopied=(!f.image_url&&!!src.image_url)||(!f.image_url_2&&!!src.image_url_2);
     setF(prev=>{
       const next={...prev};
       replicaFields.forEach(k=>{
@@ -8487,6 +8490,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
         if(!isEmpty)next[k]=v;
       });
+      // imágenes (imagen 1 / imagen 2): copiar de la orden fuente SOLO en slots vacíos (no pisa arte ya adjuntado)
+      if(!next.image_url&&src.image_url)next.image_url=src.image_url;
+      if(!next.image_url_2&&src.image_url_2)next.image_url_2=src.image_url_2;
       if(prev.billing_mode==="stock"&&src.client_product_id&&src.client_id&&prev.client_id===src.client_id){
         next.client_product_id=src.client_product_id;
       }else if(src.client_product_id&&(prev.billing_mode!=="stock"||prev.client_id!==src.client_id)){
@@ -8503,7 +8509,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       setShowOtroFinish(customFins.length>0);
     }
     setBlocksRaw(finGetDetail(src.finishes,"Blocks"));setFolioRaw(finGetDetail(src.finishes,"Folio"));
-    const baseMsg="✅ Datos replicados de "+(src.production_number||"orden anterior");
+    const baseMsg="✅ Datos replicados de "+(src.production_number||"orden anterior")+(imgCopied?" · imagen incluida":"");
     showToast?.(skuOmitted?baseMsg+" (SKU del catálogo omitido — pertenece a otro cliente)":baseMsg);
   };
   // v10.58.22: agregada karla. Marcelo pidió que Karla pueda editar precio de órdenes
