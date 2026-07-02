@@ -8,6 +8,15 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.29 — /impeccable critique de la vista "En espera" (29/40), pasada de fixes P1+P2+menores: (1) OCard en
+//   "modo espera" (prop inEsperaView): suprime el muro de StageFlowButtons/cluster de avance (la card se abre al
+//   detalle con click) y los chips redundantes (T1 "En espera" + chip de etapa, ya que la etapa es el header del
+//   grupo). (2) Etiqueta de reactivar POR ETAPA/KIND (reactLabel): "Volver a producción" solo en producción,
+//   "Quitar espera" en salidas/maq_received, "Ya pidió factura · Reactivar" en awaiting_invoice — consistente con
+//   el board de Karla. (3) CTA de reactivar con más peso (F.body + padding) en la vista. (4) Banner deduplicado
+//   (1 def para canAct/!canAct) con borde sólido + tinte ámbar (era dashed = léxico de "vacío"). (5) Empty-states:
+//   gate de carga + "Sin resultados" bajo búsqueda vs verde "Nada en espera" solo con 0 reales (vía EmptyState).
+//   (6) Badge de conteo por grupo al color de la etapa (era C.t3 ilegible).
 // v10.73.28 — Vista dedicada "En espera" (sidebar): reúne las órdenes pausadas del rol (admin = todas) en un solo
 //   lugar, AGRUPADAS POR ETAPA, con la razón visible (banner de OCard) y botón "Volver a producción" (unsnooze).
 //   Contador "En espera (N)" en el menú. Reusa myTasks (role-scoping) + snoozeActive + OCard (prop unsnoozeLabel).
@@ -9848,7 +9857,7 @@ function StageFlowButtons({o,role,onAction}){
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}
   </>;
 }
-function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsnoozeLabel="Quitar espera"}) {
+function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsperaView}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
   const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
@@ -9869,7 +9878,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
   // T3 metadata (contexto secundario). T1+T2 siempre visibles; T3 colapsa tras un chip "+N" expandible.
   const bT1=[], bT2=[], bT3=[];
   // T1 — alertas (rojo/ámbar, strong, primero: se escanean por el borde izquierdo)
-  if(snoozeActive(o)) bT1.push(<Badge key="snz" tone="context" strong title={(o.snooze_reason||"En espera")+(o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):"")+(o.snooze_until?" · hasta "+fD(o.snooze_until):"")} icon={<BellSlashIcon size={10} weight="bold"/>}>En espera</Badge>); // v10.73.18
+  if(snoozeActive(o)&&!inEsperaView) bT1.push(<Badge key="snz" tone="context" strong title={(o.snooze_reason||"En espera")+(o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):"")+(o.snooze_until?" · hasta "+fD(o.snooze_until):"")} icon={<BellSlashIcon size={10} weight="bold"/>}>En espera</Badge>); // v10.73.18
   if(late) bT1.push(<Badge key="late" tone="danger" strong icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>);
   if(stale) bT1.push(<Badge key="stale" tone={stale.lv==="critical"?"danger":"warn"} strong>{stale.lb}</Badge>);
   if(o.priority!=="normal"&&PM[o.priority]) bT1.push(<Badge key="prio" color={PM[o.priority].c} strong><PrioLbl priority={o.priority}/></Badge>);
@@ -9879,7 +9888,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
     if(noPrice||noCost) bT1.push(<Badge key="maqfalta" tone="warn" strong title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>);
   }
   // T2 — identidad (la etapa es la señal primaria; #folio o, si no hay, el id como fallback)
-  bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:F.body,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>);
+  if(!inEsperaView) bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:F.body,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>); // en la vista "En espera" la etapa ya es el header del grupo
   if(o.production_number) bT2.push(<Badge key="pn" tone="identity">#{o.production_number}</Badge>);
   else if(o.id) bT2.push(<Badge key="id" tone="context" style={{fontFamily:"'Geist Mono',monospace"}}>{o.id}</Badge>);
   if(o.stock_role==="production") bT2.push(<Badge key="stockp" tone="context" title="Producción a stock — no se entrega al cliente, ingresa al inventario interno" icon={<PackageIcon size={11} weight="bold"/>}>a Stock</Badge>);
@@ -9908,6 +9917,11 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
   const _vendOwns=role!=="vendedor"||agentMatch||o.created_by===userLogin||!o.created_by;
   const isResp=!!_resp&&_vendOwns&&(_resp.role===role||(_resp.role==="both"&&(role==="produccion"||role==="preprensa"))||(_resp.role==="secretaria"&&role==="secretaria")||(o.stage==="proof_client"&&role==="secretaria"));
   const canSnooze=(role==="admin"||isResp)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected","stocked"].includes(o.stage);
+  // v10.73.29 — etiqueta de reactivar por etapa/kind (evita "Volver a producción" en salidas/factura); CTA con más peso en la vista dedicada.
+  const reactLabel=o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":((inEsperaView&&!["salidas","maq_received"].includes(o.stage))?"Volver a producción":"Quitar espera");
+  const reactBtnStyle={...bs(C.ac+"15",C.ac),fontSize:inEsperaView?F.body:10,padding:inEsperaView?"6px 12px":"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"};
+  // v10.73.29 — banner "En espera" (razón + reactivar) DEDUPLICADO: una sola definición para canAct y !canAct (antes byte-a-byte 2×). Borde sólido + tinte ámbar (era 1px dashed = léxico de "zona vacía", contradecía el contenido real).
+  const snoozeBanner=<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.amb+"0d",border:"1px solid "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:F.body,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>{canSnooze&&<button onClick={()=>onAction(o.id,"unsnooze")} style={reactBtnStyle}><BellRingingIcon size={12} weight="bold"/>{reactLabel}</button>}</div>;
   const mi=(c)=>({display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",border:"none",background:"transparent",color:c,fontFamily:"'Geist',sans-serif",fontSize:12,fontWeight:600,padding:"7px 10px",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"});
   const miHover={onMouseEnter:e=>{e.currentTarget.style.background=C.sf;},onMouseLeave:e=>{e.currentTarget.style.background="transparent";}};
 
@@ -9922,7 +9936,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
         lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
         style, 1.5px al ~40%); el chip de etapa con icono+label sigue como indicador primario (a11y). */}
     {isDraggable&&!compact&&!noDragHint&&<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4,padding:"2px 6px",opacity:.5}}><DotsSixVerticalIcon size={13} color={C.ac}/><span style={{fontSize:9,color:C.ac,fontWeight:500}}>Arrastra al Tablero</span></div>}
-    {canAct&&guide&&!compact&&<GuideBanner text={guide} color={st?.c}/>}
+    {canAct&&guide&&!compact&&!inEsperaView&&<GuideBanner text={guide} color={st?.c}/>}
     <div style={{display:"flex",gap:10}}>
       {(o.image_url||o.image_url_2||o.image||(o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")))&&<div style={{position:"relative",flexShrink:0}}><img src={o.image_url||o.image_url_2||o.image||o.file_url} alt="" loading="lazy" decoding="async" style={{width:compact?32:48,height:compact?32:48,objectFit:"cover",borderRadius:10}}/>{o.image_url&&o.image_url_2&&<div title="2 imágenes adjuntas" aria-label="2 imágenes adjuntas" style={{position:"absolute",bottom:-2,right:-2,background:C.fac,color:"#fff",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:700,boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}>+1</div>}</div>}
       <div style={{flex:1,minWidth:0}}>
@@ -9988,7 +10002,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
       </div>
     </div>
 
-    {!compact&&canAct&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
+    {!compact&&canAct&&!inEsperaView&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap",opacity:busy?0.5:1,pointerEvents:busy?"none":"auto",position:"relative"}}>
       {busy&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}><span role="status" aria-live="polite" style={{fontSize:12,fontWeight:600,color:C.ac,background:C.bg+"ee",padding:"4px 12px",borderRadius:8,display:"inline-flex",alignItems:"center",gap:6}}><HourglassIcon size={13} weight="bold"/>Procesando...</span></div>}
       <StageFlowButtons o={o} role={role} onAction={onAction}/>
       <div role="group" aria-label="Acciones de la orden" style={{display:"flex",gap:4,marginLeft:"auto"}}>
@@ -10007,7 +10021,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
           <button onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} title="Más acciones" aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
           {moreOpen&&<div role="menu" onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,zIndex:41,background:C.bg,border:"1px solid "+C.bd,borderRadius:10,boxShadow:C.sh3,padding:4,minWidth:210,display:"flex",flexDirection:"column",gap:1}}>
             {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"snooze");}} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
-            {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{unsnoozeLabel}</button>}
+            {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{reactLabel}</button>}
             {canSnooze&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
             {canRevertBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"revert");}} style={mi(C.wn)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar a etapa anterior</button>}
             {canCancelBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_order");}} style={mi(C.dn)}><XIcon size={14} weight="bold"/>Cancelar orden</button>}
@@ -10020,15 +10034,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
 
     {/* v10.73.28 — orden EN ESPERA vista por el rol que SÍ puede actuar (canAct): banner de razón + botón prominente
         (antes el banner solo salía en el path !canAct → invisible en la vista "En espera"). Etiqueta vía unsnoozeLabel. */}
-    {!compact&&canAct&&snoozeActive(o)&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
-      <span style={{fontSize:11,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
-      {canSnooze&&<button onClick={()=>onAction(o.id,"unsnooze")} style={{...bs(C.ac+"15",C.ac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"}}><BellRingingIcon size={12} weight="bold"/>{unsnoozeLabel}</button>}
-    </div>}
+    {!compact&&canAct&&snoozeActive(o)&&snoozeBanner}
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
-    {!compact&&!canAct&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
+    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
-    {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
+    {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
       {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dn)} title="Cancelar orden"><XIcon size={13} weight="bold"/>Cancelar</button>}
     </div>}
@@ -10038,10 +10049,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,unsno
         retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse). */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
       // v10.58.52: si está "en espera" (Torre), mostrar la razón en vez del nudge
-      if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
-        <span style={{fontSize:11,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
-        {canSnooze&&<button onClick={()=>onAction(o.id,"unsnooze")} style={{...bs(C.ac+"15",C.ac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"}}><BellRingingIcon size={12} weight="bold"/>{unsnoozeLabel}</button>}
-      </div>;
+      if(snoozeActive(o))return snoozeBanner;
       const resp=orderResponsible(o); // v10.58.65: maquila → vendedor (no Lupita)
       if(!resp)return null;
       const respName=resp.role==="both"?"Producción y Pre-prensa":resp.name;
@@ -16446,14 +16454,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
           <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes pausadas — se reactivan solas al cambiar de etapa o al vencer. Regrésalas al flujo con "Volver a producción" cuando estén listas.{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>
           {esperaOrders.length===0
-            ? <div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}><CheckCircleIcon size={46} weight="fill" color={C.ok}/></div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>Nada en espera</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes que pauses aparecerán aquí, agrupadas por etapa.</div></div>
+            ? (!loaded ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,fontSize:13}}>Cargando…</div>
+               : search ? <EmptyState icon={MagnifyingGlassIcon} title="Sin resultados" hint={"Ninguna orden en espera coincide con \""+search+"\"."} action={{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}}/>
+               : <EmptyState icon={CheckCircleIcon} tone="positive" title="Nada en espera" hint="Las órdenes que pauses aparecerán aquí, agrupadas por etapa."/>)
             : (()=>{
                 const ordIdx=s=>{const i=STAGE_SEQUENCE.indexOf(s);if(i>=0)return i;const j=MAQ_FLOW.findIndex(m=>m.id===s);return j>=0?100+j:200;};
                 const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
                 const stages=Object.keys(byStage).sort((a,b)=>ordIdx(a)-ordIdx(b));
                 return <div style={{display:"flex",flexDirection:"column",gap:18}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>(a.client||"").localeCompare(b.client||""));return <div key={st}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}}><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.t3,background:C.sf,padding:"1px 9px",borderRadius:9,border:"1px solid "+C.bd}}>{list.length}</span></div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} unsnoozeLabel="Volver a producción"/>)}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}}><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:SM[st]?.c||C.t2,background:C.sf,padding:"1px 9px",borderRadius:9,border:"1px solid "+C.bd}}>{list.length}</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
                 </div>;})}</div>;
               })()}
         </div>}
