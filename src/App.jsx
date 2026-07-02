@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.18 — "En espera" GENERALIZADO (F1): el responsable de cada área (+admin) puede pausar sus órdenes con
+//   razón (SnoozeModal: chips predefinidos + texto libre + fecha opcional). El snooze ahora deja de contar como
+//   ESTANCADA en TODOS lados (getStale respeta snooze → badge/filtro/Pipeline/MaquilaTracker). Auto-exención:
+//   "listo"/"placas" con entrega a >5 días hábiles no se marca estancada. Sección "En espera (N)" por rol en Mis
+//   Pendientes (generaliza la de Karla). Inicio/fin de pausa quedan en el timeline (para el historial F2).
 // v10.73.17 — /impeccable harden OCard (re-critique #2 P1 a11y): los chips PAGADA/PARCIAL eran texto verde/violeta
 //   sobre tinte del MISMO hue (~2:1, falla WCAG AA en info de dinero). Fix: texto oscuro legible (C.tx) + el color
 //   semántico se mueve al ícono (CheckCircle verde / CircleHalf violeta) + fondo tinte. Ahora pasa AA y sigue codificado.
@@ -1671,7 +1676,12 @@ const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // v10.49.4 — Si la orden está EN MÁQUINA (current_machine NOT NULL), NO se considera estancada.
 // Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
 // aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina).
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
+// v10.73.18 — días HÁBILES que faltan para una fecha futura (para exentar pre-producción con entrega lejana)
+function bizDaysUntil(d){if(!d)return 0;const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return 0;let cur=new Date();cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate());const end=new Date(t.getFullYear(),t.getMonth(),t.getDate());let n=0;while(cur<end){cur.setDate(cur.getDate()+1);const dow=cur.getDay();if(dow!==0&&dow!==6)n++;if(n>365)break;}return n;}
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;
+  if(snoozeActive(o))return null; // v10.73.18 — "En espera" NO es estancada (consistente con Torre/Salud/alerta)
+  if((o.stage==="ready"||o.stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)return null; // v10.73.18 — pre-producción con entrega lejana: aún no entra a máquina, no es "sin avance"
+  const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
 
 // v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
 const STAGE_RESPONSIBLE = {
@@ -2252,7 +2262,7 @@ function diagnoseOrder(o){
       resp?.role||"admin",resp?.role==="both"?"Gerardo y Noemí":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
   }
   // v10.58.53: una orden MONTADA EN MÁQUINA no está estancada (paridad con getStale v10.49.4)
-  if(d>=2&&!o.current_machine&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)){
+  if(d>=2&&!o.current_machine&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)&&!((stage==="ready"||stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)){
     const resp=orderResponsible(o); // v10.58.65: consistente con la regla maquila→vendedor
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
       resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
@@ -3311,6 +3321,47 @@ function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose
 }
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
+// v10.73.18 — Modal "Poner en espera": razón (chips predefinidos + texto libre) + fecha opcional.
+// Reemplaza el window.prompt de snoozeOrder; disponible para el responsable del área + admin.
+const SNOOZE_PRESETS=[
+  {kind:"client_correction",label:"Cliente enviará corrección / nuevo diseño",text:"El cliente enviará corrección o un nuevo diseño"},
+  {kind:"far_due",label:"Entrega lejana — aún no entra a máquina",text:"Entrega lejana: aún no toca programar en máquina"},
+  {kind:"material",label:"Esperando material / insumo",text:"Esperando material o insumo para continuar"},
+  {kind:"authorization",label:"Esperando autorización del cliente",text:"Esperando autorización del cliente"},
+];
+function SnoozeModal({order,onConfirm,onClose}){
+  useEscClose(onClose);
+  const [kind,setKind]=useState(null);
+  const [reason,setReason]=useState("");
+  const [days,setDays]=useState("");
+  const [saving,setSaving]=useState(false);
+  const submit=async()=>{
+    const r=reason.trim(); if(r.length<5)return;
+    const d=parseInt(days,10);
+    const until=Number.isFinite(d)&&d>0?localDayStr(new Date(Date.now()+d*86400000)):null;
+    setSaving(true);
+    try{ await onConfirm({reason:r,kind,until}); }finally{ setSaving(false); }
+  };
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"85vh",overflowY:"auto"}}>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 4px",color:C.ac}}><BellSlashIcon size={17} weight="bold"/>Poner en espera</h3>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 14px",lineHeight:1.45}}>{order?.client||""} sale de la cola activa y deja de marcarse como estancada. Se reactiva sola al cambiar de etapa o al vencer la fecha.</p>
+      <div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:6}}>Razón</div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+        {SNOOZE_PRESETS.map(p=><button key={p.kind} onClick={()=>{setKind(p.kind);setReason(p.text);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",textAlign:"left",cursor:"pointer",fontSize:12,fontWeight:600,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(kind===p.kind?C.ac:C.bd),background:kind===p.kind?C.ac+"0e":C.bg,color:kind===p.kind?C.ac:C.tx,fontFamily:"'Geist',sans-serif"}}>{p.label}</button>)}
+      </div>
+      <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Razón (mín. 5 caracteres) — edita el preset o escribe la tuya…" style={{...inp,minHeight:60,resize:"vertical",fontSize:12,marginBottom:10}}/>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+        <span style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}>¿Por cuántos días?</span>
+        <input type="number" min="1" value={days} onChange={e=>setDays(e.target.value)} placeholder="vacío = hasta que cambie de etapa" style={{...inp,fontSize:12,flex:1}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={submit} disabled={saving||reason.trim().length<5} style={{...bt(reason.trim().length>=5?C.ac:C.bdSt),fontSize:12,padding:"8px 14px",cursor:reason.trim().length>=5&&!saving?"pointer":"default",opacity:saving?.6:1}}>{saving?"Guardando…":<><BellSlashIcon size={13} weight="bold"/>Poner en espera</>}</button>
+      </div>
+    </div>
+  </div>;
+}
 function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) {
   useEscClose(onClose);
   const [folio,setFolio]=useState("");
@@ -9657,6 +9708,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   // T3 metadata (contexto secundario). T1+T2 siempre visibles; T3 colapsa tras un chip "+N" expandible.
   const bT1=[], bT2=[], bT3=[];
   // T1 — alertas (rojo/ámbar, strong, primero: se escanean por el borde izquierdo)
+  if(snoozeActive(o)) bT1.push(<Badge key="snz" tone="context" strong title={(o.snooze_reason||"En espera")+(o.snoozed_by?" — "+o.snoozed_by:"")+(o.snooze_until?" · hasta "+fD(o.snooze_until):"")} icon={<BellSlashIcon size={10} weight="bold"/>}>En espera</Badge>); // v10.73.18
   if(late) bT1.push(<Badge key="late" tone="danger" strong icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>);
   if(stale) bT1.push(<Badge key="stale" tone={stale.lv==="critical"?"danger":"warn"} strong>{stale.lb}</Badge>);
   if(o.priority!=="normal"&&PM[o.priority]) bT1.push(<Badge key="prio" color={PM[o.priority].c} strong><PrioLbl priority={o.priority}/></Badge>);
@@ -9687,6 +9739,14 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
   const canCancelNCBtn=role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio;
   const canDeleteBtn=role==="admin";
   const hasDangerMenu=canRevertBtn||canCancelBtn||canCancelNCBtn||canDeleteBtn;
+  // v10.73.18 — poner "En espera": admin o el responsable del área de esta etapa (orderResponsible ya maneja maquila→vendedor).
+  // v10.73.18b (workflow adversarial): isSec(role) es true también para vendedor → endurecido. El vendedor debe SER dueño
+  // de la orden (espejo de secOwns/canAct); la cláusula secretaria exige role==="secretaria" (no isSec) para que un vendedor
+  // no herede la responsabilidad de Lupita; + proof_client lo puede pausar la secretaria dueña (caso "esperando al cliente").
+  const _resp=orderResponsible(o);
+  const _vendOwns=role!=="vendedor"||agentMatch||o.created_by===userLogin||!o.created_by;
+  const isResp=!!_resp&&_vendOwns&&(_resp.role===role||(_resp.role==="both"&&(role==="produccion"||role==="preprensa"))||(_resp.role==="secretaria"&&role==="secretaria")||(o.stage==="proof_client"&&role==="secretaria"));
+  const canSnooze=(role==="admin"||isResp)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected","stocked"].includes(o.stage);
   const mi=(c)=>({display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",border:"none",background:"transparent",color:c,fontFamily:"'Geist',sans-serif",fontSize:12,fontWeight:600,padding:"7px 10px",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"});
   const miHover={onMouseEnter:e=>{e.currentTarget.style.background=C.sf;},onMouseLeave:e=>{e.currentTarget.style.background="transparent";}};
 
@@ -9782,9 +9842,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
             salen del muro de iconos a un menú "⋯ Más" con ETIQUETAS de texto + divisor antes de Borrar. Antes eran
             iconos rojos de 15px casi idénticos (label solo en hover) → riesgo de mis-click en acciones con consecuencia fiscal. */}
-        {hasDangerMenu&&<div style={{position:"relative"}}>
+        {(hasDangerMenu||canSnooze)&&<div style={{position:"relative"}}>
           <button onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} title="Más acciones" aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
           {moreOpen&&<div role="menu" onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,zIndex:41,background:C.bg,border:"1px solid "+C.bd,borderRadius:10,boxShadow:C.sh3,padding:4,minWidth:210,display:"flex",flexDirection:"column",gap:1}}>
+            {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"snooze");}} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
+            {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>Quitar espera</button>}
+            {canSnooze&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
             {canRevertBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"revert");}} style={mi(C.wn)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar a etapa anterior</button>}
             {canCancelBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_order");}} style={mi(C.dn)}><XIcon size={14} weight="bold"/>Cancelar orden</button>}
             {canCancelNCBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_with_nc");}} style={mi(C.dn)}><ReceiptIcon size={14} weight="bold"/>Cancelar con Nota de Crédito</button>}
@@ -9808,8 +9871,9 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
         retrasadas sin botón ni instrucción — P-3562 atorada 2 semanas sin escalarse). */}
     {!compact&&!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&(()=>{
       // v10.58.52: si está "en espera" (Torre), mostrar la razón en vez del nudge
-      if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10}}>
+      if(snoozeActive(o))return <div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px dashed "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}>
         <span style={{fontSize:11,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>
+        {canSnooze&&<button onClick={()=>onAction(o.id,"unsnooze")} style={{...bs(C.ac+"15",C.ac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}
       </div>;
       const resp=orderResponsible(o); // v10.58.65: maquila → vendedor (no Lupita)
       if(!resp)return null;
@@ -9947,7 +10011,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
         {sample?.maquila_email&&<a href={"mailto:"+sample.maquila_email} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500}}><EnvelopeIcon size={11} weight="bold"/>{sample.maquila_email}</a>}
       </div>
       {d.orders.map(o=>{const days=getDays(o);const st=SM[o.stage];const hp=role==="produccion"||role==="preprensa"||role==="german";const oOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin;
-        const urgColor=days>=14?C.dn:days>=7?C.wn:days>=3?C.maq:C.ok;
+        const urgColor=snoozeActive(o)?C.t3:(days>=14?C.dn:days>=7?C.wn:days>=3?C.maq:C.ok); // v10.73.18 — en espera: no pintar como atrasada
         return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:12,marginBottom:6,cursor:"pointer",border:"1.5px solid "+urgColor+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
@@ -13883,6 +13947,7 @@ export default function PrintFlow() {
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [histFolioOrder,setHistFolioOrder]=useState(null); // v10.72.56 — captura de folio fiscal en órdenes históricas (import-historico)
+  const [snoozeTarget,setSnoozeTarget]=useState(null); // v10.73.18 — orden a poner "En espera" (abre SnoozeModal)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
   const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
@@ -14655,21 +14720,7 @@ export default function PrintFlow() {
   },[user,userLogin,showToast,reload]);
 
   // 🗼 v10.58.52 — Torre de Control: handlers de snooze + recordatorio batch + aterrizaje admin
-  const snoozeOrder=useCallback(async(o)=>{
-    const reason=window.prompt('¿Por qué se pone en espera esta orden?\n(ej. "Esperando autorización del cliente — Noemí 04-jun")');
-    if(reason===null)return;
-    if(reason.trim().length<5){showToast("Razón mínima 5 caracteres","warning");return}
-    const daysStr=window.prompt("¿Por cuántos días? (vacío = hasta que cambie de etapa)","");
-    if(daysStr===null)return;
-    const days=parseInt(daysStr,10);
-    const until=Number.isFinite(days)&&days>0?localDayStr(new Date(Date.now()+days*86400000)):null;
-    const upd={snooze_reason:reason.trim(),snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until,snooze_kind:null};
-    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
-    if(error){showToast("❌ "+error.message,"error");return}
-    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
-    try{await db.addTimeline(o.id,"🔕 En espera (Torre): "+reason.trim()+(until?" · hasta "+fD(until):" · hasta que cambie de etapa"),user,"#8e8e93")}catch(e){}
-    showToast("🔕 En espera — se reactiva sola si cambia de etapa"+(until?" o el "+fD(until):""));
-  },[user,userLogin,showToast]);
+  const snoozeOrder=useCallback((o)=>{ setSnoozeTarget(o); },[]); // v10.73.18 — abre SnoozeModal (razón+chips+fecha) en vez del window.prompt
   const unsnoozeOrder=useCallback(async(o)=>{
     setActionLoading(o.id); // v10.72.52 — busy en la card evita doble-click
     const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null};
@@ -14679,6 +14730,18 @@ export default function PrintFlow() {
     try{await db.addTimeline(o.id,"🔔 Reactivada",user,"#8e8e93")}catch(e){}
     showToast("🔔 Reactivada");setActionLoading(null);
   },[user,showToast]);
+  // v10.73.18 — escribe el "En espera" desde el SnoozeModal (responsable del área + admin). Reusa columnas snooze_*
+  // y el evento "🔕 En espera" del timeline (F2 reconstruye la ventana de pausa hasta el "🔔 Reactivada"/avance).
+  const applySnooze=useCallback(async(o,{reason,kind,until})=>{
+    const r=(reason||"").trim(); if(r.length<5){showToast("Razón mínima 5 caracteres","warning");return;}
+    const upd={snooze_reason:r,snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until||null,snooze_kind:kind||null};
+    const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
+    if(error){showToast("❌ "+error.message,"error");return;}
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
+    try{await db.addTimeline(o.id,"🔕 En espera: "+r+(until?" · hasta "+fD(until):" · hasta que cambie de etapa"),user,"#8e8e93")}catch(e){}
+    setSnoozeTarget(null);
+    showToast("🔕 En espera — se reactiva sola al cambiar de etapa"+(until?" o el "+fD(until):""),"success",{label:"Deshacer",onClick:()=>unsnoozeOrder(o)});
+  },[user,userLogin,showToast,unsnoozeOrder]);
   // v10.72.36 — preset "en espera: el cliente no ha pedido factura" (pedido por Karla). Reusa el snooze existente,
   // pero con motivo TIPADO (snooze_kind='awaiting_client_invoice'), sin prompts y espera indefinida
   // (snooze_until=null → se reactiva sola al avanzar de etapa, p.ej. al asignar folio). Lo opera Karla desde su
@@ -15579,6 +15642,8 @@ export default function PrintFlow() {
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
+    if(action==="snooze"){const o=orders.find(x=>x.id===id);if(o)setSnoozeTarget(o);return} // v10.73.18 — poner en espera (SnoozeModal)
+    if(action==="unsnooze"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
     if(action==="apply_historic_folio"){const o=orders.find(x=>x.id===id);if(o)setHistFolioOrder(o);return}
     // v10.58.50: 📣 Recordar al responsable de la etapa (cards sin acción para el rol).
     // Notifica in-app + Telegram (db.notify ya copia a admin) con el bloqueo concreto.
@@ -16145,7 +16210,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <div style={{boxSizing:"border-box",width:"100%",maxWidth:view==="board"?((user==="produccion"||user==="admin")?"none":1300):(VIEW_MAXW[view]??1300),margin:"0 auto",padding:"14px 16px"}}>
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{/* v10.72.44 — hint de orientación: producción aterriza aquí (vista general) pero su trabajo se mueve en el Tablero. Las otras vistas ya tenían hint; esta no. */}{user==="produccion"&&<FirstTimeHint role={user} hintKey="pipeline-prod" text="Vista general del flujo. Tu trabajo se mueve en el Tablero: arrastra las órdenes Listas a las máquinas." color={C.ac}/>}{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
-        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{(()=>{const pk=user==="karla"?filteredMyTasks.filter(o=>snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice").length:0;const act=filteredMyTasks.length-pk;return act+" pendiente"+(act!==1?"s":"")+(pk>0?" · "+pk+" en espera de factura":"")})()}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
+        {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{(()=>{const pk=filteredMyTasks.filter(o=>snoozeActive(o)).length;const act=filteredMyTasks.length-pk;return act+" pendiente"+(act!==1?"s":"")+(pk>0?" · "+pk+" en espera":"")})()}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color={C.ios}/>}
           {user==="preprensa"&&<FirstTimeHint role={user} hintKey="tasks-prep" text="Aquí verás órdenes para validar, diseñar y aprobar pruebas. Prepara archivos en Diseño, súbelos y envía a Prueba de Color para Germán." color={C.dsn}/>}
           {user==="german"&&<FirstTimeHint role={user} hintKey="tasks-german" text="Aquí verás pruebas para imprimir y órdenes para CTP. Imprime en el Epson, y usa tu Tablero para mover órdenes por CTP y Procesadora." color={C.ctp}/>}
@@ -16166,18 +16231,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {/* v10.41.0 — Chips redondos de filtro */}
           <TaskFilterChips
             filters={taskFilterConfigs}
-            tasks={user==="karla"?myTasks.filter(o=>!(snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice")):myTasks}
+            tasks={myTasks.filter(o=>!snoozeActive(o))}
             activeFilters={taskFilters}
             onToggle={key=>setTaskFilters(prev=>{const next=new Set(prev);if(next.has(key))next.delete(key);else next.add(key);return next})}
           />
-          {(()=>{const effRole=(user==="admin"&&adminRoleFilter)?adminRoleFilter:user;const isParked=o=>effRole==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice";const staleIds=new Set(staleTasks.map(o=>o.id));const normalTasks=filteredMyTasks.filter(o=>!staleIds.has(o.id)&&!isParked(o));const visibleStale=staleTasks.filter(o=>filteredMyTasks.some(ft=>ft.id===o.id)&&!isParked(o));const waitTasks=effRole==="karla"?filteredMyTasks.filter(o=>snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice").sort((a,b)=>(a.client||"").localeCompare(b.client||"")):[];return <>{visibleStale.length>0&&<div style={{background:C.dn+"08",border:"1.5px solid "+C.dn+"25",borderRadius:14,padding:14,marginBottom:14}}>
+          {(()=>{const effRole=(user==="admin"&&adminRoleFilter)?adminRoleFilter:user;const isParked=o=>snoozeActive(o);const staleIds=new Set(staleTasks.map(o=>o.id));const normalTasks=filteredMyTasks.filter(o=>!staleIds.has(o.id)&&!isParked(o));const visibleStale=staleTasks.filter(o=>filteredMyTasks.some(ft=>ft.id===o.id)&&!isParked(o));const waitTasks=filteredMyTasks.filter(o=>snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));return <>{visibleStale.length>0&&<div style={{background:C.dn+"08",border:"1.5px solid "+C.dn+"25",borderRadius:14,padding:14,marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
               <div style={{background:C.dn,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{visibleStale.length}</div>
               <div><div style={{fontSize:13,fontWeight:700,color:C.dn}}>⚠️ Órdenes Estancadas</div><div style={{fontSize:10,color:C.t2}}>Llevan más de 24h sin avance — requieren tu atención</div></div>
             </div>
             {visibleStale.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
           </div>}
-          {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden espera":" órdenes esperan")+" factura del cliente, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><ReceiptIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>Esperan factura del cliente <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa hasta que el cliente la pida</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
+          {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden está":" órdenes están")+" en espera, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
@@ -16529,6 +16594,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
       {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
+      {snoozeTarget&&<SnoozeModal order={snoozeTarget} onConfirm={(data)=>applySnooze(snoozeTarget,data)} onClose={()=>setSnoozeTarget(null)}/>}
       {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
