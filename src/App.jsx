@@ -8,6 +8,12 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.31 — (1) Las órdenes EN ESPERA se OCULTAN del Tablero (Kanban + PreprensaBoard): dejan de hacer ruido
+//   visual en las columnas/pool; reaparecen en su etapa exacta al reactivarlas. Un chip "N en espera →" en la
+//   summary bar del Kanban avisa que hay pausadas y lleva a la vista dedicada (onAction goto_espera → setView).
+//   La lógica de drag/cola es intacta (opera sobre `orders`, no sobre los pools filtrados). (2) La vista "En espera"
+//   arranca con los grupos de etapa MINIMIZADOS (<details> sin `open`): índice compacto scaneable, clic para
+//   expandir la etapa — mata el scroll.
 // v10.73.30 — Re-critique #2 de "En espera" (subió 29→32/40); pasada de P2+P3 elegida (CTA sólido + colapsables):
 //   (1) CTA de reactivar SÓLIDO (bt(C.ac)) en la vista (era ghost → se leía secundario en una vista cuyo único fin
 //   es reactivar). (2) Grupos por etapa en <details open> colapsables (como Pendientes/board) + orden intra-grupo
@@ -10238,10 +10244,14 @@ function Pipeline({orders,role,onAction}) {
 
 // ─── KANBAN ────────────────────────────────────────
 function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
-  const ready=orders.filter(o=>o.stage==="ready"||o.stage==="maquila_in").sort(prioSort);
+  // v10.73.31 — ocultar las órdenes EN ESPERA del POOL de espera ("Listas"/maquila_in), que es donde se acumulan y
+  // hacen ruido. Las que están EN una máquina (in_production) NO se ocultan: la máquina NO debe aparecer "Disponible"
+  // enmascarando un trabajo montado + su timer. Se rastrean en la vista "En espera"; reaparecen en su etapa al reactivar.
+  const ready=orders.filter(o=>(o.stage==="ready"||o.stage==="maquila_in")&&!snoozeActive(o)).sort(prioSort);
   const inProd=orders.filter(o=>o.stage==="in_production");
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
+  const snoozedHidden=orders.filter(o=>snoozeActive(o)&&(o.stage==="ready"||o.stage==="maquila_in")).length;
   const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:role==="produccion"});
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
@@ -10293,6 +10303,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
       {["offset","acabados","digital"].map(type=>{const cnt=catCount(type);return <div key={type} style={{background:cc[type]+"10",border:"1px solid "+cc[type]+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
         <span style={{fontSize:18,fontWeight:800,color:cc[type]}}>{cnt}</span><span style={{fontSize:11,color:cc[type],fontWeight:600}}>{type.charAt(0).toUpperCase()+type.slice(1)}</span>
       </div>})}
+      {/* v10.73.31 — aviso de las pausadas ocultas del tablero → lleva a la vista "En espera" (no "ojos que no ven"). */}
+      {snoozedHidden>0&&<button onClick={()=>onAction(null,"goto_espera")} title="Órdenes en espera, ocultas del tablero. Clic para verlas y reactivarlas." style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:"8px 14px",display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><BellSlashIcon size={15} weight="bold" color={C.t2}/><span style={{fontSize:11,color:C.t2,fontWeight:600}}>{snoozedHidden} en espera</span><CaretRightIcon size={11} weight="bold" color={C.t3}/></button>}
       {inManual.length>0&&<div style={{background:C.emp+"10",border:"1px solid "+C.emp+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
         <span style={{fontSize:18,fontWeight:800,color:C.emp}}>{inManual.length}</span><span style={{fontSize:11,color:C.emp,fontWeight:600}}>Empaque</span>
       </div>}
@@ -10526,7 +10538,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
 // ─── PREPRENSA BOARD ──────────────────────────────
 function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],role}) {
   const ctpOrders=orders.filter(o=>o.stage==="ctp");
-  const readyCtp=ctpOrders.filter(o=>!o.current_machine).sort(prioSort);
+  const readyCtp=ctpOrders.filter(o=>!o.current_machine&&!snoozeActive(o)).sort(prioSort); // v10.73.31 — pausadas fuera del POOL de espera (no de las máquinas)
   const assigned=ctpOrders.filter(o=>o.current_machine);
   const ppMachines=MACHINES.filter(m=>m.type==="preprensa"&&m.status==="active");
   const [dO,setDO]=useState(null);
@@ -15845,6 +15857,7 @@ export default function PrintFlow() {
   },[user,userLogin,orders]);
 
   const handleAction=useCallback((id,action,payload)=>{
+    if(action==="goto_espera"){setView("espera");return} // v10.73.31 — chip "N en espera" del tablero → vista dedicada
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
@@ -16470,7 +16483,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 const ordIdx=s=>{const i=STAGE_SEQUENCE.indexOf(s);if(i>=0)return i;const j=MAQ_FLOW.findIndex(m=>m.id===s);return j>=0?100+j:200;};
                 const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
                 const stages=Object.keys(byStage).sort((a,b)=>ordIdx(a)-ordIdx(b));
-                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>{const ua=a.snooze_until?new Date(String(a.snooze_until).slice(0,10)).getTime():Infinity;const ub=b.snooze_until?new Date(String(b.snooze_until).slice(0,10)).getTime():Infinity;return ua-ub||(a.client||"").localeCompare(b.client||"");});return <details key={st} open>
+                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>{const ua=a.snooze_until?new Date(String(a.snooze_until).slice(0,10)).getTime():Infinity;const ub=b.snooze_until?new Date(String(b.snooze_until).slice(0,10)).getTime():Infinity;return ua-ub||(a.client||"").localeCompare(b.client||"");});return <details key={st}>
                   <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
                 </details>;})}</div>;
