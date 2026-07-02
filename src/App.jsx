@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.23 — Replicar/Duplicar ahora DUPLICAN el archivo de imagen en Storage (helper copyStorageImage) en vez de
+//   compartir la URL: cada orden tiene su propia imagen 1/2, así quitar/cambiar la imagen en una ya NO rompe la otra.
+//   Fallback a la referencia si la copia falla (no pierde la imagen). Elimina el riesgo de acoplamiento de v10.73.22.
 // v10.73.22 — (1) Bandeja de notificaciones ahora muestra la PERSONA (AUTHOR_NAME/AUTHOR_COLOR) en vez del rol,
 //   cerrando la migración de v10.73.21 (ya no quedan mapas rc/rN sueltos). (2) "Replicar de orden anterior" ahora
 //   copia también la imagen 1 (image_url) e imagen 2 (image_url_2) — como "Duplicar orden" (por referencia) — pero
@@ -8427,6 +8430,24 @@ function PantoneChips({codes}) {
   </div>;
 }
 
+// v10.73.23 — Duplica un archivo de imagen en Storage y devuelve la NUEVA URL pública (o null si falla). Se usa al
+// Replicar/Duplicar para que las órdenes NO compartan el mismo archivo (quitar/cambiar la imagen en una no rompe la
+// otra). Descarga el público + re-sube a un path nuevo en order-files.
+async function copyStorageImage(srcUrl,keyPrefix){
+  try{
+    if(!srcUrl||typeof srcUrl!=="string")return null;
+    const srcPath=srcUrl.split("/order-files/")[1]; if(!srcPath)return null; // no es del bucket (legacy/externa) → no duplicar
+    const {data:blob,error:dlErr}=await supabase.storage.from("order-files").download(decodeURIComponent(srcPath));
+    if(dlErr||!blob)return null;
+    const m=srcPath.split("?")[0].match(/\.([a-z0-9]+)$/i);
+    const ext=(m?m[1]:((blob.type||"").split("/")[1]||"jpg")).toLowerCase();
+    const path=(keyPrefix||"copy")+"/img-"+Date.now()+"-"+Math.random().toString(36).slice(2,8)+"."+ext;
+    const {error}=await supabase.storage.from("order-files").upload(path,blob,{upsert:true,contentType:blob.type||"image/jpeg"});
+    if(error){console.warn("[copyStorageImage] upload",error);return null;}
+    const {data}=supabase.storage.from("order-files").getPublicUrl(path);
+    return data?.publicUrl||null;
+  }catch(e){console.warn("[copyStorageImage]",e);return null;}
+}
 // ─── ORDER FORM ────────────────────────────────────
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
   const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false};
@@ -8490,9 +8511,6 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         const isEmpty=v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
         if(!isEmpty)next[k]=v;
       });
-      // imágenes (imagen 1 / imagen 2): copiar de la orden fuente SOLO en slots vacíos (no pisa arte ya adjuntado)
-      if(!next.image_url&&src.image_url)next.image_url=src.image_url;
-      if(!next.image_url_2&&src.image_url_2)next.image_url_2=src.image_url_2;
       if(prev.billing_mode==="stock"&&src.client_product_id&&src.client_id&&prev.client_id===src.client_id){
         next.client_product_id=src.client_product_id;
       }else if(src.client_product_id&&(prev.billing_mode!=="stock"||prev.client_id!==src.client_id)){
@@ -8501,6 +8519,25 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       return next;
     });
     setReplicateOpen(false);
+    // v10.73.23 — copiar el arte DUPLICANDO el archivo en Storage (no por referencia): cada orden con su propia
+    // imagen, así quitar/cambiar la imagen aquí ya NO afecta a la orden fuente. Async → bloquea submit mientras copia.
+    // Solo slots vacíos; si la copia falla, cae a la ref original (no perder la imagen).
+    const wantImg1=!f.image_url&&!!src.image_url, wantImg2=!f.image_url_2&&!!src.image_url_2;
+    if(wantImg1||wantImg2){
+      setImgUploading(true);
+      (async()=>{
+        try{
+          const [u1,u2]=await Promise.all([
+            wantImg1?copyStorageImage(src.image_url,"replica"):Promise.resolve(null),
+            wantImg2?copyStorageImage(src.image_url_2,"replica"):Promise.resolve(null),
+          ]);
+          setF(prev=>{const next={...prev};
+            if(wantImg1&&!prev.image_url)next.image_url=u1||src.image_url;
+            if(wantImg2&&!prev.image_url_2)next.image_url_2=u2||src.image_url_2;
+            return next;});
+        }finally{setImgUploading(false);}
+      })();
+    }
     // v10.59.6 — si la fuente trae acabados, sincronizar el panel "Otro" (customFinish/showOtroFinish)
     // con el acabado custom replicado; si no, no tocar el panel actual.
     if(src.finishes!==null&&src.finishes!==undefined&&src.finishes!==""){
@@ -15416,6 +15453,14 @@ export default function PrintFlow() {
     const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
     try{
+    // v10.73.23 — duplicar los archivos de imagen: la copia NO comparte Storage con la original (quitar/cambiar la
+    // imagen en una ya no rompe la otra). Si la copia falla, cae a la ref original (no pierde la imagen).
+    const [ni1,ni2]=await Promise.all([
+      orig.image_url?copyStorageImage(orig.image_url,dup.id):Promise.resolve(null),
+      orig.image_url_2?copyStorageImage(orig.image_url_2,dup.id):Promise.resolve(null),
+    ]);
+    if(ni1)dup.image_url=ni1; if(ni2)dup.image_url_2=ni2;
+    if(ni1||ni2)setOrders(p=>p.map(o=>o.id===dup.id?{...o,image_url:dup.image_url,image_url_2:dup.image_url_2}:o));
     await db.saveOrder(dup);
     await db.addTimeline(dup.id,"📋 Duplicada de "+origLabel,user,C.fac);
     showToast("📋 Orden duplicada como "+dupFolio);
