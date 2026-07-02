@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.21 — (1) Etapa "Lista" renombrada a "Lista para imprimir" (no se confunde con Salidas). (2) Autor de
+//   notas/eventos = la PERSONA logueada (display_name: Genaro, Lupita, Gerardo…) en vez del rol genérico. Mapa
+//   central ROLE_PEOPLE→AUTHOR_NAME/AUTHOR_COLOR con doble clave (rol para datos viejos, nombre para nuevos), aplicado
+//   a CommentLog, QuickNotes, notas del DetailModal, Timeline, StageFlowHistory y OrderChangeHistory. Se ESCRIBE
+//   userName (fuente de verdad); notas viejas se re-personalizan al mostrarse. NotificationTray queda por rol (aparte).
 // v10.73.20 — Hardening F1+F2 (scan exhaustivo, 10 hallazgos MED/LOW corregidos): (F2) reconstrucción de pausas
 //   robusta — no la cortan eventos neutros (edición/merma), cierran en Reactivada/transición/otra pausa, y una pausa
 //   vencida por fecha cierra en snooze_until (no infla); fmtDur redondea antes de descomponer (no más "1d 24h").
@@ -584,10 +589,17 @@ const finWithout=(s,base)=>finList(s).filter(x=>!(x.toLowerCase()===base.toLower
 // v10.73.4 — equivalencia en kg para productos vendidos por kilo (client_products.specs.sell_unit='kg').
 // Convierte un conteo de UNIDADES a kg (units/units_per_kg). Devuelve null si el producto NO es 'kg' (default seguro).
 const kgEquiv=(units,specs)=>{const upk=Number(specs&&specs.units_per_kg);if(!specs||specs.sell_unit!=="kg"||!(upk>0))return null;return (Math.abs(Number(units)||0)/upk).toLocaleString(undefined,{maximumFractionDigits:1})+" kg";};
-const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista",lt:"Lista",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
+const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista para imprimir",lt:"Lista p/ imprimir",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#2f9aad",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#2f9e7a",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
+// v10.73.21 — Autor de notas/eventos = la PERSONA (display_name), no el rol genérico. Mapa central rol→persona+color,
+// con doble clave: por ROL (notas viejas que guardaban "vendedor"/"produccion") y por NOMBRE (notas nuevas que ya
+// guardan "Genaro"/"Gerardo"), para que ambas rendericen igual. Si hay 2ª persona en un rol, su nombre real se
+// muestra vía fallback (AUTHOR_NAME[nombre]||nombre). Fuente de verdad al escribir = userName (display_name de la BD).
+const ROLE_PEOPLE={produccion:{n:"Gerardo",c:C.ios},preprensa:{n:"Noemí",c:C.dsn},german:{n:"Germán",c:C.ctp},secretaria:{n:"Lupita",c:C.fac},vendedor:{n:"Genaro",c:"#d97706"},karla:{n:"Karla",c:"#a855f7"},admin:{n:"Administrador",c:C.ok},sistema:{n:"Sistema",c:C.t3}};
+const AUTHOR_NAME={},AUTHOR_COLOR={};
+Object.entries(ROLE_PEOPLE).forEach(([r,m])=>{AUTHOR_NAME[r]=m.n;AUTHOR_NAME[m.n]=m.n;AUTHOR_COLOR[r]=m.c;AUTHOR_COLOR[m.n]=m.c;});
 // v10.61.0 — Badge de etapa/prioridad con icono Phosphor. `l` (con emoji) se conserva
 // para contextos de string (toasts, CSV, impresión, timeline, opciones); el badge JSX
 // usa Icon+lt vía estos helpers.
@@ -2110,9 +2122,7 @@ function Timeline({tl=[]}) {
   const [op,setOp]=useState(false);
   if(!tl?.length) return null;
   const show=op?tl:tl.slice(-3);
-  const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,karla:"#a855f7",sistema:C.t3,admin:C.ok};
-  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
-  return <div style={{marginTop:6}}><button onClick={()=>setOp(!op)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}><ClockCounterClockwiseIcon size={11} weight="bold"/>({tl.length}) {op?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>{(op||tl.length<=3)&&<div style={{marginTop:6,borderLeft:"2px solid "+C.bd,paddingLeft:12}}>{show.map((e,i)=><div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:C.tx,fontWeight:500}}>{e.action}</div><div style={{fontSize:10,color:C.t3}}><span style={{color:rc[e.by]||C.t3,fontWeight:600}}>{rN[e.by]||e.by||""}</span>{e.by?" · ":""}{fDT(e.date)}</div></div>)}</div>}</div>;
+  return <div style={{marginTop:6}}><button onClick={()=>setOp(!op)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}><ClockCounterClockwiseIcon size={11} weight="bold"/>({tl.length}) {op?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>{(op||tl.length<=3)&&<div style={{marginTop:6,borderLeft:"2px solid "+C.bd,paddingLeft:12}}>{show.map((e,i)=><div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:C.tx,fontWeight:500}}>{e.action}</div><div style={{fontSize:10,color:C.t3}}><span style={{color:AUTHOR_COLOR[e.by]||C.t3,fontWeight:600}}>{AUTHOR_NAME[e.by]||e.by||""}</span>{e.by?" · ":""}{fDT(e.date)}</div></div>)}</div>}</div>;
 }
 // 🆕 v10.58.41 — Historial campo-a-campo de cambios (lee order_change_log).
 // Carga on-demand al expandir. Muestra: campo · antes → después · quién · cuándo.
@@ -2120,7 +2130,6 @@ function OrderChangeHistory({orderId}) {
   const [open,setOpen]=useState(false);
   const [rows,setRows]=useState(null);
   const [loading,setLoading]=useState(false);
-  const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,karla:"#a855f7",sistema:C.t3,admin:C.ok};
   const load=async()=>{
     // v10.58.43 #34: refetch en cada apertura — antes cacheaba para siempre y las
     // ediciones posteriores no aparecían al re-expandir.
@@ -2153,7 +2162,7 @@ function OrderChangeHistory({orderId}) {
             <span style={{color:C.ok}}>{fmtV(r.field,r.value_after)}</span>
           </div>
           <div style={{color:C.t3,fontSize:9}}>
-            <span style={{color:rc[r.changed_by]||C.t3,fontWeight:600}}>{r.changed_by}</span>
+            <span style={{color:AUTHOR_COLOR[r.changed_by]||C.t3,fontWeight:600}}>{AUTHOR_NAME[r.changed_by]||r.changed_by}</span>
             {" · "}{fDT(r.changed_at)}
             {r.stage_at_change&&<span> · <StageLbl stage={r.stage_at_change} size={9}/></span>}
           </div>
@@ -2210,7 +2219,6 @@ function StageFlowHistory({order:o}){
   },[o]);
   if(!data.segs.length) return null;
   const fmtDur=h=>{ if(h==null)return "—"; if(h<1)return Math.max(1,Math.round(h*60))+"m"; if(h<9.95)return h.toFixed(1)+"h"; const H=Math.round(h); if(H<24)return H+"h"; const d=Math.floor(H/24),hr=H%24; return d+"d"+(hr?" "+hr+"h":""); };
-  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
     <button onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dn,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
     {open&&<div style={{marginTop:8}}>
@@ -2226,7 +2234,7 @@ function StageFlowHistory({order:o}){
               <span style={{fontSize:12,fontWeight:700,color:c}}><StageLbl stage={s.stage}/></span>
               {!s.endpoint&&<span style={{fontSize:11,fontWeight:700,color:durC,background:durC+"14",padding:"1px 7px",borderRadius:5}}>{s.current?"en curso · ":""}{fmtDur(s.hours)}{s.current&&snoozeActive(o)?" · en espera":""}</span>}
             </div>
-            <div style={{fontSize:10,color:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(rN[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
+            <div style={{fontSize:10,color:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(AUTHOR_NAME[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
           </div>
         </div>;
       })}
@@ -2642,16 +2650,12 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
 function CommentLog({comments=[],onAdd,role}) {
   const [text,setText]=useState("");const [show,setShow]=useState(false);
   const add=()=>{if(!text.trim())return;onAdd({text:text.trim(),by:role,date:new Date().toISOString()});setText("")};
-  const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,karla:"#a855f7",sistema:C.t3,admin:C.ok};
-  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
-  return <div style={{marginTop:6}}>{comments.length>0&&<div style={{maxHeight:80,overflowY:"auto",marginBottom:4}}>{comments.map((c,i)=><div key={i} style={{padding:"2px 0",fontSize:10,borderBottom:i<comments.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontWeight:600,color:rc[c.by]||C.t3}}>{rN[c.by]||c.by}</span> {c.text} <span style={{color:C.t3,fontSize:10}}>{fDT(c.date)}</span></div>)}</div>}{!show?<button onClick={()=>setShow(true)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}><ChatCircleIcon size={12} weight="bold"/>Nota</button>:<div style={{display:"flex",gap:4}}><input style={{...inp,flex:1,padding:"6px 10px",fontSize:11}} value={text} onChange={e=>setText(e.target.value)} placeholder="Nota..." onKeyDown={e=>e.key==="Enter"&&add()}/><button onClick={add} style={bs(C.ac)}>↑</button><button onClick={()=>setShow(false)} style={bs(C.sf,C.t2)}>✕</button></div>}</div>;
+  return <div style={{marginTop:6}}>{comments.length>0&&<div style={{maxHeight:80,overflowY:"auto",marginBottom:4}}>{comments.map((c,i)=><div key={i} style={{padding:"2px 0",fontSize:10,borderBottom:i<comments.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontWeight:600,color:AUTHOR_COLOR[c.by]||C.t3}}>{AUTHOR_NAME[c.by]||c.by}</span> {c.text} <span style={{color:C.t3,fontSize:10}}>{fDT(c.date)}</span></div>)}</div>}{!show?<button onClick={()=>setShow(true)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}><ChatCircleIcon size={12} weight="bold"/>Nota</button>:<div style={{display:"flex",gap:4}}><input style={{...inp,flex:1,padding:"6px 10px",fontSize:11}} value={text} onChange={e=>setText(e.target.value)} placeholder="Nota..." onKeyDown={e=>e.key==="Enter"&&add()}/><button onClick={add} style={bs(C.ac)}>↑</button><button onClick={()=>setShow(false)} style={bs(C.sf,C.t2)}>✕</button></div>}</div>;
 }
 
 // ─── QUICK NOTES (mini-chat between roles) ────────
 function QuickNotes({notes=[],onAdd,role}) {
   const [text,setText]=useState("");const [open,setOpen]=useState(false);
-  const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,karla:"#a855f7",sistema:C.t3,admin:C.ok};
-  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
   const send=()=>{if(!text.trim())return;onAdd(text.trim());setText("")};
   const hasNotes=notes.length>0;
   return <div style={{marginTop:6}}>
@@ -2661,9 +2665,9 @@ function QuickNotes({notes=[],onAdd,role}) {
     {open&&<div style={{marginTop:6,background:"#f0f4f8",borderRadius:12,border:"0.5px solid "+C.bd,overflow:"hidden"}}>
       {hasNotes&&<div style={{maxHeight:140,overflowY:"auto",padding:"8px 10px"}}>
         {notes.map((n,i)=>{
-          const isMe=n.by===role;
+          const isMe=n.by===role||n.by===AUTHOR_NAME[role];
           return <div key={i} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start",marginBottom:6}}>
-            <div style={{fontSize:9,color:rc[n.by]||C.t3,fontWeight:600,marginBottom:1}}>{rN[n.by]||n.by}</div>
+            <div style={{fontSize:9,color:AUTHOR_COLOR[n.by]||C.t3,fontWeight:600,marginBottom:1}}>{AUTHOR_NAME[n.by]||n.by}</div>
             <div style={{background:isMe?C.ios:"#fff",color:isMe?"#fff":C.tx,padding:"6px 10px",borderRadius:10,fontSize:11,maxWidth:"85%",lineHeight:1.4,boxShadow:C.sh1}}>{n.text}</div>
             <div style={{fontSize:8,color:C.t3,marginTop:1}}>{fDT(n.date)}</div>
           </div>;
@@ -3321,7 +3325,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12 (extensión): campo notes oculto para vendedor en órdenes ajenas (puede contener acuerdos verbales/descuentos/info comercial sensible) */}
       {vOwns&&o.notes&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Notas</div><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5,maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{o.notes}</div></>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12: quick_notes ocultos para vendedor en órdenes ajenas (mismo gate vOwns que precios/contactos) */}
-      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><ChatCircleIcon size={12} weight="bold" color={C.ios}/>Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
+      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><ChatCircleIcon size={12} weight="bold" color={C.ios}/>Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:AUTHOR_COLOR[n.by]||C.t3}}>{AUTHOR_NAME[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
       {/* v10.73.19 (F2) — Historial de tiempos por etapa (cuánto en cada una, quién la movió, regresiones). */}
@@ -8898,7 +8902,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!isMaq&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><DiscIcon size={12} weight="bold"/>Placa CTP</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="new_ctp"?"":"new_ctp")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="new_ctp"?C.ctp:C.bd),background:f.plate_status==="new_ctp"?C.ctp+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="new_ctp"?700:500,color:f.plate_status==="new_ctp"?C.ctp:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="new_ctp"?"✓ ":""}<PlusIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Nueva CTP</button>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:12,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}<ArrowsClockwiseIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ya existe (reutilizar)</button>
-    </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:10,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para Producción".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:10,color:C.ctp,fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
+    </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:10,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para imprimir".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:10,color:C.ctp,fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
     {/* v10.22.0 — Hasta 2 imágenes de referencia (compresión client-side via v10.16.0). */}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><img src={val} alt="" style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();const path=(f.id||"new-img-"+Date.now())+"/img-"+(idx+1)+"-"+Date.now()+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);s(slot,urlData.publicUrl);if(idx===0)s("image",null)}catch(err){console.error("[image upload "+slot+"]",err);showToast?.("⚠️ Error al subir imagen: "+(err?.message||err),"error")}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
     {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={()=>{s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
@@ -9717,7 +9721,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt(C.cart)}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
       {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
       {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
-      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista</button>}
+      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista p/ imprimir</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
       {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
@@ -14365,7 +14369,7 @@ export default function PrintFlow() {
           const skipCtp = o.plate_status === "existing";
           const targetStage = skipCtp ? "ready" : "design";
           const tlMsg = skipCtp
-            ? "📝 → ✅ Ambos validaron · Placa ya existe → Lista para Producción (auto-skip CTP)"
+            ? "📝 → ✅ Ambos validaron · Placa ya existe → Lista para imprimir (auto-skip CTP)"
             : "📝 → 🎨 Ambos validaron → Diseño (auto)";
           const tlColor = skipCtp ? C.live : C.dsn;
           const { count, error:afErr } = await supabase.from("orders").update({ stage: targetStage }, { count: "exact" }).eq("id", o.id).eq("stage", "draft");
@@ -15554,9 +15558,10 @@ export default function PrintFlow() {
     // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no comenta en órdenes ajenas
     const o=orders.find(x=>x.id===oid);
     if(o&&!canExecuteAction("addComment",o,user,userLogin)){showToast(actionDeniedToast("addComment",o,user,userLogin),"error");return}
-    setOrders(p=>p.map(o=>o.id===oid?{...o,comments:[...(o.comments||[]),c]}:o));
-    try{await db.addComment(oid,c.text,c.by)}catch(e){console.error("[addComment] Error:",e);showToast("❌ No se pudo guardar nota: "+(e?.message||"error desconocido"),"error")}
-  },[orders,user,userLogin,showToast]);
+    const cc={...c,by:userName||user}; // v10.73.21 — autor = la persona logueada (display_name), no el rol
+    setOrders(p=>p.map(o=>o.id===oid?{...o,comments:[...(o.comments||[]),cc]}:o));
+    try{await db.addComment(oid,cc.text,cc.by)}catch(e){console.error("[addComment] Error:",e);showToast("❌ No se pudo guardar nota: "+(e?.message||"error desconocido"),"error")}
+  },[orders,user,userName,userLogin,showToast]);
 
   const webApprove=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);if(!o)return;
@@ -15901,7 +15906,7 @@ export default function PrintFlow() {
       // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no agrega notas a órdenes ajenas
       const qnOrd=orders.find(x=>x.id===id);
       if(qnOrd&&!canExecuteAction("quick_note",qnOrd,user,userLogin)){showToast(actionDeniedToast("quick_note",qnOrd,user,userLogin),"error");return}
-      const noteObj={text:payload,by:user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
+      const noteObj={text:payload,by:userName||user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,userName||user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
     }
     if(action==="duplicate")duplicate(id);
     if(action==="load_stock")loadStock(id);
@@ -16087,7 +16092,7 @@ export default function PrintFlow() {
       if(o&&!canExecuteAction("web_reject",o,user,userLogin)){showToast(actionDeniedToast("web_reject",o,user,userLogin),"error");return}
       if(o)setWebRejectModal(o)
     }
-  },[orders,advance,approveProof,addComment,duplicate,deleteOrder,doAdv,showToast,user,userLogin,reload,webApprove]);
+  },[orders,advance,approveProof,addComment,duplicate,deleteOrder,doAdv,showToast,user,userName,userLogin,reload,webApprove]);
 
   // Filtered orders for view — "mine" shows only orders created by current user, "all" shows everything
   // Only applies to vendedor/secretaría/admin; other roles always see all orders
