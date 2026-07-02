@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.27 — Fixes del scan ronda 4 (1 MED + 1 LOW; la búsqueda se secó: 9→7→4→2, cross-app verificado limpio):
+//   (MED) la exención far-due de "Lista para imprimir" estaba en la regla stale/getStale pero NO en la regla
+//   no_machine de diagnoseOrder → la misma orden salía sana en Salud pero "sin máquina" en la Torre; ahora consistente.
+//   (LOW) el botón "Quitar espera" del DetailModal usaba canActFlow (isSec incluye vendedor) → gate canUnsnooze
+//   que espeja el isResp de la card (secretaria estricta), para no sobre-otorgar unsnooze de maquila a un vendedor.
 // v10.73.26 — Fixes del scan ronda 3 (1 MED + 3 LOW; F2 math salió limpia): (MED) una nota/comentario en una orden
 //   ENTREGADA desaparecía de la UI al llegar el realtime reload (loadOrders relatedOnly omite related de etapas
 //   finales) → reload preserva del estado previo notas/comentarios/timeline de órdenes finales. (LOW) Duplicar ya no
@@ -2348,7 +2353,7 @@ function diagnoseOrder(o){
     // v10.58.65: perseguir al proveedor lento es del vendedor (Genaro) si tiene usuario;
     // external solo cuando cae a Lupita (ella da seguimiento al externo en ese caso).
     return R("maq_sleep","🚚 En maquila con "+((o.maq_provider||"el proveedor").trim())+" hace "+d+" días sin recibirse",_maqRole,_maqName,{external:!_maqByVendor,sev:d>=14?"red":"orange"});
-  if(stage==="ready"&&!o.current_machine&&d>=1)
+  if(stage==="ready"&&!o.current_machine&&d>=1&&!(o.due_date&&bizDaysUntil(o.due_date)>5)) // v10.73.27 — misma exención far-due que la regla stale/getStale (entrega lejana no toca máquina aún)
     return R("no_machine","🖱️ Sin máquina asignada hace "+d+" día"+(d===1?"":"s"),"produccion","Gerardo",{});
   if(o.needs_reprint)
     return R("reprint","🔁 Marcada para REIMPRIMIR","produccion","Gerardo",{sev:"red"});
@@ -3278,6 +3283,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const _agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
   const _secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||_agentMatch;
   const canActFlow=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&isSec(role)));
+  // v10.73.27 — gate ESPECÍFICO para "Quitar espera": espeja isResp de la card (secretaria estricta, NO isSec que incluye vendedor) para no sobre-otorgar unsnooze de maquila a un vendedor
+  const canUnsnooze=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&role==="secretaria")||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&role==="secretaria"));
   // cierra el modal y despacha (mismo patrón que dispatch, pero forwardea el 3er arg de advance)
   const flowDispatch=(id,action,arg)=>{onClose();if(onAction)onAction(id,action,arg)};
   // v10.72.28 — botón Editar TAMBIÉN en el modal para el DUEÑO (no solo admin). Genaro abría el detalle de su
@@ -3399,7 +3406,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <div style={{position:"sticky",bottom:0,marginTop:16,marginLeft:-24,marginRight:-24,padding:"12px 24px 0",background:C.bg,borderTop:"0.5px solid "+C.bd,boxShadow:"0 -6px 14px -10px rgba(26,26,31,.18)",zIndex:2}}>
         {canActFlow&&!snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}><span style={{fontSize:9.5,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em",display:"inline-flex",alignItems:"center",gap:4,marginRight:2}}><FlowArrowIcon size={11} weight="bold"/>Flujo</span><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>}
         {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
-        {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canActFlow&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
+        {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
