@@ -8,6 +8,10 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.19 — Historial de tiempos por etapa (F2): componente StageFlowHistory reconstruye del order_timeline cuánto
+//   estuvo la orden en cada etapa (NETEANDO pausas "En espera" y fines de semana), día/hora de cada paso, quién la
+//   movió, y las regresiones (retrocesos). Va en el DetailModal + el expand de OCard. Vuelve objetivo el "se echan
+//   la bolita". Helpers bizMsBetween/bizHoursBetween. Conecta con F1: las pausas se restan del tiempo real.
 // v10.73.18 — "En espera" GENERALIZADO (F1): el responsable de cada área (+admin) puede pausar sus órdenes con
 //   razón (SnoozeModal: chips predefinidos + texto libre + fecha opcional). El snooze ahora deja de contar como
 //   ESTANCADA en TODOS lados (getStale respeta snooze → badge/filtro/Pipeline/MaquilaTracker). Auto-exención:
@@ -1656,6 +1660,10 @@ const hoursAgo=d=>d?Math.round((Date.now()-new Date(d).getTime())/3600000):0;
 // Para "estancadas": una orden parada el viernes no acumula días durante el fin de semana.
 // Itera por día (incremento a medianoche local → seguro ante DST) restando el fin de semana.
 const bizHoursAgo=d=>{if(!d)return 0;const start=new Date(d).getTime();const now=Date.now();if(now<=start)return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<now&&guard++<420){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(now,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return Math.round((now-start-weekendMs)/3600000);};
+// v10.73.19 (F2) — ms HÁBILES entre dos instantes (resta fines de semana completos), generaliza bizHoursAgo.
+function bizMsBetween(a,b){const start=new Date(a).getTime(),end=new Date(b).getTime();if(!(end>start))return 0;let weekendMs=0;let cur=new Date(start);cur.setHours(0,0,0,0);let guard=0;while(cur.getTime()<end&&guard++<3660){const dow=cur.getDay();const dayStart=cur.getTime();const nextMid=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+1).getTime();if(dow===0||dow===6){const ds=Math.max(start,dayStart);const de=Math.min(end,nextMid);if(de>ds)weekendMs+=de-ds;}cur=new Date(nextMid);}return end-start-weekendMs;}
+// horas hábiles trabajables entre a y b, NETEANDO las ventanas de pausa "En espera" (mismo motor bizMs → sin doble-conteo del finde dentro de la pausa).
+function bizHoursBetween(a,b,pauses){let ms=bizMsBetween(a,b);(pauses||[]).forEach(p=>{const s=Math.max(new Date(a).getTime(),new Date(p.start).getTime());const e=Math.min(new Date(b).getTime(),new Date(p.end).getTime());if(e>s)ms-=bizMsBetween(s,e);});return Math.max(0,ms)/3600000;}
 // v10.43.1 FIX M4 — Traduce errores SQL crudos a mensajes legibles para Karla/Gerardo.
 // v10.43.2 FIX M5 — Cobertura de UNIQUE constraints (doble click).
 const humanizeStockError=err=>{
@@ -2167,6 +2175,57 @@ function bizDaysSince(date){
 // 🗼 v10.58.52 — TORRE DE CONTROL: motor de diagnóstico central.
 // snoozeActive: la orden está marcada "en espera" (Torre) — se auto-desactiva si
 // cambia de etapa o si pasa la fecha límite.
+// v10.73.19 (F2) — Historial de tiempos por etapa: reconstruye del timeline cuánto estuvo la orden en cada etapa
+// (neteando pausas "En espera" y fines de semana), el día/hora de cada paso, quién la movió, y las regresiones.
+// Vuelve objetivo el "se echan la bolita": el registro muestra exactamente cuándo entró/salió de cada etapa y quién.
+function StageFlowHistory({order:o}){
+  const [open,setOpen]=useState(false);
+  const data=useMemo(()=>{
+    const tl=(o?.timeline||[]).filter(t=>t?.date&&!isNaN(new Date(t.date).getTime())).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+    const nowISO=new Date().toISOString();
+    const isFinal=s=>/delivered|cancelled|stocked|maq_delivered|maq_cancelled/.test(s||"");
+    // ventanas de pausa: cada evento "En espera" (🔕/🧾) hasta el siguiente evento del timeline (🔔 Reactivada / avance) o ahora
+    const pauses=[]; tl.forEach((t,i)=>{ if(/En espera/i.test(t.action||"")){ pauses.push({start:t.date,end:tl[i+1]?.date||nowISO}); } });
+    // el evento "📋 Orden creada" YA trae to=etapa inicial + by=creador → NO lo tratamos como transición (evita fila duplicada)
+    const created=tl.find(t=>/Orden creada/i.test(t.action||""));
+    const trans=tl.filter(t=>t.to&&!/Orden creada/i.test(t.action||""));
+    const seqIdx=s=>STAGE_SEQUENCE.indexOf(s);
+    let segs=[];
+    if(trans.length===0){
+      if(o?.created_at&&!isFinal(o.stage)) segs=[{stage:o.stage,at:o.created_at,by:created?.by||o.created_by,current:true,isReg:false,hours:bizHoursBetween(o.created_at,nowISO,pauses)}];
+    } else {
+      const initStage=created?.to||(o.order_type==="maquila"?"maq_created":"draft");
+      if(o.created_at&&new Date(o.created_at)<new Date(trans[0].date)) segs.push({stage:initStage,at:o.created_at,by:created?.by||o.created_by,current:false,isReg:false,hours:bizHoursBetween(o.created_at,trans[0].date,pauses)});
+      trans.forEach((t,i)=>{ const last=i===trans.length-1; const endpoint=last&&isFinal(t.to); const end=last?(endpoint?t.date:nowISO):trans[i+1].date; const prev=segs.length?segs[segs.length-1].stage:null; const isReg=/^↩️/.test(t.action||"")||(!!prev&&seqIdx(t.to)>=0&&seqIdx(prev)>=0&&seqIdx(t.to)<seqIdx(prev)); segs.push({stage:t.to,at:t.date,by:t.by,current:last&&!endpoint,endpoint,isReg,hours:bizHoursBetween(t.date,end,pauses)}); });
+    }
+    return {segs,regs:segs.filter(s=>s.isReg).length};
+  },[o]);
+  if(!data.segs.length) return null;
+  const fmtDur=h=>{ if(h==null)return "—"; if(h<1)return Math.max(1,Math.round(h*60))+"m"; if(h<24)return (h<10?h.toFixed(1):String(Math.round(h)))+"h"; const d=Math.floor(h/24),hr=Math.round(h%24); return d+"d"+(hr?" "+hr+"h":""); };
+  const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",sistema:"Sistema"};
+  return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
+    <button onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dn,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+    {open&&<div style={{marginTop:8}}>
+      {data.segs.map((s,i)=>{ const st=SM[s.stage]; const c=s.isReg?C.dn:(st?.c||C.t3); const durC=s.hours>=48?C.dn:s.hours>=24?C.amb:C.t2;
+        return <div key={i} style={{display:"flex",gap:10,alignItems:"stretch"}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,paddingTop:3}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:c,flexShrink:0,boxShadow:s.current?"0 0 0 3px "+c+"22":"none"}}/>
+            {i<data.segs.length-1&&<div style={{width:2,flex:1,minHeight:16,background:C.bd,marginTop:2}}/>}
+          </div>
+          <div style={{flex:1,minWidth:0,paddingBottom:i<data.segs.length-1?10:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              {s.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dn}/></span>}
+              <span style={{fontSize:12,fontWeight:700,color:c}}><StageLbl stage={s.stage}/></span>
+              {!s.endpoint&&<span style={{fontSize:11,fontWeight:700,color:durC,background:durC+"14",padding:"1px 7px",borderRadius:5}}>{s.current?"en curso · ":""}{fmtDur(s.hours)}{s.current&&snoozeActive(o)?" · en espera":""}</span>}
+            </div>
+            <div style={{fontSize:10,color:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(rN[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
+          </div>
+        </div>;
+      })}
+      <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Tiempo hábil (sin fines de semana ni pausas "En espera")</div>
+    </div>}
+  </div>;
+}
 function snoozeActive(o){
   if(!o?.snooze_reason) return false;
   if(o.snooze_stage && o.snooze_stage !== o.stage) return false;
@@ -3257,6 +3316,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {vOwns&&(o.notes_log||[]).length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><ChatCircleIcon size={12} weight="bold" color={C.ios}/>Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{const rc={secretaria:C.fac,vendedor:"#d97706",produccion:C.ios,preprensa:C.dsn,german:C.ctp,admin:C.ok};const rN={produccion:"Producción",preprensa:"Noemí",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",admin:"Admin"};return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:rc[n.by]||C.t3}}>{rN[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
+      {/* v10.73.19 (F2) — Historial de tiempos por etapa (cuánto en cada una, quién la movió, regresiones). */}
+      {vOwns&&o.timeline?.length>0&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
+        <StageFlowHistory order={o}/>
+      </div>}
       {/* 🆕 v10.58.41 — Historial campo-a-campo de cambios (antes/después/quién/cuándo).
           Mismo gate vOwns que precios/notas: un vendedor no ve el historial de órdenes ajenas. */}
       {vOwns&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
@@ -9964,6 +10027,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView}) {
       {!expanded&&(o.waste_log||[]).length>0&&<span style={{fontSize:9,color:C.wn,fontWeight:600}}><TrashIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0)+(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0)} merma</span>}
       {!expanded&&(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage)&&<button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.wn),padding:"3px 8px",fontSize:9}}><TrashIcon size={11} weight="bold"/>+</button>}
     </div>}
+    {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><StageFlowHistory order={o}/></div>}
     {!compact&&expanded&&o.timeline?.length>0&&<div onClick={e=>e.stopPropagation()}><Timeline tl={o.timeline}/></div>}
     {/* v10.58.41 — historial campo-a-campo de cambios (carga on-demand).
         v10.58.42 Fix #2: gate vOwns — el historial expone precio/costo maquila/cliente;
