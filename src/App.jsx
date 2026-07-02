@@ -8,6 +8,14 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.36 — nombres del workflow de MAQUILA auto-descriptivos (pedido de Marcelo: distinguir el proceso en el que está una
+//   orden sin ambigüedad, EN CUALQUIER contexto). MAQ_FLOW: Creada→"Creada (Maquila)", Enviada→"Enviada a Maquila",
+//   Proceso→"Proceso en Maquila", Recibida→"Recibida de Maquila", Entregada→"Entregada (Maquila)". Rama maquila del flujo
+//   interno: maquila_out "Maquila"→"Enviada a Maquila", maquila_in "De Maquila"→"Recibida de Maquila". + 2 filtros 1:1
+//   alineados (Karla "Maquila recibida"→"Recibida de Maquila", Producción "Maquila regresó"→"Recibida de Maquila"). Solo
+//   se cambian las etiquetas l/lt (los IDs de stage y los datos quedan intactos → propaga vía SM/StageLbl a badges, flujo,
+//   listas, Torre, En espera, toasts). Se CONSERVAN las agrupaciones (filtro "Maquilas"/"Maquila externa", zonas WIP) y los
+//   botones de acción (verbos: "Marcar Enviada", "Enviar a Maquila", "Recibido de Maquila").
 // v10.73.35 — "En espera" pulido de FRICCIÓN (panel de ideación de diseño, 3 mejoras de mayor ROI): (1) DESHACER al
 //   reactivar — unsnoozeOrder captura los snooze_* previos y el toast trae "Deshacer" que los restaura fieles (motivo,
 //   responsable, fecha, kind); antes reactivar era irreversible y un mis-click obligaba a re-teclear la razón. Cubre las
@@ -663,8 +671,9 @@ const finWithout=(s,base)=>finList(s).filter(x=>!(x.toLowerCase()===base.toLower
 // v10.73.4 — equivalencia en kg para productos vendidos por kilo (client_products.specs.sell_unit='kg').
 // Convierte un conteo de UNIDADES a kg (units/units_per_kg). Devuelve null si el producto NO es 'kg' (default seguro).
 const kgEquiv=(units,specs)=>{const upk=Number(specs&&specs.units_per_kg);if(!specs||specs.sell_unit!=="kg"||!(upk>0))return null;return (Math.abs(Number(units)||0)/upk).toLocaleString(undefined,{maximumFractionDigits:1})+" kg";};
-const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista para imprimir",lt:"Lista p/ imprimir",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Maquila",lt:"Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 De Maquila",lt:"De Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
-const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada",lt:"Creada",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada",lt:"Enviada",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso",lt:"Proceso",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida",lt:"Recibida",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
+const INT_FLOW=[{id:"draft",l:"📝 Validar",lt:"Validar",Icon:NotePencilIcon,c:"#aeaeb2",who:"both"},{id:"design",l:"🎨 Diseño",lt:"Diseño",Icon:PaletteIcon,c:"#b3567f",who:"preprensa"},{id:"proof_printing",l:"🖨️ Prueba",lt:"Prueba",Icon:PrinterIcon,c:"#6f6cc0",who:"german"},{id:"proof_client",l:"👤 Aprobación",lt:"Aprobación",Icon:UserIcon,c:"#b8902f",who:"preprensa"},{id:"ctp",l:"💿 CTP",lt:"CTP",Icon:DiscIcon,c:"#2c8395",who:"german"},{id:"placas_listas",l:"📋 Placas Listas",lt:"Placas Listas",Icon:ClipboardTextIcon,c:"#2f9aad",who:"produccion"},{id:"ready",l:"✅ Lista para imprimir",lt:"Lista p/ imprimir",Icon:CheckCircleIcon,c:"#3a9e6a",who:"produccion"},{id:"in_production",l:"⚙️ Máquina",lt:"Máquina",Icon:GearIcon,c:"#c07d2e",who:"produccion"},{id:"maquila_out",l:"🚚 Enviada a Maquila",lt:"Enviada a Maquila",Icon:TruckIcon,c:"#b06a34",who:"produccion"},{id:"maquila_in",l:"📥 Recibida de Maquila",lt:"Recibida de Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"produccion"},{id:"packaging",l:"📦 Empaque",lt:"Empaque",Icon:PackageIcon,c:"#9c5fb8",who:"produccion"},{id:"salidas",l:"📤 Salidas",lt:"Salidas",Icon:ExportIcon,c:"#2f9a5c",who:"karla"},{id:"delivered",l:"✅ Entregada",lt:"Entregada",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
+// v10.73.36 — nombres de las etapas de maquila auto-descriptivos ("... a/en/de Maquila") para distinguir el proceso EN CUALQUIER contexto (badge fuera del flujo, Torre, En espera, listas). Los IDs de stage NO cambian (datos intactos); solo l/lt.
+const MAQ_FLOW=[{id:"maq_created",l:"📋 Creada (Maquila)",lt:"Creada (Maquila)",Icon:ClipboardTextIcon,c:"#aeaeb2",who:"secretaria"},{id:"maq_sent",l:"🚚 Enviada a Maquila",lt:"Enviada a Maquila",Icon:TruckIcon,c:"#b06a34",who:"secretaria"},{id:"maq_in_progress",l:"⚙️ Proceso en Maquila",lt:"Proceso en Maquila",Icon:GearIcon,c:"#c07d2e",who:"secretaria"},{id:"maq_received",l:"📥 Recibida de Maquila",lt:"Recibida de Maquila",Icon:DownloadSimpleIcon,c:"#4187b5",who:"karla"},{id:"maq_delivered",l:"✅ Entregada (Maquila)",lt:"Entregada (Maquila)",Icon:CheckCircleIcon,c:"#3a9e6a",who:null}];
 const ALL_S=[...INT_FLOW,...MAQ_FLOW,{id:"cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"maq_cancelled",l:"❌ Cancelada",lt:"Cancelada",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"web_pending",l:"🌐 Pedido Web",lt:"Pedido Web",Icon:GlobeIcon,c:"#2f9aad",who:null},{id:"web_rejected",l:"❌ Web Rechazado",lt:"Web Rechazado",Icon:XCircleIcon,c:"#c84a3f",who:null},{id:"stocked",l:"📦 En Stock",lt:"En Stock",Icon:PackageIcon,c:"#2f9e7a",who:null}];
 const SM=Object.fromEntries(ALL_S.map(s=>[s.id,s]));
 // v10.73.21 — Autor de notas/eventos = la PERSONA (display_name), no el rol genérico. Mapa central rol→persona+color,
@@ -769,14 +778,14 @@ function getTaskFilters(role){
   const base = showPrice ? [...baseWithStale, {key:"no_price",Icon:CurrencyDollarIcon,label:"Sin precio",color:C.sal,predicate:o=>!o.price||Number(o.price)===0}] : baseWithStale;
   if(role==="karla")return[...base,
     {key:"salidas",Icon:ExportIcon,label:"Salidas",color:C.sal,predicate:o=>o.stage==="salidas"},
-    {key:"maq_received",Icon:DownloadSimpleIcon,label:"Maquila recibida",color:C.maqin,predicate:o=>o.stage==="maq_received"},
+    {key:"maq_received",Icon:DownloadSimpleIcon,label:"Recibida de Maquila",color:C.maqin,predicate:o=>o.stage==="maq_received"},
     {key:"oc_pending",Icon:ClipboardTextIcon,label:"OC pendiente folio",color:C.prf,predicate:o=>!!o.purchase_order_id&&!o.invoice_folio&&o.stage==="salidas"},
     {key:"pre_assigned",Icon:LockIcon,label:"Pre-asignados",color:C.cart,predicate:o=>!!o.invoice_pre_assigned},
   ];
   if(role==="produccion")return[...base,
     {key:"no_machine",Icon:MouseIcon,label:"Sin máquina",color:C.ios,predicate:o=>o.stage==="ready"&&!o.current_machine},
     {key:"in_production",Icon:GearIcon,label:"En máquina",color:C.amb,predicate:o=>o.stage==="in_production"},
-    {key:"maquila_in",Icon:DownloadSimpleIcon,label:"Maquila regresó",color:C.maqin,predicate:o=>o.stage==="maquila_in"},
+    {key:"maquila_in",Icon:DownloadSimpleIcon,label:"Recibida de Maquila",color:C.maqin,predicate:o=>o.stage==="maquila_in"},
     {key:"packaging",Icon:PackageIcon,label:"Empaque pendiente",color:C.emp,predicate:o=>o.stage==="packaging"},
   ];
   if(role==="preprensa")return[...base,
@@ -10204,7 +10213,8 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
   if(all.length===0)return null;
 
   // Get days since order entered maquila stage
-  const getDays=o=>{const tl=(o.timeline||[]).slice().reverse();const entry=tl.find(t=>t.action?.includes("Maquila")||t.action?.includes("🚚"));const d=entry?entry.date:o.created_at;return Math.max(0,Math.round((Date.now()-new Date(d).getTime())/86400000))};
+  // v10.73.36 — anclar en la transición de ENVÍO a maquila por el emoji 🚚 (único de las etiquetas "Enviada a Maquila"/partial "🚚 "+prov). El match por texto "Maquila" se ROMPIÓ con el rename v10.73.36: ahora TODAS las etiquetas maq_* contienen "Maquila", así que la transición Proceso→Recibida matcheaba y el contador medía "días desde recibida" (≈0). El 📥 de "Recibida de Maquila" NO lleva 🚚 → neutral (restaura el comportamiento previo al rename).
+  const getDays=o=>{const tl=(o.timeline||[]).slice().reverse();const entry=tl.find(t=>t.action?.includes("🚚"));const d=entry?entry.date:o.created_at;return Math.max(0,Math.round((Date.now()-new Date(d).getTime())/86400000))};
 
   // Group by provider
   const byProv={};all.forEach(o=>{const p=o.maquila_provider||o.maq_provider||"Sin proveedor";if(!byProv[p])byProv[p]={orders:[],totalDays:0};byProv[p].orders.push(o);byProv[p].totalDays+=getDays(o)});
@@ -10360,7 +10370,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
-            {o.stage==="maquila_in"&&<span style={{background:C.maqin+"12",color:C.maqin,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>De maquila</span>}
+            {o.stage==="maquila_in"&&<span style={{background:C.maqin+"12",color:C.maqin,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>{SM.maquila_in?.lt}</span>}
             {o.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><CircleIcon size={9} weight="fill"/></span>}
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           </div>
