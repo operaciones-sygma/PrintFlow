@@ -8,6 +8,13 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.30 — Re-critique #2 de "En espera" (subió 29→32/40); pasada de P2+P3 elegida (CTA sólido + colapsables):
+//   (1) CTA de reactivar SÓLIDO (bt(C.ac)) en la vista (era ghost → se leía secundario en una vista cuyo único fin
+//   es reactivar). (2) Grupos por etapa en <details open> colapsables (como Pendientes/board) + orden intra-grupo
+//   por snooze_until (próximas a vencer primero, indefinidas al final) en vez de A-Z. (3) Badge de conteo legible:
+//   número C.tx sobre fondo tintado del color de etapa (antes texto color-etapa sobre C.sf = <3:1 en etapas claras).
+//   (4) Banner sin el tinte ámbar muerto (C.amb+0d ~5% invisible → C.sf neutro). (5) Edge card-muda: si canSnooze=
+//   false (pre-asignada en etapa ajena) el banner dice "Le toca a <resp> · abre el detalle" en vez de quedar sin CTA.
 // v10.73.29 — /impeccable critique de la vista "En espera" (29/40), pasada de fixes P1+P2+menores: (1) OCard en
 //   "modo espera" (prop inEsperaView): suprime el muro de StageFlowButtons/cluster de avance (la card se abre al
 //   detalle con click) y los chips redundantes (T1 "En espera" + chip de etapa, ya que la etapa es el header del
@@ -9919,9 +9926,11 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   const canSnooze=(role==="admin"||isResp)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected","stocked"].includes(o.stage);
   // v10.73.29 — etiqueta de reactivar por etapa/kind (evita "Volver a producción" en salidas/factura); CTA con más peso en la vista dedicada.
   const reactLabel=o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":((inEsperaView&&!["salidas","maq_received"].includes(o.stage))?"Volver a producción":"Quitar espera");
-  const reactBtnStyle={...bs(C.ac+"15",C.ac),fontSize:inEsperaView?F.body:10,padding:inEsperaView?"6px 12px":"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"};
+  // v10.73.30 (re-critique) — en la vista dedicada el CTA es SÓLIDO (era ghost → se leía como secundario en una vista cuyo único propósito es reactivar); en el resto de vistas sigue tenue.
+  const reactBtnStyle=inEsperaView?{...bt(C.ac),fontSize:F.body,padding:"0 16px",minHeight:40,whiteSpace:"nowrap"}:{...bs(C.ac+"15",C.ac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"};
   // v10.73.29 — banner "En espera" (razón + reactivar) DEDUPLICADO: una sola definición para canAct y !canAct (antes byte-a-byte 2×). Borde sólido + tinte ámbar (era 1px dashed = léxico de "zona vacía", contradecía el contenido real).
-  const snoozeBanner=<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.amb+"0d",border:"1px solid "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:F.body,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>{canSnooze&&<button onClick={()=>onAction(o.id,"unsnooze")} style={reactBtnStyle}><BellRingingIcon size={12} weight="bold"/>{reactLabel}</button>}</div>;
+  // v10.73.30 (re-critique) — fondo neutro C.sf (el tinte ámbar 0d ~5% era invisible; en una vista donde TODO está pausado lo correcto es quieto). Edge: si no puedo reactivar (canSnooze=false, p.ej. pre-asignada de Karla en etapa ajena) muestro a quién le toca en vez de dejar la card muda.
+  const snoozeBanner=<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px solid "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:F.body,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>{canSnooze?<button onClick={()=>onAction(o.id,"unsnooze")} style={reactBtnStyle}><BellRingingIcon size={12} weight="bold"/>{reactLabel}</button>:(inEsperaView&&_resp?<span style={{fontSize:F.meta,color:C.t3,fontStyle:"italic",whiteSpace:"nowrap"}}>Le toca a {_resp.name} · abre el detalle</span>:null)}</div>;
   const mi=(c)=>({display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",border:"none",background:"transparent",color:c,fontFamily:"'Geist',sans-serif",fontSize:12,fontWeight:600,padding:"7px 10px",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"});
   const miHover={onMouseEnter:e=>{e.currentTarget.style.background=C.sf;},onMouseLeave:e=>{e.currentTarget.style.background="transparent";}};
 
@@ -16461,10 +16470,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 const ordIdx=s=>{const i=STAGE_SEQUENCE.indexOf(s);if(i>=0)return i;const j=MAQ_FLOW.findIndex(m=>m.id===s);return j>=0?100+j:200;};
                 const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
                 const stages=Object.keys(byStage).sort((a,b)=>ordIdx(a)-ordIdx(b));
-                return <div style={{display:"flex",flexDirection:"column",gap:18}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>(a.client||"").localeCompare(b.client||""));return <div key={st}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}}><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:SM[st]?.c||C.t2,background:C.sf,padding:"1px 9px",borderRadius:9,border:"1px solid "+C.bd}}>{list.length}</span></div>
+                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map(st=>{const list=byStage[st].slice().sort((a,b)=>{const ua=a.snooze_until?new Date(String(a.snooze_until).slice(0,10)).getTime():Infinity;const ub=b.snooze_until?new Date(String(b.snooze_until).slice(0,10)).getTime():Infinity;return ua-ub||(a.client||"").localeCompare(b.client||"");});return <details key={st} open>
+                  <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
-                </div>;})}</div>;
+                </details>;})}</div>;
               })()}
         </div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
