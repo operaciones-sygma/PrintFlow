@@ -8,6 +8,9 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.33 — /impeccable critique #3, último P2: el índice colapsado comunicaba VOLUMEN pero no URGENCIA. Se agrega
+//   un resumen de RIESGO DE ENTREGA en el header de "En espera" (chips "N con entrega vencida" rojo / "N con entrega
+//   ≤3 días" ámbar) — la urgencia (tiempo) es escaneable aunque los grupos estén plegados.
 // v10.73.32 — /impeccable critique #3 (la vista bajó 32→31 por el colapso-total: "landing vacío"). Fix: (1) auto-open
 //   ADAPTATIVO de los grupos — abre TODO si hay pocas (≤6 órdenes o ≤2 etapas), si no solo el grupo MÁS URGENTE;
 //   así ves órdenes al entrar sin reintroducir el scroll a alto volumen. (2) grupos ORDENADOS por urgencia (la orden
@@ -16481,7 +16484,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
-          <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes pausadas — se reactivan solas al cambiar de etapa o al vencer. Regrésalas al flujo con "Volver a producción" cuando estén listas.{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>
+          <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Órdenes pausadas — se reactivan solas al cambiar de etapa o al vencer. Regrésalas al flujo con "Volver a producción" cuando estén listas.{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>
+          {/* v10.73.33 (critique #3, P2) — resumen de RIESGO DE ENTREGA: la urgencia (tiempo) es escaneable aunque los grupos estén plegados. */}
+          {esperaOrders.length>0&&(()=>{const overdue=esperaOrders.filter(o=>o.due_date&&isOverdue(o.due_date)).length;const soon=esperaOrders.filter(o=>o.due_date&&!isOverdue(o.due_date)&&bizDaysUntil(o.due_date)<=3).length;if(!overdue&&!soon)return null;return <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"0 0 14px"}}>{overdue>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.dn,background:C.dn+"12",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"4px 10px"}} title="Órdenes en espera cuya fecha de entrega ya venció"><WarningIcon size={12} weight="fill"/>{overdue} con entrega vencida</span>}{soon>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.amb,background:C.amb+"12",border:"1px solid "+C.amb+"33",borderRadius:8,padding:"4px 10px"}} title="Entrega en 3 días hábiles o menos"><ClockIcon size={12} weight="bold"/>{soon} con entrega ≤3 días</span>}</div>;})()}
           {esperaOrders.length===0
             ? (!loaded ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,fontSize:13}}>Cargando…</div>
                : search ? <EmptyState icon={MagnifyingGlassIcon} title="Sin resultados" hint={"Ninguna orden en espera coincide con \""+search+"\"."} action={{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}}/>
