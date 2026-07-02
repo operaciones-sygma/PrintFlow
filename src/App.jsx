@@ -8,6 +8,15 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.35 — "En espera" pulido de FRICCIÓN (panel de ideación de diseño, 3 mejoras de mayor ROI): (1) DESHACER al
+//   reactivar — unsnoozeOrder captura los snooze_* previos y el toast trae "Deshacer" que los restaura fieles (motivo,
+//   responsable, fecha, kind); antes reactivar era irreversible y un mis-click obligaba a re-teclear la razón. Cubre las
+//   3 rutas (unsnooze/unsnooze_invoice/awaiting) porque todas pasan por unsnoozeOrder. (2) PILL de reactivación en el
+//   banner: distingue lo que vuelve SOLO (fecha → "se reactiva sola hoy/mañana/·<fecha>") de lo que espera acción humana
+//   ("sin fecha · reactivación manual"); reemplaza el "· hasta <fecha>" enterrado en el texto. (3) FIX del bug de plegado:
+//   los grupos usaban open={true} (controlado/no-controlado mezclado) → al cruzar el umbral de auto-open o reordenarse por
+//   urgencia React re-forzaba el grupo abierto y NO se podía plegar; ahora open es controlado (esperaGroupPrefs) + onToggle
+//   + persistido en localStorage (recuerda la elección entre visitas), con el default adaptativo como fallback.
 // v10.73.33 — /impeccable critique #3, último P2: el índice colapsado comunicaba VOLUMEN pero no URGENCIA. Se agrega
 //   un resumen de RIESGO DE ENTREGA en el header de "En espera" (chips "N con entrega vencida" rojo / "N con entrega
 //   ≤3 días" ámbar) — la urgencia (tiempo) es escaneable aunque los grupos estén plegados.
@@ -9949,7 +9958,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   const reactBtnStyle=inEsperaView?{...bt(C.ac),fontSize:F.body,padding:"0 16px",minHeight:40,whiteSpace:"nowrap"}:{...bs(C.ac+"15",C.ac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ac+"40",whiteSpace:"nowrap"};
   // v10.73.29 — banner "En espera" (razón + reactivar) DEDUPLICADO: una sola definición para canAct y !canAct (antes byte-a-byte 2×). Borde sólido + tinte ámbar (era 1px dashed = léxico de "zona vacía", contradecía el contenido real).
   // v10.73.30 (re-critique) — fondo neutro C.sf (el tinte ámbar 0d ~5% era invisible; en una vista donde TODO está pausado lo correcto es quieto). Edge: si no puedo reactivar (canSnooze=false, p.ej. pre-asignada de Karla en etapa ajena) muestro a quién le toca en vez de dejar la card muda.
-  const snoozeBanner=<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px solid "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:F.body,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span></span>{canSnooze?<button onClick={()=>onAction(o.id,"unsnooze")} style={reactBtnStyle}><BellRingingIcon size={12} weight="bold"/>{reactLabel}</button>:(inEsperaView&&_resp?<span style={{fontSize:F.meta,color:C.t3,fontStyle:"italic",whiteSpace:"nowrap"}}>Le toca a {_resp.name} · abre el detalle</span>:null)}</div>;
+  // v10.73.35 — pill de reactivación: distingue lo que se reactiva SOLO (tiene fecha) de lo que espera acción humana (sin fecha),
+  // y hace escaneable el "cuándo vuelve" sin abrir el detalle. Reemplaza el "· hasta <fecha>" enterrado en el texto del banner.
+  const _snzMidnight=o.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T00:00:00"):null;
+  const _snzDays=_snzMidnight?Math.round((_snzMidnight-new Date(new Date().toDateString()))/86400000):null;
+  const _snzPill=!_snzMidnight?{t:"Sin fecha · reactivación manual",c:C.t3,soft:true}:_snzDays<=0?{t:"Se reactiva sola hoy",c:C.amb,soft:false}:_snzDays===1?{t:"Se reactiva sola mañana",c:C.amb,soft:false}:{t:"Se reactiva sola · "+fD(o.snooze_until),c:C.t3,soft:true};
+  const snoozeBanner=<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"8px 12px",background:C.sf,border:"1px solid "+C.bd,borderRadius:10,display:"flex",alignItems:"center",gap:8,justifyContent:"space-between",flexWrap:"wrap"}}><span style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0,flex:1}}><span style={{fontSize:F.body,color:C.t2}}><BellSlashIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b> <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}</span></span><span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:F.meta,fontWeight:700,color:_snzPill.c,background:_snzPill.soft?C.bg:_snzPill.c+"14",border:"1px solid "+(_snzPill.soft?C.bd:_snzPill.c+"33"),borderRadius:7,padding:"2px 7px",whiteSpace:"nowrap"}} title={_snzMidnight?"Fecha en que la orden vuelve sola al flujo":"No hay fecha de reactivación automática: sigue en pausa hasta que alguien la reactive o cambie su etapa"}>{_snzMidnight?<ClockIcon size={10} weight="bold"/>:<HourglassIcon size={10} weight="bold"/>}{_snzPill.t}</span></span>{canSnooze?<button onClick={()=>onAction(o.id,"unsnooze")} style={reactBtnStyle}><BellRingingIcon size={12} weight="bold"/>{reactLabel}</button>:(inEsperaView&&_resp?<span style={{fontSize:F.meta,color:C.t3,fontStyle:"italic",whiteSpace:"nowrap"}}>Le toca a {_resp.name} · abre el detalle</span>:null)}</div>;
   const mi=(c)=>({display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",border:"none",background:"transparent",color:c,fontFamily:"'Geist',sans-serif",fontSize:12,fontWeight:600,padding:"7px 10px",borderRadius:7,cursor:"pointer",whiteSpace:"nowrap"});
   const miHover={onMouseEnter:e=>{e.currentTarget.style.background=C.sf;},onMouseLeave:e=>{e.currentTarget.style.background="transparent";}};
 
@@ -14941,12 +14955,26 @@ export default function PrintFlow() {
   const snoozeOrder=useCallback((o)=>{ setSnoozeTarget(o); },[]); // v10.73.18 — abre SnoozeModal (razón+chips+fecha) en vez del window.prompt
   const unsnoozeOrder=useCallback(async(o)=>{
     setActionLoading(o.id); // v10.72.52 — busy en la card evita doble-click
+    // v10.73.35 — captura los snooze_* ANTES de limpiar para poder DESHACER: reactivar borra motivo+responsable+fecha+kind,
+    // y un mis-click en el CTA sólido durante triage rápido obligaba a re-teclear la razón (mín. 5 chars) desde el SnoozeModal.
+    // Cubre las 3 rutas (unsnooze / unsnooze_invoice / awaiting_client_invoice) porque todas pasan por aquí.
+    const prev={snooze_reason:o.snooze_reason,snoozed_by:o.snoozed_by,snooze_stage:o.snooze_stage,snooze_until:o.snooze_until,snooze_kind:o.snooze_kind};
     const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null};
     const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
     if(error){showToast("❌ "+error.message,"error");setActionLoading(null);return}
     setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
     try{await db.addTimeline(o.id,"🔔 Reactivada",user,"#8e8e93")}catch(e){}
-    showToast("🔔 Reactivada");setActionLoading(null);
+    setActionLoading(null);
+    // Deshacer SIMÉTRICO: restaura los campos snooze_* exactos (motivo, responsable, fecha, kind). Restauración fiel
+    // (applySnooze reescribiría snoozed_by al usuario actual y re-validaría) — aquí revierte tal cual estaba.
+    const undo=prev.snooze_reason?{label:"Deshacer",onClick:async()=>{
+      const {error:e2}=await supabase.from("orders").update(prev).eq("id",o.id);
+      if(e2){showToast("❌ "+e2.message,"error");return}
+      setOrders(p=>p.map(x=>x.id===o.id?{...x,...prev}:x));
+      try{await db.addTimeline(o.id,"↩️ En espera restaurada",user,"#8e8e93")}catch(e){}
+      showToast("↩️ Restaurada en espera");
+    }}:null;
+    showToast("🔔 Reactivada","success",undo);
   },[user,showToast]);
   // v10.73.18 — escribe el "En espera" desde el SnoozeModal (responsable del área + admin). Reusa columnas snooze_*
   // y el evento "🔕 En espera" del timeline (F2 reconstruye la ventana de pausa hasta el "🔔 Reactivada"/avance).
@@ -16302,6 +16330,11 @@ export default function PrintFlow() {
 
   // v10.73.28 — vista "En espera": órdenes pausadas del rol (admin=todas). El hook DEBE ir ARRIBA de los early returns (Rules of Hooks).
   const esperaOrders=useMemo(()=>myTasks.filter(o=>snoozeActive(o)),[myTasks,dayTick]);
+  // v10.73.35 — plegado de grupos de "En espera" CONTROLADO + persistido. Arregla el bug de open={true} (mezclar controlado/no-controlado:
+  // al cruzar el umbral de auto-open o reordenarse por urgencia, React re-forzaba el grupo abierto → el encargado no podía plegarlo).
+  // Set de preferencias por etapa {stage:bool}; si no hay preferencia, cae al default adaptativo. También recuerda la elección entre visitas.
+  const [esperaGroupPrefs,setEsperaGroupPrefs]=useState(()=>{try{return JSON.parse(localStorage.getItem("pf_espera_open")||"{}")||{};}catch(e){return {};}});
+  const setEsperaGroupOpen=useCallback((st,open)=>{setEsperaGroupPrefs(p=>{const n={...p,[st]:open};try{localStorage.setItem("pf_espera_open",JSON.stringify(n));}catch(e){}return n;});},[]);
   // v10.17.0 — Mostrar loading screen mientras se restaura la sesión (evita flash del Login)
   if(!authChecked) return (
     <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Geist',sans-serif"}}>
@@ -16501,9 +16534,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 // v10.73.32 (critique #3) — grupos ordenados por URGENCIA (la orden que vence antes primero), luego por flujo.
                 const grpUrg=st=>Math.min(...byStage[st].map(untilMs));
                 const stages=Object.keys(byStage).sort((a,b)=>(grpUrg(a)-grpUrg(b))||(ordIdx(a)-ordIdx(b)));
-                // v10.73.32 — auto-open ADAPTATIVO: abre TODO si hay pocas (≤6 órdenes o ≤2 etapas); si no, solo el grupo más urgente (gi 0). Mata el "landing vacío" sin reintroducir scroll a alto volumen.
+                // v10.73.32 — auto-open ADAPTATIVO (default): abre TODO si hay pocas (≤6 órdenes o ≤2 etapas); si no, solo el grupo más urgente (gi 0). Mata el "landing vacío" sin reintroducir scroll a alto volumen.
+                // v10.73.35 — el default adaptativo cede a la preferencia del usuario si la hay (esperaGroupPrefs), y open es CONTROLADO vía onToggle → ya se puede plegar y se recuerda.
                 const openAll=esperaOrders.length<=6||stages.length<=2;
-                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));return <details key={st} open={openAll||gi===0?true:undefined}>
+                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
                   <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
                 </details>;})}</div>;
