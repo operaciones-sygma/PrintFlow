@@ -8,6 +8,14 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon};
+// v10.73.25 — Fixes del scan ronda 2: (HIGH) Duplicar sin guard → doble-clic consumía 2 folios/2 órdenes → lock
+//   síncrono duplicateLock (patrón de assignMachine). (MED) al cambiar de etapa por handlers que no pasan por
+//   doAdv/revert (assignMachine/approveProof/return_to_ready/sendMaquila) las columnas snooze_* quedaban y el
+//   "En espera" revivía al volver a la etapa → TRIGGER en BD clear_snooze_on_stage_change (fuente de verdad).
+//   (MED) Replicar: si cambias de cliente durante la copia async, ya no pisa el form nuevo (captura client_id).
+//   (MED) Duplicar ya no hereda snooze de la fuente (reset snooze_*) ni pierde el arte legacy `image` (→image_url).
+//   Diferidos (documentados, no-bug): gate client-side de snooze en handleAction (deuda de auth conocida), y el
+//   degradado del archivado a 30 días sobre imágenes compartidas SOLO en el camino de fallback (raro).
 // v10.73.24 — Fixes del scan exhaustivo de la sesión: (HIGH) Replicar re-entrante durante una copia mezclaba
 //   arte/specs de dos fuentes y apagaba el gate antes de tiempo → guard imgUploading + botón deshabilitado. (MED)
 //   copyStorageImage sin timeout podía colgar Duplicar/Replicar → timeout de 20s por llamada (cae al fallback).
@@ -8540,6 +8548,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // Solo slots vacíos; si la copia falla, cae a la ref original (no perder la imagen).
     const wantImg1=!f.image_url&&!!src.image_url, wantImg2=!f.image_url_2&&!!src.image_url_2;
     if(wantImg1||wantImg2){
+      const cid=f.client_id; // v10.73.25 — si el usuario cambia de cliente durante la copia, NO pisar el form nuevo con el arte de la fuente vieja
       setImgUploading(true);
       (async()=>{
         try{
@@ -8547,7 +8556,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             wantImg1?copyStorageImage(src.image_url,"replica"):Promise.resolve(null),
             wantImg2?copyStorageImage(src.image_url_2,"replica"):Promise.resolve(null),
           ]);
-          setF(prev=>{const next={...prev};
+          setF(prev=>{if(prev.client_id!==cid)return prev;const next={...prev};
             if(wantImg1&&!prev.image_url)next.image_url=u1||src.image_url;
             if(wantImg2&&!prev.image_url_2)next.image_url_2=u2||src.image_url_2;
             return next;});
@@ -14105,6 +14114,7 @@ export default function PrintFlow() {
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
   const assignMachineLock=useRef(false); // v10.64.1 — lock SÍNCRONO real para reentrada de assignMachine (actionLoading es async y se leía stale del closure)
+  const duplicateLock=useRef(false); // v10.73.25 — mismo patrón: lock síncrono anti doble-clic en Duplicar (evitaba 2 folios/2 órdenes)
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
   const showToast=useCallback((message,type="success",action=null)=>setToast({message,type,action}),[]);
   // 🆕 v10.13.0 — Registrar hook global para que OrderForm.submit pueda esperar la resolución del modal de cliente similar
@@ -15462,25 +15472,29 @@ export default function PrintFlow() {
     const orig=orders.find(o=>o.id===id);if(!orig)return;
     // 🔒 v10.12.0.2 Phase 1 — Hardstop: bloquea bypass via DevTools en órdenes ajenas (vendedor) o roles no permitidos
     if(!canExecuteAction("duplicate",orig,user,userLogin)){showToast(actionDeniedToast("duplicate",orig,user,userLogin),"error");return}
+    if(duplicateLock.current)return; duplicateLock.current=true; setActionLoading(id); // v10.73.25 — lock síncrono anti doble-clic (evita 2 folios / 2 órdenes; actionLoading es async y se leería stale)
+    try{
     const origLabel=orig.cart_folio||orig.production_number||orig.id.slice(0,8);
     // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
+    // v10.73.25 — reset de snooze_* (#6): un duplicado NUNCA hereda el estado "En espera" de la fuente
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
-    try{
-    // v10.73.23 — duplicar los archivos de imagen: la copia NO comparte Storage con la original (quitar/cambiar la
-    // imagen en una ya no rompe la otra). Si la copia falla, cae a la ref original (no pierde la imagen).
+    // v10.73.23/25 — duplicar los archivos de imagen (incl. arte legacy `image`, #5) para que la copia NO comparta
+    // Storage con la original (quitar/cambiar la imagen en una ya no rompe la otra). Si la copia falla, cae a la ref.
     const [ni1,ni2]=await Promise.all([
       orig.image_url?copyStorageImage(orig.image_url,dup.id):Promise.resolve(null),
       orig.image_url_2?copyStorageImage(orig.image_url_2,dup.id):Promise.resolve(null),
     ]);
     if(ni1)dup.image_url=ni1; if(ni2)dup.image_url_2=ni2;
-    if(ni1||ni2)setOrders(p=>p.map(o=>o.id===dup.id?{...o,image_url:dup.image_url,image_url_2:dup.image_url_2}:o));
+    if(!dup.image_url&&orig.image){const niL=await copyStorageImage(orig.image,dup.id);dup.image_url=niL||orig.image;dup.image=null;} // arte legacy → image_url (se persiste)
+    if(dup.image_url||dup.image_url_2)setOrders(p=>p.map(o=>o.id===dup.id?{...o,image_url:dup.image_url,image_url_2:dup.image_url_2}:o));
     await db.saveOrder(dup);
     await db.addTimeline(dup.id,"📋 Duplicada de "+origLabel,user,C.fac);
     showToast("📋 Orden duplicada como "+dupFolio);
     }catch(e){console.error("[duplicate] Error:",e);showToast("❌ No se pudo duplicar: "+(e?.message||"error desconocido"),"error");reload()}
+    finally{duplicateLock.current=false;setActionLoading(null)}
   },[orders,user,userLogin,showToast,reload]);
 
   // v10.42.0 — Carga orden a stock: stage→stocked, NO setea delivered_at (no contamina revenue),
