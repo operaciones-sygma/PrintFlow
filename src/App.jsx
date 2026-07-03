@@ -3575,7 +3575,11 @@ function SnoozeModal({order,onConfirm,onClose}){
   const [saving,setSaving]=useState(false);
   // v10.73.44b — "entrega lejana" (far_due) se auto-reactiva si la entrega es ≤5 días hábiles o ya venció (v10.73.44): pausarla así
   // sería un no-op con toast de éxito engañoso. La ocultamos del modal cuando no aplica (el usuario usa otra razón real).
-  const farDueBlocked=!!(order?.due_date&&(isOverdue(order.due_date)||bizDaysUntil(order.due_date)<=5));
+  // v10.73.46 (scan) — TAMBIÉN sin fecha de entrega: el auto-lift far_due depende de due_date, así que NUNCA dispararía → la orden
+  // quedaría pausada indefinidamente, justo el "far_due olvidada" que v44 resolvió. Bloquear far_due también en ese caso.
+  const farDueNoDate=!order?.due_date;
+  const farDueSoon=!!(order?.due_date&&(isOverdue(order.due_date)||bizDaysUntil(order.due_date)<=5));
+  const farDueBlocked=farDueNoDate||farDueSoon;
   const submit=async()=>{
     const r=reason.trim(); if(r.length<5)return;
     const d=parseInt(days,10);
@@ -3591,7 +3595,7 @@ function SnoozeModal({order,onConfirm,onClose}){
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
         {SNOOZE_PRESETS.filter(p=>!(p.kind==="far_due"&&farDueBlocked)).map(p=><button key={p.kind} onClick={()=>{setKind(p.kind);setReason(p.text);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",textAlign:"left",cursor:"pointer",fontSize:12,fontWeight:600,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(kind===p.kind?C.ac:C.bd),background:kind===p.kind?C.ac+"0e":C.bg,color:kind===p.kind?C.ac:C.tx,fontFamily:"'Geist',sans-serif"}}>{p.label}</button>)}
       </div>
-      {farDueBlocked&&<div style={{fontSize:10.5,color:C.t3,margin:"-4px 0 10px",display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.4}}><CalendarDotsIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>"Entrega lejana" no está disponible: la entrega es ≤5 días hábiles o ya venció (se reactivaría al instante). Usa la razón real de la pausa.</span></div>}
+      {farDueBlocked&&<div style={{fontSize:10.5,color:C.t3,margin:"-4px 0 10px",display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.4}}><CalendarDotsIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{farDueNoDate?"\"Entrega lejana\" necesita una fecha de entrega para reactivarse sola; sin ella la orden quedaría pausada indefinidamente. Ponle fecha de entrega o usa la razón real de la pausa.":"\"Entrega lejana\" no está disponible: la entrega es ≤5 días hábiles o ya venció (se reactivaría al instante). Usa la razón real de la pausa."}</span></div>}
       <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Razón (mín. 5 caracteres) — edita el preset o escribe la tuya…" style={{...inp,minHeight:60,resize:"vertical",fontSize:12,marginBottom:10}}/>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
         <span style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}>¿Por cuántos días?</span>
@@ -15136,6 +15140,9 @@ export default function PrintFlow() {
     // vencida, ver snoozeActive L2380). Escribirla sobre una orden así sería un no-op silencioso: persistiría snooze_* + evento
     // "🔕 En espera" en el timeline y mostraría éxito, pero snoozeActive(o) daría false → la orden NO se pausa. Cortamos aquí para
     // no mentir en el toast ni dejar un evento huérfano; el usuario elige otra razón (material/autorización/etc no dependen de la fecha).
+    // v10.73.46 (scan) — far_due SIN fecha de entrega: el auto-lift (snoozeActive L2407) depende de due_date → nunca dispararía y la
+    // orden quedaría pausada INDEFINIDAMENTE (el "far_due olvidada" que v44 resolvió). El modal ya lo oculta; esto es el backstop server-side del flujo.
+    if((kind||"")==="far_due" && !o.due_date){showToast("\"Entrega lejana\" necesita una fecha de entrega para reactivarse sola — sin ella la orden quedaría pausada indefinidamente. Ponle fecha o usa otra razón.","warning");return;}
     if((kind||"")==="far_due" && o.due_date && (isOverdue(o.due_date)||bizDaysUntil(o.due_date)<=5)){showToast("La entrega ya no es lejana (≤5 días hábiles o vencida): esa pausa se reactivaría de inmediato. Usa otra razón o revisa la fecha.","warning");return;}
     const upd={snooze_reason:r,snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until||null,snooze_kind:kind||null,snoozed_at:(snoozeActive(o)&&o.snoozed_at)?o.snoozed_at:new Date().toISOString()};// v10.73.42b — inicio de la pausa (antigüedad); preserva la fecha SOLO si la pausa está ACTIVA (editar razón no reinicia). Guard por snoozeActive, no por snooze_reason: una pausa CON FECHA caduca sin limpiar la BD (snoozeActive computa la expiración) → re-pausarla debe dar now, no la fecha vieja
     const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
