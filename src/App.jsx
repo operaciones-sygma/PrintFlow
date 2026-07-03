@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.43 — "En espera" resumen de riesgo REENCUADRADO por semántica de datos (no critique de UI): el "N con entrega vencida"
+//   mezclaba "el taller va tarde" con "espera al cliente". Ahora separa: (1) aviso propio y fuerte de la CONTRADICCIÓN
+//   far_due-ya-vencida (pausada como "entrega lejana/sin prisa" pero la fecha llegó → orden olvidada); (2) "N atrasadas de
+//   producción" excluyendo las que esperan factura del cliente (bloqueo del cliente, no del taller); (3) "≤3 días" también sin
+//   espera-factura. Grounded en datos reales (far_due 7/7 vencidas >7d; 13 de 22 "vencidas" eran espera-factura = ruido).
 // v10.73.42 — "En espera" ANTIGÜEDAD de la pausa (última del panel): columna aditiva orders.snoozed_at (migración
 //   add_orders_snoozed_at, backfilled 52/52 desde el timeline "🔕/🧾 En espera"). applySnooze/snoozeAwaitingInvoice la setean;
 //   el banner muestra un chip "Nd en espera" (ClockCounterClockwise) con escala de color >7d ámbar / >21d rojo → segundo eje de
@@ -1494,11 +1499,12 @@ const db = {
   // splits: [{qty, amount (sin IVA), doc_type, folio (null si corona_saldo), pre_assigned, reason}]
   // Backend valida SUM(qty)=order.quantity, SUM(amount)=order.price ±0.01, folios únicos,
   // uniformidad pre_assigned (XOR), saldo Corona si hay corona_saldo. Atómico.
-  async assignInvoiceSplits(orderId, splits, actor) {
+  async assignInvoiceSplits(orderId, splits, actor, allowLink=false) {
     const {data, error} = await supabase.rpc("assign_invoice_splits", {
       p_order_id: orderId,
       p_splits: splits,
-      p_actor: actor
+      p_actor: actor,
+      p_allow_link: allowLink
     });
     if(error) throw new Error(error.message);
     return data;
@@ -16642,8 +16648,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="espera"&&<div>
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
           <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Órdenes pausadas — se reactivan solas al cambiar de etapa o al vencer. Regrésalas al flujo con "Volver a producción" cuando estén listas.{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>
-          {/* v10.73.33 (critique #3, P2) — resumen de RIESGO DE ENTREGA: la urgencia (tiempo) es escaneable aunque los grupos estén plegados. */}
-          {esperaOrders.length>0&&(()=>{const overdue=esperaOrders.filter(o=>o.due_date&&isOverdue(o.due_date)).length;const soon=esperaOrders.filter(o=>o.due_date&&!isOverdue(o.due_date)&&bizDaysUntil(o.due_date)<=3).length;if(!overdue&&!soon)return null;return <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"0 0 14px"}}>{overdue>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.dn,background:C.dn+"12",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"4px 10px"}} title="Órdenes en espera cuya fecha de entrega ya venció"><WarningIcon size={12} weight="fill"/>{overdue} con entrega vencida</span>}{soon>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.amb,background:C.amb+"12",border:"1px solid "+C.amb+"33",borderRadius:8,padding:"4px 10px"}} title="Entrega en 3 días hábiles o menos"><ClockIcon size={12} weight="bold"/>{soon} con entrega ≤3 días</span>}</div>;})()}
+          {/* v10.73.43 — resumen de riesgo REENCUADRADO: separa "el TALLER va tarde" de "espera al CLIENTE". Aviso propio para la
+              contradicción far_due-ya-vencida (pausada como "sin prisa" pero la fecha llegó = orden OLVIDADA, la señal más afilada).
+              Las de espera-factura (awaiting_client_invoice) NO se cuentan como atraso del taller: el bloqueo es del cliente y ya
+              salen en su chip de motivo + en el preview/antigüedad de cada card. Datos 2026-07: far_due 7/7 vencidas >7d; 13 de las
+              22 "vencidas" del contador viejo eran espera-factura (ruido que le echaba la culpa al taller). */}
+          {esperaOrders.length>0&&(()=>{const ov=o=>o.due_date&&isOverdue(o.due_date);const isAwait=o=>o.snooze_kind==="awaiting_client_invoice";const farDueOverdue=esperaOrders.filter(o=>o.snooze_kind==="far_due"&&ov(o)).length;const otherLate=esperaOrders.filter(o=>!isAwait(o)&&o.snooze_kind!=="far_due"&&ov(o)).length;const soon=esperaOrders.filter(o=>!isAwait(o)&&o.due_date&&!isOverdue(o.due_date)&&bizDaysUntil(o.due_date)<=3).length;if(!farDueOverdue&&!otherLate&&!soon)return null;const s=n=>n>1?"s":"";return <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"0 0 14px"}}>{farDueOverdue>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.dn,background:C.dn+"1a",border:"1px solid "+C.dn+"40",borderRadius:8,padding:"4px 10px"}} title="Se pausaron como 'entrega lejana / sin prisa' pero su fecha de entrega YA venció — probablemente olvidadas. Revísalas y regrésalas al flujo."><WarningIcon size={12} weight="fill"/>{farDueOverdue} pausada{s(farDueOverdue)} 'entrega lejana' ya vencida{s(farDueOverdue)}</span>}{otherLate>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.dn,background:C.dn+"12",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"4px 10px"}} title="Órdenes en espera cuya entrega ya venció y el TALLER debe actuar (excluye las que esperan factura del cliente)."><WarningIcon size={12} weight="fill"/>{otherLate} atrasada{s(otherLate)} de producción</span>}{soon>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.amb,background:C.amb+"12",border:"1px solid "+C.amb+"33",borderRadius:8,padding:"4px 10px"}} title="Entrega en 3 días hábiles o menos (excluye las que esperan factura del cliente)."><ClockIcon size={12} weight="bold"/>{soon} con entrega ≤3 días</span>}</div>;})()}
           {/* v10.73.40 — chips de filtro por MOTIVO (snooze_kind): acotan la lista a una causa; combinable con el batch. Solo si hay ≥2 motivos distintos. */}
           {esperaOrders.length>0&&(()=>{const kinds=SNOOZE_KIND_ORDER.filter(k=>esperaKindCounts[k]);if(kinds.length<=1)return null;return <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",margin:"0 0 14px"}}><span style={{fontSize:F.meta,color:C.t3,fontWeight:600}}>Motivo:</span>{kinds.map(k=>{const m=SNOOZE_KIND_META[k];const active=esperaEffKind===k;const I=m.Icon;return <button key={k} onClick={()=>setEsperaKindFilter(active?null:k)} title={active?"Quitar filtro":("Ver solo: "+m.l)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.meta,fontWeight:600,padding:"3px 10px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist',sans-serif",border:"1px solid "+(active?C.ac:C.bd),background:active?C.ac:C.bg,color:active?"#fff":C.t2}}><I size={11} weight="bold"/>{m.l}<span style={{fontWeight:700,marginLeft:1,opacity:active?1:.65}}>{esperaKindCounts[k]}</span></button>;})}{esperaEffKind&&<button onClick={()=>setEsperaKindFilter(null)} style={{fontSize:F.meta,color:C.t3,background:"none",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textDecoration:"underline",padding:"3px 4px"}}>Ver todas</button>}</div>;})()}
           {esperaOrders.length===0
@@ -16909,17 +16919,39 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
       {splitInvoiceModal&&<SplitInvoiceModal order={splitInvoiceModal} user={user} userLogin={userLogin}
         onConfirm={async(payload)=>{
-          try {
-            const actor = userLogin || user;
-            const result = await db.assignInvoiceSplits(splitInvoiceModal.id, payload, actor);
+          const actor = userLogin || user;
+          // 🔗 v10.73.37 — Opción A "ligar en vez de bloquear": si un folio ya existe en cobranza (factura de Alpha
+          // del mismo cliente), en vez del error muerto se ofrece LIGAR la(s) existente(s) + crear las nuevas (p_allow_link).
+          const doSplit = async (allowLink)=>{
+            const result = await db.assignInvoiceSplits(splitInvoiceModal.id, payload, actor, allowLink);
             const corona = result?.has_corona_saldo ? " (incl. saldo Corona)" : "";
             const preMsg = result?.all_pre_assigned ? " pre-asignados" : "";
-            showToast(`📑 ${result.splits_count} folios${preMsg}${corona} para ${splitInvoiceModal.production_number}`, "success");
+            const nLinked = result?.linked_folios?.length || 0;
+            const linked = nLinked ? ` · 🔗 ${nLinked} ligada(s)` : "";
+            showToast(`📑 ${result.splits_count} folios${preMsg}${corona}${linked} para ${splitInvoiceModal.production_number}`, "success");
             setSplitInvoiceModal(null);
             reload();
+          };
+          try {
+            await doSplit(false);
           } catch(e) {
+            const msg = e?.message || "";
+            if(/registrado en cobranza/i.test(msg)){
+              setConfirmModal({
+                title:"Folio ya existe en cobranza",
+                message:"Uno o más de estos folios ya están registrados en cobranza (facturas de Alpha para este mismo cliente).\n\n¿Ligarlos a esta orden? Se ligarán los existentes (mismo cliente, mismo monto, sin ligar previo) y se crearán los nuevos — sin doble-cobro.",
+                confirmLabel:"🔗 Sí, ligar folios existentes",
+                confirmColor:C.fac,
+                onConfirm: async ()=>{
+                  setConfirmModal(null);
+                  try { await doSplit(true); }
+                  catch(e2){ console.error("[assignInvoiceSplits link] Error:", e2); showToast("❌ "+(e2?.message||"No se pudo ligar"), "error"); }
+                }
+              });
+              return;
+            }
             console.error("[assignInvoiceSplits] Error:", e);
-            showToast("❌ "+(e?.message||"No se pudo crear los splits"), "error");
+            showToast("❌ "+(msg||"No se pudo crear los splits"), "error");
           }
         }}
         onClose={()=>setSplitInvoiceModal(null)}/>}
