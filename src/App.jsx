@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.40 — "En espera" chips de filtro por MOTIVO (snooze_kind): fila de chips clicables bajo el resumen de riesgo
+//   ("Material 2 · Autorización 1 · Espera factura 4 · Otro 1") que acotan la lista agrupada a esa causa (esperaShown).
+//   Combinable con el batch v10.73.39: "llegó el material" → filtro Material → "Reactivar las N". Toggle (2º clic quita) +
+//   "Ver todas"; solo aparece con ≥2 motivos distintos; auto-limpia si el motivo se queda sin órdenes (esperaEffKind). El
+//   resumen de riesgo y el contador del header siguen sobre el TOTAL (overview); solo la lista de abajo se filtra.
 // v10.73.39 — "En espera" batch: botón "Reactivar las N" en el header de cada grupo de etapa → suelta toda la etapa de un clic
 //   (caso dominante: llega el material / el cliente autoriza). unsnoozeBatch = 1 UPDATE .in() + toast con "Deshacer" que restaura
 //   cada snooze_* previo. Solo cuenta/toca las órdenes REACTIVABLES por el rol (canReact = réplica exacta de canSnooze → respeta
@@ -3507,6 +3512,9 @@ const SNOOZE_PRESETS=[
   {kind:"material",label:"Esperando material / insumo",text:"Esperando material o insumo para continuar"},
   {kind:"authorization",label:"Esperando autorización del cliente",text:"Esperando autorización del cliente"},
 ];
+// v10.73.40 — meta de los chips de filtro por MOTIVO en "En espera". __none = snooze genérico (texto libre sin preset). Etiquetas cortas + iconos ya importados.
+const SNOOZE_KIND_META={material:{l:"Material",Icon:PackageIcon},authorization:{l:"Autorización",Icon:UserIcon},client_correction:{l:"Corrección",Icon:NotePencilIcon},far_due:{l:"Entrega lejana",Icon:CalendarDotsIcon},awaiting_client_invoice:{l:"Espera factura",Icon:ReceiptIcon},__none:{l:"Otro",Icon:BellSlashIcon}};
+const SNOOZE_KIND_ORDER=["material","authorization","client_correction","far_due","awaiting_client_invoice","__none"];
 function SnoozeModal({order,onConfirm,onClose}){
   useEscClose(onClose);
   const [kind,setKind]=useState(null);
@@ -16418,6 +16426,16 @@ export default function PrintFlow() {
   // Set de preferencias por etapa {stage:bool}; si no hay preferencia, cae al default adaptativo. También recuerda la elección entre visitas.
   const [esperaGroupPrefs,setEsperaGroupPrefs]=useState(()=>{try{return JSON.parse(localStorage.getItem("pf_espera_open")||"{}")||{};}catch(e){return {};}});
   const setEsperaGroupOpen=useCallback((st,open)=>{setEsperaGroupPrefs(p=>{const n={...p,[st]:open};try{localStorage.setItem("pf_espera_open",JSON.stringify(n));}catch(e){}return n;});},[]);
+  // v10.73.40 — filtro por MOTIVO (snooze_kind) de "En espera": chips clicables que acotan la lista agrupada a una causa
+  // (material/autorización/factura/…). Combinable con el batch: "llegó el material" → filtro Material → Reactivar las N.
+  const [esperaKindFilter,setEsperaKindFilter]=useState(null);
+  const esperaKindCounts=useMemo(()=>{const c={};esperaOrders.forEach(o=>{const k=o.snooze_kind||"__none";c[k]=(c[k]||0)+1;});return c;},[esperaOrders]);
+  const esperaEffKind=(esperaKindFilter&&esperaKindCounts[esperaKindFilter])?esperaKindFilter:null; // auto-limpia si el kind ya no tiene órdenes (p.ej. tras reactivarlas en lote)
+  const esperaShown=esperaEffKind?esperaOrders.filter(o=>(o.snooze_kind||"__none")===esperaEffKind):esperaOrders;
+  // v10.73.40b (workflow adversarial) — resetea el estado del filtro cuando su motivo se queda sin órdenes, para que no
+  // se re-active solo si ese kind reaparece luego (p.ej. otro usuario pausa otra "material" vía realtime). esperaEffKind ya
+  // lo neutraliza en el display; esto además limpia el state para que la lista no se acote sorpresivamente después.
+  useEffect(()=>{if(esperaKindFilter&&!esperaKindCounts[esperaKindFilter])setEsperaKindFilter(null);},[esperaKindFilter,esperaKindCounts]);
   // v10.17.0 — Mostrar loading screen mientras se restaura la sesión (evita flash del Login)
   if(!authChecked) return (
     <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Geist',sans-serif"}}>
@@ -16606,6 +16624,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Órdenes pausadas — se reactivan solas al cambiar de etapa o al vencer. Regrésalas al flujo con "Volver a producción" cuando estén listas.{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>
           {/* v10.73.33 (critique #3, P2) — resumen de RIESGO DE ENTREGA: la urgencia (tiempo) es escaneable aunque los grupos estén plegados. */}
           {esperaOrders.length>0&&(()=>{const overdue=esperaOrders.filter(o=>o.due_date&&isOverdue(o.due_date)).length;const soon=esperaOrders.filter(o=>o.due_date&&!isOverdue(o.due_date)&&bizDaysUntil(o.due_date)<=3).length;if(!overdue&&!soon)return null;return <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"0 0 14px"}}>{overdue>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.dn,background:C.dn+"12",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"4px 10px"}} title="Órdenes en espera cuya fecha de entrega ya venció"><WarningIcon size={12} weight="fill"/>{overdue} con entrega vencida</span>}{soon>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:700,color:C.amb,background:C.amb+"12",border:"1px solid "+C.amb+"33",borderRadius:8,padding:"4px 10px"}} title="Entrega en 3 días hábiles o menos"><ClockIcon size={12} weight="bold"/>{soon} con entrega ≤3 días</span>}</div>;})()}
+          {/* v10.73.40 — chips de filtro por MOTIVO (snooze_kind): acotan la lista a una causa; combinable con el batch. Solo si hay ≥2 motivos distintos. */}
+          {esperaOrders.length>0&&(()=>{const kinds=SNOOZE_KIND_ORDER.filter(k=>esperaKindCounts[k]);if(kinds.length<=1)return null;return <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",margin:"0 0 14px"}}><span style={{fontSize:F.meta,color:C.t3,fontWeight:600}}>Motivo:</span>{kinds.map(k=>{const m=SNOOZE_KIND_META[k];const active=esperaEffKind===k;const I=m.Icon;return <button key={k} onClick={()=>setEsperaKindFilter(active?null:k)} title={active?"Quitar filtro":("Ver solo: "+m.l)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:F.meta,fontWeight:600,padding:"3px 10px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist',sans-serif",border:"1px solid "+(active?C.ac:C.bd),background:active?C.ac:C.bg,color:active?"#fff":C.t2}}><I size={11} weight="bold"/>{m.l}<span style={{fontWeight:700,marginLeft:1,opacity:active?1:.65}}>{esperaKindCounts[k]}</span></button>;})}{esperaEffKind&&<button onClick={()=>setEsperaKindFilter(null)} style={{fontSize:F.meta,color:C.t3,background:"none",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textDecoration:"underline",padding:"3px 4px"}}>Ver todas</button>}</div>;})()}
           {esperaOrders.length===0
             ? (!loaded ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,fontSize:13}}>Cargando…</div>
                : search ? <EmptyState icon={MagnifyingGlassIcon} title="Sin resultados" hint={"Ninguna orden en espera coincide con \""+search+"\"."} action={{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}}/>
@@ -16615,13 +16635,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 // v10.73.39 — ¿el rol actual PUEDE reactivar esta orden? Replica EXACTA del canSnooze de OCard (admin o responsable del área; el vendedor debe ser dueño) → el batch solo toca lo accionable, respeta el "Le toca a X".
                 const canReact=o=>{const _r=orderResponsible(o);const _am=isVendedorOwnerByAgent(user,userLogin,o);const _vo=user!=="vendedor"||_am||o.created_by===userLogin||!o.created_by;const _ir=!!_r&&_vo&&(_r.role===user||(_r.role==="both"&&(user==="produccion"||user==="preprensa"))||(_r.role==="secretaria"&&user==="secretaria")||(o.stage==="proof_client"&&user==="secretaria"));return (user==="admin"||_ir)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected","stocked"].includes(o.stage);};
                 const untilMs=o=>o.snooze_until?new Date(String(o.snooze_until).slice(0,10)).getTime():Infinity;
-                const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
+                const byStage={};esperaShown.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);}); // v10.73.40 — esperaShown = esperaOrders filtrado por el chip de motivo activo (o todo)
                 // v10.73.32 (critique #3) — grupos ordenados por URGENCIA (la orden que vence antes primero), luego por flujo.
                 const grpUrg=st=>Math.min(...byStage[st].map(untilMs));
                 const stages=Object.keys(byStage).sort((a,b)=>(grpUrg(a)-grpUrg(b))||(ordIdx(a)-ordIdx(b)));
                 // v10.73.32 — auto-open ADAPTATIVO (default): abre TODO si hay pocas (≤6 órdenes o ≤2 etapas); si no, solo el grupo más urgente (gi 0). Mata el "landing vacío" sin reintroducir scroll a alto volumen.
                 // v10.73.35 — el default adaptativo cede a la preferencia del usuario si la hay (esperaGroupPrefs), y open es CONTROLADO vía onToggle → ya se puede plegar y se recuerda.
-                const openAll=esperaOrders.length<=6||stages.length<=2;
+                const openAll=esperaShown.length<=6||stages.length<=2;
                 return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));const reactList=list.filter(canReact);const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
                   <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span><span style={{marginLeft:"auto"}}><EsperaGroupBatchBtn count={reactList.length} onReactivate={()=>unsnoozeBatch(reactList)}/></span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
