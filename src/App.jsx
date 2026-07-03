@@ -16937,6 +16937,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           } catch(e) {
             const msg = e?.message || "";
             if(/registrado en cobranza/i.test(msg)){
+              // 🔧 F1 (verificación w06267b0u): cerrar el split modal (z-1000) para que el ConfirmModal (z-999)
+              // sea visible/clickeable. doSplit ya capturó splitInvoiceModal.id en su closure → el reintento funciona.
+              setSplitInvoiceModal(null);
               setConfirmModal({
                 title:"Folio ya existe en cobranza",
                 message:"Uno o más de estos folios ya están registrados en cobranza (facturas de Alpha para este mismo cliente).\n\n¿Ligarlos a esta orden? Se ligarán los existentes (mismo cliente, mismo monto, sin ligar previo) y se crearán los nuevos — sin doble-cobro.",
