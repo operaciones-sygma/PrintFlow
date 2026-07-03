@@ -1354,6 +1354,18 @@ const db = {
     if(error) throw new Error(error.message);
     return data;
   },
+  // 🔗 v10.73.45 · Opción A · Fase 2 — Ligar un folio INDIVIDUAL que ya existe en cobranza (factura de Alpha ERP importada por
+  // conciliación/manual) a esta orden, en vez de bloquear con "ya registrado en cobranza". El RPC link_invoice_to_order
+  // valida estado de la orden + 4 guards (mismo cliente, sin ligar previo, monto ±0.02 con IVA, existe la factura),
+  // estampa el folio (el puente sync_invoice_from_orders salta el duplicado), liga la factura existente
+  // (source_order_id) y deja la orden entregada. Espejo del flujo de split (assign_invoice_splits p_allow_link).
+  async linkInvoiceToOrder(orderId, folio, actor) {
+    const {data, error} = await supabase.rpc("link_invoice_to_order", {
+      p_order_id: orderId, p_folio: folio, p_actor: actor
+    });
+    if(error) throw new Error(error.message);
+    return data; // { invoice_status, amount, doc_type, ... }
+  },
   // 🆕 v10.72.87 — Facturar a un tercero: alta/selección + enriquecimiento de la razón social destinataria.
   async upsertBillingClient(clientId, name, rfc, email, whatsapp, byUser) {
     const {data, error} = await supabase.rpc("upsert_billing_client", {
@@ -16892,9 +16904,44 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           setInvoiceModal(null);setAllowNoPriceForOrder(null);
         }catch(e){
           console.error("[assignInvoice] Error:",e);
+          const errMsg=e?.message||"";
+          // 🔗 v10.73.45 · Opción A · Fase 2 — el folio ya existe en cobranza (factura de Alpha importada por conciliación/manual):
+          // en vez de morir con error, ofrecer LIGAR la factura existente a esta orden (mismo cliente + mismo monto + sin ligar previo).
+          // Solo para factura/remisión (stock_load / no_folio retornan antes y no llegan aquí).
+          if(/registrad[oa] en cobranza|ya existe en cobranza|folio.*ya.*(existe|registrad)/i.test(errMsg)&&(invoiceType==="factura"||invoiceType==="remision")){
+            const oid=invoiceModal.id, actor=userLogin||user, otype=invoiceModal.order_type, capturedPay=(paymentStatus==="paid"||paymentStatus==="partial");
+            // el folio no se asignó → revertir el tercero huérfano; el link usa la factura existente tal cual (no re-factura al tercero).
+            if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
+            setInvoiceModal(null);setAllowNoPriceForOrder(null); // cerrar para que el ConfirmModal (z-999) no quede tapado ni intercepte clics (fix espejo del split F1)
+            setConfirmModal({
+              title:"Folio "+folio+" ya existe en cobranza",
+              message:"El folio "+folio+" ya está registrado en cobranza (factura de Alpha para este cliente). ¿Ligarlo a esta orden?\n\nSe ligará la factura existente y la orden quedará entregada. No se crea factura nueva ni se cobra doble — el sistema verifica que sea el mismo cliente y el mismo monto antes de ligar."+(capturedPay?"\n\n⚠️ El pago/cobro que capturaste NO se registra aquí: para esta factura ya existente en cobranza, el cobro se administra en CobranzaFlow.":""),
+              confirmLabel:"🔗 Sí, ligar folio existente",
+              confirmColor:C.fac,
+              onConfirm:async()=>{
+                setConfirmModal(null);
+                try{
+                  const r=await db.linkInvoiceToOrder(oid, folio, actor);
+                  const paid=r?.invoice_status==="pagada", partial=r?.invoice_status==="parcial";
+                  const newStage=otype==="maquila"?"maq_delivered":"delivered";
+                  const tlMsg="🔗 Folio "+folio+" ligado a factura existente en cobranza"+(paid?" (ya pagada)":partial?" (pago parcial)":"");
+                  setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paid?"paid":partial?"partial":"unpaid",stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
+                  try{ await db.addTimeline(oid,tlMsg,user,C.fac); }catch(_){}
+                  const payMismatch=capturedPay&&!paid&&!partial; // Karla marcó pago pero la factura ligada sigue pendiente → el cobro va en CobranzaFlow
+                  showToast("🔗 Folio "+folio+" ligado"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+" — orden entregada"+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""));
+                  reload();
+                }catch(e2){
+                  console.error("[linkInvoiceToOrder] Error:",e2);
+                  showToast("❌ "+(e2?.message||"No se pudo ligar el folio"),"error");
+                  reload();
+                }
+              }
+            });
+            return;
+          }
           // v10.72.88 (#9): si este intento fijó un tercero pero el folio falló, revertir el bill_to huérfano (applyBillTo commiteó en tx aparte) para no re-facturar al tercero por otra vía.
           if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(invoiceModal.id, null, userLogin||user); }catch(_){} }
-          showToast("❌ "+(e?.message||"No se pudo asignar folio"),"error");
+          showToast("❌ "+(errMsg||"No se pudo asignar folio"),"error");
           reload();
         }
       }} onClose={()=>{setInvoiceModal(null);setAllowNoPriceForOrder(null)}}/>}
