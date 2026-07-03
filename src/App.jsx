@@ -8,6 +8,10 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.39 — "En espera" batch: botón "Reactivar las N" en el header de cada grupo de etapa → suelta toda la etapa de un clic
+//   (caso dominante: llega el material / el cliente autoriza). unsnoozeBatch = 1 UPDATE .in() + toast con "Deshacer" que restaura
+//   cada snooze_* previo. Solo cuenta/toca las órdenes REACTIVABLES por el rol (canReact = réplica exacta de canSnooze → respeta
+//   "Le toca a X"); aparece con ≥2; para ≥4 pide confirmación inline de 2º clic (no modal). Timeline idéntico al individual.
 // v10.73.38 — "En espera" re-jerarquiza la OCard en modo espera (inEsperaView): el MOTIVO de la pausa sube a LÍNEA PRIMARIA
 //   bajo el cliente (era la señal que decide "¿sigue teniendo sentido la pausa?" pero iba enterrada al fondo) + se PODAN
 //   precio/papel/teléfono/agente (irrelevantes para esa decisión) → card ~30% más baja, más órdenes por pantalla. El banner
@@ -9911,6 +9915,18 @@ function StageFlowButtons({o,role,onAction}){
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}
   </>;
 }
+// v10.73.39 — botón de LOTE en el header de cada grupo de "En espera": reactiva toda la etapa de un clic.
+// Solo aparece con ≥2 órdenes reactivables por el rol; para ≥4 pide confirmación inline de 2º clic (no modal, auto-cancela a 3.5s).
+// preventDefault+stopPropagation para no plegar/desplegar el <details> al pulsar el botón dentro del <summary>.
+function EsperaGroupBatchBtn({count,onReactivate}){
+  const [confirming,setConfirming]=useState(false);
+  useEffect(()=>{if(!confirming)return;const t=setTimeout(()=>setConfirming(false),3500);return ()=>clearTimeout(t);},[confirming]);
+  if(count<2)return null;
+  const needsConfirm=count>=4;
+  const click=e=>{e.preventDefault();e.stopPropagation();if(needsConfirm&&!confirming){setConfirming(true);return;}setConfirming(false);onReactivate();};
+  const base={display:"inline-flex",alignItems:"center",gap:4,fontSize:F.meta,fontWeight:600,padding:"3px 10px",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist',sans-serif"};
+  return <button onClick={click} onMouseDown={e=>e.stopPropagation()} title={"Reactiva las "+count+" órdenes de esta etapa"+(needsConfirm?" (pide confirmar)":"")} style={confirming?{...base,background:C.ac,color:"#fff",border:"1px solid "+C.ac}:{...base,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"33"}}>{confirming?<><CheckIcon size={12} weight="bold"/>Confirmar · {count}</>:<><BellRingingIcon size={12} weight="bold"/>Reactivar las {count}</>}</button>;
+}
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsperaView}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
@@ -15004,6 +15020,35 @@ export default function PrintFlow() {
     }}:null;
     showToast("🔔 Reactivada","success",undo);
   },[user,showToast]);
+  // v10.73.39 — reactivar en LOTE toda una etapa de "En espera" (llega el material / el cliente autoriza → se suelta el grupo
+  // de un clic). Un solo UPDATE .in(); el Deshacer restaura cada snooze_* previo (valores distintos por orden → loop). Timeline
+  // "🔔 Reactivada" IDÉNTICO al individual (F2/getDays lo tratan igual; no contiene 🚚 → no afecta "días en maquila").
+  // v10.73.39b (workflow adversarial) — guard anti doble-click con REF (no state: el 2º click llega ANTES del re-render que
+  // encogería el grupo). Espeja el setActionLoading del unsnooze individual: sin él, un doble-clic en un grupo de 2-3 (que NO
+  // tiene confirm) reejecutaba el loop de addTimeline → 2×N eventos "🔔 Reactivada" duplicados en la bitácora append-only.
+  const unsnoozeBatchBusy=useRef(false);
+  const unsnoozeBatch=useCallback(async(list)=>{
+    if(unsnoozeBatchBusy.current)return;
+    const targets=(list||[]).filter(o=>o&&o.snooze_reason);
+    if(targets.length===0)return;
+    unsnoozeBatchBusy.current=true;
+    try{
+      const ids=targets.map(o=>o.id);
+      const prevs=targets.map(o=>({id:o.id,snooze_reason:o.snooze_reason,snoozed_by:o.snoozed_by,snooze_stage:o.snooze_stage,snooze_until:o.snooze_until,snooze_kind:o.snooze_kind}));
+      const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null};
+      const {error}=await supabase.from("orders").update(upd).in("id",ids);
+      if(error){showToast("❌ "+error.message,"error");return}
+      setOrders(p=>p.map(x=>ids.includes(x.id)?{...x,...upd}:x));
+      for(const o of targets){try{await db.addTimeline(o.id,"🔔 Reactivada",user,"#8e8e93")}catch(e){}}
+      const undo={label:"Deshacer",onClick:async()=>{
+        for(const pv of prevs){const {id,...rest}=pv;await supabase.from("orders").update(rest).eq("id",id);}
+        setOrders(p=>p.map(x=>{const pv=prevs.find(v=>v.id===x.id);return pv?{...x,snooze_reason:pv.snooze_reason,snoozed_by:pv.snoozed_by,snooze_stage:pv.snooze_stage,snooze_until:pv.snooze_until,snooze_kind:pv.snooze_kind}:x;}));
+        for(const pv of prevs){try{await db.addTimeline(pv.id,"↩️ En espera restaurada",user,"#8e8e93")}catch(e){}}
+        showToast("↩️ "+prevs.length+" restaurada"+(prevs.length===1?"":"s")+" en espera");
+      }};
+      showToast("🔔 "+targets.length+" reactivada"+(targets.length===1?"":"s"),"success",undo);
+    }finally{unsnoozeBatchBusy.current=false;}
+  },[user,showToast]);
   // v10.73.18 — escribe el "En espera" desde el SnoozeModal (responsable del área + admin). Reusa columnas snooze_*
   // y el evento "🔕 En espera" del timeline (F2 reconstruye la ventana de pausa hasta el "🔔 Reactivada"/avance).
   const applySnooze=useCallback(async(o,{reason,kind,until})=>{
@@ -16567,6 +16612,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                : <EmptyState icon={CheckCircleIcon} tone="positive" title="Nada en espera" hint="Las órdenes que pauses aparecerán aquí, agrupadas por etapa."/>)
             : (()=>{
                 const ordIdx=s=>{const i=STAGE_SEQUENCE.indexOf(s);if(i>=0)return i;const j=MAQ_FLOW.findIndex(m=>m.id===s);return j>=0?100+j:200;};
+                // v10.73.39 — ¿el rol actual PUEDE reactivar esta orden? Replica EXACTA del canSnooze de OCard (admin o responsable del área; el vendedor debe ser dueño) → el batch solo toca lo accionable, respeta el "Le toca a X".
+                const canReact=o=>{const _r=orderResponsible(o);const _am=isVendedorOwnerByAgent(user,userLogin,o);const _vo=user!=="vendedor"||_am||o.created_by===userLogin||!o.created_by;const _ir=!!_r&&_vo&&(_r.role===user||(_r.role==="both"&&(user==="produccion"||user==="preprensa"))||(_r.role==="secretaria"&&user==="secretaria")||(o.stage==="proof_client"&&user==="secretaria"));return (user==="admin"||_ir)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected","stocked"].includes(o.stage);};
                 const untilMs=o=>o.snooze_until?new Date(String(o.snooze_until).slice(0,10)).getTime():Infinity;
                 const byStage={};esperaOrders.forEach(o=>{(byStage[o.stage]=byStage[o.stage]||[]).push(o);});
                 // v10.73.32 (critique #3) — grupos ordenados por URGENCIA (la orden que vence antes primero), luego por flujo.
@@ -16575,8 +16622,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 // v10.73.32 — auto-open ADAPTATIVO (default): abre TODO si hay pocas (≤6 órdenes o ≤2 etapas); si no, solo el grupo más urgente (gi 0). Mata el "landing vacío" sin reintroducir scroll a alto volumen.
                 // v10.73.35 — el default adaptativo cede a la preferencia del usuario si la hay (esperaGroupPrefs), y open es CONTROLADO vía onToggle → ya se puede plegar y se recuerda.
                 const openAll=esperaOrders.length<=6||stages.length<=2;
-                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
-                  <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span></summary>
+                return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));const reactList=list.filter(canReact);const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
+                  <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span><span style={{marginLeft:"auto"}}><EsperaGroupBatchBtn count={reactList.length} onReactivate={()=>unsnoozeBatch(reactList)}/></span></summary>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
                 </details>;})}</div>;
               })()}
