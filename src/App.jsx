@@ -8,6 +8,10 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.41 — "En espera" 2 mejoras de diseño del panel: (1) PREVIEW del grupo COLAPSADO — en el <summary> de un grupo plegado
+//   se muestra el riesgo (N vencidas rojo / N ≤3d ámbar) + el motivo del más urgente, para decidir "abro o sigo" sin expandir.
+//   (2) SALIDA ANIMADA al reactivar — en la vista espera (y solo si NO hay prefers-reduced-motion) la card se desvanece+sube
+//   ~200ms antes de reactivarse, confirmando espacialmente cuál dejó la cola (individual y lote); exitingIds + gate por vista.
 // v10.73.40 — "En espera" chips de filtro por MOTIVO (snooze_kind): fila de chips clicables bajo el resumen de riesgo
 //   ("Material 2 · Autorización 1 · Espera factura 4 · Otro 1") que acotan la lista agrupada a esa causa (esperaShown).
 //   Combinable con el batch v10.73.39: "llegó el material" → filtro Material → "Reactivar las N". Toggle (2º clic quita) +
@@ -9935,7 +9939,7 @@ function EsperaGroupBatchBtn({count,onReactivate}){
   const base={display:"inline-flex",alignItems:"center",gap:4,fontSize:F.meta,fontWeight:600,padding:"3px 10px",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist',sans-serif"};
   return <button onClick={click} onMouseDown={e=>e.stopPropagation()} title={"Reactiva las "+count+" órdenes de esta etapa"+(needsConfirm?" (pide confirmar)":"")} style={confirming?{...base,background:C.ac,color:"#fff",border:"1px solid "+C.ac}:{...base,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"33"}}>{confirming?<><CheckIcon size={12} weight="bold"/>Confirmar · {count}</>:<><BellRingingIcon size={12} weight="bold"/>Reactivar las {count}</>}</button>;
 }
-function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsperaView}) {
+function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsperaView,exiting}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
   const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
@@ -10015,7 +10019,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     role="button" tabIndex={0}
     aria-label={"Orden "+(o.production_number||o.id||"")+(o.client?", "+o.client:"")+", "+(st?.l||o.stage)+". Enter para abrir el detalle."}
     onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();onAction(o.id,"detail");}}}
-    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:C.tCard,position:moreOpen?"relative":undefined,zIndex:moreOpen?60:undefined}}
+    style={{background:C.card,borderRadius:14,padding:compact?10:16,marginBottom:8,boxShadow:C.sh2,cursor:isDraggable?"grab":"pointer",border:"1.5px solid "+(o.priority==="urgente"?C.dn:st?.c||C.t3)+"66",transition:exiting?"opacity .2s ease, transform .2s ease":C.tCard,opacity:exiting?0:1,transform:exiting?"translateY(-8px) scale(.985)":undefined,pointerEvents:exiting?"none":undefined,position:moreOpen?"relative":undefined,zIndex:moreOpen?60:undefined}}
     onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
     {/* v10.65.1 — VARIANTE B (impeccable critique): el acento de etapa/urgencia deja de ser raya
         lateral (side-tab) y pasa a un BORDE COMPLETO sutil tintado del color de etapa (en la card
@@ -15006,6 +15010,11 @@ export default function PrintFlow() {
   // 🗼 v10.58.52 — Torre de Control: handlers de snooze + recordatorio batch + aterrizaje admin
   const snoozeOrder=useCallback((o)=>{ setSnoozeTarget(o); },[]); // v10.73.18 — abre SnoozeModal (razón+chips+fecha) en vez del window.prompt
   const unsnoozeOrder=useCallback(async(o)=>{
+    // v10.73.41 — salida animada SOLO en la vista "En espera" y si el usuario no pidió reduced-motion: marca la card "saliendo"
+    // (fade+slide 200ms) antes de reactivar, para confirmar espacialmente cuál dejó la cola. Fuera de espera = reactivación inmediata.
+    const animate=view==="espera"&&typeof window!=="undefined"&&!!window.matchMedia&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const clearExit=()=>{if(animate)setExitingIds(p=>{const n=new Set(p);n.delete(o.id);return n;});};
+    if(animate){setExitingIds(p=>{const n=new Set(p);n.add(o.id);return n;});await new Promise(r=>setTimeout(r,200));}
     setActionLoading(o.id); // v10.72.52 — busy en la card evita doble-click
     // v10.73.35 — captura los snooze_* ANTES de limpiar para poder DESHACER: reactivar borra motivo+responsable+fecha+kind,
     // y un mis-click en el CTA sólido durante triage rápido obligaba a re-teclear la razón (mín. 5 chars) desde el SnoozeModal.
@@ -15013,10 +15022,10 @@ export default function PrintFlow() {
     const prev={snooze_reason:o.snooze_reason,snoozed_by:o.snoozed_by,snooze_stage:o.snooze_stage,snooze_until:o.snooze_until,snooze_kind:o.snooze_kind};
     const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null};
     const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
-    if(error){showToast("❌ "+error.message,"error");setActionLoading(null);return}
+    if(error){showToast("❌ "+error.message,"error");setActionLoading(null);clearExit();return}
     setOrders(p=>p.map(x=>x.id===o.id?{...x,...upd}:x));
     try{await db.addTimeline(o.id,"🔔 Reactivada",user,"#8e8e93")}catch(e){}
-    setActionLoading(null);
+    setActionLoading(null);clearExit();
     // Deshacer SIMÉTRICO: restaura los campos snooze_* exactos (motivo, responsable, fecha, kind). Restauración fiel
     // (applySnooze reescribiría snoozed_by al usuario actual y re-validaría) — aquí revierte tal cual estaba.
     const undo=prev.snooze_reason?{label:"Deshacer",onClick:async()=>{
@@ -15027,7 +15036,7 @@ export default function PrintFlow() {
       showToast("↩️ Restaurada en espera");
     }}:null;
     showToast("🔔 Reactivada","success",undo);
-  },[user,showToast]);
+  },[user,showToast,view]);
   // v10.73.39 — reactivar en LOTE toda una etapa de "En espera" (llega el material / el cliente autoriza → se suelta el grupo
   // de un clic). Un solo UPDATE .in(); el Deshacer restaura cada snooze_* previo (valores distintos por orden → loop). Timeline
   // "🔔 Reactivada" IDÉNTICO al individual (F2/getDays lo tratan igual; no contiene 🚚 → no afecta "días en maquila").
@@ -15040,8 +15049,11 @@ export default function PrintFlow() {
     const targets=(list||[]).filter(o=>o&&o.snooze_reason);
     if(targets.length===0)return;
     unsnoozeBatchBusy.current=true;
+    const ids=targets.map(o=>o.id);
+    // v10.73.41 — salida animada del lote (misma regla que el individual: solo en la vista espera y sin reduced-motion).
+    const animate=view==="espera"&&typeof window!=="undefined"&&!!window.matchMedia&&!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     try{
-      const ids=targets.map(o=>o.id);
+      if(animate){setExitingIds(p=>{const n=new Set(p);ids.forEach(id=>n.add(id));return n;});await new Promise(r=>setTimeout(r,200));}
       const prevs=targets.map(o=>({id:o.id,snooze_reason:o.snooze_reason,snoozed_by:o.snoozed_by,snooze_stage:o.snooze_stage,snooze_until:o.snooze_until,snooze_kind:o.snooze_kind}));
       const upd={snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null};
       const {error}=await supabase.from("orders").update(upd).in("id",ids);
@@ -15055,8 +15067,8 @@ export default function PrintFlow() {
         showToast("↩️ "+prevs.length+" restaurada"+(prevs.length===1?"":"s")+" en espera");
       }};
       showToast("🔔 "+targets.length+" reactivada"+(targets.length===1?"":"s"),"success",undo);
-    }finally{unsnoozeBatchBusy.current=false;}
-  },[user,showToast]);
+    }finally{unsnoozeBatchBusy.current=false;if(animate)setExitingIds(p=>{const n=new Set(p);ids.forEach(id=>n.delete(id));return n;});}
+  },[user,showToast,view]);
   // v10.73.18 — escribe el "En espera" desde el SnoozeModal (responsable del área + admin). Reusa columnas snooze_*
   // y el evento "🔕 En espera" del timeline (F2 reconstruye la ventana de pausa hasta el "🔔 Reactivada"/avance).
   const applySnooze=useCallback(async(o,{reason,kind,until})=>{
@@ -16432,6 +16444,8 @@ export default function PrintFlow() {
   const esperaKindCounts=useMemo(()=>{const c={};esperaOrders.forEach(o=>{const k=o.snooze_kind||"__none";c[k]=(c[k]||0)+1;});return c;},[esperaOrders]);
   const esperaEffKind=(esperaKindFilter&&esperaKindCounts[esperaKindFilter])?esperaKindFilter:null; // auto-limpia si el kind ya no tiene órdenes (p.ej. tras reactivarlas en lote)
   const esperaShown=esperaEffKind?esperaOrders.filter(o=>(o.snooze_kind||"__none")===esperaEffKind):esperaOrders;
+  // v10.73.41 — salida animada: ids de las cards "saliendo" (fade-out ~200ms antes de reactivar/desmontar en la vista espera). Solo se puebla si no hay prefers-reduced-motion.
+  const [exitingIds,setExitingIds]=useState(()=>new Set());
   // v10.73.40b (workflow adversarial) — resetea el estado del filtro cuando su motivo se queda sin órdenes, para que no
   // se re-active solo si ese kind reaparece luego (p.ej. otro usuario pausa otra "material" vía realtime). esperaEffKind ya
   // lo neutraliza en el display; esto además limpia el state para que la lista no se acote sorpresivamente después.
@@ -16643,8 +16657,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 // v10.73.35 — el default adaptativo cede a la preferencia del usuario si la hay (esperaGroupPrefs), y open es CONTROLADO vía onToggle → ya se puede plegar y se recuerda.
                 const openAll=esperaShown.length<=6||stages.length<=2;
                 return <div style={{display:"flex",flexDirection:"column",gap:14}}>{stages.map((st,gi)=>{const list=byStage[st].slice().sort((a,b)=>untilMs(a)-untilMs(b)||(a.client||"").localeCompare(b.client||""));const reactList=list.filter(canReact);const isOpen=st in esperaGroupPrefs?!!esperaGroupPrefs[st]:(openAll||gi===0);return <details key={st} open={isOpen} onToggle={e=>{if(e.currentTarget.open!==isOpen)setEsperaGroupOpen(st,e.currentTarget.open);}}>
-                  <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span><span style={{marginLeft:"auto"}}><EsperaGroupBatchBtn count={reactList.length} onReactivate={()=>unsnoozeBatch(reactList)}/></span></summary>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView/>)}</div>
+                  <summary style={{cursor:"pointer",listStyle:"none",display:"flex",alignItems:"center",gap:8,margin:"0 2px 8px"}} title="Clic para plegar/desplegar"><CaretDownIcon size={11} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><StageLbl stage={st} size={13}/><span style={{fontSize:11,fontWeight:700,color:C.tx,background:(SM[st]?.c||C.t3)+"1a",padding:"1px 9px",borderRadius:9,border:"1px solid "+(SM[st]?.c||C.bd)+"40"}}>{list.length}</span><span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:F.meta}}>{/* v10.73.41 — preview del grupo COLAPSADO: riesgo + motivo del más urgente, para decidir "abro o sigo" sin expandir */}{!isOpen&&(()=>{const ov=list.filter(o=>o.due_date&&isOverdue(o.due_date)).length;const sn=list.filter(o=>o.due_date&&!isOverdue(o.due_date)&&bizDaysUntil(o.due_date)<=3).length;const top=list[0];if(!ov&&!sn&&!top?.snooze_reason)return null;return <>{ov>0&&<span style={{color:C.dn,fontWeight:600}}>· {ov} vencida{ov>1?"s":""} </span>}{sn>0&&<span style={{color:C.amb,fontWeight:600}}>· {sn} ≤3d </span>}{top?.snooze_reason&&<span style={{color:C.t3}}>· {top.snooze_reason}</span>}</>;})()}</span><span><EsperaGroupBatchBtn count={reactList.length} onReactivate={()=>unsnoozeBatch(reactList)}/></span></summary>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{list.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin} inEsperaView exiting={exitingIds.has(o.id)}/>)}</div>
                 </details>;})}</div>;
               })()}
         </div>}
