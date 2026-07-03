@@ -8,6 +8,11 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.44 — "En espera" AUTO-REACTIVACIÓN de las pausas "entrega lejana" (far_due): en snoozeActive, una far_due deja de estar
+//   pausada en cuanto su entrega es ≤5 días hábiles o ya venció → re-entra sola al flujo (Pendientes/Kanban) cuando toca
+//   programarla, para que NUNCA quede olvidada pasada su fecha (dato que motivó esto: 7/7 far_due estaban vencidas >7d). Es
+//   computado (como snooze_until), sin cron ni acción manual. Efecto colateral bueno: el chip "far_due ya vencidas" de v43 pasa
+//   a ser una red de seguridad (debería leer 0). Las otras causas (material/autorización/factura) NO dependen de la fecha → intactas.
 // v10.73.43 — "En espera" resumen de riesgo REENCUADRADO por semántica de datos (no critique de UI): el "N con entrega vencida"
 //   mezclaba "el taller va tarde" con "espera al cliente". Ahora separa: (1) aviso propio y fuerte de la CONTRADICCIÓN
 //   far_due-ya-vencida (pausada como "entrega lejana/sin prisa" pero la fecha llegó → orden olvidada); (2) "N atrasadas de
@@ -1823,6 +1828,8 @@ const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // aunque pase mucho tiempo (un tiraje grande puede tomar horas/días en una sola máquina).
 // v10.73.18 — días HÁBILES que faltan para una fecha futura (para exentar pre-producción con entrega lejana)
 function bizDaysUntil(d){if(!d)return 0;const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return 0;let cur=new Date();cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate());const end=new Date(t.getFullYear(),t.getMonth(),t.getDate());let n=0;while(cur<end){cur.setDate(cur.getDate()+1);const dow=cur.getDay();if(dow!==0&&dow!==6)n++;if(n>365)break;}return n;}
+// v10.73.44b — fecha n días hábiles ANTES de d (para topar la pausa far_due en su instante de auto-reactivación = due − 5 hábiles).
+function bizDaysBefore(d,n){const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return new Date();let cur=new Date(t.getFullYear(),t.getMonth(),t.getDate()),c=0;while(c<n){cur.setDate(cur.getDate()-1);const dow=cur.getDay();if(dow!==0&&dow!==6)c++;if(c>365)break;}return cur;}
 const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;
   if(snoozeActive(o))return null; // v10.73.18 — "En espera" NO es estancada (consistente con Torre/Salud/alerta)
   if((o.stage==="ready"||o.stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)return null; // v10.73.18 — pre-producción con entrega lejana: aún no entra a máquina, no es "sin avance"
@@ -2320,8 +2327,13 @@ function StageFlowHistory({order:o}){
     const isFinal=s=>/delivered|cancelled|stocked|maq_delivered|maq_cancelled|web_rejected/.test(s||"");
     // ventana de pausa: desde "🔕 En espera" hasta el 1er evento posterior que sea "🔔 Reactivada" o una transición real
     // (los eventos neutros —edición/merma/precio— NO la cortan); si sigue abierta cierra en el vencimiento (si ya pasó) o ahora.
-    const snoozeCapISO=o?.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T23:59:59").toISOString():null;
-    const pauses=[]; tl.forEach((t,i)=>{ if(!/En espera/i.test(t.action||""))return; let end=null; for(let j=i+1;j<tl.length;j++){ if(/Reactivada|En espera/i.test(tl[j].action||"")||tl[j].to){ end=tl[j].date; break; } } if(!end){ end=nowISO; if(snoozeCapISO&&new Date(snoozeCapISO)<new Date(end))end=snoozeCapISO; } pauses.push({start:t.date,end}); });
+    // v10.73.44b — tope de una pausa AÚN ABIERTA: el más TEMPRANO entre (a) vencimiento snooze_until y (b) auto-lift far_due
+    // (due − 5 días hábiles, v10.73.44). Si el instante de lift es futuro (aún lejana), no topa (falla el test <end=ahora) → la
+    // pausa sigue corriendo hasta ahora, correcto. Espeja en el timeline lo que snoozeActive ya hace computado.
+    const _capUntil=o?.snooze_until?new Date(String(o.snooze_until).slice(0,10)+"T23:59:59").toISOString():null;
+    const _capFarDue=(o?.snooze_kind==="far_due"&&o?.due_date)?bizDaysBefore(o.due_date,5).toISOString():null;
+    const snoozeCapISO=(_capUntil&&_capFarDue)?(_capUntil<_capFarDue?_capUntil:_capFarDue):(_capUntil||_capFarDue);
+    const pauses=[]; tl.forEach((t,i)=>{ if(!/En espera/i.test(t.action||""))return; let end=null; for(let j=i+1;j<tl.length;j++){ if(/Reactivada|En espera/i.test(tl[j].action||"")||tl[j].to){ end=tl[j].date; break; } } if(!end){ end=nowISO; if(snoozeCapISO&&new Date(snoozeCapISO)<new Date(end))end=snoozeCapISO; } if(new Date(end)<new Date(t.date))end=t.date; pauses.push({start:t.date,end}); });
     // el evento "📋 Orden creada" YA trae to=etapa inicial + by=creador → NO lo tratamos como transición (evita fila duplicada)
     const created=tl.find(t=>/Orden creada/i.test(t.action||""));
     const trans=tl.filter(t=>t.to&&!/Orden creada/i.test(t.action||""));
@@ -2367,6 +2379,12 @@ function snoozeActive(o){
   // v10.58.63: expira al FIN del día indicado (23:59), no al mediodía — parseDate ancla
   // a T12:00 y revivía la orden medio día antes (igual que el fix de vencidas v10.58.53).
   if(o.snooze_until){ const end=new Date(String(o.snooze_until).slice(0,10)+"T23:59:59"); if(end < new Date()) return false; }
+  // v10.73.44 — una pausa "entrega lejana" (far_due) existe PORQUE la entrega está lejos; debe AUTO-REACTIVARSE en cuanto la
+  // entrega deja de ser lejana (≤5 días hábiles o ya vencida) para que JAMÁS quede "olvidada" pausada pasada su fecha (el
+  // problema real: 7/7 far_due estaban vencidas >7d, nadie las revisaba). Es COMPUTADO, como la expiración de snooze_until:
+  // la orden re-entra sola al flujo cuando toca programarla — sin cron ni acción manual; getStale la re-evalúa (si sigue
+  // atorada se marca estancada). Solo far_due (las otras causas —material/autorización/factura— no dependen de la fecha).
+  if(o.snooze_kind==="far_due" && o.due_date && (isOverdue(o.due_date) || bizDaysUntil(o.due_date)<=5)) return false;
   return true;
 }
 // Días REALES en la etapa actual (la última entrada de timeline que LLEGÓ a este
@@ -3535,6 +3553,9 @@ function SnoozeModal({order,onConfirm,onClose}){
   const [reason,setReason]=useState("");
   const [days,setDays]=useState("");
   const [saving,setSaving]=useState(false);
+  // v10.73.44b — "entrega lejana" (far_due) se auto-reactiva si la entrega es ≤5 días hábiles o ya venció (v10.73.44): pausarla así
+  // sería un no-op con toast de éxito engañoso. La ocultamos del modal cuando no aplica (el usuario usa otra razón real).
+  const farDueBlocked=!!(order?.due_date&&(isOverdue(order.due_date)||bizDaysUntil(order.due_date)<=5));
   const submit=async()=>{
     const r=reason.trim(); if(r.length<5)return;
     const d=parseInt(days,10);
@@ -3548,8 +3569,9 @@ function SnoozeModal({order,onConfirm,onClose}){
       <p style={{fontSize:12,color:C.t2,margin:"0 0 14px",lineHeight:1.45}}>{order?.client||""} sale de la cola activa y deja de marcarse como estancada. Se reactiva sola al cambiar de etapa o al vencer la fecha.</p>
       <div style={{fontSize:11,fontWeight:700,color:C.t2,marginBottom:6}}>Razón</div>
       <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
-        {SNOOZE_PRESETS.map(p=><button key={p.kind} onClick={()=>{setKind(p.kind);setReason(p.text);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",textAlign:"left",cursor:"pointer",fontSize:12,fontWeight:600,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(kind===p.kind?C.ac:C.bd),background:kind===p.kind?C.ac+"0e":C.bg,color:kind===p.kind?C.ac:C.tx,fontFamily:"'Geist',sans-serif"}}>{p.label}</button>)}
+        {SNOOZE_PRESETS.filter(p=>!(p.kind==="far_due"&&farDueBlocked)).map(p=><button key={p.kind} onClick={()=>{setKind(p.kind);setReason(p.text);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",textAlign:"left",cursor:"pointer",fontSize:12,fontWeight:600,padding:"8px 11px",borderRadius:9,border:"1.5px solid "+(kind===p.kind?C.ac:C.bd),background:kind===p.kind?C.ac+"0e":C.bg,color:kind===p.kind?C.ac:C.tx,fontFamily:"'Geist',sans-serif"}}>{p.label}</button>)}
       </div>
+      {farDueBlocked&&<div style={{fontSize:10.5,color:C.t3,margin:"-4px 0 10px",display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.4}}><CalendarDotsIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>"Entrega lejana" no está disponible: la entrega es ≤5 días hábiles o ya venció (se reactivaría al instante). Usa la razón real de la pausa.</span></div>}
       <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Razón (mín. 5 caracteres) — edita el preset o escribe la tuya…" style={{...inp,minHeight:60,resize:"vertical",fontSize:12,marginBottom:10}}/>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
         <span style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}>¿Por cuántos días?</span>
@@ -15085,6 +15107,11 @@ export default function PrintFlow() {
   // y el evento "🔕 En espera" del timeline (F2 reconstruye la ventana de pausa hasta el "🔔 Reactivada"/avance).
   const applySnooze=useCallback(async(o,{reason,kind,until})=>{
     const r=(reason||"").trim(); if(r.length<5){showToast("Razón mínima 5 caracteres","warning");return;}
+    // v10.73.44b — una pausa "entrega lejana" (far_due) AUTO-REACTIVA cuando la entrega ya no es lejana (≤5 días hábiles o
+    // vencida, ver snoozeActive L2380). Escribirla sobre una orden así sería un no-op silencioso: persistiría snooze_* + evento
+    // "🔕 En espera" en el timeline y mostraría éxito, pero snoozeActive(o) daría false → la orden NO se pausa. Cortamos aquí para
+    // no mentir en el toast ni dejar un evento huérfano; el usuario elige otra razón (material/autorización/etc no dependen de la fecha).
+    if((kind||"")==="far_due" && o.due_date && (isOverdue(o.due_date)||bizDaysUntil(o.due_date)<=5)){showToast("La entrega ya no es lejana (≤5 días hábiles o vencida): esa pausa se reactivaría de inmediato. Usa otra razón o revisa la fecha.","warning");return;}
     const upd={snooze_reason:r,snoozed_by:userLogin||user,snooze_stage:o.stage,snooze_until:until||null,snooze_kind:kind||null,snoozed_at:(snoozeActive(o)&&o.snoozed_at)?o.snoozed_at:new Date().toISOString()};// v10.73.42b — inicio de la pausa (antigüedad); preserva la fecha SOLO si la pausa está ACTIVA (editar razón no reinicia). Guard por snoozeActive, no por snooze_reason: una pausa CON FECHA caduca sin limpiar la BD (snoozeActive computa la expiración) → re-pausarla debe dar now, no la fecha vieja
     const {error}=await supabase.from("orders").update(upd).eq("id",o.id);
     if(error){showToast("❌ "+error.message,"error");return;}
