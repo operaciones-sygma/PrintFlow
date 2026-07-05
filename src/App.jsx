@@ -8,6 +8,12 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.46 — AUTH F0 (seguridad, primer paso del proyecto auth/RLS): revertir DESDE ENTREGADA ahora va por la RPC SECDEF
+//   revert_order_from_terminal (admin-gateada) en vez de update directo. Habilita el trigger orders_immutability_guard en BD:
+//   para escrituras DIRECTAS anon (las RPCs pasan, corren como owner) → (R1) invoice_folio inmutable una vez asignado,
+//   (R2) pago congelado una vez 'paid', (R3) etapa terminal no cambia. Comparación POR COLUMNA (IS DISTINCT FROM) → re-guardados
+//   idempotentes y limpieza de archivos de órdenes entregadas pasan. Re-verificado vs BD viva + barrido de 32 updates directos
+//   (workflow 8 agentes): revert-delivered era el ÚNICO flujo legítimo que chocaba. Ver printflow-auth-rls-map.
 // v10.73.45 — SCAN exhaustivo de lo reciente (v34-v44, 6 lentes find→verify + BD viva): 6 confirmados, arreglados los 5+RPC
 //   (el modal split del usuario se deja para él). (1) RPC assign_historic_folio: guard anti doble-cobro por PLAN MATRIZ
 //   (oc_invoice_split_lines vivas) — faltaba junto a splits/grouped/OC-compartida; + botones de folio histórico ocultos para
@@ -15557,8 +15563,15 @@ export default function PrintFlow() {
       // era justamente re-validar). A design/prueba también se re-aprueba la prueba.
       if(targetStage==="draft"){updates.validated_by_production=false;updates.validated_by_preprensa=false;updates.proof_approved=null}
       if(["design","proof_printing","proof_client"].includes(targetStage))updates.proof_approved=null;
-      const {error:uErr}=await supabase.from("orders").update(updates).eq("id",id);
-      if(uErr)throw uErr;
+      // v10.73.46 (AUTH F0) — revertir DESDE ENTREGADA va por RPC SECDEF (admin-gateada): el trigger orders_immutability_guard
+      // bloquea cambios directos de etapa terminal (anti-tampering anon). Las demás etapas siguen con el update directo de siempre.
+      if(o.stage==="delivered"){
+        const {error:uErr}=await supabase.rpc("revert_order_from_terminal",{p_order_id:id,p_target_stage:targetStage,p_user:userLogin||user});
+        if(uErr)throw uErr;
+      }else{
+        const {error:uErr}=await supabase.from("orders").update(updates).eq("id",id);
+        if(uErr)throw uErr;
+      }
       // v10.58.43 #13: cerrar el reloj de máquina (no-op si no había log abierto) y
       // abrir el log de la orden promovida — antes el reloj seguía corriendo y la
       // cola quedaba sin activar a nadie.
@@ -15604,7 +15617,7 @@ export default function PrintFlow() {
       showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");
       reload();
     }finally{setActionLoading(null)}
-  },[orders,user,showToast,reload]);
+  },[orders,user,userLogin,showToast,reload]);
 
   const approveProof=useCallback(async id=>{
     const o=orders.find(x=>x.id===id);
