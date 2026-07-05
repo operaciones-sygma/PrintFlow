@@ -8,6 +8,12 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.48 — AUTH F2-full (frontend auth-only): se RETIRA el fallback legacy — el login es SOLO signInWithPassword y el
+//   restore SOLO desde la sesión Supabase Auth (una sesión pre-F1 sin JWT cae a login y re-autentica una vez, misma
+//   contraseña). Esto elimina toda sesión sin JWT → habilita en BD rechazar anon en verify_actor_role (todas las ~37 RPCs
+//   gateadas exigen JWT; verificado que login/restore/portal/selectores NO usan verify_actor_role, y approve_web_cart lo
+//   llama admin/secretaria autenticados) + REVOKE anon en el resto de RPCs peligrosas. Trade-off asumido: si Supabase Auth
+//   estuviera caído no hay login de emergencia (las 7 cuentas están probadas). Rollback = revertir este commit.
 // v10.73.47 — AUTH F1 (switch de login a Supabase Auth): db.login intenta signInWithPassword (email sintético
 //   username@padillahnos.local; las 7 cuentas auth ya existen con el MISMO password + rol en app_metadata, E2E probado
 //   por curl) con FALLBACK al RPC legacy verify_user_password (nadie queda fuera; el retiro va con F2). Restauración de
@@ -1229,27 +1235,20 @@ const db = {
     }
   },
   async login(username, password) {
-    // v10.73.47 — AUTH F1: login REAL con Supabase Auth (sesión criptográfica, JWT con rol en app_metadata).
-    // El empleado sigue tecleando su username: se mapea a email sintético username@padillahnos.local.
-    // FALLBACK al RPC legacy (v10.58.0 verify_user_password) si la cuenta auth no existe/falla — transición
-    // sin riesgo: nadie queda fuera; el retiro del legacy va con F2. Las 7 cuentas ya existen (E2E probado).
+    // v10.73.48 — AUTH F2-full: SOLO Supabase Auth (se retiró el fallback legacy verify_user_password; todos migraron).
+    // El empleado teclea su username → email sintético username@padillahnos.local. Tras signIn se re-verifica 'active'
+    // en public.users vía get_user_session (bloquea desactivados aunque su cuenta auth siga viva) y se toman rol +
+    // display_name FRESCOS de la BD (un cambio de rol aplica al entrar, no queda el app_metadata stale del JWT).
+    let authData;
     try{
-      const {data:authData,error:aErr}=await supabase.auth.signInWithPassword({email:username+"@padillahnos.local",password});
-      if(!aErr&&authData?.user){
-        const am=authData.user.app_metadata||{},um=authData.user.user_metadata||{};
-        if(am.role){
-          // Re-verificar ACTIVO en public.users (misma regla que el restore al montar y que el RPC legacy):
-          // desactivar a un empleado (users.active=false) debe seguir bloqueando el login aunque su cuenta
-          // auth siga viva. Si no hay fila activa (o el RPC falla) → signOut y cae al legacy, que también rechaza.
-          const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:am.username||username});
-          if(!sErr&&Array.isArray(sess)&&sess.length>0) return {username:am.username||username,role:am.role,display_name:um.display_name||am.username||username};
-        }
-        await supabase.auth.signOut(); // cuenta sin rol o usuario desactivado → no dejar sesión a medias
-      }
-    }catch(e){ console.warn("[login] auth falló, intento legacy:",e?.message); }
-    const { data, error } = await supabase.rpc("verify_user_password", { p_username: username, p_password: password });
-    if (error) throw new Error("Error verificando credenciales: " + error.message);
-    return Array.isArray(data) && data.length > 0 ? data[0] : null;
+      const r=await supabase.auth.signInWithPassword({email:username+"@padillahnos.local",password});
+      if(r.error||!r.data?.user) return null; // credenciales incorrectas / cuenta inexistente
+      authData=r.data;
+    }catch(e){ console.warn("[login] auth:",e?.message); return null; }
+    const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:authData.user.app_metadata?.username||username});
+    const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
+    if(sErr||!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return null; } // desactivado o error → sesión no queda viva
+    return {username:dbUser.username,role:dbUser.role,display_name:dbUser.display_name};
   },
   async loadNotifications(role) {
     const { data } = await supabase.from("notifications").select("*").eq("target_role", role).order("created_at", { ascending: false }).limit(50);
@@ -14500,22 +14499,17 @@ export default function PrintFlow() {
     let cancelled = false;
     (async () => {
       try {
-        // v10.73.47 — AUTH F1: restaurar PRIMERO la sesión de Supabase Auth (fuente de verdad nueva);
-        // fallback a pf-session legacy (quien estaba logueado antes del switch NO se expulsa — al siguiente
-        // login manual ya obtiene sesión auth). En ambos caminos se re-verifica contra la BD que sigue activo.
+        // v10.73.48 — AUTH F2-full: AUTH-ONLY. Se restaura SOLO desde la sesión de Supabase Auth; se retiró el fallback
+        // a pf-session legacy → una sesión pre-F1 (sin JWT) YA NO entra: cae a la pantalla de login y re-autentica una
+        // vez (misma contraseña). Esto elimina toda sesión sin JWT, requisito para rechazar anon en verify_actor_role
+        // sin dejar a nadie en estado "logueado pero nada funciona". Se sigue re-verificando 'active' contra la BD.
         let sessionUsername=null;
         try{
           const {data:{session:authSess}}=await supabase.auth.getSession();
           if(authSess?.user) sessionUsername=authSess.user.app_metadata?.username||String(authSess.user.email||"").split("@")[0]||null;
         }catch(e){ console.warn("[auth restore] getSession:",e?.message); }
-        const raw = sessionUsername?null:localStorage.getItem("pf-session");
-        if (!sessionUsername && !raw) { if (!cancelled) setAuthChecked(true); return; }
-        const session = sessionUsername?{username:sessionUsername}:JSON.parse(raw);
-        if (!session || !session.username) {
-          localStorage.removeItem("pf-session");
-          if (!cancelled) setAuthChecked(true);
-          return;
-        }
+        if (!sessionUsername) { try{localStorage.removeItem("pf-session")}catch(e){} if (!cancelled) setAuthChecked(true); return; }
+        const session = {username:sessionUsername};
         // v10.58.0 — Re-verificación via RPC server-side (acceso directo a public.users
         // revocado para anon). La RPC solo retorna identidad básica si el user sigue activo.
         const { data: dbUserRows, error } = await supabase.rpc("get_user_session", { p_username: session.username });
