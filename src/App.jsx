@@ -8,6 +8,14 @@ const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",
 const F={title:15,label:13,body:11,meta:10,micro:9};
 // v10.60.0 — íconos del Sidebar (Phosphor, aliased con sufijo Icon para no chocar con componentes existentes p.ej. Archive)
 const NAV_ICON={torre:BroadcastIcon,pipeline:SquaresFourIcon,tasks:ListChecksIcon,form:PlusIcon,oc:ShoppingCartIcon,web_orders:GlobeIcon,board:FactoryIcon,calendar:CalendarDotsIcon,orders:ListBulletsIcon,archive:ArchiveIcon,analytics:ChartBarIcon,wip:CurrencyDollarIcon,health:HeartbeatIcon,audit:FileTextIcon,storage:FolderOpenIcon,chemicals:FlaskIcon,devoluciones:ArrowUUpLeftIcon,cancelaciones:XCircleIcon,espera:BellSlashIcon};
+// v10.73.47 — AUTH F1 (switch de login a Supabase Auth): db.login intenta signInWithPassword (email sintético
+//   username@padillahnos.local; las 7 cuentas auth ya existen con el MISMO password + rol en app_metadata, E2E probado
+//   por curl) con FALLBACK al RPC legacy verify_user_password (nadie queda fuera; el retiro va con F2). Restauración de
+//   sesión: primero supabase.auth.getSession() (fuente nueva), fallback a pf-session legacy (los logueados de antes no
+//   se expulsan); ambos re-verifican activo vía get_user_session. logout hace signOut. DOBLE-ESCRITURA de identidad
+//   real: AUTH_UID (onAuthStateChange) se escribe en by_uid/registered_by_uid/started_by_uid/ended_by_uid/voided_by_uid/
+//   created_by_uid/last_edited_by_uid junto al string legacy. UX idéntica (mismo username+contraseña). Pre-checks BD:
+//   authenticated tiene TODOS los grants/policies/RPCs de anon (diffs vacíos) + bucket order-files es TO public.
 // v10.73.46 — AUTH F0 (seguridad, primer paso del proyecto auth/RLS): revertir DESDE ENTREGADA ahora va por la RPC SECDEF
 //   revert_order_from_terminal (admin-gateada) en vez de update directo. Habilita el trigger orders_immutability_guard en BD:
 //   para escrituras DIRECTAS anon (las RPCs pasan, corren como owner) → (R1) invoice_folio inmutable una vez asignado,
@@ -274,6 +282,12 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
+// v10.73.47 — AUTH F1: uid de la sesión Supabase Auth (null en sesión legacy pf-session). Se mantiene solo
+// vía onAuthStateChange (login/restore/refresh/signOut) y se DOBLE-ESCRIBE en las columnas *_uid aditivas
+// (timeline/comments/notes/notifications/logs + orders.created_by_uid/last_edited_by_uid) junto al string
+// legacy — el switch de lectura a _uid llega con F2/F3. Ver printflow-auth-rls-map.
+let AUTH_UID=null;
+try{ supabase.auth.onAuthStateChange((_e,s)=>{ AUTH_UID=s?.user?.id||null; }); }catch(e){ console.warn("[auth] state listener:",e); }
 
 const LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAN4AAADwCAIAAADgo02mAAABAGlDQ1BpY2MAABiVY2BgPMEABCwGDAy5eSVFQe5OChGRUQrsDxgYgRAMEpOLCxhwA6Cqb9cgai/r4lGHC3CmpBYnA+kPQKxSBLQcaKQIkC2SDmFrgNhJELYNiF1eUlACZAeA2EUhQc5AdgqQrZGOxE5CYicXFIHU9wDZNrk5pckIdzPwpOaFBgNpDiCWYShmCGJwZ3AC+R+iJH8RA4PFVwYG5gkIsaSZDAzbWxkYJG4hxFQWMDDwtzAwbDuPEEOESUFiUSJYiAWImdLSGBg+LWdg4I1kYBC+wMDAFQ0LCBxuUwC7zZ0hHwjTGXIYUoEingx5DMkMekCWEYMBgyGDGQCm1j8/yRb+6wAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAABmJLR0QA/wD/AP+gvaeTAAAAB3RJTUUH6gMMESUlyG6aywAAGC9JREFUeNrtnXt4VNW1wNfa+5zJJEKK0KI8AljptbeApDy0l97eVEAegu+KGq0oIUGoULAK1U8LSKVFvQWqaEEjwRcgVECLIC+B+Cq06q3PghWV8gZJAuQxZ++97h975mSYPExChmSG9fv48uUbZiYzc36z1l5r77MPkjbAMM0PwR8Bw2oyDKvJsJoMw2oyrCbDsJoMw2oyrCbDsJoMq8kwrCbDsJoMq8kwrCbDajIMq8mwmgzDajIMq8mwmgzDajKsJsOwmgzDajKsJsOwmgyryTCsJsNqMgyryTCsJsNqMgyrybCaDMNqMgyrybCaDMNqMqwmw7CaDKvJMKwmw7CaDKvJMKwmw2oyDKvJMKwmw2oyDKvJsJoMw2oyDKvJsJoMw2oyrCbDsJoMq8kwrCbDsJoMq8kwrCbDajIMq8kwrCbDajIMq8mwmgwTf5yEfvVEFHMLIvJBZTWb0khEJCKt9Sk+1elU+RT/Vt0fbj+cRP+WImmToAEThAAOkVUxBESQ+NnDSUAnyQaG8vKy5557vuRYiRSCAMhQSjCldevWRGQPCwH4v8R+IwGMoZbpLVu0aGGMwbo4jgAEiHB2q7OllA142YGUQMv0dDBUz+gBRBAMBlODQWNMOBb6763KX0lNS5NSWjsTWs/Ei5pERETCkV8f+bpzl87Hjx8/3R8ZAKKoTvhaP2cgx3XTUlOrjo+jntl3iaLTMxGlpqamBu1jI4+nyrtR+LFEBC+vWtXzhz80SjXg+8NRs3EEFYht2rQpKysTQvjHO/rA1yJBLXeoPdZQmPp+nwkAvFCoOBRq2PstKSmp4z3Ly8sRCRKfRFXTjvSLioqMMUCk/UxXZy9rKh38n/6N1Twt1jNo1reUQUAI+4VRY5jo8UzMC0NEAgICIQRQMozBRYJ6aZRumZ5+0003EREI4R+q6J8NGMKGQ6Ix0b9UozsBIorqkLUiasDXLhKUiYiACCKvxL6YmBcWjTHGPooAkqM6dBLRS/uLRJw3b16b1q1n/Pa39uiaKrGzjthiqKK8QggBQISVwz5jTLUtKopo0LhvzQ5O/Cc/k9u0Cd7X9NQDM2a0bdt2/IQJACCl1FrX63Da58nIyJi/YH67c9uVl5ZJR0aqWwJEz/OKiopi/jwKUVpaWlJSIlD4dQkiaq0PHz4cVfKTLWIOHzrkKeW/MARQWh85fEQbLaU8fPjwzp079+zZc/ToUf9rIKW0sbABVVpykKh9zeiuuxNwlyxZkjNqVGlZmbWzAaPMiy66aPmy5RmdMprk7WhPHTx08NN//vOtt94qLCx8++23/bpHCFGtoFWHm5a333zrR/3+S3sJX6EnbMu9ip1bNm8ecf31Bw8edBxHKVWvp7JCt2/fftmyZf369QuVV0gpazr2Da60avluSClBVMa7L7/48rXXXnv+hee3bt1au6BV38i7f/v7hZk9taeElNzXbHo7ldJuivvhhx9ee+21O3bsaEDstEKnp6c/++yzV1xxhQp5lXZGMjFV0xLC2Fuo4e8l3LIVQjjhgLdly5Y5c+asXLnS//7UHjKDweBHH3z43a7nG6URMaGHqom98sg/Qq7rqJDXvXv3TZs2/bhfP62149RvGK2UklKWlJRcc801Ty5Y4ARcYwzZuioiAcb+w2puqS/hHj6iQCGF/T4YpVXII2WysrJWrFixfv36vn362GH0N7ZdGzA8ZTXjZaft/DmOoz3VoUOHNWvWXnXVVaqe0yG2iLHFR96YMdMfeEC6DkSq/kYvxqP/sJ3vRvtbBCklIGhPaU8NHDiwsLDwvvvus/JFTzEkaw0ESbJeE9HaI6XUnmrZsuXy5cvHjh2rtfZbhnXEiug4zrSpU8eNHWeARKTqj6Od1b8htENMIYQKeSmBlBkzZqxcsfLsVq2MMUIk/0Lb5HmHvp1GawR4/PHHp02darNbXey0w1bbHDXGuK77xJ+eGHHddceOH5Ouo5Syz98kgjqOQ0SqwrviyivWr1/fsUOHM8HOpHp71h4hBBIoT02dNm3+E3+y6a/2A1l1ktOOVl9asWLo0KF79+x1Aq6KNCZPp52V42lE6UivItS7T59Vq1a1+larBs8vsJpNaScKIYVQIS/v9jEv/fml9PR0Y0wtQ8+YhbeRql9JKd98882BAwd8/NFH1s5aquO4vikIV3uuVxHq1bv3c88+awsmVjMB7USUUnoVoSuuvGLNmjXt27e3VU61SbPqMbby2dj5yaefDhg4sHDrVifgaq2j13+c5uRuqz2vIjTs8uGT77o7udN6cr4x307XdVXI69ev36ZNm3p07167nTHLjqKbSvv37x86dOhLy//chHb6r1ZKqZW+7/77u/3gB0lsZ9J+5/yqxXEcFfIuuOCCDRs2/DTrpzEtz+jFOzEh08cKfaK09Gcjrnt83jzb8ox7U6nWwTQZk3ZW2m/u/00NzTRWMwF6Sui3PNuec87q1auvv25ETMvTr81jVmpG4/ehfnHHHb+5737pOngaWp7f1Ii4+uqrL+zRIzpw2qVzrGaCNZW0p9LSUpcsXTJ+/PiYlme1ITNmcZo95FLKGQ/+Nm90rjamSVqe/psy2rgpgZEjR0a3mYKpqampqaxm4tlptDHa/PGPf5z54Ey7Gjd6DW+1S8f9O1g7bXJ/Mv+pa6+9prikWLqO9lueQKfz7aAQRDRs2LCUlBR/KWAwGExLS/Pvx2omjJ02UqqQd8+99zz9VL7run7Ls+6Rz45WX37llSFDhuzevVv6LU86fS1PRBSIQNS16/e6desG/ukZhpqkOGM1G62ppELebTmjVqxY0apVK2NMzFqQb9xiwI5W33nnnf6XXPLBP/7hBFzP8+C0tzy10tKRvXr18tVMpkn0M2vPo5iW57Bhw15bszajY4ZSynEcP8XXZesLm9k/+9e/BgwcuHHjRjcloJqiqURE//n979tzkuyEu72V1UxUOyHS8rzoRxdven1Tz549rZ0QtQa0LpldCHHo0KHhw4cvXrzYbYqWJyK2a9/eGFNRUWGMOXHiBCX+KNPiwJlHpGoB2/Ls2rXrhg0bbhhx/cbXN/kr5KOjZi222cZNeXl5dnb2/n37J905SSuFFD77LN4tRvuqOnXMuLBHDymlUvrbbdo4UibBhkeQ6KvcTz0bhpdpuk5ZaemoUTlLli6RUkYX73WJo34VP3ny5FmzZpExZCjedkaPPYwxkXPj7eLk8BrWhBb0jFbzJDsdCYgTJ06cO3euHbH5HfU6JmgphDZm5C23zF+wICUlxZ44Fnc7K3086T+Ao2bS2Gk76sKRv//d7++59x5/7Wa9FsLZ03eGDB7y3AvPt2ndWoU8u9QS4nNGeU1fG97EMNnsJCJttOO6BQUFeXl5nuc1+PS33r17L1++vEuXLvG2M5lLAlYzxk6ltRtw16xZk52dXVRU1OBTh8/r0mXZsuW9+/SOPjmT7eTmUQOrXUR0pFQhb+jQoevXrevcubOq/26AtuW564svLh106dq1a5t8HR2rmSR2AqJtKvXp23fD+g2ZF/ZswKnDtuV59OjRK6+88pmCRWwnq9kIdkLUKs+u3+u6fsP6gf0HKKUcWT87bcszFAqNvO3WWbNmOQHXEDXJOjoeaybh0NO2PMvLynNGjXphyeKGbahkK/2Jv5w4e/YfgMA/253HnRw1G57cpZTGUykpKc8vfmHSxIkNOLHdbqchpZwzd84N199QWl4mXaepVnly1Ey22Om3PB966KEpU6ZAg1YY2YiblZX14tIX257TtrKphIB8IQ9Ws8F2EpE2xnGdZxYtGp2b63leHbduq2pn927dV65ccX7XrtzyZDUbz06tnYC7ds3a7OwbjxYVNWDoaR+S0TFj+fJlF118sVcRchyHW5481jylcae/BnnI0CHrXlvXOaNTtacO1459yO5/7x40ePCaV191UwLcVGI1G8HOypbnRX03btqYmZnZMDuFEMXFxVdeddWihQXh3RLZTlbzVOyMbnme37Xr+nXrLh0wsAF22u6m53m3jrpt9uzZ0nUIiHM6q3lKdkaf2P7t73zn5Vdeyb4xuy52xuxgY0UUQtx5550zH3wQAKvu1MBlEJdBDSyMjNYoJQqcNHHSnLlz/Ouq1D5gjb6DfUi7du3++cmnLdJb2mPBsZOj5qkOPYWUZIxWevac2b+f+buYtfHVDFVruP2kC8qwl6xm49gphEBUnppyz68LFhZEn9geE2WrCur3niZMmBBMSzVK27vyZ8sJvdEye1TLc82NN2YXFRfVtPjcf4iUUinV7tx28xfMv/zyy/0LVnAxxGrGy87t27Zd+7Of7d69u/ornEZ2ENFa/+QnP1m4cOH555/Pa41ZzTjaac2rqKhISQ3u2rWrV69excXFVQOnn8TvuOOOhx9+OBgMqpDnODJ8vWD2MgqHP4JG8BIRiJRSKanBYyXHHn744RMnTlTzWTuOUqpFixZzZs/OGT0aDGlP2Wl05AKIo2Zcs/lHH344alTOtu3bqt7Txstu3botLFjYt09fTuJcocdRSn+5MQA4AXfxC4uzsrK2bd8W0373N48dMWLEli1b+vbp64VC7CWrGc8kjqiUkq7jKXXXnb/Kvin7yNdfCyGilyPZBe0A8LuZM5cuXdqmTRvtKddxIfF31+CE3tyT+K5/fZ6bm7vx9U1VZ4NsEu/QocOCBQsuu+wy27k8PdshsZpnYikeve599erVebl5e/ftdaSjtIpJ4saYrKysp/Pzv8sdIk7o8R1cAiCiUko4EqWYOnXq8OHD9+7bK6WM9tLGRWPMhPHj161bZ72M3iGRP0yOmvFK4vv27bs9b8zLf3ml6o5INom3bNHysccevWXkSNLGnrbGUrKa8fLSrt6QrrN58+acnJzPP/+86gkY9pYLe/TIz3+6T98+ylNSCE7inNDjk8QjHSIhpXSd2X+YPXjQ4KpeRneINm/e0qdvHxXy2EtWM47BEuxFBVynqOjoTdk33fmrO0NeqNoOESI+NOuhpUuXnn322XaahweXnNDjmMSNMU7A3f7XbaNzR//jgw9qSuIdO3bMfyp/0OBB2lN2+TpLyVEznklcCCfg5j/51CX9L6nqpVVQa92/f//CwsJBgwepkGcvQ8FesprxTeInykrHjR07Oi/3RGlpTBL3O0STJk5cu3atv8srJ3FO6PHy0u8Qffzxx7feeuv27dtrmuZJT09/7NFHf37LLdwhYjXjaSVA5RV8pVj24rKxY28/8vXXNQ0ue3Tvsaig4Ie9e/E0Dyf0eA4uMTzNI11HGX333XePuH5E1bUa1jytdfaNN27dutX3EprOS6oOjppJmMS/3PVFzuicjZtqXKshpZz54IOTp0wBAP/yK9BEC9SjX3z06+QrYCRPhwgAhCNfXb06Ly9vz9691SRxR2qlO3bosHDhwoGXXnpShwiaZoE62YtYEaEQMbsgkjZJYKdzxkoJkbUaTsAFgBnTH5g6fZrd7rWaaR6l+/fv/3T+0527dG4ug0v7HgQeP3Zs+vTpJSUlQgpj6NdTpnT57nlGG46aCZzElVZuIHDgwIExY8asWrWq6loNfxPNu+66a+bMmfaKq81kU0w73hCOPHzwUKdOncoqyu3tbxa+0e+/f2wHGwl9mJwz00tjDAG5gcCWrVtyR+fu3Lmzpko8PT193mPzbv75zaRN5VlmzScgEZWVlQVTgyHl+fsxJUcl5JxRUkKkQyRdBwDmzp07efLkUChUk5c9e/YsKCjIzMy0Sby5dS5tmfb5558fLarclIGS5aRhceZ4GT3Nc7So6Oabbp44cWIoFKo6zWM7RDfecMPmzZt9L6G5FRYYflOFb7xhv0tJdsjEmeOlMUYb4wTcd999N+t//uf5F563hzN6S3Z7xWnHcR555JEXFi9u9a1W/hoibE7RiIiAQEqpPLVy1cqYd5EcOEkvZWUSl1IIfPqp/F9Omnj8+PGaknjnTp3yn8ofcOlA2yFqntOP4YkrR7795tvvvvuu3wLjqJmQSby0vOz222/PyR19/PjxqtM8KITWesjgwYVvvDHg0oHNeQ1RZM6HEPHxx+dVuzcdq5kAHSI7zfPJx58MGDBg/vz5djesmCRORGTMrydP+ctfVmdkZESvIYKm22I9ejqK7L/Igj2llOO627dt//NLL/nbNHBCT6QkbhdcLnvxxXHjfnH4yOGaknjrs1s/8acnRowYYbQxSsd2iJooalbts1o1jTFuSuDYsWPjxo2zVzBKym22nST0EgEhPM3jhbz777131kOzbOldNbporXv36pWf/3TPzJ7lpWV2mqe5jdvspChKYb8iEmDHjh15eXl/+/vfGnBlLVazKZO40soJuF/s+iI3d/SGjRsFCgKKOYSIGAwGx40b98gjj9hbgmmpzfndHSsp2bdv346dOzds3PBMwaKjRUVJ7GUSqXnyvhpOwI3aV0OqKsHSGtyjR4/MzMwnn3xSKyWkhOaUFRFBa33o0OEjR47s2bPnq6++2n9g/4EDByoqKsJVQlJ7Cckxh151rcYDDzwwbVo1azWS4YAhWilrGl++8/Y7F//oYp5Db05JXCkn4B7Yf2DMmDGrXl7lnxj+DR2Kel5EuokbRkQxqzOTGCehpYRIEiciJ+Bu3bo1Jyfns88+q3uwTO6cmNCIRPfS31dj3qOPDRo0qF5eMhw145vES0pKJowfv+iZZ6CGDhHDap5WL+00z/+9//5tt4167/33bHHACZoTelN6qbUGRCfgPlOwKCsr673337MrhvhwsppNBiKSIek6IS80YfyEkbfdWlxSIjmJc0Jv4pAJQMagwJ07duTkji7cWminjzXHS46aTVySExljUIhp06cXbi10XbeWzjPDap72hB5Z4M1SckJvjhH0pGuIN/W3JR6vpMHPaRfSsZpNo4IbcB3HCQQC31j9GGM8z4v396RZxW+lFERd3Tpx1UyY5R0UFQwOHDxQVFwsv2GtEAGi8lRRcRFGoknYpXB0wUZ4UYhFRUUVFRWNKIFdp1J09CgBKKUQ6rQiyv55Q3T1lVe1PactmabfxOFMUTM6SqHkDe5qRZskuE6wk3heItor6tU31sa3e9Bs4J3imjKzY+RnndQ8+Z51fGB9X0/jj16ifpy2EorVZJhvhgdtDKvJMElcBp3mQW3UWO/kHg4hICEhABAQYG0dHtu6Iv/5+FoErOapFd3hbTsMRRdUAAgCAIwJS2n/RwAIArt5duW9Y08uC59OzhcW4jLo1IruiD+ibg5pABEVY23dXvWhJrwzTDzqeo6aZ0bQJAA0FQa37D1RoUigQDQho1sFnb5aq7/ukQ4CECKYCi0uaBvsvhcrvkThAhkDgCA0Zb6+5ZPjJ4olhrdKPKtli0uyfuq4bjiUcuDkqNmAqElEQsLhct37xV1fnRAgDYCAcp15XtqrXtGJa/MdSBGACOjB8eCky8793w104A/CTQXSRBJc95h+9j9+MP7gwa/8pz33nHN27NjZMr2l/cw5p3PUbGAJZM/ZFK6LLqIEBDSGnEAgoIXBVHACaAilIC8UEAEEAQJAIJBAAgCJgs46q4UQAgUCABlKO+ssbGZTR6xm4iWTcBEOoAkJCAEIiEAYIiLQZKQBQwRkDBmDxtqMIAHQgEEIAYExYIwJF/KRBUqIkWqdYTVPoXkEAklgOPkKALvXBwoEREAEgSjsb0goCBAQARAQCUAI9HcHqazKOWqymqesJQBQSIHxCDQBIChTrgwZbUw5GkmgUQkDHoUMoSJjwBwHMEAOCAFgSktPRJ/nWVZaSuHqh+1kNU8hoyMYQOzbmnanyQAigilXge7fAkhNwwszhJtiCFCAKC8VXVqSOc/IXkKeBQAapBQooU1mzwv//e80x3EIQCvdKSNDJuk2rVyhn76YiUSEQEQq3FK3W1YTAASIQAlAOxglNEAOgPAQFKCwCRsJAFOMBiKDELkR0W66zleoZjVPpT63fsUshg8vsqOY/7J7IcNJnXRbPAEi+F1M+wsRdzRZzUYYcJ5cTVcOE2MGjFWXhNaUtjlY8ljzlM1EihEvHPfsPCYAgh8lo883ipo058lIjppM8sHrNRlWk2FYTYbVZBhWk2E1GYbVZBhWk2E1GYbVZFhNhmE1GYbVZFhNhmE1GVaTYVhNhtVkGFaTYVhNhtVkGFaTYTUZhtVkGFaTYTUZhtVkWE2GYTUZVpNhWE2GYTUZVpNhWE2G1WQYVpNhWE2G1WQYVpNhNRmG1WRYTf4IGFaTYVhNhtVkGFaTYTUZhtVkGFaTYTUZpjH4f0F24dOtIrdrAAAAHnRFWHRpY2M6Y29weXJpZ2h0AEdvb2dsZSBJbmMuIDIwMTasCzM4AAAAFHRFWHRpY2M6ZGVzY3JpcHRpb24Ac1JHQrqQcwcAAAAASUVORK5CYII=";
 // PRINTFLOW v10.11.0 Sub-fase B — Folios fiscales a nivel OC (compartidos / consecutivos / pre-asignados)
@@ -1149,6 +1163,7 @@ const db = {
     const dbCols=["id","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded","distribution","sin_empaque_sygma"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
+    if("created_by" in dbRow)dbRow.created_by_uid=AUTH_UID; // v10.73.47 doble-escritura F1
     const {error}=await supabase.from("orders").upsert(dbRow);
     if(error)throw new Error(error.message);
   },
@@ -1156,7 +1171,7 @@ const db = {
   // v10.58.53: toStage = etapa a la que LLEGÓ la orden (persistido — antes 'to' solo
   // vivía en el estado optimista y daysInStage medía la edad total tras recargar)
   async addTimeline(orderId, action, byUser, color, toStage=null) {
-    const {error}=await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color, to_stage: toStage });
+    const {error}=await supabase.from("order_timeline").insert({ order_id: orderId, action, by_user: byUser, color, to_stage: toStage, by_uid: AUTH_UID }); // v10.73.47 doble-escritura F1
     if(error)throw new Error("addTimeline: "+error.message);
   },
   // 🆕 v10.58.41 — Historial campo-a-campo de cambios (order_change_log). El trigger lo escribe;
@@ -1170,7 +1185,7 @@ const db = {
     return data||[];
   },
   async addComment(orderId, text, byUser) {
-    const {error}=await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser });
+    const {error}=await supabase.from("order_comments").insert({ order_id: orderId, text, by_user: byUser, by_uid: AUTH_UID });
     if(error)throw new Error("addComment: "+error.message);
   },
   async addWaste(orderId, pliegos, qty, note) {
@@ -1214,9 +1229,24 @@ const db = {
     }
   },
   async login(username, password) {
-    // v10.58.0 — Auth via RPC server-side. Antes leíamos public.users directo con anon key,
-    // exponiendo TODOS los password_hash a quien tuviera DevTools. Ahora la comparación de
-    // credenciales corre en server-side via SECURITY DEFINER y solo retorna identidad básica.
+    // v10.73.47 — AUTH F1: login REAL con Supabase Auth (sesión criptográfica, JWT con rol en app_metadata).
+    // El empleado sigue tecleando su username: se mapea a email sintético username@padillahnos.local.
+    // FALLBACK al RPC legacy (v10.58.0 verify_user_password) si la cuenta auth no existe/falla — transición
+    // sin riesgo: nadie queda fuera; el retiro del legacy va con F2. Las 7 cuentas ya existen (E2E probado).
+    try{
+      const {data:authData,error:aErr}=await supabase.auth.signInWithPassword({email:username+"@padillahnos.local",password});
+      if(!aErr&&authData?.user){
+        const am=authData.user.app_metadata||{},um=authData.user.user_metadata||{};
+        if(am.role){
+          // Re-verificar ACTIVO en public.users (misma regla que el restore al montar y que el RPC legacy):
+          // desactivar a un empleado (users.active=false) debe seguir bloqueando el login aunque su cuenta
+          // auth siga viva. Si no hay fila activa (o el RPC falla) → signOut y cae al legacy, que también rechaza.
+          const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:am.username||username});
+          if(!sErr&&Array.isArray(sess)&&sess.length>0) return {username:am.username||username,role:am.role,display_name:um.display_name||am.username||username};
+        }
+        await supabase.auth.signOut(); // cuenta sin rol o usuario desactivado → no dejar sesión a medias
+      }
+    }catch(e){ console.warn("[login] auth falló, intento legacy:",e?.message); }
     const { data, error } = await supabase.rpc("verify_user_password", { p_username: username, p_password: password });
     if (error) throw new Error("Error verificando credenciales: " + error.message);
     return Array.isArray(data) && data.length > 0 ? data[0] : null;
@@ -1226,7 +1256,7 @@ const db = {
     return data || [];
   },
   async addNotification(targetRole, orderId, type, message, reason, byUser) {
-    const {error}=await supabase.from("notifications").insert({ target_role: targetRole, order_id: orderId, type, message, reason, by_user: byUser });
+    const {error}=await supabase.from("notifications").insert({ target_role: targetRole, order_id: orderId, type, message, reason, by_user: byUser, by_uid: AUTH_UID });
     if(error)throw new Error("addNotification: "+error.message);
   },
   async notify(targetRole, orderId, type, message, reason, byUser) {
@@ -1249,7 +1279,7 @@ const db = {
     await supabase.from("notifications").delete().eq("target_role", role);
   },
   async addPlate(orderId, plateSize, quantity, byUser) {
-    const {error}=await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser });
+    const {error}=await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser, registered_by_uid: AUTH_UID });
     if(error)throw new Error("addPlate: "+error.message);
   },
   async loadPlates() {
@@ -1257,7 +1287,7 @@ const db = {
     return data || [];
   },
   async addChemical(chemicalType, actionType, tambos, notes, byUser) {
-    const {error}=await supabase.from("chemical_log").insert({ chemical_type: chemicalType, action_type: actionType, tambos, notes, registered_by: byUser });
+    const {error}=await supabase.from("chemical_log").insert({ chemical_type: chemicalType, action_type: actionType, tambos, notes, registered_by: byUser, registered_by_uid: AUTH_UID });
     if(error)throw new Error("addChemical: "+error.message);
   },
   async loadChemicals() {
@@ -1269,15 +1299,15 @@ const db = {
     return data || [];
   },
   async startMaintenance(machineId, notes, byUser) {
-    const {error}=await supabase.from("maintenance_log").insert({ machine_id: machineId, notes, started_by: byUser });
+    const {error}=await supabase.from("maintenance_log").insert({ machine_id: machineId, notes, started_by: byUser, started_by_uid: AUTH_UID });
     if(error)throw new Error("startMaintenance: "+error.message);
   },
   async endMaintenance(id, cost, byUser) {
-    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: parseFloat(cost)||0, ended_by: byUser }).eq("id", id);
+    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: parseFloat(cost)||0, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id);
     if(error)throw new Error("endMaintenance: "+error.message);
   },
   async addNote(orderId, text, byUser) {
-    const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser});
+    const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser,by_uid:AUTH_UID});
     if(error)throw new Error(error.message);
   },
   // v10.58.0 — Acceso a app_config via RPC. Antes lectura directa con anon key exponía
@@ -14470,9 +14500,17 @@ export default function PrintFlow() {
     let cancelled = false;
     (async () => {
       try {
-        const raw = localStorage.getItem("pf-session");
-        if (!raw) { if (!cancelled) setAuthChecked(true); return; }
-        const session = JSON.parse(raw);
+        // v10.73.47 — AUTH F1: restaurar PRIMERO la sesión de Supabase Auth (fuente de verdad nueva);
+        // fallback a pf-session legacy (quien estaba logueado antes del switch NO se expulsa — al siguiente
+        // login manual ya obtiene sesión auth). En ambos caminos se re-verifica contra la BD que sigue activo.
+        let sessionUsername=null;
+        try{
+          const {data:{session:authSess}}=await supabase.auth.getSession();
+          if(authSess?.user) sessionUsername=authSess.user.app_metadata?.username||String(authSess.user.email||"").split("@")[0]||null;
+        }catch(e){ console.warn("[auth restore] getSession:",e?.message); }
+        const raw = sessionUsername?null:localStorage.getItem("pf-session");
+        if (!sessionUsername && !raw) { if (!cancelled) setAuthChecked(true); return; }
+        const session = sessionUsername?{username:sessionUsername}:JSON.parse(raw);
         if (!session || !session.username) {
           localStorage.removeItem("pf-session");
           if (!cancelled) setAuthChecked(true);
@@ -14484,8 +14522,9 @@ export default function PrintFlow() {
         if (cancelled) return;
         const dbUser = Array.isArray(dbUserRows) && dbUserRows.length > 0 ? dbUserRows[0] : null;
         if (error || !dbUser) {
-          // Usuario no existe o está desactivado → invalidar sesión
+          // Usuario no existe o está desactivado → invalidar sesión (legacy Y auth)
           localStorage.removeItem("pf-session");
+          try{ await supabase.auth.signOut(); }catch(e){}
           setAuthChecked(true);
           return;
         }
@@ -15325,6 +15364,7 @@ export default function PrintFlow() {
     // El trigger log_order_field_changes solo atribuye a last_edited_by si last_edited_at cambió
     // en este UPDATE (= edición de usuario). Esto distingue ediciones reales de cambios de sistema.
     safeUpdate.last_edited_by = userLogin || user;
+    safeUpdate.last_edited_by_uid = AUTH_UID; // v10.73.47 doble-escritura F1
     safeUpdate.last_edited_at = new Date().toISOString();
     // v10.47.0 — has_post_invoice_edits ahora lo setea el trigger BEFORE UPDATE auto_mark_post_invoice_edits.
     // Frontend solo predice el valor para optimistic UI; el backend (trigger SECURITY DEFINER) lo confirma.
@@ -15493,7 +15533,7 @@ export default function PrintFlow() {
       const tlMsg="↩️ Regresada a CTP — Razón: "+reason.trim();
       // 1. Invalidar plates existentes (no se borran, solo marca void)
       const {error:plErr}=await supabase.from("plate_log")
-        .update({voided_at:now,voided_reason:reason.trim(),voided_by:user})
+        .update({voided_at:now,voided_reason:reason.trim(),voided_by:user,voided_by_uid:AUTH_UID})
         .eq("order_id",id).is("voided_at",null);
       if(plErr)console.warn("[returnToCtp] No se pudieron invalidar plates:",plErr.message);
       // 2. Update order: stage='ctp', limpiar current_machine (va a Germán otra vez)
@@ -15542,7 +15582,7 @@ export default function PrintFlow() {
       // 1. Side effect: si destino es ctp, invalidar plates (preserva historial)
       if(targetStage==="ctp"){
         const {error:plErr}=await supabase.from("plate_log")
-          .update({voided_at:now,voided_reason:reason.trim(),voided_by:user})
+          .update({voided_at:now,voided_reason:reason.trim(),voided_by:user,voided_by_uid:AUTH_UID})
           .eq("order_id",id).is("voided_at",null);
         if(plErr)console.warn("[revertOrder] plates void warn:",plErr.message);
       }
@@ -16587,7 +16627,15 @@ export default function PrintFlow() {
         /* 🔒 v10.12.0.2 Phase 1 — Vendedor SIEMPRE exporta solo sus órdenes, independiente del toggle "Todas". Principio: ver sí, llevarse no. */
         const csvOrders=user==="vendedor"?csvOrdersRaw.filter(o=>o.created_by===userLogin):csvOrdersRaw;
         const h=["ID","Fecha","Tipo","Prioridad","#Prod","Agente","Cliente","Empresa","Tel","Email","RFC","Producto","TipoProd","Cant","Papel","Gramaje","Ancho","Alto","Tintas","TintasFrente","TintasVuelta","Acabados","Hrs","Precio","CostoMaq","PrecioMaq","Margen","Proveedor","ProvTel","ProvEmail","Etapa","Entrega","PlMerma","PzMerma","MinMaq","Prueba","Archivo","Notas","CreadoPor","Source","WebRef","CartFolio","WebFolio","TamañoEstándar"];const r=csvOrders.map(o=>{const mg=o.maq_cost&&o.maq_price?pct(parseFloat(o.maq_cost),parseFloat(o.maq_price)):"";return[o.id,fDT(o.created_at),o.order_type,o.priority,o.production_number,o.agent||"",o.client,o.client_company,o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:"",o.client_email||"",o.client_rfc||"",o.product,o.product_type,o.quantity,o.paper_type,o.paper_grammage||"",o.width_cm,o.height_cm,o.colors,o.ink_front||"",o.ink_back||"",o.finishes,o.estimated_hours,o.price,o.maq_cost,o.maq_price,mg,o.maq_provider||o.maquila_provider,o.maquila_phone||"",o.maquila_email||"",SM[o.stage]?.l,o.due_date,(o.waste_log||[]).reduce((s,w)=>s+(w.pliegos||0),0),(o.waste_log||[]).reduce((s,w)=>s+(w.qty||0),0),(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0),o.proof_approved?fDT(o.proof_approved):"",o.file_name||"",o.notes,o.created_by||"",o.source||"internal",o.web_order_ref||"",o.cart_folio||"",o.web_folio||"",o.standard_size?ssLabel(o.standard_size):""]});const out="﻿"+[h,...r].map(row=>row.map(c=>'"'+String(c||"").replace(/"/g,'""')+'"').join(",")).join("\n");const b=new Blob([out],{type:"text/csv;charset=utf-8;"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="PrintFlow_"+new Date().toISOString().slice(0,10)+".csv";a.click()};
-  const logout=()=>{try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setWakeupItems(null)};
+  // v10.73.47 — AUTH F1: cierra también la sesión Supabase Auth (scope local: cuentas compartidas por área —
+  // global mataría la sesión auth de las demás estaciones). Gotcha auth-js: si el POST /logout falla (red caída,
+  // 5xx) devuelve {error} SIN borrar el token local y SIN rechazar la promesa (aún con scope local) → al refrescar,
+  // el restore re-loguearía solo al usuario "deslogueado". Fallback: limpiar sb-*-auth-token* de localStorage a mano.
+  // Además nulifica AUTH_UID a mano: al fallar signOut nunca se emite SIGNED_OUT (y borrar localStorage no dispara
+  // onAuthStateChange en esta pestaña), así que sin esto el uid viejo contaminaría las columnas _uid del siguiente
+  // login que entre por el fallback legacy (misma caída de red que rompió el signOut).
+  const clearSbAuthStorage=()=>{try{Object.keys(localStorage).filter(k=>k.startsWith("sb-")&&k.includes("-auth-token")).forEach(k=>localStorage.removeItem(k))}catch{}AUTH_UID=null;};
+  const logout=()=>{try{supabase.auth.signOut({scope:"local"}).then(({error})=>{if(error)clearSbAuthStorage()}).catch(()=>clearSbAuthStorage())}catch{clearSbAuthStorage()}try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setWakeupItems(null)};
   // v10.72.40 — grupos del command palette: navegación (por sección del Sidebar) + acciones, gateadas por rol igual que el header.
   const cmdGroups=(()=>{
     const stripCount=l=>l.replace(/\s*\(\d+\)\s*$/,"");
