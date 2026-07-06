@@ -8645,6 +8645,19 @@ function PantoneChips({codes}) {
 // v10.73.23 — Duplica un archivo de imagen en Storage y devuelve la NUEVA URL pública (o null si falla). Se usa al
 // Replicar/Duplicar para que las órdenes NO compartan el mismo archivo (quitar/cambiar la imagen en una no rompe la
 // otra). Descarga el público + re-sube a un path nuevo en order-files.
+// v10.73.50 — al CANCELAR una orden, borra su ARCHIVO DE PRODUCCIÓN pesado (file_url: PSD/AI/PDF print-ready)
+// de storage y limpia las columnas file_url/file_name (para que la orden cancelada no quede con un link roto).
+// CONSERVA las imágenes de referencia (image_url/image_url_2) por la política de retención v10.72.70 (identificar
+// la orden después). Fire-and-forget: NO rompe la cancelación si falla el borrado. Idempotente (skip si no hay
+// file_url). El storage.remove corre como authenticated (candado de empleados v10.73.49). Pedido de Marcelo.
+async function deleteOrderProductionFile(order){
+  try{
+    if(!order?.file_url) return;
+    const path=order.file_url.split("/order-files/")[1];
+    if(path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+    await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",order.id);
+  }catch(e){ console.warn("[deleteOrderProductionFile]",order?.id,e); }
+}
 async function copyStorageImage(srcUrl,keyPrefix){
   // v10.73.24 — timeout en cada llamada de red: garantiza que la función SIEMPRE resuelve (≤~20s) → el gate
   // imgUploading de Replicar siempre se libera y el Promise.all de Duplicar nunca cuelga (cae al fallback de ref).
@@ -15948,6 +15961,7 @@ export default function PrintFlow() {
       };
       const {error}=await supabase.from("orders").update(upd).eq("id",id);
       if(error)throw new Error(error.message);
+      deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (conserva imágenes)
       await db.closeMachineLog(id);
       await db.addTimeline(id,"❌ Cancelada: "+reason,user,"#ff3b30");
       await db.addComment(id,"❌ Cancelada: "+reason,user);
@@ -16117,6 +16131,7 @@ export default function PrintFlow() {
       try{
         // RPC autoritativo: rutea por vínculo con cobranza (folio/grupo/splits/matriz/compartido) y admin-gatea los vinculados.
         await db.cancelOrderSafe(id, r, userLogin||user);
+        deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (masiva)
         ok++;
       }catch(e){ fail.push(((o&&o.production_number)||id)+": "+(e?.message||"error")); failIds.push(id); }
     }
@@ -17186,6 +17201,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         try{
           // v10.58.25: userLogin en lugar de user (rol) por consistencia con otras RPCs
           await db.cancelInvoicedOrder(cancelInvoicedModal.id,reason,userLogin||user);
+          deleteOrderProductionFile(cancelInvoicedModal); // v10.73.50 — borra el archivo de producción al cancelar (NC)
           const newStage=cancelInvoicedModal.order_type==="maquila"?"maq_cancelled":"cancelled";
           const tlMsg="❌ Cancelada (con NC pendiente) · Folio "+cancelInvoicedModal.invoice_folio+" · Razón: "+reason;
           setOrders(p=>p.map(o=>o.id===cancelInvoicedModal.id?{...o,stage:newStage,cancellation_reason:reason,cancelled_at:new Date().toISOString(),cancelled_by:user,nc_emitted:false,timeline:addTL(o,tlMsg,{to:newStage})}:o));
