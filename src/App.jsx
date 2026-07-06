@@ -9190,7 +9190,20 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     </>}
     <div style={{padding:"12px 20px 16px"}}>
       {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:11,color:C.dn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?C.maq:C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={()=>{
+        // v10.73.52 — al CANCELAR el formulario SIN guardar, borra del bucket los archivos subidos en esta
+        // sesión que NO pertenecen a la orden editada (en orden nueva: todos los subidos). Cierra el hueco de
+        // huérfanos de formulario abandonado (subir archivo y cerrar sin crear/guardar). Fire-and-forget.
+        try{
+          const orig=new Set([editOrder?.file_url,editOrder?.image_url,editOrder?.image_url_2].filter(Boolean));
+          const paths=[f.file_url,f.image_url,f.image_url_2]
+            .filter(u=>u&&!orig.has(u))
+            .map(u=>(u.split("/order-files/")[1]||""))
+            .filter(Boolean).map(decodeURIComponent);
+          if(paths.length) supabase.storage.from("order-files").remove(paths).catch(e=>console.warn("[form cancel cleanup]",e));
+        }catch(e){console.warn("[form cancel cleanup]",e);}
+        onCancel();
+      }} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?C.maq:C.ac),flex:1,justifyContent:"center",fontSize:15,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
       {!specsOnly&&<div style={{fontSize:9.5,color:C.t3,textAlign:"center",marginTop:7}}>Tip: <b style={{color:C.t2,fontWeight:700}}>Ctrl/⌘ + Enter</b> para guardar sin tocar el botón</div>}
     </div>
     {/* v10.45.0 — Modal replicar orden anterior */}
