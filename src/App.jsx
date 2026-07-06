@@ -8654,7 +8654,12 @@ async function deleteOrderProductionFile(order){
   try{
     if(!order?.file_url) return;
     const path=order.file_url.split("/order-files/")[1];
-    if(path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+    if(!path) return; // v10.73.51 — no es del bucket order-files (legacy/externo): no borrar ni soltar la referencia
+    // v10.73.51 — revisar el {error} del remove ANTES de nular: supabase-js resuelve con {data,error} (no lanza),
+    // así que un fallo silencioso (RLS/red/5xx) nularía file_url dejando el objeto huérfano PARA SIEMPRE (la red de
+    // 30 días lo salta con if(!o.file_url)). Si el remove falla, CONSERVAR file_url para que el auto-archivado reintente.
+    const {error:rmErr}=await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+    if(rmErr){ console.warn("[deleteOrderProductionFile] remove falló, conservo file_url para reintento:",order?.id,rmErr); return; }
     await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",order.id);
   }catch(e){ console.warn("[deleteOrderProductionFile]",order?.id,e); }
 }
@@ -14752,7 +14757,11 @@ export default function PrintFlow() {
         if (!o.file_url) continue;
         try {
           const path = o.file_url.split("/order-files/")[1];
-          if (path) await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+          if (!path) continue; // v10.73.51 — legacy/externo: no borrar ni soltar la referencia
+          // v10.73.51 — revisar el {error} del remove antes de nular: si falla en silencio (RLS/red/5xx), conservar
+          // file_url para reintentar mañana en vez de dejar el objeto huérfano para siempre (if(!o.file_url) lo saltaría).
+          const { error: rmErr } = await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
+          if (rmErr) { console.warn("[storage-cleanup] remove falló, conservo file_url para reintentar:", o.id, rmErr); continue; }
           await supabase.from("orders").update({ file_url: null, file_name: null }).eq("id", o.id);
         } catch {}
       }
