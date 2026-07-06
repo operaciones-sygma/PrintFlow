@@ -8466,11 +8466,17 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
     setUploading(true); setProgress(0); setUpInfo({name:file.name,mb:(file.size/1048576).toFixed(1)});
     const cleanup=()=>{ uploadingRef.current=false; setUploading(false); setProgress(0); setUpInfo(null); xhrRef.current=null; };
     try{
+      // v10.73.49 — AUTH: el XHR de upload ahora manda el JWT del usuario (session.access_token), NO la anon
+      //   key, para que el upload cuente como authenticated (permite re-candar order-files a empleados y
+      //   pasar a signed URLs). apikey sigue siendo la anon key (identifica el proyecto). Fallback a anon key
+      //   si por alguna razón no hubiera sesión (no debería, la app es auth-only desde F2-full).
+      const {data:{session}}=await supabase.auth.getSession();
+      const accessToken=session?.access_token||import.meta.env.VITE_SUPABASE_ANON_KEY;
       // 1) Vía principal: XHR con progreso real por bytes + cancelable
       await new Promise((resolve,reject)=>{
         const xhr=new XMLHttpRequest(); xhrRef.current=xhr;
         xhr.open("POST", import.meta.env.VITE_SUPABASE_URL+"/storage/v1/object/order-files/"+path, true);
-        xhr.setRequestHeader("Authorization","Bearer "+import.meta.env.VITE_SUPABASE_ANON_KEY);
+        xhr.setRequestHeader("Authorization","Bearer "+accessToken);
         xhr.setRequestHeader("apikey",import.meta.env.VITE_SUPABASE_ANON_KEY);
         xhr.setRequestHeader("x-upsert","true");
         if(file.type) xhr.setRequestHeader("Content-Type",file.type);
