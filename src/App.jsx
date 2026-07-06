@@ -10864,6 +10864,7 @@ function StorageTab({orders,onReload}) {
   const [topFiles,setTopFiles]=useState([]);
   const [orphans,setOrphans]=useState([]);
   const [breakdown,setBreakdown]=useState({prod:{count:0,bytes:0},img:{count:0,bytes:0}});
+  const [rawFiles,setRawFiles]=useState(null); // v10.73.55 — lista cruda del bucket (se lista 1 vez, en paralelo)
   const [cleaningOrphans,setCleaningOrphans]=useState(false);
   const [refreshKey,setRefreshKey]=useState(0);
   // Helper: formatear bytes a MB/KB
@@ -10873,86 +10874,64 @@ function StorageTab({orders,onReload}) {
   const withFile=orders.filter(o=>o.file_url);
   const oldFiles=withFile.filter(o=>{const d=new Date(o.created_at);return(Date.now()-d.getTime())>30*86400000});
 
-  // v10.18.0 — Calcula storage usado + Top archivos + Huérfanos + Breakdown en una sola pasada
+  // v10.73.55 — Efecto 1 (COSTOSO, corre SOLO cuando cambian los archivos, NO cuando cambian las órdenes):
+  //   lista el bucket UNA vez y en PARALELO por lotes. Antes hacía N storage.list() SECUENCIALES (uno por
+  //   carpeta) → con cientos de imágenes tardaba decenas de segundos. Guarda la lista cruda en rawFiles.
   useEffect(()=>{
+    let alive=true;
     (async()=>{
       setLoadingSize(true);
       try{
-        // v10.34.4 fix #8 — paginar list para evitar truncado silencioso a 1000 folders (con >1000 órdenes los folders no listados nunca aparecen como huérfanos)
-        let data=[];
-        let offset=0;const pageSize=1000;
+        // v10.34.4 fix #8 — paginar el list de raíz (evita truncado silencioso a 1000 folders)
+        let data=[];let offset=0;const pageSize=1000;
         while(true){
           const {data:page}=await supabase.storage.from("order-files").list("",{limit:pageSize,offset});
           if(!page||page.length===0)break;
           data=data.concat(page);
           if(page.length<pageSize)break;
-          offset+=pageSize;
-          if(offset>50000)break; // safety: no más de 50k folders en una pasada
+          offset+=pageSize;if(offset>50000)break; // safety
         }
-        if(!data.length){setStorageUsed(0);setTopFiles([]);setOrphans([]);setLoadingSize(false);return}
-        // Construir set de paths referenciados desde orders (file_url + image_url)
-        const prodRefPaths=new Set();
-        const imgRefPaths=new Set();
-        const orderByPath={}; // path → order para enriquecer Top
-        orders.forEach(o=>{
-          if(o.file_url){
-            const p=o.file_url.split("/order-files/")[1];
-            if(p){const dp=decodeURIComponent(p);prodRefPaths.add(dp);orderByPath[dp]=o}
-          }
-          if(o.image_url){
-            const p=o.image_url.split("/order-files/")[1];
-            if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}
-          }
-          // v10.72.70 — image_url_2 ahora es permanente (las imágenes ya no se borran): indexarla también
-          // para que la limpieza de huérfanos NO ofrezca borrar las segundas imágenes (vuelta).
-          if(o.image_url_2){
-            const p=o.image_url_2.split("/order-files/")[1];
-            if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}
-          }
-        });
-        // Recolectar todos los archivos con path completo
-        let totalBytes=0;
-        const allFiles=[];
-        for(const folder of data){
-          if(folder.id){
-            // Archivo en raíz (raro pero posible)
-            totalBytes+=folder.metadata?.size||0;
-            allFiles.push({path:folder.name,name:folder.name,folder:"",size:folder.metadata?.size||0,created_at:folder.created_at});
-            continue;
-          }
-          const{data:files}=await supabase.storage.from("order-files").list(folder.name,{limit:100});
-          if(files)files.forEach(f=>{
-            const sz=f.metadata?.size||0;
-            totalBytes+=sz;
-            allFiles.push({path:folder.name+"/"+f.name,name:f.name,folder:folder.name,size:sz,created_at:f.created_at});
-          });
+        const rootFiles=data.filter(x=>x.id).map(x=>({path:x.name,name:x.name,folder:"",size:x.metadata?.size||0,created_at:x.created_at}));
+        const folders=data.filter(x=>!x.id);
+        const all=[...rootFiles];
+        const BATCH=16; // concurrencia: 16 list() en paralelo por lote (antes: 1 a la vez)
+        for(let i=0;i<folders.length;i+=BATCH){
+          if(!alive)return;
+          const chunk=folders.slice(i,i+BATCH);
+          const res=await Promise.all(chunk.map(folder=>
+            supabase.storage.from("order-files").list(folder.name,{limit:100}).then(r=>({folder,files:r.data})).catch(()=>({folder,files:null}))
+          ));
+          for(const {folder,files} of res){ if(files)files.forEach(fl=>all.push({path:folder.name+"/"+fl.name,name:fl.name,folder:folder.name,size:fl.metadata?.size||0,created_at:fl.created_at})); }
         }
-        setStorageUsed(Math.round(totalBytes/1024/1024*10)/10);
-        // Calcular breakdown
-        const bd={prod:{count:0,bytes:0},img:{count:0,bytes:0}};
-        const orphanList=[];
-        allFiles.forEach(f=>{
-          if(prodRefPaths.has(f.path)){bd.prod.count++;bd.prod.bytes+=f.size}
-          else if(imgRefPaths.has(f.path)){bd.img.count++;bd.img.bytes+=f.size}
-          else orphanList.push(f); // ni en file_url ni en image_url → huérfano
-        });
-        setBreakdown(bd);
-        setOrphans(orphanList);
-        // Top 5 archivos más grandes (con enriquecimiento de orden)
-        const top=[...allFiles].sort((a,b)=>b.size-a.size).slice(0,5).map(f=>({
-          ...f,
-          order:orderByPath[f.path]||null,
-          isOrphan:!prodRefPaths.has(f.path)&&!imgRefPaths.has(f.path),
-          isImage:imgRefPaths.has(f.path)
-        }));
-        setTopFiles(top);
-      }catch(err){
-        console.error("[StorageTab]",err);
-        setStorageUsed(null);
-      }
-      setLoadingSize(false);
+        if(alive)setRawFiles(all);
+      }catch(err){ console.error("[StorageTab list]",err); if(alive){setRawFiles([]);setStorageUsed(null);} }
+      if(alive)setLoadingSize(false);
     })();
-  },[cleaned,deleting,refreshKey,orders]);
+    return ()=>{alive=false};
+  },[cleaned,deleting,refreshKey]);
+  // v10.73.55 — Efecto 2 (BARATO, sin red): recalcula breakdown/huérfanos/top desde rawFiles + orders. Corre
+  //   cuando cambian las órdenes (realtime) SIN re-listar el bucket → el "actualizarse" ya no cuesta nada.
+  useEffect(()=>{
+    if(!rawFiles)return;
+    const prodRefPaths=new Set();const imgRefPaths=new Set();const orderByPath={};
+    orders.forEach(o=>{
+      if(o.file_url){const p=o.file_url.split("/order-files/")[1];if(p){const dp=decodeURIComponent(p);prodRefPaths.add(dp);orderByPath[dp]=o}}
+      if(o.image_url){const p=o.image_url.split("/order-files/")[1];if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}}
+      // v10.72.70 — image_url_2 permanente: indexarla para no ofrecerla como huérfano.
+      if(o.image_url_2){const p=o.image_url_2.split("/order-files/")[1];if(p){const dp=decodeURIComponent(p);imgRefPaths.add(dp);orderByPath[dp]=o}}
+    });
+    let totalBytes=0;const bd={prod:{count:0,bytes:0},img:{count:0,bytes:0}};const orphanList=[];
+    rawFiles.forEach(f=>{
+      totalBytes+=f.size;
+      if(prodRefPaths.has(f.path)){bd.prod.count++;bd.prod.bytes+=f.size}
+      else if(imgRefPaths.has(f.path)){bd.img.count++;bd.img.bytes+=f.size}
+      else orphanList.push(f); // ni en file_url ni en image_url/image_url_2 → huérfano
+    });
+    setStorageUsed(Math.round(totalBytes/1024/1024*10)/10);
+    setBreakdown(bd);setOrphans(orphanList);
+    const top=[...rawFiles].sort((a,b)=>b.size-a.size).slice(0,5).map(f=>({...f,order:orderByPath[f.path]||null,isOrphan:!prodRefPaths.has(f.path)&&!imgRefPaths.has(f.path),isImage:imgRefPaths.has(f.path)}));
+    setTopFiles(top);
+  },[rawFiles,orders]);
 
   const usedPct=storageUsed!==null?Math.min((storageUsed/maxStorage)*100,100):0;
   const barColor=usedPct>=90?"#ff3b30":usedPct>=70?C.amb:C.live;
