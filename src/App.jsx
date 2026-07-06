@@ -10865,6 +10865,7 @@ function StorageTab({orders,onReload}) {
   const [orphans,setOrphans]=useState([]);
   const [breakdown,setBreakdown]=useState({prod:{count:0,bytes:0},img:{count:0,bytes:0}});
   const [rawFiles,setRawFiles]=useState(null); // v10.73.55 — lista cruda del bucket (se lista 1 vez, en paralelo)
+  const [listError,setListError]=useState(false); // v10.73.56 — fallo real de listado (para mostrar "Error", no "0 MB")
   const [cleaningOrphans,setCleaningOrphans]=useState(false);
   const [refreshKey,setRefreshKey]=useState(0);
   // Helper: formatear bytes a MB/KB
@@ -10880,7 +10881,7 @@ function StorageTab({orders,onReload}) {
   useEffect(()=>{
     let alive=true;
     (async()=>{
-      setLoadingSize(true);
+      setLoadingSize(true);setListError(false);
       try{
         // v10.34.4 fix #8 — paginar el list de raíz (evita truncado silencioso a 1000 folders)
         let data=[];let offset=0;const pageSize=1000;
@@ -10904,7 +10905,7 @@ function StorageTab({orders,onReload}) {
           for(const {folder,files} of res){ if(files)files.forEach(fl=>all.push({path:folder.name+"/"+fl.name,name:fl.name,folder:folder.name,size:fl.metadata?.size||0,created_at:fl.created_at})); }
         }
         if(alive)setRawFiles(all);
-      }catch(err){ console.error("[StorageTab list]",err); if(alive){setRawFiles([]);setStorageUsed(null);} }
+      }catch(err){ console.error("[StorageTab list]",err); if(alive){setListError(true);setRawFiles(null);setStorageUsed(null);} }
       if(alive)setLoadingSize(false);
     })();
     return ()=>{alive=false};
@@ -10990,7 +10991,7 @@ function StorageTab({orders,onReload}) {
     <div style={{background:C.sf,borderRadius:14,padding:20,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700}}><FloppyDiskIcon size={14} weight="bold"/>Almacenamiento Supabase</div>
-        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{loadingSize?<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Calculando...</>:(storageUsed!==null?(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"):"Error")}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
+        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{listError?"Error":((loadingSize||storageUsed===null)?<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Calculando...</>:(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"))}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
       </div>
       <div style={{background:C.bg,borderRadius:8,height:20,overflow:"hidden",border:"0.5px solid "+C.bd}}>
         <div style={{width:usedPct+"%",height:"100%",background:barColor,borderRadius:8,transition:"width .8s ease",minWidth:usedPct>0?"8px":"0"}}/>
