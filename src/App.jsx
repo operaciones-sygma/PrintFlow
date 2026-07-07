@@ -1402,12 +1402,16 @@ const db = {
   // valida estado de la orden + 4 guards (mismo cliente, sin ligar previo, monto ±0.02 con IVA, existe la factura),
   // estampa el folio (el puente sync_invoice_from_orders salta el duplicado), liga la factura existente
   // (source_order_id) y deja la orden entregada. Espejo del flujo de split (assign_invoice_splits p_allow_link).
-  async linkInvoiceToOrder(orderId, folio, actor) {
+  // v10.73.47 — paymentMethod/bankReference: la factura ligada mirror-ea su pago en la orden. El check
+  // orders_payment_method_required_if_paid_or_partial EXIGE payment_method si la factura está pagada/parcial;
+  // el RPC normaliza (default 'otro' si no viene) pero pasamos el método/ref reales que Karla capturó para exactitud.
+  async linkInvoiceToOrder(orderId, folio, actor, paymentMethod, bankReference) {
     const {data, error} = await supabase.rpc("link_invoice_to_order", {
-      p_order_id: orderId, p_folio: folio, p_actor: actor
+      p_order_id: orderId, p_folio: folio, p_actor: actor,
+      p_payment_method: paymentMethod || null, p_bank_reference: bankReference || null
     });
     if(error) throw new Error(error.message);
-    return data; // { invoice_status, amount, doc_type, ... }
+    return data; // { invoice_status, amount, payment_status, payment_method, ... }
   },
   // 🆕 v10.72.87 — Facturar a un tercero: alta/selección + enriquecimiento de la razón social destinataria.
   async upsertBillingClient(clientId, name, rfc, email, whatsapp, byUser) {
@@ -17001,18 +17005,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // Solo para factura/remisión (stock_load / no_folio retornan antes y no llegan aquí).
           if(/registrad[oa] en cobranza|ya existe en cobranza|folio.*ya.*(existe|registrad)/i.test(errMsg)&&(invoiceType==="factura"||invoiceType==="remision")){
             const oid=invoiceModal.id, actor=userLogin||user, otype=invoiceModal.order_type, capturedPay=(paymentStatus==="paid"||paymentStatus==="partial");
+            // v10.73.47 — método/ref para el espejo de pago en la orden (el RPC lo exige si la factura ligada está pagada/parcial). Multi-pago → agrega.
+            const _lMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0, _lMethods=_lMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+            const ligarMethod=_lMulti?(_lMethods.length>1?"mixed":_lMethods[0]):paymentMethod;
+            const ligarRef=_lMulti?(paymentRefs.length>1?("MULTIPLES ("+paymentRefs.length+" pagos)"):(paymentRefs[0]?.bank_reference||null)):bankReference;
             // el folio no se asignó → revertir el tercero huérfano; el link usa la factura existente tal cual (no re-factura al tercero).
             if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
             setInvoiceModal(null);setAllowNoPriceForOrder(null); // cerrar para que el ConfirmModal (z-999) no quede tapado ni intercepte clics (fix espejo del split F1)
             setConfirmModal({
               title:"Folio "+folio+" ya existe en cobranza",
-              message:"El folio "+folio+" ya está registrado en cobranza (factura de Alpha para este cliente). ¿Ligarlo a esta orden?\n\nSe ligará la factura existente y la orden quedará entregada. No se crea factura nueva ni se cobra doble — el sistema verifica que sea el mismo cliente y el mismo monto antes de ligar."+(capturedPay?"\n\n⚠️ El pago/cobro que capturaste NO se registra aquí: para esta factura ya existente en cobranza, el cobro se administra en CobranzaFlow.":""),
+              message:"El folio "+folio+" ya está registrado en cobranza (factura de Alpha para este cliente). ¿Ligarlo a esta orden?\n\nSe ligará la factura existente y la orden quedará entregada. No se crea factura nueva ni se cobra doble — el sistema verifica que sea el mismo cliente y el mismo monto antes de ligar."+(capturedPay?"\n\n⚠️ El estado de pago se toma de la factura ya existente en cobranza (no de lo que marques aquí). Si el pago aún no está aplicado allá, regístralo en CobranzaFlow.":""),
               confirmLabel:"🔗 Sí, ligar folio existente",
               confirmColor:C.fac,
               onConfirm:async()=>{
                 setConfirmModal(null);
                 try{
-                  const r=await db.linkInvoiceToOrder(oid, folio, actor);
+                  const r=await db.linkInvoiceToOrder(oid, folio, actor, ligarMethod, ligarRef);
                   const paid=r?.invoice_status==="pagada", partial=r?.invoice_status==="parcial";
                   const newStage=otype==="maquila"?"maq_delivered":"delivered";
                   const tlMsg="🔗 Folio "+folio+" ligado a factura existente en cobranza"+(paid?" (ya pagada)":partial?" (pago parcial)":"");
