@@ -1675,6 +1675,16 @@ const db = {
     }
     return prefix + (maxNum + 1);
   },
+  // F1 — ¿el foliado está en modo EMISOR? (ON = el folio nace del counter server-side,
+  // ya no se transcribe de Alpha). Cuando está ON, los modales ocultan el input de folio.
+  // Default false ante cualquier error → se muestra el input (comportamiento de hoy, seguro).
+  async getFolioEmitterEnabled() {
+    try {
+      const {data, error} = await supabase.rpc("get_folio_emitter_enabled");
+      if(error) return false;
+      return data === true;
+    } catch(e) { return false; }
+  },
   // 🆕 v10.7.0 — Lee el siguiente folio que se asignaría (preview, no incrementa)
   // ⚠️ DEPRECATED en v10.9.0 — usar getNextFolioSuggestion (más robusto).
   async previewNextFolio(invoiceType) {
@@ -4088,6 +4098,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [invoiceType, setInvoiceType] = useState("factura");
   const [folio, setFolio] = useState("");
   const [folioEdited, setFolioEdited] = useState(false); // M2: tracking si Karla editó manualmente
+  const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
   const [totalAmount, setTotalAmount] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
@@ -4103,11 +4114,12 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
   useEffect(()=>{
     let alive = true;
-    Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision")])
-      .then(([f,r])=>{
+    Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision"), db.getFolioEmitterEnabled()])
+      .then(([f,r,emitter])=>{
         if (!alive) return;
         setSuggestionByType({factura:f||"", remision:r||""});
         setFolio(invoiceType==="factura"?(f||""):(r||""));
+        setFolioAuto(emitter===true);
       })
       .catch(e=>console.warn("[BulkSellModal] suggestions:",e));
     return ()=>{alive=false};
@@ -4198,7 +4210,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     return parseInt(m[1], 10);
   };
   const pref = invoiceType==="factura"?"D-":"R-";
-  const folioOK = parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref);
+  const folioOK = folioAuto ? true : (parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref)); // F1: emisor ON → no exige folio manual
   const totalNum = parseFloat(totalAmount);
   const totalOK = Number.isFinite(totalNum) && totalNum > 0;
   // MultiPaymentPicker espera SUBTOTAL SIN IVA (lo multiplica × 1.16 si factura).
@@ -4366,8 +4378,11 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                 </div>
               </div>
               <div>
+                {/* F1: en modo emisor el folio nace del counter → se oculta el input */}
+                {folioAuto?<FolioAutoNote/>:<>
                 <label style={{...lbl,marginTop:0,fontSize:10}}>Folio fiscal * <span style={{color:C.t3,fontWeight:400}}>(sugerido — modificable)</span></label>
                 <input style={{...inp,fontSize:13,fontFamily:"'Geist Mono',monospace",fontWeight:700,letterSpacing:.5,border:"1.5px solid "+(folioOK?C.bd:C.dn+"40")}} value={folio} onChange={e=>{const v=e.target.value; setFolio(v); setFolioEdited(v.length>0);}} placeholder={pref+"XXXX"} disabled={busy}/>
+                </>}
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
@@ -5539,6 +5554,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const [coronaInfo, setCoronaInfo] = useState(null);
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
+  const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
 
   // ESC close (solo cuando NO está guardando)
   // v10.58.43 #25: guard de INPUT/TEXTAREA (convención escStack) — ESC dentro de un
@@ -5558,15 +5574,17 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     let alive = true;
     (async()=>{
       try {
-        const [info, sF, sR] = await Promise.all([
+        const [info, sF, sR, emitter] = await Promise.all([
           db.getClientBillingInfo(order?.client_id, order?.client),
           db.getNextFolioSuggestion("factura"),
-          db.getNextFolioSuggestion("remision")
+          db.getNextFolioSuggestion("remision"),
+          db.getFolioEmitterEnabled()
         ]);
         if(!alive) return;
         setCoronaInfo(info || {billing_mode:"normal", current_balance:0});
         setFolioSugFactura(sF || "");
         setFolioSugRemision(sR || "");
+        setFolioAuto(emitter===true);
       } catch(e) {
         if(alive) setCoronaInfo({billing_mode:"normal", current_balance:0});
       }
@@ -5646,8 +5664,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // Validación de folios fiscales (factura/remision)
   const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo");
   const folioRegex = /^[DR]-[1-9]\d*$/;
-  const foliosFmtOk = foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
-  const foliosUnicos = (() => {
+  // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
+  const foliosFmtOk = folioAuto ? true : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
+  const foliosUnicos = folioAuto ? true : (() => {
     const set = new Set();
     for (const s of foliosNoCorona) {
       const f = (s.folio||"").toUpperCase();
@@ -5657,7 +5676,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     return true;
   })();
   // Prefix correcto según tipo
-  const foliosPrefixOk = foliosNoCorona.every(s => {
+  const foliosPrefixOk = folioAuto ? true : foliosNoCorona.every(s => {
     const f = (s.folio||"").toUpperCase();
     const prefix = s.doc_type === "factura" ? "D-" : "R-";
     return f.startsWith(prefix);
@@ -5807,6 +5826,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         </button>
       </div>
 
+      {/* F1: aviso de foliado automático (emisor ON) */}
+      {folioAuto && <FolioAutoNote label="uno por cada parte"/>}
       {/* Tabla de splits */}
       <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"hidden",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"40px 100px 1fr 140px 140px",gap:0,padding:"8px 10px",background:C.sf,fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,borderBottom:"0.5px solid "+C.bd}}>
@@ -5851,6 +5872,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 <div style={{fontSize:11,color:C.t2,fontStyle:"italic",padding:"6px 0"}}>
                   Sin folio fiscal
                 </div>
+              ) : folioAuto ? (
+                /* F1: en modo emisor el folio nace del counter → chip en vez de input */
+                <div style={{fontSize:11,fontWeight:600,color:C.fac,padding:"6px 0",display:"flex",alignItems:"center",gap:4,width:"130px"}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span></div>
               ) : (
                 <input type="text" value={s.folio||""}
                   onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
@@ -6192,6 +6216,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [coronaInfo, setCoronaInfo] = useState(null);
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
+  const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
   // 🆕 Fase 2.5 — tercero POR GRUPO: edición en overlay (índice del grupo) + borrador local del picker
   const [billToEditGroup, setBillToEditGroup] = useState(null);
   const [billToDraft, setBillToDraft] = useState(null);
@@ -6286,16 +6311,18 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     let alive = true;
     (async () => {
       try {
-        const [info, sF, sR] = await Promise.all([
+        const [info, sF, sR, emitter] = await Promise.all([
           db.getClientBillingInfo(oc?.client_id, oc?.client),
           db.getNextFolioSuggestion("factura"),
-          db.getNextFolioSuggestion("remision")
+          db.getNextFolioSuggestion("remision"),
+          db.getFolioEmitterEnabled()
         ]);
         if(!alive) return;
         const billingInfo = info || {billing_mode:"normal", current_balance:0};
         setCoronaInfo(billingInfo);
         setFolioSugFactura(sF || "");
         setFolioSugRemision(sR || "");
+        setFolioAuto(emitter===true);
         // v10.58.38: heurística de default captureMode si no hay preferencia persistida.
         // Cliente Corona (anticipo) suele mandar hoja con montos por destino → modo amount.
         try {
@@ -6594,7 +6621,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     groups.forEach((g, i) => {
       const hasAnyCell = Object.values(g.lines).some(c => Number(c.qty||0) > 0);
       if(!hasAnyCell) errors.push(`Factura ${i+1}: sin líneas con cantidad`);
-      if(g.doc_type !== "corona_saldo") {
+      // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
+      if(g.doc_type !== "corona_saldo" && !folioAuto) {
         if(!folioRegex.test((g.folio||"").toUpperCase())) errors.push(`Factura ${i+1}: folio inválido`);
         else {
           const fu = g.folio.toUpperCase();
@@ -6624,7 +6652,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
     }
     return errors;
-  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder]);
+  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder, folioAuto]);
 
   const canSubmit = !saving && validation.length === 0 && eligibleOrders.length > 0;
 
@@ -6795,6 +6823,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
       </div>
 
+      {/* F1: aviso de foliado automático (emisor ON) */}
+      {folioAuto && <FolioAutoNote label="uno por cada factura del plan"/>}
       {/* GRID: filas=órdenes, columnas=facturas */}
       <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"auto",marginBottom:14,maxHeight:"50vh"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
@@ -6852,11 +6882,14 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                       <option value="remision">📋 Remisión R-</option>
                       {isCorona && <option value="corona_saldo">💎 Saldo Corona</option>}
                     </select>
-                    {g.doc_type !== "corona_saldo" && (
+                    {g.doc_type !== "corona_saldo" && (folioAuto ? (
+                      /* F1: en modo emisor el folio nace del counter → chip en vez de input */
+                      <div style={{fontSize:10,fontWeight:600,color:C.fac,padding:"4px 8px",display:"flex",alignItems:"center",gap:4}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span></div>
+                    ) : (
                       <input value={g.folio||""} placeholder={g.doc_type==="factura"?"D-XXXX":"R-XXXX"}
                         onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
                         style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
-                    )}
+                    ))}
                     {/* 🆕 Fase 2.5 — facturar ESTE grupo a un tercero (razón social distinta del productor) */}
                     {g.doc_type !== "corona_saldo" && !isCorona && (
                       <button type="button" onClick={()=>{setBillToDraft(null); setBillToEditGroup(i);}}
@@ -7064,6 +7097,18 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   </div>;
 }
 
+// F1 — Aviso reutilizable cuando el foliado está en modo EMISOR (el folio nace del
+// counter server-side y ya NO se captura a mano). Reemplaza al input de folio en los modales.
+function FolioAutoNote({label}){
+  return <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",marginBottom:8,marginTop:4,background:C.fac+"0E",border:"1px solid "+C.fac+"33",borderRadius:10}}>
+    <span style={{fontSize:15,flexShrink:0}}>🔢</span>
+    <div style={{fontSize:11,color:C.t2,lineHeight:1.4}}>
+      <b style={{color:C.tx}}>El folio se asignará automáticamente</b> al confirmar (emisión SYGMA). Ya no se captura a mano.
+      {label?<span style={{color:C.t3}}> · {label}</span>:null}
+    </div>
+  </div>;
+}
+
 // ─── INVOICE MODAL (v10.7.0) ─── Karla asigna folio fiscal D-XXXX o R-XXXX
 function InvoiceModal({order,onConfirm,onClose}) {
   // v10.58.11: backdrop+ESC guards durante busy.
@@ -7076,6 +7121,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
   const [confirming,setConfirming]=useState(false);
   const [warnLow,setWarnLow]=useState(false); // confirmación si folio menor al sugerido
+  const [folioAuto,setFolioAuto]=useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   // v10.29.0 + v10.30.0 — estado de pago obligatorio + monto parcial
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [paymentMethod,setPaymentMethod]=useState(null);
@@ -7144,11 +7190,12 @@ function InvoiceModal({order,onConfirm,onClose}) {
     let cancelled=false;
     (async()=>{
       try{
-        const [f,r]=await Promise.all([
+        const [f,r,emitter]=await Promise.all([
           db.getNextFolioSuggestion("factura"),
-          db.getNextFolioSuggestion("remision")
+          db.getNextFolioSuggestion("remision"),
+          db.getFolioEmitterEnabled()
         ]);
-        if(!cancelled)setSuggestion({factura:f,remision:r});
+        if(!cancelled){setSuggestion({factura:f,remision:r});setFolioAuto(emitter===true);}
       }catch(e){console.error("Error cargando sugerencias de folio:",e)}
     })();
     return ()=>{cancelled=true};
@@ -7160,7 +7207,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const isNoFolio=type==="no_folio";
   const folioRegex=type==="factura"?/^D-[1-9]\d*$/:/^R-[1-9]\d*$/; // v10.64.3 — sin cero a la izquierda (consistente con SplitInvoice/Matrix; 0 folios reales con cero inicial)
   const folioPrefix=type==="factura"?"D-":"R-";
-  const folioValid=(isNoFolio||isStockLoad)?true:(folio&&folioRegex.test(folio));
+  const folioValid=folioAuto?true:((isNoFolio||isStockLoad)?true:(folio&&folioRegex.test(folio))); // F1: emisor ON → no exige folio manual
   const folioNum=(!isNoFolio&&!isStockLoad&&folioValid)?parseInt(folio.split("-")[1],10):0;
   const suggestedNum=(!isNoFolio&&!isStockLoad&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
   const folioIsLower=(!isNoFolio&&!isStockLoad)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
@@ -7381,7 +7428,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
           </>}
         </div>}
         {/* v10.43.10 — Input de folio solo si NO es 'no_folio' ni 'stock_load' */}
-        {type&&!isNoFolio&&!isStockLoad&&<>
+        {/* F1: en modo emisor el folio nace del counter → se oculta el input y se muestra aviso */}
+        {type&&!isNoFolio&&!isStockLoad&&(folioAuto?<FolioAutoNote/>:<>
           <label style={{...lbl,marginTop:4}}>Folio del {type==="factura"?"CFDI":"comprobante"} (escribe o usa sugerido):</label>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <input
@@ -7395,7 +7443,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
           </div>
           {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:8}}><WarningIcon size={11} weight="fill"/>Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.amb,marginBottom:8,fontWeight:600}}><WarningIcon size={11} weight="fill"/>Este folio es menor al último registrado ({suggestion[type]})</div>}
-        </>}
+        </>)}
         {type&&folioValid&&!isStockLoad&&((isCorona&&isNoFolio)?
           (()=>{
             // v10.57.0 — Banner Corona SOLO en la opción "Aplicar saldo" (no_folio).
@@ -7470,9 +7518,9 @@ function InvoiceModal({order,onConfirm,onClose}) {
           <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.ok}}>Entregada</strong> sin folio fiscal individual. El subtotal se descuenta del saldo Corona inmediatamente.</p>
         </> : <>
           <div style={{background:(type==="factura"?C.fac:C.live)+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?C.fac:C.live)+"40"}}>
-            <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar:</div>
-            <div style={{fontSize:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>{folio}</div>
-            <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"})</div>
+            <div style={{fontSize:11,color:C.t2,marginBottom:4}}>{folioAuto?"Vas a emitir:":"Vas a asignar:"}</div>
+            <div style={{fontSize:folioAuto?18:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>{folioAuto?"🔢 Folio automático":folio}</div>
+            <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"}){folioAuto?" · se asigna al confirmar":""}</div>
           </div>
           {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
           <div style={{background:paymentStatus==="paid"?C.live+"10":paymentStatus==="partial"?C.fac+"10":C.amb+"10",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?C.live+"40":paymentStatus==="partial"?C.fac+"40":C.amb+"40")}}>
@@ -7528,6 +7576,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
   const [confirming,setConfirming]=useState(false);
   const [warnLow,setWarnLow]=useState(false);
+  const [folioAuto,setFolioAuto]=useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   // v10.29.0 + v10.30.0 — estado de pago obligatorio + monto parcial
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [paymentMethod,setPaymentMethod]=useState(null);
@@ -7572,11 +7621,12 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
     let cancelled=false;
     (async()=>{
       try{
-        const [f,r]=await Promise.all([
+        const [f,r,emitter]=await Promise.all([
           db.getNextFolioSuggestion("factura"),
-          db.getNextFolioSuggestion("remision")
+          db.getNextFolioSuggestion("remision"),
+          db.getFolioEmitterEnabled()
         ]);
-        if(!cancelled)setSuggestion({factura:f,remision:r});
+        if(!cancelled){setSuggestion({factura:f,remision:r});setFolioAuto(emitter===true);}
       }catch(e){console.error("Error cargando sugerencias:",e)}
     })();
     return ()=>{cancelled=true};
@@ -7591,7 +7641,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
 
   const folioRegex=type==="factura"?/^D-[1-9]\d*$/:/^R-[1-9]\d*$/; // v10.64.3 — sin cero a la izquierda (consistente con SplitInvoice/Matrix; 0 folios reales con cero inicial)
   const folioPrefix=type==="factura"?"D-":"R-";
-  const folioValid=folio&&folioRegex.test(folio);
+  const folioValid=folioAuto?true:(folio&&folioRegex.test(folio)); // F1: emisor ON → no exige folio manual
   const folioNum=folioValid?parseInt(folio.split("-")[1],10):0;
   const suggestedNum=suggestion[type]?parseInt(suggestion[type].split("-")[1],10):0;
   const folioIsLower=folioValid&&suggestedNum>0&&folioNum<suggestedNum;
@@ -7701,6 +7751,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         </div>
 
         {type&&<>
+          {/* F1: en modo emisor el folio anticipado nace del counter → se oculta el input */}
+          {folioAuto?<FolioAutoNote label="folio anticipado"/>:<>
           <label style={lbl}>Folio</label>
           <div style={{display:"flex",gap:6,marginBottom:6}}>
             <input
@@ -7714,6 +7766,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           </div>
           {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:6}}><WarningIcon size={11} weight="fill"/>Formato: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.amb,marginBottom:6,fontWeight:600}}><WarningIcon size={11} weight="fill"/>Menor al último registrado ({suggestion[type]})</div>}
+          </>}
 
           <label style={{...lbl,marginTop:14}}>Razón del folio anticipado</label>
           <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>
@@ -7744,8 +7797,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         </div>
       </> : <>
         <div style={{background:(type==="factura"?C.fac:C.live)+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?C.fac:C.live)+"40"}}>
-          <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a asignar (anticipado):</div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}><LightningIcon size={24} weight="fill"/>{folio}</div>
+          <div style={{fontSize:11,color:C.t2,marginBottom:4}}>{folioAuto?"Vas a emitir (anticipado):":"Vas a asignar (anticipado):"}</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:folioAuto?18:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}><LightningIcon size={24} weight="fill"/>{folioAuto?"🔢 Folio automático":folio}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{type==="factura"?"Factura":"Remisión"} · Razón: {finalReason}</div>
         </div>
         {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
@@ -9603,6 +9656,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   const [mode, setMode] = useState("shared");
   const [billTo, setBillTo] = useState(null); // 🆕 Fase 2 — facturar TODA la OC a un tercero (solo modo "shared")
   const [folioStart, setFolioStart] = useState("");
+  const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
   // 🆕 Fase 2 (#4) — no dejar un tercero colgado si la OC resulta Corona o si se cambia a modo consecutivo (ahí no aplica tercero).
   useEffect(()=>{ if(isCorona || mode!=="shared") setBillTo(null); }, [isCorona, mode]);
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
@@ -9612,10 +9666,11 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     let cancelled = false;
     (async()=>{
       try {
-        const [sF, sR] = await Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision")]);
+        const [sF, sR, emitter] = await Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision"), db.getFolioEmitterEnabled()]);
         if (!cancelled) {
           setSuggestionByType({factura:sF||"", remision:sR||""});
           if (activeMode === "simple") setFolioStart(invoiceType==="factura" ? (sF||"") : (sR||""));
+          setFolioAuto(emitter===true);
         }
       } catch(e) {}
     })();
@@ -9637,15 +9692,16 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 
   const prefix = invoiceType==="factura" ? "D-" : "R-";
   const startNum = parseFolioNum(folioStart);
-  const folioValid = startNum !== null && folioStart.toUpperCase().startsWith(prefix);
+  // F1: en modo emisor el folio nace del counter → no se valida ni se previsualiza (va vacío)
+  const folioValid = folioAuto ? true : (startNum !== null && folioStart.toUpperCase().startsWith(prefix));
   const suggestionNum = parseFolioNum(suggestionByType[invoiceType] || "");
-  const folioBelowSuggestion = folioValid && suggestionNum !== null && startNum < suggestionNum;
+  const folioBelowSuggestion = !folioAuto && folioValid && suggestionNum !== null && startNum < suggestionNum;
 
   const preview = useMemo(()=>{
-    if (!folioValid || pendingCount === 0) return null;
+    if (folioAuto || !folioValid || pendingCount === 0) return null;
     if (mode === "shared") return [prefix+startNum];
     return Array.from({length: pendingCount}, (_,i) => prefix+(startNum+i));
-  }, [folioValid, startNum, mode, pendingCount, prefix]);
+  }, [folioAuto, folioValid, startNum, mode, pendingCount, prefix]);
 
   const canSubmitSimple = !saving && folioValid && pendingCount > 0
     && (!preAssignedMode || reason.trim().length > 0)
@@ -9706,14 +9762,17 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     const foliosSeen = new Set();
     for (let i=0; i<splitGroups.length; i++) {
       const g = splitGroups[i];
-      const pref = g.doc_type==="factura"?"D-":"R-";
-      const num = parseFolioNum(g.folio);
-      if (num === null || num <= 0 || !g.folio.toUpperCase().startsWith(pref)) {
-        return {ok:false, reason:`Grupo ${i+1}: folio inválido`};
+      // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
+      if (!folioAuto) {
+        const pref = g.doc_type==="factura"?"D-":"R-";
+        const num = parseFolioNum(g.folio);
+        if (num === null || num <= 0 || !g.folio.toUpperCase().startsWith(pref)) {
+          return {ok:false, reason:`Grupo ${i+1}: folio inválido`};
+        }
+        const folU = g.folio.toUpperCase();
+        if (foliosSeen.has(folU)) return {ok:false, reason:`Folio duplicado: ${folU}`};
+        foliosSeen.add(folU);
       }
-      const folU = g.folio.toUpperCase();
-      if (foliosSeen.has(folU)) return {ok:false, reason:`Folio duplicado: ${folU}`};
-      foliosSeen.add(folU);
       if (g.order_ids.length === 0) return {ok:false, reason:`Grupo ${i+1}: sin órdenes`};
       // v10.51.1 M4 — Si está marcado paid/partial, exigir órdenes asignadas con subtotal > 0
       const subtotal = pendingOrders.filter(o=>g.order_ids.includes(o.id)).reduce((s,o)=>s+orderSubtotal(o), 0);
@@ -9743,7 +9802,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
       }
     }
     return {ok:true};
-  }, [splitGroups, unassignedOrders, pendingOrders]);
+  }, [splitGroups, unassignedOrders, pendingOrders, folioAuto]);
 
   const canSubmitSplit = !saving && splitValidation.ok && (!preAssignedMode || reason.trim().length > 0);
 
@@ -9856,10 +9915,13 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         </div>
 
         <div style={{marginBottom:14}}>
+          {/* F1: en modo emisor el/los folio(s) nacen del counter → se oculta el input */}
+          {folioAuto ? <FolioAutoNote label={mode==="shared"?"un folio para toda la OC":"uno por producto pendiente"}/> : <>
           <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
           <input style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
           {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
           {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
+          </>}
         </div>
 
         {preview && <div style={{background:tColor+"08",border:"1px solid "+tColor+"25",borderRadius:10,padding:12,marginBottom:14}}>
@@ -9951,10 +10013,14 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                   })}
                 </div>
 
-                {/* Folio */}
+                {/* Folio — F1: en modo emisor el folio nace del counter → chip en vez de input */}
+                {folioAuto ? (
+                  <div style={{fontSize:11,fontWeight:600,color:C.fac,padding:"6px 8px",marginBottom:8,display:"flex",alignItems:"center",gap:4,border:"1px dashed "+C.fac+"40",borderRadius:8,background:C.fac+"08"}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span></div>
+                ) : (
                 <input type="text" value={g.folio} onChange={e=>updateGroup(gIdx, {folio:e.target.value})}
                   placeholder={pref+"XXXX"}
                   style={{...inp,padding:"6px 8px",fontSize:12,fontFamily:"'Geist Mono',monospace",border:"1.5px solid "+(folOK?C.bd:C.dn+"40"),marginBottom:8}}/>
+                )}
 
                 {/* Total */}
                 <div style={{fontSize:10,color:C.t2,marginBottom:8,padding:"4px 8px",background:C.sf,borderRadius:6}}>
