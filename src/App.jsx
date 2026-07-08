@@ -8745,7 +8745,7 @@ async function copyStorageImage(srcUrl,keyPrefix){
   }catch(e){console.warn("[copyStorageImage]",e);return null;}
 }
 // ─── ORDER FORM ────────────────────────────────────
-// v10.73.60 — al CREAR la orden, la sección "Adicional" (CTP · imágenes · archivo · notas) ya NO es colapsable
+// v10.73.61 — al CREAR la orden, la sección "Adicional" (CTP · imágenes · archivo · notas) ya NO es colapsable
 //   (header estático, sin caret): sus inputs quedan SIEMPRE a la vista para que no se olviden/ignoren. En EDICIÓN
 //   sigue colapsable (auto-expande legacy). specsOnly (preprensa) intacto: sin header, contenido visible. Pedido de Marcelo.
 // v10.73.59 — /impeccable layout (plan critique 3/3, CIERRA el Top 3): el form era un scroll de ~2500px con el submit
@@ -9279,7 +9279,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){financialsLocked&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/><div style={{fontSize:F.meta,color:C.t2,marginTop:5,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura el precio <b style={{color:C.tx}}>SIN IVA</b> — el sistema agrega el 16% automáticamente al facturar.</div></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {/* v10.72.3 — divisor de jerarquía: separa el núcleo obligatorio de la cola "adicional" (CTP / Imágenes / Notas) */}
-    {/* v10.73.60 — "Adicional" (CTP · imágenes · archivo · notas): al CREAR ya NO es colapsable (header estático,
+    {/* v10.73.61 — "Adicional" (CTP · imágenes · archivo · notas): al CREAR ya NO es colapsable (header estático,
         sin caret) para que esos inputs siempre estén a la vista y no se olviden/ignoren. En EDICIÓN se conserva
         colapsable (auto-expande órdenes legacy con imagen; ver useEffect de editOrder). */}
     {!specsOnly&&(editOrder?<button type="button" onClick={()=>setShowAdic(v=>!v)} aria-expanded={showAdic} style={{width:"100%",padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textAlign:"left"}}><CaretRightIcon size={11} weight="bold" style={{color:C.t3,transform:showAdic?"rotate(90deg)":"none",transition:"transform .15s ease"}}/><span style={{fontSize:F.micro,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span>{!showAdic&&<span style={{fontSize:F.micro,fontWeight:600,color:C.t3,letterSpacing:.2}}>· CTP · imágenes · archivo · notas</span>}<div style={{flex:1,height:1,background:C.bd}}/></button>:<div style={{padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:F.micro,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span><div style={{flex:1,height:1,background:C.bd}}/></div>)}
