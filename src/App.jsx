@@ -4824,11 +4824,12 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const [loadingClients,setLoadingClients]=useState(true);
   // v10.43.28 — sugerencias del siguiente folio fiscal (mismo patrón que InvoiceModal)
   const [suggestion,setSuggestion]=useState({factura:null,remision:null});
+  const [folioAuto,setFolioAuto]=useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   useEffect(()=>{
     let alive=true;
     db.listAnticipoClients().then(list=>{if(alive)setStockClients(list||[])}).catch(e=>console.warn("[RegisterCoronaPOModal]",e)).finally(()=>{if(alive)setLoadingClients(false)});
-    Promise.all([db.getNextFolioSuggestion("factura"),db.getNextFolioSuggestion("remision")])
-      .then(([f,r])=>{if(alive)setSuggestion({factura:f,remision:r})})
+    Promise.all([db.getNextFolioSuggestion("factura"),db.getNextFolioSuggestion("remision"),db.getFolioEmitterEnabled()])
+      .then(([f,r,emitter])=>{if(alive){setSuggestion({factura:f,remision:r});setFolioAuto(emitter===true);}})
       .catch(e=>console.warn("[RegisterCoronaPOModal] suggestions:",e));
     return ()=>{alive=false};
   },[]);
@@ -4837,7 +4838,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
   const folioClean=folioFiscal.trim().toUpperCase();
   const isFactura=folioClean.startsWith("D-");
   const isRemision=folioClean.startsWith("R-");
-  const folioValid=(isFactura||isRemision)&&/^[DR]-[1-9]\d*$/.test(folioClean); // v10.64.3 — sin cero a la izquierda (consistente con Invoice/Split/Matrix)
+  const folioValid=folioAuto?true:((isFactura||isRemision)&&/^[DR]-[1-9]\d*$/.test(folioClean)); // v10.64.3 — sin cero a la izquierda; F1 emisor ON → no exige folio manual
   // v10.43.28 — determinar qué sugerencia mostrar (default D- si aún no escribió nada)
   const suggestedType=isRemision?"remision":"factura";
   const suggestedFolio=suggestion[suggestedType];
@@ -4886,7 +4887,9 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       </div>
 
       {/* v10.43.28 — Folio fiscal con sugerencia + botón "Usar" (mismo patrón que InvoiceModal) */}
+      {/* F1: en modo emisor el folio nace del counter → se oculta el input */}
       <div style={{marginBottom:10}}>
+        {folioAuto?<FolioAutoNote label="Corona · siempre factura"/>:<>
         <label style={lbl}>Folio fiscal emitido *</label>
         <div style={{display:"flex",gap:6}}>
           <input
@@ -4899,6 +4902,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
         </div>
         {folioFiscal&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginTop:4}}><WarningIcon size={11} weight="fill"/>Formato inválido. Esperado: D-XXXX o R-XXXX</div>}
         {folioIsLower&&<div style={{display:"flex",alignItems:"flex-start",gap:4,fontSize:10,color:C.amb,marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/>Este folio es menor al último registrado ({suggestedFolio}). Continuará válido si está realmente emitido.</div>}
+        </>}
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -8741,6 +8745,9 @@ async function copyStorageImage(srcUrl,keyPrefix){
   }catch(e){console.warn("[copyStorageImage]",e);return null;}
 }
 // ─── ORDER FORM ────────────────────────────────────
+// v10.73.60 — al CREAR la orden, la sección "Adicional" (CTP · imágenes · archivo · notas) ya NO es colapsable
+//   (header estático, sin caret): sus inputs quedan SIEMPRE a la vista para que no se olviden/ignoren. En EDICIÓN
+//   sigue colapsable (auto-expande legacy). specsOnly (preprensa) intacto: sin header, contenido visible. Pedido de Marcelo.
 // v10.73.59 — /impeccable layout (plan critique 3/3, CIERRA el Top 3): el form era un scroll de ~2500px con el submit
 //   y los errores SOLO al fondo, y al fallar saltaba al TOPE (lejos del campo). (1) BARRA DE ACCIÓN STICKY: el bloque
 //   Cancelar/Crear Orden se pega a la ventana (se quitó el overflow:hidden del root que atrapaba el sticky; ningún
@@ -9272,8 +9279,11 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){financialsLocked&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/><div style={{fontSize:F.meta,color:C.t2,marginTop:5,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura el precio <b style={{color:C.tx}}>SIN IVA</b> — el sistema agrega el 16% automáticamente al facturar.</div></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {/* v10.72.3 — divisor de jerarquía: separa el núcleo obligatorio de la cola "adicional" (CTP / Imágenes / Notas) */}
-    {!specsOnly&&<button type="button" onClick={()=>setShowAdic(v=>!v)} aria-expanded={showAdic} style={{width:"100%",padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textAlign:"left"}}><CaretRightIcon size={11} weight="bold" style={{color:C.t3,transform:showAdic?"rotate(90deg)":"none",transition:"transform .15s ease"}}/><span style={{fontSize:F.micro,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span>{!showAdic&&<span style={{fontSize:F.micro,fontWeight:600,color:C.t3,letterSpacing:.2}}>· CTP · imágenes · archivo · notas</span>}<div style={{flex:1,height:1,background:C.bd}}/></button>}
-    {showAdic&&<>
+    {/* v10.73.60 — "Adicional" (CTP · imágenes · archivo · notas): al CREAR ya NO es colapsable (header estático,
+        sin caret) para que esos inputs siempre estén a la vista y no se olviden/ignoren. En EDICIÓN se conserva
+        colapsable (auto-expande órdenes legacy con imagen; ver useEffect de editOrder). */}
+    {!specsOnly&&(editOrder?<button type="button" onClick={()=>setShowAdic(v=>!v)} aria-expanded={showAdic} style={{width:"100%",padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",fontFamily:"'Geist',sans-serif",textAlign:"left"}}><CaretRightIcon size={11} weight="bold" style={{color:C.t3,transform:showAdic?"rotate(90deg)":"none",transition:"transform .15s ease"}}/><span style={{fontSize:F.micro,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span>{!showAdic&&<span style={{fontSize:F.micro,fontWeight:600,color:C.t3,letterSpacing:.2}}>· CTP · imágenes · archivo · notas</span>}<div style={{flex:1,height:1,background:C.bd}}/></button>:<div style={{padding:"16px 20px 4px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:F.micro,fontWeight:800,color:C.t3,textTransform:"uppercase",letterSpacing:.8}}>Adicional</span><div style={{flex:1,height:1,background:C.bd}}/></div>)}
+    {(showAdic||!editOrder)&&<>
     {!isMaq&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><DiscIcon size={12} weight="bold"/>Placa CTP</label><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="new_ctp"?"":"new_ctp")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="new_ctp"?C.ac:C.bd),background:f.plate_status==="new_ctp"?C.ac+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.plate_status==="new_ctp"?700:500,color:f.plate_status==="new_ctp"?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="new_ctp"?"✓ ":""}<PlusIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Nueva CTP</button>
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}<ArrowsClockwiseIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ya existe (reutilizar)</button>
