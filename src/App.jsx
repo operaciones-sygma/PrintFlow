@@ -17087,7 +17087,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
           const appliedBillTo=await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
-          await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs);
+          // #2 scan final: en modo emisor el RPC IGNORA el folio de entrada y genera el del counter → usar el RETORNO
+          // (assignedFolio) en el optimista/timeline/notif. En follower entrada==retorno (idéntico a hoy).
+          const assignedFolio=(await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs))||folio;
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs si multi-pago.
           // Antes el timeline + optimistic mostraban "null" porque paymentMethod/Amount/bankRef quedan null en flow multi-pay.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
@@ -17104,28 +17106,28 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           const payLabel=payLabelMulti
             ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
           const newStage=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
-          const tlMsg="📄 Asignado folio "+folio+" ("+(invoiceType==="factura"?"Factura":"Remisión")+") · "+SM[newStage]?.l+payLabel;
-          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,stage:newStage,delivered_at:new Date().toISOString(),bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg,{to:newStage})}:o));
+          const tlMsg="📄 Asignado folio "+assignedFolio+" ("+(invoiceType==="factura"?"Factura":"Remisión")+") · "+SM[newStage]?.l+payLabel;
+          setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:assignedFolio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,stage:newStage,delivered_at:new Date().toISOString(),bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg,{to:newStage})}:o));
           await db.addTimeline(invoiceModal.id,tlMsg,user,C.ok);
           // Notify admin + secretaria + vendedor creator
-          const notifMsg="📄 "+folio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
+          const notifMsg="📄 "+assignedFolio+" asignado a "+(invoiceModal.client||"")+" — "+(invoiceModal.product_type||"")+" · "+(invoiceModal.production_number||"");
           await db.notifySecs(invoiceModal.id,"delivery",notifMsg,null,user,invoiceModal.created_by);
           // v10.49.2 fix#2 — Notificar si quedó huérfana (Karla eligió "sin precio")
           if(skipPrice){
-            showToast("✅ Folio "+folio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea");
+            showToast("✅ Folio "+assignedFolio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea");
           }else if(invoiceType==="no_folio"){
-            showToast("✅ Folio "+folio+" asignado y orden entregada");
+            showToast("✅ Folio "+assignedFolio+" asignado y orden entregada");
           }else{
             // v10.57.1: post-confirm chequea si era Corona para aclarar que el saldo NO se descontó.
             try{
               const bi=await db.getClientBillingInfo(invoiceModal.client_id,invoiceModal.client);
               if(bi?.billing_mode==="anticipo"){
-                showToast("✅ Folio "+folio+" asignado · 💡 Factura Corona pendiente en CobranzaFlow (saldo NO descontado)");
+                showToast("✅ Folio "+assignedFolio+" asignado · 💡 Factura Corona pendiente en CobranzaFlow (saldo NO descontado)");
               }else{
-                showToast("✅ Folio "+folio+" asignado y orden entregada");
+                showToast("✅ Folio "+assignedFolio+" asignado y orden entregada");
               }
             }catch{
-              showToast("✅ Folio "+folio+" asignado y orden entregada");
+              showToast("✅ Folio "+assignedFolio+" asignado y orden entregada");
             }
           }
           setInvoiceModal(null);setAllowNoPriceForOrder(null);
@@ -17269,7 +17271,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
           const appliedBillTo=await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
-          await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs);
+          // #2 scan final: usar el RETORNO del RPC (en emisor el folio nace del counter, ignora la entrada).
+          const assignedFolio=(await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs))||folio;
           // v10.50.1 F1+F2 — Calcular agregados desde paymentRefs para timeline y optimistic update.
           const usingMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0;
           const refsTotal=usingMulti?paymentRefs.reduce((s,r)=>s+(Number(r.amount)||0),0):0;
@@ -17284,11 +17287,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             :null;
           const payLabel=payLabelMulti
             ||(paymentStatus==="paid"?" · 💰 Pagada ("+paymentMethod+")":paymentStatus==="partial"?" · 🔶 Parcial $"+paymentAmount+" ("+paymentMethod+")":" · ⏳ Pendiente cobro");
-          const tlMsg="⚡ Folio anticipado "+folio+" asignado ("+(invoiceType==="factura"?"Factura":"Remisión")+") · Razón: "+reason+payLabel;
-          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg)}:o));
+          const tlMsg="⚡ Folio anticipado "+assignedFolio+" asignado ("+(invoiceType==="factura"?"Factura":"Remisión")+") · Razón: "+reason+payLabel;
+          setOrders(p=>p.map(o=>o.id===preInvoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:assignedFolio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:true,invoice_reason:reason,payment_status:paymentStatus,payment_method:aggMethod,payment_amount:aggAmount,bank_reference:aggBankRef,bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsg)}:o));
           await db.addTimeline(preInvoiceModal.id,tlMsg,user,C.amb);
           // Notificaciones a Lupita + Vendedor + Marcelo
-          const notifMsg="⚡ Folio anticipado "+folio+" asignado a "+(preInvoiceModal.client||"")+" — "+(preInvoiceModal.product_type||"")+" · "+(preInvoiceModal.production_number||"");
+          const notifMsg="⚡ Folio anticipado "+assignedFolio+" asignado a "+(preInvoiceModal.client||"")+" — "+(preInvoiceModal.product_type||"")+" · "+(preInvoiceModal.production_number||"");
           if(user!=="secretaria")await db.addNotification("secretaria",preInvoiceModal.id,"delivery",notifMsg,null,user);
           if(user!=="admin")await db.addNotification("admin",preInvoiceModal.id,"delivery",notifMsg,null,user);
           // Si la orden tiene un vendedor (created_by no es admin/secretaria/karla/etc), notificarlo
@@ -17296,7 +17299,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           if(preInvoiceModal.created_by&&!stdRoles.includes(preInvoiceModal.created_by)&&preInvoiceModal.created_by!==user){
             await db.addNotification(preInvoiceModal.created_by,preInvoiceModal.id,"delivery",notifMsg,null,user);
           }
-          showToast("⚡ Folio anticipado "+folio+" asignado");
+          showToast("⚡ Folio anticipado "+assignedFolio+" asignado");
           setPreInvoiceModal(null);
         }catch(e){
           console.error("[assignPreInvoice] Error:",e);
