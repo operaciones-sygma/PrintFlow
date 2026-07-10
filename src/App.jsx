@@ -7113,6 +7113,16 @@ function FolioAutoNote({label}){
   </div>;
 }
 
+// v10.73.40 — Amarre CobranzaFlow: al asignar folio, recordar que el cliente tiene saldo a favor
+// (anticipo/prepago recibido en efectivo) para que Karla lo aplique y no lo cobre doble. Es
+// informativo: NO descuenta el saldo aquí — la aplicación se hace en CobranzaFlow. Gemelo del
+// banner Corona (mismo estilo), pero para clientes normales con current_balance>0.
+function SaldoFavorAmarreBanner({balance}){
+  return <div style={{background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
+    <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente tiene <b>${Number(balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b> a favor (anticipo o saldo previo). Esta factura/remisión <b>NO lo descuenta automáticamente</b> — captúrala normal y aplica el saldo a favor desde <b>CobranzaFlow</b> al registrar el pago, para no cobrarle de más.
+  </div>;
+}
+
 // ─── INVOICE MODAL (v10.7.0) ─── Karla asigna folio fiscal D-XXXX o R-XXXX
 function InvoiceModal({order,onConfirm,onClose}) {
   // v10.58.11: backdrop+ESC guards durante busy.
@@ -7448,6 +7458,8 @@ function InvoiceModal({order,onConfirm,onClose}) {
           {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.dn,marginBottom:8}}><WarningIcon size={11} weight="fill"/>Formato inválido. Esperado: {folioPrefix}XXXX</div>}
           {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.amb,marginBottom:8,fontWeight:600}}><WarningIcon size={11} weight="fill"/>Este folio es menor al último registrado ({suggestion[type]})</div>}
         </>)}
+        {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al asignar folio */}
+        {type&&folioValid&&!isStockLoad&&!isNoFolio&&!isCorona&&Number(coronaInfo?.current_balance||0)>0.005&&<SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
         {type&&folioValid&&!isStockLoad&&((isCorona&&isNoFolio)?
           (()=>{
             // v10.57.0 — Banner Corona SOLO en la opción "Aplicar saldo" (no_folio).
@@ -7791,6 +7803,8 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           {reasonValid&&isCorona&&<div style={{background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
             <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente tiene saldo a favor (Corona) de <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Esta factura/remisión <b>NO descontará el saldo automáticamente</b> — captura el pago como con cualquier otro cliente. Si quieres aplicar saldo, usa la opción "Aplicar saldo" al entregar la orden.
           </div>}
+          {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al pre-asignar folio */}
+          {reasonValid&&!isCorona&&Number(coronaInfo?.current_balance||0)>0.005&&<SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
