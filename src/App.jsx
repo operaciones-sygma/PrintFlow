@@ -5811,6 +5811,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         </div>
       </div>
 
+      {/* v10.73.41 — amarre: saldo a favor del cliente (no-Corona) al facturar por partes */}
+      {!isCorona && coronaBalance > 0.005 && <SaldoFavorAmarreBanner balance={coronaBalance}/>}
       {/* Selector de N + acción Dividir igual */}
       <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
         <label style={{...lbl,marginBottom:0}}>N facturas:</label>
@@ -6792,6 +6794,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       </div>;
       })()}
 
+      {/* v10.73.41 — amarre: saldo a favor del cliente (no-Corona) al foliar la matriz OC */}
+      {!isCorona && coronaBalance > 0.005 && <SaldoFavorAmarreBanner balance={coronaBalance}/>}
       {/* v10.58.38: Toggle global de modo de captura (qty vs amount) */}
       <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap",background:C.sf,padding:"8px 12px",borderRadius:10}}>
         <label style={{...lbl,marginBottom:0}}>Capturar por:</label>
@@ -9905,6 +9909,8 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         {invoicedOrders.length > 0 && <div style={{fontSize:10,color:C.t3,marginTop:6}}>Folios ya asignados (inmutables): {invoicedOrders.map(o=>o.invoice_folio).join(", ")}</div>}
       </div>
 
+      {/* v10.73.41 — amarre: saldo a favor del cliente (no-Corona) al asignar folio de OC (ambos modos) */}
+      {!isCorona && Number(coronaInfo?.current_balance||0) > 0.005 && <SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
       {/* v10.51.0 — Toggle Simple/Split */}
       <div style={{display:"flex",gap:6,marginBottom:14,padding:4,background:C.sf,borderRadius:10}}>
         <button onClick={()=>setActiveMode("simple")} style={{flex:1,padding:"8px 12px",borderRadius:8,border:"none",background:activeMode==="simple"?C.bg:"transparent",color:activeMode==="simple"?C.ac:C.t2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Geist',sans-serif",boxShadow:activeMode==="simple"?"0 1px 3px rgba(0,0,0,0.08)":"none",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><FileTextIcon size={14} weight="bold"/>Asignación simple</button>
