@@ -1397,6 +1397,20 @@ const db = {
     if(error) throw new Error(error.message);
     return data;
   },
+  // 💵 v10.73.65 · Nivel 3 F1 — Efectivo→vale ATÓMICO. Folía (los pagos no-efectivo por el camino normal) y crea el/los
+  // vale(s) de caja por la porción en efectivo, que bajan el balance de la factura y van al corte de Lucero. Todo en una
+  // transacción: si algo falla, rollback total (sin folios huérfanos). noncashRefs = refs no-efectivo (toBackendRef);
+  // cashItems = [{amount, delivered_by}]. Devuelve {folio, vale_folios, payment_status, payment_method, total, paid, balance}.
+  async assignInvoiceCash(orderId, invoiceType, folio, noncashRefs, cashItems, byUser, preAssigned) {
+    const {data, error} = await supabase.rpc("assign_invoice_cash", {
+      p_order_id: orderId, p_invoice_type: invoiceType, p_folio: folio,
+      p_noncash_refs: Array.isArray(noncashRefs) ? noncashRefs : [],
+      p_cash_items: Array.isArray(cashItems) ? cashItems : [],
+      p_user: byUser, p_pre_assigned: !!preAssigned
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
   // 🔗 v10.73.45 · Opción A · Fase 2 — Ligar un folio INDIVIDUAL que ya existe en cobranza (factura de Alpha ERP importada por
   // conciliación/manual) a esta orden, en vez de bloquear con "ya registrado en cobranza". El RPC link_invoice_to_order
   // valida estado de la orden + 4 guards (mismo cliente, sin ligar previo, monto ±0.02 con IVA, existe la factura),
@@ -5242,14 +5256,52 @@ function refComplete(r) {
   }
   return true;
 }
+// 💵 v10.73.66 Nivel 3 — Impresión del/los vale(s) de caja (efectivo). Usa un IFRAME OCULTO (no window.open) → NO lo
+// bloquea el popup blocker (Opera GX) aunque se llame tras un await. B/N para láser. NO usa pfPrint (eso es para órdenes
+// de producción con control de versión). Espejo simple del vale de CobranzaFlow (si cambia el formato legal, actualizar ambos).
+function printCashVoucher({folios, client, amount, doc, docType, by}) {
+  const fol = (folios || []).join(", ") || "VC";
+  const fecha = new Date().toLocaleDateString("es-MX", {day: "2-digit", month: "long", year: "numeric"});
+  const monto = Number(amount || 0).toLocaleString("es-MX", {style: "currency", currency: "MXN"});
+  const esc = s => String(s == null ? "" : s).replace(/[&<>]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;"}[c]));
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Vale ${esc(fol)}</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;color:#000}
+    body{padding:28px}.v{border:1.5px solid #000;border-radius:6px;padding:20px 22px;max-width:520px;margin:0 auto}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5px solid #000;padding-bottom:10px;margin-bottom:14px}
+    .t{font-size:18px;font-weight:800;letter-spacing:.5px}.f{font-size:13px;font-weight:700}
+    .row{font-size:13px;margin:7px 0;display:flex;gap:8px}.k{font-weight:700;min-width:135px}
+    .amt{font-size:26px;font-weight:800;text-align:center;margin:16px 0;padding:10px;border:1.5px dashed #000;border-radius:6px}
+    .sig{margin-top:34px;display:flex;justify-content:space-around;text-align:center;font-size:12px}
+    .sl{border-top:1px solid #000;padding-top:5px;width:170px}</style></head>
+    <body><div class="v">
+      <div class="hd"><div><div class="t">VALE DE CAJA</div><div style="font-size:11px;font-weight:600">Padilla Hnos. Impresora · SYGMA</div></div><div style="text-align:right"><div class="f">${esc(fol)}</div><div style="font-size:11px">${esc(fecha)}</div></div></div>
+      <div class="row"><span class="k">Recibí de:</span><span>${esc(client) || "Cliente"}</span></div>
+      <div class="row"><span class="k">Por concepto de:</span><span>Pago en efectivo · ${esc((docType || "").toUpperCase())} ${esc(doc)}</span></div>
+      <div class="amt">${esc(monto)}</div>
+      <div class="row"><span class="k">Recibió:</span><span>${esc(by) || ""}</span></div>
+      <div class="sig"><div class="sl">Entregó (cliente)</div><div class="sl">Recibió (SYGMA)</div></div>
+    </div></body></html>`;
+  const ifr = document.createElement("iframe");
+  ifr.setAttribute("aria-hidden", "true");
+  ifr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(ifr);
+  const idoc = ifr.contentWindow.document;
+  idoc.open(); idoc.write(html); idoc.close();
+  const go = () => { try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) { /* impresión best-effort */ }
+    setTimeout(() => { try { document.body.removeChild(ifr); } catch (_) {} }, 3000); };
+  setTimeout(go, 350);
+}
 
 // v10.29.0 + v10.30.0 — Selector de estado de pago al asignar folio (3 opciones: no pagada / parcial / pagada)
 // v10.50.0 — MultiPaymentPicker: soporta capturar varios pagos al asignar folio.
 // Cada pago es {method, amount, bank_reference, notes, bank_ref_omitted_intentional}.
 // Karla puede agregar/eliminar pagos. Para status=paid suma debe coincidir con total.
 // Para partial suma debe ser < total. Drop-in replacement de PaymentStatusPicker.
-function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
+function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, allowCash=false}) {
   const METHODS = [
+    // v10.73.65 Nivel 3 — Efectivo real (solo donde allowCash=true, hoy InvoiceModal): crea un vale de caja (VC-XXXX)
+    // que baja el balance de la factura y aparece en el corte de Lucero. El efectivo NUNCA va por assign_invoice.
+    ...(allowCash ? [{id: "efectivo", l: "Efectivo", Icon: CurrencyDollarIcon, c: C.live}] : []),
     {id: "transferencia", l: "Transferencia", Icon: BankIcon, c: C.emr},
     {id: "tarjeta", l: "Tarjeta", Icon: CreditCardIcon, c: C.fac},
     {id: "cheque", l: "Cheque", Icon: MoneyIcon, c: C.amb},
@@ -5369,7 +5421,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
               {r.method === "otro" && (
                 <div style={{fontSize: 10.5, color: C.amb, background: C.amb + "10", border: "1px solid " + C.amb + "40", borderRadius: 8, padding: "7px 9px", marginBottom: 8, lineHeight: 1.45}}>
                   <WarningIcon size={11} weight="fill" style={{verticalAlign: "-2px", marginRight: 4}}/>
-                  <b>¿Es efectivo?</b> No lo captures aquí. El efectivo se registra como <b>vale de caja en Tesorería</b> (CobranzaFlow): deja la orden en <b>No pagada</b>. Ponerlo como "Otro" crea un pago que se <b>duplica</b> con el vale. Usa "Otro" solo para pagos <b>no-efectivo</b> sin categoría (compensación, nota de crédito).
+                  <b>¿Es efectivo?</b> No lo pongas como "Otro" — usa el método <b>Efectivo</b> (arriba): crea el <b>vale de caja VC-XXXX</b>, lo imprime y deja la orden <b>Pagada</b>. "Otro" es solo para pagos <b>no-efectivo</b> sin categoría (compensación, nota de crédito, transferencia sin folio).
                 </div>
               )}
 
@@ -5403,6 +5455,14 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                   <input type="number" step="0.01" value={r.amount} onChange={e => updateRef(idx, {amount: e.target.value})} placeholder="0.00" aria-invalid={amountMissing} aria-label={`Monto del pago ${idx + 1}`} style={{...inp, fontSize: 13, fontWeight: 700}}/>
                 </div>
                 <div>
+                  {/* v10.73.65 Nivel 3 — Efectivo: en vez de ref bancaria pide "¿quién entregó?" (delivered_by del vale de caja). */}
+                  {r.method === "efectivo" ? (
+                    <>
+                      <label style={{...lbl, fontSize: 10, marginTop: 0, color: C.live}}>¿Quién entregó el efectivo?</label>
+                      <input type="text" value={r.delivered_by ?? ""} onChange={e => updateRef(idx, {delivered_by: e.target.value})} placeholder="Cliente" maxLength={60} aria-label={`Quién entregó el efectivo del pago ${idx + 1}`} style={{...inp, fontSize: 11}}/>
+                      <div style={{fontSize: 9.5, color: C.live, marginTop: 4, lineHeight: 1.35}}>Se creará un <b>vale de caja VC-XXXX</b> por este monto y se imprimirá. Entrégalo a Tesorería con el efectivo.</div>
+                    </>
+                  ) : (<>
                   {/* v10.72.27 — label en AMBAR (no rojo) + icono Warning cuando falta ref
                       para metodo bancario. Comunica "estas omitiendo el folio" sin convertirlo
                       en error tecnico (aria-invalid=false porque NO es invalid: es opcional).
@@ -5472,6 +5532,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                       </span>
                     </label>
                   )}
+                  </>)}
                 </div>
               </div>
             </div>
@@ -7532,7 +7593,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
               <div style={{fontSize:10,color:C.t2,marginTop:6}}>Sin folio fiscal — la orden se entrega y el monto se descuenta del saldo directamente. No se crea factura/remisión.</div>
             </div>;
           })()
-          :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
+          :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} allowCash onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
         )}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
         {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={type==="factura"?C.fac:C.live}/></div>}
@@ -17131,6 +17192,35 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
           const appliedBillTo=await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
+          // 💵 v10.73.65 Nivel 3 F1 — Efectivo→vale: si hay alguna porción en efectivo, va por la RPC atómica assign_invoice_cash
+          // (folia + crea el/los vale(s) de caja + baja el balance). Self-contained (su propio try/catch → NO cae al flujo "ligar").
+          if(Array.isArray(paymentRefs)&&paymentRefs.some(r=>r.method==="efectivo")){
+            try{
+              const noncash=paymentRefs.filter(r=>r.method!=="efectivo").map(toBackendRef);
+              const cashItems=paymentRefs.filter(r=>r.method==="efectivo").map(r=>({amount:Number(r.amount),delivered_by:(r.delivered_by||"").trim()||"Cliente"}));
+              const cashRes=await db.assignInvoiceCash(invoiceModal.id,invoiceType,folio,noncash,cashItems,userLogin||user,false);
+              const vf=(cashRes&&cashRes.vale_folios)||[];
+              const finStatus=cashRes?.payment_status||"paid";
+              const finMethod=cashRes?.payment_method||"efectivo";
+              const realFolio=cashRes?.folio||folio; // v10.73.66 — folio REAL del RPC (en modo emisor difiere del tecleado; en follower es igual)
+              const cashSum=cashItems.reduce((s,c)=>s+(Number(c.amount)||0),0);
+              const newStageC=invoiceModal.order_type==="maquila"?"maq_delivered":"delivered";
+              const tlMsgC="📄 Folio "+realFolio+" · 💵 Efectivo"+(finMethod==="mixed"?" (mixto)":"")+" · vale "+vf.join(", ")+(finStatus==="partial"?" · 🔶 Parcial":"");
+              setOrders(p=>p.map(o=>o.id===invoiceModal.id?{...o,invoice_type:invoiceType,invoice_folio:realFolio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:finStatus,payment_method:finMethod,payment_amount:finStatus==="partial"?(cashRes?.paid??null):null,stage:newStageC,delivered_at:new Date().toISOString(),bill_to_client_id:appliedBillTo?appliedBillTo.client_id:null,bill_to_name:appliedBillTo?appliedBillTo.name:null,bill_to_rfc:appliedBillTo?appliedBillTo.rfc:null,timeline:addTL(o,tlMsgC,{to:newStageC})}:o));
+              try{ await db.addTimeline(invoiceModal.id,tlMsgC,user,C.live); }catch(_){}
+              try{ printCashVoucher({folios:vf, client:invoiceModal.client, amount:cashSum, doc:realFolio, docType:invoiceType, by:userLogin||user}); }
+              catch(pe){ showToast("⚠️ Vale creado ("+vf.join(", ")+") pero no se imprimió ("+(pe?.message||"")+") — imprímelo desde CobranzaFlow","warning"); }
+              showToast("💵 Folio "+realFolio+" cobrado en efectivo · vale "+vf.join(", ")+(finStatus==="partial"?" (parcial)":"")+" — entrega el efectivo y el impreso a Tesorería");
+              setInvoiceModal(null);setAllowNoPriceForOrder(null);
+              reload();
+            }catch(ce){
+              console.error("[assignInvoiceCash] Error:",ce);
+              if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(invoiceModal.id, null, userLogin||user); }catch(_){} }
+              showToast("❌ "+(ce?.message||"No se pudo cobrar en efectivo"),"error");
+              reload();
+            }
+            return;
+          }
           // #2 scan final: en modo emisor el RPC IGNORA el folio de entrada y genera el del counter → usar el RETORNO
           // (assignedFolio) en el optimista/timeline/notif. En follower entrada==retorno (idéntico a hoy).
           const assignedFolio=(await db.assignInvoice(invoiceModal.id,invoiceType,folio,false,null,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,skipPrice,paymentRefs))||folio;
