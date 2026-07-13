@@ -5343,6 +5343,17 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 })}
               </div>
 
+              {/* v10.73.62 — el EFECTIVO no se captura aquí: va como vale de caja en Tesorería (CobranzaFlow).
+                  Karla usaba "Otro" para colar efectivo → creaba un pago que se DUPLICABA con el vale de caja
+                  (caso real R-1243/VC-0004: $8,000 contados dos veces). Aviso no bloqueante; no afecta usos
+                  legítimos de "Otro" (compensación, nota de crédito, transferencia sin folio). */}
+              {r.method === "otro" && (
+                <div style={{fontSize: 10.5, color: C.amb, background: C.amb + "10", border: "1px solid " + C.amb + "40", borderRadius: 8, padding: "7px 9px", marginBottom: 8, lineHeight: 1.45}}>
+                  <WarningIcon size={11} weight="fill" style={{verticalAlign: "-2px", marginRight: 4}}/>
+                  <b>¿Es efectivo?</b> No lo captures aquí. El efectivo se registra como <b>vale de caja en Tesorería</b> (CobranzaFlow): deja la orden en <b>No pagada</b>. Ponerlo como "Otro" crea un pago que se <b>duplica</b> con el vale. Usa "Otro" solo para pagos <b>no-efectivo</b> sin categoría (compensación, nota de crédito).
+                </div>
+              )}
+
               <div style={{display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8}}>
                 <div>
                   <label style={{...lbl, fontSize: 10, marginTop: 0}}>Monto *</label>
