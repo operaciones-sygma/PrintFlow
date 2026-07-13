@@ -4227,12 +4227,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // (el label de captura lo aclara). La suma de paymentRefs se compara directo contra él.
   const sumCents = paymentRefs.reduce((s,r)=>s+Math.round((Number(r.amount)||0)*100), 0);
   const totalCents = Math.round((totalNum||0)*100);
-  const refValid = (r) => {
-    if (!r.method) return false;
-    if (!(Number(r.amount) > 0)) return false;
-    // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
-    return true;
-  };
+  const refValid = refComplete; // v10.73.64 — compartido (incluye la categoría obligatoria de 'otro')
   const allRefsValid = paymentRefs.length===0 || paymentRefs.every(refValid);
   const validPayments = paymentStatus==="unpaid"
     ? true
@@ -5235,6 +5230,18 @@ function toBackendRef(r) {
     bank_ref_omitted_intentional: !!r.bank_ref_omitted_intentional,
   };
 }
+// v10.73.64 — validez de UN pago (método + monto + categoría obligatoria si es 'otro'). COMPARTIDA por el picker
+// y TODOS los padres (InvoiceModal, PreInvoiceModal, BulkSell, matriz) para que el botón bloquee inline cuando falta
+// la categoría de 'otro' — igual que el server (trigger guard_otro_ref_requires_reason). Mata la divergencia de validadores.
+function refComplete(r) {
+  if (!r.method) return false;
+  if (!(Number(r.amount) > 0)) return false;
+  if (r.method === "otro") {
+    if (!r.otro_category) return false;
+    if (r.otro_category === "otro_especificar" && !(r.otro_detail || "").trim()) return false;
+  }
+  return true;
+}
 
 // v10.29.0 + v10.30.0 — Selector de estado de pago al asignar folio (3 opciones: no pagada / parcial / pagada)
 // v10.50.0 — MultiPaymentPicker: soporta capturar varios pagos al asignar folio.
@@ -5272,17 +5279,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   };
 
   // Validación visual por pago
-  const refValid = (r) => {
-    if (!r.method) return false;
-    if (!(Number(r.amount) > 0)) return false;
-    // v10.73.63 — método "Otro": categoría OBLIGATORIA (+ detalle si es "Otro (especificar)"). El backend lo exige vía trigger.
-    if (r.method === "otro") {
-      if (!r.otro_category) return false;
-      if (r.otro_category === "otro_especificar" && !(r.otro_detail || "").trim()) return false;
-    }
-    // v10.72.11 — ref bancaria OPCIONAL (recomendada): ya no bloquea (algunos clientes no la dan, ej. Tiendas Cuadra)
-    return true;
-  };
+  const refValid = refComplete; // v10.73.64 — compartido con los padres (incluye la categoría obligatoria de 'otro')
   const allRefsValid = list.length > 0 && list.every(refValid);
   // v10.50.3 — Comparación exacta en centavos (sin tolerancia float).
   const sumExactPaid = sumCents === totalCents;
@@ -7311,12 +7308,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
   const refsValid = (() => {
     if (paymentStatus !== "paid" && paymentStatus !== "partial") return true;
     if (!Array.isArray(paymentRefs) || paymentRefs.length === 0) return false;
-    const allValid = paymentRefs.every(r => {
-      if (!r.method) return false;
-      if (!(Number(r.amount) > 0)) return false;
-      // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
-      return true;
-    });
+    const allValid = paymentRefs.every(refComplete); // v10.73.64 — incluye la categoría obligatoria de 'otro' (evita el error 22023 crudo del server al confirmar)
     if (!allValid) return false;
     const sum = paymentRefs.reduce((s,r) => s + (Number(r.amount)||0), 0);
     if (paymentStatus === "paid") return Math.round(sum*100) === Math.round(totalDisplay*100); // v10.64.1 — centavos exactos (igual que el picker), antes tolerancia 0.01 dejaba pasar ±1 centavo
@@ -7735,12 +7727,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const refsValid = (() => {
     if (paymentStatus !== "paid" && paymentStatus !== "partial") return true;
     if (!Array.isArray(paymentRefs) || paymentRefs.length === 0) return false;
-    const allValid = paymentRefs.every(r => {
-      if (!r.method) return false;
-      if (!(Number(r.amount) > 0)) return false;
-      // v10.72.11 — ref bancaria opcional (recomendada): ya no bloquea el guardado
-      return true;
-    });
+    const allValid = paymentRefs.every(refComplete); // v10.73.64 — incluye la categoría obligatoria de 'otro' (evita el error 22023 crudo del server al confirmar)
     if (!allValid) return false;
     const sum = paymentRefs.reduce((s,r) => s + (Number(r.amount)||0), 0);
     if (paymentStatus === "paid") return Math.round(sum*100) === Math.round(totalDisplay*100); // v10.64.1 — centavos exactos (igual que el picker), antes tolerancia 0.01 dejaba pasar ±1 centavo
