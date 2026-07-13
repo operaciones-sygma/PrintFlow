@@ -5209,12 +5209,29 @@ function PlateModal({order,machine,onConfirm,onClose}) {
 // bank_ref_omitted_intentional: si se omite, toda la feature v10.72.28/v3.7.7.23-24
 // queda inerte (el backend hace COALESCE(_, false) y siempre persiste false en
 // cobranza.payments). Único lugar donde se decide la serialización.
+// v10.73.63 — categorías OBLIGATORIAS del método "Otro". "Otro" NO es para efectivo (el efectivo va por vale de
+// caja/Tesorería); se usa solo para pagos no-efectivo sin folio. La categoría viaja en notes → order_payment_refs.notes,
+// y un trigger de BD (guard_otro_ref_requires_reason) rechaza un "Otro" sin motivo. Cierra el punto ciego de robo.
+const OTRO_CATS = [
+  {id: "compensacion", l: "Compensación"},
+  {id: "nota_credito", l: "Nota de crédito"},
+  {id: "transferencia_sin_folio", l: "Transferencia sin folio"},
+  {id: "otro_especificar", l: "Otro (especificar)"},
+];
+const OTRO_CAT_LABEL = Object.fromEntries(OTRO_CATS.map(c => [c.id, c.l]));
+// Compone el texto de motivo para un pago "Otro" (categoría + detalle opcional). Null si aún no hay categoría.
+function otroNote(r) {
+  const cat = OTRO_CAT_LABEL[r.otro_category] || null;
+  const detail = (r.otro_detail || "").trim();
+  if (!cat) return (r.notes || "").trim() || null;
+  return cat + (detail ? " — " + detail : "");
+}
 function toBackendRef(r) {
   return {
     method: r.method,
     amount: Number(r.amount),
     bank_reference: (r.bank_reference || "").trim() || null,
-    notes: (r.notes || "").trim() || null,
+    notes: r.method === "otro" ? otroNote(r) : ((r.notes || "").trim() || null),
     bank_ref_omitted_intentional: !!r.bank_ref_omitted_intentional,
   };
 }
@@ -5258,6 +5275,11 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
   const refValid = (r) => {
     if (!r.method) return false;
     if (!(Number(r.amount) > 0)) return false;
+    // v10.73.63 — método "Otro": categoría OBLIGATORIA (+ detalle si es "Otro (especificar)"). El backend lo exige vía trigger.
+    if (r.method === "otro") {
+      if (!r.otro_category) return false;
+      if (r.otro_category === "otro_especificar" && !(r.otro_detail || "").trim()) return false;
+    }
     // v10.72.11 — ref bancaria OPCIONAL (recomendada): ya no bloquea (algunos clientes no la dan, ej. Tiendas Cuadra)
     return true;
   };
@@ -5351,6 +5373,30 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange}) {
                 <div style={{fontSize: 10.5, color: C.amb, background: C.amb + "10", border: "1px solid " + C.amb + "40", borderRadius: 8, padding: "7px 9px", marginBottom: 8, lineHeight: 1.45}}>
                   <WarningIcon size={11} weight="fill" style={{verticalAlign: "-2px", marginRight: 4}}/>
                   <b>¿Es efectivo?</b> No lo captures aquí. El efectivo se registra como <b>vale de caja en Tesorería</b> (CobranzaFlow): deja la orden en <b>No pagada</b>. Ponerlo como "Otro" crea un pago que se <b>duplica</b> con el vale. Usa "Otro" solo para pagos <b>no-efectivo</b> sin categoría (compensación, nota de crédito).
+                </div>
+              )}
+
+              {/* v10.73.63 — categoría OBLIGATORIA para "Otro" (auditable + exigida por trigger de BD guard_otro_ref_requires_reason). */}
+              {r.method === "otro" && (
+                <div style={{marginBottom: 8}}>
+                  <label style={{...lbl, fontSize: 10, marginTop: 0}}>Motivo del pago "Otro" *</label>
+                  <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: r.otro_category === "otro_especificar" ? 6 : 0}}>
+                    {OTRO_CATS.map(oc => (
+                      <button key={oc.id} type="button" role="radio" aria-checked={r.otro_category === oc.id}
+                        onClick={() => updateRef(idx, {otro_category: oc.id})}
+                        style={{padding: "7px 9px", borderRadius: 8, border: "1.5px solid " + (r.otro_category === oc.id ? C.fac : (r.otro_category ? C.bd : C.amb + "80")), background: r.otro_category === oc.id ? C.fac + "12" : C.bg, fontSize: 11, fontWeight: 600, cursor: "pointer", color: r.otro_category === oc.id ? C.fac : C.t2, fontFamily: "'Geist',sans-serif", textAlign: "left"}}>
+                        {oc.l}
+                      </button>
+                    ))}
+                  </div>
+                  {r.otro_category === "otro_especificar" && (
+                    <input type="text" value={r.otro_detail || ""} onChange={e => updateRef(idx, {otro_detail: e.target.value})}
+                      placeholder="Especifica el motivo…" maxLength={120}
+                      style={{...inp, fontSize: 11, ...(!(r.otro_detail || "").trim() ? {borderColor: C.amb, background: C.amb + "08"} : {})}}/>
+                  )}
+                  {!r.otro_category && (
+                    <div style={{fontSize: 10, color: C.amb, marginTop: 4}}>Elige el motivo — un pago "Otro" sin motivo no se puede guardar.</div>
+                  )}
                 </div>
               )}
 
