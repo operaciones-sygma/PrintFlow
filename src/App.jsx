@@ -11027,12 +11027,12 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div style={{background:C.ctp,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{readyCtp.length}</div>
         <div><div style={{fontSize:13,fontWeight:700,color:C.ctp}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:C.ctp)+"66",transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:C.ctp)+"66",transition:C.tCard,display:"flex",gap:10,alignItems:"flex-start"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
         {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
-      </div>)}</div>
+      </div></div>)}</div>
     </div>}
 
     {/* CTP & Procesadora machines — con 2 máquinas se fuerzan 2 columnas (minmax 0,1fr nunca colapsa a 1 ni desborda); 3+ vuelve responsivo */}
@@ -11062,12 +11062,12 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                 {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
               </div>
               <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
-                style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",border:"1.5px solid "+(activa.priority==="urgente"?C.dn:C.ctp)+"66"}}>
+                style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",border:"1.5px solid "+(activa.priority==="urgente"?C.dn:C.ctp)+"66",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={activa} size={38}/><div style={{flex:1,minWidth:0}}>
                 {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,marginBottom:3,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</div>}
                 <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{activa.client}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
                 {activa.due_date&&<div style={{fontSize:9,color:isOverdue(activa.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(activa.due_date)}</div>}
-              </div>
+              </div></div>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:6,paddingLeft:2}}>
                 {activa.current_machine==="pp_proc"&&<button onClick={()=>onAction(activa.id,"advance","placas_listas")} style={bs(C.cart)}><ClipboardTextIcon size={13} weight="bold"/>Placas Listas</button>}
                 {(role==="admin"||role==="german")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs(C.ios),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={13} weight="bold"/></button>}
@@ -11088,11 +11088,11 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                     {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                   </div>
                 </div>
-                <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
+                <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                   <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
                   {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
-                </div>
+                </div></div>
               </div>)}
             </div>}
           </>}
