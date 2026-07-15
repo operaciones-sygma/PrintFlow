@@ -1904,7 +1904,16 @@ const humanizeStockError=err=>{
   return"❌ "+m;
 };
 const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
-const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};return(p[a.priority]??1)-(p[b.priority]??1)};
+// v10.73.75 — /impeccable clarify (P1 del critique): antes SOLO ordenaba por prioridad y el desempate era ACCIDENTAL
+//   (la más nueva primero, porque orders se lee con .order("created_at",{ascending:false}) y Array.sort es estable) →
+//   el pool le entregaba a Gerardo las órdenes NUEVAS antes que la que vence mañana, y una "vencida+normal" perdía
+//   contra una "urgente+entrega en 3 semanas". Planear el día ES ordenar por urgencia: la app ya calculaba el dato
+//   correcto (isOverdue pinta la fecha en rojo) y lo presentaba en el peor orden. Ahora, DENTRO de cada bucket de
+//   prioridad, desempata por FECHA DE ENTREGA asc → las vencidas al tope (fecha menor) y las SIN fecha al final.
+//   Determinista. Decisión de Marcelo: GLOBAL — lo comparten 7 pantallas (Tablero, board de Germán, Mis Pendientes,
+//   board de Karla, Todas, Dashboard, OC). dueTs blinda due_date nulo/inválido (un NaN rompería el comparador).
+const dueTs=o=>{if(!o||!o.due_date)return Infinity;const v=Date.parse(o.due_date);return isNaN(v)?Infinity:v};
+const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};const d=(p[a.priority]??1)-(p[b.priority]??1);if(d)return d;const at=dueTs(a),bt=dueTs(b);return at===bt?0:at-bt};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // v10.49.4 — Si la orden está EN MÁQUINA (current_machine NOT NULL), NO se considera estancada.
 // Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
@@ -10714,6 +10723,8 @@ function DragCard({o,borderColor,reorderMachine,onAction}){return <div draggable
     {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
       <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,flex:1,minWidth:0}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}</span></span>
+      {/* v10.73.75 — clarify: el folio impreso es la llave papel↔pantalla de Gerardo y desaparecía JUSTO al entrar a máquina (DragCard = activa + Empaque). Mismo contrato de color que el chip del pool, más denso (density > consistency en el board). */}
+      {o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}
       <span style={{flexShrink:0}}>{(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}</span>
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
@@ -10832,7 +10843,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     </div>}
 
     {/* Empty state */}
-    {ready.length===0&&inProd.length===0&&inManual.length===0&&inSalidas.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Cuando una orden esté lista, arrástrala aquí</div></div>}
+    {ready.length===0&&inProd.length===0&&inManual.length===0&&inSalidas.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Tablero vacío</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecen aquí solas cuando Pre-prensa libera archivo y placa.</div></div>}
 
     {/* ═══ TWO-COLUMN LAYOUT: Machines left + Sticky sidebar right (envuelve el sidebar debajo cuando el ancho es chico, p.ej. zoom/escala alta en piso) ═══ */}
     <div style={{display:"flex",flexWrap:"wrap",gap:16,alignItems:"flex-start"}}>
@@ -10899,7 +10910,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",cursor:"grab"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
-                            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3}}><DotsSixVerticalIcon size={11}/>#{o.machine_queue_position}</span>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
                             <div style={{display:"flex",gap:3}}>
                               {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:"#fff",color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
                               {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
@@ -10941,9 +10952,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             :inManual.map(o=><div key={o.id}>
               <DragCard o={o} borderColor={C.emp} onAction={onAction}/>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
-                <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs(C.sal)}><ExportIcon size={14} weight="bold"/></button>
-                <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs(C.maq),padding:"4px 8px"}}><TruckIcon size={14} weight="bold"/></button>
-                <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}}><TrashIcon size={14} weight="bold"/></button>
+                {/* v10.73.75 — clarify: los 3 botones de Empaque no tenían label (los de la cola sí). El del bote de basura NO borra la orden: registra MERMA — el ícono decía una cosa y la acción hacía otra. */}
+                <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs(C.sal)} title="Enviar a Salidas" aria-label="Enviar a Salidas"><ExportIcon size={14} weight="bold"/></button>
+                <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs(C.maq),padding:"4px 8px"}} title="Enviar a maquila" aria-label="Enviar a maquila"><TruckIcon size={14} weight="bold"/></button>
+                <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}} title="Registrar merma (no borra la orden)" aria-label="Registrar merma"><TrashIcon size={14} weight="bold"/></button>
               </div>
             </div>)}
           </div>
@@ -11099,7 +11111,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                   onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
                   style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3}}><DotsSixVerticalIcon size={11}/>#{o.machine_queue_position}</span>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
                   <div style={{display:"flex",gap:3}}>
                     {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:"#fff",color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
                     {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
