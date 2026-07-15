@@ -10812,8 +10812,25 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   // v10.73.79 — /impeccable critique #2 (P1): la CARGA de la máquina (cola + ETA) era el ÚNICO dato que el modal de
   //   confirmación aportaba y que no existía en ningún otro lado... y se enseñaba DESPUÉS de elegir. Un planeador elige
   //   POR carga. Ahora vive donde se DECIDE: en cada <option> del select y en el header de la card de máquina.
-  const machineLoad=mid=>{const q=orders.filter(o=>o.current_machine===mid&&o.stage==="in_production");return{n:q.length,mins:Math.round(q.reduce((s,o)=>s+(o.estimated_hours||0),0)*60)}};
-  const machineOpts=t=>machinesByType(t).map(m=>{const mt=activeMaint(m.id);const L=machineLoad(m.id);return <option key={m.id} value={m.id} disabled={!!mt}>{m.name}{mt?" — en mantenimiento":(L.n?" — "+L.n+" en cola"+(L.mins>0?" · ~"+fmtM(L.mins):""):" — libre")}</option>});
+  // v10.73.81 — dos arreglos en la misma función:
+  //   (a) leía de su PROPIO filtro (current_machine + stage) mientras la card 40px abajo lee de getMachineQueue.
+  //       Dos filtros para un concepto: el que no exige `machine_queue_position!=null` contaba órdenes que la card
+  //       no pinta. Ahora comparten fuente.
+  //   (b) se le quitó `mins`: sumaba estimated_hours, que es NULL en 441/441 órdenes porque NO EXISTE input para
+  //       capturarlo en toda la app. O sea el "~ETA" que agregué en v10.73.79 jamás pintó un pixel, ni en el
+  //       <option> ni en el header de la card. Era código muerto vendido como dato. (fmtM se queda: 6 usos vivos
+  //       fuera del Kanban.) Ver el memo de datos fantasma antes de volver a construir carga sobre este campo.
+  const machineLoad=mid=>{const q=getMachineQueue(orders,mid).filter(o=>o.stage==="in_production");return{n:q.length,activa:q.filter(o=>o.machine_queue_position===0).length,enEspera:q.filter(o=>o.machine_queue_position>0).length}};
+  // v10.73.81 — el <option> decía "N en cola" con N = activa + en espera: el NÚMERO era correcto (trabajos por
+  //   delante del tuyo) pero el SUSTANTIVO mentía, porque una de esas N está corriendo, no encolada. Bajar N a
+  //   solo-la-cola arreglaría la palabra rompiendo el número. Se dicen las dos piezas, con el vocabulario que la
+  //   card ya enseña 40px abajo ("Activa" / "En espera"), sin inventar un tercer idioma.
+  //   `curMid` = la máquina donde YA está la orden: se DESHABILITA con el motivo en vez de ocultarla (misma
+  //   política que el mantenimiento; ocultarla dejaría a Gerardo buscándola) y mata el no-op mudo por construcción.
+  const machineOpts=(t,curMid)=>machinesByType(t).map(m=>{const mt=activeMaint(m.id);const L=machineLoad(m.id);const here=!!curMid&&m.id===curMid;
+    const parts=[L.activa?(L.activa===1?"1 activa":L.activa+" activas"):null,L.enEspera?L.enEspera+" en espera":null].filter(Boolean);
+    const lbl=here?" — aquí está":mt?" — en mantenimiento":L.n===0?" — libre":parts.length?" — "+parts.join(" · "):" — "+L.n+" en máquina";
+    return <option key={m.id} value={m.id} disabled={!!mt||here}>{m.name}{lbl}</option>});
   // v10.73.79 — /impeccable critique #2 (P1): el presupuesto de confirmación estaba INVERTIDO. Asignar máquina es
   //   trivialmente reversible ("Volver a Lista" está a 3cm) y pagaba el modal más caro ~30 veces al día; mandar a
   //   Salidas (que notifica a Karla, arranca el reloj de facturación y NO tiene vuelta desde el tablero) pagaba un
@@ -10941,8 +10958,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         <div style={{fontSize:F.micro,color:inMaint?C.wn:C.t2,fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
-                        {/* v10.73.79 — critique #2 (P1): la carga vive en la DECISIÓN, no en la confirmación. Gerardo elige máquina POR carga; antes solo la veía dentro del modal, o sea después de haber elegido. */}
-                        {hasWork&&(()=>{const L=machineLoad(m.id);return L.mins>0?<span title={L.n+" trabajo"+(L.n>1?"s":"")+" en esta máquina · ~"+fmtM(L.mins)+" de carga"} style={{fontSize:9,fontWeight:700,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>~{fmtM(L.mins)}</span>:null})()}
+                        {/* v10.73.81 — aquí vivía el chip "~ETA" de v10.73.79. Se borra: dependía de machineLoad().mins,
+                            que suma estimated_hours = NULL en 441/441 órdenes. NUNCA renderizó (su guard era mins>0).
+                            El título del chip también era código muerto. No lo revivas sin un input real para el campo. */}
                         {/* v10.73.80 — contador neutro: la categoría ya la dice la sección; aquí el color solo competía con lo ACTIVO. */}
                         {hasWork?<div style={{background:C.tx,color:C.bg,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body,fontWeight:800}}>{mo.length}</div>
                         :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body}}>—</div>}
@@ -10997,7 +11015,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                             {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                           </div></div>
                           {/* v10.73.71 — mover una orden ENCOLADA a otra máquina sin arrastrar (paridad con las cards de "Órdenes Listas"). quickAssign no-op si eliges la misma máquina. */}
-                          {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machineOpts("offset")}</optgroup><optgroup label="Acabados">{machineOpts("acabados")}</optgroup><optgroup label="Digital">{machineOpts("digital")}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
+                          {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machineOpts("offset",o.current_machine)}</optgroup><optgroup label="Acabados">{machineOpts("acabados",o.current_machine)}</optgroup><optgroup label="Digital">{machineOpts("digital",o.current_machine)}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
                         </div>)}
                       </div>}
                     </>}
