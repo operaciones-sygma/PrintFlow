@@ -10693,6 +10693,18 @@ function Pipeline({orders,role,onAction}) {
 //   scroll interno para reordenar en cola larga; la ventana solo desplaza cuando la cola ya tocó su límite. El React
 //   synthetic del wrapper corre ANTES que el listener nativo en document (burbujeo), así que la marca ya está puesta.
 let qAutoScrollClaim=0;
+// v10.73.69 — miniatura de la imagen de referencia en las tarjetas del Tablero (más visual para reconocer el trabajo
+//   de un vistazo). Se renderiza SOLO si la orden tiene imagen (image_url/image_url_2/image) → los formularios sin foto
+//   quedan compactos, sin placeholder. Estado propio de fallo: si la img 404ea se oculta (no rompe la tarjeta).
+//   draggable={false} en la img para NO robar el drag de la card (que sí es arrastrable).
+function OrderThumb({o,size=40}){
+  const [failed,setFailed]=useState(false);
+  const img=o.image_url||o.image_url_2||o.image;
+  if(!img||failed)return null;
+  return <div style={{width:size,height:size,borderRadius:7,overflow:"hidden",flexShrink:0,background:C.bg,border:"0.5px solid "+C.bd,alignSelf:"flex-start"}}>
+    <img src={img} alt="" loading="lazy" draggable={false} onError={()=>setFailed(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+  </div>;
+}
 // v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
 //   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
@@ -10737,7 +10749,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
 
   const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
       {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
@@ -10748,7 +10760,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
     {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
     {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
-  </div>;
+  </div></div>;
 
   return <div>
     {/* Summary bar */}
@@ -10781,7 +10793,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:10}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
             <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
@@ -10791,7 +10803,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {o.stage==="maquila_in"&&<span style={{background:C.maqin+"12",color:C.maqin,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>{SM.maquila_in?.lt}</span>}
             {o.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><CircleIcon size={9} weight="fill"/></span>}
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
-          </div>
+          </div></div>
         </div>
         {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
         <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8,position:"relative"}}>
@@ -10880,11 +10892,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                               {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                             </div>
                           </div>
-                          <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer"}}>
+                          <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
                             {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
-                          </div>
+                          </div></div>
                         </div>)}
                       </div>}
                     </>}
