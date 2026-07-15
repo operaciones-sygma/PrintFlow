@@ -10755,8 +10755,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   const urgentesSinAsignar=ready.filter(o=>o.priority==="urgente").length;
   const inMaquilaOut=orders.filter(o=>o.stage==="maquila_out").length; // v10.73.77 — polish: Maquila era la única zona del sidebar SIN contador
   const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true}); // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
-  const [dropConfirm,setDropConfirm]=useState(null);
-  useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
+  // v10.73.79 — dropConfirm (state + Escape) eliminado con el modal de asignación. Ver la nota del rediseño abajo.
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
   useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;/* v10.73.68 — cede si la cola interna está auto-scrolleando (evita el doble-scroll) */if(dir&&qAutoScrollClaim&&Date.now()-qAutoScrollClaim<150)dir=0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
   const activeMaint=mid=>maintenance.find(m=>m.machine_id===mid&&!m.ended_at);
@@ -10778,8 +10777,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
     if(o.current_machine===mid){showToast?.("Ya está en "+m.name+".","error");return}
     if(activeMaint(mid)){showToast?.(m.name+" está fuera de servicio.","error");return} // v10.73.74 — defensa en profundidad: la tarjeta ya bloquea con if(!inMaint); paridad con el drop() de PreprensaBoard
     const fromM=o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null;
-    setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
-  const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
+    assignNow(o,mid,m,fromM)};
   const cc={offset:C.ac,digital:C.dig,acabados:C.maq};
   const catLabel={offset:"Offset",digital:"Digital",acabados:"Acabados"};
   const catIcon={offset:GearIcon,digital:PrinterIcon,acabados:WrenchIcon};
@@ -10793,9 +10791,20 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   "Fuera de servicio", y nadie lo notaba hasta buscarla. La máquina NO se oculta: se deshabilita CON el motivo,
   //   para que Gerardo vea POR QUÉ no está (ocultarla lo dejaría buscándola). Un helper → lo heredan los 2 selects
   //   (pool "Órdenes Listas" y la cola EN ESPERA de v10.73.71, que había heredado el hueco).
-  const machineOpts=t=>machinesByType(t).map(m=>{const mt=activeMaint(m.id);return <option key={m.id} value={m.id} disabled={!!mt}>{m.name}{mt?" — en mantenimiento":""}</option>});
+  // v10.73.79 — /impeccable critique #2 (P1): la CARGA de la máquina (cola + ETA) era el ÚNICO dato que el modal de
+  //   confirmación aportaba y que no existía en ningún otro lado... y se enseñaba DESPUÉS de elegir. Un planeador elige
+  //   POR carga. Ahora vive donde se DECIDE: en cada <option> del select y en el header de la card de máquina.
+  const machineLoad=mid=>{const q=orders.filter(o=>o.current_machine===mid&&o.stage==="in_production");return{n:q.length,mins:Math.round(q.reduce((s,o)=>s+(o.estimated_hours||0),0)*60)}};
+  const machineOpts=t=>machinesByType(t).map(m=>{const mt=activeMaint(m.id);const L=machineLoad(m.id);return <option key={m.id} value={m.id} disabled={!!mt}>{m.name}{mt?" — en mantenimiento":(L.n?" — "+L.n+" en cola"+(L.mins>0?" · ~"+fmtM(L.mins):""):" — libre")}</option>});
+  // v10.73.79 — /impeccable critique #2 (P1): el presupuesto de confirmación estaba INVERTIDO. Asignar máquina es
+  //   trivialmente reversible ("Volver a Lista" está a 3cm) y pagaba el modal más caro ~30 veces al día; mandar a
+  //   Salidas (que notifica a Karla, arranca el reloj de facturación y NO tiene vuelta desde el tablero) pagaba un
+  //   "¿Estás seguro?" que ni decía de qué orden. Ahora: asignar es optimista + toast con DESHACER (patrón ya
+  //   establecido en la app, ver snooze), y el gasto de confirmación se movió a Salidas (ver advance()).
+  //   El undo respeta el ORIGEN: si venía de otra máquina vuelve a ESA máquina; si venía del pool, vuelve a Listas.
+  const assignNow=(o,mid,m,fromM)=>{onDrop(o.id,mid);showToast?.((fromM?"Movida a ":"Asignada a ")+m.name,"success",{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready")}})};
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
-    setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
+    assignNow(o,mid,m,o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null)};
 
   // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
@@ -10884,6 +10893,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         <div style={{fontSize:9,color:inMaint?C.wn:cc[type],fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        {/* v10.73.79 — critique #2 (P1): la carga vive en la DECISIÓN, no en la confirmación. Gerardo elige máquina POR carga; antes solo la veía dentro del modal, o sea después de haber elegido. */}
+                        {hasWork&&(()=>{const L=machineLoad(m.id);return L.mins>0?<span title={L.n+" trabajo"+(L.n>1?"s":"")+" en esta máquina · ~"+fmtM(L.mins)+" de carga"} style={{fontSize:9,fontWeight:700,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>~{fmtM(L.mins)}</span>:null})()}
                         {hasWork?<div style={{background:cc[type],color:"#fff",width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{mo.length}</div>
                         :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>—</div>}
                         {(role==="produccion"||role==="admin")&&!inMaint&&!hasWork&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
@@ -11021,29 +11032,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
     </div>
 
     {/* Drop confirmation modal */}
-    {dropConfirm&&(()=>{const queueCount=orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").length;const totalMins=(orders.filter(o=>o.current_machine===dropConfirm.mid&&o.stage==="in_production").reduce((s,o)=>s+(o.estimated_hours||0),0)*60);return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-      <div role="dialog" aria-modal="true" aria-label={(dropConfirm.fromMachine?"Mover":"Asignar")+" orden a máquina"} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:420,width:"90%",textAlign:"center"}}>
-        <div style={{marginBottom:8}}>{dropConfirm.fromMachine?<ArrowsClockwiseIcon size={34} weight="bold" color={C.ac}/>:<FactoryIcon size={34} weight="bold" color={C.ac}/>}</div>
-        <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{dropConfirm.fromMachine?"¿Mover de máquina?":"¿Asignar a máquina?"}</h3>
-        <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:12,textAlign:"left"}}>
-          <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{dropConfirm.order.client}</div>
-          <div style={{fontSize:11,color:C.t2}}>{dropConfirm.order.product_type}{dropConfirm.order.quantity?" · "+Number(dropConfirm.order.quantity).toLocaleString()+" pzas":""}</div>
-          {dropConfirm.order.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:6,fontSize:9,fontWeight:700,marginTop:4,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
-          {dropConfirm.order.due_date&&<div style={{fontSize:10,color:isOverdue(dropConfirm.order.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(dropConfirm.order.due_date)}</div>}
-          {dropConfirm.order.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>#{dropConfirm.order.production_number}</div>}
-          <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
-            {dropConfirm.fromMachine&&<><span style={{fontSize:12,fontWeight:600,color:C.dn}}>{dropConfirm.fromMachine.name}</span><span style={{fontSize:14}}>→</span></>}
-            <span style={{fontSize:12,fontWeight:700,color:C.ok}}>{dropConfirm.machine.name}</span>
-            <span style={{fontSize:9,color:C.t2}}>({dropConfirm.machine.sub})</span>
-          </div>
-        </div>
-        {queueCount>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.wn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Esta máquina tiene {queueCount} trabajo{queueCount>1?"s":""} en cola{totalMins>0?" (~"+fmtM(Math.round(totalMins))+")":""}</div>}
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setDropConfirm(null)} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={confirmDrop} style={{...bt(dropConfirm.fromMachine?C.wn:C.ok),flex:1,justifyContent:"center"}}>{dropConfirm.fromMachine?<><ArrowsClockwiseIcon size={14} weight="bold"/>Sí, mover</>:<><CheckCircleIcon size={14} weight="bold"/>Sí, asignar</>}</button>
-        </div>
-      </div>
-    </div>})()}
+    {/* v10.73.79 — /impeccable critique #2 (P1): el modal de confirmación de asignación se ELIMINÓ. Su único dato
+        único (la carga: cola + ETA) ahora vive en la DECISIÓN (el <option> del select y el header de la card), que es
+        donde un planeador la necesita. Vaciado de eso, no quedaba nada que justificara un overlay en la acción MÁS
+        frecuente del día (~30/día) y trivialmente reversible. Lo sustituye optimista + toast con DESHACER, el patrón
+        ya establecido en la app (snooze). El presupuesto de confirmación se gasta ahora donde el daño es real: Salidas. */}
   </div>;
 }
 
@@ -15834,7 +15827,17 @@ export default function PrintFlow() {
         return;
       }
     }
-    if(["delivered","maq_delivered","salidas"].includes(ns)){setConfirmModal({title:SM[ns]?.l||"Confirmar",message:"¿Estás seguro?",confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:C.sal,onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})}else doAdv(id,ns)
+    // v10.73.79 — /impeccable critique #2 (P1): decía "¿Estás seguro?" SIN decir de QUÉ orden → un mis-drop pasaba la
+    //   confirmación sin fricción, justo en la transición MÁS consecuente del tablero: Salidas notifica a Karla, mete la
+    //   orden en la cola de folio fiscal y arranca el reloj de facturación, y desde el tablero NO tiene vuelta. Una
+    //   confirmación que no contiene la información para detectar el error no es una barrera, es un badén. Ahora
+    //   identifica la orden y nombra la consecuencia. (`orders` está en las deps de advance → no es stale.)
+    if(["delivered","maq_delivered","salidas"].includes(ns)){
+      const oc=orders.find(x=>x.id===id);
+      const who=oc?[oc.production_number,oc.client,oc.product_type].filter(Boolean).join(" · "):"";
+      const why=ns==="salidas"?"Karla recibirá aviso para asignarle folio fiscal.":"Se marcará como entregada.";
+      setConfirmModal({title:SM[ns]?.l||"Confirmar",message:(who?who+" — ":"")+why,confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:C.sal,onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})
+    }else doAdv(id,ns)
   },[orders,user,userLogin,showToast,doAdv]);
 
   // v10.38.0 — Regresa orden a CTP desde ready/placas_listas, invalida plates existentes,
