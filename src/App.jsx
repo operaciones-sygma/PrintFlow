@@ -10687,7 +10687,7 @@ function Pipeline({orders,role,onAction}) {
 }
 
 // ─── KANBAN ────────────────────────────────────────
-// v10.73.62 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
+// v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
 //   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
 //   una cola larga sigue siendo fácil). El tablero ya no se estira; el encabezado de la máquina (la zona de drop) y
