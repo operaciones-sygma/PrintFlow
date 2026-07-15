@@ -1302,7 +1302,12 @@ const db = {
     if(error)throw new Error("startMaintenance: "+error.message);
   },
   async endMaintenance(id, cost, byUser) {
-    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: parseFloat(cost)||0, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id);
+    // v10.73.81 — `parseFloat(cost)||0` escribía 0 cuando el costo venía vacío, y 0 NO es "no sé": es "salió
+    // gratis". Ahora que el costo es opcional (ver EndMaintenanceModal), esa colisión haría inconstruible la cola
+    // de captura diferida del admin (`WHERE ended_at IS NOT NULL AND cost IS NULL`). Vacío → NULL. La columna es
+    // nullable en BD, así que no hay migración.
+    const parsed=(cost==null||String(cost).trim()==="")?null:parseFloat(cost);
+    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: (parsed==null||isNaN(parsed))?null:parsed, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id);
     if(error)throw new Error("endMaintenance: "+error.message);
   },
   async addNote(orderId, text, byUser) {
@@ -5175,10 +5180,15 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>En mantenimiento desde: {started?fDT(record.started_at):"-"}</p>
       <p style={{fontSize:12,color:C.wn,margin:"0 0 4px",fontWeight:600}}><ClockIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{elapsed<24?elapsed+"h":Math.floor(elapsed/24)+"d "+elapsed%24+"h"} fuera de servicio</p>
       {record?.notes&&<p style={{fontSize:11,color:C.t3,margin:"0 0 14px",fontStyle:"italic"}}>Motivo: {record.notes}</p>}
-      <div style={{marginBottom:16}}><label style={lbl}>Costo total del mantenimiento (obligatorio)</label><input style={inp} type="number" step=".01" min="0" value={cost} onChange={e=>setCost(e.target.value)} placeholder="$0.00"/></div>
+      {/* v10.73.81 — el costo era OBLIGATORIO y es el mejor sospechoso de por qué maintenance_log tiene 0 filas en
+          60 días contra ~890 corridas de máquina. No es política contable: la factura del técnico llega DÍAS
+          después, o sea el campo exigía un dato que todavía no existe en el momento en que lo pedía. La máquina ya
+          está reparada y produciendo; obligar a inventar un número para poder decirlo es lo que mata la feature.
+          `cost` es nullable en BD → se puede capturar después. Solo se rechaza un costo NEGATIVO. */}
+      <div style={{marginBottom:16}}><label style={lbl}>Costo total del mantenimiento (opcional)</label><input style={inp} type="number" step=".01" min="0" value={cost} onChange={e=>setCost(e.target.value)} placeholder="Déjalo vacío si aún no llega la factura"/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if((!cost&&cost!=="0")||parseFloat(cost)<0)return alert("Ingresa un costo válido (0 o mayor)");onConfirm(cost)}} style={{...bt(C.ok),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Máquina Reparada</button>
+        <button onClick={()=>{if(cost.trim()!==""&&(isNaN(parseFloat(cost))||parseFloat(cost)<0))return alert("El costo no puede ser negativo. Déjalo vacío si todavía no lo sabes.");onConfirm(cost)}} style={{...bt(C.ok),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Máquina Reparada</button>
       </div>
     </div>
   </div>;
@@ -10964,13 +10974,35 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         {/* v10.73.80 — contador neutro: la categoría ya la dice la sección; aquí el color solo competía con lo ACTIVO. */}
                         {hasWork?<div style={{background:C.tx,color:C.bg,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body,fontWeight:800}}>{mo.length}</div>
                         :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body}}>—</div>}
-                        {(role==="produccion"||role==="admin")&&!inMaint&&!hasWork&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
-                        {inMaint&&role==="admin"&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Quitar mantenimiento de la máquina" title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
+                        {/* v10.73.81 — MANTENIMIENTO: 0 filas en maintenance_log contra ~890 corridas de máquina en
+                            60 días. La feature estaba 100% cableada y su adopción era exactamente cero. Dos huecos,
+                            y el ORDEN importa:
+                            (1) Gerardo podía TIRAR una máquina pero no LEVANTARLA (cerrar era solo admin). Abrir el
+                                cierre a producción es PRERREQUISITO, no la segunda mitad: sin esto, la primera vez
+                                que lo usara se atrapa (tira la Polar, la arreglan en 40 min, y su planeador la
+                                declara muerta rechazando drops hasta que un admin entre a la app). Aprende en una
+                                tarde a no tocar el wrench nunca. El gate admin era cosmético de todos modos: el RLS
+                                de UPDATE es qual=true para public.
+                            (2) El wrench solo salía en máquinas VACÍAS, que es justo cuando no se necesita: una
+                                máquina se rompe CON el pliego montado. Se quita `!hasWork`; el trabajo se queda
+                                visible para poder arrastrarlo a otra máquina (el drop de entrada ya está bloqueado).
+                            Criterio de salida falsable: si en 3 semanas con los gates abiertos sigue en 0 filas, la
+                            respuesta era "Gerardo grita y ya" y se BORRA la feature en vez de seguir puliéndola. */}
+                        {(role==="produccion"||role==="admin")&&!inMaint&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
+                        {inMaint&&(role==="produccion"||role==="admin")&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Quitar mantenimiento de la máquina" title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
                       </div>
                     </div>
-                    {inMaint&&!hasWork?<div style={{textAlign:"center",padding:"12px 0",color:C.wn,fontSize:11,fontWeight:600}}>
+                    {/* v10.73.81 — el aviso estaba gateado con `inMaint&&!hasWork`, o sea el estado "máquina muerta
+                        CON trabajo montado" (que hasta hoy era inalcanzable, porque el wrench solo salía en máquinas
+                        vacías) caía al branch de la cola y pintaba la card ACTIVA con su LiveTimer corriendo tan
+                        campante sobre una máquina parada. Ahora el aviso sale SIEMPRE que esté en mantenimiento, y
+                        el trabajo se sigue viendo debajo para poder sacarlo. El reloj sigue corriendo a propósito:
+                        el pliego sigue montado y esos minutos son trabajo real, no se invalidan. */}
+                    {inMaint&&<div style={{textAlign:"center",padding:"12px 0",color:C.wn,fontSize:11,fontWeight:600}}>
                       <WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
-                    </div>
+                      {hasWork&&<div style={{fontSize:F.meta,color:C.t2,fontWeight:500,marginTop:3}}>El trabajo sigue montado. Arrástralo a otra máquina.</div>}
+                    </div>}
+                    {inMaint&&!hasWork?null
                     :mo.length===0?<div style={{textAlign:"center",padding:"12px 0",color:isD?cc[type]:C.ph,fontSize:isD?12:10,fontWeight:isD?600:400,transition:"all .15s"}}>
                       {isD?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Disponible"}
                     </div>
@@ -17642,7 +17674,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }
       }} onClose={()=>setCancelInvoicedModal(null)}/>}
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
-      {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada — Costo: $"+parseFloat(cost).toLocaleString("es-MX",{minimumFractionDigits:2}),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
+      {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);/* v10.73.81 — con el costo ya opcional, esto emitía literalmente "Costo: $NaN" a todo producción. */
+        const cn=(cost==null||String(cost).trim()===""||isNaN(parseFloat(cost)))?null:parseFloat(cost);
+        await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2})),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
       {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
       {snoozeTarget&&<SnoozeModal order={snoozeTarget} onConfirm={(data)=>applySnooze(snoozeTarget,data)} onClose={()=>setSnoozeTarget(null)}/>}
