@@ -10711,9 +10711,10 @@ function OrderThumb({o,size=40}){
 //   card activa+Empaque al arrastrar). Ahora onAction va como PROP → componente estable, sin remonte. (scan wf8k8mdnb P3)
 function DragCard({o,borderColor,reorderMachine,onAction}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
-      {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+    {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,flex:1,minWidth:0}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}</span></span>
+      <span style={{flexShrink:0}}>{(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}</span>
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
     {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes, Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
@@ -10751,7 +10752,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
     // Special zone: Maquila — triggers maquila modal
     if(mid==="vm_maquila"){if(["ready","in_production","packaging","maquila_in"].includes(o.stage)){onAction(o.id,"send_maquila")}return}
     // Regular machine
-    const m=MACHINES.find(x=>x.id===mid);if(!m)return;if(o.current_machine===mid)return;
+    const m=MACHINES.find(x=>x.id===mid);if(!m)return;if(o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — defensa en profundidad: la tarjeta ya bloquea con if(!inMaint); paridad con el drop() de PreprensaBoard
     const fromM=o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null;
     setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
   const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
@@ -10762,7 +10763,15 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
   // v10.68.0 — envio directo a maquina (sin arrastrar) desde la card de Listas
   const machinesByType=t=>MACHINES.filter(m=>m.type===t&&m.status==="active"&&m.id!=="vm_manual");
-  const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
+  // v10.73.74 — /impeccable harden (P1 del critique): el SELECT ignoraba el MANTENIMIENTO. machinesByType filtra el
+  //   catálogo ESTÁTICO (status==="active"), NO el estado REAL (activeMaint), mientras el drag sí bloqueaba en la
+  //   tarjeta (onDrop={if(!inMaint)...}) → el tablero se contradecía: mandaba trabajo a una máquina que a 30cm dice
+  //   "Fuera de servicio", y nadie lo notaba hasta buscarla. La máquina NO se oculta: se deshabilita CON el motivo,
+  //   para que Gerardo vea POR QUÉ no está (ocultarla lo dejaría buscándola). Un helper → lo heredan los 2 selects
+  //   (pool "Órdenes Listas" y la cola EN ESPERA de v10.73.71, que había heredado el hueco).
+  const machineOpts=t=>machinesByType(t).map(m=>{const mt=activeMaint(m.id);return <option key={m.id} value={m.id} disabled={!!mt}>{m.name}{mt?" — en mantenimiento":""}</option>});
+  const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
+    setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
 
   // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
@@ -10813,9 +10822,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8,position:"relative"}}>
           <select aria-label={"Enviar la orden de "+o.client+" a una máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:9,padding:"7px 26px 7px 10px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}>
             <option value="">Enviar a máquina…</option>
-            <optgroup label="Offset">{machinesByType("offset").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
-            <optgroup label="Acabados">{machinesByType("acabados").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
-            <optgroup label="Digital">{machinesByType("digital").map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</optgroup>
+            <optgroup label="Offset">{machineOpts("offset")}</optgroup>
+            <optgroup label="Acabados">{machineOpts("acabados")}</optgroup>
+            <optgroup label="Digital">{machineOpts("digital")}</optgroup>
           </select>
           <CaretDownIcon size={12} weight="bold" color={C.ac} style={{position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
         </div>
@@ -10902,7 +10911,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                             {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                           </div></div>
                           {/* v10.73.71 — mover una orden ENCOLADA a otra máquina sin arrastrar (paridad con las cards de "Órdenes Listas"). quickAssign no-op si eliges la misma máquina. */}
-                          {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machinesByType("offset").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup><optgroup label="Acabados">{machinesByType("acabados").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup><optgroup label="Digital">{machinesByType("digital").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
+                          {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machineOpts("offset")}</optgroup><optgroup label="Acabados">{machineOpts("acabados")}</optgroup><optgroup label="Digital">{machineOpts("digital")}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
                         </div>)}
                       </div>}
                     </>}
