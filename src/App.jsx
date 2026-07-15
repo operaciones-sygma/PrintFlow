@@ -10748,6 +10748,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
   const snoozedHidden=orders.filter(o=>snoozeActive(o)&&(o.stage==="ready"||o.stage==="maquila_in")).length;
+  // v10.73.76 — /impeccable distill: lo ÚNICO que Gerardo NO puede contar de un vistazo (todos los totales ya viven
+  //   en su propio panel). "vencidas" = lo que está en SU cancha (por asignar + en máquina) con la entrega pasada;
+  //   "urgentes sin asignar" = urgentes que siguen en el pool, sin máquina. Ambas se derivan de lo ya cargado (0 red).
+  const vencidas=[...ready,...inProd].filter(o=>isOverdue(o.due_date)).length;
+  const urgentesSinAsignar=ready.filter(o=>o.priority==="urgente").length;
   const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true}); // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
@@ -10787,26 +10792,22 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
   return <div>
-    {/* Summary bar */}
-    <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-      <div style={{background:C.ok+"10",border:"1px solid "+C.ok+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:18,fontWeight:800,color:C.ok}}>{ready.length}</span><span style={{fontSize:11,color:C.ok,fontWeight:600}}>Listas</span>
-      </div>
-      {["offset","acabados","digital"].map(type=>{const cnt=catCount(type);return <div key={type} style={{background:cc[type]+"10",border:"1px solid "+cc[type]+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:18,fontWeight:800,color:cc[type]}}>{cnt}</span><span style={{fontSize:11,color:cc[type],fontWeight:600}}>{type.charAt(0).toUpperCase()+type.slice(1)}</span>
-      </div>})}
-      {/* v10.73.31 — aviso de las pausadas ocultas del tablero → lleva a la vista "En espera" (no "ojos que no ven"). */}
-      {snoozedHidden>0&&<button onClick={()=>onAction(null,"goto_espera")} title="Órdenes en espera, ocultas del tablero. Clic para verlas y reactivarlas." style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:"8px 14px",display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><BellSlashIcon size={15} weight="bold" color={C.t2}/><span style={{fontSize:11,color:C.t2,fontWeight:600}}>{snoozedHidden} en espera</span><CaretRightIcon size={11} weight="bold" color={C.t3}/></button>}
-      {inManual.length>0&&<div style={{background:C.emp+"10",border:"1px solid "+C.emp+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:18,fontWeight:800,color:C.emp}}>{inManual.length}</span><span style={{fontSize:11,color:C.emp,fontWeight:600}}>Empaque</span>
-      </div>}
-      {inSalidas.length>0&&<div style={{background:C.sal+"10",border:"1px solid "+C.sal+"30",borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:18,fontWeight:800,color:C.sal}}>{inSalidas.length}</span><span style={{fontSize:11,color:C.sal,fontWeight:600}}>Salidas</span>
-      </div>}
-      <div style={{background:C.sf,borderRadius:10,padding:"8px 14px",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{fontSize:18,fontWeight:800,color:C.tx}}>{inProd.length}</span><span style={{fontSize:11,color:C.t2,fontWeight:600}}>En máquina</span>
-      </div>
-    </div>
+    {/* v10.73.76 — /impeccable distill (P2 del critique). La barra era el "hero-metric row" genérico: 7 pastillas
+        tintadas que REPETÍAN números ya visibles 40px abajo — "Listas" duplicaba el badge del panel "Órdenes Listas";
+        Offset/Acabados/Digital duplicaban el badge "N en producción" de cada categoría (que se renderiza colapsada o
+        no); Empaque/Salidas los badges del sidebar; "En máquina" era la suma de las 3 categorías. Gastaba los 56px
+        superiores sin aportar UN dato nuevo y, encima, disfrazaba el único chip que sí era botón ("N en espera")
+        igual que los 6 que no lo eran. Además `color:X sobre background:X+"10"` daba 2.9-3.2:1 en los labels.
+        Ahora la barra SOLO existe cuando tiene algo que decir, y dice lo único que no se puede contar de un vistazo:
+        el RIESGO. Fondo sólido (no tinte-sobre-tinte) → contrasta y grita cuando debe. Los totales no se pierden:
+        cada uno sigue en su propio panel. Decisión de Marcelo: reemplazar, no solo limpiar. */}
+    {(vencidas>0||urgentesSinAsignar>0||snoozedHidden>0)&&<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+      {vencidas>0&&<span title="Órdenes con la entrega vencida que siguen por asignar o en máquina" style={{background:C.dn,color:C.bg,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><WarningIcon size={14} weight="fill"/>{vencidas} vencida{vencidas!==1?"s":""}</span>}
+      {urgentesSinAsignar>0&&<span title="Órdenes urgentes que siguen en Órdenes Listas, sin máquina asignada" style={{background:C.amb,color:C.tx,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><FireIcon size={14} weight="fill"/>{urgentesSinAsignar} urgente{urgentesSinAsignar!==1?"s":""} sin asignar</span>}
+      {/* v10.73.31 — pausadas ocultas del tablero → lleva a la vista "En espera" (no "ojos que no ven"). v10.73.76: ya
+          no compite con 6 chips iguales y se ve como BOTÓN (borde marcado + hover), que es lo que siempre fue. */}
+      {snoozedHidden>0&&<button onClick={()=>onAction(null,"goto_espera")} title="Órdenes en espera, ocultas del tablero. Clic para verlas y reactivarlas." onMouseEnter={e=>{e.currentTarget.style.background=C.acL;e.currentTarget.style.borderColor=C.ac+"55"}} onMouseLeave={e=>{e.currentTarget.style.background=C.bg;e.currentTarget.style.borderColor=C.bdSt}} style={{background:C.bg,border:"1px solid "+C.bdSt,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",fontFamily:"'Geist',sans-serif",transition:"background .12s,border-color .12s"}}><BellSlashIcon size={14} weight="bold" color={C.t2}/><span style={{fontSize:12,color:C.t2,fontWeight:700}}>{snoozedHidden} en espera</span><CaretRightIcon size={11} weight="bold" color={C.t3}/></button>}
+    </div>}
 
     {/* Ready orders (includes maquila_in returning) — full width */}
     {ready.length>0&&<div style={{marginBottom:20,background:C.ok+"06",border:"1.5px solid "+C.ok+"25",borderRadius:16,padding:16}}>
