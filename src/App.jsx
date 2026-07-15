@@ -10736,7 +10736,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
   const snoozedHidden=orders.filter(o=>snoozeActive(o)&&(o.stage==="ready"||o.stage==="maquila_in")).length;
-  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:role==="produccion"});
+  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true}); // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
@@ -10940,9 +10940,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
           </div>
         </div>
 
-        {/* SALIDAS — v10.72.51: sección colapsable. Arranca MINIMIZADA para produccion (Gerardo) para
-            que no le haga ruido visual, pero puede expandirla con clic para ver la lista. Admin abierta
-            por default. El contador queda visible siempre; la zona de drop funciona aunque esté colapsada. */}
+        {/* SALIDAS — v10.72.51 + v10.73.73 (Marcelo): sección colapsable. Arranca MINIMIZADA para TODOS
+            (Gerardo y admin, los únicos roles que ven este tablero) para que no haga ruido visual; se expande
+            con clic para ver la lista. El contador queda visible siempre; la zona de drop funciona aunque
+            esté colapsada. */}
         <div onDragOver={e=>{e.preventDefault();setDO("vm_salidas")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_salidas",e)}
           style={{borderRadius:14,border:dO==="vm_salidas"?"2px solid "+C.sal:"1.5px solid "+C.sal+"40",background:dO==="vm_salidas"?C.sal+"12":C.sal+"06",transition:"all .15s",overflow:"hidden"}}>
           <div onClick={()=>toggle("salidas")} style={{padding:"10px 14px",borderBottom:collapsed.salidas?"none":"1px solid "+C.sal+"20",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
