@@ -10687,6 +10687,12 @@ function Pipeline({orders,role,onAction}) {
 }
 
 // ─── KANBAN ────────────────────────────────────────
+// v10.73.68 — coordina el auto-scroll INTERNO de la cola con el de VENTANA (arregla el P3 doble-scroll del scan
+//   wrho4zq4p): la cola marca qAutoScrollClaim mientras ELLA está scrolleando (y solo si aún puede); el listener de
+//   auto-scroll de ventana (useEffect en Kanban, ~L10709) CEDE si el timestamp está fresco (<150ms). Prioridad al
+//   scroll interno para reordenar en cola larga; la ventana solo desplaza cuando la cola ya tocó su límite. El React
+//   synthetic del wrapper corre ANTES que el listener nativo en document (burbujeo), así que la marca ya está puesta.
+let qAutoScrollClaim=0;
 // v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
 //   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
@@ -10706,7 +10712,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
-  useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
+  useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;/* v10.73.68 — cede si la cola interna está auto-scrolleando (evita el doble-scroll) */if(dir&&qAutoScrollClaim&&Date.now()-qAutoScrollClaim<150)dir=0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
   const activeMaint=mid=>maintenance.find(m=>m.machine_id===mid&&!m.ended_at);
 
   const drop=(mid,e)=>{e.preventDefault();setDO(null);const oid=e.dataTransfer.getData("orderId");if(!oid)return;const o=orders.find(x=>x.id===oid);if(!o)return;
@@ -10859,7 +10865,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                         </div>
                       </div>}
                       {/* v10.26.0 — Cola en espera */}
-                      {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34;if(y<r.top+edge)el.scrollTop-=14;else if(y>r.bottom-edge)el.scrollTop+=14}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
+                      {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34,up=y<r.top+edge&&el.scrollTop>0,dn=y>r.bottom-edge&&el.scrollTop+el.clientHeight<el.scrollHeight-1;if(up||dn){qAutoScrollClaim=Date.now();el.scrollTop+=up?-14:14}}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
                         {/* v10.72.43 — legibilidad de la cola: 8→9px + t2 (antes el operador tenía que acercarse a leer las posiciones) */}
                         <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
                         {enEspera.map(o=><div key={o.id} draggable
@@ -11056,7 +11062,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
               </div>
             </div>}
             {/* v10.26.0 — Cola en espera */}
-            {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34;if(y<r.top+edge)el.scrollTop-=14;else if(y>r.bottom-edge)el.scrollTop+=14}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
+            {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34,up=y<r.top+edge&&el.scrollTop>0,dn=y>r.bottom-edge&&el.scrollTop+el.clientHeight<el.scrollHeight-1;if(up||dn){qAutoScrollClaim=Date.now();el.scrollTop+=up?-14:14}}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
               <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
               {enEspera.map(o=><div key={o.id} draggable
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
