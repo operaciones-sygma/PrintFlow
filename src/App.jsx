@@ -10700,11 +10700,27 @@ let qAutoScrollClaim=0;
 function OrderThumb({o,size=40}){
   const [failed,setFailed]=useState(false);
   const img=o.image_url||o.image_url_2||o.image;
+  useEffect(()=>{setFailed(false)},[img]); // v10.73.72 — reintentar al cambiar/recuperar la imagen (no dejar la miniatura oculta por un fallo previo, p.ej. 404 transitorio o re-subida)
   if(!img||failed)return null;
   return <div style={{width:size,height:size,borderRadius:7,overflow:"hidden",flexShrink:0,background:C.bg,border:"0.5px solid "+C.bd,alignSelf:"flex-start"}}>
     <img src={img} alt="" loading="lazy" draggable={false} onError={()=>setFailed(true)} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
   </div>;
 }
+// v10.73.72 — DragCard HOISTED a nivel módulo (antes se definía DENTRO de Kanban → su identidad de función cambiaba
+//   cada render y React RE-MONTABA la card completa; con la miniatura adentro eso recargaba/parpadeaba la imagen de la
+//   card activa+Empaque al arrastrar). Ahora onAction va como PROP → componente estable, sin remonte. (scan wf8k8mdnb P3)
+function DragCard({o,borderColor,reorderMachine,onAction}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
+    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
+      {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+    </div>
+    <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
+    {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes, Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
+    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
+    {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
+    {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+  </div></div>;}
 // v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
 //   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
@@ -10748,19 +10764,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   const machinesByType=t=>MACHINES.filter(m=>m.type===t&&m.status==="active"&&m.id!=="vm_manual");
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;setDropConfirm({oid:o.id,mid,order:o,machine:m,fromMachine:o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null})};
 
-  const DragCard=({o,borderColor,reorderMachine})=><div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</span>
-      {(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
-    </div>
-    <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-    {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes,
-        Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
-    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
-    {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
-    {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
-  </div></div>;
+  // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
   return <div>
     {/* Summary bar */}
@@ -10870,7 +10874,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                           <span style={{fontSize:9,fontWeight:800,color:C.live,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
                           {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
                         </div>
-                        <DragCard o={activa} borderColor={cc[type]} reorderMachine={m.id}/>
+                        <DragCard o={activa} borderColor={cc[type]} reorderMachine={m.id} onAction={onAction}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           <button onClick={()=>onAction(activa.id,"advance","packaging")} style={bs(C.emp)}><PackageIcon size={13} weight="bold"/>Empaque</button>
                           {(role==="admin"||role==="produccion")&&<button onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs(C.ios),padding:"4px 8px"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={13} weight="bold"/></button>}
@@ -10926,7 +10930,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               {dO==="vm_manual"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Arrastra órdenes aquí"}
             </div>
             :inManual.map(o=><div key={o.id}>
-              <DragCard o={o} borderColor={C.emp}/>
+              <DragCard o={o} borderColor={C.emp} onAction={onAction}/>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
                 <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs(C.sal)}><ExportIcon size={14} weight="bold"/></button>
                 <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs(C.maq),padding:"4px 8px"}}><TruckIcon size={14} weight="bold"/></button>
