@@ -13,6 +13,12 @@
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* ─── v10.73.77 (/impeccable polish) — feedback de agarre al arrastrar ───
+   Las tarjetas del Tablero declaran cursor:grab en su estilo inline, pero un estilo inline
+   NO puede expresar :active, así que al agarrar una orden el cursor nunca cambiaba. Regla
+   global: cualquier elemento arrastrable muestra "grabbing" mientras se sostiene. */
+[draggable="true"]:active { cursor: grabbing; }
+
 /* ─── Theme override: registrar fonts como utilities de Tailwind ─── */
 @theme {
   --font-sans: 'Geist', system-ui, -apple-system, sans-serif;

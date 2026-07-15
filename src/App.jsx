@@ -10753,6 +10753,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   //   "urgentes sin asignar" = urgentes que siguen en el pool, sin máquina. Ambas se derivan de lo ya cargado (0 red).
   const vencidas=[...ready,...inProd].filter(o=>isOverdue(o.due_date)).length;
   const urgentesSinAsignar=ready.filter(o=>o.priority==="urgente").length;
+  const inMaquilaOut=orders.filter(o=>o.stage==="maquila_out").length; // v10.73.77 — polish: Maquila era la única zona del sidebar SIN contador
   const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true}); // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
   const [dropConfirm,setDropConfirm]=useState(null);
   useEffect(()=>{if(!dropConfirm)return;const h=e=>{if(e.key==="Escape")setDropConfirm(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[dropConfirm]);
@@ -10868,7 +10869,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
               <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fit,minmax(min(240px,100%),1fr))",gap:10}}>
                 {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
-                  return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
+                  return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
                     style={{background:inMaint?C.amb+"08":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
                       <div>
@@ -10909,12 +10910,12 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
-                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",cursor:"grab"}}>
+                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,cursor:"grab"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                             <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
                             <div style={{display:"flex",gap:3}}>
-                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:"#fff",color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
-                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:C.card,color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                              {(role==="admin"||role==="produccion")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:C.card,color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                             </div>
                           </div>
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
@@ -10937,7 +10938,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
       <div style={{width:260,flexShrink:0,position:"sticky",top:16,alignSelf:"flex-start",display:"flex",flexDirection:"column",gap:12}}>
 
         {/* EMPAQUE */}
-        <div onDragOver={e=>{e.preventDefault();setDO("vm_manual")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_manual",e)}
+        <div onDragOver={e=>{e.preventDefault();setDO("vm_manual")}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop("vm_manual",e)}
           style={{borderRadius:14,border:dO==="vm_manual"?"2px solid "+C.emp:"1.5px solid "+C.emp+"40",background:dO==="vm_manual"?C.emp+"12":C.emp+"06",transition:"all .15s",overflow:"hidden"}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid "+C.emp+"20",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -10966,7 +10967,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             (Gerardo y admin, los únicos roles que ven este tablero) para que no haga ruido visual; se expande
             con clic para ver la lista. El contador queda visible siempre; la zona de drop funciona aunque
             esté colapsada. */}
-        <div onDragOver={e=>{e.preventDefault();setDO("vm_salidas")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_salidas",e)}
+        <div onDragOver={e=>{e.preventDefault();setDO("vm_salidas")}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop("vm_salidas",e)}
           style={{borderRadius:14,border:dO==="vm_salidas"?"2px solid "+C.sal:"1.5px solid "+C.sal+"40",background:dO==="vm_salidas"?C.sal+"12":C.sal+"06",transition:"all .15s",overflow:"hidden"}}>
           <div onClick={()=>toggle("salidas")} style={{padding:"10px 14px",borderBottom:collapsed.salidas?"none":"1px solid "+C.sal+"20",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -10978,7 +10979,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
               <span style={{fontSize:14,color:collapsed.salidas?C.sal:C.t2,transition:"transform .2s",transform:collapsed.salidas?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
             </div>
           </div>
-          {!collapsed.salidas&&<div style={{padding:10,minHeight:60}}>
+          {/* v10.73.77 — polish: a Salidas le FALTABA el tope de altura. El fix de v10.73.71 llegó a Empaque (500) y a
+              las colas (400) pero no aquí → con 20 órdenes en salida el sidebar sticky se volvía a estirar. Lo tapaba
+              que arranca colapsada (v10.73.73), pero era un hueco de mi propio arreglo. Mismo auto-scroll coordinado. */}
+          {!collapsed.salidas&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34,up=y<r.top+edge&&el.scrollTop>0,dn=y>r.bottom-edge&&el.scrollTop+el.clientHeight<el.scrollHeight-1;if(up||dn){qAutoScrollClaim=Date.now();el.scrollTop+=up?-14:14}}} style={{padding:10,minHeight:60,maxHeight:420,overflowY:"auto",overflowX:"hidden"}}>
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
@@ -10991,10 +10995,12 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
         </div>
 
         {/* MAQUILA */}
-        <div onDragOver={e=>{e.preventDefault();setDO("vm_maquila")}} onDragLeave={()=>setDO(null)} onDrop={e=>drop("vm_maquila",e)}
+        <div onDragOver={e=>{e.preventDefault();setDO("vm_maquila")}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop("vm_maquila",e)}
           style={{borderRadius:14,border:dO==="vm_maquila"?"2px solid "+C.maq:"1.5px solid "+C.maq+"40",background:dO==="vm_maquila"?C.maq+"12":C.maq+"06",transition:"all .15s",overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",borderBottom:"1px solid "+C.maq+"20"}}>
+          <div style={{padding:"10px 14px",borderBottom:"1px solid "+C.maq+"20",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:13,fontWeight:800,color:C.maq}}><TruckIcon size={14} weight="bold"/>Maquila</span>
+            {/* v10.73.77 — polish: era la ÚNICA zona del sidebar sin contador → soltabas una orden y el trabajo desaparecía del tablero (vive en MaquilaTracker, abajo, fuera del viewport). Paridad con Empaque/Salidas. Texto oscuro sobre el naranja: blanco sobre C.maq no pasa contraste. */}
+            {inMaquilaOut>0&&<div title={inMaquilaOut+" en maquila · el detalle está en el tracker, abajo del tablero"} style={{background:C.maq,color:C.tx,minWidth:22,height:22,padding:"0 6px",borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inMaquilaOut}</div>}
           </div>
           <div style={{padding:10,minHeight:50}}>
             <div style={{textAlign:"center",padding:"8px 0",color:dO==="vm_maquila"?C.maq:C.ph,fontSize:dO==="vm_maquila"?11:10,fontWeight:dO==="vm_maquila"?600:400}}>
@@ -11068,7 +11074,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
     {/* CTP & Procesadora machines — con 2 máquinas se fuerzan 2 columnas (minmax 0,1fr nunca colapsa a 1 ni desborda); 3+ vuelve responsivo */}
     <div style={{display:"grid",gridTemplateColumns:ppMachines.length<=2?"repeat("+ppMachines.length+",minmax(0,1fr))":"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
       {ppMachines.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="ctp");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
-        return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={()=>setDO(null)} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
+        return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
           style={{background:inMaint?C.amb+"08":isD?C.ctp+"12":C.bg,borderRadius:14,padding:16,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+C.ctp:hasWork?"1.5px solid "+C.ctp+"40":"1.5px dashed "+C.bd,minHeight:120,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+C.ctp+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
             <div>
@@ -11110,12 +11116,12 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                   onDragOver={e=>{e.preventDefault()}}
                   onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
-                  style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:"#fafafa",opacity:0.85,cursor:"grab"}}>
+                  style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,opacity:0.85,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
                   <div style={{display:"flex",gap:3}}>
-                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:"#fff",color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
-                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:"#fff",color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:C.card,color:C.live,cursor:"pointer",fontWeight:600}} title="Subir a activa"><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                    {(role==="admin"||role==="german")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:C.card,color:C.ios,cursor:"pointer",fontWeight:600,display:"inline-flex",alignItems:"center"}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
                   </div>
                 </div>
                 <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
