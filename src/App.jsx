@@ -10871,32 +10871,39 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
         {["offset","acabados","digital"].map(type=>{const ms=MACHINES.filter(m=>m.type===type&&m.status==="active"&&m.id!=="vm_manual");if(!ms.length)return null;
           const cnt=catCount(type);const isCol=collapsed[type];
           return <div key={type} style={{marginBottom:20}}>
-            <div onClick={()=>toggle(type)} onMouseEnter={e=>e.currentTarget.style.background=cc[type]+"1c"} onMouseLeave={e=>e.currentTarget.style.background=cc[type]+"10"} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:cc[type]+"10",borderRadius:isCol?"12px":"12px 12px 0 0",cursor:"pointer",border:"1px solid "+cc[type]+"25",borderBottom:isCol?"1px solid "+cc[type]+"25":"none",transition:"background .12s"}}>
+            {/* v10.73.80 — /impeccable layout: el color de categoría se concentra AQUÍ (banda + ícono + contador).
+                El header es el dueño único; el resto de la sección va en neutros para que el color signifique algo. */}
+            <div onClick={()=>toggle(type)} onMouseEnter={e=>e.currentTarget.style.background=cc[type]+"20"} onMouseLeave={e=>e.currentTarget.style.background=cc[type]+"14"} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:cc[type]+"14",borderRadius:isCol?"12px":"12px 12px 0 0",cursor:"pointer",border:"1px solid "+C.bd,borderBottom:isCol?"1px solid "+C.bd:"none",transition:"background .12s"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                {(()=>{const CI=catIcon[type];return CI?<CI size={17} weight="bold" color={cc[type]} style={{flexShrink:0}}/>:null})()}<span style={{fontSize:14,fontWeight:800,color:cc[type]}}>{catLabel[type]}</span>
-                <span style={{fontSize:10,color:C.t2}}>{ms.length} máquinas</span>
+                {(()=>{const CI=catIcon[type];return CI?<CI size={17} weight="bold" color={cc[type]} style={{flexShrink:0}}/>:null})()}<span style={{fontSize:F.title,fontWeight:800,color:C.tx,letterSpacing:-.2}}>{catLabel[type]}</span>
+                <span style={{fontSize:F.meta,color:C.t2}}>{ms.length} máquinas</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {cnt>0&&<div style={{background:cc[type],color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{cnt} en producción</div>}
-                {isCol&&<span style={{fontSize:10,fontWeight:600,color:cc[type]}}>clic para abrir</span>}
-                <span style={{fontSize:14,color:isCol?cc[type]:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
+                {cnt>0&&<div style={{background:cc[type],color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:F.body,fontWeight:700}}>{cnt} en producción</div>}
+                {isCol&&<span style={{fontSize:F.meta,fontWeight:600,color:C.t2}}>clic para abrir</span>}
+                <span style={{fontSize:F.title,color:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
               </div>
             </div>
-            {!isCol&&<div style={{border:"1px solid "+cc[type]+"25",borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
+            {!isCol&&<div style={{border:"1px solid "+C.bd,borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
               <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fit,minmax(min(240px,100%),1fr))",gap:10}}>
                 {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
                   return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>{if(!inMaint)drop(m.id,e)}}
-                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"12":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+cc[type]+"40":"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:hasWork&&!inMaint?"0 2px 8px "+cc[type]+"15":"none",opacity:inMaint&&!hasWork?0.7:1}}>
+                    /* v10.73.80 — /impeccable layout: la máquina va NEUTRA. El borde sigue contando el estado
+                       (dashed=libre · solid=trabajando · 2px color=soltar aquí · ámbar=mantenimiento), pero el color
+                       y la elevación se gastan SOLO en el drop-target: ahí el color quiere decir algo. */
+                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"1a":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+C.bd:"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:isD?"0 4px 14px "+cc[type]+"33":"none",opacity:inMaint&&!hasWork?0.7:1}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
                       <div>
-                        <div style={{fontSize:13,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
-                        <div style={{fontSize:9,color:inMaint?C.wn:cc[type],fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
+                        <div style={{fontSize:F.label,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
+                        {/* v10.73.80 — el subtítulo de la máquina era la 6ª repetición del color de categoría. Neutro. */}
+                        <div style={{fontSize:F.micro,color:inMaint?C.wn:C.t2,fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
                         {/* v10.73.79 — critique #2 (P1): la carga vive en la DECISIÓN, no en la confirmación. Gerardo elige máquina POR carga; antes solo la veía dentro del modal, o sea después de haber elegido. */}
                         {hasWork&&(()=>{const L=machineLoad(m.id);return L.mins>0?<span title={L.n+" trabajo"+(L.n>1?"s":"")+" en esta máquina · ~"+fmtM(L.mins)+" de carga"} style={{fontSize:9,fontWeight:700,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>~{fmtM(L.mins)}</span>:null})()}
-                        {hasWork?<div style={{background:cc[type],color:"#fff",width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{mo.length}</div>
-                        :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>—</div>}
+                        {/* v10.73.80 — contador neutro: la categoría ya la dice la sección; aquí el color solo competía con lo ACTIVO. */}
+                        {hasWork?<div style={{background:C.tx,color:C.bg,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body,fontWeight:800}}>{mo.length}</div>
+                        :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body}}>—</div>}
                         {(role==="produccion"||role==="admin")&&!inMaint&&!hasWork&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
                         {inMaint&&role==="admin"&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Quitar mantenimiento de la máquina" title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
                       </div>
@@ -10909,12 +10916,17 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                     </div>
                     :<>
                       {/* v10.26.0 — Activa (timer corriendo) */}
-                      {activa&&<div key={activa.id} style={{border:"2px solid "+C.live,borderRadius:10,padding:6,marginBottom:6,background:C.live+"08"}}>
+                      {/* v10.73.80 — /impeccable layout: lo ACTIVO es lo único con reloj corriendo y dinero encima.
+                          Con la máquina en neutro, se queda con TODO el presupuesto de contraste de la card:
+                          único relleno saturado + única elevación (sombra teñida de su propio verde). */}
+                      {activa&&<div key={activa.id} style={{border:"2px solid "+C.live,borderRadius:10,padding:8,marginBottom:8,background:C.live+"12",boxShadow:"0 2px 8px "+C.live+"22"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
                           <span style={{fontSize:9,fontWeight:800,color:C.live,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
                           {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
                         </div>
-                        <DragCard o={activa} borderColor={cc[type]} reorderMachine={m.id} onAction={onAction}/>
+                        {/* v10.73.80 — el marco verde ya dice "activa"; el borde de categoría aquí adentro solo repetía
+                            (card anidada con dos colores compitiendo). Neutro. La excepción roja de urgente sigue viva. */}
+                        <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
                           <button disabled={actionLoading===activa.id} onClick={()=>onAction(activa.id,"advance","packaging")} style={{...bs(C.emp),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
