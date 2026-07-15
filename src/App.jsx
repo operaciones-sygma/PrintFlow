@@ -10687,6 +10687,12 @@ function Pipeline({orders,role,onAction}) {
 }
 
 // ─── KANBAN ────────────────────────────────────────
+// v10.73.62 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
+//   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
+//   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
+//   una cola larga sigue siendo fácil). El tablero ya no se estira; el encabezado de la máquina (la zona de drop) y
+//   la lista "Órdenes Listas" quedan siempre alcanzables. Aplica a Kanban (produccion) y PreprensaBoard (german),
+//   mismo patrón de cola. Se mantiene la planeación (Gerardo apila las que quiera; solo se ven con scroll en esa máquina).
 function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
   // v10.73.31 — ocultar las órdenes EN ESPERA del POOL de espera ("Listas"/maquila_in), que es donde se acumulan y
   // hacen ruido. Las que están EN una máquina (in_production) NO se ocultan: la máquina NO debe aparecer "Disponible"
@@ -10853,7 +10859,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                         </div>
                       </div>}
                       {/* v10.26.0 — Cola en espera */}
-                      {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
+                      {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34;if(y<r.top+edge)el.scrollTop-=14;else if(y>r.bottom-edge)el.scrollTop+=14}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
                         {/* v10.72.43 — legibilidad de la cola: 8→9px + t2 (antes el operador tenía que acercarse a leer las posiciones) */}
                         <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
                         {enEspera.map(o=><div key={o.id} draggable
@@ -11050,7 +11056,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
               </div>
             </div>}
             {/* v10.26.0 — Cola en espera */}
-            {enEspera.length>0&&<div style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0}}>
+            {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34;if(y<r.top+edge)el.scrollTop-=14;else if(y>r.bottom-edge)el.scrollTop+=14}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
               <div style={{fontSize:8,color:C.t3,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
               {enEspera.map(o=><div key={o.id} draggable
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
