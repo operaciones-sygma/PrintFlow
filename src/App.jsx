@@ -10897,6 +10897,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
                             {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                           </div></div>
+                          {/* v10.73.71 — mover una orden ENCOLADA a otra máquina sin arrastrar (paridad con las cards de "Órdenes Listas"). quickAssign no-op si eliges la misma máquina. */}
+                          {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machinesByType("offset").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup><optgroup label="Acabados">{machinesByType("acabados").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup><optgroup label="Digital">{machinesByType("digital").map(mm=><option key={mm.id} value={mm.id}>{mm.name}</option>)}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
                         </div>)}
                       </div>}
                     </>}
@@ -10918,7 +10920,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance}) {
             </div>
             {inManual.length>0&&<div style={{background:C.emp,color:"#fff",width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800}}>{inManual.length}</div>}
           </div>
-          <div style={{padding:10,minHeight:60}}>
+          {/* v10.73.71 — tope de altura + scroll interno en Empaque (como las colas de máquina): con muchas órdenes empacadas la lista ya no estira el sidebar sticky. Mismo auto-scroll coordinado (qAutoScrollClaim) al arrastrar. */}
+          <div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34,up=y<r.top+edge&&el.scrollTop>0,dn=y>r.bottom-edge&&el.scrollTop+el.clientHeight<el.scrollHeight-1;if(up||dn){qAutoScrollClaim=Date.now();el.scrollTop+=up?-14:14}}} style={{padding:10,minHeight:60,maxHeight:500,overflowY:"auto",overflowX:"hidden"}}>
             {inManual.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_manual"?C.emp:C.ph,fontSize:dO==="vm_manual"?11:10,fontWeight:dO==="vm_manual"?600:400}}>
               {dO==="vm_manual"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Arrastra órdenes aquí"}
             </div>
