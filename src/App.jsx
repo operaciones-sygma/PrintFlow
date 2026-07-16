@@ -10863,7 +10863,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   "¿Estás seguro?" que ni decía de qué orden. Ahora: asignar es optimista + toast con DESHACER (patrón ya
   //   establecido en la app, ver snooze), y el gasto de confirmación se movió a Salidas (ver advance()).
   //   El undo respeta el ORIGEN: si venía de otra máquina vuelve a ESA máquina; si venía del pool, vuelve a Listas.
-  const assignNow=(o,mid,m,fromM)=>{onDrop(o.id,mid);showToast?.((fromM?"Movida a ":"Asignada a ")+m.name,"success",{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready")}})};
+  // v10.73.82 (scan w1sw90ei4) — ya NO pinta toast propio: le pasa el undo a assignMachine para que lo emita SU toast
+  //   terminal. El de aquí era síncrono y el terminal lo pisaba ~1s después, así que el botón "Deshacer" moría antes
+  //   de ser clicable; y encima mentía en verde ("Asignada a X") cuando el lock se tragaba el drop sin tocar la BD.
+  //   Ver el comentario largo en assignMachine. `m` ya no se usa aquí: el toast terminal arma su propio label.
+  const assignNow=(o,mid,m,fromM)=>onDrop(o.id,mid,{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready")}});
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
     assignNow(o,mid,m,o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null)};
 
@@ -14797,7 +14801,13 @@ export default function PrintFlow() {
   const reorderLock=useRef(false); // v10.73.78 — misma lección para reorder_in_machine (critique #2): quedó fuera de la defensa que ya tenían assignMachine y duplicate
   const duplicateLock=useRef(false); // v10.73.25 — mismo patrón: lock síncrono anti doble-clic en Duplicar (evitaba 2 folios/2 órdenes)
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
-  const showToast=useCallback((message,type="success",action=null)=>setToast({message,type,action}),[]);
+  // v10.73.82 (scan w1sw90ei4) — identidad monotónica por toast. El <Toast> no tenía key y su timer no dependía del
+  //   mensaje, así que dos toasts seguidos reusaban la instancia: el 2º heredaba el setTimeout del 1º (se iba antes
+  //   de tiempo) y no re-disparaba la animación de entrada. Agregar `message` a las deps NO alcanza: dos órdenes
+  //   arrastradas a Salidas producen el MISMO string byte a byte → Object.is igual → mismo bug. El contador es lo
+  //   único que distingue "el mismo mensaje otra vez" de "no pasó nada".
+  const toastSeq=useRef(0);
+  const showToast=useCallback((message,type="success",action=null)=>setToast({message,type,action,id:++toastSeq.current}),[]);
   // 🆕 v10.13.0 — Registrar hook global para que OrderForm.submit pueda esperar la resolución del modal de cliente similar
   useEffect(()=>{
     window.__showClientConfirmModal=(props)=>new Promise(resolve=>{
@@ -16137,12 +16147,27 @@ export default function PrintFlow() {
     }catch(e){console.error("[approveProof] Error:",e);showToast("❌ No se pudo aprobar prueba: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
-  const assignMachine=useCallback(async(oid,mid)=>{
+  // v10.73.82 (scan w1sw90ei4) — `undo` entra como PARÁMETRO. Antes, assignNow (en Kanban) pintaba su propio toast
+  //   con el botón "Deshacer" de forma SÍNCRONA, y 0.5-2s después el toast terminal de aquí abajo lo PISABA (showToast
+  //   es un slot único y el <Toast> no tenía key) → el botón desaparecía antes de que nadie pudiera apretarlo. Y en su
+  //   única ventana de vida, assignMachineLock estaba tomado, así que la rama máquina→máquina del undo abortaba muda.
+  //   O sea: v10.73.79 quitó el modal de la acción más frecuente del día justificándose EXACTAMENTE en este Deshacer,
+  //   y el Deshacer no funcionaba. La red de seguridad por la que cambiamos el modal no existía.
+  //   Hilándolo hacia adentro se emite UN SOLO toast, el terminal, que además es el único que sabe si quedó activa o
+  //   en cola #N, y se dispara microsegundos antes de que el finally libere el lock → el botón por fin sirve.
+  //   NO se hace con `await onDrop(...)` en assignNow: esta función captura sin re-lanzar, así que el await resolvería
+  //   normal también en error y el "Asignada a X [Deshacer]" pisaría al "❌ No se pudo asignar". Con el parámetro, la
+  //   rama catch se queda sin action POR CONSTRUCCIÓN. Los demás call sites pasan 2 args → undo=null → PreprensaBoard
+  //   y el board de Karla quedan byte-idénticos.
+  const assignMachine=useCallback(async(oid,mid,undo=null)=>{
     // v10.58.64 M5: guard de reentrada REAL — setActionLoading no es síncrono, un
     // doble-drop alcanzaba a correr 2 veces y duplicaba/triplicaba el machine_log.
     // v10.64.1 fix — actionLoading se leía STALE del closure (no estaba en deps), así que dos
     // drops síncronos pasaban ambos. Lock síncrono vía useRef (set/check atómico, sin async).
-    if(assignMachineLock.current)return;
+    // v10.73.82 (scan w1sw90ei4) — este rechazo era MUDO, y con el modal fuera (v79) Gerardo arrastra en ráfaga:
+    //   el 2º drop se lo tragaba el lock sin tocar la BD mientras la app cantaba "Asignada a X" en verde. Era el
+    //   "rechazo MUDO" que v10.73.78 declaró erradicado, con un toast de éxito encima afirmando lo contrario.
+    if(assignMachineLock.current){showToast("⏳ Hay otra asignación en curso. Espera un segundo e inténtalo de nuevo.","error");return}
     assignMachineLock.current=true;
     const isManual=mid==="vm_manual";
     const mach=MACHINES.find(x=>x.id===mid);
@@ -16179,7 +16204,7 @@ export default function PrintFlow() {
           await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
           setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0}:x));
         }
-        showToast("🏭 "+label);
+        showToast("🏭 "+label,"success",undo);
         return;
       }
       // Máquina real (offset/digital/acabados/preprensa): cola por posición
@@ -16216,7 +16241,7 @@ export default function PrintFlow() {
         await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
         setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0}:x));
       }
-      showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label);
+      showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label,"success",undo);
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
     finally{setActionLoading(null);assignMachineLock.current=false}
   },[user,userLogin,orders,showToast,reload]);
@@ -16798,7 +16823,15 @@ export default function PrintFlow() {
       //   closeMachineLog/addMachineLog sobre el mismo trabajo = MINUTOS DE MÁQUINA CORRUPTOS. Es exactamente la
       //   lección de assignMachineLock (v10.64.1) y duplicateLock (v10.73.x), que nunca se aplicó aquí ni a
       //   return_to_ready. useRef = set/check atómico y síncrono, inmune al stale del closure.
-      if(reorderLock.current)return;
+      // v10.73.82 (scan w1sw90ei4) — el lock de v78 es UN booleano GLOBAL (no por orden ni por máquina) y se sostiene
+      //   a través del reload() completo, 1-3s. En esa ventana, el 2º "Activar" de CUALQUIER máquina moría en un
+      //   return sin toast, con el botón perfectamente habilitado (su disabled es por SU orden). Gerardo reintenta y
+      //   concluye que la app falla. Es el mismo "rechazo MUDO" que este commit declaró erradicado en drop().
+      //   NO acortar el lock ni sacar el reload() del try para "arreglarlo": el guard de arriba lee `orders` del
+      //   CLOSURE, que sigue rancio hasta que el reload aterriza; acortarlo reintroduce el doble-fire de la misma
+      //   orden que duplica closeMachineLog/addMachineLog = MINUTOS DE MÁQUINA CORRUPTOS, la lección de v78. Solo
+      //   se le da VOZ; llavear por máquina es la mejora opcional, no el fix.
+      if(reorderLock.current){showToast("⏳ Todavía estoy guardando el movimiento anterior de la cola. Espera 1-2s y vuelve a intentarlo.","error");return}
       reorderLock.current=true;
       const wasActive=o.machine_queue_position===0;
       const willBeActive=newPosition===0;
@@ -17766,7 +17799,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={ackWakeup}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
       {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} onResolve={clientConfirmModal.onResolve}/>}
-      {toast&&<Toast message={toast.message} type={toast.type} action={toast.action} onDone={()=>setToast(null)}/>}
+      {/* v10.73.82 — key por identidad de toast: fuerza remount → timer fresco + animación de entrada re-disparada. */}
+      {toast&&<Toast key={toast.id} message={toast.message} type={toast.type} action={toast.action} onDone={()=>setToast(null)}/>}
     </div>
   );
 }
