@@ -1307,8 +1307,14 @@ const db = {
     // de captura diferida del admin (`WHERE ended_at IS NOT NULL AND cost IS NULL`). Vacío → NULL. La columna es
     // nullable en BD, así que no hay migración.
     const parsed=(cost==null||String(cost).trim()==="")?null:parseFloat(cost);
-    const {error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: (parsed==null||isNaN(parsed))?null:parsed, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id);
+    // v10.73.82 (scan w1sw90ei4) — el UPDATE era CIEGO: sin `.is('ended_at',null)` y sin `.select()` para detectar 0
+    //   filas. v10.73.81 quitó el gate admin del botón de cierre, así que por primera vez DOS actores pueden tener
+    //   abierto el EndMaintenanceModal sobre el MISMO registro (y el realtime no cierra el modal del otro). El
+    //   segundo en confirmar RE-ESCRIBÍA ended_at y pisaba el costo del primero, reportando éxito. El guard va en el
+    //   filtro del UPDATE porque el RLS de esta tabla es qual=true: no puede vivir en permisos.
+    const {data,error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: (parsed==null||isNaN(parsed))?null:parsed, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id).is("ended_at", null).select("id");
     if(error)throw new Error("endMaintenance: "+error.message);
+    if(!data||data.length===0)throw new Error("Este mantenimiento ya lo cerró alguien más. Refresca para ver el costo que se capturó.");
   },
   async addNote(orderId, text, byUser) {
     const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser,by_uid:AUTH_UID});
@@ -14831,6 +14837,14 @@ export default function PrintFlow() {
   // When archive loaded: loads everything including related data for historical (full)
   const reload = useCallback(async () => {
    try {
+    // v10.73.82 (scan w1sw90ei4) — `maintenance` es un GATE DE ESCRITURA desde v74 (deshabilita el <option> del
+    //   select, rechaza el drop, deshabilita "Activar" y respalda el handler de reorder), pero setMaintenance solo
+    //   corría en la carga inicial, en el realtime de su tabla y en los 2 modales. Los TRES caminos de resync
+    //   (reconnect tras caída del socket, visibilitychange al volver a la pestaña, y el polling de 20s con el socket
+    //   caído) llaman reload() y NO lo tocaban → tras cualquier corte de wifi del taller el gate operaba con datos
+    //   viejos. Una línea aquí cubre los tres y cualquier path futuro. Fire-and-forget FUERA del Promise.all a
+    //   propósito: si mantenimiento falla, que no tumbe la carga de órdenes.
+    db.loadMaintenance().then(setMaintenance).catch(()=>{});
     const [data, pos, splitsResp, matrixGroupsResp, matrixLinesResp] = await Promise.all([
       db.loadOrders(!archiveLoadedRef.current),
       db.loadPurchaseOrders(),
@@ -17813,10 +17827,34 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           reload();
         }
       }} onClose={()=>setCancelInvoicedModal(null)}/>}
-      {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{try{await db.startMaintenance(maintModal.machine.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);const msg="🔧 "+maintModal.machine.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user);setMaintModal(null)}catch(e){console.error("[startMaintenance] Error:",e);showToast("❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
-      {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);/* v10.73.81 — con el costo ya opcional, esto emitía literalmente "Costo: $NaN" a todo producción. */
+      {/* v10.73.82 (scan w1sw90ei4) — dos arreglos: (a) el modal se cierra ANTES de notificar y las notificaciones
+          quedan en su PROPIO try. addNotification hace throw en cualquier error, así que un blip de red EN LA
+          NOTIFICACIÓN saltaba al catch: Gerardo leía "no se pudo iniciar mantenimiento" y el modal seguía abierto,
+          con la máquina YA en ámbar detrás del overlay. Vuelve a intentar → 2ª fila abierta → "Reparada" cierra una
+          sola y la máquina queda muerta para siempre. (b) el 23505 del índice único nuevo se traduce a español en
+          vez de escupir el string crudo de Postgres. */}
+      {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{
+        const mach=maintModal.machine;
+        try{await db.startMaintenance(mach.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);setMaintModal(null)}
+        catch(e){console.error("[startMaintenance] Error:",e);const dup=e?.message?.includes("idx_one_open_maint_per_machine");showToast(dup?"⚠️ Esa máquina ya está en mantenimiento.":"❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error");if(dup)setMaintModal(null);return}
+        try{const msg="🔧 "+mach.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
+        catch(e){console.warn("[startMaintenance] notif warn:",e?.message)}
+      }} onClose={()=>setMaintModal(null)}/>}
+      {/* v10.73.82 (scan w1sw90ei4) — misma forma que la apertura, y por la misma razón. Además se jubila `db.notify`
+          aquí: arranca con `if(targetRole===byUser)return`, o sea RETORNA ANTES de su copia a admin. Como v10.73.81
+          abrió el cierre a producción y su camino feliz declarado es "Gerardo tira la máquina, Gerardo la levanta",
+          el resultado era que al reparar NO se emitía ninguna notificación: ni a producción (correcto, es él) ni a
+          admin (bug). Marcelo se enteraba de la caída y nunca de la reparación. Con addNotification la matriz queda
+          simétrica con la apertura: producción cierra → admin se entera; admin cierra → producción se entera. */}
+      {maintModal?.type==="end"&&<EndMaintenanceModal machine={maintModal.machine} record={maintModal.record} onConfirm={async(cost)=>{
+        const mach=maintModal.machine;
+        // v10.73.81 — con el costo ya opcional, el mensaje emitía literalmente "Costo: $NaN".
         const cn=(cost==null||String(cost).trim()===""||isNaN(parseFloat(cost)))?null:parseFloat(cost);
-        await db.notify("produccion",null,"new_order","✅ "+maintModal.machine.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2})),null,user);setMaintModal(null)}catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error")}}} onClose={()=>setMaintModal(null)}/>}
+        try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);setMaintModal(null)}
+        catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error");return}
+        try{const msg="✅ "+mach.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2}));if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
+        catch(e){console.warn("[endMaintenance] notif warn:",e?.message)}
+      }} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
       {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
       {snoozeTarget&&<SnoozeModal order={snoozeTarget} onConfirm={(data)=>applySnooze(snoozeTarget,data)} onClose={()=>setSnoozeTarget(null)}/>}
