@@ -11188,8 +11188,14 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
   const activeMaint=mid=>maintenance.find(m=>m.machine_id===mid&&!m.ended_at);
 
   const drop=(mid,e)=>{e.preventDefault();setDO(null);const oid=e.dataTransfer.getData("orderId");if(!oid)return;const o=orders.find(x=>x.id===oid);const m=MACHINES.find(x=>x.id===mid);if(!o||!m)return;if(o.current_machine===mid)return;if(activeMaint(mid))return;const fromM=o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null;
-    // If dropping to CTP and order has no plates registered yet, require plate registration
-    if(mid==="pp_ctp"&&!o.current_machine&&onPlateRequired){onPlateRequired(oid,mid,o,m);return}
+    // v10.73.82 (scan w1sw90ei4, P0) — el guard solo cubría pp_ctp mientras el pool de arriba dice, textual,
+    //   "Arrastra a CTP o Procesadora". Si Germán soltaba en PROCESADORA (justo lo que la UI le invita a hacer),
+    //   el modal de placas NUNCA abría; y como el guard exige `!o.current_machine`, una vez asignada ya no volvía
+    //   a pedirlas JAMÁS: el registro de placas se perdía en silencio y para siempre.
+    //   Probado en prod: de las que entraron primero a pp_ctp, 102 órdenes y CERO sin placas. De las que entraron
+    //   primero a pp_proc, 33 órdenes y 25 SIN placas (76%). Correlación perfecta con el mecanismo.
+    //   Cubre las DOS máquinas de preprensa. Si algún día se agrega otra, va aquí.
+    if((mid==="pp_ctp"||mid==="pp_proc")&&!o.current_machine&&onPlateRequired){onPlateRequired(oid,mid,o,m);return}
     setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
   const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
 
