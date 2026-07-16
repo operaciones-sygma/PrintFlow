@@ -16822,9 +16822,22 @@ export default function PrintFlow() {
             if(prevActive)await db.closeMachineLog(prevActive.id);
           }
           // 3. RPC atómico para reordenar
-          await db.moveOrderInQueue(id,mach,newPosition,userLogin||user);
+          const result=await db.moveOrderInQueue(id,mach,newPosition,userLogin||user);
           // 4. Abrir log si ahora es activa
           if(!wasActive&&willBeActive)await db.addMachineLog(id,mach);
+          // 4b. v10.73.82 (scan w1sw90ei4, P1) — DEGRADAR la activa arrastrándola a su propia cola promueve a la #1
+          //     a pos 0, y la RPC lo reporta en `new_active_id` JUSTO para que le abramos el log. Su propio código
+          //     lo dice textual: "Caso 2b ... reportar la que subio a pos 0 para que el frontend abra su log"
+          //     (v10.58.67). Este era el ÚNICO de los 8 call sites que tiraba el retorno al piso: la promovida se
+          //     pintaba con el marco verde "ACTIVA" pero SIN LiveTimer, y su corrida no dejaba NINGUNA fila en
+          //     order_machine_log → invisible en costeo/KPIs (ni siquiera como fila en cero: no existía). Además se
+          //     auto-perpetuaba: closeMachineLog es no-op sin log abierto, y en pos 0 ya no hay botón "Activar" para
+          //     rescatarla. Mismo bloque que doAdv (15923), assignMachine (16208) y return_to_ready (16866).
+          //     Aquí NO se parchea el estado local: el reload() de abajo lo cubre.
+          if(result?.new_active_id&&result.new_active_id!==id){
+            await db.addMachineLog(result.new_active_id,result.old_machine||mach);
+            await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+          }
           await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida a cola #"+newPosition,userLogin||user,willBeActive?C.live:C.ios);
           showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida a cola #"+newPosition);
           // Reload completo para sincronizar todas las positions afectadas
