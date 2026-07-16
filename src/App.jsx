@@ -1314,7 +1314,7 @@ const db = {
     //   filtro del UPDATE porque el RLS de esta tabla es qual=true: no puede vivir en permisos.
     const {data,error}=await supabase.from("maintenance_log").update({ ended_at: new Date().toISOString(), cost: (parsed==null||isNaN(parsed))?null:parsed, ended_by: byUser, ended_by_uid: AUTH_UID }).eq("id", id).is("ended_at", null).select("id");
     if(error)throw new Error("endMaintenance: "+error.message);
-    if(!data||data.length===0)throw new Error("Este mantenimiento ya lo cerró alguien más. Refresca para ver el costo que se capturó.");
+    if(!data||data.length===0)throw new Error("Este mantenimiento ya estaba cerrado. Refresca para ver el costo capturado.");
   },
   async addNote(orderId, text, byUser) {
     const {error}=await supabase.from("order_notes").insert({order_id:orderId,text,by_user:byUser,by_uid:AUTH_UID});
@@ -1949,13 +1949,21 @@ const machineDown=mid=>!!mid&&MAINT_DOWN.has(mid);
 const promoteLog=async(newActiveId,oldMachine)=>{
   if(!newActiveId)return;
   if(machineDown(oldMachine)){
-    await db.addTimeline(newActiveId,"⏸️ Subió a turno 1, pero la máquina está fuera de servicio: no se arrancó la corrida","system",C.wn);
+    // v10.73.84 (scan #2 promotelog-timeline) — el rastro honesto va a COMENTARIOS, no al timeline. getStale mide la
+    //   antigüedad desde timeline[last].date; escribirlo en el timeline con fecha=ahora RESETEABA el reloj de
+    //   estancamiento de la promovida a 0, silenciándola ~24h justo cuando está atascada en una prensa muerta. El
+    //   comentario conserva el rastro humano en el detalle sin tocar el reloj de las alarmas.
+    await db.addComment(newActiveId,"⏸️ Subió a turno 1, pero la máquina está fuera de servicio: no se arrancó la corrida","sistema");
   }else{
     await db.addMachineLog(newActiveId,oldMachine);
     await db.addTimeline(newActiveId,"⏯️ Auto-activada (cola promoción)","system",C.live);
   }
 };
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine&&!machineDown(o.current_machine))return null;
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;
+  // v10.73.84 (scan #2 machinedown-des-exime-cola) — la des-exención de máquina muerta aplica SOLO a la orden ACTIVA
+  //   (pos 0), la única "montada en la prensa". La COLA (pos>0) detrás de una prensa caída sigue exenta como siempre;
+  //   si no, tirar una prensa cargada inundaba la Torre con las ~5-10 de su cola marcadas "Vencida" de golpe.
+  if(o.current_machine&&(!machineDown(o.current_machine)||o.machine_queue_position!==0))return null;
   if(snoozeActive(o))return null; // v10.73.18 — "En espera" NO es estancada (consistente con Torre/Salud/alerta)
   if((o.stage==="ready"||o.stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)return null; // v10.73.18 — pre-producción con entrega lejana: aún no entra a máquina, no es "sin avance"
   const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
@@ -2599,14 +2607,15 @@ function diagnoseOrder(o){
   // v10.73.82 (L4) — una máquina MUERTA no exime: v81 falsificó a propósito la premisa "montada en máquina = está
   //   avanzando" al permitir tirar una máquina con trabajo. Sin esto, una orden urgente montada en la prensa que se
   //   rompió el viernes desaparece de "Vencida" y del "N días sin avanzar" de la Torre durante todo el paro.
-  const onMachine = !!o.current_machine && !machineDown(o.current_machine) && stage==="in_production";
+  // v10.73.84 (machinedown-des-exime-cola) — la máquina muerta des-exime solo a su ACTIVA (pos 0), no a toda la cola.
+  const onMachine = !!o.current_machine && (!machineDown(o.current_machine)||o.machine_queue_position!==0) && stage==="in_production";
   if(late && !onMachine){
     const resp=orderResponsible(o); // v10.58.65: maquila vencida → vendedor (no Lupita)
     return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
       resp?.role||"admin",resp?.role==="both"?"Gerardo y Noemí":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
   }
   // v10.58.53: una orden MONTADA EN MÁQUINA no está estancada (paridad con getStale v10.49.4)
-  if(d>=2&&(!o.current_machine||machineDown(o.current_machine))&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)&&!((stage==="ready"||stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)){
+  if(d>=2&&(!o.current_machine||(machineDown(o.current_machine)&&o.machine_queue_position===0))&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)&&!((stage==="ready"||stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)){
     const resp=orderResponsible(o); // v10.58.65: consistente con la regla maquila→vendedor
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
       resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
@@ -2671,7 +2680,7 @@ function getWakeupItems(role, userLogin, orders){
     // v10.58.64 M1: Gerardo NO se despierta por trabajo MONTADO EN MÁQUINA (su tablero
     // normal) — restaura la regla v61 que se perdió al delegar a diagnoseOrder. Una
     // orden en 'ready' SIN máquina (no_machine) o estancada sí lo despierta.
-    if(role==="produccion" && o.current_machine && ["ready","in_production","packaging"].includes(o.stage)) continue;
+    if(role==="produccion" && o.current_machine && !machineDown(o.current_machine) && ["ready","in_production","packaging"].includes(o.stage)) continue; // v10.73.84 (DESPERTADOR-1) — 3er gate paralelo a diagnoseOrder; L4 aplicó machineDown a los otros 2 pero no aquí, así que el Despertador seguía exentando a Gerardo de una orden montada en prensa muerta
     const ag = (o.agent||"").trim();
     // v10.58.64 M2: el rescate de Manuel (agente sin usuario → Lupita persigue) se basa
     // en el VENCIMIENTO real, no en diag.key==='late' (no_folio/validation ganaban antes
@@ -5192,6 +5201,7 @@ function CancelOrderModal({order,onConfirm,onClose}) {
 function StartMaintenanceModal({machine,onConfirm,onClose}) {
   useEscClose(onClose);
   const [notes,setNotes]=useState("");
+  const [busy,setBusy]=useState(false); // v10.73.84 (scan #2 MAINT-LOCK-1) — sin lock de submit, el doble-clic disparaba el índice único (23505) y producía una falsa alarma "ya está en mantenimiento" sobre tu propia acción
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={17} weight="bold"/>Mantenimiento — {machine?.name}</h3>
@@ -5199,7 +5209,7 @@ function StartMaintenanceModal({machine,onConfirm,onClose}) {
       <div style={{marginBottom:16}}><label style={lbl}>¿Qué problema tiene? (opcional)</label><textarea style={{...inp,minHeight:60,resize:"vertical"}} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Describe la falla..."/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>onConfirm(notes||null)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}><WrenchIcon size={14} weight="bold"/>Poner en Mantenimiento</button>
+        <button disabled={busy} onClick={async()=>{if(busy)return;setBusy(true);try{await onConfirm(notes||null)}finally{setBusy(false)}}} style={{...bt(C.wn),flex:1,justifyContent:"center",...(busy?{opacity:.6,cursor:"wait"}:{})}}><WrenchIcon size={14} weight="bold"/>{busy?"Guardando…":"Poner en Mantenimiento"}</button>
       </div>
     </div>
   </div>;
@@ -5207,6 +5217,7 @@ function StartMaintenanceModal({machine,onConfirm,onClose}) {
 function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
   useEscClose(onClose);
   const [cost,setCost]=useState("");
+  const [busy,setBusy]=useState(false); // v10.73.84 (scan #2 MAINT-LOCK-1) — lock de submit: sin él, el doble-clic dispara el CAS de endMaintenance y muestra la falsa alarma "ya lo cerró alguien más" sobre tu propio 2º clic
   const started=record?.started_at?new Date(record.started_at):null;
   const elapsed=started?Math.round((Date.now()-started.getTime())/3600000):0;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
@@ -5223,7 +5234,7 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
       <div style={{marginBottom:16}}><label style={lbl}>Costo total del mantenimiento (opcional)</label><input style={inp} type="number" step=".01" min="0" value={cost} onChange={e=>setCost(e.target.value)} placeholder="Déjalo vacío si aún no llega la factura"/></div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={()=>{if(cost.trim()!==""&&(isNaN(parseFloat(cost))||parseFloat(cost)<0))return alert("El costo no puede ser negativo. Déjalo vacío si todavía no lo sabes.");onConfirm(cost)}} style={{...bt(C.ok),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Máquina Reparada</button>
+        <button disabled={busy} onClick={async()=>{if(busy)return;if(cost.trim()!==""&&(isNaN(parseFloat(cost))||parseFloat(cost)<0))return alert("El costo no puede ser negativo. Déjalo vacío si todavía no lo sabes.");setBusy(true);try{await onConfirm(cost)}finally{setBusy(false)}}} style={{...bt(C.ok),flex:1,justifyContent:"center",...(busy?{opacity:.6,cursor:"wait"}:{})}}><CheckCircleIcon size={14} weight="bold"/>{busy?"Guardando…":"Máquina Reparada"}</button>
       </div>
     </div>
   </div>;
@@ -10671,7 +10682,10 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
   // v10.73.82 (verificación L11) — excluir maq_received: una orden RECIBIDA de maquila ya no está con el proveedor,
   //   así que no pertenece al tracker de "en maquila" (que además la etiquetaba con un "+N días RETRASO" falso). Su
   //   lugar es el grid de folios de Karla, donde L11 la puso. Sin esto, sale DUPLICADA y mal etiquetada.
-  const full=orders.filter(o=>o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="maq_received");
+  // v10.73.84 (MAQTRACKER-1) — excluir maq_created: una orden CREADA pero aún NO enviada al proveedor no está "en
+  //   maquila", y getDays caía a created_at → la contaba con un "+N días RETRASO" falso desde su alta. Quedan solo
+  //   maq_sent y maq_in_progress, que sí tienen la transición 🚚 que ancla el contador. (maq_received ya se excluyó en v82.)
+  const full=orders.filter(o=>o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="maq_received"&&o.stage!=="maq_created");
   const all=[...partial,...full];
   if(all.length===0)return null;
 
@@ -10950,7 +10964,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
           <div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>Órdenes Listas</div><div style={{fontSize:10,color:C.t2}}>Arrastra a una máquina o a Empaque</div>{/* v10.73.78 — critique #2: decía "…o Salidas" pero Salidas RECHAZA el stage `ready` (la mayoría del pool) en silencio, y el FirstTimeHint tenía la regla correcta → el copy se contradecía consigo mismo e invitaba al drop mudo. */}</div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{ready.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(match,o)}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{/* v10.73.84 (scan #2 ASSIGN-1) — feedback inmediato al soltar: la card se atenúa/bloquea mientras su asignación
+          está en vuelo (actionLoading===o.id, que se setea SÍNCRONO antes de los ~4 awaits de assignMachine). v82 quitó
+          el toast síncrono que enmascaraba la no-optimicidad; sin esto la card quedaba inerte 1-2s y el drop se sentía
+          fallido, además de que un re-drop chocaba con el lock y disparaba el toast rojo. */}
+        {ready.map(o=><div key={o.id} draggable={actionLoading!==o.id} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(match,o),...(actionLoading===o.id?{opacity:.55,pointerEvents:"none",cursor:"wait"}:{})}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -11221,7 +11239,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
 }
 
 // ─── PREPRENSA BOARD ──────────────────────────────
-function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],role}) {
+function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],role,platedIds=new Set()}) {
   const ctpOrders=orders.filter(o=>o.stage==="ctp");
   const readyCtp=ctpOrders.filter(o=>!o.current_machine&&!snoozeActive(o)).sort(prioSort); // v10.73.31 — pausadas fuera del POOL de espera (no de las máquinas)
   const assigned=ctpOrders.filter(o=>o.current_machine);
@@ -11239,7 +11257,9 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
     //   Probado en prod: de las que entraron primero a pp_ctp, 102 órdenes y CERO sin placas. De las que entraron
     //   primero a pp_proc, 33 órdenes y 25 SIN placas (76%). Correlación perfecta con el mecanismo.
     //   Cubre las DOS máquinas de preprensa. Si algún día se agrega otra, va aquí.
-    if((mid==="pp_ctp"||mid==="pp_proc")&&!o.current_machine&&onPlateRequired){onPlateRequired(oid,mid,o,m);return}
+    // v10.73.84 (PLACAS-1) — `!platedIds.has(oid)`: una orden retornada que YA tiene placas cae al re-montaje normal
+    //   sin segundo INSERT en plate_log. El P0 de forzar placas en un drop FRESCO (sin placas aún) se preserva.
+    if((mid==="pp_ctp"||mid==="pp_proc")&&!o.current_machine&&!platedIds.has(oid)&&onPlateRequired){onPlateRequired(oid,mid,o,m);return}
     setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
   const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
 
@@ -14832,6 +14852,10 @@ export default function PrintFlow() {
   useEffect(()=>{MAINT_DOWN=new Set((maintenance||[]).filter(m=>!m.ended_at).map(m=>m.machine_id))},[maintenance]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
+  // v10.73.84 (scan #2 PLACAS-1) — set de órdenes que YA tienen placas registradas, para no re-abrir el PlateModal
+  //   (y duplicar plate_log) cuando Germán saca una orden de CTP con el ⟳ y la vuelve a soltar. v82 (L7) hizo que el
+  //   ⟳ dejara la orden en stage=ctp/current_machine=null, y el guard solo miraba !current_machine → re-INSERT.
+  const platedIds=useMemo(()=>new Set((plates||[]).map(p=>p.order_id)),[plates]);
   const [maintModal,setMaintModal]=useState(null); // {type:'start'|'end', machine, record?}
   const [chemKey,setChemKey]=useState(0); // forces ChemicalPanel remount on realtime
   const autoFixRef=useRef(new Set()); // guard against duplicate auto-fix
@@ -16228,7 +16252,11 @@ export default function PrintFlow() {
     // v10.73.82 (scan w1sw90ei4) — este rechazo era MUDO, y con el modal fuera (v79) Gerardo arrastra en ráfaga:
     //   el 2º drop se lo tragaba el lock sin tocar la BD mientras la app cantaba "Asignada a X" en verde. Era el
     //   "rechazo MUDO" que v10.73.78 declaró erradicado, con un toast de éxito encima afirmando lo contrario.
-    if(assignMachineLock.current){showToast("⏳ Hay otra asignación en curso. Espera un segundo e inténtalo de nuevo.","error");return}
+    // v10.73.84 (scan #2 PLACAS-2) — assignMachine ahora RETORNA éxito (true/false) para que el PlateModal registre la
+    //   placa SOLO si el montaje ocurrió. Antes se tragaba todos los fallos (catch sin re-throw + rechazo mudo del lock)
+    //   y el modal cerraba "con éxito" dejando la placa guardada pero la orden sin montar → re-drop = placa duplicada.
+    //   Los demás callers ignoran el retorno.
+    if(assignMachineLock.current){showToast("⏳ Hay otra asignación en curso. Espera un segundo e inténtalo de nuevo.","error");return false}
     assignMachineLock.current=true;
     const isManual=mid==="vm_manual";
     const mach=MACHINES.find(x=>x.id===mid);
@@ -16236,7 +16264,7 @@ export default function PrintFlow() {
     //   movimiento máquina→máquina llama assignMachine DIRECTO (onDrop(o.id,fromM.id)), saltándose el guard activeMaint
     //   que vive en drop()/quickAssign: reabría una corrida en la prensa muerta. Aquí lo cubre para TODOS los callers.
     //   machineDown solo contiene offset/acabados/digital → nunca rechaza CTP (preprensa) ni Empaque (vm_manual).
-    if(machineDown(mid)){assignMachineLock.current=false;showToast((mach?.name||"Esa máquina")+" está fuera de servicio. Muévela a otra máquina.","error");return}
+    if(machineDown(mid)){assignMachineLock.current=false;showToast((mach?.name||"Esa máquina")+" está fuera de servicio. Muévela a otra máquina.","error");return false}
     const isPreprensa=mach?.type==="preprensa";
     const stage=isManual?"packaging":isPreprensa?"ctp":"in_production";
     const label=isManual?"📦 Empaque":(mach?.name||mid);
@@ -16246,7 +16274,7 @@ export default function PrintFlow() {
     //   y el undo aterrizaba DEGRADANDO a la activa de A en vez de anexarse al final. Con el ref, oldMachine ya es la
     //   máquina B real → oldMachine!==mid → targetPos=currentQueue.length → se anexa y no toca a nadie.
     const o=ordersRef.current.find(x=>x.id===oid);
-    if(!o){assignMachineLock.current=false;return;}
+    if(!o){assignMachineLock.current=false;return false;}
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
     // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
@@ -16271,10 +16299,12 @@ export default function PrintFlow() {
         // Si había siguiente en cola en oldMachine, promover (abrir log)
         if(queueResult?.new_active_id){
           await promoteLog(queueResult.new_active_id,oldMachine);
-          setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0}:x));
+          // v10.73.84 (ASSIGN-3) — parchear el machine_log local (gateado por machineDown, como los otros 5 sitios), o la
+          //   promovida se pintaba "Activa" sin LiveTimer hasta el reload. El realtime luego solo reconcilia (idempotente).
+          setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,...(machineDown(oldMachine)?{}:{machine_log:[...(x.machine_log||[]),{machine:oldMachine,started:new Date().toISOString()}]})}:x));
         }
         showToast("🏭 "+label,"success",undo);
-        return;
+        return true; // v10.73.84 (PLACAS-2) — éxito rama Empaque
       }
       // Máquina real (offset/digital/acabados/preprensa): cola por posición
       const currentQueue=getMachineQueue(orders,mid);
@@ -16307,12 +16337,13 @@ export default function PrintFlow() {
       // Si al sacarla de la máquina vieja se promovió otra a activa
       if(result?.new_active_id&&result.new_active_id!==oid){
         await promoteLog(result.new_active_id,result.old_machine);
-        setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0}:x));
+        setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0,...(machineDown(result.old_machine)?{}:{machine_log:[...(x.machine_log||[]),{machine:result.old_machine,started:new Date().toISOString()}]})}:x)); // v10.73.84 (ASSIGN-3) — LiveTimer local de la promovida
       }
       /* v10.73.83 (scan #2) — el toast anunciaba willBeActive/targetPos (PRE-clamp), mientras el timeline, la bitácora
          y el estado local ya usan finallyActive/finalPos (el resultado real de la RPC). Se alinea con lo que de verdad pasó. */
       showToast(finallyActive?"🏭 "+label:"⏳ En cola #"+finalPos+" · "+label,"success",undo);
-    }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
+      return true; // v10.73.84 (PLACAS-2) — éxito rama máquina real
+    }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload();return false}
     finally{setActionLoading(null);assignMachineLock.current=false}
   },[user,userLogin,orders,showToast,reload]);
 
@@ -17031,7 +17062,7 @@ export default function PrintFlow() {
           //   que la orden "se devolvió a Lista", un movimiento que para ellas nunca existió (estaba en Listas antes
           //   y está en Listas después). Antes de v79 el modal atajaba el mis-drop y no llegaba ninguna.
           //   El TIMELINE sí se conserva a propósito: el assign ocurrió y luego se anuló, y eso es rastro legítimo.
-          if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
+          if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+(backStage==="ctp"?" sacada de la máquina por ":" devuelta a Lista por ")+userDisplayName(user),null,user,o.created_by);/* v10.73.84 (RETURN-1) — el texto ramifica por backStage igual que tlMsg y el toast: una orden de CTP se QUEDA en CTP, no "vuelve a Lista". */
           showToast(backStage==="ctp"?"🔄 Sacada de la máquina":"🔄 Devuelta a Lista");
         }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
         finally{returnLock.current.delete(id);setActionLoading(null)}
@@ -17409,7 +17440,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden está":" órdenes están")+" en espera, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
-        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></div>}
+        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá el tamaño y cantidad de placas. Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/>{/* v10.73.81 — `viewOrders`, NO `filteredOrders`: el buscador ya no filtra el tablero, lo RESALTA (ver Kanban).
              Tiene que ser viewOrders y no `orders` crudo, o se rompe el toggle Mis Órdenes/Todas del admin. */}
           <Kanban orders={viewOrders} match={search?searchFilter:null} searchText={search} onClearSearch={()=>setSearch("")} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})} showToast={showToast} actionLoading={actionLoading}/>{/* v10.73.81 (verificación adversarial) — MaquilaTracker cuelga de la MISMA pantalla
@@ -17420,7 +17451,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
              PreprensaBoard NO se mueve (2ª verificación: moverlo dejaba la búsqueda como no-op ahí — ni filtra ni
              resalta, porque sus cards no usan hlOf — y es el board de Germán, fuera de alcance). Los otros call sites
              (tablero propio de Germán, board de Karla) se quedan igual: no pintan este banner y filtran coherente. */}
-          <MaquilaTracker orders={viewOrders} onAction={handleAction} role={user} userLogin={userLogin}/>{user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user}/></>}</div>}
+          <MaquilaTracker orders={viewOrders} onAction={handleAction} role={user} userLogin={userLogin}/>
+          {/* v10.73.84 (scan #2 MAQTRACKER-2) — panel compensatorio: L11 (v82) sacó las maq_received del MaquilaTracker
+              (correcto, ya no están con el proveedor), pero eso las dejó invisibles en el board de admin/producción, sin
+              grid de folios propio (ese solo existe para Karla). Aquí van, informativas (Karla asigna el folio), null si no hay. */}
+          {(()=>{const recv=viewOrders.filter(o=>o.stage==="maq_received");if(!recv.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.maq,display:"flex",alignItems:"center",gap:6}}><TruckIcon size={15} weight="bold"/>Recibidas de maquila · pendientes de folio ({recv.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Regresaron del proveedor. Karla les asigna folio; aquí solo para tu visibilidad.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{recv.map(o=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"pointer",boxShadow:C.sh2,border:"1.5px solid "+C.maq+"55",...hlOf(search?searchFilter:null,o)}}><div style={{fontSize:F.label,fontWeight:700}}>{o.client}</div><div style={{fontSize:F.meta,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:F.micro,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:F.micro,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}</div>)}</div></div>})()}
+          {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
@@ -17507,7 +17543,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={(targetOCId,forceCrossClient)=>moveOrderToOC(moveModal.id,targetOCId,forceCrossClient)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
       {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason,billTo)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason,billTo)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
-      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null)}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
+      {/* v10.73.84 (scan #2 PLACAS-2) — assignMachine se tragaba sus fallos (catch sin re-throw + rechazo mudo del
+          lock global), así que el modal cerraba "con éxito" dejando la placa guardada pero la orden SIN montar. Ahora
+          se gatea en su retorno: si el montaje no ocurrió, la placa ya quedó registrada y se avisa claro que hay que
+          re-arrastrar; el re-drop NO re-pedirá placas (PLACAS-1 la reconoce en platedIds) → cero duplicado. addPlate
+          corre a lo sumo una vez. Si addPlate mismo falla, el catch no cierra el modal → reintentar es seguro (sin placa). */}
+      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
           v10.49.3 F1 FIX — capturar el target ANTES del await; si Karla cierra con ESC el state
           se vuelve null y abortamos los setters externos. Evita "InvoiceModal fantasma" abriendo
@@ -17904,7 +17945,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {maintModal?.type==="start"&&<StartMaintenanceModal machine={maintModal.machine} onConfirm={async(notes)=>{
         const mach=maintModal.machine;
         try{await db.startMaintenance(mach.id,notes,user);const m=await db.loadMaintenance();setMaintenance(m);setMaintModal(null)}
-        catch(e){console.error("[startMaintenance] Error:",e);const dup=e?.message?.includes("idx_one_open_maint_per_machine");showToast(dup?"⚠️ Esa máquina ya está en mantenimiento.":"❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error");if(dup)setMaintModal(null);return}
+        catch(e){console.error("[startMaintenance] Error:",e);const dup=e?.message?.includes("idx_one_open_maint_per_machine");showToast(dup?"⚠️ Esa máquina ya está en mantenimiento.":"❌ No se pudo iniciar mantenimiento: "+(e?.message||"error desconocido"),"error");/* v10.73.84 (MAINT-START-1) — el INSERT falló porque la fila abierta YA existe en BD; refrescar `maintenance` para que el gate local (drops/quickAssign) empiece a rechazar de inmediato sin esperar al realtime. */if(dup){try{const m=await db.loadMaintenance();setMaintenance(m)}catch(_){}setMaintModal(null)}return}
         try{const msg="🔧 "+mach.name+" en mantenimiento"+(notes?" — "+notes:"");if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
         catch(e){console.warn("[startMaintenance] notif warn:",e?.message)}
       }} onClose={()=>setMaintModal(null)}/>}
@@ -17919,13 +17960,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         // v10.73.81 — con el costo ya opcional, el mensaje emitía literalmente "Costo: $NaN".
         const cn=(cost==null||String(cost).trim()===""||isNaN(parseFloat(cost)))?null:parseFloat(cost);
         try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);setMaintModal(null)}
-        catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error");return}
+        catch(e){console.error("[endMaintenance] Error:",e);/* v10.73.84 (MAINT-END-STUCK-1) — si el CAS de endMaintenance dice "ya estaba cerrado" (otra sesión lo cerró), NO es un error de red: tratarlo como éxito suave, reconciliar el estado local y cerrar el modal, en vez de dejarlo colgado en un reintento fútil. Los errores de red genuinos SÍ conservan el modal para reintentar. */const done=e?.message?.includes("ya estaba cerrado");showToast(done?"✅ Este mantenimiento ya estaba cerrado.":"❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),done?"info":"error");if(done){try{const m=await db.loadMaintenance();setMaintenance(m)}catch(_){}setMaintModal(null)}return}
         // v10.73.82 (L4) — contraparte de promoteLog: si durante el paro se promovió una orden a activa (pos 0) en
         //   ESTA máquina, quedó SIN log a propósito (no se contaban minutos de una prensa parada). Al repararla hay
         //   que arrancarle el reloj, o esa corrida nunca cuenta (pos 0 no tiene botón "Activar" para rescatarla).
         //   ordersRef, no el closure, para no leer un snapshot viejo. Idempotente: solo si le falta el log abierto.
         try{const act=ordersRef.current.find(o=>o.current_machine===mach.id&&o.machine_queue_position===0);
-          if(act&&!(act.machine_log||[]).some(e=>!e.ended)){await db.addMachineLog(act.id,mach.id);await db.addTimeline(act.id,"⏯️ Reanudada al reparar la máquina","system",C.live)}}
+          if(act&&!(act.machine_log||[]).some(e=>!e.ended)){await db.addMachineLog(act.id,mach.id);await db.addTimeline(act.id,"⏯️ Reanudada al reparar la máquina","system",C.live);
+            // v10.73.84 (MAINT-RESUME-1) — paridad con los otros sitios de promoción: parchear el log abierto en el
+            //   estado local, o la card queda pintada "Activa" sin LiveTimer hasta el próximo reload (el reloj no corre).
+            setOrders(p=>p.map(x=>x.id===act.id?{...x,machine_log:[...(x.machine_log||[]),{machine:mach.id,started:new Date().toISOString()}]}:x))}}
         catch(e){console.warn("[endMaintenance] resume warn:",e?.message)}
         try{const msg="✅ "+mach.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2}));if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
         catch(e){console.warn("[endMaintenance] notif warn:",e?.message)}
