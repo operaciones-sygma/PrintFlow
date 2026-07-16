@@ -1933,7 +1933,29 @@ const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 function bizDaysUntil(d){if(!d)return 0;const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return 0;let cur=new Date();cur=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate());const end=new Date(t.getFullYear(),t.getMonth(),t.getDate());let n=0;while(cur<end){cur.setDate(cur.getDate()+1);const dow=cur.getDay();if(dow!==0&&dow!==6)n++;if(n>365)break;}return n;}
 // v10.73.44b — fecha n días hábiles ANTES de d (para topar la pausa far_due en su instante de auto-reactivación = due − 5 hábiles).
 function bizDaysBefore(d,n){const t=new Date(String(d).slice(0,10)+"T12:00:00");if(isNaN(t.getTime()))return new Date();let cur=new Date(t.getFullYear(),t.getMonth(),t.getDate()),c=0;while(c<n){cur.setDate(cur.getDate()-1);const dow=cur.getDay();if(dow!==0&&dow!==6)c++;if(c>365)break;}return cur;}
-const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine)return null;
+// v10.73.82 (scan w1sw90ei4, L4) — espejo module-level de las máquinas EN mantenimiento. getStale/diagnoseOrder son
+//   funciones puras module-level y no ven el state React `maintenance`; promoteLog tampoco quiere depender de él (o
+//   invalidaría los deps de 6 useCallback). El Set se sincroniza desde App con un useEffect keyed en [maintenance].
+//   Mismo patrón que AUTH_UID / qAutoScrollClaim. Vacío por defecto → machineDown()=false → cero cambio de conducta
+//   mientras no haya mantenimientos abiertos (que es siempre, hoy).
+let MAINT_DOWN=new Set();
+const machineDown=mid=>!!mid&&MAINT_DOWN.has(mid);
+// v10.73.82 (L4, CORROMPE DATOS) — promover al siguiente de la cola cuando la máquina de origen está MUERTA abría
+//   una corrida (machine_log) en una prensa parada, con LiveTimer corriendo, escribiendo minutos reales que nadie
+//   trabajó. Los 3 guards de v81 (option disabled, "Activar" disabled, guard en reorder) cubren solo la activación
+//   MANUAL; la promoción automática pasa por debajo. Y la card literalmente INSTRUYE "arrástralo a otra máquina",
+//   que es justo lo que la dispara. Este helper reemplaza el par addMachineLog+addTimeline idéntico en los 8 call
+//   sites de promoción: si la máquina está muerta, NO abre log y deja rastro honesto en el timeline.
+const promoteLog=async(newActiveId,oldMachine)=>{
+  if(!newActiveId)return;
+  if(machineDown(oldMachine)){
+    await db.addTimeline(newActiveId,"⏸️ Subió a turno 1, pero la máquina está fuera de servicio: no se arrancó la corrida","system",C.wn);
+  }else{
+    await db.addMachineLog(newActiveId,oldMachine);
+    await db.addTimeline(newActiveId,"⏯️ Auto-activada (cola promoción)","system",C.live);
+  }
+};
+const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected"||o.stage==="stocked"||WAIT_STAGES.includes(o.stage))return null;if(o.current_machine&&!machineDown(o.current_machine))return null;
   if(snoozeActive(o))return null; // v10.73.18 — "En espera" NO es estancada (consistente con Torre/Salud/alerta)
   if((o.stage==="ready"||o.stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)return null; // v10.73.18 — pre-producción con entrega lejana: aún no entra a máquina, no es "sin avance"
   const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
@@ -2570,14 +2592,17 @@ function diagnoseOrder(o){
   // v10.59.5 (Marcelo): un trabajo MONTADO EN MÁQUINA (in_production + current_machine) está
   // avanzando — NO es un "bloqueo" para Gerardo aunque esté vencido (mismo criterio que la regla
   // 🐢 estancada, que ya excluye current_machine). Evita el ruido de vencidas en producción.
-  const onMachine = !!o.current_machine && stage==="in_production";
+  // v10.73.82 (L4) — una máquina MUERTA no exime: v81 falsificó a propósito la premisa "montada en máquina = está
+  //   avanzando" al permitir tirar una máquina con trabajo. Sin esto, una orden urgente montada en la prensa que se
+  //   rompió el viernes desaparece de "Vencida" y del "N días sin avanzar" de la Torre durante todo el paro.
+  const onMachine = !!o.current_machine && !machineDown(o.current_machine) && stage==="in_production";
   if(late && !onMachine){
     const resp=orderResponsible(o); // v10.58.65: maquila vencida → vendedor (no Lupita)
     return R("late","⚠️ Vencida hace "+lateDays+" día"+(lateDays===1?"":"s")+" · está en "+(SM[stage]?.l||stage),
       resp?.role||"admin",resp?.role==="both"?"Gerardo y Noemí":(resp?.name||"—"),{sev:lateDays>=3?"red":"orange"});
   }
   // v10.58.53: una orden MONTADA EN MÁQUINA no está estancada (paridad con getStale v10.49.4)
-  if(d>=2&&!o.current_machine&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)&&!((stage==="ready"||stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)){
+  if(d>=2&&(!o.current_machine||machineDown(o.current_machine))&&!["proof_client","maq_sent","maq_in_progress","maq_created"].includes(stage)&&!((stage==="ready"||stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)){
     const resp=orderResponsible(o); // v10.58.65: consistente con la regla maquila→vendedor
     if(resp)return R("stale","🐢 "+d+" días sin avanzar en "+(SM[stage]?.l||stage),
       resp.role,resp.role==="both"?"Gerardo y Noemí":resp.name,{sev:d>=4?"red":"orange"});
@@ -14794,6 +14819,10 @@ export default function PrintFlow() {
   const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
   const [matrixCancelModal,setMatrixCancelModal]=useState(null); // 🆕 v10.58.40 — Modal confirmar cancel línea/grupo del plan matriz
   const [maintenance,setMaintenance]=useState([]);
+  // v10.73.82 (L4) — mantiene fresco el espejo module-level que consultan getStale/diagnoseOrder/promoteLog. Corre
+  //   en cada cambio de `maintenance` (carga inicial, realtime, reload, modales), así que el gate de "máquina muerta"
+  //   nunca opera con datos viejos, sin acoplar esas funciones puras al ciclo de vida de React.
+  useEffect(()=>{MAINT_DOWN=new Set((maintenance||[]).filter(m=>!m.ended_at).map(m=>m.machine_id))},[maintenance]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
   const [maintModal,setMaintModal]=useState(null); // {type:'start'|'end', machine, record?}
@@ -15959,8 +15988,7 @@ export default function PrintFlow() {
     if(ns==="packaging")await db.addMachineLog(id,"vm_manual");
     // v10.26.0 — Si había siguiente en cola de la máquina origen, promoverla (abrir log)
     if(queueResult?.new_active_id){
-      await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
-      await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+      await promoteLog(queueResult.new_active_id,queueResult.old_machine);
       setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
     }
     // Timeline and notifications (o captured above before setOrders)
@@ -16111,8 +16139,7 @@ export default function PrintFlow() {
       try{await db.closeMachineLog(id)}catch(mlErr){console.warn("[revertOrder] machinelog warn:",mlErr.message)}
       if(queueResult?.new_active_id){
         try{
-          await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
-          await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+          await promoteLog(queueResult.new_active_id,queueResult.old_machine);
           setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
         }catch(prErr){console.warn("[revertOrder] promote warn:",prErr.message)}
       }
@@ -16226,8 +16253,7 @@ export default function PrintFlow() {
         setOrders(p=>p.map(x=>{if(x.id!==oid)return x;const l=closeML(x);l.push({machine:mid,started:new Date().toISOString()});return{...x,stage,current_machine:mid,machine_queue_position:null,machine_log:l,timeline:addTL(x,"🏭 "+label,{to:stage})}}));
         // Si había siguiente en cola en oldMachine, promover (abrir log)
         if(queueResult?.new_active_id){
-          await db.addMachineLog(queueResult.new_active_id,oldMachine);
-          await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+          await promoteLog(queueResult.new_active_id,oldMachine);
           setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0}:x));
         }
         showToast("🏭 "+label,"success",undo);
@@ -16263,8 +16289,7 @@ export default function PrintFlow() {
       }));
       // Si al sacarla de la máquina vieja se promovió otra a activa
       if(result?.new_active_id&&result.new_active_id!==oid){
-        await db.addMachineLog(result.new_active_id,result.old_machine);
-        await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+        await promoteLog(result.new_active_id,result.old_machine);
         setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0}:x));
       }
       showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label,"success",undo);
@@ -16291,8 +16316,7 @@ export default function PrintFlow() {
     await db.notifySecs(oid,"new_order",maqMsg,null,user,orig?.created_by);
     // v10.26.0 — Si había siguiente en cola, promoverla
     if(queueResult?.new_active_id){
-      await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
-      await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+      await promoteLog(queueResult.new_active_id,queueResult.old_machine);
       setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
     }
     showToast("🚚 Enviada a maquila: "+prov);
@@ -16466,8 +16490,7 @@ export default function PrintFlow() {
       await db.addComment(id,"❌ Cancelada: "+reason,user);
       // v10.26.0 — Promover siguiente si la cancelada era activa
       if(queueResult?.new_active_id){
-        await db.addMachineLog(queueResult.new_active_id,queueResult.old_machine);
-        await db.addTimeline(queueResult.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+        await promoteLog(queueResult.new_active_id,queueResult.old_machine);
         setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]}:x));
       }
       // Notify admin + produccion
@@ -16900,8 +16923,7 @@ export default function PrintFlow() {
           //     rescatarla. Mismo bloque que doAdv (15923), assignMachine (16208) y return_to_ready (16866).
           //     Aquí NO se parchea el estado local: el reload() de abajo lo cubre.
           if(result?.new_active_id&&result.new_active_id!==id){
-            await db.addMachineLog(result.new_active_id,result.old_machine||mach);
-            await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+            await promoteLog(result.new_active_id,result.old_machine||mach);
           }
           await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida a cola #"+newPosition,userLogin||user,willBeActive?C.live:C.ios);
           showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida a cola #"+newPosition);
@@ -16953,8 +16975,7 @@ export default function PrintFlow() {
           setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:backStage,current_machine:null,machine_queue_position:null,machine_log:ml,timeline:newTL}:x));
           // v10.26.0 — Si había siguiente en cola y ahora se promueve, abrir su log
           if(result?.new_active_id){
-            await db.addMachineLog(result.new_active_id,result.old_machine);
-            await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
+            await promoteLog(result.new_active_id,result.old_machine);
             setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:result.old_machine,started:now.toISOString()}]}:x));
           }
           // v10.73.82 — `silent`: cuando esto viene del botón "Deshacer" de un mis-drop, notificar es ruido puro.
@@ -17852,6 +17873,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         const cn=(cost==null||String(cost).trim()===""||isNaN(parseFloat(cost)))?null:parseFloat(cost);
         try{await db.endMaintenance(maintModal.record.id,cost,user);const m=await db.loadMaintenance();setMaintenance(m);setMaintModal(null)}
         catch(e){console.error("[endMaintenance] Error:",e);showToast("❌ No se pudo cerrar mantenimiento: "+(e?.message||"error desconocido"),"error");return}
+        // v10.73.82 (L4) — contraparte de promoteLog: si durante el paro se promovió una orden a activa (pos 0) en
+        //   ESTA máquina, quedó SIN log a propósito (no se contaban minutos de una prensa parada). Al repararla hay
+        //   que arrancarle el reloj, o esa corrida nunca cuenta (pos 0 no tiene botón "Activar" para rescatarla).
+        //   ordersRef, no el closure, para no leer un snapshot viejo. Idempotente: solo si le falta el log abierto.
+        try{const act=ordersRef.current.find(o=>o.current_machine===mach.id&&o.machine_queue_position===0);
+          if(act&&!(act.machine_log||[]).some(e=>!e.ended)){await db.addMachineLog(act.id,mach.id);await db.addTimeline(act.id,"⏯️ Reanudada al reparar la máquina","system",C.live)}}
+        catch(e){console.warn("[endMaintenance] resume warn:",e?.message)}
         try{const msg="✅ "+mach.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2}));if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
         catch(e){console.warn("[endMaintenance] notif warn:",e?.message)}
       }} onClose={()=>setMaintModal(null)}/>}
