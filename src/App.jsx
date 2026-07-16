@@ -14855,7 +14855,12 @@ export default function PrintFlow() {
   // v10.73.84 (scan #2 PLACAS-1) — set de órdenes que YA tienen placas registradas, para no re-abrir el PlateModal
   //   (y duplicar plate_log) cuando Germán saca una orden de CTP con el ⟳ y la vuelve a soltar. v82 (L7) hizo que el
   //   ⟳ dejara la orden en stage=ctp/current_machine=null, y el guard solo miraba !current_machine → re-INSERT.
-  const platedIds=useMemo(()=>new Set((plates||[]).map(p=>p.order_id)),[plates]);
+  // v10.73.84 (verificación P2) — FILTRAR placas anuladas (voided_at). Un RE-TRABAJO (returnToCtp/revertOrder→ctp)
+  //   ANULA las placas viejas a propósito porque la orden necesita placas NUEVAS, pero las filas anuladas siguen en
+  //   plate_log; sin este filtro, platedIds la seguía contando como "ya tiene placas" y el guard la montaba SIN
+  //   registrar las nuevas → resucitaba el P0 original para los re-trabajos (verificado: 4 órdenes en prod con placas
+  //   anuladas Y vivas prueban que el ciclo ocurre). El ⟳ "sacar de máquina" NO anula (placas vivas) → sigue suprimido.
+  const platedIds=useMemo(()=>new Set((plates||[]).filter(p=>!p.voided_at).map(p=>p.order_id)),[plates]);
   const [maintModal,setMaintModal]=useState(null); // {type:'start'|'end', machine, record?}
   const [chemKey,setChemKey]=useState(0); // forces ChemicalPanel remount on realtime
   const autoFixRef=useRef(new Set()); // guard against duplicate auto-fix
@@ -17548,7 +17553,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           se gatea en su retorno: si el montaje no ocurrió, la placa ya quedó registrada y se avisa claro que hay que
           re-arrastrar; el re-drop NO re-pedirá placas (PLACAS-1 la reconoce en platedIds) → cero duplicado. addPlate
           corre a lo sumo una vez. Si addPlate mismo falla, el catch no cierra el modal → reintentar es seguro (sin placa). */}
-      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
+      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);/* v10.73.84 (verificación P3) — setPlates OPTIMISTA cierra la ventana de carrera: `plates` solo se refresca por realtime (reload no recarga plates), así que sin esto un re-drop rápido tras un montaje fallido re-abría el modal y DUPLICABA plate_log. Con el optimista, platedIds tiene el oid de inmediato; el realtime luego reemplaza el array y el Set queda idempotente. */setPlates(p=>[...p,{order_id:plateModal.oid,voided_at:null}]);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
           v10.49.3 F1 FIX — capturar el target ANTES del await; si Karla cierra con ESC el state
           se vuelve null y abortamos los setters externos. Evita "InvoiceModal fantasma" abriendo
