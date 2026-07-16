@@ -10867,7 +10867,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   terminal. El de aquí era síncrono y el terminal lo pisaba ~1s después, así que el botón "Deshacer" moría antes
   //   de ser clicable; y encima mentía en verde ("Asignada a X") cuando el lock se tragaba el drop sin tocar la BD.
   //   Ver el comentario largo en assignMachine. `m` ya no se usa aquí: el toast terminal arma su propio label.
-  const assignNow=(o,mid,m,fromM)=>onDrop(o.id,mid,{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready")}});
+  //   v10.73.82 — el payload del undo va UNIFICADO: `silent` mata la notificación a 3 personas de un movimiento que
+  //   se anuló, y `backStage` devuelve la orden a la etapa de la que SALIÓ (el pool mezcla `ready` y `maquila_in`).
+  const assignNow=(o,mid,m,fromM)=>onDrop(o.id,mid,{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready",{silent:true,backStage:o.stage})}});
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
     assignNow(o,mid,m,o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null)};
 
@@ -14798,6 +14800,12 @@ export default function PrintFlow() {
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
   const assignMachineLock=useRef(false); // v10.64.1 — lock SÍNCRONO real para reentrada de assignMachine (actionLoading es async y se leía stale del closure)
+  // v10.73.82 (scan w1sw90ei4) — espejo SIEMPRE fresco de `orders`. El onClick del botón "Deshacer" se congela en el
+  //   render del drop y el toast lo guarda VERBATIM, así que al apretarlo corría con el `orders` PREVIO a la
+  //   asignación y tomaba decisiones sobre un mundo que ya no existía (ver los dos usos abajo). Ahora que L1 hace que
+  //   el toast aparezca DESPUÉS del setOrders optimista y DESPUÉS de que el lock se libere, este ref ya es la verdad
+  //   post-assign en el momento del clic. Mismo idioma que los locks de aquí arriba.
+  const ordersRef=useRef(orders); ordersRef.current=orders;
   const reorderLock=useRef(false); // v10.73.78 — misma lección para reorder_in_machine (critique #2): quedó fuera de la defensa que ya tenían assignMachine y duplicate
   const duplicateLock=useRef(false); // v10.73.25 — mismo patrón: lock síncrono anti doble-clic en Duplicar (evitaba 2 folios/2 órdenes)
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
@@ -16175,7 +16183,11 @@ export default function PrintFlow() {
     const stage=isManual?"packaging":isPreprensa?"ctp":"in_production";
     const label=isManual?"📦 Empaque":(mach?.name||mid);
     const stageColor=isManual?C.emp:isPreprensa?C.ctp:C.amb;
-    const o=orders.find(x=>x.id===oid);
+    // v10.73.82 — ordersRef, NO el closure: el "Deshacer" de un movimiento máquina→máquina re-entra aquí con el
+    //   snapshot PRE-drop, donde `o.current_machine` todavía decía la máquina A. Así `oldMachine===mid` salía cierto
+    //   y el undo aterrizaba DEGRADANDO a la activa de A en vez de anexarse al final. Con el ref, oldMachine ya es la
+    //   máquina B real → oldMachine!==mid → targetPos=currentQueue.length → se anexa y no toca a nadie.
+    const o=ordersRef.current.find(x=>x.id===oid);
     if(!o){assignMachineLock.current=false;return;}
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
@@ -16889,8 +16901,19 @@ export default function PrintFlow() {
     // timeline y machine_log son tablas separadas (order_timeline / order_machine_log),
     // por eso usamos db.addTimeline y db.closeMachineLog en vez de incluirlos en el UPDATE.
     if(action==="return_to_ready"){
-      const o=orders.find(x=>x.id===id);
+      // v10.73.82 (scan w1sw90ei4, CORROMPE DATOS) — ordersRef, NO el closure. El "Deshacer" del drop pool→máquina
+      //   re-entraba aquí con el snapshot PRE-asignación, donde machine_queue_position todavía era null → wasActive
+      //   salía false → closeMachineLog NUNCA corría → quedaba una fila ABIERTA en order_machine_log acumulando
+      //   minutos hasta que alguien reasignara esa orden (y ahí se cerraba capada a >1440min → minutes NULL +
+      //   minutes_invalid) o para siempre. Por el mismo stale, `result` quedaba null y tampoco se promovía a la
+      //   siguiente de la cola. Con el ref lee la verdad post-assign y las tres cosas ocurren bien.
+      const o=ordersRef.current.find(x=>x.id===id);
       if(!o){return}
+      // v10.73.82 — el pool "Órdenes Listas" contiene DOS etapas (`ready` y `maquila_in`) y esto hardcodeaba "ready":
+      //   deshacer el drop de una orden recibida de maquila la devolvía al pool convertida en orden nueva. Perdía su
+      //   badge, salía de los filtros de maquila, y el drop a Salidas pasaba de PERMITIDO a RECHAZADO, sin camino de
+      //   vuelta por UI. Whitelist SOLO de maquila_in; los otros 4 call sites no pasan payload → "ready" → igual que antes.
+      const backStage=payload?.backStage==="maquila_in"?"maquila_in":"ready";
       if(!canExecuteAction("return_to_ready",o,user,userLogin)){showToast(actionDeniedToast("return_to_ready",o,user,userLogin),"error");return}
       setActionLoading(id);
       (async()=>{
@@ -16902,25 +16925,31 @@ export default function PrintFlow() {
             ?await db.moveOrderInQueue(id,null,null,userLogin||user)
             :null;
           // Update stage en orders. v10.28.1 — siempre setear current_machine y machine_queue_position a null (defensa en profundidad si la RPC no lo hizo)
-          const {error:rtErr}=await supabase.from("orders").update({stage:"ready",current_machine:null,machine_queue_position:null}).eq("id",id);
+          const {error:rtErr}=await supabase.from("orders").update({stage:backStage,current_machine:null,machine_queue_position:null}).eq("id",id);
           if(rtErr)throw new Error(rtErr.message);
           // Cerrar machine_log si era activa
           if(wasActive)await db.closeMachineLog(id);
-          await db.addTimeline(id,"🔄 Devuelta a Lista (desde "+fromMachine+")",userLogin||user,C.ios,"ready");
+          await db.addTimeline(id,"🔄 Devuelta a Lista (desde "+fromMachine+")",userLogin||user,C.ios,backStage);
           // State local
           const now=new Date();
           // v10.64.3 — usar closeML (aplica el cap >1440min→null igual que el server) en vez del
           // loop manual, que dejaba minutos gigantes en un log estancado hasta el reload.
           const ml=closeML(o);
           const newTL=[...(o.timeline||[]),{action:"🔄 Devuelta a Lista (desde "+fromMachine+")",date:now.toISOString(),by:userLogin||user,color:C.ios}];
-          setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:"ready",current_machine:null,machine_queue_position:null,machine_log:ml,timeline:newTL}:x));
+          setOrders(prev=>prev.map(x=>x.id===id?{...x,stage:backStage,current_machine:null,machine_queue_position:null,machine_log:ml,timeline:newTL}:x));
           // v10.26.0 — Si había siguiente en cola y ahora se promueve, abrir su log
           if(result?.new_active_id){
             await db.addMachineLog(result.new_active_id,result.old_machine);
             await db.addTimeline(result.new_active_id,"⏯️ Auto-activada (cola promoción)","system",C.live);
             setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0,machine_log:[...(x.machine_log||[]),{machine:result.old_machine,started:now.toISOString()}]}:x));
           }
-          await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
+          // v10.73.82 — `silent`: cuando esto viene del botón "Deshacer" de un mis-drop, notificar es ruido puro.
+          //   notifySecs inserta hasta TRES filas (secretaria, admin y el vendedor creador): Gerardo soltaba mal una
+          //   card, apretaba Deshacer 2s después para que no hubiera pasado nada, y tres personas recibían aviso de
+          //   que la orden "se devolvió a Lista", un movimiento que para ellas nunca existió (estaba en Listas antes
+          //   y está en Listas después). Antes de v79 el modal atajaba el mis-drop y no llegaba ninguna.
+          //   El TIMELINE sí se conserva a propósito: el assign ocurrió y luego se anuló, y eso es rastro legítimo.
+          if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
           showToast("🔄 Devuelta a Lista");
         }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
         finally{setActionLoading(null)}
