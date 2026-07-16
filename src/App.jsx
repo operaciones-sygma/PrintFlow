@@ -2217,6 +2217,10 @@ function Toast({message,type="success",onDone,action=null}) {
   },[type, isSecurityLock, action]);
   const bg={success:C.ok,error:C.dn,warning:C.wn,info:C.ios}[type]||C.ok;
   const icon={success:"✅",error:"❌",warning:"⚠️",info:"ℹ️"}[type]||"✅";
+  // v10.73.83 (scan #2 wcz865ydu) — el onClick del botón hace cb.current() (=setToast null) ANTES de action.onClick(),
+  //   NO al revés. Si el undo choca con un lock en vuelo, su handler emite un showToast(error) SÍNCRONO; si el descarte
+  //   corriera después, React 18 batchea ambos y gana el null → el aviso "lock ocupado" nunca se pinta y el Deshacer
+  //   queda MUDO (el rechazo mudo que este arco presume de erradicar). Con este orden el error gana. NO invertir.
   return <div style={{
     position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
     background:bg,color:"#fff",
@@ -2231,7 +2235,7 @@ function Toast({message,type="success",onDone,action=null}) {
     wordBreak:"break-word",
     lineHeight:1.45,
     textAlign: isSecurityLock ? "left" : "center",
-  }}>{icon} {message}{action&&<button onClick={()=>{action.onClick();cb.current()}} style={{marginLeft:6,background:"rgba(255,255,255,.22)",color:"#fff",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0,whiteSpace:"nowrap"}}>{action.label}</button>}</div>;
+  }}>{icon} {message}{action&&<button onClick={()=>{cb.current();action.onClick()}} style={{marginLeft:6,background:"rgba(255,255,255,.22)",color:"#fff",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0,whiteSpace:"nowrap"}}>{action.label}</button>}</div>;
 }
 
 // ─── ESC CLOSE HOOK ───────────────────────────────
@@ -14844,8 +14848,12 @@ export default function PrintFlow() {
   //   el toast aparezca DESPUÉS del setOrders optimista y DESPUÉS de que el lock se libere, este ref ya es la verdad
   //   post-assign en el momento del clic. Mismo idioma que los locks de aquí arriba.
   const ordersRef=useRef(orders); ordersRef.current=orders;
-  const reorderLock=useRef(false); // v10.73.78 — misma lección para reorder_in_m
-  const returnLock=useRef(false); // v10.73.82 (scan w1sw90ei4) — return_to_ready nunca tuvo lock; PreprensaBoard tampoco recibe actionLoading → doble-clic sin protección por ambos ladosachine (critique #2): quedó fuera de la defensa que ya tenían assignMachine y duplicate
+  const reorderLock=useRef(false); // v10.73.78 — misma lección para reorder_in_machine (critique #2): quedó fuera de la defensa que ya tenían assignMachine y duplicate
+  // v10.73.83 (scan #2) — Set por-ORDEN, no booleano global. Como global serializaba los returns de órdenes DISTINTAS
+  //   (sacar A bloqueaba el ⟳/Deshacer de B ~1-1.5s), el mismo pecado que reorderLock. Se puede llavear por orden sin
+  //   riesgo porque este handler lee ordersRef.current (siempre fresco) y su camino feliz NO llama reload (a diferencia
+  //   de reorder, que se dejó global A PROPÓSITO porque su guard lee `orders` del closure hasta que aterriza el reload).
+  const returnLock=useRef(new Set());
   const duplicateLock=useRef(false); // v10.73.25 — mismo patrón: lock síncrono anti doble-clic en Duplicar (evitaba 2 folios/2 órdenes)
   const [orderFilter,setOrderFilter]=useState(null); // "mine"|"all" — set on login
   // v10.73.82 (scan w1sw90ei4) — identidad monotónica por toast. El <Toast> no tenía key y su timer no dependía del
@@ -16224,6 +16232,11 @@ export default function PrintFlow() {
     assignMachineLock.current=true;
     const isManual=mid==="vm_manual";
     const mach=MACHINES.find(x=>x.id===mid);
+    // v10.73.83 (scan #2, undo-redrop) — guard de mantenimiento DENTRO del handler compartido. El "Deshacer" de un
+    //   movimiento máquina→máquina llama assignMachine DIRECTO (onDrop(o.id,fromM.id)), saltándose el guard activeMaint
+    //   que vive en drop()/quickAssign: reabría una corrida en la prensa muerta. Aquí lo cubre para TODOS los callers.
+    //   machineDown solo contiene offset/acabados/digital → nunca rechaza CTP (preprensa) ni Empaque (vm_manual).
+    if(machineDown(mid)){assignMachineLock.current=false;showToast((mach?.name||"Esa máquina")+" está fuera de servicio. Muévela a otra máquina.","error");return}
     const isPreprensa=mach?.type==="preprensa";
     const stage=isManual?"packaging":isPreprensa?"ctp":"in_production";
     const label=isManual?"📦 Empaque":(mach?.name||mid);
@@ -16296,7 +16309,9 @@ export default function PrintFlow() {
         await promoteLog(result.new_active_id,result.old_machine);
         setOrders(p=>p.map(x=>x.id===result.new_active_id?{...x,machine_queue_position:0}:x));
       }
-      showToast(willBeActive?"🏭 "+label:"⏳ En cola #"+targetPos+" · "+label,"success",undo);
+      /* v10.73.83 (scan #2) — el toast anunciaba willBeActive/targetPos (PRE-clamp), mientras el timeline, la bitácora
+         y el estado local ya usan finallyActive/finalPos (el resultado real de la RPC). Se alinea con lo que de verdad pasó. */
+      showToast(finallyActive?"🏭 "+label:"⏳ En cola #"+finalPos+" · "+label,"success",undo);
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload()}
     finally{setActionLoading(null);assignMachineLock.current=false}
   },[user,userLogin,orders,showToast,reload]);
@@ -16311,8 +16326,14 @@ export default function PrintFlow() {
     if(wasInQueue){
       queueResult=await db.moveOrderInQueue(oid,null,null,user||"sistema");
     }
-    const {error:smErr}=await supabase.from("orders").update({stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null,machine_queue_position:null}).eq("id",oid);
+    // v10.73.83 (scan #2, BUG-2) — COMPARE-AND-SWAP sobre el stage de origen. v82 le abrió a producción el permiso
+    //   send_maquila, así que Gerardo puede tener el MaqModal abierto tecleando proveedor mientras el admin avanza esa
+    //   orden a Salidas en otra sesión. Sin el `.eq("stage",orig.stage)`, el UPDATE macheaba y la mandaba a maquila
+    //   externa con proveedor, sacándola de las pantallas de Karla sin rastro del stage real. El early-return va ANTES
+    //   de closeMachineLog/addTimeline/notifySecs/promoteLog, y el reload revierte el setOrders optimista de arriba.
+    const {data:smRows,error:smErr}=await supabase.from("orders").update({stage:"maquila_out",maquila_provider:prov,maquila_phone:phone||null,maquila_email:email||null,current_machine:null,machine_queue_position:null}).eq("id",oid).eq("stage",orig?.stage).select("id");
     if(smErr)throw new Error(smErr.message);
+    if(!smRows||smRows.length===0){showToast("⚠️ La orden cambió de etapa en otra sesión; no se envió a maquila.","warning");reload();return}
     await db.closeMachineLog(oid);
     await db.addTimeline(oid,"🚚 "+prov,user,C.maq,"maquila_out");
     await db.addComment(oid,"🚚 "+prov+(phone?" | 📱"+phone:"")+(email?" | 📧"+email:"")+(note?" — "+note:""),"sistema");
@@ -16949,10 +16970,16 @@ export default function PrintFlow() {
       //   siguiente de la cola. Con el ref lee la verdad post-assign y las tres cosas ocurren bien.
       const o=ordersRef.current.find(x=>x.id===id);
       if(!o){return}
+      // v10.73.83 (scan #2, ruta A de BUG-1) — el botón "Deshacer" vive 6.5s y sobrevive al reload, así que sigue
+      //   clicable después de que otro actor (o el bridge) avance la orden a Empaque/Salidas en esa ventana. Una orden
+      //   ya avanzada tiene current_machine=null: si no está en máquina, este handler no tiene nada que "sacar", y sin
+      //   este guard el UPDATE la arrancaría de Salidas de vuelta al pool. Va ANTES del lock (aún no se tomó).
+      if(!o.current_machine){showToast("⚠️ La orden ya avanzó de etapa; recarga el tablero.","error");return}
       // v10.73.82 — el pool "Órdenes Listas" contiene DOS etapas (`ready` y `maquila_in`) y esto hardcodeaba "ready":
       //   deshacer el drop de una orden recibida de maquila la devolvía al pool convertida en orden nueva. Perdía su
       //   badge, salía de los filtros de maquila, y el drop a Salidas pasaba de PERMITIDO a RECHAZADO, sin camino de
-      //   vuelta por UI. Whitelist SOLO de maquila_in; los otros 4 call sites no pasan payload → "ready" → igual que antes.
+      //   vuelta por UI. El undo del Kanban manda payload (ready/maquila_in) y precede; los ⟳ de PreprensaBoard NO
+      //   pasan payload y operan sobre stage=ctp → backStage="ctp" (se quedan en CTP); el resto → "ready".
       // v10.73.82 (L7, CORROMPE DATOS) — PreprensaBoard (board de Germán) reusa este handler, pero una orden de CTP
       //   tiene stage="ctp", y hardcodear "ready" la saltaba DOS etapas HACIA ADELANTE (ctp→placas_listas→ready): la
       //   orden desaparecía del board de Germán y aterrizaba en el pool de Gerardo como si tuviera placas hechas. La
@@ -16965,7 +16992,7 @@ export default function PrintFlow() {
       //   en el Kanban, y PreprensaBoard no recibe `actionLoading` en ninguno de sus 2 call sites → sus botones ⟳
       //   quedaban crudos. La raíz es que este handler nunca tuvo lock (a diferencia de reorder_in_machine): doble
       //   clic = doble moveOrderInQueue/closeMachineLog. El lock lo cubre en las DOS superficies, no solo la UI.
-      if(returnLock.current){showToast("⏳ Todavía estoy sacando la orden anterior. Espera 1-2s e inténtalo de nuevo.","error");return} returnLock.current=true;
+      if(returnLock.current.has(id)){showToast("⏳ Esa orden ya se está sacando. Espera 1-2s e inténtalo de nuevo.","error");return} returnLock.current.add(id);
       setActionLoading(id);
       (async()=>{
         try{
@@ -16976,8 +17003,13 @@ export default function PrintFlow() {
             ?await db.moveOrderInQueue(id,null,null,userLogin||user)
             :null;
           // Update stage en orders. v10.28.1 — siempre setear current_machine y machine_queue_position a null (defensa en profundidad si la RPC no lo hizo)
-          const {error:rtErr}=await supabase.from("orders").update({stage:backStage,current_machine:null,machine_queue_position:null}).eq("id",id);
+          // v10.73.83 (scan #2, ruta B de BUG-1) — COMPARE-AND-SWAP sobre el stage, espejo de doAdv. Si entre que este
+          //   handler leyó ordersRef y ejecuta el UPDATE, otra sesión avanzó la orden, `.eq("stage",o.stage)` machea 0
+          //   filas y abortamos, en vez de pisar 'salidas'→'ready' a ciegas. Cubre la carrera de 2 sesiones que el guard
+          //   de current_machine de arriba no ve (el ref pudo estar fresco al entrar y quedar rancio en el await).
+          const {data:rtRows,error:rtErr}=await supabase.from("orders").update({stage:backStage,current_machine:null,machine_queue_position:null}).eq("id",id).eq("stage",o.stage).select("id");
           if(rtErr)throw new Error(rtErr.message);
+          if(!rtRows||rtRows.length===0)throw new Error("La orden cambió de etapa en otra sesión. Recarga el tablero.");
           // Cerrar machine_log si era activa
           if(wasActive)await db.closeMachineLog(id);
           await db.addTimeline(id,tlMsg,userLogin||user,C.ios,backStage);
@@ -17002,7 +17034,7 @@ export default function PrintFlow() {
           if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+" devuelta a Lista por "+userDisplayName(user),null,user,o.created_by);
           showToast(backStage==="ctp"?"🔄 Sacada de la máquina":"🔄 Devuelta a Lista");
         }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
-        finally{returnLock.current=false;setActionLoading(null)}
+        finally{returnLock.current.delete(id);setActionLoading(null)}
       })();
     }
     if(action==="delete")deleteOrder(id);
