@@ -1307,6 +1307,16 @@ const db = {
     const {error}=await supabase.from("maintenance_log").insert({ machine_id: machineId, notes, started_by: byUser, started_by_uid: AUTH_UID });
     if(error)throw new Error("startMaintenance: "+error.message);
   },
+  // v10.73.84 (scan #1 L5) — captura DIFERIDA del costo: solo actualiza `cost`, NO re-estampa ended_at (a diferencia de
+  //   endMaintenance), para no corromper el downtime ni mover la fila de semana en el filtro del reporte. Es el lector
+  //   que le faltaba a la "cola de captura diferida" que v81 prometió en su comentario pero nunca construyó.
+  async setMaintenanceCost(id, cost) {
+    const parsed=(cost==null||String(cost).trim()==="")?null:parseFloat(cost);
+    if(parsed==null||isNaN(parsed)||parsed<0)throw new Error("Ingresa un costo válido (0 o mayor).");
+    const {data,error}=await supabase.from("maintenance_log").update({cost:parsed}).eq("id",id).is("cost",null).select("id");
+    if(error)throw new Error("setMaintenanceCost: "+error.message);
+    if(!data||data.length===0)throw new Error("Ese costo ya se capturó. Refresca.");
+  },
   async endMaintenance(id, cost, byUser) {
     // v10.73.81 — `parseFloat(cost)||0` escribía 0 cuando el costo venía vacío, y 0 NO es "no sé": es "salió
     // gratis". Ahora que el costo es opcional (ver EndMaintenanceModal), esa colisión haría inconstruible la cola
@@ -5250,6 +5260,22 @@ function EndMaintenanceModal({machine,record,onConfirm,onClose}) {
     </div>
   </div>;
 }
+// v10.73.84 (scan #1 L5) — fila de captura DIFERIDA del costo de un mantenimiento ya cerrado sin costo (la factura del
+//   técnico llega días después). Es el lector que le faltaba a la cola que v81 prometió. Solo actualiza el costo.
+function MaintCostRow({rec,onSave}){
+  const [cost,setCost]=useState("");
+  const [busy,setBusy]=useState(false);
+  const mach=MACHINES.find(m=>m.id===rec.machine_id);
+  const save=async()=>{if(busy)return;setBusy(true);try{await onSave(rec.id,cost)}finally{setBusy(false)}};
+  return <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:F.label,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mach?.name||rec.machine_id}</div>
+      <div style={{fontSize:F.micro,color:C.t2}}>Reparada {fD(rec.ended_at)}{rec.notes?" · "+rec.notes:""}</div>
+    </div>
+    <input type="number" step=".01" min="0" value={cost} onChange={e=>setCost(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")save()}} placeholder="$ costo" style={{...inp,width:110,flexShrink:0}}/>
+    <button disabled={busy} onClick={save} style={{...bs(C.ok),flexShrink:0,...(busy?{opacity:.6,cursor:"wait"}:{})}}>{busy?"…":"Guardar"}</button>
+  </div>;
+}
 
 // ─── PLATE MODAL (forced on CTP drop) ─────────────
 function PlateModal({order,machine,onConfirm,onClose}) {
@@ -8635,9 +8661,13 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const plChicas=weekPlates.filter(p=>p.plate_size==="chica").reduce((s,p)=>s+(p.quantity||0),0);
   const plGrandes=weekPlates.filter(p=>p.plate_size==="grande").reduce((s,p)=>s+(p.quantity||0),0);
 
-  // Weekly maintenance
+  // Weekly maintenance — v10.73.84 (scan #1 L5) — sumar solo lo CONOCIDO, no imputar $0 a los cierres sin costo.
+  //   v81 escribe NULL cuando el costo se deja vacío ("aún no llega la factura"), pero este reduce hacía
+  //   `parseFloat(null)||0` = 0, subreportando el gasto real de la semana. Ahora se separa lo capturado de lo pendiente.
   const weekMaint=maintenance.filter(m=>m.ended_at&&new Date(m.ended_at)>=wa);
-  const maintCost=weekMaint.reduce((s,m)=>s+(parseFloat(m.cost)||0),0);
+  const maintKnown=weekMaint.filter(m=>m.cost!=null&&!isNaN(parseFloat(m.cost)));
+  const maintPend=weekMaint.length-maintKnown.length;
+  const maintCost=maintKnown.reduce((s,m)=>s+parseFloat(m.cost),0);
 
   return <div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:14}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -8662,7 +8692,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
         <St l="Reforzador" v={refLt+"L"} c={C.ctp}/>
         <St l="Placas ch." v={plChicas} c={"#6366f1"}/>
         <St l="Placas gr." v={plGrandes} c={"#6366f1"}/>
-        <St l="Mant. costo" v={fmt(maintCost)} c={maintCost>0?C.wn:C.ok}/>
+        <St l={"Mant. costo"+(maintPend>0?" ("+maintPend+" s/costo)":"")} v={fmt(maintCost)} c={maintPend>0?C.dn:maintCost>0?C.wn:C.ok}/>
       </div>
 
       {/* Top clients */}
@@ -17526,6 +17556,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               (correcto, ya no están con el proveedor), pero eso las dejó invisibles en el board de admin/producción, sin
               grid de folios propio (ese solo existe para Karla). Aquí van, informativas (Karla asigna el folio), null si no hay. */}
           {(()=>{const recv=viewOrders.filter(o=>o.stage==="maq_received");if(!recv.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.maq,display:"flex",alignItems:"center",gap:6}}><TruckIcon size={15} weight="bold"/>Recibidas de maquila · pendientes de folio ({recv.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Regresaron del proveedor. Karla les asigna folio; aquí solo para tu visibilidad.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{recv.map(o=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"pointer",boxShadow:C.sh2,border:"1.5px solid "+C.maq+"55",...hlOf(search?searchFilter:null,o)}}><div style={{fontSize:F.label,fontWeight:700}}>{o.client}</div><div style={{fontSize:F.meta,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:F.micro,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:F.micro,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}</div>)}</div></div>})()}
+          {/* v10.73.84 (scan #1 L5) — cola de captura DIFERIDA del costo de mantenimiento. v81 hizo el costo opcional
+              ("aún no llega la factura") con la promesa en el código de una cola del admin, pero esa cola nunca tuvo
+              lector. Aquí está: los cierres sin costo, con input inline. setMaintenanceCost solo toca `cost`. */}
+          {user==="admin"&&(()=>{const pend=maintenance.filter(m=>m.ended_at&&m.cost==null).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));if(!pend.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.wn,display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={15} weight="bold"/>Costos de mantenimiento pendientes ({pend.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Reparaciones cerradas sin costo. Captúralo cuando llegue la factura del técnico; el reporte semanal lo excluye hasta entonces.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:8}}>{pend.map(rec=><MaintCostRow key={rec.id} rec={rec} onSave={async(id,cost)=>{try{await db.setMaintenanceCost(id,cost);const m=await db.loadMaintenance();setMaintenance(m);showToast("✅ Costo capturado","success")}catch(e){console.error("[setMaintenanceCost] Error:",e);showToast("❌ "+(e?.message||"No se pudo guardar el costo"),"error")}}}/>)}</div></div>})()}
           {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
