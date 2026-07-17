@@ -10775,6 +10775,12 @@ function Pipeline({orders,role,onAction}) {
 //   scroll interno para reordenar en cola larga; la ventana solo desplaza cuando la cola ya tocó su límite. El React
 //   synthetic del wrapper corre ANTES que el listener nativo en document (burbujeo), así que la marca ya está puesta.
 let qAutoScrollClaim=0;
+// v10.73.84 (scan #2 RETURN-2) — recuerda qué órdenes venían de maquila_in (maquila parcial devuelta) al montarse en
+//   máquina, para que el ⟳ "sacar de la máquina" DIRECTO las restaure a maquila_in y no las degrade a "ready"
+//   (perdiendo el badge maqin y el drop directo a Salidas). El Deshacer del Kanban ya lo cubre por payload; esto cubre
+//   el botón directo. Set efímero (sin migración): en el peor caso una recarga entre montar y sacar lo pierde → cae a
+//   "ready", que es el comportamiento viejo, no una regresión.
+const preMountMaquilaIn=new Set();
 // v10.73.69 — miniatura de la imagen de referencia en las tarjetas del Tablero (más visual para reconocer el trabajo
 //   de un vistazo). Se renderiza SOLO si la orden tiene imagen (image_url/image_url_2/image) → los formularios sin foto
 //   quedan compactos, sin placeholder. Estado propio de fallo: si la img 404ea se oculta (no rompe la tarjeta).
@@ -10866,10 +10872,21 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   BOOLEANOS: no re-corren en los batches de realtime que no cambian la coincidencia, y sí cuando la coincidencia
   //   entra a Salidas/Digital. Dos efectos separados a propósito: con uno solo, un flip de `hasDig` reabriría una
   //   Salidas que Gerardo acababa de cerrar a mano. Cerrar a mano no altera los booleanos → se queda cerrada.
+  //   v10.73.84 (scan #1 L10): (1) generalizado a las 3 CATEGORÍAS (no solo digital): Gerardo puede colapsar offset o
+  //   acabados a mano, y una coincidencia ahí también debe reabrir. (2) deps SOLO booleanas (sin searchText): con
+  //   searchText el efecto re-corría en CADA TECLA y reabría una sección que Gerardo acababa de cerrar; el booleano
+  //   solo cambia cuando la coincidencia entra/sale, no por tecla, y conserva la propiedad de no re-correr en batches
+  //   de realtime (por eso se metió el booleano en v81). TRADE-OFF ACEPTADO (bug menor, no arreglado a propósito): al
+  //   limpiar la búsqueda la sección auto-abierta NO se repliega sola (el fix correcto exige rastrear autoría con un
+  //   ref, no vale la complejidad para un P3). El outline recortado dentro de scrollers (scroll-to-match) queda como
+  //   backlog M (arriesgado por el landmine de qAutoScrollClaim).
   const hasSalMatch=match?inSalidas.some(match):false;
-  const hasDigMatch=match?inProd.some(o=>{const mm=MACHINES.find(x=>x.id===o.current_machine);return mm&&mm.type==="digital"&&match(o)}):false;
-  useEffect(()=>{if(hasSalMatch)setCollapsed(p=>p.salidas?{...p,salidas:false}:p)},[searchText,hasSalMatch]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>{if(hasDigMatch)setCollapsed(p=>p.digital?{...p,digital:false}:p)},[searchText,hasDigMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasTypeMatch=t=>match?inProd.some(o=>{const mm=MACHINES.find(x=>x.id===o.current_machine);return mm&&mm.type===t&&match(o)}):false;
+  const hasOffMatch=hasTypeMatch("offset"),hasAcaMatch=hasTypeMatch("acabados"),hasDigMatch=hasTypeMatch("digital");
+  useEffect(()=>{if(hasSalMatch)setCollapsed(p=>p.salidas?{...p,salidas:false}:p)},[hasSalMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(hasOffMatch)setCollapsed(p=>p.offset?{...p,offset:false}:p)},[hasOffMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(hasAcaMatch)setCollapsed(p=>p.acabados?{...p,acabados:false}:p)},[hasAcaMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(hasDigMatch)setCollapsed(p=>p.digital?{...p,digital:false}:p)},[hasDigMatch]); // eslint-disable-line react-hooks/exhaustive-deps
   // v10.73.79 — dropConfirm (state + Escape) eliminado con el modal de asignación. Ver la nota del rediseño abajo.
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
   useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;/* v10.73.68 — cede si la cola interna está auto-scrolleando (evita el doble-scroll) */if(dir&&qAutoScrollClaim&&Date.now()-qAutoScrollClaim<150)dir=0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
@@ -10944,6 +10961,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   Ver el comentario largo en assignMachine. `m` ya no se usa aquí: el toast terminal arma su propio label.
   //   v10.73.82 — el payload del undo va UNIFICADO: `silent` mata la notificación a 3 personas de un movimiento que
   //   se anuló, y `backStage` devuelve la orden a la etapa de la que SALIÓ (el pool mezcla `ready` y `maquila_in`).
+  //   LIMITACIÓN CONOCIDA (scan #2 undo-mov-no-inverso, DIFERIDO): el undo de un movimiento máquina→máquina (fromM) es
+  //   un forward-assign, no un inverso real. Si se arrastró la ACTIVA de una prensa cargada, el Deshacer la re-anexa al
+  //   FINAL de la cola de origen (no a pos 0) y no cierra el log de la que se auto-promovió mientras tanto. Fix correcto
+  //   = pasar target-pos explícito + cerrar el log de la promovida, lo que exige refactorizar assignMachine (compartido
+  //   por los 3 boards, alto riesgo) para un P3 de escenario raro. No vale el riesgo/valor hoy.
   const assignNow=(o,mid,m,fromM)=>onDrop(o.id,mid,{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready",{silent:true,backStage:o.stage})}});
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
     assignNow(o,mid,m,o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null)};
@@ -14628,12 +14650,12 @@ function CreateOCModal({onCreate, onClose, showToast}){
 // acciones de 1 click. Agrupada POR PERSONA (decisión de Marcelo: "ir con ella
 // directamente"), crónicas arriba, sanas visibles por persona, y 🔕 En espera
 // para falsos positivos (ej. esperando autorización del cliente).
-function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth,dayTick}){
+function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth,dayTick,maintKey}){
   const [openHealthy,setOpenHealthy]=useState({});
   const [showSnoozed,setShowSnoozed]=useState(true);
   const isActive=o=>{const s=String(o.stage||"");return !o.cancelled_at&&!s.includes("cancelled")&&!s.includes("delivered")&&s!=="stocked"&&!["web_pending","web_rejected"].includes(s)};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders,dayTick]);
+  const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders,dayTick,maintKey]);// v10.73.84 (memos-invisible) — maintKey en deps: la Torre recomputa al caer/reparar una máquina
   const blocked=rows.filter(r=>r.diag&&!r.diag.snoozed);
   const snoozedRows=rows.filter(r=>snoozeActive(r.o));
   const healthy=rows.filter(r=>!r.diag&&!snoozeActive(r.o));
@@ -14872,7 +14894,13 @@ export default function PrintFlow() {
   // v10.73.82 (L4) — mantiene fresco el espejo module-level que consultan getStale/diagnoseOrder/promoteLog. Corre
   //   en cada cambio de `maintenance` (carga inicial, realtime, reload, modales), así que el gate de "máquina muerta"
   //   nunca opera con datos viejos, sin acoplar esas funciones puras al ciclo de vida de React.
-  useEffect(()=>{MAINT_DOWN=new Set((maintenance||[]).filter(m=>!m.ended_at).map(m=>m.machine_id))},[maintenance]);
+  // v10.73.84 (scan #2 memos-invisible) — sincronizar el espejo MAINT_DOWN EN RENDER (useMemo), no en un useEffect
+  //   post-commit. Antes, getStale/diagnoseOrder (que leen MAINT_DOWN) veían el Set VIEJO por un render tras caer/reparar
+  //   una máquina, y los memos de la Torre (rows, torreCount) ni siquiera recomputaban (no dependían de maintenance).
+  //   El useMemo corre en orden de declaración ANTES de torreCount, y `maintKey` (una llave estable derivada) se
+  //   threadea a los deps de los memos para que recomputen. El side-effect en render es idempotente (mismo maintenance
+  //   → mismo Set), seguro bajo StrictMode.
+  const maintKey=useMemo(()=>{MAINT_DOWN=new Set((maintenance||[]).filter(m=>!m.ended_at).map(m=>m.machine_id));return[...MAINT_DOWN].sort().join(",")},[maintenance]);
   const [chemicals,setChemicals]=useState([]);
   const [plates,setPlates]=useState([]);
   // v10.73.84 (scan #2 PLACAS-1) — set de órdenes que YA tienen placas registradas, para no re-abrir el PlateModal
@@ -15817,7 +15845,7 @@ export default function PrintFlow() {
     if(!user)landedTorreRef.current=false;
   },[user]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick]);
+  const torreCount=useMemo(()=>user==="admin"?orders.reduce((n,o)=>{const dg=diagnoseOrder(o);return n+(dg&&!dg.snoozed?1:0)},0):0,[user,orders,dayTick,maintKey]);// v10.73.84 (memos-invisible) — maintKey en deps: recomputa al caer/reparar una máquina
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     // 🔒 v10.64.0 — NO re-agregar "production_number": el folio es inmutable (corte híbrido).
@@ -16303,6 +16331,8 @@ export default function PrintFlow() {
     //   máquina B real → oldMachine!==mid → targetPos=currentQueue.length → se anexa y no toca a nadie.
     const o=ordersRef.current.find(x=>x.id===oid);
     if(!o){assignMachineLock.current=false;return false;}
+    // v10.73.84 (RETURN-2) — recordar el origen maquila_in antes de que el montaje sobrescriba el stage a in_production.
+    if(o.stage==="maquila_in")preMountMaquilaIn.add(oid);else preMountMaquilaIn.delete(oid);
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
     // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
@@ -16748,7 +16778,7 @@ export default function PrintFlow() {
   },[user,userLogin,orders]);
 
   const handleAction=useCallback((id,action,payload)=>{
-    if(action==="goto_espera"){setView("espera");return} // v10.73.31 — chip "N en espera" del tablero → vista dedicada
+    if(action==="goto_espera"){setSearch("");setView("espera");return} // v10.73.31 — chip "N en espera" del tablero → vista dedicada. v10.73.84 (L10 chip-espera): limpiar la búsqueda al navegar; el chip contaba SIN buscador pero aterrizaba en una vista que SÍ filtra por búsqueda → desincronización. Se preserva la búsqueda DENTRO de la vista En espera (feature deliberada).
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
@@ -17044,7 +17074,11 @@ export default function PrintFlow() {
       //   orden desaparecía del board de Germán y aterrizaba en el pool de Gerardo como si tuviera placas hechas. La
       //   semántica correcta ahí es QUEDARSE en ctp y solo soltar la máquina, para que reaparezca en readyCtp. El undo
       //   del Kanban sigue mandando su payload (maquila_in/ready) y precede; solo si no hay payload se mira el stage.
-      const backStage=payload?.backStage==="maquila_in"?"maquila_in":(o.stage==="ctp"?"ctp":"ready");
+      // v10.73.84 (RETURN-2) — el ⟳ directo (sin payload) de una orden que venía de maquila_in la restaura a maquila_in
+      //   en vez de degradarla a "ready" (que le perdía el badge y el drop a Salidas). Se consulta el Set efímero y se
+      //   limpia al sacarla. Precedencia: payload (Deshacer) > ctp (Germán) > pre-mount maquila_in > ready.
+      const backStage=payload?.backStage==="maquila_in"?"maquila_in":(o.stage==="ctp"?"ctp":(preMountMaquilaIn.has(id)?"maquila_in":"ready"));
+      preMountMaquilaIn.delete(id);
       const tlMsg=backStage==="ctp"?"🔄 Sacada de la máquina (desde "+(o.current_machine||"máquina")+")":"🔄 Devuelta a Lista (desde "+(o.current_machine||"máquina")+")";
       if(!canExecuteAction("return_to_ready",o,user,userLogin)){showToast(actionDeniedToast("return_to_ready",o,user,userLogin),"error");return}
       // v10.73.82 (L7, CORROMPE DATOS) — lock síncrono real. v78 tapó el doble-clic con `disabled={actionLoading}` SOLO
@@ -17535,7 +17569,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
-        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick}/>}
+        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
