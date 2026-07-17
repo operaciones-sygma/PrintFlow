@@ -16,8 +16,10 @@
 /* ─── v10.73.77 (/impeccable polish) — feedback de agarre al arrastrar ───
    Las tarjetas del Tablero declaran cursor:grab en su estilo inline, pero un estilo inline
    NO puede expresar :active, así que al agarrar una orden el cursor nunca cambiaba. Regla
-   global: cualquier elemento arrastrable muestra "grabbing" mientras se sostiene. */
-[draggable="true"]:active { cursor: grabbing; }
+   global: cualquier elemento arrastrable muestra "grabbing" mientras se sostiene.
+   v10.73.84 (scan #1 L14): necesita !important porque el `style` inline (cursor:grab) le
+   gana a cualquier regla de hoja normal — sin esto la regla no aplicaba nunca. */
+[draggable="true"]:active { cursor: grabbing !important; }
 
 /* ─── Theme override: registrar fonts como utilities de Tailwind ─── */
 @theme {

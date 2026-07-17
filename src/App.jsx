@@ -910,7 +910,13 @@ const fDT=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.
 const parseDate=d=>{if(!d)return null;const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s)};
 // v10.64.3 — "vencida" = pasó el FIN del día de entrega (no el mediodía que da parseDate). Una
 // orden que entrega HOY no está vencida hasta que el día termina. Consistente con el chip Retrasos.
-const isOverdue=d=>{if(!d)return false;const due=new Date(String(d).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()};
+// v10.73.84 (scan #1 L13 duets-fecha-absurda) — guard de rango plausible compartido. Prod tiene due_date corruptas
+//   ("0026-06-01", "20226-07-10"): sin esto, dueTs las parsea a un timestamp válido pero absurdo y prioSort las pone
+//   al TOPE de la cola (año 26 = hace 2000 años = "vencidísima"), e isOverdue las marca vencidas. Fuera de rango =
+//   tratar como SIN fecha, no como lo más urgente del taller.
+const DUE_MIN=Date.parse("2015-01-01"),DUE_MAX=Date.parse("2100-01-01");
+const duePlausible=v=>!isNaN(v)&&v>=DUE_MIN&&v<=DUE_MAX;
+const isOverdue=d=>{if(!d)return false;const due=new Date(String(d).slice(0,10)+"T23:59:59");const t=due.getTime();return duePlausible(t)&&due<new Date()};
 const pct=(c,p)=>p>0?Math.round(((p-c)/p)*100):0;
 const fmtM=m=>{if(!m&&m!==0)return "—";const h=Math.floor(m/60);return h>0?h+"h "+(m%60)+"m":m+"m"};
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
@@ -1923,8 +1929,13 @@ const recProof=o=>(o.paper_type||"").toLowerCase().includes("couch");
 //   prioridad, desempata por FECHA DE ENTREGA asc → las vencidas al tope (fecha menor) y las SIN fecha al final.
 //   Determinista. Decisión de Marcelo: GLOBAL — lo comparten 7 pantallas (Tablero, board de Germán, Mis Pendientes,
 //   board de Karla, Todas, Dashboard, OC). dueTs blinda due_date nulo/inválido (un NaN rompería el comparador).
-const dueTs=o=>{if(!o||!o.due_date)return Infinity;const v=Date.parse(o.due_date);return isNaN(v)?Infinity:v};
+const dueTs=o=>{if(!o||!o.due_date)return Infinity;const v=Date.parse(String(o.due_date).slice(0,10));return duePlausible(v)?v:Infinity};// v10.73.84 (L13) — fecha implausible = SIN fecha (Infinity), no lo más urgente
 const prioSort=(a,b)=>{const p={urgente:0,normal:1,baja:2};const d=(p[a.priority]??1)-(p[b.priority]??1);if(d)return d;const at=dueTs(a),bt=dueTs(b);return at===bt?0:at-bt};
+// v10.73.84 (scan #1 L13 priosort-todas) — comparador para la vista "Todas", que NO filtra a trabajo vivo. Con prioSort
+//   (desempate por due_date ASC) esa vista abría con 20/20 órdenes ENTREGADAS de mayo al tope (las más "vencidas"). El
+//   desempate por created_at DESC (más reciente primero) que ANTES era accidental (por el orden de carga + sort
+//   estable) ahora es explícito. Las 6 pantallas que sí filtran a trabajo vivo conservan prioSort a propósito.
+const prioSortRecent=(a,b)=>{const p={urgente:0,normal:1,baja:2};const d=(p[a.priority]??1)-(p[b.priority]??1);if(d)return d;return (Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0)};
 const WAIT_STAGES=["maquila_out","proof_client","maq_sent","maq_in_progress"];
 // v10.49.4 — Si la orden está EN MÁQUINA (current_machine NOT NULL), NO se considera estancada.
 // Una orden produciendo activamente en CTP/Speedmaster/etc no debe disparar alertas de estancamiento
@@ -10820,15 +10831,23 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   // v10.73.31 — ocultar las órdenes EN ESPERA del POOL de espera ("Listas"/maquila_in), que es donde se acumulan y
   // hacen ruido. Las que están EN una máquina (in_production) NO se ocultan: la máquina NO debe aparecer "Disponible"
   // enmascarando un trabajo montado + su timer. Se rastrean en la vista "En espera"; reaparecen en su etapa al reactivar.
-  const ready=orders.filter(o=>(o.stage==="ready"||o.stage==="maquila_in")&&!snoozeActive(o)).sort(prioSort);
-  const inProd=orders.filter(o=>o.stage==="in_production");
+  // v10.73.84 (scan #1 L9 inprod-sin-maquina) — una orden in_production SIN máquina (o sin posición de cola) es
+  //   HUÉRFANA: getMachineQueue exige machine_queue_position!=null, así que no se pinta en ninguna máquina y quedaba
+  //   fantasma (contada en agregados, invisible en el board). Va al POOL, donde vive el trabajo sin asignar y desde
+  //   donde assignMachine la re-monta. HOY hay 0 en prod (fix preventivo), pero cierra el estado inconsistente.
+  const orphanInProd=o=>o.stage==="in_production"&&(!o.current_machine||o.machine_queue_position==null);
+  const ready=orders.filter(o=>((o.stage==="ready"||o.stage==="maquila_in")||orphanInProd(o))&&!snoozeActive(o)).sort(prioSort);
+  const inProd=orders.filter(o=>o.stage==="in_production"&&!orphanInProd(o));
   const inManual=orders.filter(o=>o.stage==="packaging");
   const inSalidas=orders.filter(o=>o.stage==="salidas");
   const snoozedHidden=orders.filter(o=>snoozeActive(o)&&(o.stage==="ready"||o.stage==="maquila_in")).length;
   // v10.73.76 — /impeccable distill: lo ÚNICO que Gerardo NO puede contar de un vistazo (todos los totales ya viven
-  //   en su propio panel). "vencidas" = lo que está en SU cancha (por asignar + en máquina) con la entrega pasada;
+  //   en su propio panel). "vencidas" = lo que está en SU cancha con la entrega pasada;
   //   "urgentes sin asignar" = urgentes que siguen en el pool, sin máquina. Ambas se derivan de lo ya cargado (0 red).
-  const vencidas=[...ready,...inProd].filter(o=>isOverdue(o.due_date)).length;
+  // v10.73.84 (scan #1 L9) — sumar `inManual` (Empaque ES cancha de Gerardo; había 3 vencidas ahí sin contar) y filtrar
+  //   `!snoozeActive` en el set COMPARTIDO (ready ya lo trae por construcción, inProd no → asimetría corregida). Los 3
+  //   sets son mutuamente excluyentes por stage → sin doble conteo. NO se suma inSalidas (cancha de Karla).
+  const vencidas=[...ready,...inProd,...inManual].filter(o=>isOverdue(o.due_date)&&!snoozeActive(o)).length;
   const urgentesSinAsignar=ready.filter(o=>o.priority==="urgente").length;
   // v10.73.81 — coincidencias sobre lo que el board REALMENTE pinta (estos 4 sets), no sobre `orders` crudo:
   //   `ready` ya excluye las EN ESPERA, así que contarlas mentiría igual que el filtro que acabamos de quitar.
@@ -10865,12 +10884,12 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
     // → `maquila_in` entra y `ready` NO: dos cards visualmente idénticas con comportamientos opuestos. De ahí el toast.
     if(mid==="vm_salidas"){if(["packaging","in_production","maquila_in"].includes(o.stage)){onAction(o.id,"advance","salidas")}else showToast?.("Esa orden todavía no pasa por Empaque. Arrástrala a Empaque primero.","error");return}
     // Special zone: Empaque — skip if already there
-    if(mid==="vm_manual"){if(o.current_machine==="vm_manual"){showToast?.("Ya está en Empaque.","error");return}onDrop(oid,"vm_manual");return}
+    if(mid==="vm_manual"){if(o.current_machine==="vm_manual"){setDO(null);return}onDrop(oid,"vm_manual");return}
     // Special zone: Maquila — triggers maquila modal
     if(mid==="vm_maquila"){if(["ready","in_production","packaging","maquila_in"].includes(o.stage)){onAction(o.id,"send_maquila")}else showToast?.("Desde su etapa actual esa orden no se puede mandar a maquila.","error");return}
     // Regular machine
     const m=MACHINES.find(x=>x.id===mid);if(!m)return;
-    if(o.current_machine===mid){showToast?.("Ya está en "+m.name+".","error");return}
+    if(o.current_machine===mid){setDO(null);return}/* v10.73.84 (scan #1 L14 self-drop) — soltar una card sobre la máquina donde YA está es un NO-OP ("me arrepentí"), no un rechazo: al silencio, como PreprensaBoard. La doctrina "ningún rechazo mudo" de v78 aplica a rechazos reales (Salidas/maquila/mantenimiento, que conservan su toast), no a no-ops. */
     if(activeMaint(mid)){showToast?.(m.name+" está fuera de servicio.","error");return} // v10.73.74 — defensa en profundidad: la tarjeta ya bloquea con if(!inMaint); paridad con el drop() de PreprensaBoard
     const fromM=o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null;
     assignNow(o,mid,m,fromM)};
@@ -10898,7 +10917,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //       capturarlo en toda la app. O sea el "~ETA" que agregué en v10.73.79 jamás pintó un pixel, ni en el
   //       <option> ni en el header de la card. Era código muerto vendido como dato. (fmtM se queda: 6 usos vivos
   //       fuera del Kanban.) Ver el memo de datos fantasma antes de volver a construir carga sobre este campo.
-  const machineLoad=mid=>{const q=getMachineQueue(orders,mid).filter(o=>o.stage==="in_production");return{n:q.length,activa:q.filter(o=>o.machine_queue_position===0).length,enEspera:q.filter(o=>o.machine_queue_position>0).length}};
+  // v10.73.84 (scan #1 L14 machineopts-hot-path) — UN solo recorrido O(orders) memoizado, en vez de escanear los 441
+  //   pedidos por cada <option> del select (2 selects × 3 optgroups × ~13 máquinas = decenas de escaneos por render,
+  //   en pleno hot path del drag). `orders` es estable durante el arrastre → el memo pega el 100% de los renders.
+  const loadMap=useMemo(()=>{const m={};for(const o of orders){if(o.current_machine&&o.machine_queue_position!=null&&o.stage==="in_production"){const e=m[o.current_machine]||(m[o.current_machine]={n:0,activa:0,enEspera:0});e.n++;if(o.machine_queue_position===0)e.activa++;else e.enEspera++}}return m},[orders]);
+  const machineLoad=mid=>loadMap[mid]||{n:0,activa:0,enEspera:0};
   // v10.73.81 — el <option> decía "N en cola" con N = activa + en espera: el NÚMERO era correcto (trabajos por
   //   delante del tuyo) pero el SUSTANTIVO mentía, porque una de esas N está corriendo, no encolada. Bajar N a
   //   solo-la-cola arreglaría la palabra rompiendo el número. Se dicen las dos piezas, con el vocabulario que la
@@ -10949,7 +10972,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
       {onClearSearch&&<button onClick={onClearSearch} style={{...bs(C.bg,C.t2),flexShrink:0,border:"1px solid "+C.bdSt}}><XIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Limpiar</button>}
     </div>}
     {(vencidas>0||urgentesSinAsignar>0||snoozedHidden>0)&&<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-      {vencidas>0&&<span title="Órdenes con la entrega vencida que siguen por asignar o en máquina" style={{background:C.dn,color:C.bg,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><WarningIcon size={14} weight="fill"/>{vencidas} vencida{vencidas!==1?"s":""}</span>}
+      {vencidas>0&&<span title="Órdenes con la entrega vencida que siguen por asignar, en máquina o en Empaque" style={{background:C.dn,color:C.bg,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><WarningIcon size={14} weight="fill"/>{vencidas} vencida{vencidas!==1?"s":""}</span>}
       {urgentesSinAsignar>0&&<span title="Órdenes urgentes que siguen en Órdenes Listas, sin máquina asignada" style={{background:C.amb,color:C.tx,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><FireIcon size={14} weight="fill"/>{urgentesSinAsignar} urgente{urgentesSinAsignar!==1?"s":""} sin asignar</span>}
       {/* v10.73.31 — pausadas ocultas del tablero → lleva a la vista "En espera" (no "ojos que no ven"). v10.73.76: ya
           no compite con 6 chips iguales y se ve como BOTÓN (borde marcado + hover), que es lo que siempre fue. */}
@@ -11120,7 +11143,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         {enEspera.map(o=><div key={o.id} draggable
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                             onDragOver={e=>{e.preventDefault()}}
-                            onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                            onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();setDO(null);onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})/* v10.73.84 (L14 drop-target-pegado) — setDO(null) aquí: el reorder hace stopPropagation, así que el drop NO burbujea al onDrop de la card donde vive setDO(null), y el resaltado de drop-target quedaba pegado tras reordenar */}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,cursor:"grab",...hlOf(match,o)}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                             <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
@@ -11322,7 +11345,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
               {enEspera.map(o=><div key={o.id} draggable
                   onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                   onDragOver={e=>{e.preventDefault()}}
-                  onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})}}}
+                  onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();setDO(null);onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})/* v10.73.84 (L14 drop-target-pegado) — setDO(null) aquí: el reorder hace stopPropagation, así que el drop NO burbujea al onDrop de la card donde vive setDO(null), y el resaltado de drop-target quedaba pegado tras reordenar */}}}
                   style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,opacity:0.85,cursor:"grab"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
@@ -16329,13 +16352,13 @@ export default function PrintFlow() {
       if(stageErr)throw new Error(stageErr.message);
       // Abrir log si será activa
       if(finallyActive)await db.addMachineLog(oid,mid);
-      await db.addTimeline(oid,"🏭 "+label+(finallyActive?"":" (cola #"+finalPos+")"),user,stageColor,stage);
+      await db.addTimeline(oid,"🏭 "+label+(finallyActive?"":" (turno "+finalPos+")"),user,stageColor,stage);
       // Update local
       setOrders(p=>p.map(x=>{
         if(x.id===oid){
           const l=closeML(x);
           if(finallyActive)l.push({machine:mid,started:new Date().toISOString()});
-          return{...x,stage,current_machine:mid,machine_queue_position:finalPos,machine_log:l,timeline:addTL(x,"🏭 "+label+(finallyActive?"":" (cola #"+finalPos+")"),{to:stage})};
+          return{...x,stage,current_machine:mid,machine_queue_position:finalPos,machine_log:l,timeline:addTL(x,"🏭 "+label+(finallyActive?"":" (turno "+finalPos+")"),{to:stage})};
         }
         return x;
       }));
@@ -16346,7 +16369,7 @@ export default function PrintFlow() {
       }
       /* v10.73.83 (scan #2) — el toast anunciaba willBeActive/targetPos (PRE-clamp), mientras el timeline, la bitácora
          y el estado local ya usan finallyActive/finalPos (el resultado real de la RPC). Se alinea con lo que de verdad pasó. */
-      showToast(finallyActive?"🏭 "+label:"⏳ En cola #"+finalPos+" · "+label,"success",undo);
+      showToast(finallyActive?"🏭 "+label:"⏳ Turno "+finalPos+" · "+label,"success",undo);
       return true; // v10.73.84 (PLACAS-2) — éxito rama máquina real
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload();return false}
     finally{setActionLoading(null);assignMachineLock.current=false}
@@ -16986,8 +17009,8 @@ export default function PrintFlow() {
           if(result?.new_active_id&&result.new_active_id!==id){
             await promoteLog(result.new_active_id,result.old_machine||mach);
           }
-          await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida a cola #"+newPosition,userLogin||user,willBeActive?C.live:C.ios);
-          showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida a cola #"+newPosition);
+          await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida al turno "+newPosition,userLogin||user,willBeActive?C.live:C.ios);
+          showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida al turno "+newPosition);
           // Reload completo para sincronizar todas las positions afectadas
           await reload();
         }catch(e){console.error("[reorder_in_machine] Error:",e);showToast("❌ No se pudo reordenar: "+(e?.message||"error desconocido"),"error");reload()}
@@ -17190,7 +17213,12 @@ export default function PrintFlow() {
 
   // Filtered orders for view — "mine" shows only orders created by current user, "all" shows everything
   // Only applies to vendedor/secretaría/admin; other roles always see all orders
-  const hasFilter=isSec(user)||user==="admin";
+  // v10.73.84 (scan #1 L12 orderfilter-fantasma) — `&&view!=="board"`: el toggle "Mis Órdenes/Todas" del header NO
+  //   aplica al Tablero (es estado físico de máquinas, no una lista personal), pero viewOrders lo respetaba y nadie lo
+  //   reseteaba al cambiar de vista → un 2º buscador-fantasma: llegabas al Tablero con "Mis Órdenes" activo y el board
+  //   filtraba en silencio. Los 4 call sites cuelgan de hasFilter, así que esto los cubre a todos Y hace que el banner
+  //   "El tablero no está filtrado" vuelva a ser verdad en vez de parchearlo. El toggle se oculta en el Tablero.
+  const hasFilter=(isSec(user)||user==="admin")&&view!=="board";
   // v10.58.23: el filtro "mine" para vendedor también incluye órdenes donde él es el agent.
   // Caso real: Lupita captura órdenes para Genaro (created_by="secretaria", agent="genaro").
   // Antes Genaro no las veía con filtro "mine" → maquila completada quedaba invisible para él.
@@ -17236,7 +17264,10 @@ export default function PrintFlow() {
     return myTasks.filter(o=>activePredicates.some(p=>{try{return p(o)}catch{return false}}));
   },[myTasks,taskFilters,taskFilterConfigs]);
 
-  // Stale alerts use unfiltered viewOrders so they always show regardless of search
+  // v10.73.84 (scan #1 L12 staletasks-comentario) — el comentario decía "unfiltered viewOrders" pero la línea usa
+  //   filteredOrders: la búsqueda SÍ acota las stale alerts, igual que el resto de esta vista (el header lo anuncia con
+  //   el chip de lupa y el empty state dice "Sin resultados"). Se corrige el comentario a la verdad; NO se cambia a
+  //   viewOrders porque visibleStale además re-intersecta con filteredMyTasks, así que no cambiaría lo que se pinta.
   const staleTasks=useMemo(()=>{const isFinal=s=>s.includes("delivered")||s.includes("cancelled")||s==="web_pending"||s==="web_rejected";let pool=filteredOrders;if(user==="produccion")pool=pool.filter(o=>["draft","ready","in_production","maquila_in","packaging","placas_listas"].includes(o.stage));else if(user==="preprensa")pool=pool.filter(o=>["draft","design"].includes(o.stage));else if(user==="german")pool=pool.filter(o=>["proof_printing","ctp"].includes(o.stage));else if(user==="karla")pool=pool.filter(o=>["salidas","maq_received"].includes(o.stage));else if(isSec(user))pool=pool.filter(o=>["draft","maq_created"].includes(o.stage));else if(user==="admin")pool=pool.filter(o=>!isFinal(o.stage));return pool.filter(o=>getStale(o)).sort((a,b)=>hoursAgo(b.timeline?.length>0?b.timeline[b.timeline.length-1].date:b.created_at)-hoursAgo(a.timeline?.length>0?a.timeline[a.timeline.length-1].date:a.created_at))},[filteredOrders,user]);
 
   // v10.73.28 — vista "En espera": órdenes pausadas del rol (admin=todas). El hook DEBE ir ARRIBA de los early returns (Rules of Hooks).
@@ -17498,7 +17529,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               })()}
         </div>}
         {view==="calendar"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Calendario de Entregas</h2><Calendar orders={filteredOrders} onChangeDate={changeDate} role={user} userLogin={userLogin}/></div>}
-        {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.length===0?<EmptyState icon={search?MagnifyingGlassIcon:ListBulletsIcon} title={search?"Sin resultados":"Sin órdenes que mostrar"} hint={search?"Prueba con otro término o limpia la búsqueda.":"Las órdenes que captures aparecerán listadas aquí."} action={search?{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}:((user==="admin"||isSec(user))?{label:"Nueva orden",icon:PlusIcon,onClick:()=>{setEditO(null);setView("form")}}:null)}/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{filteredOrders.slice().sort(prioSort).map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}</div>}
+        {view==="orders"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px"}}>Todas ({filteredOrders.length}){search&&<span style={{fontSize:13,fontWeight:500,color:C.t2,textTransform:"none"}}> · <MagnifyingGlassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>"{search}"</span>}</h2>{filteredOrders.length===0?<EmptyState icon={search?MagnifyingGlassIcon:ListBulletsIcon} title={search?"Sin resultados":"Sin órdenes que mostrar"} hint={search?"Prueba con otro término o limpia la búsqueda.":"Las órdenes que captures aparecerán listadas aquí."} action={search?{label:"Limpiar búsqueda",icon:XIcon,onClick:()=>setSearch("")}:((user==="admin"||isSec(user))?{label:"Nueva orden",icon:PlusIcon,onClick:()=>{setEditO(null);setView("form")}}:null)}/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{filteredOrders.slice().sort(prioSortRecent)/* v10.73.84 (L13) — "Todas" no filtra a trabajo vivo → prioSortRecent (recientes primero), no prioSort (que la abría en entregadas de mayo) */.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}</div>}
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
