@@ -2570,7 +2570,11 @@ function diagnoseOrder(o){
   const d=daysInStage(o);
   // v10.58.53: vencida = pasadas las 23:59 del día pactado (antes acusaba desde el
   // mediodía del MISMO día de entrega — contradecía las KPIs de on-time)
-  const dueEnd=o.due_date?new Date(String(o.due_date).slice(0,10)+"T23:59:59"):null;
+  // v10.73.84b (scan #1 secuela L13) — mismo guard de rango que isOverdue/dueTs. Sin esto, una due_date corrupta
+  //   FAR-PAST ("0026-06-01") en una orden ACTIVA quedaba late=true aquí ("⚠️ Vencida hace ~730000 días" en la
+  //   Torre) mientras isOverdue la trata como SIN fecha → divergencia tarjeta-vs-Torre. Implausible = null = no-late.
+  const _dueEnd=o.due_date?new Date(String(o.due_date).slice(0,10)+"T23:59:59"):null;
+  const dueEnd=_dueEnd&&duePlausible(_dueEnd.getTime())?_dueEnd:null;
   const late=dueEnd&&dueEnd<new Date();
   const lateDays=late?Math.max(1,Math.floor((Date.now()-dueEnd.getTime())/86400000)+1):0;
   const worst=Math.max(d,lateDays);
@@ -10805,12 +10809,13 @@ function Pipeline({orders,role,onAction}) {
 //   scroll interno para reordenar en cola larga; la ventana solo desplaza cuando la cola ya tocó su límite. El React
 //   synthetic del wrapper corre ANTES que el listener nativo en document (burbujeo), así que la marca ya está puesta.
 let qAutoScrollClaim=0;
-// v10.73.84 (scan #2 RETURN-2) — recuerda qué órdenes venían de maquila_in (maquila parcial devuelta) al montarse en
-//   máquina, para que el ⟳ "sacar de la máquina" DIRECTO las restaure a maquila_in y no las degrade a "ready"
-//   (perdiendo el badge maqin y el drop directo a Salidas). El Deshacer del Kanban ya lo cubre por payload; esto cubre
-//   el botón directo. Set efímero (sin migración): en el peor caso una recarga entre montar y sacar lo pierde → cae a
-//   "ready", que es el comportamiento viejo, no una regresión.
-const preMountMaquilaIn=new Set();
+// v10.73.84 RETURN-2 REVERTIDO (verificación del backlog): el intento de recordar el origen maquila_in con un Set
+//   module-level efímero era INSEGURO cross-sesión — el realtime de otra sesión nunca lo limpia, así que una entrada
+//   stale sobrevivía un ciclo montar→salir→re-montar y hacía que el ⟳ escribiera stage='maquila_in' INCORRECTO (un
+//   modo de fallo que el código viejo nunca producía, P2). Un Set efímero no puede resolver esto; la versión robusta
+//   necesitaría una columna persistente en la orden, una migración que no vale un P3 de badge. RETURN-2 queda DIFERIDO:
+//   el ⟳ directo de una maquila_in la manda a 'ready' (pierde el badge maqin y el drop directo a Salidas); el Deshacer
+//   del Kanban SÍ la restaura vía payload. Backlog documentado.
 // v10.73.69 — miniatura de la imagen de referencia en las tarjetas del Tablero (más visual para reconocer el trabajo
 //   de un vistazo). Se renderiza SOLO si la orden tiene imagen (image_url/image_url_2/image) → los formularios sin foto
 //   quedan compactos, sin placeholder. Estado propio de fallo: si la img 404ea se oculta (no rompe la tarjeta).
@@ -16362,7 +16367,6 @@ export default function PrintFlow() {
     const o=ordersRef.current.find(x=>x.id===oid);
     if(!o){assignMachineLock.current=false;return false;}
     // v10.73.84 (RETURN-2) — recordar el origen maquila_in antes de que el montaje sobrescriba el stage a in_production.
-    if(o.stage==="maquila_in")preMountMaquilaIn.add(oid);else preMountMaquilaIn.delete(oid);
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
     // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
@@ -17104,11 +17108,7 @@ export default function PrintFlow() {
       //   orden desaparecía del board de Germán y aterrizaba en el pool de Gerardo como si tuviera placas hechas. La
       //   semántica correcta ahí es QUEDARSE en ctp y solo soltar la máquina, para que reaparezca en readyCtp. El undo
       //   del Kanban sigue mandando su payload (maquila_in/ready) y precede; solo si no hay payload se mira el stage.
-      // v10.73.84 (RETURN-2) — el ⟳ directo (sin payload) de una orden que venía de maquila_in la restaura a maquila_in
-      //   en vez de degradarla a "ready" (que le perdía el badge y el drop a Salidas). Se consulta el Set efímero y se
-      //   limpia al sacarla. Precedencia: payload (Deshacer) > ctp (Germán) > pre-mount maquila_in > ready.
-      const backStage=payload?.backStage==="maquila_in"?"maquila_in":(o.stage==="ctp"?"ctp":(preMountMaquilaIn.has(id)?"maquila_in":"ready"));
-      preMountMaquilaIn.delete(id);
+      const backStage=payload?.backStage==="maquila_in"?"maquila_in":(o.stage==="ctp"?"ctp":"ready");
       const tlMsg=backStage==="ctp"?"🔄 Sacada de la máquina (desde "+(o.current_machine||"máquina")+")":"🔄 Devuelta a Lista (desde "+(o.current_machine||"máquina")+")";
       if(!canExecuteAction("return_to_ready",o,user,userLogin)){showToast(actionDeniedToast("return_to_ready",o,user,userLogin),"error");return}
       // v10.73.82 (L7, CORROMPE DATOS) — lock síncrono real. v78 tapó el doble-clic con `disabled={actionLoading}` SOLO
