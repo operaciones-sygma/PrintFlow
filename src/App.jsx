@@ -16493,11 +16493,17 @@ export default function PrintFlow() {
     if(duplicateLock.current)return; duplicateLock.current=true; setActionLoading(id); // v10.73.25 — lock síncrono anti doble-clic (evita 2 folios / 2 órdenes; actionLoading es async y se leería stale)
     try{
     const origLabel=orig.cart_folio||orig.production_number||orig.id.slice(0,8);
+    // v10.74.0 (scan wuy6vf3ji #6): una orden que quedaría INTERNA sin agente NO puede duplicarse
+    // (trg_require_agent la rechaza). Avisar accionable ANTES de consumir folio, no error crudo de BD.
+    if((orig.source||"internal")==="internal" && !(orig.agent&&String(orig.agent).trim())){
+      showToast("Esta orden no tiene vendedor. Ábrela, asigna el Agente/Vendedor y vuelve a duplicarla.","error");
+      return;
+    }
     // v10.20.0 — RPC atómico (evita race condition tipo P-3503 duplicado)
     const {data:dupFolio,error:folioErr}=await supabase.rpc("next_production_number");
     if(folioErr||!dupFolio){showToast("❌ No se pudo asignar folio: "+(folioErr?.message||"sin respuesta"),"error");return}
     // v10.73.25 — reset de snooze_* (#6): un duplicado NUNCA hereda el estado "En espera" de la fuente
-    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,payment_status:null,payment_method:null,payment_amount:null,bank_reference:null,purchase_order_id:null,invoice_pre_assigned:false,invoice_reason:null,machine_queue_position:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
+    const dup={...orig,id:gid(),stage:orig.order_type==="maquila"?"maq_created":"draft",created_at:new Date().toISOString(),created_by:userLogin||user,validated_by_production:false,validated_by_preprensa:false,production_number:dupFolio,machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,deliveredAt:null,delivered_at:null,maquila_provider:null,maquila_phone:null,maquila_email:null,file_url:null,file_name:null,source:orig.source||"internal",cart_folio:null,web_folio:null,web_order_ref:null,mp_payment_id:null,invoice_type:null,invoice_folio:null,invoiced_at:null,invoiced_by:null,has_post_invoice_edits:false,stock_role:null,client_product_id:null,stock_loaded:false,sin_empaque_sygma:false,snooze_reason:null,snoozed_by:null,snooze_stage:null,snooze_until:null,snooze_kind:null,payment_status:null,payment_method:null,payment_amount:null,bank_reference:null,purchase_order_id:null,invoice_pre_assigned:false,invoice_reason:null,machine_queue_position:null,timeline:[{action:"📋 Duplicada de "+origLabel,date:new Date().toISOString(),by:user,color:C.fac}]};
     setOrders(p=>[dup,...p]);
     // v10.73.23/25 — duplicar los archivos de imagen (incl. arte legacy `image`, #5) para que la copia NO comparta
     // Storage con la original (quitar/cambiar la imagen en una ya no rompe la otra). Si la copia falla, cae a la ref.
