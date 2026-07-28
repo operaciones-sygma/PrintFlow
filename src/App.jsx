@@ -307,7 +307,19 @@ const SS_BY_ID=Object.fromEntries(STANDARD_SIZES.map(sz=>[sz.id,sz]));
 const ssLabel=id=>SS_BY_ID[id]?.label||(id?"⚠️ "+id:"");
 const PRIOS=[{id:"urgente",l:"🔴 Urgente",lt:"Urgente",Icon:FireIcon,c:"#c84a3f"},{id:"normal",l:"🟡 Normal",lt:"Normal",Icon:CircleIcon,c:"#c07d2e"},{id:"baja",l:"🟢 Baja",lt:"Baja",Icon:CircleIcon,c:"#3a9e6a"}];
 const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
-const AGENTS=["Manuel","Genaro","Marcelo"];
+// v10.74.2 — vendedores del picker. LANDMINE: estos strings alimentan las comisiones de CobranzaFlow
+// via cobranza.resolve_seller(orders.agent), que hace match EXACTO contra username/display_name.
+// "Jaime"->username jaime · "Pepe Chuy"->display_name 'Pepe Chuy'. NO renombrar sin actualizar cobranza.users.
+const AGENTS=["Manuel","Genaro","Marcelo","Jaime","Pepe Chuy"];
+// v10.74.2 — traduce el vendedor asignado al cliente (cobranza.users) a una opción VÁLIDA del picker.
+// Espeja resolve_seller al revés y SOLO puede devolver un string que ya está en AGENTS: si el vendedor
+// asignado no corresponde a ninguno, no sugiere nada (falla suave, nunca escribe un agente huérfano).
+const agentLabelFor=u=>{
+  if(!u)return null;
+  const c=[u.username,u.display_name,String(u.display_name||"").trim().split(/\s+/)[0]]
+    .filter(Boolean).map(x=>String(x).toLowerCase());
+  return AGENTS.find(a=>c.includes(a.toLowerCase()))||null;
+};
 const FINISHES=["Barniz Brillante","Barniz Mate","Barniz a Registro","Doblez","Intercalado","Grapado","Perforado","Plastificado","Suajado","Botado","Forma Suelta","Blocks","Folio","Engomado Superior","Engomado Lateral"];
 // v10.72.4 — /impeccable distill: top-8 acabados por USO REAL (historial de la imprenta) visibles por
 // default, ordenados por frecuencia; el resto se oculta tras "+ Más". Baja de 16 chips a ~8 el escaneo
@@ -4201,6 +4213,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [paymentRefs, setPaymentRefs] = useState([]);
   const [agent, setAgent] = useState("");
+  const agentTouched = useRef(false); // v10.74.2 — el usuario ya eligió vendedor: no volver a sugerir
   // v10.59.2 C3 — AGENTE (contacto del cliente comprador, ej. Eva/Jorge). Distinto del Vendedor SYGMA (agent).
   const [clientAgent, setClientAgent] = useState("");
   const [clientAgents, setClientAgents] = useState([]);
@@ -4278,6 +4291,21 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // v10.59.6 — dep por el client_id primitivo (no el array cart): evita re-fetch en cada tecla de cantidad
   }, [hasPooled, destClientId, cart[0]?.client_id]);
 
+  // v10.74.2 — sugerir el VENDEDOR asignado al cliente del carrito (Cuadra -> "Pepe Chuy").
+  // Las ventas de stock SÍ comisionan, así que el agente no puede quedar vacío por descuido.
+  // Nunca pisa una elección manual (agentTouched) ni un valor ya puesto.
+  useEffect(()=>{
+    const effId = hasPooled ? destClientId : (cart[0]?.client_id||null);
+    if(!effId || agentTouched.current || agent) return;
+    let alive=true;
+    supabase.rpc("get_client_seller_label",{p_client_id:effId}).then(({data})=>{
+      if(!alive) return;
+      const lbl=agentLabelFor(Array.isArray(data)?data[0]:data);
+      if(lbl) setAgent(lbl);
+    }).catch(()=>{});
+    return ()=>{alive=false};
+  }, [hasPooled, destClientId, cart[0]?.client_id]);
+
   const addToCart = (p) => {
     if (cart.find(c=>c.client_product_id===p.id)) return;
     // 🆕 v10.73.3 — venta por KILOS (china blanco): si el producto trae specs.sell_unit='kg',
@@ -4331,7 +4359,10 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     : (allRefsValid && paymentRefs.length>0
         && (paymentStatus==="paid" ? sumCents===totalCents : (sumCents>0 && sumCents<totalCents)));
 
-  const canSubmit = !busy && validCart && folioOK && validDest && totalOK
+  // v10.74.2 — el vendedor es OBLIGATORIO: las ventas de stock SÍ comisionan (decisión del dueño),
+  // y sin agente la factura nace sin seller y la comisión se pierde en silencio.
+  const agentOK = !!(agent && agent.trim());
+  const canSubmit = !busy && validCart && folioOK && validDest && totalOK && agentOK
     && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && validPayments;
 
   const submit = async()=>{
@@ -4479,9 +4510,9 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
               <div>
-                <label style={{...lbl,marginTop:0,fontSize:10}}>Vendedor</label>
-                <select style={{...inp,fontSize:11}} value={agent} onChange={e=>setAgent(e.target.value)} disabled={busy}>
-                  <option value="">— Sin asignar —</option>
+                <label style={{...lbl,marginTop:0,fontSize:10,color:agentOK?undefined:C.dn}}>Vendedor *</label>
+                <select style={{...inp,fontSize:11,border:"1.5px solid "+(agentOK?C.bd:C.dn+"60")}} value={agent} onChange={e=>{agentTouched.current=true;setAgent(e.target.value)}} disabled={busy}>
+                  <option value="">— Selecciona vendedor —</option>
                   {AGENTS.map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
@@ -4520,6 +4551,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
             {!totalOK && totalAmount && <div style={{fontSize:10,color:C.dn,marginTop:6,textAlign:"center"}}>Captura un total mayor a 0</div>}
             {cart.length>0 && !validCart && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa las cantidades de los items</div>}
             {hasPooled && !destClientId && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el cliente destino del pool</div>}
+            {!agentOK && cart.length>0 && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Selecciona el vendedor — sin él la venta no genera comisión</div>}
             {totalOK && !validPayments && <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:10,color:C.amb,marginTop:6}}><WarningIcon size={11} weight="fill"/>Revisa el estado de pago y los montos</div>}
           </div>
         </div>
@@ -9180,8 +9212,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // "Reemplazar" (delete-on-replace seguro): nunca una imagen guardada ni la referencia ajena del fallback
   // de "Replicar orden anterior". El borrado-al-cancelar se revirtió (v10.73.53) por riesgo de data-loss.
   const imgUploadsRef=useRef(new Set());
+  // v10.74.2 — última sugerencia de vendedor aplicada (permite reemplazarla al cambiar de cliente
+  // sin pisar NUNCA una elección manual del usuario). Ref, no estado: no provoca repintado.
+  const sugAgentRef=useRef(null);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
-  useEffect(()=>{if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));setBlocksRaw(finGetDetail(editOrder.finishes,"Blocks"));setFolioRaw(finGetDetail(editOrder.finishes,"Folio"));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes); v10.71.6 — y los buffers crudos de Blocks/Folio */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
+  useEffect(()=>{sugAgentRef.current=null;/* v10.74.2 — al reabrir/re-inicializar el form la sugerencia previa deja de aplicar (si no, un agente heredado de la OC podría ser pisado por el siguiente cliente) */
+    if(editOrder){setF({...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))});const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));setBlocksRaw(finGetDetail(editOrder.finishes,"Blocks"));setFolioRaw(finGetDetail(editOrder.finishes,"Folio"));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes); v10.71.6 — y los buffers crudos de Blocks/Folio */if(editOrder.product&&!editOrder.paper_type&&!editOrder.ink_front&&!editOrder.width_cm)setAdvMode(true)}},[editOrder?.id,editOrder?._fromOC]);
   // v10.64.0 — corte híbrido: ya no se pre-llena el folio en el form. Lo asigna el RPC atómico
   // al guardar (serie 100% consecutiva). El form solo muestra "Asignado automáticamente".
   // v10.64.0 — corte híbrido: el folio de producción ya NO es editable por nadie. Es 100%
@@ -9301,7 +9337,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         }
       }
       await onSubmit(clean);
-      if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false)} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
+      if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false);sugAgentRef.current=null} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
     }catch(e){showToast("❌ "+(e?.message||"Error desconocido (revisa F12)"),"error")}
     finally{setSaving(false)}
@@ -9323,6 +9359,19 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           : {stock_role:null,client_product_id:null,stock_loaded:false};
       return{...p,client_id:c.id,client:c.name,client_company:c.name,client_email:c.email||"",client_phone:c.whatsapp||"",client_lada:"+52",client_rfc:c.rfc||"",billing_mode:c.billing_mode||"normal",...stockReset};
     });
+    // v10.74.2 — sugerir el vendedor asignado al cliente (p.ej. razones sociales Cuadra -> "Pepe Chuy").
+    // Solo rellena si el campo está VACÍO o si trae la sugerencia anterior: jamás pisa una elección manual.
+    // Va ANTES del bloque de contacto porque ese tiene un return temprano.
+    if(!editOrder?.id){
+      try{
+        const {data:sd}=await supabase.rpc("get_client_seller_label",{p_client_id:c.id});
+        const lbl=agentLabelFor(Array.isArray(sd)?sd[0]:sd);
+        if(lbl){
+          setF(p=>(!String(p.agent||"").trim()||p.agent===sugAgentRef.current)?{...p,agent:lbl}:p);
+          sugAgentRef.current=lbl;
+        }
+      }catch(e){console.warn("get_client_seller_label falló (no bloqueante):",e)}
+    }
     if(!c.email||!c.whatsapp){
       try{
         const {data,error}=await supabase.rpc("get_last_contact_for_client",{p_client_id:c.id});
