@@ -9732,6 +9732,8 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
   // Pre-fill SOLO vendedor + delivery_date (NO client — forzar elección consciente para evitar errores de inercia)
   // v10.58.12 F31: client_id se captura si Karla selecciona del autocomplete; null si escribe libre.
   const [newOC, setNewOC] = useState({client:"",client_id:null,vendedor:order?.agent||"",delivery_date:order?.due_date||"",notes:""});
+  // v10.74.5 — ¿ya eligió vendedor a mano? Mientras sea false, la sugerencia por cliente puede rellenarlo.
+  const ocAgentTouched = useRef(!!order?.agent);
   const [saving, setSaving] = useState(false);
 
   // v10.57.5 — Conteo dinámico de órdenes activas (no canceladas) por OC.
@@ -9892,7 +9894,17 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
           <ClientInput
             value={newOC.client}
             onChange={(v)=>setNewOC(p=>({...p,client:v,client_id:null}))}
-            onSelect={(c)=>setNewOC(p=>({...p,client:c.name,client_id:c.id}))}
+            onSelect={async (c)=>{
+              setNewOC(p=>({...p,client:c.name,client_id:c.id}));
+              // v10.74.5 — sugerir el vendedor asignado al cliente (mismo criterio que OrderForm).
+              // Solo rellena si el usuario NO ha elegido vendedor a mano; sigue siendo editable.
+              if(ocAgentTouched.current) return;
+              try{
+                const {data}=await supabase.rpc("get_client_seller_label",{p_client_id:c.id});
+                const lbl=agentLabelFor(Array.isArray(data)?data[0]:data);
+                setNewOC(p=>p.client_id===c.id?{...p,vendedor:lbl||""}:p);
+              }catch(e){console.warn("get_client_seller_label falló (no bloqueante):",e)}
+            }}
           />
           {newOC.client_id
             ? <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.ok,marginTop:4,fontWeight:600}}><CheckIcon size={11} weight="bold"/>Cliente vinculado por ID</div>
@@ -9902,7 +9914,7 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
         </div>
         <div>
           <label style={lbl}>Vendedor</label>
-          <select style={inp} value={newOC.vendedor} onChange={e=>setNewOC(p=>({...p,vendedor:e.target.value}))}>
+          <select style={inp} value={newOC.vendedor} onChange={e=>{ocAgentTouched.current=true;setNewOC(p=>({...p,vendedor:e.target.value}))}}>
             <option value="">— Sin asignar —</option>
             {AGENTS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
