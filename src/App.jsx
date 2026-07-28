@@ -310,7 +310,7 @@ const PM=Object.fromEntries(PRIOS.map(p=>[p.id,p]));
 // v10.74.2 — vendedores del picker. LANDMINE: estos strings alimentan las comisiones de CobranzaFlow
 // via cobranza.resolve_seller(orders.agent), que hace match EXACTO contra username/display_name.
 // "Jaime"->username jaime · "Pepe Chuy"->display_name 'Pepe Chuy'. NO renombrar sin actualizar cobranza.users.
-const AGENTS=["Manuel","Genaro","Marcelo","Jaime","Pepe Chuy"];
+const AGENTS=["Manuel","Genaro","Marcelo","Jaime","Pepe Chuy","Christian Diaz","Victor"];
 // v10.74.2 — traduce el vendedor asignado al cliente (cobranza.users) a una opción VÁLIDA del picker.
 // Espeja resolve_seller al revés y SOLO puede devolver un string que ya está en AGENTS: si el vendedor
 // asignado no corresponde a ninguno, no sugiere nada (falla suave, nunca escribe un agente huérfano).
