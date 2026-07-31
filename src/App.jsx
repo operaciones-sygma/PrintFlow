@@ -1546,6 +1546,32 @@ const db = {
     if (error) throw new Error(error.message);
     return count || 0;
   },
+  // 🚚 v10.75.0 — CFDI de TRASLADO (tipo T + Carta Porte 3.1). Grupo Cuadra lo exige para
+  // amparar la mercancía en la carretera. Se emite AL MOMENTO DE LA SALIDA: un traslado
+  // timbrado después no sirve porque el papel tiene que ir a bordo del camión.
+  //
+  // trasladoPreviewOC resuelve TODO desde la sola OC (destino, distancia, mercancías): no
+  // hay nada que capturar. Si algo no se reconoce devuelve listo:false con el motivo, para
+  // que la casilla se desmarque en vez de emitir un traslado incompleto en silencio.
+  async trasladoPreviewOC(ocId) {
+    const {data, error} = await supabase.schema("cobranza").rpc("traslado_preview_oc", {p_oc: ocId});
+    if(error) throw new Error(error.message);
+    return data; // {aplica, cliente, destino_id, destino, distancia_km, lineas, listo, motivo}
+  },
+  // El motor valida rol server-side. Los usuarios de PrintFlow pasan por el puente de
+  // identidad de cfdi-engine v30 (las dos apps tienen cuentas de Auth SEPARADAS).
+  async emitirTraslado(destinoId, lineas, orderIds, fechaSalida) {
+    const {data, error} = await supabase.functions.invoke("cfdi-engine", {
+      body: {
+        action: "stamp-traslado", destino_id: destinoId, lineas,
+        ...(orderIds?.length ? {order_ids: orderIds} : {}),
+        ...(fechaSalida ? {fecha_salida: fechaSalida} : {})
+      }
+    });
+    if(error) throw new Error(error.message);
+    if(!data?.ok) throw new Error(data?.error || "no se pudo timbrar el traslado");
+    return data; // {folio_completo, uuid, id_ccp, test}
+  },
   async assignFolioToOC(ocId, invoiceType, mode, folioStart, preAssigned, reason, actor) {
     const {data, error} = await supabase.rpc("assign_folio_to_oc", {
       p_oc_id: ocId,
@@ -9973,6 +9999,31 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     })();
     return ()=>{alive = false};
   }, [oc?.client_id, oc?.client]);
+
+  // 🚚 v10.75.0 — CFDI de Traslado junto con la factura.
+  // A Cuadra le salen SIEMPRE los dos documentos (la D de ingreso y la T de traslado),
+  // y el traslado tiene que existir ANTES de que arranque la camioneta. Por eso vive
+  // aquí y no en un botón aparte: éste es el momento en que la mercancía sale.
+  // Se pre-marca solo si TODO se resolvió; si algo falta, se muestra el motivo y no se marca.
+  // NO aplica en pre-asignación: ahí la mercancía todavía no se mueve.
+  const [tras, setTras] = useState(null);        // null = cargando · {aplica, listo, ...}
+  const [conTraslado, setConTraslado] = useState(false);
+  useEffect(()=>{
+    let alive = true;
+    if (preAssignedMode) { setTras({aplica:false}); return; }
+    (async()=>{
+      try {
+        const p = await db.trasladoPreviewOC(oc?.id);
+        if (!alive) return;
+        setTras(p);
+        setConTraslado(!!p?.listo);
+      } catch(e) {
+        // que no se caiga el modal de folio por esto: el traslado es un extra
+        if (alive) setTras({aplica:false, motivo:"No se pudo consultar: "+(e?.message||"error")});
+      }
+    })();
+    return ()=>{alive = false};
+  }, [oc?.id, preAssignedMode]);
   const isCorona = coronaInfo?.billing_mode === "anticipo";
 
   // ===== SIMPLE MODE state =====
@@ -10168,7 +10219,10 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     if (!canSubmitSimple) return;
     setSaving(true);
     try {
-      await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null, (!isCorona && mode==="shared") ? billTo : null);
+      // 🚚 el traslado va como último argumento: el padre lo emite DESPUÉS de que el
+      // folio quedó asignado, para que un fallo del traslado no tire la factura.
+      await onConfirmSimple(invoiceType, mode, folioStart.toUpperCase(), preAssignedMode, reason.trim() || null, (!isCorona && mode==="shared") ? billTo : null,
+        (conTraslado && tras?.listo) ? {destino_id: tras.destino_id, lineas: tras.lineas, destino: tras.destino} : null);
     } finally { setSaving(false); }
   };
   const submitSplit = async()=>{
@@ -10410,6 +10464,37 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         <label style={lbl}>Razón de pre-asignación * <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· obligatoria</span></label>
         <textarea style={{...inp,minHeight:60,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Ej. Pago adelantado, Reserva fiscal fin de mes, Exigencia de cliente corporativo"/>
       </div>}
+
+      {/* 🚚 v10.75.0 — CFDI de Traslado. A Cuadra le salen los DOS documentos: la factura de
+          ingreso y el traslado que ampara la mercancía en la carretera. Va aquí porque el
+          traslado debe existir ANTES de que arranque la camioneta. Siempre es opcional. */}
+      {activeMode === "simple" && tras?.aplica && (
+        <div style={{marginBottom:14,padding:"11px 13px",borderRadius:10,
+                     background:tras.listo?C.ok+"0e":C.wn+"12",
+                     border:"1px solid "+(tras.listo?C.ok+"3a":C.wn+"44")}}>
+          <label style={{display:"flex",gap:9,alignItems:"flex-start",cursor:tras.listo?"pointer":"not-allowed"}}>
+            <input type="checkbox" checked={conTraslado} disabled={!tras.listo}
+                   onChange={e=>setConTraslado(e.target.checked)}
+                   style={{marginTop:2,width:15,height:15,cursor:tras.listo?"pointer":"not-allowed"}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:700,fontSize:13,color:C.t1}}>
+                También emitir CFDI de Traslado
+              </div>
+              {tras.listo ? (
+                <div style={{fontSize:11.5,color:C.t2,marginTop:2}}>
+                  {tras.destino} · {tras.distancia_km} km · {tras.total_lineas} mercancía(s) ·
+                  {" "}se arma solo con los datos de la OC
+                </div>
+              ) : (
+                <div style={{fontSize:11.5,color:C.wn,marginTop:2,fontWeight:600}}>
+                  ⚠ {tras.motivo || "No se pudo armar automáticamente."}
+                  {" "}Emítelo desde CobranzaFlow → Traslados.
+                </div>
+              )}
+            </div>
+          </label>
+        </div>
+      )}
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
@@ -15790,7 +15875,7 @@ export default function PrintFlow() {
   },[user,userLogin,showToast,reload]);
 
   // 📄 v10.11.0 Sub-fase B — Asigna folio(s) a las órdenes pendientes de una OC vía RPC atómica
-  const assignFolioToOC=useCallback(async(ocId,invoiceType,mode,folioStart,preAssigned,reason,billTo)=>{
+  const assignFolioToOC=useCallback(async(ocId,invoiceType,mode,folioStart,preAssigned,reason,billTo,traslado)=>{
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: solo admin/karla asignan folios fiscales a OCs
     if(!canExecuteAction("assignFolioToOC",null,user,userLogin)){showToast(actionDeniedToast("assignFolioToOC",null,user,userLogin),"error");return null}
     try{
@@ -15809,6 +15894,26 @@ export default function PrintFlow() {
         const folioPreview=Array.isArray(result?.folios)?(result.folios.length===1?result.folios[0]:result.folios[0]+"..."+result.folios[result.folios.length-1]):"";
         showToast(icon+" "+result.count+" folio(s) "+verb+" a "+ocId+(folioPreview?" ("+folioPreview+")":""));
         setFolioOCModal(null);
+
+        // 🚚 v10.75.0 — El traslado va DESPUÉS y en su propio try: el folio fiscal ya quedó
+        // asignado y NO se puede perder por un fallo del timbrado. Si truena, se avisa con
+        // la instrucción de dónde reintentarlo, en vez de tirar toda la operación.
+        if(traslado?.destino_id && Array.isArray(traslado.lineas) && traslado.lineas.length){
+          try{
+            const lineas=traslado.lineas.map(l=>({
+              descripcion:l.descripcion, cantidad:Number(l.cantidad),
+              clave_prod_serv:l.clave_prod_serv, clave_unidad:l.clave_unidad,
+              unidad:l.unidad||l.clave_unidad, valor_mercancia:Number(l.valor_mercancia)||0
+            }));
+            const orderIds=traslado.lineas.map(l=>l.order_id).filter(Boolean);
+            const t=await db.emitirTraslado(traslado.destino_id, lineas, orderIds, null);
+            showToast("🚚 Traslado "+t.folio_completo+" timbrado"+(t.test?" (PRUEBA, sin validez fiscal)":"")+" · "+traslado.destino);
+          }catch(te){
+            console.error("[traslado] Error:",te);
+            showToast("⚠️ El folio quedó asignado pero el TRASLADO no se pudo timbrar: "+(te?.message||"error")+". Emítelo desde CobranzaFlow → Traslados antes de que salga la camioneta.","error");
+          }
+        }
+
         reload();
         return result;
       }catch(e){
@@ -17747,7 +17852,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {addExistingModal&&<AddExistingProductsModal oc={addExistingModal} orders={orders} purchaseOrders={purchaseOrders} onConfirm={(ids)=>confirmAddExisting(addExistingModal,ids)} onClose={()=>setAddExistingModal(null)}/>}
       {cancelModal&&<CancelOrderModal order={cancelModal} onConfirm={reason=>cancelOrder(cancelModal.id,reason)} onClose={()=>setCancelModal(null)}/>}
       {moveModal&&<MoveOrderModal order={moveModal} purchaseOrders={purchaseOrders} orders={orders} onMove={(targetOCId,forceCrossClient)=>moveOrderToOC(moveModal.id,targetOCId,forceCrossClient)} onCreateAndMove={ocData=>createOCAndMove(moveModal.id,ocData)} onClose={()=>setMoveModal(null)} showToast={showToast}/>}
-      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason,billTo)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason,billTo)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
+      {folioOCModal&&<AssignOCFolioModal oc={folioOCModal.oc} ocOrders={folioOCModal.ocOrders} preAssignedMode={folioOCModal.preAssigned} onConfirmSimple={(invoiceType,mode,folioStart,preAssigned,reason,billTo,traslado)=>assignFolioToOC(folioOCModal.oc.id,invoiceType,mode,folioStart,preAssigned,reason,billTo,traslado)} onConfirmSplit={(groups,preAssigned,reason)=>assignFoliosSplitOC(folioOCModal.oc.id,groups,preAssigned,reason)} onClose={()=>setFolioOCModal(null)}/>}
       {webRejectModal&&<WebRejectModal order={webRejectModal} onConfirm={reason=>webReject(webRejectModal.id,reason)} onClose={()=>setWebRejectModal(null)}/>}
       {/* v10.73.84 (scan #2 PLACAS-2) — assignMachine se tragaba sus fallos (catch sin re-throw + rechazo mudo del
           lock global), así que el modal cerraba "con éxito" dejando la placa guardada pero la orden SIN montar. Ahora
