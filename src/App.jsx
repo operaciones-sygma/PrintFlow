@@ -5939,7 +5939,13 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // v10.64.2 — tolerancia proporcional al N de splits: el round-trip CON↔SIN IVA redondea por
   // split y al teclear cantidades manualmente la suma derivaba >0.01 y bloqueaba Crear. El backend
   // revalida la suma real, así que esta tolerancia solo absorbe ruido de redondeo (no errores reales).
-  const amountOk = Math.abs(sumAmountSinIva - totalSinIva) <= 0.01 * splits.length;
+  // v10.75.9 — la tolerancia era 0.01 POR SPLIT, y el RPC exige 0.01 en total
+  // (assign_invoice_splits: ABS(v_total_amount - v_expected_amount) > 0.01 -> RAISE).
+  // Con 4 partes, el modal pintaba en verde una suma desviada hasta 4 centavos, Karla daba
+  // Crear y la base la rechazaba con un error de SQL que no dice qué centavo ajustar.
+  // No se pierde dinero (el RPC es atómico), pero es un callejón sin salida: todo se ve
+  // bien y no hay pista de qué corregir. Ahora el semáforo dice la verdad.
+  const amountOk = Math.abs(sumAmountSinIva - totalSinIva) <= 0.01;
 
   // Saldo Corona requerido (solo splits de tipo corona_saldo)
   const coronaTotalSinIva = splits
