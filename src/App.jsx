@@ -1575,11 +1575,25 @@ const db = {
   // El motor valida rol server-side. Los usuarios de PrintFlow pasan por el puente de
   // identidad de cfdi-engine v30 (las dos apps tienen cuentas de Auth SEPARADAS).
   async emitirTraslado(destinoId, lineas, orderIds, fechaSalida) {
+    // 🔒 v10.75.18 (auditoría whg64e5cn, P1) — el motor elige entorno por el PREFIJO DE LA LLAVE
+    // de Facturapi y solo usa la de sandbox si el cuerpo trae `test: true`. Como nunca se mandaba,
+    // la llave era la REAL, el entorno salía 'production' y el gate cortaba con "la emisión REAL
+    // de traslados está apagada". O sea: era IMPOSIBLE ensayar un traslado, y el primer intento
+    // del día del arranque habría sido real, con folio real de la serie T-.
+    // Se pregunta al motor por el estado (acción 'mode', que desde v3.7.177 devuelve
+    // traslado_enabled) y se manda `test: true` mientras la emisión real esté apagada.
+    // FAIL-CLOSED: si la consulta falla, se asume PRUEBA. Nunca al revés.
+    let real = false;
+    try {
+      const {data: m} = await supabase.functions.invoke("cfdi-engine", {body: {action: "mode"}});
+      real = m?.ok === true && m?.traslado_enabled === true;
+    } catch(e) { real = false; }
     const {data, error} = await supabase.functions.invoke("cfdi-engine", {
       body: {
         action: "stamp-traslado", destino_id: destinoId, lineas,
         ...(orderIds?.length ? {order_ids: orderIds} : {}),
-        ...(fechaSalida ? {fecha_salida: fechaSalida} : {})
+        ...(fechaSalida ? {fecha_salida: fechaSalida} : {}),
+        ...(real ? {} : {test: true})
       }
     });
     if(error) throw new Error(error.message);
