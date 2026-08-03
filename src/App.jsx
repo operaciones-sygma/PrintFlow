@@ -1436,6 +1436,20 @@ const db = {
     if(error) throw new Error(error.message);
     return data;
   },
+  // 🔒 v10.75.11 — ¿Bajarle el precio a esta orden dejaría la factura por debajo de lo ya cobrado?
+  // Lo pregunta ANTES de guardar. Desde v10.75.10 el puente se NIEGA a bajar una factura cobrada
+  // (bajarla destruía el balance y la dejaba exigiéndole al cliente dinero que ya pagó), pero se
+  // negaba en silencio. Esto es lo que permite avisarle a la persona en el momento.
+  // Devuelve {aplica, bloquea, folio, monto_factura, cobrado, recalculo, diferencia,
+  //           cobro_conciliado, banco:{fecha,monto,banco,concepto}, timbrada}.
+  async checkPriceDrop(actor, orderId, newPrice, newMaqPrice) {
+    const {data, error} = await supabase.rpc("pf_price_drop_check", {
+      p_actor: actor, p_order_id: orderId,
+      p_new_price: newPrice ?? null, p_new_maq_price: newMaqPrice ?? null
+    });
+    if(error) throw new Error(error.message);
+    return data;
+  },
   // 💵 v10.73.65 · Nivel 3 F1 — Efectivo→vale ATÓMICO. Folía (los pagos no-efectivo por el camino normal) y crea el/los
   // vale(s) de caja por la porción en efectivo, que bajan el balance de la factura y van al corte de Lucero. Todo en una
   // transacción: si algo falla, rollback total (sin folios huérfanos). noncashRefs = refs no-efectivo (toBackendRef);
@@ -2911,6 +2925,70 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
       <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={()=>onResolve("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
         <button onClick={()=>onResolve("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>{hasMatches?`Crear "${typed}" como nuevo`:"Sí, crear cliente nuevo"}</button>
+      </div>
+    </div>
+  </div>;
+}
+// 🔒 v10.75.11 — Bajarle el precio a una orden YA FACTURADA Y COBRADA.
+//
+// Por qué existe: hasta v10.75.9 el puente recalculaba la factura hacia abajo y el
+// GREATEST(0, nuevo - pagado) DESTRUÍA el balance. Bajar el precio por error y volverlo a subir
+// dejaba la factura en 'parcial' exigiéndole al cliente dinero que YA había pagado (reproducido
+// en D-5827: pagada/$0 → parcial/$11,866.80). Desde v10.75.10 el puente se niega — pero se
+// negaba EN SILENCIO. Este modal es el aviso.
+//
+// Por qué NO pregunta "¿qué tipo de error fue?": porque el tipo de error no decide nada. Que
+// Lupita teclee mal el precio produce resultados opuestos según si el cliente ya pagó el monto
+// equivocado o no. Lo que sí decide es si ese dinero entró de verdad al banco — y eso el sistema
+// ya lo sabe cuando el cobro está conciliado (payments.bank_movement_id).
+function PriceDropModal({open,info,onResolve}) {
+  const [choice,setChoice]=useState(null);
+  if(!open||!info)return null;
+  const m=n=>"$"+Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const conciliado=!!info.cobro_conciliado;
+  // Si el depósito es real y está amarrado al banco, "el cobro está mal capturado" deja de ser
+  // una respuesta honesta: el dinero entró. Se quita la opción en vez de dejar que se elija mal.
+  const opciones=[
+    {v:"saldo_a_favor",t:"Dejárselos como saldo a favor",d:"El cliente tiene "+m(info.diferencia)+" a su favor para su próxima compra."},
+    {v:"devolucion",   t:"Marcar para devolución",       d:"Hay que regresarle "+m(info.diferencia)+" al cliente."},
+    ...(conciliado?[]:[{v:"error_captura",t:"El cobro registrado está mal",d:"No sobra nada: lo que hay que corregir es el pago de "+m(info.cobrado)+", no el precio."}]),
+  ];
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>onResolve(null)}>
+    <div role="dialog" aria-modal="true" aria-label="Esta factura ya está cobrada" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx,marginBottom:6}}><WarningIcon size={18} weight="fill" color={C.amb}/>Esta factura ya está cobrada</div>
+      <div style={{fontSize:12.5,color:C.t2,lineHeight:1.5,marginBottom:14}}>
+        El folio <strong style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{info.folio}</strong> tiene <strong style={{color:C.tx}}>{m(info.cobrado)}</strong> registrados como cobrados. Con el precio nuevo, la factura daría <strong style={{color:C.tx}}>{m(info.recalculo)}</strong>.
+        {info.oc_compartida&&<> Es un folio de <strong>OC compartida</strong>, así que el monto sale de la suma de todas las órdenes de esa OC.</>}
+      </div>
+
+      <div style={{background:C.sf,borderRadius:12,padding:"12px 14px",marginBottom:14,display:"flex",flexDirection:"column",gap:9}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Factura hoy</span><span style={{fontWeight:700,color:C.tx}}>{m(info.monto_factura)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Cobrado</span><span style={{fontWeight:700,color:C.tx}}>{m(info.cobrado)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Quedaría en</span><span style={{fontWeight:700,color:C.tx}}>{m(info.recalculo)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:13,borderTop:"0.5px solid "+C.bd,paddingTop:9}}><span style={{color:C.tx,fontWeight:700}}>Sobrarían</span><span style={{fontWeight:800,color:C.amb}}>{m(info.diferencia)}</span></div>
+      </div>
+
+      {conciliado&&info.banco&&<div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.ac+"10",border:"1px solid "+C.ac+"35",borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,lineHeight:1.45,marginBottom:14}}>
+        <ReceiptIcon size={15} weight="bold" color={C.ac} style={{flexShrink:0,marginTop:1}}/>
+        <span>Ese cobro está <strong style={{color:C.tx}}>conciliado con un depósito real</strong> del banco{info.banco.fecha?" ("+info.banco.fecha+", "+m(info.banco.monto)+")":""}{info.banco.concepto?<> con el concepto <strong style={{color:C.tx}}>"{info.banco.concepto}"</strong></>:null}. El dinero sí entró, así que la diferencia es del cliente.</span>
+      </div>}
+
+      <div style={{fontSize:12.5,fontWeight:700,color:C.tx,marginBottom:8}}>¿Qué hacemos con {m(info.diferencia)}?</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+        {opciones.map(o=><button key={o.v} onClick={()=>setChoice(o.v)} style={{background:choice===o.v?C.ac+"12":C.sf,border:"1px solid "+(choice===o.v?C.ac:C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{o.t}</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2,lineHeight:1.4}}>{o.d}</div>
+        </button>)}
+      </div>
+
+      <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.sf,borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,lineHeight:1.45}}>
+        <CurrencyDollarIcon size={15} weight="bold" color={C.t3} style={{flexShrink:0,marginTop:1}}/>
+        <span>La factura <strong style={{color:C.tx}}>no se va a modificar</strong>: se queda en {m(info.monto_factura)}. Se guarda el precio nuevo en la orden y queda un aviso en <strong style={{color:C.tx}}>Auditoría de CobranzaFlow</strong> con lo que elijas, para que CxC lo resuelva.</span>
+      </div>
+
+      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={()=>onResolve(null)} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
+        <button onClick={()=>choice&&onResolve(choice)} disabled={!choice} style={{...bs(choice?C.ac:C.bd),padding:"8px 16px",opacity:choice?1:.55,cursor:choice?"pointer":"not-allowed"}}>Guardar el precio nuevo</button>
       </div>
     </div>
   </div>;
@@ -15126,6 +15204,7 @@ export default function PrintFlow() {
   const webNotifiedRef=useRef(new Set()); // guard against duplicate web order notifications
   const [toast,setToast]=useState(null); // {message,type}
   const [clientConfirmModal,setClientConfirmModal]=useState(null); // 🆕 v10.13.0 — Modal de confirmación cliente similar
+  const [priceDropModal,setPriceDropModal]=useState(null); // 🔒 v10.75.11 — bajar precio de una factura ya cobrada
   const [connected,setConnected]=useState(null);
   const [actionLoading,setActionLoading]=useState(null); // orderId currently processing
   const assignMachineLock=useRef(false); // v10.64.1 — lock SÍNCRONO real para reentrada de assignMachine (actionLoading es async y se leía stale del closure)
@@ -15155,7 +15234,12 @@ export default function PrintFlow() {
     window.__showClientConfirmModal=(props)=>new Promise(resolve=>{
       setClientConfirmModal({...props,onResolve:(result)=>{setClientConfirmModal(null);resolve(result)}});
     });
-    return()=>{delete window.__showClientConfirmModal};
+    // 🔒 v10.75.11 — mismo mecanismo para el aviso de bajar el precio de una factura cobrada.
+    // Resuelve con la intención elegida (saldo_a_favor|devolucion|error_captura) o null si cancela.
+    window.__showPriceDropModal=(info)=>new Promise(resolve=>{
+      setPriceDropModal({info,onResolve:(result)=>{setPriceDropModal(null);resolve(result)}});
+    });
+    return()=>{delete window.__showClientConfirmModal;delete window.__showPriceDropModal};
   },[]);
   const [archiveLoaded,setArchiveLoaded]=useState(false);
   const archiveLoadedRef=useRef(false);
@@ -16189,6 +16273,35 @@ export default function PrintFlow() {
     if(user==="vendedor"&&orderBefore&&orderBefore.order_type!=="maquila"&&!PRE_PROD_STAGES.includes(orderBefore.stage)){
       showToast("❌ La orden avanzó a "+(SM[orderBefore.stage]?.l||orderBefore.stage)+" mientras editabas — el trabajo ya está en producción y no se puede modificar.","error");
       const err=new Error("order_in_production");err._toasted=true;throw err;
+    }
+    // 🔒 v10.75.11 — Bajarle el precio a una orden YA FACTURADA Y COBRADA.
+    // Desde v10.75.10 el puente se NIEGA a bajar una factura con dinero cobrado, porque bajarla
+    // destruía el balance y la dejaba exigiéndole al cliente dinero que ya había pagado
+    // (reproducido en D-5827). Pero se negaba EN SILENCIO: la orden se guardaba y la factura no
+    // se movía sin que nadie se enterara. Aquí se pregunta ANTES de guardar, y la respuesta viaja
+    // en la MISMA update que el precio para que sync_post_invoice_edit escriba la discrepancia
+    // con lo que la persona decidió en vez de adivinar.
+    // NO bloqueante ante fallo de red: si la consulta truena se guarda igual. El trigger sigue
+    // siendo quien protege el dinero; esto es solamente el aviso.
+    const priceChanged=("price" in safeUpdate&&Number(safeUpdate.price||0)!==Number(orderBefore?.price||0))
+                     ||("maq_price" in safeUpdate&&Number(safeUpdate.maq_price||0)!==Number(orderBefore?.maq_price||0));
+    if(priceChanged&&orderBefore&&(orderBefore.invoice_folio||orderBefore.purchase_order_id)){
+      let intent=null;
+      try{
+        const chk=await db.checkPriceDrop(userLogin||user,f.id,
+          "price" in safeUpdate?safeUpdate.price:orderBefore.price,
+          "maq_price" in safeUpdate?safeUpdate.maq_price:orderBefore.maq_price);
+        if(chk?.aplica&&chk?.bloquea){
+          intent=await window.__showPriceDropModal?.(chk);
+          if(!intent){const err=new Error("price_drop_cancelled");err._toasted=true;throw err;}
+        }
+      }catch(e){
+        if(e?.message==="price_drop_cancelled")throw e;
+        console.warn("[update] checkPriceDrop falló (no bloqueante):",e?.message);
+      }
+      // Se reescribe SIEMPRE, aunque sea a null: así una intención vieja no se recicla en una
+      // edición posterior si la consulta falla y el trigger bloquea de todos modos.
+      safeUpdate.post_invoice_edit_intent=intent;
     }
     const willMarkPostEdit=orderBefore?.invoice_folio&&!orderBefore?.has_post_invoice_edits;
     // v10.58.41 — estampar actor + timestamp para el trigger de historial (order_change_log).
@@ -18302,6 +18415,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={ackWakeup}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
       {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} onResolve={clientConfirmModal.onResolve}/>}
+      {/* 🔒 v10.75.11 — bajar el precio de una orden ya facturada y cobrada */}
+      {priceDropModal&&<PriceDropModal open info={priceDropModal.info} onResolve={priceDropModal.onResolve}/>}
       {/* v10.73.82 — key por identidad de toast: fuerza remount → timer fresco + animación de entrada re-disparada. */}
       {toast&&<Toast key={toast.id} message={toast.message} type={toast.type} action={toast.action} onDone={()=>setToast(null)}/>}
     </div>
