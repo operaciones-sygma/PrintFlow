@@ -2973,6 +2973,14 @@ function PriceDropModal({open,info,onResolve}) {
         <span>Ese cobro está <strong style={{color:C.tx}}>conciliado con un depósito real</strong> del banco{info.banco.fecha?" ("+info.banco.fecha+", "+m(info.banco.monto)+")":""}{info.banco.concepto?<> con el concepto <strong style={{color:C.tx}}>"{info.banco.concepto}"</strong></>:null}. El dinero sí entró, así que la diferencia es del cliente.</span>
       </div>}
 
+      {/* v10.75.17 (scan wu9ahtseu) — si la factura YA está timbrada, el puente la bloquea por el
+          CFDI (guarda F1-4E) antes de llegar a esta lógica: el CFDI es inmutable ante el SAT y hay
+          que cancelarlo y re-timbrarlo. Prometer aquí "saldo a favor" sin decirlo sería mentir. */}
+      {info.timbrada&&<div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.45,marginBottom:14}}>
+        <WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/>
+        <span>Esta factura <strong>ya está timbrada ante el SAT</strong>. El CFDI no se puede modificar: para cambiar el monto hay que <strong>cancelarlo y volver a timbrar</strong>. Lo que elijas queda anotado, pero el trámite fiscal es aparte.</span>
+      </div>}
+
       <div style={{fontSize:12.5,fontWeight:700,color:C.tx,marginBottom:8}}>¿Qué hacemos con {m(info.diferencia)}?</div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
         {opciones.map(o=><button key={o.v} onClick={()=>setChoice(o.v)} style={{background:choice===o.v?C.ac+"12":C.sf,border:"1px solid "+(choice===o.v?C.ac:C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
@@ -9455,7 +9463,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       await onSubmit(clean);
       if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false);agentTouchedRef.current=false} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
-    }catch(e){showToast("❌ "+(e?.message||"Error desconocido (revisa F12)"),"error")}
+    // v10.75.17 (scan wu9ahtseu) — respetar la convención `_toasted`. Los guards de update() ya
+    // muestran su propio mensaje en español y marcan el error como _toasted; este catch lo volvía
+    // a pintar crudo encima. Lo peor: cancelar el modal de baja de precio no es un error, y el
+    // usuario veía "❌ price_drop_cancelled". Arregla de paso el toast duplicado de los otros 3
+    // guards (cantidad bloqueada por stock, orden cambiada en otra sesión, orden en producción).
+    }catch(e){if(!e?._toasted)showToast("❌ "+(e?.message||"Error desconocido (revisa F12)"),"error")}
     finally{setSaving(false)}
   };
   // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
