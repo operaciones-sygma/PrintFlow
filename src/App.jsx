@@ -16288,9 +16288,13 @@ export default function PrintFlow() {
     if(priceChanged&&orderBefore&&(orderBefore.invoice_folio||orderBefore.purchase_order_id)){
       let intent=null;
       try{
-        const chk=await db.checkPriceDrop(userLogin||user,f.id,
-          "price" in safeUpdate?safeUpdate.price:orderBefore.price,
-          "maq_price" in safeUpdate?safeUpdate.maq_price:orderBefore.maq_price);
+        // v10.75.14 (scan wu9ahtseu) — si el campo se DEJA VACIO, safeUpdate trae null y el RPC
+        // hacia COALESCE(p_new_price, o.price), o sea evaluaba con el precio VIEJO y concluia que
+        // no pasaba nada: el aviso no salia y el puente bloqueaba en silencio. Vaciar el precio
+        // significa cero, no "no lo cambies", asi que se manda 0 explicito.
+        const _np="price" in safeUpdate?(safeUpdate.price??0):orderBefore.price;
+        const _nm="maq_price" in safeUpdate?(safeUpdate.maq_price??0):orderBefore.maq_price;
+        const chk=await db.checkPriceDrop(userLogin||user,f.id,_np,_nm);
         if(chk?.aplica&&chk?.bloquea){
           intent=await window.__showPriceDropModal?.(chk);
           if(!intent){const err=new Error("price_drop_cancelled");err._toasted=true;throw err;}
