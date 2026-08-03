@@ -5952,6 +5952,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
   const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
+  // v10.75.10 — Karla se confundía: el campo pedía CON IVA pero el objetivo del semáforo es el
+  // SUBTOTAL (misma base que "subtotal $56,900" de la orden), así que tecleaba subtotales y "no cuadraba".
+  // Default = capturar en SUBTOTAL (misma base que ve por todos lados → cero conversión mental).
+  // Toggle a CON IVA para quien tenga el total a la mano. La fuente de verdad interna sigue siendo
+  // amountConIva (NO se toca reconciliación/submit/divideEqual): solo cambia la capa de edición.
+  const [captureMode, setCaptureMode] = useState("subtotal"); // "subtotal" | "con_iva"
 
   // ESC close (solo cuando NO está guardando)
   // v10.58.43 #25: guard de INPUT/TEXTAREA (convención escStack) — ESC dentro de un
@@ -6039,6 +6045,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     if (doc_type === "factura") return Math.round(amountSinIva * 1.16 * 100) / 100;
     return Math.round(amountSinIva * 100) / 100;
   };
+
+  // v10.75.10 — captura en SUBTOTAL: guardamos amountConIva SIN redondear (subtotal*1.16) para que
+  // amountToBackend haga round-trip EXACTO (round2(S*1.16/1.16)=S) → el input no "salta" y la
+  // reconciliación no marca falsos "no cuadra". El display de con IVA se redondea con fmtMx.
+  const subtotalToStored = (amountSinIva, doc_type) =>
+    doc_type === "factura" ? amountSinIva * 1.16 : amountSinIva;
 
   // Sumas validadas
   const sumQty = splits.reduce((s, sp) => s + Number(sp.qty||0), 0);
@@ -6233,12 +6245,25 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
 
       {/* F1: aviso de foliado automático (emisor ON) */}
       {folioAuto && <FolioAutoNote label="uno por cada parte"/>}
+      {/* v10.75.10 — base de captura (default SUBTOTAL: misma base que el objetivo del semáforo, para no confundir) */}
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+        <label style={{...lbl,marginBottom:0}}>Capturar montos en:</label>
+        {[{k:"subtotal",l:"Subtotal (sin IVA)"},{k:"con_iva",l:"Total (con IVA)"}].map(m => (
+          <button key={m.k} onClick={()=>setCaptureMode(m.k)}
+            style={{...bs(captureMode===m.k?C.ac:C.sf, captureMode===m.k?"#fff":C.t2),padding:"5px 11px",border:captureMode===m.k?"none":"0.5px solid "+C.bd}}>
+            {m.l}
+          </button>
+        ))}
+        <span style={{fontSize:10,color:C.t2}}>
+          {captureMode==="subtotal" ? "Teclea el subtotal (sin IVA); el IVA se calcula solo." : "Teclea el total con IVA; abajo se muestra el subtotal."}
+        </span>
+      </div>
       {/* Tabla de splits */}
       <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"hidden",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"40px 100px 1fr 140px 140px",gap:0,padding:"8px 10px",background:C.sf,fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",letterSpacing:0.3,borderBottom:"0.5px solid "+C.bd}}>
           <div>#</div>
           <div>Cantidad</div>
-          <div>Total <span style={{color:C.ac}}>CON IVA</span> · subtotal</div>
+          <div>{captureMode==="subtotal" ? <>Subtotal <span style={{color:C.ac}}>SIN IVA</span> · con IVA</> : <>Total <span style={{color:C.ac}}>CON IVA</span> · subtotal</>}</div>
           <div>Tipo</div>
           <div>Folio</div>
         </div>
@@ -6255,17 +6280,30 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 placeholder="0"/>
             </div>
             <div>
-              <input type="number" step="0.01" min="0" value={s.amountConIva||""}
-                onChange={e=>updateSplit(i, {amountConIva: parseFloat(e.target.value)||0})}
+              <input type="number" step="0.01" min="0"
+                value={captureMode==="subtotal" ? (s.amountConIva ? subtotal : "") : (s.amountConIva ? Math.round(s.amountConIva*100)/100 : "")}
+                onChange={e=>{
+                  const v = parseFloat(e.target.value)||0;
+                  updateSplit(i, {amountConIva: captureMode==="subtotal" ? subtotalToStored(v, s.doc_type) : v});
+                }}
                 style={{...inp,padding:"6px 10px",fontSize:13,width:"calc(100% - 10px)"}}
                 placeholder="0.00"/>
               <div style={{fontSize:9,color:C.t2,marginTop:2,marginLeft:2}}>
-                {isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)"}
+                {captureMode==="subtotal"
+                  ? (isFactura ? `Total con IVA: $${fmtMx(s.amountConIva)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)")
+                  : (isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)")}
               </div>
             </div>
             <div>
               <select value={s.doc_type}
-                onChange={e=>updateSplit(i, {doc_type: e.target.value, folio: e.target.value==="corona_saldo" ? "" : s.folio})}
+                onChange={e=>{
+                  // v10.75.10 — al cambiar el TIPO, conservar el SUBTOTAL ya capturado (no el número crudo):
+                  // reinterpretar amountConIva al nuevo tipo. Antes el subtotal mostrado saltaba ±16% al
+                  // togglear factura↔remisión, y (factura→Saldo Corona) consumía saldo inflado 16%.
+                  const nt = e.target.value;
+                  updateSplit(i, {doc_type: nt, folio: nt==="corona_saldo" ? "" : s.folio,
+                    amountConIva: s.amountConIva ? subtotalToStored(amountToBackend(Number(s.amountConIva), s.doc_type), nt) : s.amountConIva});
+                }}
                 style={{...inp,padding:"6px 10px",fontSize:12,width:"130px",appearance:"auto"}}>
                 <option value="factura">📄 Factura D-</option>
                 <option value="remision">📋 Remisión R-</option>
