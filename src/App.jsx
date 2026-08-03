@@ -1596,7 +1596,17 @@ const db = {
         ...(real ? {} : {test: true})
       }
     });
-    if(error) throw new Error(error.message);
+    // v10.75.19 (auditoría whg64e5cn) — el motor manda el motivo REAL en el cuerpo de la respuesta,
+    // pero supabase-js solo expone "Edge Function returned a non-2xx status code". Karla veía eso y
+    // no tenía idea de qué corregir. Se desenvuelve el cuerpo, como ya hace CobranzaFlow.
+    if(error){
+      let msg = error.message;
+      try{
+        const b = await error?.context?.json?.();
+        if(b?.error) msg = b.error + (b.folio_quemado ? ` (se consumió el folio T-${b.folio_quemado})` : "");
+      }catch(e){ /* si no se puede leer el cuerpo, queda el mensaje genérico */ }
+      throw new Error(msg);
+    }
     if(!data?.ok) throw new Error(data?.error || "no se pudo timbrar el traslado");
     return data; // {folio_completo, uuid, id_ccp, test}
   },
