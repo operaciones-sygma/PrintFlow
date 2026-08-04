@@ -1687,7 +1687,16 @@ const db = {
       p_actor: actor,
       p_allow_link: allowLink
     });
-    if(error) throw new Error(error.message);
+    if(error){
+      // v10.75.11 (scan w7yyjrpws P3): el bridge de splits registra sus errores en audit_log DENTRO de la
+      // misma tx atómica → el RAISE los revierte y nunca persisten. Dejamos el rastro forense desde la app,
+      // en su propia transacción (best-effort; si el log falla, no bloquea el error real que sí ve el usuario).
+      try {
+        const folios = Array.isArray(splits) ? splits.map(s=>s?.folio).filter(Boolean).join(", ") : "";
+        await supabase.rpc("log_split_bridge_failure", { p_order_id: orderId, p_folios: folios, p_error: error.message, p_actor: actor });
+      } catch(_) { /* best-effort, no romper el flujo de error */ }
+      throw new Error(error.message);
+    }
     return data;
   },
   // 🆕 v10.58.34 — Cancelar 1 split individual (admin-only). Si era corona_saldo o
@@ -6099,7 +6108,10 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
 
   const reasonOk = !allPreAssigned || (globalReason||"").trim().length >= 3;
   const qtysOk = splits.every(s => Number(s.qty||0) > 0);
-  const amountsOk = splits.every(s => Number(s.amountConIva||0) > 0);
+  // v10.75.11 (scan w7yyjrpws P3): validar el monto YA REDONDEADO (lo que ve el RPC), no el amountConIva
+  // crudo. Sin esto, un subtotal sub-centavo (<0.005) pasaba el semáforo en verde pero el RPC lo rechaza
+  // ('amount debe ser > 0') → callejón "todo verde pero Crear falla". Ahora el semáforo lo bloquea antes.
+  const amountsOk = splits.every(s => amountToBackend(Number(s.amountConIva||0), s.doc_type) > 0);
   const splitsMin = splits.length >= 2;
   const coronaTypesValid = !hasCoronaSaldo || isCorona;  // corona_saldo solo si cliente Corona
 
