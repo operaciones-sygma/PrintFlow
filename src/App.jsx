@@ -1691,10 +1691,15 @@ const db = {
       // v10.75.11 (scan w7yyjrpws P3): el bridge de splits registra sus errores en audit_log DENTRO de la
       // misma tx atómica → el RAISE los revierte y nunca persisten. Dejamos el rastro forense desde la app,
       // en su propia transacción (best-effort; si el log falla, no bloquea el error real que sí ve el usuario).
-      try {
-        const folios = Array.isArray(splits) ? splits.map(s=>s?.folio).filter(Boolean).join(", ") : "";
-        await supabase.rpc("log_split_bridge_failure", { p_order_id: orderId, p_folios: folios, p_error: error.message, p_actor: actor });
-      } catch(_) { /* best-effort, no romper el flujo de error */ }
+      // v10.75.11b (re-scan wqhehpuu6 P3): SOLO fallas genuinas del puente/sistema. Las validaciones de usuario
+      // y la señal de control "folio ya registrado" (Opción A ligar) usan ERRCODE 22023 → NO loggear (inundaban
+      // audit_log de falsos positivos y diluían la señal de una falla real de dinero). Las reales son 23xxx/40xxx/P0001.
+      if(error.code !== "22023"){
+        try {
+          const folios = Array.isArray(splits) ? splits.map(s=>s?.folio).filter(Boolean).join(", ") : "";
+          await supabase.rpc("log_split_bridge_failure", { p_order_id: orderId, p_folios: folios, p_error: error.message, p_actor: actor });
+        } catch(_) { /* best-effort, no romper el flujo de error */ }
+      }
       throw new Error(error.message);
     }
     return data;
