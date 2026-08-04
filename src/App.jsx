@@ -1601,11 +1601,25 @@ const db = {
     // no tenía idea de qué corregir. Se desenvuelve el cuerpo, como ya hace CobranzaFlow.
     if(error){
       let msg = error.message;
+      // v10.75.20 (scan wmqw3wytg, P1) — antes se tiraba el cuerpo entero salvo el texto, y con él
+      // las DOS señales que dicen "no vuelvas a intentar": `ambiguo` (el motor mandó a Facturapi y
+      // no le contestaron) y `timbrado` (el CFDI SÍ salió, solo falló el guardado). Sin ellas, el
+      // catch de arriba trataba el peor caso igual que un "falta la fecha" y empujaba a re-emitir.
+      let ambiguo = false, timbrado = false, uuid = null;
       try{
         const b = await error?.context?.json?.();
-        if(b?.error) msg = b.error + (b.folio_quemado ? ` (se consumió el folio T-${b.folio_quemado})` : "");
+        if(b?.error){
+          // el motor ya incluye "Se consumió el folio T-N." dentro de b.error; no repetirlo
+          const yaLoDice = b.folio_quemado && b.error.includes(`T-${b.folio_quemado}`);
+          msg = b.error + (b.folio_quemado && !yaLoDice ? ` (se consumió el folio T-${b.folio_quemado})` : "");
+        }
+        ambiguo = b?.ambiguo === true; timbrado = b?.timbrado === true; uuid = b?.uuid ?? null;
       }catch(e){ /* si no se puede leer el cuerpo, queda el mensaje genérico */ }
-      throw new Error(msg);
+      const err = new Error(msg);
+      // si no se pudo leer el cuerpo, tratarlo como ambiguo: es justo el síntoma de un timeout
+      err.ambiguo = ambiguo || !msg || msg === error.message;
+      err.timbrado = timbrado; err.uuid = uuid;
+      throw err;
     }
     if(!data?.ok) throw new Error(data?.error || "no se pudo timbrar el traslado");
     return data; // {folio_completo, uuid, id_ccp, test}
@@ -16092,7 +16106,18 @@ export default function PrintFlow() {
             showToast("🚚 Traslado "+t.folio_completo+" timbrado"+(t.test?" (PRUEBA, sin validez fiscal)":"")+" · "+traslado.destino);
           }catch(te){
             console.error("[traslado] Error:",te);
-            showToast("⚠️ El folio quedó asignado pero el TRASLADO no se pudo timbrar: "+(te?.message||"error")+". Emítelo desde CobranzaFlow → Traslados antes de que salga la camioneta.","error");
+            // v10.75.20 (scan wmqw3wytg, P1) — antes SIEMPRE se cerraba con "Emítelo desde
+            // CobranzaFlow → Traslados antes de que salga la camioneta", incluso cuando el motor
+            // acababa de avisar que el CFDI PUDO haberse emitido, o que SÍ se emitió. El aviso se
+            // contradecía solo, y la última frase —la que se lee con prisa— empujaba justo al
+            // segundo CFDI real por la misma carga, que solo se deshace cancelando uno ante el SAT.
+            if(te?.timbrado){
+              showToast("🛑 El folio quedó asignado y el TRASLADO SÍ SE TIMBRÓ ante el SAT"+(te.uuid?" ("+te.uuid+")":"")+", pero no se pudo guardar en la app. NO lo emitas otra vez: sería un segundo CFDI por la misma carga. Anota ese folio fiscal y avisa a cobranza.","error");
+            } else if(te?.ambiguo){
+              showToast("⚠️ El folio quedó asignado, pero NO SABEMOS si el traslado se timbró: el servidor no alcanzó a contestar. ANTES de emitirlo, revísalo en CobranzaFlow → Traslados; si ya está ahí, no lo timbres otra vez.","error");
+            } else {
+              showToast("⚠️ El folio quedó asignado pero el TRASLADO no se pudo timbrar: "+(te?.message||"error")+". Emítelo desde CobranzaFlow → Traslados antes de que salga la camioneta.","error");
+            }
           }
         }
 
