@@ -9095,6 +9095,7 @@ function PantoneInput({label, value, onChange}) {
   const [results, setResults] = useState([]);
   const [hexCache, setHexCache] = useState({});
   const [open, setOpen] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const debRef = useRef(null);
   const arr = Array.isArray(value) ? value : [];
   useEffect(() => {
@@ -9119,24 +9120,50 @@ function PantoneInput({label, value, onChange}) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arr.join(",")]);
+  // v10.76.2 (scan w8pvkd758) — normalización IGUAL que code_normalized del catálogo (UPPER + sin espacios),
+  // para dedup y matching case/space-insensitive: evita chips duplicados y variantes-sombra del mismo Pantone.
+  const norm = (s) => (s || "").trim().toUpperCase().replace(/\s+/g, "");
+  // Sanea un código libre: quita separadores que rompen impresión/comparación de arrays/PK (coma, pipe),
+  // colapsa espacios y limita a 40 (igual que el tope de la RPC). Un código Pantone real no lleva "," ni "|".
+  const sanitizeCode = (s) => (s || "").replace(/[,|]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
   const addPantone = (code) => {
-    if (arr.includes(code)) return;
-    onChange([...arr, code]);
+    const c = sanitizeCode(code);
     setQuery(""); setResults([]); setOpen(false);
+    if (!c || arr.some(x => norm(x) === norm(c))) return;  // dedup por normalizado, no por string exacto
+    onChange([...arr, c]);
   };
-  // v10.76.0 — Pantones LIBRES: el catálogo (pantone_colors) no cubre todas las series (p.ej. la 76xx —
-  // Pantone 7648 — no está). Antes solo se podía agregar un Pantone eligiéndolo de los resultados, así que
-  // un código faltante era imposible de guardar. Ahora se puede escribir cualquier código y guardarlo tal
-  // cual (queda como chip sin vista de color). El cliente pide un Pantone → siempre se puede registrar.
-  const addCustom = () => { const c = query.trim(); if (c) addPantone(c); };
+  // v10.76.0 — Pantones LIBRES: el catálogo (pantone_colors) no cubre todas las series (p.ej. la 76xx — el
+  // Pantone 7648 — no está). Se puede escribir cualquier código y guardarlo. Si el catálogo YA lo tiene con
+  // otra grafía (mayúsculas/espacios), se usa el código CANÓNICO del catálogo (así hereda su color oficial y
+  // no se crea una variante-sombra).
+  const addCustom = () => {
+    const c = sanitizeCode(query);
+    if (!c) return;
+    const hit = results.find(r => norm(r.code) === norm(c));
+    addPantone(hit ? hit.code : c);
+  };
   const removePantone = (code) => onChange(arr.filter(c => c !== code));
   // v10.76.1 — fijarle color a un Pantone que NO está en el catálogo (el color lo captura el operador desde
   // SU guía/software Pantone licenciado). Se guarda vía upsert_pantone → queda con vista de color para
-  // siempre y para todas las órdenes. Optimista: el color se ve al instante aunque el guardado tarde.
+  // siempre y para todas las órdenes.
   const setCustomColor = async (code, hex) => {
-    setHexCache(prev => ({ ...prev, [code]: hex }));
-    try { await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null }); }
-    catch (e) { /* el color local ya aplicó; se persistirá al reintentar */ }
+    setHexCache(prev => ({ ...prev, [code]: hex }));  // optimista
+    setSaveErr("");
+    // v10.76.2 (scan w8pvkd758) — supabase-js RESUELVE con {data,error} (NO lanza), así que el catch no
+    // atrapaba nada: un fallo del guardado dejaba el color "puesto" pero se perdía al recargar, sin aviso.
+    // Ahora se inspecciona el error, se REVIERTE el color optimista y se avisa para que el operador reintente.
+    const { error } = await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null });
+    if (error) {
+      setHexCache(prev => { const n = { ...prev }; delete n[code]; return n; });
+      setSaveErr("No se pudo guardar el color de " + code + ". Reintenta.");
+    }
+  };
+  // v10.76.2 — pegar el HEX EXACTO (de Pantone Connect / guía digital). Acepta con o sin '#', y expande el
+  // atajo de 3 dígitos (#abc→#aabbcc). Solo guarda cuando es un hex válido.
+  const tryHex = (code, raw) => {
+    let v = (raw || "").trim().replace(/^#/, "");
+    if (/^[0-9a-fA-F]{3}$/.test(v)) v = v.split("").map(ch => ch + ch).join("");
+    if (/^[0-9a-fA-F]{6}$/.test(v)) setCustomColor(code, "#" + v.toLowerCase());
   };
   return (
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
@@ -9147,14 +9174,18 @@ function PantoneInput({label, value, onChange}) {
           return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
             {hex
               ? <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
-              : <input type="color" defaultValue="#cccccc" onChange={e=>setCustomColor(code, e.target.value)} title="Fijar el color de este Pantone (desde tu guía Pantone)" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent"}}/>
+              : <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
+                  <input type="color" defaultValue="#cccccc" onChange={e=>setCustomColor(code, e.target.value)} title="Elegir el color visualmente" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
+                  <input type="text" placeholder="#HEX" maxLength={7} onChange={e=>tryHex(code, e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();tryHex(code, e.target.value);}}} title="Pega aquí el HEX exacto de tu guía Pantone (ej. #7A2E1D)" style={{width:60,fontSize:10,padding:"2px 4px",borderRadius:5,border:"1px solid "+C.bd,fontFamily:"monospace"}}/>
+                </span>
             }
             <span>{code}</span>
             <button type="button" onClick={()=>removePantone(code)} style={{border:"none",background:"transparent",cursor:"pointer",color:C.t3,fontSize:14,padding:0,marginLeft:2,lineHeight:1}} title="Quitar">×</button>
           </div>;
         })}
       </div>}
-      {arr.some(c => !hexCache[c]) && <div style={{fontSize:10,color:C.t3,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>Los Pantones con recuadro punteado no están en el catálogo: toca el recuadro para fijarles su color desde tu guía Pantone (se guarda para la próxima).</div>}
+      {arr.some(c => !hexCache[c]) && <div style={{fontSize:10,color:C.t3,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>Los Pantones con recuadro punteado no están en el catálogo: elige el color o <strong>pega su HEX</strong> (de tu guía / Pantone Connect) para fijarlo. Se guarda para la próxima.</div>}
+      {saveErr && <div style={{fontSize:10,color:"#dc2626",marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>⚠ {saveErr}</div>}
       <div style={{position:"relative"}}>
         <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addCustom();}}} placeholder="Buscar o escribir un Pantone (ej. 186 C, 7648, Reflex Blue)..."/>
         {open && (results.length > 0 || query.trim().length > 0) && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
@@ -9168,10 +9199,10 @@ function PantoneInput({label, value, onChange}) {
               <div style={{fontSize:9,color:C.t3,padding:"2px 6px",borderRadius:6,background:C.sf}}>{r.system}</div>
             </div>
           ))}
-          {query.trim() && !results.some(r => (r.code||"").toLowerCase() === query.trim().toLowerCase()) && (
+          {sanitizeCode(query) && !results.some(r => norm(r.code) === norm(query)) && (
             <div onMouseDown={e=>{e.preventDefault();addCustom();}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",fontFamily:"'Geist',sans-serif",background:C.sf}} onMouseEnter={e=>e.currentTarget.style.background=C.bd} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
               <div style={{width:24,height:24,borderRadius:12,background:"#e5e5e5",border:"1px dashed rgba(0,0,0,0.25)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:C.t3,lineHeight:1}}>+</div>
-              <div style={{flex:1,minWidth:0,fontSize:12,color:C.tx}}>Agregar <strong>“{query.trim()}”</strong> <span style={{color:C.t3,fontSize:10}}>· código libre (sin vista de color)</span></div>
+              <div style={{flex:1,minWidth:0,fontSize:12,color:C.tx}}>Agregar <strong>“{sanitizeCode(query)}”</strong> <span style={{color:C.t3,fontSize:10}}>· código libre (sin vista de color)</span></div>
             </div>
           )}
         </div>}
