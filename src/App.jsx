@@ -9158,6 +9158,10 @@ function PantoneInput({label, value, onChange}) {
       setSaveErr("No se pudo guardar el color de " + code + ". Reintenta.");
     }
   };
+  // v10.76.4 (scan final wypx8vbd1) — debounce del <input type=color> (onChange se dispara en cada paso del
+  // arrastre → ráfaga de upserts). El HEX pegado (tryHex) guarda directo.
+  const colorDebRef = useRef(null);
+  const setColorDebounced = (code, hex) => { if (colorDebRef.current) clearTimeout(colorDebRef.current); colorDebRef.current = setTimeout(() => setCustomColor(code, hex), 350); };
   // v10.76.2 — pegar el HEX EXACTO (de Pantone Connect / guía digital). Acepta con o sin '#', y expande el
   // atajo de 3 dígitos (#abc→#aabbcc). Solo guarda cuando es un hex válido.
   const tryHex = (code, raw) => {
@@ -9175,7 +9179,7 @@ function PantoneInput({label, value, onChange}) {
             {hex
               ? <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
               : <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
-                  <input type="color" defaultValue="#cccccc" onChange={e=>setCustomColor(code, e.target.value)} title="Elegir el color visualmente" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
+                  <input type="color" defaultValue="#cccccc" onChange={e=>setColorDebounced(code, e.target.value)} title="Elegir el color visualmente" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
                   <input type="text" placeholder="#HEX" maxLength={7} onChange={e=>tryHex(code, e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();tryHex(code, e.target.value);}}} title="Pega aquí el HEX exacto de tu guía Pantone (ej. #7A2E1D)" style={{width:60,fontSize:10,padding:"2px 4px",borderRadius:5,border:"1px solid "+C.bd,fontFamily:"monospace"}}/>
                 </span>
             }
@@ -9232,12 +9236,16 @@ function PantoneChips({codes, role}) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codes.join(",")]);
-  const saveColor = async (code, hex) => {
+  const colorDeb = useRef(null);
+  const saveColorNow = async (code, hex) => {
     setHexes(prev => ({...prev, [code]: hex})); setErr("");  // optimista
     const { error } = await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null });
     if (error) { setHexes(prev => { const n={...prev}; delete n[code]; return n; }); setErr("No se pudo guardar el color de "+code); }
   };
-  const tryHex = (code, raw) => { let v=(raw||"").trim().replace(/^#/,""); if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split("").map(c=>c+c).join(""); if(/^[0-9a-fA-F]{6}$/.test(v))saveColor(code,"#"+v.toLowerCase()); };
+  // v10.76.4 (scan final wypx8vbd1) — el <input type=color> dispara onChange en cada paso del arrastre → una
+  // ráfaga de upserts. Se DEBOUNCE para guardar una sola vez al soltar. El HEX pegado guarda directo.
+  const saveColor = (code, hex) => { if (colorDeb.current) clearTimeout(colorDeb.current); colorDeb.current = setTimeout(() => saveColorNow(code, hex), 350); };
+  const tryHex = (code, raw) => { let v=(raw||"").trim().replace(/^#/,""); if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split("").map(c=>c+c).join(""); if(/^[0-9a-fA-F]{6}$/.test(v))saveColorNow(code,"#"+v.toLowerCase()); };
   return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
     {codes.map(code => {
       const hex = hexes[code];
