@@ -9130,19 +9130,31 @@ function PantoneInput({label, value, onChange}) {
   // cual (queda como chip sin vista de color). El cliente pide un Pantone → siempre se puede registrar.
   const addCustom = () => { const c = query.trim(); if (c) addPantone(c); };
   const removePantone = (code) => onChange(arr.filter(c => c !== code));
+  // v10.76.1 — fijarle color a un Pantone que NO está en el catálogo (el color lo captura el operador desde
+  // SU guía/software Pantone licenciado). Se guarda vía upsert_pantone → queda con vista de color para
+  // siempre y para todas las órdenes. Optimista: el color se ve al instante aunque el guardado tarde.
+  const setCustomColor = async (code, hex) => {
+    setHexCache(prev => ({ ...prev, [code]: hex }));
+    try { await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null }); }
+    catch (e) { /* el color local ya aplicó; se persistirá al reintentar */ }
+  };
   return (
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
       <label style={lbl}>{label}</label>
       {arr.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,marginBottom:6}}>
         {arr.map(code => {
-          const hex = hexCache[code] || "#cccccc";
+          const hex = hexCache[code];
           return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
-            <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+            {hex
+              ? <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+              : <input type="color" defaultValue="#cccccc" onChange={e=>setCustomColor(code, e.target.value)} title="Fijar el color de este Pantone (desde tu guía Pantone)" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent"}}/>
+            }
             <span>{code}</span>
             <button type="button" onClick={()=>removePantone(code)} style={{border:"none",background:"transparent",cursor:"pointer",color:C.t3,fontSize:14,padding:0,marginLeft:2,lineHeight:1}} title="Quitar">×</button>
           </div>;
         })}
       </div>}
+      {arr.some(c => !hexCache[c]) && <div style={{fontSize:10,color:C.t3,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>Los Pantones con recuadro punteado no están en el catálogo: toca el recuadro para fijarles su color desde tu guía Pantone (se guarda para la próxima).</div>}
       <div style={{position:"relative"}}>
         <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addCustom();}}} placeholder="Buscar o escribir un Pantone (ej. 186 C, 7648, Reflex Blue)..."/>
         {open && (results.length > 0 || query.trim().length > 0) && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
