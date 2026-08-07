@@ -3766,7 +3766,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
       <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
-      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
+      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
       {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
       {!hp&&vOwns&&isMaq&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Maquila</div><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
@@ -9211,9 +9211,15 @@ function PantoneInput({label, value, onChange}) {
   );
 }
 
-// ─── PANTONE CHIPS (read-only, para DetailModal) ───
-function PantoneChips({codes}) {
+// ─── PANTONE CHIPS (para DetailModal) ───
+// v10.76.3 — antes era read-only. Ahora diseño (preprensa/Noemí), admin, secretaría y germán (CTP) pueden
+// FIJAR el color de un Pantone que no está en el catálogo directo desde el detalle de la orden (selector +
+// pegar HEX de su guía Pantone). El color se guarda en el catálogo (upsert_pantone) → sirve para todas las
+// órdenes. Pedido: que Noemí de diseño también pueda agregar los HEX. El color lo aporta el operador.
+function PantoneChips({codes, role}) {
   const [hexes, setHexes] = useState({});
+  const [err, setErr] = useState("");
+  const canEdit = ["admin","secretaria","preprensa","german"].includes(role);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -9226,14 +9232,29 @@ function PantoneChips({codes}) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codes.join(",")]);
-  return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>
+  const saveColor = async (code, hex) => {
+    setHexes(prev => ({...prev, [code]: hex})); setErr("");  // optimista
+    const { error } = await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null });
+    if (error) { setHexes(prev => { const n={...prev}; delete n[code]; return n; }); setErr("No se pudo guardar el color de "+code); }
+  };
+  const tryHex = (code, raw) => { let v=(raw||"").trim().replace(/^#/,""); if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split("").map(c=>c+c).join(""); if(/^[0-9a-fA-F]{6}$/.test(v))saveColor(code,"#"+v.toLowerCase()); };
+  return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
     {codes.map(code => {
-      const hex = hexes[code] || "#cccccc";
+      const hex = hexes[code];
       return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px 2px 3px",borderRadius:12,background:"#f5f5f7",fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
-        <div style={{width:14,height:14,borderRadius:7,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+        {hex
+          ? <div style={{width:14,height:14,borderRadius:7,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
+          : canEdit
+            ? <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
+                <input type="color" defaultValue="#cccccc" onChange={e=>saveColor(code,e.target.value)} title="Fijar el color (desde tu guía Pantone)" style={{width:16,height:16,borderRadius:8,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
+                <input type="text" placeholder="#HEX" maxLength={7} onChange={e=>tryHex(code,e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryHex(code,e.target.value);}} title="Pega el HEX exacto (Pantone Connect)" style={{width:56,fontSize:10,padding:"1px 3px",borderRadius:4,border:"1px solid "+C.bd,fontFamily:"monospace"}}/>
+              </span>
+            : <div style={{width:14,height:14,borderRadius:7,background:"#e5e5e5",border:"1px dashed "+C.t3}} title="Sin color en el catálogo"/>
+        }
         <span>{code}</span>
       </div>;
     })}
+    {err && <span style={{fontSize:9,color:"#dc2626"}}>⚠ {err}</span>}
   </div>;
 }
 
