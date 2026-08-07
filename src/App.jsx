@@ -9124,6 +9124,11 @@ function PantoneInput({label, value, onChange}) {
     onChange([...arr, code]);
     setQuery(""); setResults([]); setOpen(false);
   };
+  // v10.76.0 — Pantones LIBRES: el catálogo (pantone_colors) no cubre todas las series (p.ej. la 76xx —
+  // Pantone 7648 — no está). Antes solo se podía agregar un Pantone eligiéndolo de los resultados, así que
+  // un código faltante era imposible de guardar. Ahora se puede escribir cualquier código y guardarlo tal
+  // cual (queda como chip sin vista de color). El cliente pide un Pantone → siempre se puede registrar.
+  const addCustom = () => { const c = query.trim(); if (c) addPantone(c); };
   const removePantone = (code) => onChange(arr.filter(c => c !== code));
   return (
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
@@ -9139,8 +9144,8 @@ function PantoneInput({label, value, onChange}) {
         })}
       </div>}
       <div style={{position:"relative"}}>
-        <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} placeholder="Buscar Pantone (ej. 186 C, Reflex Blue)..."/>
-        {open && results.length > 0 && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
+        <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addCustom();}}} placeholder="Buscar o escribir un Pantone (ej. 186 C, 7648, Reflex Blue)..."/>
+        {open && (results.length > 0 || query.trim().length > 0) && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
           {results.map(r => (
             <div key={r.code} onMouseDown={e=>{e.preventDefault();addPantone(r.code)}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:"0.5px solid "+C.bd,fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
               <div style={{width:24,height:24,borderRadius:12,background:r.hex,border:"1px solid rgba(0,0,0,0.1)",flexShrink:0}}/>
@@ -9151,6 +9156,12 @@ function PantoneInput({label, value, onChange}) {
               <div style={{fontSize:9,color:C.t3,padding:"2px 6px",borderRadius:6,background:C.sf}}>{r.system}</div>
             </div>
           ))}
+          {query.trim() && !results.some(r => (r.code||"").toLowerCase() === query.trim().toLowerCase()) && (
+            <div onMouseDown={e=>{e.preventDefault();addCustom();}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",fontFamily:"'Geist',sans-serif",background:C.sf}} onMouseEnter={e=>e.currentTarget.style.background=C.bd} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
+              <div style={{width:24,height:24,borderRadius:12,background:"#e5e5e5",border:"1px dashed rgba(0,0,0,0.25)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:C.t3,lineHeight:1}}>+</div>
+              <div style={{flex:1,minWidth:0,fontSize:12,color:C.tx}}>Agregar <strong>“{query.trim()}”</strong> <span style={{color:C.t3,fontSize:10}}>· código libre (sin vista de color)</span></div>
+            </div>
+          )}
         </div>}
       </div>
     </div>
