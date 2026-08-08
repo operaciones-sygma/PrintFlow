@@ -847,7 +847,7 @@ function getTaskFilters(role){
   const common=[
     {key:"urgent",Icon:FireIcon,label:"Urgentes",color:"#dc2626",predicate:o=>o.priority==="urgente"}, // v10.43.20 FIX A9 — lowercase consistente con PRIOS/BD
     // v10.41.1 #5 — defensive slice por si due_date trae tiempo (patrón usado en fD/fDT)
-    {key:"late",Icon:AlarmIcon,label:"Retrasos",color:"#f59e0b",predicate:o=>{if(!o.due_date)return false;const due=new Date(String(o.due_date).slice(0,10)+"T23:59:59");return !isNaN(due.getTime())&&due<new Date()}},
+    {key:"late",Icon:AlarmIcon,label:"Retrasos",color:"#f59e0b",predicate:o=>isOverdue(o.due_date)},// v10.73.85 (ultracode) — reusar isOverdue (que trae el guard duePlausible de L13); antes reimplementaba el cálculo crudo sin el guard, divergiendo de isOverdue/diagnoseOrder con fechas corruptas
   ];
   const isOperative=role==="produccion"||role==="preprensa"||role==="german";
   // v10.54.6 — 🐢 Estancadas: solo roles que actúan sobre WIP atorado (no Lupita ni vendedor).
@@ -2814,7 +2814,7 @@ function getWakeupItems(role, userLogin, orders){
     // v10.58.64 M2: el rescate de Manuel (agente sin usuario → Lupita persigue) se basa
     // en el VENCIMIENTO real, no en diag.key==='late' (no_folio/validation ganaban antes
     // y Lupita perdía las vencidas más viejas de Manuel).
-    const overdue = o.due_date && new Date(String(o.due_date).slice(0,10)+"T23:59:59") < new Date();
+    const overdue = isOverdue(o.due_date);// v10.73.85 (ultracode) — reusar isOverdue (guard duePlausible de L13); antes el cálculo crudo divergía de diagnoseOrder con fechas corruptas
     const viaManuel = isSec(role) && overdue && ag && !VENDEDORES_CON_USUARIO.has(ag.toLowerCase());
     let mine=false;
     if(role==="admin") mine=true;
@@ -13220,7 +13220,7 @@ function StatCard({ label, value, subValue, color }) {
 }
 
 // ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
-function OperationalHealthView({ orders, role, userLogin, notifications, maintenance, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
+function OperationalHealthView({ orders, role, userLogin, notifications, maintenance, maintKey, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
   // v10.54.5 m2 — modal admin para limpiar histórico de impresiones
   const [showPrintCleanup, setShowPrintCleanup] = useState(false);
   const [showMergeClients, setShowMergeClients] = useState(false);
@@ -13250,7 +13250,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   const isVencida = (o) => o.due_date && isOverdue(o.due_date);
   const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000);
 
-  const topPriority = useMemo(() => getTopPriority(active), [active]);
+  const topPriority = useMemo(() => getTopPriority(active), [active, maintKey]);// v10.73.85 (ultracode) — maintKey en deps: getStale cambia su veredicto al caer/reparar una máquina, pero `active` (deps [orders]) no cambia por un toggle de mantenimiento → sin esto Salud mostraba la clasificación vieja (asimetría con la Torre)
 
   const responsiblePulse = useMemo(() => {
     const icons = { preprensa: PaletteIcon, produccion: GearIcon, secretaria: ClipboardTextIcon, karla: ReceiptIcon, german: DiscIcon };
@@ -13285,7 +13285,7 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
       warning: list.filter(o => o._stale.lv === "warning"),
       total: list.length
     };
-  }, [active]);
+  }, [active, maintKey]);// v10.73.85 (ultracode) — maintKey en deps, igual que topPriority: recomputar getStale al caer/reparar máquina
 
   const incomplete = useMemo(() => getIncompleteData(orders), [orders]);
 
@@ -16875,7 +16875,6 @@ export default function PrintFlow() {
     //   máquina B real → oldMachine!==mid → targetPos=currentQueue.length → se anexa y no toca a nadie.
     const o=ordersRef.current.find(x=>x.id===oid);
     if(!o){assignMachineLock.current=false;return false;}
-    // v10.73.84 (RETURN-2) — recordar el origen maquila_in antes de que el montaje sobrescriba el stage a in_production.
     const oldMachine=o?.current_machine;
     const wasActiveOldMachine=o?.machine_queue_position===0;
     // v10.58.64 A3: Empaque (vm_manual) NO usa cola (position NULL) pero SÍ tiene log
@@ -18131,7 +18130,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
         {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
