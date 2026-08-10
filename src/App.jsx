@@ -16136,7 +16136,7 @@ export default function PrintFlow() {
       const o=orders.find(x=>x.id===orderId);
       const fromId=o?.purchase_order_id;
       await db.moveOrderToOC(orderId,targetOCId,userLogin||user,forceCrossClient);
-      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId+(forceCrossClient?" · ⚠️ Override CFDI":""));
+      showToast("↔️ Movida"+(fromId?" desde "+fromId:"")+" → "+targetOCId+(forceCrossClient?" · ⚠️ Override CFDI":""),forceCrossClient?"warning":"success");/* v10.76.8: ámbar cuando hay override CFDI (el ⚠️ ya no se ve; el color lleva la señal) */
       setMoveModal(null);
       // v10.20.0 — Notif al trío Lupita+Noemí+Gerardo (excepto al que movió) + creador externo + admin in-app
       try{
@@ -16416,6 +16416,15 @@ export default function PrintFlow() {
       if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
       if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
       if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) delete safeUpdate.client_company;
+    }
+    // v10.76.8 (rescan wayd09m7h, P2) — defensa en profundidad que faltaba al candado v10.76.7: una orden comprometida
+    // por SPLIT/MATRIZ/AGRUPADA pero SIN invoice_folio (el bridge de sync es por folio → NO la cubre) tampoco debe
+    // cambiar price/maq_price desde aquí. El form ya lo bloquea (_financialsLocked → inputs readOnly), pero faltaba el
+    // strip anti-DevTools que SÍ tienen los otros dos disparadores de financialsLocked (folio pre-asignado, return_covered).
+    // Aplica a TODOS los roles (incluido admin): a diferencia de invoice_folio, aquí no hay re-sync ni badge de auditoría.
+    if(!originalOrder?.invoice_folio && (originalOrder?.has_splits || originalOrder?.has_matrix_lines || originalOrder?.grouped_invoice_folio)){
+      delete safeUpdate.price;
+      delete safeUpdate.maq_price;
     }
     if(originalOrder && user!=="admin"){
       if("production_number" in safeUpdate && safeUpdate.production_number !== originalOrder.production_number){
@@ -18359,7 +18368,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           await db.notifySecs(invoiceModal.id,"delivery",notifMsg,null,user,invoiceModal.created_by);
           // v10.49.2 fix#2 — Notificar si quedó huérfana (Karla eligió "sin precio")
           if(skipPrice){
-            showToast("✅ Folio "+assignedFolio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea");
+            showToast("✅ Folio "+assignedFolio+" asignado · ⚠️ Capturar precio después para que CobranzaFlow la vea","warning");/* v10.76.8: ámbar — lleva una advertencia de dinero (sin precio, CBF no la ve) */
           }else if(invoiceType==="no_folio"){
             showToast("✅ Folio "+assignedFolio+" asignado y orden entregada");
           }else{
@@ -18406,7 +18415,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:folio,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,payment_status:paid?"paid":partial?"partial":"unpaid",stage:newStage,delivered_at:new Date().toISOString(),timeline:addTL(o,tlMsg,{to:newStage})}:o));
                   try{ await db.addTimeline(oid,tlMsg,user,C.fac); }catch(_){}
                   const payMismatch=capturedPay&&!paid&&!partial; // Karla marcó pago pero la factura ligada sigue pendiente → el cobro va en CobranzaFlow
-                  showToast("🔗 Folio "+folio+" ligado"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+" — orden entregada"+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""));
+                  showToast("🔗 Folio "+folio+" ligado"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+" — orden entregada"+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""),payMismatch?"warning":"success");/* v10.76.8: ámbar cuando el pago va en CBF (advertencia de dinero) */
                   reload();
                 }catch(e2){
                   console.error("[linkInvoiceToOrder] Error:",e2);
