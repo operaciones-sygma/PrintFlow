@@ -3735,7 +3735,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // y aquí el costo salía como fila de solo-lectura. Mismos gates que OCard (maquila: isSec+owner; interna:
   // secretaria en draft / vendedor pre-producción). El handler update ya bloquea precios al cliente.
   const _ownEdit=role==="secretaria"||!o.created_by||o.created_by===userLogin||_agentMatch;
-  const _canEditOwner=(isMaq&&isSec(role)&&_ownEdit&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&canEditWebOrder(o,role))
+  // v10.76.5 — una maquila ENTREGADA pero AÚN SIN folio fiscal (ni agrupada) sigue siendo corregible: Karla la
+  // factura después en cobranza; hasta entonces precio/costo deben poder ajustarse (Lupita capturó maq_price con
+  // error y el gate de "delivered" la dejaba intocable para todos). Al asignarse folio se re-bloquea.
+  const _canEditOwner=(isMaq&&isSec(role)&&_ownEdit&&(!o.stage.includes("delivered")||(!o.invoice_folio&&!o.grouped_invoice_folio))&&!o.stage.includes("cancelled")&&canEditWebOrder(o,role))
     ||(!isMaq&&isSec(role)&&_ownEdit&&o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&canEditWebOrder(o,role))
     ||(!isMaq&&role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft");
 
@@ -3852,7 +3855,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-          {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico")&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}
+          {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5: admin también edita una entregada SIN folio (p.ej. maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
           {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
@@ -11096,7 +11099,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     </div>}
 
     {/* Lupita: edit maquila orders (no validation lock). v10.58.23: vendedor también si es agent */}
-    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+    {/* v10.76.5 — Lupita edita también una maquila ENTREGADA mientras no tenga folio fiscal (por facturar): permite corregir precio/costo mal capturado */}
+    {!compact&&isSec(role)&&(role==="secretaria"||!o.created_by||o.created_by===userLogin||agentMatch)&&o.order_type==="maquila"&&(!o.stage.includes("delivered")||(!o.invoice_folio&&!o.grouped_invoice_folio))&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
       {canEditWebOrder(o,role)&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.maq)}><NotePencilIcon size={14} weight="bold"/>Editar Maquila</button>}
       <button onClick={()=>onAction(o.id,"print")} style={bs(C.sf,C.t2)}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
     </div>}
