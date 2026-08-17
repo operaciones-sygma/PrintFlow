@@ -17935,13 +17935,21 @@ export default function PrintFlow() {
     <Login onLogin={(role, name, login)=>{setUser(role);setUserName(name);setUserLogin(login);setOrderFilter(role==="vendedor"?"mine":"all");setView("pipeline");try{localStorage.setItem("pf-session",JSON.stringify({username:login,role,displayName:name}))}catch{}ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
   );
 
-  const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin"};
-  const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a"};
+  const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",visor:"Consulta"};
+  const rC={produccion:"#3f6fa3",preprensa:"#b3567f",german:"#2c8395",secretaria:"#5b5fbf",vendedor:"#bd7a2a",karla:"#8f63c0",admin:"#3a9e6a",visor:"#64748b"};
   const webPendingCount=orders.filter(o=>o.stage==="web_pending").length;
   const esperaCount=esperaOrders.length; // v10.73.28 — contador de la vista "En espera" (esperaOrders se computa arriba, antes de los early returns)
   // v10.72.37 — sin emoji `i:`; el ícono lo resuelve NAV_ICON[id] (Phosphor) en el render del Sidebar. Vocabulario único.
-  const navs=[{id:"pipeline",g:"op",l:"Dashboard"},{id:"tasks",g:"op",l:"Pendientes ("+myTasks.length+")"}];
-  navs.push({id:"espera",g:"op",l:"En espera"+(esperaCount?" ("+esperaCount+")":"")}); // v10.73.28 — todos los roles (cada quien las suyas; admin todas)
+  // v10.77.0 — rol "visor" = SOLO LECTURA (Dulce/contabilidad). No está en ningún ACTION_ROLES.allowed
+  // → can()/handleAction le niegan toda edición, y los RPC (verify_actor_role) también. Aquí solo se le
+  // curan las vistas: se ocultan "Pendientes"/"En espera" (colas de trabajo, siempre vacías para un
+  // observador) y se queda con Dashboard + Todas + Entregas + Archivo (los pushes de abajo ya excluyen a
+  // visor de Nueva/OC/Tablero/Analytics/etc. porque están gateados por otros roles).
+  const esVisor=user==="visor";
+  const navs=esVisor
+    ? [{id:"pipeline",g:"op",l:"Dashboard"}]
+    : [{id:"pipeline",g:"op",l:"Dashboard"},{id:"tasks",g:"op",l:"Pendientes ("+myTasks.length+")"}];
+  if(!esVisor)navs.push({id:"espera",g:"op",l:"En espera"+(esperaCount?" ("+esperaCount+")":"")}); // v10.73.28 — todos los roles (cada quien las suyas; admin todas)
   // 🗼 v10.58.52 — Torre de Control: tab #1 del admin (decisión D1 de Marcelo)
   if(user==="admin")navs.unshift({id:"torre",g:"op",l:"Torre"+(torreCount?" ("+torreCount+")":"")});
   // v10.32.0 — Datos Pendientes para Lupita en nav principal (antes de form), flujo: tasks → datos pendientes → nueva
