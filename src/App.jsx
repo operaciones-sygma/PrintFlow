@@ -14069,7 +14069,11 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     // v10.72.67 — Folios que viven SOLO en la cartera ACTIVA de CobranzaFlow: se agregan SOLO si (a) su número no
     // está ya cubierto por orders/Corona (dedup → sin duplicados falsos) y (b) cae DENTRO del rango [min..max] de
     // las órdenes (NO extiende el consecutivo hacia atrás con folios viejos). La RPC ya excluyó los cancelados.
-    const pf=f=>{const m=String(f||"").match(/[DRC]-(\d+)/);return m?parseInt(m[1],10):null};
+    // v10.77.1 — este parser se quedo con la clase vieja cuando v10.77.0 arreglo el de arriba:
+    // dos rutas del MISMO componente con criterios distintos, y esta habria quedado ciega a la
+    // serie F al mezclar la cartera de CobranzaFlow. Se alinea (y sigue descartando la canary DP-,
+    // que no es serie fiscal: DP no matchea ^[DRF]- porque la D va seguida de P).
+    const pf=f=>{const m=String(f||"").match(/^([DRCF])-(\d+)$/i);return m?parseInt(m[2],10):null};
     const baseList=[...fromOrders,...fromCorona];
     const baseNums=baseList.map(o=>pf(o.invoice_folio)).filter(n=>n!==null);
     const seen=new Set(baseNums);
@@ -14117,7 +14121,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     (purchaseOrders||[]).forEach(po=>{if(po.shared_invoice_folio)s.add(po.shared_invoice_folio)});
     return s;
   },[purchaseOrders]);
-  const {sequence,gaps,duplicates,total,latest,oldest}=useMemo(()=>{ // v10.72.73 — sharedCount ya no se desestructura: la card de Compartidos cuenta por sharedOCs.length (coherente con el modal)
+  const {sequence,gaps,duplicates,total,latest,oldest,rangos}=useMemo(()=>{ // v10.72.73 — sharedCount ya no se desestructura: la card de Compartidos cuenta por sharedOCs.length (coherente con el modal)
     // v10.77.0 (corte serie F) — el mapa se agrupa POR SERIE, no por numero desnudo.
     // Antes la llave era solo el numero, asi que con D-6138 y F-1 conviviendo el barrido de huecos
     // iba del 1 al 6138 y producia ~6,137 HUECOS FALSOS: la herramienta que existe para detectar
@@ -14128,6 +14132,13 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       const n=parseFolio(o.invoice_folio);
       const se=serieFolio(o.invoice_folio);
       if(n===null||!se)return;
+      // v10.77.1 — la canary DP- es un MECANISMO DE PRUEBA de timbrado, no una serie fiscal, y no
+      // pertenece al consecutivo que esta pantalla audita. El regex viejo /[DRC]-/ la excluia por
+      // accidente (la D iba seguida de P, no de guion); al generalizarlo en v10.77.0 los 2 folios
+      // canary reales (DP-2, DP-3) empezaron a entrar y la tarjeta de Rango paso a cerrar en "DP-3"
+      // en vez de en el ultimo folio fiscal. Se excluye a proposito, y ahora esta escrito.
+      // Coherente con el otro parser del mismo componente (`pf`), que sigue descartandola.
+      if(se==='DP')return;
       if(!bySerie[se])bySerie[se]={};
       if(!bySerie[se][n])bySerie[se][n]=[];
       bySerie[se][n].push(o);
@@ -14172,9 +14183,17 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     });
     // v10.77.0 — `oldest`/`latest` pasan a ser el FOLIO COMPLETO (antes numeros, que la vista
     // recomponia pegandoles un prefijo global). Con dos series ese prefijo global ya miente.
-    const first=seq[0],last=seq[seq.length-1];
-    return {sequence:seq,gaps:gapList,duplicates:dupes,total:numbers.length,
-            latest:last?last.folio:null,oldest:first?first.folio:null,sharedCount:sharedCnt};
+    // v10.77.1 — el rango se calcula POR SERIE. Tomar los extremos del arreglo aplanado hacia
+    // depender el dato del orden ALFABETICO de las series: con D- y F- conviviendo, "el ultimo
+    // folio" seria el de la F solo por suerte lexicografica, y con una serie que ordenara antes de
+    // la vigente volveria a mentir. Cada serie tiene su propio consecutivo; se muestran los suyos.
+    const rangos=series.map(se=>{
+      const nums=Object.keys(bySerie[se]).map(x=>parseInt(x,10)).sort((a,b)=>a-b);
+      return {serie:se,oldest:se+"-"+nums[0],latest:se+"-"+nums[nums.length-1]};
+    });
+    return {sequence:seq,gaps:gapList,duplicates:dupes,total:numbers.length,rangos,
+            latest:rangos.length?rangos[rangos.length-1].latest:null,
+            oldest:rangos.length?rangos[0].oldest:null,sharedCount:sharedCnt};
   },[folioOrders,sharedFolioStrings,purchaseOrders]);
   // Lista de OCs con folio compartido en el periodo+tipo actual (para sección dedicada)
   const sharedOCs=useMemo(()=>{
@@ -14193,7 +14212,6 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     })).sort((a,b)=>parseFolio(b.shared_invoice_folio)-parseFolio(a.shared_invoice_folio));
   },[purchaseOrders,folioOrders,type]);
   const exportCSV=()=>{
-    const prefix=type==="factura"?"D":"R";
     // v10.43.30 — Columnas extras para Corona OC
     const rows=[["Folio","Status","Origen","Cliente","Producción/PO Corona","OrdenID","Asignado","Por","Anticipado","Cancelada","Monto c/IVA"]];
     sequence.forEach(item=>{
@@ -14214,7 +14232,6 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
   };
   const tColor=type==="factura"?C.fac:C.live;
   const TIcon=type==="factura"?FileTextIcon:ReceiptIcon;
-  const prefix=type==="factura"?"D":"R";
   return <div>
     <h2 style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}><FilesIcon size={19} weight="bold"/>Auditoría</h2>
     <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Detección de gaps y duplicados · Read-only</p>
@@ -14275,7 +14292,16 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
-        <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest||"—"}{latest&&latest!==oldest?<><br/>↓<br/>{latest}</>:""}</div>
+        {/* v10.77.1 — un renglon POR SERIE. Con una sola serie se ve igual que siempre; con D- y F-
+            conviviendo (post-corte) cada consecutivo muestra su propio rango, en vez de un rango
+            mezclado que no corresponde a ninguna de las dos. */}
+        {!(rangos||[]).length
+          ? <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>—</div>
+          : (rangos||[]).map(r=>
+            <div key={r.serie} style={{fontSize:13,fontWeight:700,lineHeight:1.3,marginTop:rangos.length>1?4:0}}>
+              {rangos.length>1&&<span style={{fontSize:9.5,color:C.t2,fontWeight:700,marginRight:4}}>{r.serie}</span>}
+              {r.oldest}{r.latest!==r.oldest?<><br/>↓<br/>{r.latest}</>:""}
+            </div>)}
       </div>
     </div>
     {/* v10.72.76 — harden: estado de conciliación. Mientras cargan los RPCs el conteo de gaps es provisional; si una fuente falla, aviso explícito (gaps falsos posibles) + reintento, en vez de tragarse el error. */}
