@@ -1799,6 +1799,20 @@ const db = {
   // Calcula el GREATEST entre MAX(invoice_folio) en órdenes y invoice_counters.last_number,
   // luego devuelve +1. Esto resiste correcciones manuales Y BD vacía (donde MAX sería 0).
   async getNextFolioSuggestion(invoiceType) {
+    /* v10.77.5 — LA SUGERENCIA LA DA EL EMISOR, no se arma aqui.
+       Esta funcion cableaba 'D-' y leia el contador 'factura' (el de Alpha). Las dos cosas quedan
+       mal A LA VEZ el 1-sep: la serie vigente pasa a ser F y el contador vigente pasa a ser
+       'factura_f'. Y el corte CONGELA el contador 'factura' en el piso, asi que no es que quedara
+       desfasada: se quedaria clavada anunciando "D-6139" para siempre mientras el sistema emite
+       F-1. La RPC sugerencia_folios ya resuelve serie y contador vigentes; se le pregunta a ella y
+       el metodo viejo queda solo de red por si la RPC falla. Se arregla aqui y no en cada pantalla
+       porque son OCHO los lugares que la llaman. */
+    try {
+      const {data, error} = await supabase.rpc("sugerencia_folios");
+      const val = invoiceType==="factura" ? data?.factura : data?.remision;
+      if(!error && val) return val;
+    } catch(e) { /* sin RPC, seguimos con el metodo de abajo */ }
+    // Red de seguridad: el metodo historico (contador + MAX en ordenes).
     const prefix = invoiceType==="factura" ? "D-" : "R-";
     let maxNum = 0;
     // 1) Leer contador histórico (resiliente si BD de órdenes está vacía)
@@ -3676,7 +3690,13 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
   // Roles that always get production version
   const isFloor=role==="produccion"||role==="preprensa"||role==="german";
   // Roles that can choose
-  const canChoose=isSec(role)||role==="admin";
+  /* v10.77.5 — KARLA no caia en NINGUNA de las dos banderas: ni isFloor ni canChoose. Los tres
+     botones de impresion cuelgan de una u otra, asi que ella abria este modal y solo veia "Cerrar".
+     Y si llegaba: ACTION_ROLES.print la incluye explicitamente, y el boton "Imprimir" del detalle
+     tambien. O sea, el sistema la dejaba entrar a un cuarto vacio. Va en canChoose, que es el mismo
+     criterio con el que ya se le dio editar precio: es rol administrativo, necesita la copia con
+     precio y la de produccion. */
+  const canChoose=isSec(role)||role==="admin"||role==="karla";
 
   // v10.53.0 — info de versión actual (para mostrar en el modal de print)
   const wasPrinted=(o.print_version||0)>0;
@@ -3880,7 +3900,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
           {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
-          {vOwns&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
+          {/* v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central, asi
+              que el visor (solo lectura) podia abrirlo. Se le pone el mismo gate que a las tarjetas. */}
+          {vOwns&&canExecuteAction("print",o,role,userLogin)&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
     </div>
@@ -14383,17 +14405,27 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       // fecha) que bracketean el hueco le dicen a Karla la ventana donde buscar en Alpha; el subtexto nombra las 2
       // causas posibles (cancelado en Alpha o sin capturar) en vez del genérico "Verificar en AlphaERP".
       const fShort=(d)=>{try{return new Date(d).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}catch{return""}};
-      const coveredDated=sequence.filter(it=>it.status!=="gap").map(it=>({n:it.n,folio:it.folio,date:(it.orders||[]).map(o=>o.invoiced_at).find(Boolean)||null}));
-      const gapBracket=(n)=>{let prev=null,next=null;for(const c of coveredDated){if(c.n<n)prev=c;else if(c.n>n){next=c;break;}}return {prev,next};};
+      /* v10.77.5 — EL BRACKET TAMBIEN VA POR SERIE. v10.77.0 separo la secuencia por serie pero dejo
+         esto trabajando sobre el numero DESNUDO: aplanaba todas las series y comparaba solo `n`, asi
+         que un hueco de F-120 se enmarcaba con folios D- de Alpha, que es justo lo contrario de lo
+         que el bracket existe para decirle a Karla (donde buscarlo). Y peor: el arreglo plano seguia
+         el orden de `sequence` -serie por serie, no por numero-, asi que el `break` del primer
+         `c.n > n` cortaba en la serie equivocada. Agrupado por serie, cada lista vuelve a estar
+         ascendente y el `break` vuelve a ser valido, que era la premisa que se perdio al aplanar. */
+      const coveredBySerie={};
+      sequence.forEach(it=>{if(it.status==="gap")return;(coveredBySerie[it.serie]=coveredBySerie[it.serie]||[]).push({n:it.n,folio:it.folio,date:(it.orders||[]).map(o=>o.invoiced_at).find(Boolean)||null})});
+      const gapBracket=(n,se)=>{let prev=null,next=null;for(const c of (coveredBySerie[se]||[])){if(c.n<n)prev=c;else if(c.n>n){next=c;break;}}return {prev,next};};
       return <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd}}>
       {filteredSeq.map(item=>{
         if(item.status==="gap"){
-          const bk=gapBracket(item.n);
+          const bk=gapBracket(item.n,item.serie);
           return <div key={"gap-"+item.folio} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
             <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}><WarningIcon size={13} weight="fill"/>{item.folio}</div>
             <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
             {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t3}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
-            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>Búscalo en Alpha: ¿cancelado o sin capturar?</div>
+            {/* v10.77.5 — el subtexto tambien cableaba Alpha. Un hueco de la serie propia (F-) no se
+                busca en Alpha: o se cancelo aqui, o el folio se consumio sin llegar a la orden. */}
+            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>{item.serie==="D"?"Búscalo en Alpha: ¿cancelado o sin capturar?":"¿Cancelado, o el folio se consumió sin orden?"}</div>
           </div>;
         }
         return item.orders.map((o,i)=>{
