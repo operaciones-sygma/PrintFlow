@@ -1266,6 +1266,16 @@ const db = {
     const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:authData.user.app_metadata?.username||username});
     const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
     if(sErr||!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return null; } // desactivado o error → sesión no queda viva
+    /* v10.77.6 — ALLOWLIST DE ROLES. public.users es la tabla de usuarios de LAS DOS apps: quien
+       tiene cuenta para SygmaAlmacen (rol 'almacen') podia entrar a PrintFlow con la misma
+       contrasena y ver precios y margenes de todas las ordenes, que no es asunto suyo. Aqui no
+       habia ningun filtro: bastaba existir y estar activo. Es lista BLANCA a proposito — un rol
+       nuevo de otra app no entra solo. Espeja public.pf_puede_escribir() en la BD (v3.7.355);
+       'visor' SI entra porque su rol existe justamente para ver PrintFlow. */
+    if(!["admin","karla","secretaria","vendedor","produccion","preprensa","german","visor"].includes(dbUser.role)){
+      try{await supabase.auth.signOut({scope:"local"})}catch(e){}
+      return null;
+    }
     return {username:dbUser.username,role:dbUser.role,display_name:dbUser.display_name};
   },
   async loadNotifications(role) {
@@ -3899,7 +3909,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>Aplicar folio</button>}
+          {(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>{o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha"}</button>}
           {/* v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central, asi
               que el visor (solo lectura) podia abrirlo. Se le pone el mismo gate que a las tarjetas. */}
           {vOwns&&canExecuteAction("print",o,role,userLogin)&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
@@ -3926,6 +3936,17 @@ function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
 // v10.73.18 — Modal "Poner en espera": razón (chips predefinidos + texto libre) + fecha opcional.
 // Reemplaza el window.prompt de snoozeOrder; disponible para el responsable del área + admin.
+/* v10.77.6 — LA PUERTA DEL CORTE TAMBIEN TIENE QUE EXISTIR EN LA PANTALLA.
+   v3.7.354 abrio en la BD assign_historic_folio para admitir un D- que Alpha ya habia emitido, con
+   el emisor encendido. Pero el UNICO acceso a esa RPC desde aqui es HistoricFolioModal, y sus tres
+   entradas exigen created_by==='import-historico'. Las 26 ordenes en vuelo reales las creo
+   'secretaria' y viven en 'salidas'/'maq_received': no entraban NUNCA a ese modal, caian al
+   InvoiceModal normal -> assign_invoice con el emisor ON -> F- propio y un SEGUNDO CFDI a la misma
+   venta. O sea: arregle la cerradura y deje la puerta tapiada.
+   La RPC valida todo (serie D-, tope en el piso, rol admin/karla, monto contra la factura ya
+   registrada, cfdi_status='external'), asi que abrir el boton no afloja ningun candado: un clic
+   equivocado se responde con "...o para registrar un folio D- que Alpha ya habia emitido". */
+let EMISOR_ON=false;
 const SNOOZE_PRESETS=[
   {kind:"client_correction",label:"Cliente enviará corrección / nuevo diseño",text:"El cliente enviará corrección o un nuevo diseño"},
   {kind:"far_due",label:"Entrega lejana — aún no entra a máquina",text:"Entrega lejana: aún no toca programar en máquina"},
@@ -4000,8 +4021,14 @@ function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) 
     finally{setBusy(false)}
   };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:430,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><ReceiptIcon size={17} weight="bold"/>Aplicar folio fiscal</h3>
-    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Captura el folio <b>real</b> que ya emitió Alpha para esta orden. Si el cliente aún no la pide, no la captures todavía.</p>
+    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><ReceiptIcon size={17} weight="bold"/>{order.created_by==="import-historico"?"Aplicar folio fiscal":"Registrar el folio de Alpha"}</h3>
+    {/* v10.77.6 — el texto distingue los dos casos que ahora entran aquí: la orden histórica de
+        siempre, y la orden en vuelo del corte, a la que Alpha YA le dio folio antes de que
+        empezáramos a emitir. Si a esa se le factura por el camino normal, el sistema le acuña un
+        folio propio y le timbra un SEGUNDO CFDI a la misma venta. */}
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{order.created_by==="import-historico"
+      ?<>Captura el folio <b>real</b> que ya emitió Alpha para esta orden. Si el cliente aún no la pide, no la captures todavía.</>
+      :<>Esta orden ya salió y <b>Alpha ya le dio folio</b>. Captúralo aquí tal cual, con su <b>D-</b>. No uses “Facturar”: eso le pondría un folio nuestro y saldría una <b>segunda factura</b> de la misma venta.</>}</p>
     <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",marginBottom:14,fontSize:12}}>
       <div style={{fontWeight:700,color:C.tx}}>{order.client}{order.client_company&&order.client_company!==order.client?" · "+order.client_company:""}</div>
       <div style={{color:C.t2,marginTop:2}}>{order.production_number} · {(order.product_type||"").replace("🔴 ATRASADA · ","")}</div>
@@ -11082,7 +11109,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo" aria-label="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {/* v10.76.7 (scan wug02gay5, P3) — espejar el gate del DetailModal: admin también edita desde la card una entregada sin folio ni splits/matriz (antes solo desde el detalle → affordance incoherente) */}
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")} aria-label="Editar orden"><NotePencilIcon size={15} weight="bold"/></button>}
-        {o.created_by==="import-historico"&&o.stage.includes("delivered")&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title="Aplicar folio fiscal real (histórico)" aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
+        {(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title={o.created_by==="import-historico"?"Aplicar folio fiscal real (histórico)":"Registrar el folio D- que Alpha ya emitió para esta orden"} aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
         {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC" aria-label="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
@@ -11108,7 +11135,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {!compact&&canAct&&snoozeActive(o)&&snoozeBanner}
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
-    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&o.created_by==="import-historico"&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
+    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&(o.created_by==="import-historico"||EMISOR_ON)&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
@@ -15480,6 +15507,11 @@ export default function PrintFlow() {
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
   const [histFolioOrder,setHistFolioOrder]=useState(null); // v10.72.56 — captura de folio fiscal en órdenes históricas (import-historico)
+  // v10.77.6 — el emisor, a nivel App. Se guarda en estado (para forzar el re-render cuando llega)
+  // y ademas en un modulo (EMISOR_ON) para que OCard y DetailModal lo lean sin enhebrar un prop por
+  // SIETE call-sites. El cambio de estado es lo que garantiza que el arbol se vuelva a pintar.
+  const [emisorOn,setEmisorOn]=useState(false);
+  useEffect(()=>{db.getFolioEmitterEnabled().then(v=>{EMISOR_ON=!!v;setEmisorOn(!!v)})},[]);
   const [snoozeTarget,setSnoozeTarget]=useState(null); // v10.73.18 — orden a poner "En espera" (abre SnoozeModal)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
