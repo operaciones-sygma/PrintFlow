@@ -9026,7 +9026,11 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
     setUpErr("");
     if(file.size>maxSize){ setUpErr("Archivo muy grande (máx 50MB). Súbelo comprimido o por partes."); return; }
     const parts=file.name.split("."); const ext=parts.length>1?parts.pop():"pdf";
-    const path=(orderId||"new-"+Date.now())+"/"+Date.now()+"."+ext;
+    /* v10.77.4 — FileUpload quedo FUERA del fix de entropia de v10.77.3, que solo toco las imagenes.
+       Mismo defecto: dos Date.now() dan una ruta ADIVINABLE (milisegundo del reloj), y el bucket
+       order-files es publico, asi que adivinar la ruta es bajar el archivo. Aqui pesa mas que en las
+       imagenes: esto sube el ARTE del cliente, PDFs de hasta 50MB. crypto.randomUUID() lo cierra. */
+    const path=(orderId||"new")+"/"+crypto.randomUUID()+"."+ext;
     uploadingRef.current=true;
     setUploading(true); setProgress(0); setUpInfo({name:file.name,mb:(file.size/1048576).toFixed(1)});
     const cleanup=()=>{ uploadingRef.current=false; setUploading(false); setProgress(0); setUpInfo(null); xhrRef.current=null; };
