@@ -10313,7 +10313,14 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         const p = await db.trasladoPreviewOC(oc?.id);
         if (!alive) return;
         setTras(p);
-        setConTraslado(!!p?.listo);
+        // v10.77.2 — la casilla ya NO viene premarcada. Emitir un CFDI de traslado es un acto
+        // fiscal IRREVERSIBLE (deshacerlo exige cancelar ante el SAT), y venia marcada por
+        // default: Karla tenia que acordarse de DESmarcarla para no emitir. Mientras Alpha siga
+        // asignando el folio, el traslado le toca a Alpha y emitir aqui produce un SEGUNDO
+        // comprobante por la misma carga. Que emitirlo sea deliberado, no el camino de menor
+        // resistencia. (`p?.listo` sigue gobernando si la casilla se puede marcar; solo deja de
+        // marcarla sola.)
+        setConTraslado(false);
       } catch(e) {
         // que no se caiga el modal de folio por esto: el traslado es un extra
         if (alive) setTras({aplica:false, motivo:"No se pudo consultar: "+(e?.message||"error")});
