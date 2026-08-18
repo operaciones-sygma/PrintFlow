@@ -14102,7 +14102,12 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     }
     return [...baseList,...fromCobranza];
   },[orders,type,cutoffs,coronaOCInvoices,cobranzaFolios]);
-  const parseFolio=f=>{const m=String(f||"").match(/[DRC]-(\d+)/);return m?parseInt(m[1],10):null};
+  // v10.77.0 (corte serie F) — la clase [DRC] dejaba fuera la serie propia F-, y como el filtro de
+  // arriba selecciona por invoice_type (no por prefijo), las ordenes F- SI entraban a folioOrders y
+  // luego se TIRABAN en silencio aqui: la pestana de Facturas habria quedado ciega al 100% de lo
+  // que emita SYGMA. Se acepta cualquier serie y se conserva la LETRA, que ahora hace falta.
+  const parseFolio=f=>{const m=String(f||"").match(/^([A-Z]+)-(\d+)$/i);return m?parseInt(m[2],10):null};
+  const serieFolio=f=>{const m=String(f||"").match(/^([A-Z]+)-\d+$/i);return m?m[1].toUpperCase():null};
   // 📄 v10.11.0 Sub-fase B — Reclasifica duplicados que son folios compartidos legítimos
   // Un grupo de órdenes con el mismo folio se considera "shared" (no duplicado) si:
   //   - todas pertenecen a la misma OC (purchase_order_id idéntico)
@@ -14113,13 +14118,23 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     return s;
   },[purchaseOrders]);
   const {sequence,gaps,duplicates,total,latest,oldest}=useMemo(()=>{ // v10.72.73 — sharedCount ya no se desestructura: la card de Compartidos cuenta por sharedOCs.length (coherente con el modal)
-    const map={};
+    // v10.77.0 (corte serie F) — el mapa se agrupa POR SERIE, no por numero desnudo.
+    // Antes la llave era solo el numero, asi que con D-6138 y F-1 conviviendo el barrido de huecos
+    // iba del 1 al 6138 y producia ~6,137 HUECOS FALSOS: la herramienta que existe para detectar
+    // folios faltantes se habria vuelto una alarma permanente, y con ella la confianza en el dato.
+    // Cada serie tiene su propia numeracion y su propio consecutivo; se auditan por separado.
+    const bySerie={};
     folioOrders.forEach(o=>{
       const n=parseFolio(o.invoice_folio);
-      if(n===null)return;
-      if(!map[n])map[n]=[];
-      map[n].push(o);
+      const se=serieFolio(o.invoice_folio);
+      if(n===null||!se)return;
+      if(!bySerie[se])bySerie[se]={};
+      if(!bySerie[se][n])bySerie[se][n]=[];
+      bySerie[se][n].push(o);
     });
+    const series=Object.keys(bySerie).sort();
+    const map={};  // se conserva plano para isSharedGroup/duplicados (la llave sigue siendo el numero)
+    series.forEach(se=>Object.keys(bySerie[se]).forEach(n=>{map[n]=(map[n]||[]).concat(bySerie[se][n])}));
     const numbers=Object.keys(map).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
     const isSharedGroup=(group)=>{
       if(group.length<2)return false;
@@ -14136,21 +14151,30 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     const dupes=numbers.filter(n=>map[n].length>1 && !isSharedGroup(map[n]));
     let sharedCnt=0;
     if(numbers.length===0)return {sequence:[],gaps:[],duplicates:[],total:0,latest:null,oldest:null,sharedCount:0};
-    const min=numbers[0],max=numbers[numbers.length-1];
     const seq=[];const gapList=[];
-    for(let i=min;i<=max;i++){
-      if(map[i]){
-        const group=map[i];
-        let status="ok";
-        if(group.length>1){
-          if(isSharedGroup(group)){status="shared";sharedCnt++}
-          else{status="duplicate"}
+    // Un recorrido POR SERIE: los huecos de la D- de Alpha y los de la F- propia son cosas distintas.
+    series.forEach(se=>{
+      const nums=Object.keys(bySerie[se]).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
+      const mn=nums[0],mx=nums[nums.length-1];
+      for(let i=mn;i<=mx;i++){
+        const folio=se+"-"+i;
+        const group=bySerie[se][i];
+        if(group){
+          let status="ok";
+          if(group.length>1){
+            if(isSharedGroup(group)){status="shared";sharedCnt++}
+            else{status="duplicate"}
+          }
+          seq.push({n:i,serie:se,folio,orders:group,status});
         }
-        seq.push({n:i,orders:group,status});
+        else{seq.push({n:i,serie:se,folio,orders:[],status:"gap"});gapList.push(folio)}
       }
-      else{seq.push({n:i,orders:[],status:"gap"});gapList.push(i)}
-    }
-    return {sequence:seq,gaps:gapList,duplicates:dupes,total:numbers.length,latest:max,oldest:min,sharedCount:sharedCnt};
+    });
+    // v10.77.0 — `oldest`/`latest` pasan a ser el FOLIO COMPLETO (antes numeros, que la vista
+    // recomponia pegandoles un prefijo global). Con dos series ese prefijo global ya miente.
+    const first=seq[0],last=seq[seq.length-1];
+    return {sequence:seq,gaps:gapList,duplicates:dupes,total:numbers.length,
+            latest:last?last.folio:null,oldest:first?first.folio:null,sharedCount:sharedCnt};
   },[folioOrders,sharedFolioStrings,purchaseOrders]);
   // Lista de OCs con folio compartido en el periodo+tipo actual (para sección dedicada)
   const sharedOCs=useMemo(()=>{
@@ -14158,7 +14182,8 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     return purchaseOrders.filter(po=>{
       if(!po.shared_invoice_folio)return false;
       const prefix=po.shared_invoice_folio.charAt(0);
-      if(type==="factura"&&prefix!=="D")return false;
+      // v10.77.0 — una factura puede ser D- (Alpha) o F- (serie propia SYGMA).
+      if(type==="factura"&&prefix!=="D"&&prefix!=="F")return false;
       if(type==="remision"&&prefix!=="R")return false;
       const ocOrders=folioOrders.filter(o=>o.purchase_order_id===po.id&&o.invoice_folio===po.shared_invoice_folio);
       return ocOrders.length>0;
@@ -14172,7 +14197,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     // v10.43.30 — Columnas extras para Corona OC
     const rows=[["Folio","Status","Origen","Cliente","Producción/PO Corona","OrdenID","Asignado","Por","Anticipado","Cancelada","Monto c/IVA"]];
     sequence.forEach(item=>{
-      if(item.status==="gap"){rows.push([prefix+"-"+item.n,"GAP","","","","","","","","",""])}
+      if(item.status==="gap"){rows.push([item.folio,"GAP","","","","","","","","",""])}
       else{item.orders.forEach(o=>{
         const origen=o.isCoronaOC?"OC Crédito Corona":(o.isCobranza?(o.cobranzaKind==='externa'?(o.cobranzaStatus==='auto_zero'?"Auto-factura $0 (PADILLA)":o.cobranzaStatus==='pagada_alpha'?"Pagada directo en Alpha":"Cancelada en AlphaERP"):"CobranzaFlow (cartera)"):"Orden producción");
         const refProd=o.isCoronaOC?(o.coronaPoRef||""):(o.production_number||"");
@@ -14196,7 +14221,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     {/* v10.43.16 — Tabs principales: folios fiscales (D-/R-) vs órdenes de producción (P-XXXX) */}
     {/* v10.72.82 — al cambiar de tab solo resetea statusChip (los chips difieren por tab); el search se PRESERVA (es texto agnóstico folio/cliente, para cruzar entre tabs sin perder la query). Antes (v10.43.20) reseteaba ambos. */}
     <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"1.5px solid "+C.bd}}>
-      {[{id:"folios",ic:FileTextIcon,l:"Folios Fiscales (D- / R-)"},{id:"production",ic:ListBulletsIcon,l:"Órdenes de Producción (P-XXXX)"}].map(t=>
+      {[{id:"folios",ic:FileTextIcon,l:"Folios Fiscales"},{id:"production",ic:ListBulletsIcon,l:"Órdenes de Producción (P-XXXX)"}].map(t=>
         <button key={t.id} onClick={()=>{if(tab!==t.id){setTab(t.id);setStatusChip("all")}}} /* v10.72.82 — preservar search al cambiar tab (es texto agnóstico: folio/cliente); solo los chips resetean porque difieren por tab */
           style={{display:"inline-flex",alignItems:"center",gap:6,background:"transparent",border:"none",borderBottom:tab===t.id?"2.5px solid "+C.ac:"2.5px solid transparent",color:tab===t.id?C.ac:C.t2,padding:"10px 16px",fontSize:13,fontWeight:tab===t.id?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",marginBottom:-1.5,transition:"all 0.15s"}}>
           {(()=>{const TI=t.ic;return <TI size={14} weight="bold"/>})()}{t.l}
@@ -14250,7 +14275,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       </div>
       <div style={{background:C.card,borderRadius:14,padding:"10px 14px",border:"1.5px solid "+C.t3+"66",boxShadow:C.sh2}}>
         <div style={{fontSize:10,color:C.t2,fontWeight:600}}>Rango</div>
-        <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest?prefix+"-"+oldest:"—"}{latest&&latest!==oldest?<><br/>↓<br/>{prefix+"-"+latest}</>:""}</div>
+        <div style={{fontSize:13,fontWeight:700,lineHeight:1.3}}>{oldest||"—"}{latest&&latest!==oldest?<><br/>↓<br/>{latest}</>:""}</div>
       </div>
     </div>
     {/* v10.72.76 — harden: estado de conciliación. Mientras cargan los RPCs el conteo de gaps es provisional; si una fuente falla, aviso explícito (gaps falsos posibles) + reintento, en vez de tragarse el error. */}
@@ -14294,7 +14319,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       };
       const matchesSearch=(item)=>{
         if(!sq)return true;
-        const folio=prefix+"-"+item.n;
+        const folio=item.folio;
         if(normSearch(folio).includes(sq))return true;
         // v10.43.30 — buscar también por PO Corona (campo coronaPoRef)
         if(item.orders?.some(o=>normSearch(o.client||"").includes(sq) || normSearch(o.production_number||"").includes(sq) || normSearch(o.coronaPoRef||"").includes(sq)))return true;
@@ -14315,14 +14340,14 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
       // fecha) que bracketean el hueco le dicen a Karla la ventana donde buscar en Alpha; el subtexto nombra las 2
       // causas posibles (cancelado en Alpha o sin capturar) en vez del genérico "Verificar en AlphaERP".
       const fShort=(d)=>{try{return new Date(d).toLocaleDateString("es-MX",{day:"numeric",month:"short"})}catch{return""}};
-      const coveredDated=sequence.filter(it=>it.status!=="gap").map(it=>({n:it.n,folio:prefix+"-"+it.n,date:(it.orders||[]).map(o=>o.invoiced_at).find(Boolean)||null}));
+      const coveredDated=sequence.filter(it=>it.status!=="gap").map(it=>({n:it.n,folio:it.folio,date:(it.orders||[]).map(o=>o.invoiced_at).find(Boolean)||null}));
       const gapBracket=(n)=>{let prev=null,next=null;for(const c of coveredDated){if(c.n<n)prev=c;else if(c.n>n){next=c;break;}}return {prev,next};};
       return <div style={{background:C.bg,borderRadius:10,overflow:"hidden",border:"1px solid "+C.bd}}>
       {filteredSeq.map(item=>{
         if(item.status==="gap"){
           const bk=gapBracket(item.n);
-          return <div key={"gap-"+item.n} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}><WarningIcon size={13} weight="fill"/>{prefix}-{item.n}</div>
+          return <div key={"gap-"+item.folio} style={{padding:"10px 14px",borderBottom:"1px solid "+C.bd,background:C.dn+"08",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:14,fontWeight:800,color:C.dn,minWidth:80}}><WarningIcon size={13} weight="fill"/>{item.folio}</div>
             <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
             {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t3}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
             <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>Búscalo en Alpha: ¿cancelado o sin capturar?</div>
