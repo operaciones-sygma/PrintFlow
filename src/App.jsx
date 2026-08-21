@@ -5708,13 +5708,11 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const aGr=(((prices?.placa_grande_ancho_mm)||745)*((prices?.placa_grande_alto_mm)||605))/1e6;
   const live=(plates||[]).filter(p=>!p.voided_at);
   const agg=rows=>{let ch=0,gr=0;rows.forEach(p=>{const q=Number(p.quantity)||0;if(p.plate_size==="chica")ch+=q;else if(p.plate_size==="grande")gr+=q;});return {ch,gr,total:ch+gr,m2:ch*aCh+gr*aGr};};
-  // HISTÓRICO = lectura de la máquina (captura del Suprasetter, ctp_baseline en app_config) + lo que
-  // PrintFlow registra DESPUÉS de esa lectura (created_at > as_of). El total arranca en el número real
-  // de la máquina y crece; las placas registradas ANTES de la lectura no se doble-cuentan.
-  const baseMs=baseline?.as_of?new Date(baseline.as_of).getTime():null;
-  const incr=baseMs!=null?agg(live.filter(p=>{const t=new Date(p.created_at).getTime();return !isNaN(t)&&t>baseMs;})):agg(live);
-  const totM2=(Number(baseline?.m2)||0)+incr.m2;
-  const totPlacas=(Number(baseline?.plates)||0)+incr.total;
+  // "Prefiero el histórico real" (Marcelo): el TOTAL es la lectura real de la máquina TAL CUAL
+  // (ctp_baseline = captura del Suprasetter: Sum of Material Used + Total plate count), sin sumarle la
+  // estimación de PrintFlow (que metería deriva). Se refresca actualizando ctp_baseline al releer la máquina.
+  const totM2=Number(baseline?.m2)||0;
+  const totPlacas=Number(baseline?.plates)||0;
   // DESDE EL ÚLTIMO MANTENIMIENTO = plate_log desde el último reset (ctp_maintenance).
   const last=maints[0]; // ordenado desc por performed_at, ya sin anulados
   const lastMs=last?new Date(last.performed_at).getTime():null;
