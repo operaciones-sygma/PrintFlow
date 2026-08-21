@@ -5696,69 +5696,91 @@ function PlateModal({order,machine,onConfirm,onClose}) {
 // número se mueve solo conforme Germán registra placas.
 function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [prices,setPrices]=useState(null);
+  const [baseline,setBaseline]=useState(null);
   const [maints,setMaints]=useState([]);
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState(false);
-  const load=async()=>{try{const [cfg,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadCtpMaintenance()]);setPrices(cfg||{});setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);}};
+  const load=async()=>{try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);}};
   useEffect(()=>{load();},[]);
   const SOON=300, DUE=350;
   // m² por placa = ancho(mm) × alto(mm) / 1e6. Defaults = los mismos del panel de químicos.
   const aCh=(((prices?.placa_chica_ancho_mm)||510)*((prices?.placa_chica_alto_mm)||400))/1e6;
   const aGr=(((prices?.placa_grande_ancho_mm)||745)*((prices?.placa_grande_alto_mm)||605))/1e6;
-  const last=maints[0]; // ordenado desc por performed_at, ya sin anulados
-  const lastMs=last?new Date(last.performed_at).getTime():null;
   const live=(plates||[]).filter(p=>!p.voided_at);
   const agg=rows=>{let ch=0,gr=0;rows.forEach(p=>{const q=Number(p.quantity)||0;if(p.plate_size==="chica")ch+=q;else if(p.plate_size==="grande")gr+=q;});return {ch,gr,total:ch+gr,m2:ch*aCh+gr*aGr};};
-  const tot=agg(live);
+  // HISTÓRICO = lectura de la máquina (captura del Suprasetter, ctp_baseline en app_config) + lo que
+  // PrintFlow registra DESPUÉS de esa lectura (created_at > as_of). El total arranca en el número real
+  // de la máquina y crece; las placas registradas ANTES de la lectura no se doble-cuentan.
+  const baseMs=baseline?.as_of?new Date(baseline.as_of).getTime():null;
+  const incr=baseMs!=null?agg(live.filter(p=>{const t=new Date(p.created_at).getTime();return !isNaN(t)&&t>baseMs;})):agg(live);
+  const totM2=(Number(baseline?.m2)||0)+incr.m2;
+  const totPlacas=(Number(baseline?.plates)||0)+incr.total;
+  // DESDE EL ÚLTIMO MANTENIMIENTO = plate_log desde el último reset (ctp_maintenance).
+  const last=maints[0]; // ordenado desc por performed_at, ya sin anulados
+  const lastMs=last?new Date(last.performed_at).getTime():null;
   const since=agg(lastMs!=null?live.filter(p=>{const t=new Date(p.created_at).getTime();return !isNaN(t)&&t>=lastMs;}):live);
-  const m2=since.m2;
-  // El semáforo del ciclo SOLO tiene sentido con un mantenimiento base. Sin él, el m² acumulado es
-  // "todo lo registrado desde que arrancó PrintFlow" (la máquina lleva mucho más), así que no se
-  // dispara la alarma hasta que Germán registre el primer mantenimiento y fije el punto cero.
+  const m2s=since.m2;
+  // El semáforo del ciclo SOLO tiene sentido con un mantenimiento base; sin él no dispara la alarma
+  // (el acumulado sería de toda la historia de PrintFlow, no de un ciclo real).
   const hasBase=!!last;
-  const status=m2>=DUE?"due":m2>=SOON?"soon":"ok";
+  const status=m2s>=DUE?"due":m2s>=SOON?"soon":"ok";
   const eff=hasBase?status:"ok";
   const col=eff==="due"?C.dn:eff==="soon"?C.amb:C.ctp;
-  const pct=Math.min(100,Math.round(m2/DUE*100));
+  const pct=Math.min(100,Math.round(m2s/DUE*100));
   const canReset=user==="german"||user==="admin";
   const nf=n=>Number(n||0).toLocaleString("es-MX");
+  const m2f=n=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:1,maximumFractionDigits:1});
   const doReset=async()=>{if(busy)return;setBusy(true);try{await db.addCtpMaintenance(null,null,userLogin||user);await load();setConfirm(false);}catch(e){console.error("[CTPCounter reset] Error:",e);alert("No se pudo registrar el mantenimiento: "+(e?.message||"error desconocido"));}finally{setBusy(false);}};
-  const box=(titulo,a)=><div style={{background:C.bg,borderRadius:12,padding:"10px 12px"}}>
-    <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{titulo}</div>
-    <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(a.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
-    <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(a.ch)} chicas · {nf(a.gr)} grandes · {a.m2.toFixed(1)} m²</div>
-  </div>;
-  return <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,border:"1.5px solid "+col+"40",padding:16,marginBottom:14}}>
-    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:12}}>
+  return <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,border:"1.5px solid "+C.bd,padding:16,marginTop:16}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:7}}>
         <DiscIcon size={16} weight="bold" color={C.ctp}/>
         <div>
           <div style={{fontSize:14,fontWeight:800,letterSpacing:"-0.01em"}}>Mantenimiento CTP</div>
-          <div style={{fontSize:F.micro,color:C.t3}}>Placas registradas en PrintFlow al pasar por CTP</div>
+          <div style={{fontSize:F.micro,color:C.t3}}>Histórico del Suprasetter + lo registrado en PrintFlow</div>
         </div>
       </div>
       {canReset&&<button onClick={()=>setConfirm(true)} style={{...bs(C.ctp+"12",C.ctp),border:"1px solid "+C.ctp+"33",whiteSpace:"nowrap",flexShrink:0}}><WrenchIcon size={12} weight="bold"/>Registrar mantenimiento</button>}
     </div>
-    <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:5,flexWrap:"wrap"}}>
-      <span style={{fontSize:30,fontWeight:800,color:col,fontVariantNumeric:"tabular-nums",lineHeight:1}}>{m2.toFixed(1)}</span>
-      <span style={{fontSize:13,fontWeight:600,color:C.t2}}>{hasBase?"m² desde el último mantenimiento":"m² registrados (sin mantenimiento base aún)"}</span>
-      <span style={{marginLeft:"auto",fontSize:11,color:C.t3}}>meta {SOON}–{DUE} m²</span>
+    {/* RECUADRO GRANDE — m²: total (arriba) + desde el último mantenimiento con barra hasta 350 */}
+    <div style={{background:C.bg,borderRadius:14,padding:"14px 16px",border:"1.5px solid "+col+"40"}}>
+      <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <span style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
+        <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{m2f(totM2)}</span>
+        <span style={{fontSize:12,color:C.t2}}>m²</span>
+      </div>
+      <div style={{height:1,background:C.bd,marginBottom:10}}/>
+      <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:7}}>
+        <span style={{fontSize:30,fontWeight:800,color:col,fontVariantNumeric:"tabular-nums",lineHeight:1}}>{m2f(m2s)}</span>
+        <span style={{fontSize:13,fontWeight:600,color:C.t2}}>{hasBase?"m² desde el último mantenimiento":"m² registrados (sin mantenimiento base aún)"}</span>
+        <span style={{marginLeft:"auto",fontSize:11,color:C.t3}}>/ {DUE} m²</span>
+      </div>
+      <div style={{height:9,borderRadius:6,background:C.card,overflow:"hidden",border:"1px solid "+C.bd}}>
+        <div style={{height:"100%",width:pct+"%",background:col,transition:"width .4s"}}/>
+      </div>
+      {eff!=="ok"&&<div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:col,background:col+"14",border:"1px solid "+col+"33",borderRadius:8,padding:"4px 9px",marginTop:9}}><WarningIcon size={12} weight="fill"/>{eff==="due"?"Mantenimiento vencido — ya pasó los "+DUE+" m²":"Se acerca el mantenimiento ("+SOON+"–"+DUE+" m²)"}</div>}
     </div>
-    <div style={{height:8,borderRadius:6,background:C.bg,overflow:"hidden",marginBottom:8}}>
-      <div style={{height:"100%",width:pct+"%",background:col,transition:"width .4s"}}/>
-    </div>
-    {eff!=="ok"&&<div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:col,background:col+"14",border:"1px solid "+col+"33",borderRadius:8,padding:"4px 9px",marginBottom:10}}><WarningIcon size={12} weight="fill"/>{eff==="due"?"Mantenimiento vencido — ya pasó los "+DUE+" m²":"Se acerca el mantenimiento ("+SOON+"–"+DUE+" m²)"}</div>}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:8}}>
-      {box("Desde el mantenimiento",since)}
-      {box("Total en PrintFlow",tot)}
+    {/* 2 RECUADROS ABAJO — placas: desde el mantenimiento · histórico total */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+      <div style={{background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas desde el mantenimiento</div>
+        <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(since.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
+      </div>
+      <div style={{background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas histórico</div>
+        <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>≈ {m2f(totM2)} m²</div>
+      </div>
     </div>
     <div style={{fontSize:11,color:C.t3,marginTop:10,lineHeight:1.5}}>
       {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador “desde el último mantenimiento” arranca de cero.</>}
+      {baseline?.as_of&&<> · Histórico base al {fD(baseline.as_of)}</>}
     </div>
     {confirm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>!busy&&setConfirm(false)}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:18,padding:22,maxWidth:400,width:"90%"}}>
         <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={16} weight="bold" color={C.ctp}/>Registrar mantenimiento del CTP</h3>
-        <p style={{fontSize:12.5,color:C.t2,lineHeight:1.5,margin:"0 0 16px"}}>Se marca el mantenimiento con la fecha de hoy y el contador <strong>“desde el último mantenimiento” se reinicia a 0</strong>. En este ciclo llevas <strong style={{color:col}}>{m2.toFixed(1)} m²</strong> ({nf(since.total)} placas).</p>
+        <p style={{fontSize:12.5,color:C.t2,lineHeight:1.5,margin:"0 0 16px"}}>Se marca el mantenimiento con la fecha de hoy y el contador <strong>“desde el último mantenimiento” se reinicia a 0</strong>. En este ciclo llevas <strong style={{color:col}}>{m2f(m2s)} m²</strong> ({nf(since.total)} placas).</p>
         <div style={{display:"flex",gap:8}}>
           <button onClick={()=>setConfirm(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={doReset} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando…</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y reiniciar</>}</button>
@@ -18425,7 +18447,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden está":" órdenes están")+" en espera, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
         {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
-        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá cuántas placas chicas y grandes lleva la orden (puedes poner de ambas). Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><CTPMaintenanceCounter plates={plates} user={user} userLogin={userLogin}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/></div>}
+        {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá cuántas placas chicas y grandes lleva la orden (puedes poner de ambas). Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter plates={plates} user={user} userLogin={userLogin}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/>{/* v10.73.81 — `viewOrders`, NO `filteredOrders`: el buscador ya no filtra el tablero, lo RESALTA (ver Kanban).
              Tiene que ser viewOrders y no `orders` crudo, o se rompe el toggle Mis Órdenes/Todas del admin. */}
           <Kanban orders={viewOrders} match={search?searchFilter:null} searchText={search} onClearSearch={()=>setSearch("")} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})} showToast={showToast} actionLoading={actionLoading}/>{/* v10.73.81 (verificación adversarial) — MaquilaTracker cuelga de la MISMA pantalla
@@ -18445,7 +18467,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               ("aún no llega la factura") con la promesa en el código de una cola del admin, pero esa cola nunca tuvo
               lector. Aquí está: los cierres sin costo, con input inline. setMaintenanceCost solo toca `cost`. */}
           {user==="admin"&&(()=>{const pend=maintenance.filter(m=>m.ended_at&&m.cost==null).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));if(!pend.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.wn,display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={15} weight="bold"/>Costos de mantenimiento pendientes ({pend.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Reparaciones cerradas sin costo. Captúralo cuando llegue la factura del técnico; el reporte semanal lo excluye hasta entonces.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:8}}>{pend.map(rec=><MaintCostRow key={rec.id} rec={rec} onSave={async(id,cost)=>{try{await db.setMaintenanceCost(id,cost);const m=await db.loadMaintenance();setMaintenance(m);showToast("✅ Costo capturado","success")}catch(e){console.error("[setMaintenanceCost] Error:",e);showToast("❌ "+(e?.message||"No se pudo guardar el costo"),"error")}}}/>)}</div></div>})()}
-          {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><CTPMaintenanceCounter plates={plates} user={user} userLogin={userLogin}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/></>}</div>}
+          {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter plates={plates} user={user} userLogin={userLogin}/></>}</div>}
         {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
