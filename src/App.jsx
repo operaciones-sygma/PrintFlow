@@ -1370,6 +1370,14 @@ const db = {
     const {error}=await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser, registered_by_uid: AUTH_UID });
     if(error)throw new Error("addPlate: "+error.message);
   },
+  // v10.78.0 — alta de placas MIXTAS: una orden puede llevar chicas Y grandes. Se insertan en UN
+  // solo request (todas las filas o ninguna), para no dejar un tamaño a medias si el insert falla.
+  async addPlates(orderId, plates, byUser) {
+    const rows=(plates||[]).filter(p=>p&&p.qty>0).map(p=>({ order_id: orderId, plate_size: p.size, quantity: p.qty, registered_by: byUser, registered_by_uid: AUTH_UID }));
+    if(!rows.length)throw new Error("addPlates: sin placas que registrar");
+    const {error}=await supabase.from("plate_log").insert(rows);
+    if(error)throw new Error("addPlates: "+error.message);
+  },
   async loadPlates() {
     const { data } = await supabase.from("plate_log").select("*").order("created_at", { ascending: false });
     return data || [];
@@ -5623,33 +5631,43 @@ function MaintCostRow({rec,onSave}){
 // ─── PLATE MODAL (forced on CTP drop) ─────────────
 function PlateModal({order,machine,onConfirm,onClose}) {
   useEscClose(onClose);
-  const [size,setSize]=useState("");const [qty,setQty]=useState("");
+  // v10.78.0 — placas MIXTAS: una orden puede ocupar chicas Y grandes a la vez. Antes era un toggle de
+  // un solo tamaño (no dejaba mezclar); ahora se capturan las dos cantidades y se registra al menos una.
+  const [chicas,setChicas]=useState("");const [grandes,setGrandes]=useState("");
   // v10.58.3 — busy state previene doble alta de placas + doble asignación por double-click.
   const [busy,setBusy]=useState(false);
+  const nCh=parseInt(chicas,10)||0, nGr=parseInt(grandes,10)||0, total=nCh+nGr;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={17} weight="bold"/>Registrar Placas — CTP</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client} · {order?.product_type}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 16px",fontWeight:600}}>→ {machine?.name||"CTP"}</p>
       <div style={{marginBottom:14}}>
-        <label style={lbl}>Tamaño de placa (obligatorio)</label>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setSize("chica")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="chica"?C.ctp:C.bd),background:size==="chica"?C.ctp+"12":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="chica"?700:500,color:size==="chica"?C.ctp:C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><RulerIcon size={13} weight="bold"/>Chica</button>
-          <button onClick={()=>setSize("grande")} style={{flex:1,padding:"12px",borderRadius:12,border:"2px solid "+(size==="grande"?C.ctp:C.bd),background:size==="grande"?C.ctp+"12":C.bg,cursor:"pointer",fontSize:13,fontWeight:size==="grande"?700:500,color:size==="grande"?C.ctp:C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><RulerIcon size={16} weight="bold"/>Grande</button>
+        <label style={lbl}>Placas por tamaño (al menos una · puedes mezclar)</label>
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2,marginBottom:5}}><RulerIcon size={13} weight="bold"/>Chicas</div>
+            <input style={inp} type="number" min="0" inputMode="numeric" value={chicas} onChange={e=>setChicas(e.target.value)} placeholder="0"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2,marginBottom:5}}><RulerIcon size={16} weight="bold"/>Grandes</div>
+            <input style={inp} type="number" min="0" inputMode="numeric" value={grandes} onChange={e=>setGrandes(e.target.value)} placeholder="0"/>
+          </div>
         </div>
-      </div>
-      <div style={{marginBottom:16}}>
-        <label style={lbl}>Cantidad de placas (obligatorio)</label>
-        <input style={inp} type="number" min="1" value={qty} onChange={e=>setQty(e.target.value)} placeholder="¿Cuántas placas?"/>
+        {total>0&&<div style={{fontSize:11,color:C.t2,marginTop:10,fontWeight:600}}>Total: {total} placa{total!==1?"s":""}{nCh>0&&nGr>0?` · ${nCh} chica${nCh!==1?"s":""} + ${nGr} grande${nGr!==1?"s":""}`:""}</div>}
       </div>
       <div style={{display:"flex",gap:8}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>Cancelar</button>
         <button onClick={async()=>{
           if(busy)return;
-          if(!size)return alert("Selecciona tamaño de placa");
-          if(!qty||parseInt(qty,10)<1)return alert("Ingresa cantidad de placas");
+          if(total<1)return alert("Ingresa cuántas placas: chicas, grandes, o ambas");
           setBusy(true);
-          try{ await onConfirm(size,parseInt(qty,10)); }
+          try{
+            const plates=[];
+            if(nCh>0)plates.push({size:"chica",qty:nCh});
+            if(nGr>0)plates.push({size:"grande",qty:nGr});
+            await onConfirm(plates);
+          }
           finally{ setBusy(false); }
         }} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center",opacity:busy?.6:1,cursor:busy?"wait":"pointer"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y Asignar</>}</button>
       </div>
@@ -18426,7 +18444,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           se gatea en su retorno: si el montaje no ocurrió, la placa ya quedó registrada y se avisa claro que hay que
           re-arrastrar; el re-drop NO re-pedirá placas (PLACAS-1 la reconoce en platedIds) → cero duplicado. addPlate
           corre a lo sumo una vez. Si addPlate mismo falla, el catch no cierra el modal → reintentar es seguro (sin placa). */}
-      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(size,qty)=>{try{await db.addPlate(plateModal.oid,size,qty,user);/* v10.73.84 (verificación P3) — setPlates OPTIMISTA cierra la ventana de carrera: `plates` solo se refresca por realtime (reload no recarga plates), así que sin esto un re-drop rápido tras un montaje fallido re-abría el modal y DUPLICABA plate_log. Con el optimista, platedIds tiene el oid de inmediato; el realtime luego reemplaza el array y el Set queda idempotente. */setPlates(p=>[...p,{order_id:plateModal.oid,voided_at:null}]);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);await db.addComment(plateModal.oid,"📋 Placas: "+qty+" "+size+"s registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
+      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(plates)=>{try{await db.addPlates(plateModal.oid,plates,user);/* v10.73.84 (verificación P3) — setPlates OPTIMISTA cierra la ventana de carrera: `plates` solo se refresca por realtime (reload no recarga plates), así que sin esto un re-drop rápido tras un montaje fallido re-abría el modal y DUPLICABA plate_log. Con el optimista, platedIds tiene el oid de inmediato; el realtime luego reemplaza el array y el Set queda idempotente. v10.78.0 — addPlates inserta las N filas (chicas y/o grandes) en un solo request atómico, así que el optimista de una fila por order_id sigue siendo suficiente para platedIds. */setPlates(p=>[...p,{order_id:plateModal.oid,voided_at:null}]);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);const desc=plates.map(p=>p.qty+" "+p.size+(p.qty!==1?"s":"")).join(", ");await db.addComment(plateModal.oid,"📋 Placas: "+desc+" registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
           v10.49.3 F1 FIX — capturar el target ANTES del await; si Karla cierra con ESC el state
           se vuelve null y abortamos los setters externos. Evita "InvoiceModal fantasma" abriendo
