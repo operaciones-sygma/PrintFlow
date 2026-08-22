@@ -5742,7 +5742,10 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   // v10.80.2 (/impeccable critique) — color de TEXTO aparte: el semáforo crudo (C.amb #ff9500 ~2.2:1) reprueba
   // AA como texto sobre el panel casi-blanco. Se usa tinta oscura (#b45309, el ámbar-texto de la casa; rojo #b91c1c)
   // para el número héroe y la píldora; el brillante se queda solo en barra/borde/tinte.
-  const colTx=eff==="due"?"#b91c1c":eff==="soon"?"#b45309":C.ctp;
+  // v10.80.4 (/impeccable critique 2ª pasada) — en reposo (ok) el héroe va en tinta oscura (C.tx), NO en
+  // cian tenue: así domina al "Total" (que se degradó a referencia) y el color se RESERVA para la alarma
+  // (soon/due) — "un tablero sano es casi monocromo". También sube el contraste del número en el modal.
+  const colTx=eff==="due"?"#b91c1c":eff==="soon"?"#b45309":C.tx;
   const pct=Math.min(100,Math.round(m2s/DUE*100));
   const canReset=user==="german"||user==="admin";
   const nf=n=>Number(n||0).toLocaleString("es-MX");
@@ -5765,7 +5768,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     <div style={{background:eff==="ok"?C.sf:col+"12",borderRadius:14,padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:10}}>
         <span style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
-        <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{hasBaseline?m2f(totM2):"—"}</span>
+        <span style={{fontSize:18,fontWeight:600,color:C.t2,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{hasBaseline?m2f(totM2):"—"}</span>
         <span style={{fontSize:12,color:C.t2}}>m²</span>
       </div>
       <div style={{height:1,background:C.bd,marginBottom:10}}/>
@@ -5789,13 +5792,13 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
       </div>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
-        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas histórico</div>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas históricas</div>
         {hasBaseline?<><div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div></>:<div style={{fontSize:12,color:C.t3,marginTop:2}}>Sin lectura base del Suprasetter</div>}
       </div>
     </div>
     <div style={{fontSize:11,color:C.t3,marginTop:10,lineHeight:1.5}}>
-      {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador “desde el último mantenimiento” arranca de cero.</>}
+      {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador "desde el último mantenimiento" arranca de cero.</>}
       {baseline?.as_of&&<> · Histórico base al {fD(baseline.as_of)}</>}
     </div>
     {confirm&&<CTPResetConfirm busy={busy} colTx={colTx} m2Label={m2f(m2s)} sinceTotal={nf(since.total)} onCancel={()=>setConfirm(false)} onConfirm={doReset}/>}
