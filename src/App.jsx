@@ -5648,7 +5648,10 @@ function PlateModal({order,machine,onConfirm,onClose}) {
   const [chicas,setChicas]=useState("");const [grandes,setGrandes]=useState("");
   // v10.58.3 — busy state previene doble alta de placas + doble asignación por double-click.
   const [busy,setBusy]=useState(false);
-  const nCh=parseInt(chicas,10)||0, nGr=parseInt(grandes,10)||0, total=nCh+nGr;
+  // v10.80.3 (scan) — saneado a entero no-negativo: type=number min=0 no impide teclear "-3"/"2.9"/"1e3".
+  // Number() lee "1e3"=1000 (parseInt daba 1); Math.floor trunca decimales; Math.max(0,..) descarta negativos.
+  // Así el preview "Total" y lo que se registra siempre coinciden.
+  const nCh=Math.max(0,Math.floor(Number(chicas)||0)), nGr=Math.max(0,Math.floor(Number(grandes)||0)), total=nCh+nGr;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
     <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
       <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><DiscIcon size={17} weight="bold"/>Registrar Placas — CTP</h3>
@@ -5704,6 +5707,10 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [loadErr,setLoadErr]=useState(false); // v10.80.2 — fail-open→cerrado: si Supabase falla, se avisa en vez de mostrar 0
   const load=async()=>{setLoadErr(false);try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);setLoadErr(true);}finally{setLoaded(true);}};
   useEffect(()=>{load();},[]);
+  // v10.80.3 (scan) — el contador es un semáforo COMPARTIDO. `plates` ya es realtime (prop), pero maints/
+  // baseline se cargaban solo al montar → un mantenimiento registrado en otra sesión dejaba esta pantalla
+  // contando desde el reset viejo (falso "vencido"). Canal propio a ctp_maintenance que recarga.
+  useEffect(()=>{const ch=supabase.channel("ctp-maint-rt").on("postgres_changes",{event:"*",schema:"public",table:"ctp_maintenance"},()=>{load();}).subscribe();return ()=>{supabase.removeChannel(ch);};},[]);
   const cardSt={background:C.card,borderRadius:16,boxShadow:C.sh2,border:"1.5px solid "+C.bd,padding:16,marginTop:16};
   if(!loaded)return <div style={cardSt}><div style={{fontSize:12,color:C.t3,display:"inline-flex",alignItems:"center",gap:6}}><DiscIcon size={14} weight="bold" color={C.ctp}/>Cargando medidor del CTP…</div></div>;
   if(loadErr)return <div style={cardSt}><div style={{fontSize:13,fontWeight:700,color:C.dn,marginBottom:8,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={14} weight="fill"/>No se pudo cargar el medidor del CTP</div><button onClick={load} style={{...bs(C.ctp+"12",C.ctp),border:"1px solid "+C.ctp+"33"}}>Reintentar</button></div>;
@@ -5718,6 +5725,9 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   // estimación de PrintFlow (que metería deriva). Se refresca actualizando ctp_baseline al releer la máquina.
   const totM2=Number(baseline?.m2)||0;
   const totPlacas=Number(baseline?.plates)||0;
+  // v10.80.3 (scan) — distinguir "sin lectura base" de un 0 real: si falta ctp_baseline (o sus números),
+  // se muestra "—" en vez de 0.0, para no leerse como que el CTP procesó cero.
+  const hasBaseline=!!(baseline&&(baseline.m2!=null||baseline.plates!=null));
   // DESDE EL ÚLTIMO MANTENIMIENTO = plate_log desde el último reset (ctp_maintenance).
   const last=maints[0]; // ordenado desc por performed_at, ya sin anulados
   const lastMs=last?new Date(last.performed_at).getTime():null;
@@ -5755,31 +5765,33 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     <div style={{background:eff==="ok"?C.sf:col+"12",borderRadius:14,padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:10}}>
         <span style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
-        <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{m2f(totM2)}</span>
+        <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{hasBaseline?m2f(totM2):"—"}</span>
         <span style={{fontSize:12,color:C.t2}}>m²</span>
       </div>
       <div style={{height:1,background:C.bd,marginBottom:10}}/>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:7}}>
         <span style={{fontSize:30,fontWeight:800,color:colTx,fontVariantNumeric:"tabular-nums",lineHeight:1}}>{m2f(m2s)}</span>
         <span style={{fontSize:13,fontWeight:600,color:C.t2}}>{hasBase?"m² desde el último mantenimiento":"m² registrados (sin mantenimiento base aún)"}</span>
-        <span style={{marginLeft:"auto",fontSize:11,color:C.t3}}>/ {DUE} m²</span>
+        {hasBase&&<span style={{marginLeft:"auto",fontSize:11,color:C.t3}}>/ {DUE} m²</span>}
       </div>
-      <div style={{height:9,borderRadius:6,background:C.card,overflow:"hidden",border:"1px solid "+C.bd}}>
+      {/* v10.80.3 (scan) — sin mantenimiento base no hay ciclo que medir: se oculta la barra y el "/350" para
+          no leerse como un avance real hacia el mantenimiento. */}
+      {hasBase&&<div style={{height:9,borderRadius:6,background:C.card,overflow:"hidden",border:"1px solid "+C.bd}}>
         <div style={{height:"100%",width:"100%",background:col,transformOrigin:"left",transform:"scaleX("+(pct/100)+")",transition:"transform .4s ease-out"}}/>
-      </div>
+      </div>}
       {eff!=="ok"&&<div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:colTx,background:col+"14",border:"1px solid "+col+"33",borderRadius:8,padding:"4px 9px",marginTop:9}}><WarningIcon size={12} weight="fill"/>{eff==="due"?"Mantenimiento vencido: ya pasó los "+DUE+" m²":"Se acerca el mantenimiento ("+SOON+"–"+DUE+" m²)"}</div>}
     </div>
     {/* 2 RECUADROS ABAJO — placas: desde el mantenimiento · histórico total */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
-        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas desde el mantenimiento</div>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{hasBase?"Placas desde el mantenimiento":"Placas registradas (sin base)"}</div>
         <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(since.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
       </div>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
         <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas histórico</div>
-        <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
-        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div>
+        {hasBaseline?<><div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div></>:<div style={{fontSize:12,color:C.t3,marginTop:2}}>Sin lectura base del Suprasetter</div>}
       </div>
     </div>
     <div style={{fontSize:11,color:C.t3,marginTop:10,lineHeight:1.5}}>
@@ -18577,7 +18589,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           se gatea en su retorno: si el montaje no ocurrió, la placa ya quedó registrada y se avisa claro que hay que
           re-arrastrar; el re-drop NO re-pedirá placas (PLACAS-1 la reconoce en platedIds) → cero duplicado. addPlate
           corre a lo sumo una vez. Si addPlate mismo falla, el catch no cierra el modal → reintentar es seguro (sin placa). */}
-      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(plates)=>{try{await db.addPlates(plateModal.oid,plates,user);/* v10.73.84 (verificación P3) — setPlates OPTIMISTA cierra la ventana de carrera: `plates` solo se refresca por realtime (reload no recarga plates), así que sin esto un re-drop rápido tras un montaje fallido re-abría el modal y DUPLICABA plate_log. Con el optimista, platedIds tiene el oid de inmediato; el realtime luego reemplaza el array y el Set queda idempotente. v10.78.0 — addPlates inserta las N filas (chicas y/o grandes) en un solo request atómico, así que el optimista de una fila por order_id sigue siendo suficiente para platedIds. */setPlates(p=>[...p,{order_id:plateModal.oid,voided_at:null}]);const okAssign=await assignMachine(plateModal.oid,plateModal.mid);const desc=plates.map(p=>p.qty+" "+p.size+(p.qty!==1?"s":"")).join(", ");await db.addComment(plateModal.oid,"📋 Placas: "+desc+" registradas","sistema");setPlateModal(null);if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning")}catch(e){console.error("[PlateModal] Error:",e);showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setPlateModal(null)}/>}
+      {plateModal&&<PlateModal order={plateModal.order} machine={plateModal.machine} onConfirm={async(plates)=>{
+        // v10.80.3 (scan) — addPlates es el ÚNICO paso FATAL (insert atómico de N filas). Si FALLA, nada se
+        // insertó → se avisa y se DEJA el modal abierto para reintentar sin riesgo. Si TIENE ÉXITO, se cierra
+        // el modal de inmediato y lo demás (montar máquina, comentario) va best-effort: antes, un fallo de
+        // addComment TRAS el commit dejaba el modal abierto con un error FALSO y el reintento DUPLICABA
+        // plate_log (+ envenenaba el contador CTP). userLogin||user: atribuir a la persona, no al rol.
+        const oid=plateModal.oid, mid=plateModal.mid;
+        try{ await db.addPlates(oid,plates,userLogin||user); }
+        catch(e){ console.error("[PlateModal addPlates] Error:",e); showToast("❌ No se pudieron registrar placas: "+(e?.message||"error desconocido"),"error"); return; }
+        setPlates(p=>[...p,{order_id:oid,voided_at:null}]); // optimista → platedIds tiene el oid ya (no re-abre)
+        setPlateModal(null);
+        try{
+          const okAssign=await assignMachine(oid,mid);
+          const desc=plates.map(p=>p.qty+" "+p.size+(p.qty!==1?"s":"")).join(", ");
+          await db.addComment(oid,"📋 Placas: "+desc+" registradas","sistema");
+          if(!okAssign)showToast("⚠️ Placas registradas, pero la máquina no montó la orden (ocupada o en mantenimiento). Arrástrala de nuevo; ya no te pedirá placas.","warning");
+        }catch(e){ console.error("[PlateModal post-insert] Error:",e); showToast("Placas registradas. Si la orden no se montó, arrástrala de nuevo (no te volverá a pedir placas).","warning"); }
+      }} onClose={()=>setPlateModal(null)}/>}
       {/* v10.49.0 — PriceCaptureModal: aparece al dar Entregar si la orden no tiene precio.
           v10.49.3 F1 FIX — capturar el target ANTES del await; si Karla cierra con ESC el state
           se vuelve null y abortamos los setters externos. Evita "InvoiceModal fantasma" abriendo
