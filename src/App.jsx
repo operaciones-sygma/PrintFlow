@@ -5700,8 +5700,13 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [maints,setMaints]=useState([]);
   const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState(false);
-  const load=async()=>{try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);}};
+  const [loaded,setLoaded]=useState(false);   // v10.80.2 (/impeccable critique) — evita el parpadeo de ceros mientras carga
+  const [loadErr,setLoadErr]=useState(false); // v10.80.2 — fail-open→cerrado: si Supabase falla, se avisa en vez de mostrar 0
+  const load=async()=>{setLoadErr(false);try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);setLoadErr(true);}finally{setLoaded(true);}};
   useEffect(()=>{load();},[]);
+  const cardSt={background:C.card,borderRadius:16,boxShadow:C.sh2,border:"1.5px solid "+C.bd,padding:16,marginTop:16};
+  if(!loaded)return <div style={cardSt}><div style={{fontSize:12,color:C.t3,display:"inline-flex",alignItems:"center",gap:6}}><DiscIcon size={14} weight="bold" color={C.ctp}/>Cargando medidor del CTP…</div></div>;
+  if(loadErr)return <div style={cardSt}><div style={{fontSize:13,fontWeight:700,color:C.dn,marginBottom:8,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={14} weight="fill"/>No se pudo cargar el medidor del CTP</div><button onClick={load} style={{...bs(C.ctp+"12",C.ctp),border:"1px solid "+C.ctp+"33"}}>Reintentar</button></div>;
   const SOON=300, DUE=350;
   // m² por placa = ancho(mm) × alto(mm) / 1e6. Defaults = los mismos del panel de químicos.
   const aCh=(((prices?.placa_chica_ancho_mm)||510)*((prices?.placa_chica_alto_mm)||400))/1e6;
@@ -5723,13 +5728,17 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const hasBase=!!last;
   const status=m2s>=DUE?"due":m2s>=SOON?"soon":"ok";
   const eff=hasBase?status:"ok";
-  const col=eff==="due"?C.dn:eff==="soon"?C.amb:C.ctp;
+  const col=eff==="due"?C.dn:eff==="soon"?C.amb:C.ctp;        // color de RELLENO/borde/barra (brillante)
+  // v10.80.2 (/impeccable critique) — color de TEXTO aparte: el semáforo crudo (C.amb #ff9500 ~2.2:1) reprueba
+  // AA como texto sobre el panel casi-blanco. Se usa tinta oscura (#b45309, el ámbar-texto de la casa; rojo #b91c1c)
+  // para el número héroe y la píldora; el brillante se queda solo en barra/borde/tinte.
+  const colTx=eff==="due"?"#b91c1c":eff==="soon"?"#b45309":C.ctp;
   const pct=Math.min(100,Math.round(m2s/DUE*100));
   const canReset=user==="german"||user==="admin";
   const nf=n=>Number(n||0).toLocaleString("es-MX");
   const m2f=n=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:1,maximumFractionDigits:1});
   const doReset=async()=>{if(busy)return;setBusy(true);try{await db.addCtpMaintenance(null,null,userLogin||user);await load();setConfirm(false);}catch(e){console.error("[CTPCounter reset] Error:",e);alert("No se pudo registrar el mantenimiento: "+(e?.message||"error desconocido"));}finally{setBusy(false);}};
-  return <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,border:"1.5px solid "+C.bd,padding:16,marginTop:16}}>
+  return <div style={cardSt}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:7}}>
         <DiscIcon size={16} weight="bold" color={C.ctp}/>
@@ -5740,8 +5749,10 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
       </div>
       {canReset&&<button onClick={()=>setConfirm(true)} style={{...bs(C.ctp+"12",C.ctp),border:"1px solid "+C.ctp+"33",whiteSpace:"nowrap",flexShrink:0}}><WrenchIcon size={12} weight="bold"/>Registrar mantenimiento</button>}
     </div>
-    {/* RECUADRO GRANDE — m²: total (arriba) + desde el último mantenimiento con barra hasta 350 */}
-    <div style={{background:C.bg,borderRadius:14,padding:"14px 16px",border:"1.5px solid "+col+"40"}}>
+    {/* RECUADRO GRANDE — m²: total (arriba) + desde el último mantenimiento con barra hasta 350.
+        v10.80.2 — fondo tenue C.sf (sí contrasta con la card, C.bg era idéntico a C.card); se tiñe con el
+        semáforo solo en alarma; sin borde propio para no leerse como card-dentro-de-card. */}
+    <div style={{background:eff==="ok"?C.sf:col+"12",borderRadius:14,padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:10}}>
         <span style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
         <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{m2f(totM2)}</span>
@@ -5749,42 +5760,51 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
       </div>
       <div style={{height:1,background:C.bd,marginBottom:10}}/>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:7}}>
-        <span style={{fontSize:30,fontWeight:800,color:col,fontVariantNumeric:"tabular-nums",lineHeight:1}}>{m2f(m2s)}</span>
+        <span style={{fontSize:30,fontWeight:800,color:colTx,fontVariantNumeric:"tabular-nums",lineHeight:1}}>{m2f(m2s)}</span>
         <span style={{fontSize:13,fontWeight:600,color:C.t2}}>{hasBase?"m² desde el último mantenimiento":"m² registrados (sin mantenimiento base aún)"}</span>
         <span style={{marginLeft:"auto",fontSize:11,color:C.t3}}>/ {DUE} m²</span>
       </div>
       <div style={{height:9,borderRadius:6,background:C.card,overflow:"hidden",border:"1px solid "+C.bd}}>
-        <div style={{height:"100%",width:pct+"%",background:col,transition:"width .4s"}}/>
+        <div style={{height:"100%",width:"100%",background:col,transformOrigin:"left",transform:"scaleX("+(pct/100)+")",transition:"transform .4s ease-out"}}/>
       </div>
-      {eff!=="ok"&&<div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:col,background:col+"14",border:"1px solid "+col+"33",borderRadius:8,padding:"4px 9px",marginTop:9}}><WarningIcon size={12} weight="fill"/>{eff==="due"?"Mantenimiento vencido — ya pasó los "+DUE+" m²":"Se acerca el mantenimiento ("+SOON+"–"+DUE+" m²)"}</div>}
+      {eff!=="ok"&&<div style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:colTx,background:col+"14",border:"1px solid "+col+"33",borderRadius:8,padding:"4px 9px",marginTop:9}}><WarningIcon size={12} weight="fill"/>{eff==="due"?"Mantenimiento vencido: ya pasó los "+DUE+" m²":"Se acerca el mantenimiento ("+SOON+"–"+DUE+" m²)"}</div>}
     </div>
     {/* 2 RECUADROS ABAJO — placas: desde el mantenimiento · histórico total */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
-      <div style={{background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+      <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
         <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas desde el mantenimiento</div>
         <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(since.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
       </div>
-      <div style={{background:C.bg,borderRadius:12,padding:"10px 12px"}}>
+      <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
         <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas histórico</div>
         <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
-        <div style={{fontSize:11,color:C.t2,marginTop:2}}>≈ {m2f(totM2)} m²</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div>
       </div>
     </div>
     <div style={{fontSize:11,color:C.t3,marginTop:10,lineHeight:1.5}}>
       {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador “desde el último mantenimiento” arranca de cero.</>}
       {baseline?.as_of&&<> · Histórico base al {fD(baseline.as_of)}</>}
     </div>
-    {confirm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>!busy&&setConfirm(false)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:18,padding:22,maxWidth:400,width:"90%"}}>
-        <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={16} weight="bold" color={C.ctp}/>Registrar mantenimiento del CTP</h3>
-        <p style={{fontSize:12.5,color:C.t2,lineHeight:1.5,margin:"0 0 16px"}}>Se marca el mantenimiento con la fecha de hoy y el contador <strong>“desde el último mantenimiento” se reinicia a 0</strong>. En este ciclo llevas <strong style={{color:col}}>{m2f(m2s)} m²</strong> ({nf(since.total)} placas).</p>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setConfirm(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={doReset} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando…</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y reiniciar</>}</button>
-        </div>
+    {confirm&&<CTPResetConfirm busy={busy} colTx={colTx} m2Label={m2f(m2s)} sinceTotal={nf(since.total)} onCancel={()=>setConfirm(false)} onConfirm={doReset}/>}
+  </div>;
+}
+
+// v10.80.2 (/impeccable critique) — confirm del reinicio como diálogo accesible (role/aria-modal/aria-label,
+// Escape vía useEscClose como el resto de la app, autofoco en Cancelar). Se monta solo cuando está abierto.
+function CTPResetConfirm({busy,colTx,m2Label,sinceTotal,onCancel,onConfirm}) {
+  useEscClose(()=>{ if(!busy) onCancel(); });
+  const ref=useRef(null);
+  useEffect(()=>{ if(ref.current) ref.current.focus(); },[]);
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>!busy&&onCancel()}>
+    <div role="dialog" aria-modal="true" aria-label="Registrar mantenimiento del CTP" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:18,padding:22,maxWidth:400,width:"90%"}}>
+      <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={16} weight="bold" color={C.ctp}/>Registrar mantenimiento del CTP</h3>
+      <p style={{fontSize:12.5,color:C.t2,lineHeight:1.5,margin:"0 0 16px"}}>Se marca el mantenimiento con la fecha de hoy y el contador <strong>"desde el último mantenimiento" se reinicia a 0</strong>. En este ciclo llevas <strong style={{color:colTx}}>{m2Label} m²</strong> ({sinceTotal} placas).</p>
+      <div style={{display:"flex",gap:8}}>
+        <button ref={ref} onClick={onCancel} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button onClick={onConfirm} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando…</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y reiniciar</>}</button>
       </div>
-    </div>}
+    </div>
   </div>;
 }
 
