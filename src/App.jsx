@@ -5701,7 +5701,6 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [prices,setPrices]=useState(null);
   const [baseline,setBaseline]=useState(null);
   const [maints,setMaints]=useState([]);
-  const [busy,setBusy]=useState(false);
   const [confirm,setConfirm]=useState(false);
   const [loaded,setLoaded]=useState(false);   // v10.80.2 (/impeccable critique) — evita el parpadeo de ceros mientras carga
   const [loadErr,setLoadErr]=useState(false); // v10.80.2 — fail-open→cerrado: si Supabase falla, se avisa en vez de mostrar 0
@@ -5750,13 +5749,15 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const canReset=user==="german"||user==="admin";
   const nf=n=>Number(n||0).toLocaleString("es-MX");
   const m2f=n=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:1,maximumFractionDigits:1});
-  const doReset=async()=>{if(busy)return;setBusy(true);try{await db.addCtpMaintenance(null,null,userLogin||user);await load();setConfirm(false);}catch(e){console.error("[CTPCounter reset] Error:",e);alert("No se pudo registrar el mantenimiento: "+(e?.message||"error desconocido"));}finally{setBusy(false);}};
+  // v10.80.5 (/impeccable critique 3ª pasada) — doReset solo hace el trabajo y LANZA si falla; el modal
+  // (CTPResetConfirm) maneja busy y muestra el error INLINE, y se cierra al éxito (antes caía a alert() nativo).
+  const doReset=async()=>{ await db.addCtpMaintenance(null,null,userLogin||user); await load(); };
   return <div style={cardSt}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:7}}>
         <DiscIcon size={16} weight="bold" color={C.ctp}/>
         <div>
-          <div style={{fontSize:14,fontWeight:800,letterSpacing:"-0.01em"}}>Mantenimiento CTP</div>
+          <div style={{fontSize:15,fontWeight:800,letterSpacing:"-0.01em"}}>Mantenimiento CTP</div>
           <div style={{fontSize:F.micro,color:C.t3}}>Histórico del Suprasetter + lo registrado en PrintFlow</div>
         </div>
       </div>
@@ -5767,7 +5768,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
         semáforo solo en alarma; sin borde propio para no leerse como card-dentro-de-card. */}
     <div style={{background:eff==="ok"?C.sf:col+"12",borderRadius:14,padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:10}}>
-        <span style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
+        <span style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".05em"}}>Total m² procesados</span>
         <span style={{fontSize:18,fontWeight:600,color:C.t2,fontVariantNumeric:"tabular-nums",letterSpacing:"-0.01em"}}>{hasBaseline?m2f(totM2):"—"}</span>
         <span style={{fontSize:12,color:C.t2}}>m²</span>
       </div>
@@ -5787,13 +5788,13 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     {/* 2 RECUADROS ABAJO — placas: desde el mantenimiento · histórico total */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
-        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{hasBase?"Placas desde el mantenimiento":"Placas registradas (sin base)"}</div>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{hasBase?"Placas desde el mantenimiento":"Placas registradas (sin base)"}</div>
         <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(since.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
       </div>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
-        <div style={{fontSize:F.micro,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas históricas</div>
-        {hasBaseline?<><div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
+        <div style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas históricas</div>
+        {hasBaseline?<><div style={{fontSize:18,fontWeight:600,color:C.t2,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div></>:<div style={{fontSize:12,color:C.t3,marginTop:2}}>Sin lectura base del Suprasetter</div>}
       </div>
     </div>
@@ -5801,23 +5802,29 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
       {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador "desde el último mantenimiento" arranca de cero.</>}
       {baseline?.as_of&&<> · Histórico base al {fD(baseline.as_of)}</>}
     </div>
-    {confirm&&<CTPResetConfirm busy={busy} colTx={colTx} m2Label={m2f(m2s)} sinceTotal={nf(since.total)} onCancel={()=>setConfirm(false)} onConfirm={doReset}/>}
+    {confirm&&<CTPResetConfirm colTx={colTx} m2Label={m2f(m2s)} sinceTotal={nf(since.total)} onCancel={()=>setConfirm(false)} onConfirm={doReset}/>}
   </div>;
 }
 
 // v10.80.2 (/impeccable critique) — confirm del reinicio como diálogo accesible (role/aria-modal/aria-label,
 // Escape vía useEscClose como el resto de la app, autofoco en Cancelar). Se monta solo cuando está abierto.
-function CTPResetConfirm({busy,colTx,m2Label,sinceTotal,onCancel,onConfirm}) {
+function CTPResetConfirm({colTx,m2Label,sinceTotal,onCancel,onConfirm}) {
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
   useEscClose(()=>{ if(!busy) onCancel(); });
   const ref=useRef(null);
   useEffect(()=>{ if(ref.current) ref.current.focus(); },[]);
+  // v10.80.5 (/impeccable critique 3ª pasada) — el error del reinicio se muestra INLINE aquí (el diálogo ya
+  // está montado y es el lugar natural del resultado), no en un alert() nativo — la única costura sin diseñar.
+  const go=async()=>{ if(busy)return; setBusy(true); setErr(""); try{ await onConfirm(); onCancel(); }catch(e){ console.error("[CTP reset] Error:",e); setErr(e?.message||"No se pudo registrar el mantenimiento"); }finally{ setBusy(false); } };
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}} onClick={()=>!busy&&onCancel()}>
     <div role="dialog" aria-modal="true" aria-label="Registrar mantenimiento del CTP" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:18,padding:22,maxWidth:400,width:"90%"}}>
       <h3 style={{fontSize:15,fontWeight:800,margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={16} weight="bold" color={C.ctp}/>Registrar mantenimiento del CTP</h3>
       <p style={{fontSize:12.5,color:C.t2,lineHeight:1.5,margin:"0 0 16px"}}>Se marca el mantenimiento con la fecha de hoy y el contador <strong>"desde el último mantenimiento" se reinicia a 0</strong>. En este ciclo llevas <strong style={{color:colTx}}>{m2Label} m²</strong> ({sinceTotal} placas).</p>
+      {err&&<div style={{fontSize:12,color:"#b91c1c",background:C.dn+"12",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"8px 10px",marginBottom:12,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill"/>{err}</div>}
       <div style={{display:"flex",gap:8}}>
         <button ref={ref} onClick={onCancel} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-        <button onClick={onConfirm} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando…</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y reiniciar</>}</button>
+        <button onClick={go} disabled={busy} style={{...bt(busy?"#9ca3af":C.ctp),flex:1,justifyContent:"center"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Registrando…</>:<><CheckCircleIcon size={14} weight="bold"/>Registrar y reiniciar</>}</button>
       </div>
     </div>
   </div>;
