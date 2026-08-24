@@ -14404,17 +14404,33 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     // (la S ocupa el lugar del guion) y toda la cartera de remisiones propias dejaba de mezclarse
     // al consecutivo: la pestana de Remisiones marcaria como hueco lo que si esta en cobranza.
     const pf=f=>{const m=String(f||"").match(/^(RS|[DRCF])-(\d+)$/i);return m?parseInt(m[2],10):null};
+    // v10.80.8 — EL RANGO Y EL DEDUP VAN POR SERIE, no sobre numeros pelados de todas juntas.
+    // Antes se juntaban los numeros de D-, R-, F- y RS- en una sola bolsa: baseMin/baseMax salian del
+    // MINIMO y MAXIMO globales, y `seen` confundia D-1200 con R-1200. Hoy funciona de casualidad,
+    // porque la orden mas vieja (D-5791) pone un piso alto. En cuanto exista UNA sola orden con folio
+    // F-1 o RS-1 —o sea el dia del corte— ese piso se desploma a 1, el guard "no extiende el
+    // consecutivo hacia atras" queda inerte y TODA la cartera vieja de cobranza entra al mapa: miles
+    // de huecos falsos en una pantalla cuyo trabajo es exactamente senalar huecos.
+    const pfSerie=f=>{const m=String(f||"").match(/^(RS|[DRCF])-(\d+)$/i);return m?m[1].toUpperCase():null};
     const baseList=[...fromOrders,...fromCorona];
-    const baseNums=baseList.map(o=>pf(o.invoice_folio)).filter(n=>n!==null);
-    const seen=new Set(baseNums);
+    const porSerie=new Map(); // serie -> {min,max,seen}
+    for(const o of baseList){
+      const se=pfSerie(o.invoice_folio), n=pf(o.invoice_folio);
+      if(se===null||n===null)continue;
+      let e=porSerie.get(se);
+      if(!e){e={min:n,max:n,seen:new Set()};porSerie.set(se,e);}
+      e.min=Math.min(e.min,n); e.max=Math.max(e.max,n); e.seen.add(n);
+    }
     let fromCobranza=[];
-    if(baseNums.length>0){
-      const baseMin=Math.min(...baseNums), baseMax=Math.max(...baseNums);
+    if(porSerie.size>0){
       fromCobranza=(cobranzaFolios||[]).filter(ci=>{
-        const n=pf(ci.doc_number);
-        if(n===null||ci.doc_type!==type||seen.has(n))return false;
-        if(n<baseMin||n>baseMax)return false; // solo rellena gaps INTERNOS; no extiende el rango
-        seen.add(n);return true;
+        const se=pfSerie(ci.doc_number), n=pf(ci.doc_number);
+        if(se===null||n===null||ci.doc_type!==type)return false;
+        const e=porSerie.get(se);
+        if(!e)return false;                      // esa serie no existe en el consecutivo: no se inventa
+        if(e.seen.has(n))return false;
+        if(n<e.min||n>e.max)return false;        // solo rellena gaps INTERNOS de SU serie
+        e.seen.add(n);return true;
       }).map(ci=>({
         id:"COB-"+ci.doc_number,
         invoice_folio:ci.doc_number,
@@ -14425,7 +14441,13 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
         purchase_order_id:null,
         invoiced_by:null,
         invoice_pre_assigned:false,
-        cancelled_at:null,
+        // v10.80.8 — se pinta como CANCELADO si lo está. La RPC volvió a incluir los cancelados
+        // (v3.7.414) porque un folio cancelado ÚNICAMENTE en cobranza salía marcado FALTANTE en rojo:
+        // la pantalla acusaba de perdido algo que sí sabemos dónde está. Aquí venía cableado a null,
+        // así que aunque llegaran no se distinguirían. El riesgo que motivó el filtro original
+        // —reinflar el rango— lo cierra el guard por serie de arriba: un cancelado fuera de
+        // [min..max] de SU serie se descarta y solo puede explicar huecos internos.
+        cancelled_at:ci.status==="cancelada"?(ci.issued_date?ci.issued_date+"T12:00:00":null):null,
         nc_emitted:false,
         isCobranza:true,
         cobranzaStatus:ci.status,
@@ -15777,7 +15799,24 @@ export default function PrintFlow() {
   // y ademas en un modulo (EMISOR_ON) para que OCard y DetailModal lo lean sin enhebrar un prop por
   // SIETE call-sites. El cambio de estado es lo que garantiza que el arbol se vuelva a pintar.
   const [emisorOn,setEmisorOn]=useState(false);
-  useEffect(()=>{db.getFolioEmitterEnabled().then(v=>{EMISOR_ON=!!v;setEmisorOn(!!v)})},[]);
+  // v10.80.8 — SE VUELVE A PREGUNTAR, no solo al montar. El corte del 1-sep voltea este flag a media
+  // jornada, con las pestañas de Karla abiertas desde la mañana. Con `[]` a secas, esa pestaña se
+  // quedaba en false TODA la sesión y el botón "Folio de Alpha" —la única puerta para las órdenes que
+  // Alpha ya folió— no aparecía nunca. Y el engaño era peor que no ver el botón: los modales de folio
+  // SÍ releen el flag cada vez que se abren, así que el input de folio sí desaparecía. La pantalla
+  // quedaba a medio corte: sin dónde teclear el folio de Alpha y sin el botón que lleva a registrarlo,
+  // así que a esas órdenes se les acuñaba un folio PROPIO y salía un segundo CFDI de la misma venta.
+  // Al volver a la pestaña y cada 5 min: barato, y cierra la ventana a minutos en vez de a la sesión.
+  useEffect(()=>{
+    let vivo=true;
+    const leer=()=>{db.getFolioEmitterEnabled().then(v=>{if(!vivo)return;EMISOR_ON=!!v;setEmisorOn(!!v)}).catch(()=>{})};
+    leer();
+    const id=setInterval(leer,5*60*1000);
+    const alVolver=()=>{if(document.visibilityState==="visible")leer()};
+    document.addEventListener("visibilitychange",alVolver);
+    window.addEventListener("focus",leer);
+    return()=>{vivo=false;clearInterval(id);document.removeEventListener("visibilitychange",alVolver);window.removeEventListener("focus",leer)};
+  },[]);
   const [snoozeTarget,setSnoozeTarget]=useState(null); // v10.73.18 — orden a poner "En espera" (abre SnoozeModal)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
