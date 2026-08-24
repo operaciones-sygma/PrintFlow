@@ -5302,9 +5302,16 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
 
   const amountNum=parseFloat(amount);
   const folioClean=folioFiscal.trim().toUpperCase();
-  const isFactura=esFolioFactura(folioClean);
-  const isRemision=esFolioRemision(folioClean);
-  const folioValid=folioAuto?true:((isFactura||isRemision)&&/^(?:RS|[DFR])-[1-9]\d*$/.test(folioClean)); // v10.64.3 — sin cero a la izquierda; F1 emisor ON → no exige folio manual
+  // v10.80.7 — esta pantalla TRANSCRIBE un folio que Alpha ya emitio, asi que su validacion se
+  // queda en las series de Alpha. Al pasarla al helper en v10.80.6 se aflojo de mas: empezo a
+  // aceptar F- y RS-, que son folios PROPIOS que nadie ha emitido todavia. Post-corte el input
+  // desaparece (folioAuto) y credit_deposit acuna el folio por su cuenta, o sea que este camino
+  // es de transcripcion y solo de transcripcion.
+  // OJO: isFacturaFolio (mas abajo, el del IVA) SI usa el helper, y a proposito: ahi la pregunta
+  // es si el documento lleva IVA, y una DP- del canario si lo lleva.
+  const isFactura=/^D-[1-9]\d*$/.test(folioClean);
+  const isRemision=/^R-[1-9]\d*$/.test(folioClean);
+  const folioValid=folioAuto?true:(isFactura||isRemision); // v10.64.3 — sin cero a la izquierda; F1 emisor ON → no exige folio manual
   // v10.43.28 — determinar qué sugerencia mostrar (default D- si aún no escribió nada)
   const suggestedType=isRemision?"remision":"factura";
   const suggestedFolio=suggestion[suggestedType];
@@ -14393,7 +14400,10 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
     // dos rutas del MISMO componente con criterios distintos, y esta habria quedado ciega a la
     // serie F al mezclar la cartera de CobranzaFlow. Se alinea (y sigue descartando la canary DP-,
     // que no es serie fiscal: DP no matchea ^[DRF]- porque la D va seguida de P).
-    const pf=f=>{const m=String(f||"").match(/^([DRCF])-(\d+)$/i);return m?parseInt(m[2],10):null};
+    // v10.80.7 — RS entra a la clase. Era de UN solo caracter, asi que 'RS-1230' no matcheaba
+    // (la S ocupa el lugar del guion) y toda la cartera de remisiones propias dejaba de mezclarse
+    // al consecutivo: la pestana de Remisiones marcaria como hueco lo que si esta en cobranza.
+    const pf=f=>{const m=String(f||"").match(/^(RS|[DRCF])-(\d+)$/i);return m?parseInt(m[2],10):null};
     const baseList=[...fromOrders,...fromCorona];
     const baseNums=baseList.map(o=>pf(o.invoice_folio)).filter(n=>n!==null);
     const seen=new Set(baseNums);
@@ -14705,8 +14715,10 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             <div style={{fontSize:12,color:C.dn,fontWeight:600}}>FALTANTE</div>
             {(bk.prev||bk.next)&&<div style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:5,flexWrap:"wrap"}} title="Folios vecinos ya registrados — el hueco va entre estas fechas; ahí búscalo en Alpha">{bk.prev&&<span>{bk.prev.folio}{bk.prev.date?" · "+fShort(bk.prev.date):""}</span>}<span style={{color:C.t3}}>→</span>{bk.next&&<span>{bk.next.folio}{bk.next.date?" · "+fShort(bk.next.date):""}</span>}</div>}
             {/* v10.77.5 — el subtexto tambien cableaba Alpha. Un hueco de la serie propia (F-) no se
-                busca en Alpha: o se cancelo aqui, o el folio se consumio sin llegar a la orden. */}
-            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>{item.serie==="D"?"Búscalo en Alpha: ¿cancelado o sin capturar?":"¿Cancelado, o el folio se consumió sin orden?"}</div>
+                busca en Alpha: o se cancelo aqui, o el folio se consumio sin llegar a la orden.
+                v10.80.7 — y la R- TAMBIEN es de Alpha (1,290 folios): comparar solo contra "D"
+                le daba a toda la pestana de Remisiones el texto pensado para la serie propia. */}
+            <div style={{fontSize:10,color:C.t3,marginLeft:"auto",fontStyle:"italic"}}>{(item.serie==="D"||item.serie==="R")?"Búscalo en Alpha: ¿cancelado o sin capturar?":"¿Cancelado, o el folio se consumió sin orden?"}</div>
           </div>;
         }
         return item.orders.map((o,i)=>{
