@@ -992,6 +992,21 @@ const duePlausible=v=>!isNaN(v)&&v>=DUE_MIN&&v<=DUE_MAX;
 const isOverdue=d=>{if(!d)return false;const due=new Date(String(d).slice(0,10)+"T23:59:59");const t=due.getTime();return duePlausible(t)&&due<new Date()};
 const pct=(c,p)=>p>0?Math.round(((p-c)/p)*100):0;
 const fmtM=m=>{if(!m&&m!==0)return "—";const h=Math.floor(m/60);return h>0?h+"h "+(m%60)+"m":m+"m"};
+
+// v10.80.6 — LA SERIE DE UN FOLIO, EN UN SOLO LUGAR. Calca public.doc_type_de_folio() de la BD.
+// Hasta hoy solo existian D- y R- de Alpha, y por eso medio archivo clasificaba con
+// startsWith("D-") dando por hecho que TODO lo demas era remision. Esa suposicion ya es falsa:
+//   · DP- (canario) es factura y ningun startsWith("D-") la agarra: "DP" no lleva guion en la 2a.
+//   · F- (nuestra, desde el corte) es factura y caia en el else como "remision".
+//   · RS- (nuestra remision) no la reconocia nadie.
+// El de DP- no es teorico: en el preview del deposito ese else decide si se aplica IVA, o sea que
+// una factura del canario le mostraba a quien captura el total SIN IVA.
+// RS SE PRUEBA ANTES QUE R por como ordena el alfabeto: "RS-1" NO empieza con "R-" (la S estorba),
+// asi que un startsWith("R-") suelto la deja fuera. Aqui el match es por prefijo completo y explicito.
+const PREFIJOS_FACTURA  = ["D-", "F-", "DP-"];
+const PREFIJOS_REMISION = ["R-", "RS-"];
+const esFolioFactura  = f => PREFIJOS_FACTURA.some(x  => String(f||"").toUpperCase().startsWith(x));
+const esFolioRemision = f => PREFIJOS_REMISION.some(x => String(f||"").toUpperCase().startsWith(x));
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
@@ -4656,7 +4671,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const updateItem = (id, patch) => setCart(cart.map(c=>c.client_product_id===id?{...c,...patch}:c));
 
   const parseFolio = (f) => {
-    const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+    const m = String(f||"").toUpperCase().match(/^(?:RS|[DFR])-(\d+)$/);
     if (!m) return null;
     if (m[1].length>1 && m[1].startsWith("0")) return null;
     return parseInt(m[1], 10);
@@ -5287,9 +5302,9 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
 
   const amountNum=parseFloat(amount);
   const folioClean=folioFiscal.trim().toUpperCase();
-  const isFactura=folioClean.startsWith("D-");
-  const isRemision=folioClean.startsWith("R-");
-  const folioValid=folioAuto?true:((isFactura||isRemision)&&/^[DR]-[1-9]\d*$/.test(folioClean)); // v10.64.3 — sin cero a la izquierda; F1 emisor ON → no exige folio manual
+  const isFactura=esFolioFactura(folioClean);
+  const isRemision=esFolioRemision(folioClean);
+  const folioValid=folioAuto?true:((isFactura||isRemision)&&/^(?:RS|[DFR])-[1-9]\d*$/.test(folioClean)); // v10.64.3 — sin cero a la izquierda; F1 emisor ON → no exige folio manual
   // v10.43.28 — determinar qué sugerencia mostrar (default D- si aún no escribió nada)
   const suggestedType=isRemision?"remision":"factura";
   const suggestedFolio=suggestion[suggestedType];
@@ -5368,7 +5383,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&(()=>{
         // v10.58.45: el preview debe espejar credit_deposit — ×1.16 SOLO si el folio
         // es factura (D-); una remisión (R-) cruza a cobranza SIN IVA.
-        const isFacturaFolio=(folioClean||"").toUpperCase().startsWith("D-");
+        const isFacturaFolio=esFolioFactura(folioClean);
         const ivaPortion=isFacturaFolio?Math.round(amountNum*0.16*100)/100:0;
         const withIva=isFacturaFolio?Math.round(amountNum*1.16*100)/100:amountNum;
         return <div style={{padding:"12px 14px",background:C.emr+"10",border:"1px solid "+C.emr+"40",borderRadius:8,marginBottom:10}}>
@@ -6344,7 +6359,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     if(isHistoric) return;
     if(!folioSugFactura && !folioSugRemision) return;
     const parseNum = f => {
-      const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+      const m = String(f||"").toUpperCase().match(/^(?:RS|[DFR])-(\d+)$/);
       return m ? parseInt(m[1], 10) : null;
     };
     const baseF = parseNum(folioSugFactura);
@@ -6418,7 +6433,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
 
   // Validación de folios fiscales (factura/remision)
   const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo");
-  const folioRegex = /^[DR]-[1-9]\d*$/;
+  const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
   const foliosFmtOk = folioAuto ? true : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
   const foliosUnicos = folioAuto ? true : (() => {
@@ -7132,7 +7147,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   useEffect(() => {
     if(!folioSugFactura && !folioSugRemision) return;
     const parseNum = f => {
-      const m = String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+      const m = String(f||"").toUpperCase().match(/^(?:RS|[DFR])-(\d+)$/);
       return m ? parseInt(m[1], 10) : null;
     };
     const baseF = parseNum(folioSugFactura);
@@ -7323,7 +7338,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   // Validación
   // v10.58.38: validación per-cell qty*punit ≈ amountSinIva ±1%. NO tautológica en modo amount
   // (en modo qty seguía siendo válida; en modo amount la comparación de SUM era tautológica).
-  const folioRegex = /^[DR]-[1-9]\d*$/;
+  const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   const validation = useMemo(() => {
     const errors = [];
     // Per-cell: qty * priceUnit (SIN IVA) ≈ amountSinIva ±1%. Detecta drift real en ambos modos.
@@ -7656,8 +7671,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         }
                         // Si el folio actual no matchea el prefix del nuevo tipo, limpiarlo (auto-sugerirá)
                         const prefixOk = newType === "corona_saldo" ||
-                          (newType === "factura" && (g.folio||"").startsWith("D-")) ||
-                          (newType === "remision" && (g.folio||"").startsWith("R-"));
+                          (newType === "factura" && esFolioFactura(g.folio)) ||
+                          (newType === "remision" && esFolioRemision(g.folio));
                         updateGroup(i, {
                           doc_type: newType,
                           folio: newType === "corona_saldo" ? "" : (prefixOk ? g.folio : ""),
@@ -10570,7 +10585,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   useEscClose(onClose);
   // v10.51.2 m5 — rechazar leading zeros (D-0123) para evitar ambigüedad con AlphaERP.
   const parseFolioNum = (f)=>{
-    const m=String(f||"").toUpperCase().match(/^[DR]-(\d+)$/);
+    const m=String(f||"").toUpperCase().match(/^(?:RS|[DFR])-(\d+)$/);
     if (!m) return null;
     if (m[1].length > 1 && m[1].startsWith("0")) return null;
     return parseInt(m[1],10);
@@ -15188,7 +15203,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     // consistente con el flujo individual del botón "📄 Asignar Folio y Entregar" en cada OCard.
     // Pre-asignar (🔒) NO requiere este check — Karla puede reservar folios en cualquier estado.
     const allPendingReady = pendingOrders.every(o => o.stage === "salidas" || o.stage === "maq_received");
-    const sharedFolioType = hasShared ? (selectedOC.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
+    const sharedFolioType = hasShared ? (esFolioFactura(selectedOC.shared_invoice_folio) ? "factura" : "remision") : null;
     const sharedFolioColor = sharedFolioType === "factura" ? C.fac : C.live;
     const SharedFolioIcon = sharedFolioType === "factura" ? FileTextIcon : ClipboardTextIcon;
     return <div style={{maxWidth:1200,margin:"0 auto"}}>
@@ -15278,7 +15293,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
             // v10.59.2 D3 — purchase_orders no guarda agente; se deriva de la 1ª orden hija que lo tenga
             const ocAgent = products.find(o=>(o.client_agent||"").trim())?.client_agent || "";
             const hasShared = !!po.shared_invoice_folio;
-            const sFType = hasShared ? (po.shared_invoice_folio.startsWith("D-") ? "factura" : "remision") : null;
+            const sFType = hasShared ? (esFolioFactura(po.shared_invoice_folio) ? "factura" : "remision") : null;
             const sFColor = sFType === "factura" ? C.fac : C.live;
             const SFIcon = sFType === "factura" ? FileTextIcon : ClipboardTextIcon;
             // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
