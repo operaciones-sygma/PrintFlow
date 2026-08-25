@@ -10298,7 +10298,13 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
         ? o.client_id === ocClientId
         : (ocClientName && (o.client||"").trim().toLowerCase() === ocClientName);
       if (!match) return false;
-      return !o.invoice_folio && !o.return_covered_by_folio && !TERMINAL.includes(o.stage) && o.purchase_order_id !== oc.id;
+      // v10.80.12 — LAS CUATRO PATAS, no una. Este filtro miraba solo invoice_folio, asi que ofrecia
+      // para mover ordenes ya comprometidas por folio agrupado, por partes o por plan matriz. El
+      // backend ahora las rechaza (move_order_to_oc), pero ofrecerlas y luego negarlas se lee como
+      // que el sistema falla; mejor no listarlas. Mismo orden de patas que el resto de la app.
+      return !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines
+          && !o.oc_invoice_group_id && !o.return_covered_by_folio
+          && !TERMINAL.includes(o.stage) && o.purchase_order_id !== oc.id;
     });
     if (search.trim()) {
       const q = search.trim().toLowerCase();
