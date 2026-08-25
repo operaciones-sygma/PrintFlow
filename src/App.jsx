@@ -6302,6 +6302,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     Array.from({length: 2}, (_, i) => ({
       qty: 0,
       amountConIva: 0,    // captura CON IVA si factura/corona+factura
+      montoTocado: false, // v10.80.9 — el usuario ya capturo el monto a mano: no auto-calcular encima
       doc_type: "factura",
       folio: "",
       payment_status: "unpaid"
@@ -6518,7 +6519,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       const splitSinIva = isLast
         ? Math.round((totalSinIva - baseSinIva * (N - 1)) * 100) / 100
         : baseSinIva;
-      return {...s, qty, amountConIva: sinIvaToConIva(splitSinIva, s.doc_type)};
+      // v10.80.9 — dividir en partes iguales es una accion deliberada del usuario: reinicia la
+      // bandera para que el auto-calculo por cantidad vuelva a mandar despues de repartir.
+      return {...s, qty, amountConIva: sinIvaToConIva(splitSinIva, s.doc_type), montoTocado: false};
     });
     setSplits(newSplits);
   };
@@ -6530,7 +6533,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     // (solo si el usuario aún no ha capturado un monto manualmente)
     const priceUnitarioConIva = priceUnitario * (split.doc_type === "factura" ? 1.16 : 1);
     const autoAmount = Math.round(qty * priceUnitarioConIva * 100) / 100;
-    updateSplit(idx, {qty, amountConIva: autoAmount});
+    // v10.80.9 — EL GUARD QUE SU PROPIO COMENTARIO YA PROMETIA. Antes reescribia SIEMPRE el monto:
+    // Karla capturaba $28,650 (lo que de verdad va a facturar), luego corregia la cantidad, y el
+    // monto se le borraba y volvia al proporcional — sin aviso, y con el semaforo en verde igual.
+    // Si ya lo toco a mano, la cantidad ya no manda sobre el dinero.
+    if (split.montoTocado) updateSplit(idx, {qty});
+    else updateSplit(idx, {qty, amountConIva: autoAmount});
   };
 
   const handleSubmit = async () => {
@@ -6649,7 +6657,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 value={captureMode==="subtotal" ? (s.amountConIva ? subtotal : "") : (s.amountConIva ? Math.round(s.amountConIva*100)/100 : "")}
                 onChange={e=>{
                   const v = parseFloat(e.target.value)||0;
-                  updateSplit(i, {amountConIva: captureMode==="subtotal" ? subtotalToStored(v, s.doc_type) : v});
+                  updateSplit(i, {amountConIva: captureMode==="subtotal" ? subtotalToStored(v, s.doc_type) : v, montoTocado: true}); // v10.80.9
                 }}
                 style={{...inp,padding:"6px 10px",fontSize:13,width:"calc(100% - 10px)"}}
                 placeholder="0.00"/>
@@ -10655,6 +10663,11 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   const [mode, setMode] = useState("shared");
   const [billTo, setBillTo] = useState(null); // 🆕 Fase 2 — facturar TODA la OC a un tercero (solo modo "shared")
   const [folioStart, setFolioStart] = useState("");
+  // v10.80.10 — el usuario ya tecleo el folio: no pisarlo con la sugerencia. Mismo patron que
+  // agentTouched (v10.74.3) para el vendedor. El efecto de sugerencias depende de [invoiceType,
+  // activeMode], asi que cambiar de pestana simple<->split BORRABA el folio de Alpha ya capturado
+  // y lo reemplazaba por el sugerido — que es justo el numero equivocado, porque Alpha va adelante.
+  const folioTouched = useRef(false);
   const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
   // 🆕 Fase 2 (#4) — no dejar un tercero colgado si la OC resulta Corona o si se cambia a modo consecutivo (ahí no aplica tercero).
   useEffect(()=>{ if(isCorona || mode!=="shared") setBillTo(null); }, [isCorona, mode]);
@@ -10668,7 +10681,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         const [sF, sR, emitter] = await Promise.all([db.getNextFolioSuggestion("factura"), db.getNextFolioSuggestion("remision"), db.getFolioEmitterEnabled()]);
         if (!cancelled) {
           setSuggestionByType({factura:sF||"", remision:sR||""});
-          if (activeMode === "simple") setFolioStart(invoiceType==="factura" ? (sF||"") : (sR||""));
+          if (activeMode === "simple" && !folioTouched.current) setFolioStart(invoiceType==="factura" ? (sF||"") : (sR||"")); // v10.80.10
           setFolioAuto(emitter===true);
         }
       } catch(e) {}
@@ -10904,7 +10917,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             {["factura","remision"].map(t=>{
               const c = t==="factura"?C.fac:C.live;
               const sel = invoiceType===t;
-              return <button key={t} onClick={()=>setInvoiceType(t)} style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Factura (D-)</>:<><ClipboardTextIcon size={13} weight="bold"/>Remisión (R-)</>}</button>;
+              return <button key={t} onClick={()=>{folioTouched.current = false; setInvoiceType(t)}} /* v10.80.10: cambiar de tipo SI re-sugiere (cambia el prefijo) */ style={{...bs(sel?c:C.sf,sel?"#fff":C.t2),flex:1,justifyContent:"center",border:sel?"none":"0.5px solid "+C.bd}}>{t==="factura"?<><FileTextIcon size={13} weight="bold"/>Factura (D-)</>:<><ClipboardTextIcon size={13} weight="bold"/>Remisión (R-)</>}</button>;
             })}
           </div>
         </div>
@@ -10922,7 +10935,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
           {/* F1: en modo emisor el/los folio(s) nacen del counter → se oculta el input */}
           {folioAuto ? <FolioAutoNote label={mode==="shared"?"un folio para toda la OC":"uno por producto pendiente"}/> : <>
           <label style={lbl}>Folio inicial <span style={{color:C.t3,textTransform:"none",fontWeight:400}}>· capturado por Karla, verificado contra AlphaERP</span></label>
-          <input style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>setFolioStart(e.target.value)} placeholder={prefix+"XXXX"}/>
+          <input style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+(folioValid?C.bd:C.dn+"40")}} value={folioStart} onChange={e=>{folioTouched.current = true; setFolioStart(e.target.value)}} placeholder={prefix+"XXXX"}/>
           {!folioValid && folioStart && <div style={{fontSize:10,color:C.dn,marginTop:4,fontWeight:600}}>Formato inválido. Debe ser {prefix}NNNN (ej. {prefix}5780).</div>}
           {folioBelowSuggestion && <div style={{fontSize:10,color:C.wn,marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Folio menor al sugerido ({suggestionByType[invoiceType]}). Verifica con AlphaERP — se permite siempre que NO esté ya asignado a otra orden u OC.</div>}
           </>}
