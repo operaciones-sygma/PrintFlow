@@ -9409,7 +9409,11 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
       <FileTextIcon size={20} weight="regular" color={C.t2}/>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fSize}</div>
-        <a href={fileUrl} target="_blank" rel="noopener" download={fileName} style={{fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={11} weight="bold"/>Descargar</a>
+        {/* v10.80.11 — SE FIRMA. La capa de v10.77.7 cubrio los <img>, la hoja de produccion y los
+            enlaces de la ficha, pero este quedo fuera: desde que el bucket es privado (18-ago) daba
+            400 al abrirlo. Se le cuelga el mismo onClickCapture que los demas, armando el objeto
+            que espera el helper. */}
+        <a href={fileUrl} target="_blank" rel="noopener" download={fileName} onClickCapture={abrirArchivoFirmado({file_url:fileUrl,file_name:fileName})} style={{fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={11} weight="bold"/>Descargar</a>
       </div>
       {canUpload&&<button onClick={remove} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><XIcon size={11} weight="bold"/>Quitar</button>}
     </div>
@@ -12337,6 +12341,22 @@ function StorageTab({orders,onReload}) {
   // v10.18.0 — Limpiar archivos huérfanos (sin referencia en orders.file_url ni orders.image_url)
   const cleanupOrphans=async()=>{
     if(orphans.length===0)return;
+    // v10.80.11 — CANDADO DE CORDURA. "Huerfano" se decide por RESTA: todo archivo del bucket que
+    // no aparezca en orders.file_url/image_url/image_url_2. Esa resta depende por completo de que
+    // `orders` haya cargado — y si la carga falla EN SILENCIO (o devuelve vacio), TODOS los archivos
+    // del bucket caen en la lista y este boton los borra. Son cientos de archivos, sin deshacer.
+    // Dos guardas sobre lo mismo: no confiar en una resta cuyo minuendo pudo no llegar.
+    if(!Array.isArray(orders)||orders.length===0){
+      alert("No se puede limpiar ahora: la lista de ordenes no cargo." + "\n\n" +
+        "Sin ella TODOS los archivos parecen huerfanos. Recarga la pantalla e intenta de nuevo.");
+      return;
+    }
+    const totalArchivos=(rawFiles||[]).length;
+    if(totalArchivos>0 && orphans.length > totalArchivos*0.5){
+      alert("Se detuvo por seguridad: "+orphans.length+" de "+totalArchivos+" archivos aparecen como huerfanos (mas de la mitad)." + "\n\n" +
+        "Eso casi siempre significa que la lista de ordenes cargo incompleta, no que sobren tantos archivos. Recarga y verifica antes de borrar nada.");
+      return;
+    }
     const totalMB=(orphans.reduce((s,f)=>s+f.size,0)/1048576).toFixed(1);
     if(!confirm("¿Borrar "+orphans.length+" archivo"+(orphans.length>1?"s":"")+" huérfano"+(orphans.length>1?"s":"")+"? ("+totalMB+" MB)\n\nEstos archivos no apuntan a ninguna orden y no son visibles desde la app. Esta acción no se puede deshacer."))return;
     setCleaningOrphans(true);
