@@ -348,6 +348,29 @@ const abrirArchivoFirmado=(o)=>async(e)=>{
   const u=await firmarOrderFile(o.file_url,{download:o.file_name||true});
   window.open(u||o.file_url,"_blank","noopener");
 };
+/* v10.80.13 — EL CLIC IZQUIERDO NO ES LA UNICA FORMA DE ABRIR UN ENLACE.
+   onClickCapture solo intercepta el clic normal. El boton central, "abrir en pestana nueva" del menu
+   contextual y "copiar direccion" se llevan el href TAL CUAL — y el href es la URL /object/public/
+   que quedo MUERTA cuando el bucket paso a privado (18-ago). El usuario ve un enlace que a veces
+   funciona y a veces da 400, sin patron aparente, que es la peor forma de fallar.
+   Estos props cubren las tres vias: se pre-firma al acercar el puntero (y al abrir el menu
+   contextual) sustituyendo el href, y el boton central se atiende explicitamente. */
+const propsArchivoFirmado=(o)=>{
+  if(!o?.file_url||!pathDeOrderFile(o.file_url))return {};   // legacy/externo: sin envoltura
+  const prefirmar=async(e)=>{
+    const el=e.currentTarget;
+    if(el.dataset.firmado==="1")return;                       // ya se sustituyo; el token dura lo suyo
+    const u=await firmarOrderFile(o.file_url,{download:o.file_name||true});
+    if(u){el.href=u;el.dataset.firmado="1";}
+  };
+  return {
+    onClickCapture:abrirArchivoFirmado(o),
+    onAuxClick:(e)=>{if(e.button===1){abrirArchivoFirmado(o)(e);}},
+    onPointerEnter:prefirmar,
+    onFocus:prefirmar,
+    onContextMenu:prefirmar,
+  };
+};
 // Envoltura de <img> que firma sola. `fallback` es lo que se pinta mientras firma o si no hay src.
 function SignedImg({src,fallback=null,alt="",...rest}){
   const firmada=useSignedFile(src);
@@ -1007,6 +1030,17 @@ const PREFIJOS_FACTURA  = ["D-", "F-", "DP-"];
 const PREFIJOS_REMISION = ["R-", "RS-"];
 const esFolioFactura  = f => PREFIJOS_FACTURA.some(x  => String(f||"").toUpperCase().startsWith(x));
 const esFolioRemision = f => PREFIJOS_REMISION.some(x => String(f||"").toUpperCase().startsWith(x));
+// v10.80.13 — LA ORDEN QUE SE ENTREGO SIN FOLIO **A PROPOSITO**. Las entregas de Corona liquidadas
+// contra su anticipo (apply_credit_no_folio) quedan delivered con invoice_folio NULL por diseno: ya
+// se pagaron con saldo a favor y no generan cuenta por cobrar. El boton "Folio de Alpha" filtraba
+// por folio/agrupado/splits/matriz pero NO por esto, y se DESTRABA SOLO EL DIA DEL CORTE, asi que
+// nadie lo ha visto nunca sobre ellas: el 1-sep aparece sobre 20 ordenes ($1,180,913.21 con IVA)
+// con un texto que INVITA a teclear el folio. Hacerlo las cobraria por segunda vez.
+// El backend ya lo rechaza (assign_historic_folio, v10.80.13, por el CONSUMO del ledger); esto es
+// para no ofrecer lo que se va a negar, que se lee como que el sistema falla.
+const liquidadaConSaldoAFavor = o => !o?.invoice_folio
+  && String(o?.stage||"").includes("delivered")
+  && /saldo a favor/i.test(String(o?.invoice_reason||""));
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
@@ -3947,7 +3981,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         </>}
       </>}
 
-      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={12} weight="bold"/>Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClickCapture={abrirArchivoFirmado(o)} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><FileTextIcon size={22} weight="bold" color={C.ios} style={{flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:C.ios,fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div></a></div>}
+      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={12} weight="bold"/>Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><FileTextIcon size={22} weight="bold" color={C.ios} style={{flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:C.ios,fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div></a></div>}
       {showDeletePrompt&&<div style={{marginTop:8,background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:4}}><FloppyDiskIcon size={13} weight="bold"/>¿Ya descargaste el archivo?</div>
         <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Bórralo para liberar espacio en almacenamiento</p>
@@ -4010,7 +4044,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>{o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha"}</button>}
+          {(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>{o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha"}</button>}
           {/* v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central, asi
               que el visor (solo lectura) podia abrirlo. Se le pone el mismo gate que a las tarjetas. */}
           {vOwns&&canExecuteAction("print",o,role,userLogin)&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
@@ -4838,7 +4872,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
                   {["factura","remision"].map(t=>{
                     const sel = invoiceType===t;
                     const c = t==="factura"?C.fac:C.live;
-                    return <button key={t} onClick={()=>setInvoiceType(t)} disabled={busy} style={{flex:1,padding:"6px 4px",fontSize:10,fontWeight:700,borderRadius:6,border:"1.5px solid "+(sel?c:C.bd),background:sel?c:C.bg,color:sel?"#fff":C.t2,cursor:busy?"wait":"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
+                    return <button key={t} onClick={()=>setInvoiceType(t)} disabled={busy} style={{flex:1,padding:"6px 4px",fontSize:10,fontWeight:700,borderRadius:6,border:"1.5px solid "+(sel?c:C.bd),background:sel?c:C.bg,color:sel?"#fff":C.t2,cursor:busy?"wait":"pointer"}}>{t==="factura"?"Factura":"Remisión"}</button>;
                   })}
                 </div>
               </div>
@@ -9413,7 +9447,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
             enlaces de la ficha, pero este quedo fuera: desde que el bucket es privado (18-ago) daba
             400 al abrirlo. Se le cuelga el mismo onClickCapture que los demas, armando el objeto
             que espera el helper. */}
-        <a href={fileUrl} target="_blank" rel="noopener" download={fileName} onClickCapture={abrirArchivoFirmado({file_url:fileUrl,file_name:fileName})} style={{fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={11} weight="bold"/>Descargar</a>
+        <a href={fileUrl} target="_blank" rel="noopener" download={fileName} {...propsArchivoFirmado({file_url:fileUrl,file_name:fileName})} style={{fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={11} weight="bold"/>Descargar</a>
       </div>
       {canUpload&&<button onClick={remove} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><XIcon size={11} weight="bold"/>Quitar</button>}
     </div>
@@ -11036,7 +11070,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
                         if (!ok) return;
                       }
                       updateGroup(gIdx, {doc_type:t, folio:t==="factura"?(suggestionByType.factura||""):(suggestionByType.remision||""), payment_status:"unpaid", payment_refs:[]});
-                    }} style={{flex:1,padding:"5px 4px",borderRadius:6,border:"1px solid "+(sel?c:C.bd),background:sel?c+"15":C.bg,color:sel?c:C.t2,fontSize:10,fontWeight:600,cursor:"pointer"}}>{t==="factura"?"D-":"R-"}</button>;
+                    }} style={{flex:1,padding:"5px 4px",borderRadius:6,border:"1px solid "+(sel?c:C.bd),background:sel?c+"15":C.bg,color:sel?c:C.t2,fontSize:10,fontWeight:600,cursor:"pointer"}}>{t==="factura"?"Factura":"Remisión"}</button>;
                   })}
                 </div>
 
@@ -11182,11 +11216,11 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
       {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&(o.invoice_folio||o.has_splits||o.grouped_invoice_folio)/* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
       {o.stage==="maq_in_progress"&&(()=>{
@@ -11200,11 +11234,11 @@ function StageFlowButtons({o,role,onAction}){
           <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||o.has_splits||o.grouped_invoice_folio)/* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}
@@ -11393,7 +11427,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         <button onClick={()=>onAction(o.id,"flow")} style={bs(C.sf,C.t2)} title="Ver flujo" aria-label="Ver flujo"><FlowArrowIcon size={15} weight="bold"/></button>
         {/* v10.76.7 (scan wug02gay5, P3) — espejar el gate del DetailModal: admin también edita desde la card una entregada sin folio ni splits/matriz (antes solo desde el detalle → affordance incoherente) */}
         {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&<button onClick={()=>onAction(o.id,"edit")} style={bs(C.sf,C.t2)} title={o.created_by==="import-historico"?"Editar orden histórica atrasada":(o.invoice_folio?"Editar (orden facturada)":"Editar")} aria-label="Editar orden"><NotePencilIcon size={15} weight="bold"/></button>}
-        {(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title={o.created_by==="import-historico"?"Aplicar folio fiscal real (histórico)":"Registrar el folio D- que Alpha ya emitió para esta orden"} aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
+        {(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&(role==="admin"||role==="karla")&&<button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"22",C.fac)} title={o.created_by==="import-historico"?"Aplicar folio fiscal real (histórico)":"Registrar el folio D- que Alpha ya emitió para esta orden"} aria-label="Aplicar folio histórico"><ReceiptIcon size={15} weight="bold"/></button>}
         {/* ↔️ v10.11.0 Sub-fase A · v10.20.0 — Mover orden a otra OC (ahora también fuera de vista OC) */}
         {o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC" aria-label="Cambiar OC"><ArrowsLeftRightIcon size={15} weight="bold"/></button>}
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
@@ -11419,7 +11453,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {!compact&&canAct&&snoozeActive(o)&&snoozeBanner}
     {/* v10.72.57 — folio histórico para KARLA: el botón vive en el cluster canAct (admin lo ve), pero Karla
         tiene canAct=false en delivered y es la operadora primaria del feature → se lo damos fuera del gate. */}
-    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&(o.created_by==="import-historico"||EMISOR_ON)&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
+    {!compact&&!canAct&&!inEsperaView&&role==="karla"&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))/* v10.80.13: filtro de etapa, igual que sus dos hermanos. Sin el, con EMISOR_ON el boton salia en draft, design, ctp, prensa, empaque... donde el unico desenlace posible es un error crudo de SQL */&&!o.return_covered_by_folio&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end"}}><button onClick={()=>onAction(o.id,"apply_historic_folio")} style={bs(C.fac+"15",C.fac)} title="Aplicar el folio fiscal real (histórico)"><ReceiptIcon size={13} weight="bold"/>Aplicar folio</button></div>}
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
@@ -11500,14 +11534,14 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {!compact&&role==="preprensa"&&["design","proof_client"].includes(o.stage)&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"10px 12px",background:C.dsn+"08",borderRadius:10,border:"1px solid "+C.dsn+"20"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.dsn,marginBottom:6}}><FolderOpenIcon size={13} weight="bold"/>{o.stage==="design"?"Prepara el archivo para prueba de color":"Sube el archivo corregido para nueva prueba"}</div>
       {o.file_url&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-        <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClickCapture={abrirArchivoFirmado(o)} style={{fontSize:11,color:C.ios,fontWeight:500,textDecoration:"none"}}><DownloadSimpleIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.file_name||"Descargar archivo"}</a>
+        <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} style={{fontSize:11,color:C.ios,fontWeight:500,textDecoration:"none"}}><DownloadSimpleIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.file_name||"Descargar archivo"}</a>
       </div>}
       <div style={{fontSize:10,color:C.t2,marginBottom:6}}>{o.file_url?"Borra el archivo viejo y sube tu versión preparada":"Sube el archivo listo para producción"}</div>
       <button onClick={()=>onAction(o.id,"edit_specs")} style={bs(C.dsn)}><FolderOpenIcon size={13} weight="bold"/>Gestionar Archivo</button>
     </div>}
     {!compact&&role==="german"&&o.stage==="proof_printing"&&o.file_url&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,padding:"10px 12px",background:C.ctp+"08",borderRadius:10,border:"1px solid "+C.ctp+"20"}}>
       <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.ctp,marginBottom:4}}><FolderOpenIcon size={13} weight="bold"/>Archivo para imprimir</div>
-      <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClickCapture={abrirArchivoFirmado(o)} style={{display:"flex",alignItems:"center",gap:6,background:C.sf,borderRadius:8,padding:"8px 12px",textDecoration:"none",border:"0.5px solid "+C.bd}}>
+      <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} style={{display:"flex",alignItems:"center",gap:6,background:C.sf,borderRadius:8,padding:"8px 12px",textDecoration:"none",border:"0.5px solid "+C.bd}}>
         <FileTextIcon size={20} weight="bold" color={C.ios} style={{flexShrink:0}}/><div><div style={{fontSize:11,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:C.ios,fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div>
       </a>
     </div>}
@@ -12514,7 +12548,7 @@ function StorageTab({orders,onReload}) {
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
           {age>30&&<span style={{background:C.wn+"15",color:C.wn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>+30d</span>}
-          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} onClickCapture={abrirArchivoFirmado(o)} onClick={()=>setTimeout(()=>setDownloadedOrder(o),500)} style={{...bs(C.ios),textDecoration:"none"}}><DownloadSimpleIcon size={14} weight="bold"/></a>
+          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} onClick={()=>setTimeout(()=>setDownloadedOrder(o),500)} style={{...bs(C.ios),textDecoration:"none"}}><DownloadSimpleIcon size={14} weight="bold"/></a>
           <button onClick={()=>deleteOne(o)} disabled={isDel} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",cursor:isDel?"wait":"pointer"}} title="Borrar archivo"><TrashIcon size={14} weight="bold"/></button>
         </div>
       </div>})}
@@ -15967,6 +16001,22 @@ export default function PrintFlow() {
         .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by,created_at")
         .order("created_at",{ascending:false}).limit(5000)
     ]);
+    // v10.80.13 — NO SEGUIR CON [] CUANDO LA CONSULTA FALLO.
+    // En supabase-js una consulta fallida NO rechaza la promesa: resuelve {data:null, error}. El
+    // Promise.all pasa limpio y el catch de reload nunca corre. Con estas dos listas vacias,
+    // has_splits, splits_alive_count y has_matrix_lines quedan en false para TODAS las ordenes — y
+    // este enriquecimiento es la UNICA fuente de esas tres banderas. O sea que el chequeo fiscal de
+    // 4 patas se degrada a UNA sola en toda la app, en silencio: reaparecen botones de foliar sobre
+    // ordenes ya facturadas por partes o por plan matriz.
+    // Se falla CERRADO: si no se pudo saber, no se afirma que no hay splits.
+    const splitsFallo = !!splitsResp?.error;
+    const matrixFallo = !!matrixLinesResp?.error;
+    if (splitsFallo || matrixFallo) {
+      console.error("reload: splits/matriz no cargaron", splitsResp?.error || matrixLinesResp?.error);
+      try {
+        showToast("No se pudo verificar la facturación por partes/matriz. Se ocultan las acciones de folio hasta recargar.", "error");
+      } catch { /* el toast no puede tapar el problema real */ }
+    }
     const splitsArr = splitsResp?.data || [];
     const splitsByOrder = {};
     for (const s of splitsArr) {
@@ -15981,7 +16031,16 @@ export default function PrintFlow() {
     const _matrixLines0 = matrixLinesResp?.data || [];
     const matrixOrderIds = new Set();
     for (const l of _matrixLines0) { if (!l.cancelled_at) matrixOrderIds.add(l.order_id); }
+    // v10.80.13 — cuando la carga fallo, las banderas se ponen en TRUE (no en false): "no se sabe"
+    // tiene que cerrar las puertas de folio, no abrirlas. Es feo a proposito — el usuario ve las
+    // acciones desaparecer y el toast le dice que recargue — pero lo contrario es foliar dos veces.
     const withSplits = data.map(o => {
+      // v10.80.13 — si la carga fallo, la bandera se pone en TRUE, no en false. Estas banderas solo
+      // se usan para CERRAR puertas de folio, asi que "no se sabe" tiene que cerrar.
+      if (splitsFallo || matrixFallo) {
+        return {...o, has_splits: splitsFallo ? true : (splitsByOrder[o.id]||[]).some(x=>!x.cancelled_at),
+                      has_matrix_lines: matrixFallo ? true : matrixOrderIds.has(o.id)};
+      }
       const hml = matrixOrderIds.has(o.id);
       const sps = splitsByOrder[o.id];
       if (!sps || sps.length === 0) return hml ? {...o, has_matrix_lines: true} : o;
@@ -17954,7 +18013,12 @@ export default function PrintFlow() {
     if(action==="deliver_only"){const o=orders.find(x=>x.id===id);if(!o)return;
       // v10.58.5 — Gate central de rol.
       if(!canExecuteAction("deliver_only",o,user,userLogin)){showToast(actionDeniedToast("deliver_only",o,user,userLogin),"error");return}
-      if(!o.invoice_folio){console.error("[deliver_only] Orden sin invoice_folio, debería usar deliver_with_invoice");return}
+      // v10.80.13 — una orden facturada POR PARTES (splits) o en FOLIO AGRUPADO no tiene
+      // invoice_folio propio y SI esta facturada. Este return mudo la dejaba sin ninguna salida:
+      // no se le puede foliar (ya lo esta) y tampoco se le podia cerrar, o sea atorada en
+      // salidas para siempre, con un console.error que nadie ve.
+      if(!o.invoice_folio&&!o.has_splits&&!o.grouped_invoice_folio){
+        showToast("Esta orden no tiene folio fiscal. Usa \"Asignar Folio y Entregar\".","error");return}
       setDeliverOnlyModal(o);
     }
     // 🆕 v10.72.83 — Entregar re-trabajo cubierto (devolución): SIN folio nuevo (ya lo cubre return_covered_by_folio).
