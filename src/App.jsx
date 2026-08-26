@@ -5760,7 +5760,17 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [confirm,setConfirm]=useState(false);
   const [loaded,setLoaded]=useState(false);   // v10.80.2 (/impeccable critique) — evita el parpadeo de ceros mientras carga
   const [loadErr,setLoadErr]=useState(false); // v10.80.2 — fail-open→cerrado: si Supabase falla, se avisa en vez de mostrar 0
-  const load=async()=>{setLoadErr(false);try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);}catch(e){console.error("[CTPCounter load] Error:",e);setLoadErr(true);}finally{setLoaded(true);}};
+  const [pSince,setPSince]=useState(null); // v10.81.0 — m² desde el último mantenimiento, medido por Prinect (almacen.ctp_placas)
+  const load=async()=>{setLoadErr(false);try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);
+    // v10.81.0 — "desde el último mantenimiento" sale del colector de Prinect (almacen.ctp_placas, m² EXACTO por placa),
+    //   ya NO de la captura manual de Germán (plate_log). El agente del CTP en la DELL lo alimenta cada hora.
+    const lastM=(m&&m.length)?m[0]:null;
+    let q=supabase.schema("almacen").from("ctp_placas").select("m2,tamano");
+    if(lastM&&lastM.performed_at)q=q.gte("expuesta_at",lastM.performed_at);
+    const {data:pl,error:pe}=await q; if(pe)throw pe;
+    const ag={ch:0,gr:0,total:0,m2:0};(pl||[]).forEach(p=>{ag.total++;if(p.tamano==="chica")ag.ch++;else if(p.tamano==="grande")ag.gr++;ag.m2+=Number(p.m2)||0;});
+    setPSince(ag);
+  }catch(e){console.error("[CTPCounter load] Error:",e);setLoadErr(true);}finally{setLoaded(true);}};
   useEffect(()=>{load();},[]);
   // v10.80.3 (scan) — el contador es un semáforo COMPARTIDO. `plates` ya es realtime (prop), pero maints/
   // baseline se cargaban solo al montar → un mantenimiento registrado en otra sesión dejaba esta pantalla
@@ -5786,7 +5796,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   // DESDE EL ÚLTIMO MANTENIMIENTO = plate_log desde el último reset (ctp_maintenance).
   const last=maints[0]; // ordenado desc por performed_at, ya sin anulados
   const lastMs=last?new Date(last.performed_at).getTime():null;
-  const since=agg(lastMs!=null?live.filter(p=>{const t=new Date(p.created_at).getTime();return !isNaN(t)&&t>=lastMs;}):live);
+  const since=pSince||{ch:0,gr:0,total:0,m2:0};  // v10.81.0 — de Prinect (m² exacto por placa), no de plate_log
   const m2s=since.m2;
   // El semáforo del ciclo SOLO tiene sentido con un mantenimiento base; sin él no dispara la alarma
   // (el acumulado sería de toda la historia de PrintFlow, no de un ciclo real).
@@ -5814,7 +5824,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
         <DiscIcon size={16} weight="bold" color={C.ctp}/>
         <div>
           <div style={{fontSize:15,fontWeight:800,letterSpacing:"-0.01em"}}>Mantenimiento CTP</div>
-          <div style={{fontSize:F.micro,color:C.t3}}>Histórico del Suprasetter + lo registrado en PrintFlow</div>
+          <div style={{fontSize:F.micro,color:C.t3}}>m² medidos por Prinect · automático cada hora</div>
         </div>
       </div>
       {canReset&&<button onClick={()=>setConfirm(true)} style={{...bs(C.ctp+"12",C.ctp),border:"1px solid "+C.ctp+"33",whiteSpace:"nowrap",flexShrink:0}}><WrenchIcon size={12} weight="bold"/>Registrar mantenimiento</button>}
@@ -12188,7 +12198,9 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
     //   Cubre las DOS máquinas de preprensa. Si algún día se agrega otra, va aquí.
     // v10.73.84 (PLACAS-1) — `!platedIds.has(oid)`: una orden retornada que YA tiene placas cae al re-montaje normal
     //   sin segundo INSERT en plate_log. El P0 de forzar placas en un drop FRESCO (sin placas aún) se preserva.
-    if((mid==="pp_ctp"||mid==="pp_proc")&&!o.current_machine&&!platedIds.has(oid)&&onPlateRequired){onPlateRequired(oid,mid,o,m);return}
+    // v10.81.0 — CAPTURA MANUAL DE PLACAS RETIRADA: el conteo y el m² del CTP ahora salen del colector de Prinect
+    //   (agente en la DELL, almacen.ctp_placas, m² exacto por placa), no de que Germán teclee placas al soltar.
+    //   El drop asigna la máquina directo, sin modal. (onPlateRequired/platedIds quedan inertes pero se conservan.)
     setDropConfirm({oid,mid,order:o,machine:m,fromMachine:fromM})};
   const confirmDrop=()=>{if(dropConfirm)onDrop(dropConfirm.oid,dropConfirm.mid);setDropConfirm(null)};
 
