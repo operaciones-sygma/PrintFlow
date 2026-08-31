@@ -1958,7 +1958,19 @@ const db = {
       const val = invoiceType==="factura" ? data?.factura : data?.remision;
       if(!error && val) return val;
     } catch(e) { /* sin RPC, seguimos con el metodo de abajo */ }
-    // Red de seguridad: el metodo historico (contador + MAX en ordenes).
+    // v10.80.20 — LA RED DE SEGURIDAD NO PUEDE MENTIR DESPUES DEL CORTE.
+    // El metodo de abajo tiene 'D-'/'R-' cableados y lee los contadores 'factura'/'remision', que
+    // son los de ALPHA. El corte CONGELA esos contadores en el piso, asi que el respaldo no queda
+    // "desfasado": queda CLAVADO anunciando D-<piso+1> para siempre mientras el emisor acuna F-1,
+    // F-2... Basta un corte de red momentaneo —o que la RPC devuelva NULL, que lo hace si
+    // is_internal_employee() es false— para que los ocho modales que llaman aqui le ofrezcan a
+    // Karla un folio de la serie de Alpha que el sistema no va a emitir.
+    // Con el emisor prendido se devuelve NULL: los ocho llamadores hacen `f||""` y el campo se
+    // queda vacio. Que no haya sugerencia es un inconveniente; que la haya y sea de la serie
+    // equivocada es un folio mal capturado. El metodo viejo sigue siendo correcto ANTES del corte,
+    // que es exactamente cuando 'D-'/'R-' y los contadores de Alpha son la verdad.
+    if (EMISOR_ON) return null;
+    // Red de seguridad: el metodo historico (contador + MAX en ordenes). Solo pre-corte.
     const prefix = invoiceType==="factura" ? "D-" : "R-";
     let maxNum = 0;
     // 1) Leer contador histórico (resiliente si BD de órdenes está vacía)
@@ -1990,14 +2002,11 @@ const db = {
       return data === true;
     } catch(e) { return false; }
   },
-  // 🆕 v10.7.0 — Lee el siguiente folio que se asignaría (preview, no incrementa)
-  // ⚠️ DEPRECATED en v10.9.0 — usar getNextFolioSuggestion (más robusto).
-  async previewNextFolio(invoiceType) {
-    const {data, error} = await supabase.from("invoice_counters").select("last_number").eq("type", invoiceType).single();
-    if(error || !data) return null;
-    const prefix = invoiceType==="factura" ? "D-" : "R-";
-    return prefix + String(data.last_number + 1).padStart(4, "0");
-  },
+  // v10.80.20 — ELIMINADA db.previewNextFolio. Estaba marcada DEPRECATED desde v10.9.0 y no la
+  // llamaba nadie (0 referencias), pero tenía el mismo defecto que se acaba de cerrar arriba —
+  // 'D-'/'R-' cableados y el contador de Alpha — MÁS un padStart(4) que ni siquiera corresponde al
+  // formato actual. Dejar código muerto y equivocado a un scroll del código bueno es una trampa
+  // para quien venga después: se copia lo primero que encuentra. Usar getNextFolioSuggestion.
   // v10.28.2 — Eliminados db.loadPlans/addToPlan/removeFromPlan/reorderInMachine/executePlanOrder/clearPlan
   // (eran de ProductionPlanner, deprecado en v10.26.0 con la cola por máquina).
   // Notify secretaria + the specific vendedor who created the order (if applicable)
@@ -5430,7 +5439,17 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
       {folioValid&&Number.isFinite(amountNum)&&amountNum>0&&(()=>{
         // v10.58.45: el preview debe espejar credit_deposit — ×1.16 SOLO si el folio
         // es factura (D-); una remisión (R-) cruza a cobranza SIN IVA.
-        const isFacturaFolio=esFolioFactura(folioClean);
+        // v10.80.20 — `folioAuto ||`. Con el emisor prendido, folioValid se corto-circuita a true y
+        // el input de folio se sustituye por FolioAutoNote, asi que folioClean queda "". Este
+        // preview le seguia preguntando al folio si habia IVA, y con la cadena vacia respondia que
+        // no: pintaba "Sin IVA (remision)", IVA $0.00 y un total 16% MENOR al que se va a crear.
+        // Lo que credit_deposit hace en rama emisor es lo contrario:
+        //   v_doc_type := COALESCE(doc_type_de_folio(''),'factura') -> 'factura', y ×1.16.
+        // Con un subtotal de $300,000 la pantalla decia $300,000 y la BD creaba $348,000.
+        // La gemela de CobranzaFlow ya estaba arreglada (CreditView.jsx:1330, "F1: Corona siempre
+        // factura"); esta se quedo atras. El folio se pinta como "(automatico)" porque en este modo
+        // todavia no existe: anunciar un blanco es peor que decir que lo asigna el sistema.
+        const isFacturaFolio=folioAuto||esFolioFactura(folioClean);
         const ivaPortion=isFacturaFolio?Math.round(amountNum*0.16*100)/100:0;
         const withIva=isFacturaFolio?Math.round(amountNum*1.16*100)/100:amountNum;
         return <div style={{padding:"12px 14px",background:C.emr+"10",border:"1px solid "+C.emr+"40",borderRadius:8,marginBottom:10}}>
@@ -5439,7 +5458,7 @@ function RegisterCoronaPOModal({user, userLogin, showToast, onClose, onSaved}) {
           <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>{isFacturaFolio?"+ IVA 16%":"Sin IVA (remisión)"}</div><div style={{fontSize:14,fontWeight:700,color:C.t2}}>${ivaPortion.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
           <div><div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Total cobranza</div><div style={{fontSize:14,fontWeight:800,color:C.ac}}>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
         </div>
-        <div style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Se crea {isFacturaFolio?"factura":"remisión"} <b>{folioClean}</b> en cobranza por <b>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> {isFacturaFolio?"con IVA":"sin IVA"} (lo que Cervecería paga). El saldo a favor interno se lleva en subtotal: <b>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
+        <div style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Se crea {isFacturaFolio?"factura":"remisión"} <b>{folioAuto?"(folio automático)":folioClean}</b> en cobranza por <b>${withIva.toLocaleString("es-MX",{minimumFractionDigits:2})}</b> {isFacturaFolio?"con IVA":"sin IVA"} (lo que Cervecería paga). El saldo a favor interno se lleva en subtotal: <b>${amountNum.toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Vence {dueDateValid?new Date(dueDate+"T12:00:00").toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}):"(fecha inválida)"}.</div>
       </div>;
       })()}
 
