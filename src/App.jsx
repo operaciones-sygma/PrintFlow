@@ -1038,9 +1038,15 @@ const esFolioRemision = f => PREFIJOS_REMISION.some(x => String(f||"").toUpperCa
 // con un texto que INVITA a teclear el folio. Hacerlo las cobraria por segunda vez.
 // El backend ya lo rechaza (assign_historic_folio, v10.80.13, por el CONSUMO del ledger); esto es
 // para no ofrecer lo que se va a negar, que se lee como que el sistema falla.
-const liquidadaConSaldoAFavor = o => !o?.invoice_folio
-  && String(o?.stage||"").includes("delivered")
-  && /saldo a favor/i.test(String(o?.invoice_reason||""));
+// v10.80.15 — SE DETECTA POR COLUMNA, NO POR EL TEXTO DE UN CAMPO LIBRE.
+// La primera version leia /saldo a favor/ sobre invoice_reason, que es texto editable: si alguien
+// reescribe esa nota, la orden deja de estar protegida y vuelve a salir el boton de folio. La señal
+// dura es `credit_applied_at`, que la escribe apply_credit_no_folio y ya viene en el select('*').
+// El regex se queda SOLO como respaldo para filas viejas que quizas no tengan la columna poblada.
+const liquidadaConSaldoAFavor = o => !o?.invoice_folio && (
+     !!o?.credit_applied_at
+  || (String(o?.stage||"").includes("delivered")
+      && /saldo a favor/i.test(String(o?.invoice_reason||""))));
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
@@ -10346,7 +10352,10 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
       // para mover ordenes ya comprometidas por folio agrupado, por partes o por plan matriz. El
       // backend ahora las rechaza (move_order_to_oc), pero ofrecerlas y luego negarlas se lee como
       // que el sistema falla; mejor no listarlas. Mismo orden de patas que el resto de la app.
+      // v10.80.15 — la QUINTA pata: una orden liquidada contra el saldo Corona ya esta cerrada
+      // fiscalmente aunque no tenga folio. Moverla a otra OC la metia en un folio ajeno.
       return !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines
+          && !liquidadaConSaldoAFavor(o)
           && !o.oc_invoice_group_id && !o.return_covered_by_folio
           && !TERMINAL.includes(o.stage) && o.purchase_order_id !== oc.id;
     });
