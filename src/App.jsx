@@ -11239,7 +11239,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
       {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&(o.invoice_folio||o.has_splits||o.grouped_invoice_folio)/* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
       {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
       {o.stage==="maq_in_progress"&&(()=>{
@@ -11257,7 +11257,7 @@ function StageFlowButtons({o,role,onAction}){
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||o.has_splits||o.grouped_invoice_folio)/* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}
@@ -16059,7 +16059,12 @@ export default function PrintFlow() {
       // v10.80.13 — si la carga fallo, la bandera se pone en TRUE, no en false. Estas banderas solo
       // se usan para CERRAR puertas de folio, asi que "no se sabe" tiene que cerrar.
       if (splitsFallo || matrixFallo) {
-        return {...o, has_splits: splitsFallo ? true : (splitsByOrder[o.id]||[]).some(x=>!x.cancelled_at),
+        // v10.80.15 — `fiscal_desconocido` separa "no se sabe" de "si tiene". Sin esta bandera, poner
+        // has_splits=true para CERRAR los botones de folio ABRIA "Marcar como Entregada", que desde
+        // v10.80.13 acepta (invoice_folio || has_splits). Un fail-closed solo cierra en las
+        // condiciones que cierran; en las que abren hay que saber que no se sabe.
+        return {...o, fiscal_desconocido: true,
+                      has_splits: splitsFallo ? true : (splitsByOrder[o.id]||[]).some(x=>!x.cancelled_at),
                       has_matrix_lines: matrixFallo ? true : matrixOrderIds.has(o.id)};
       }
       const hml = matrixOrderIds.has(o.id);
@@ -19156,7 +19161,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           const now=new Date().toISOString();
           const tlMsg="✅ Entregada (folio "+deliverOnlyModal.invoice_folio+" ya asignado)";
           // v10.31.1 fix #5 — UPDATE atómico: requiere invoice_folio aún presente (race con cancel_with_nc en otro tab)
-          const {data,error}=await supabase.from("orders").update({stage:newStage,delivered_at:now}).eq("id",deliverOnlyModal.id).not("invoice_folio","is",null).select("id");
+          const {data,error}=await supabase.from("orders").update({stage:newStage,delivered_at:now}).eq("id",deliverOnlyModal.id)/* v10.80.15: las mismas patas que el boton. Antes exigia invoice_folio y la orden facturada por partes no tocaba ninguna fila: el boton existia y no hacia nada. */.or("invoice_folio.not.is.null,has_splits.eq.true,grouped_invoice_folio.not.is.null").select("id");
           if(error)throw new Error(error.message);
           if(!data||data.length===0)throw new Error("La orden ya no tiene folio asignado (cancelada en otra sesión). Recarga la página.");
           await db.addTimeline(deliverOnlyModal.id,tlMsg,user,C.ok);
