@@ -5,6 +5,70 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 ---
 
 
+> **Nota de mantenimiento (31-ago-2026).** Este archivo dejó de alimentarse en **v10.72.44**.
+> Entre esa versión y la v10.80.20 el registro real vive en los mensajes de commit y en
+> `cobranzaflow/supabase/migrations/*.sql` (los cambios de PrintFlow que tocan la base están
+> documentados ahí, porque comparten la misma migración). No se reconstruye aquí ese histórico.
+
+---
+
+## v10.80.16–20 — Cierre del scan 5 en PrintFlow — 31-ago-2026
+
+### 🔴 v10.80.19 — "Marcar como Entregada" llevaba ROTO en producción
+
+Y el causante fue mi propio arreglo de v10.80.15. Amplié el `UPDATE` de entrega con:
+
+```
+.or("invoice_folio.not.is.null,has_splits.eq.true,grouped_invoice_folio.not.is.null")
+```
+
+`has_splits` **no es una columna** de `public.orders`: es un campo que este mismo archivo calcula
+(~L16067) cruzando `order_invoice_splits` después de leer las órdenes. PostgREST lo traducía a
+`has_splits = true` y Postgres respondía **42703**. Y como un `.or()` es UNA sola expresión, reventaba
+el UPDATE entero — o sea que el botón dejó de funcionar **también para las órdenes con folio normal**,
+que eran el 100% del uso. Verificado contra la base antes de tocar nada.
+
+El arreglo no fue reparar el filtro sino **moverlo**: la regla de las cuatro patas vive en la base, así
+que ahora va por RPC `public.deliver_only`, que decide con la fila bloqueada (`FOR UPDATE`) y de forma
+atómica, conservando la guarda de carrera que el UPDATE original quería.
+
+**La lección:** un filtro de PostgREST sólo puede hablar de columnas de la tabla. Cuando la condición
+depende de otras tablas, el sitio correcto es una RPC. Y un `.or()` que menciona una columna
+inexistente no degrada — tumba la consulta completa.
+
+### v10.80.19 — el plan matriz seguía atorado
+
+La reparación de v10.80.13 se hizo con **3 patas** y dejó fuera `has_matrix_lines`, así que la orden
+facturada por plan matriz reproducía exactamente el bloqueo que esa versión vino a quitar: sin folio
+propio, sin botón de foliar (ya está facturada) y sin botón de entregar. Atorada en salidas para
+siempre. Agregado en los 2 sitios.
+
+### v10.80.20 — la sugerencia de folio iba a mentir para siempre
+
+`getNextFolioSuggestion` pregunta a la RPC correcta, pero dejaba **debajo** el método viejo intacto:
+`'D-'`/`'R-'` cableados y los contadores de Alpha. El corte **congela** esos contadores en el piso, así
+que el respaldo no queda desfasado — queda **clavado** ofreciendo `D-<piso+1>` para siempre mientras
+el emisor acuña F-1. Bastaba un corte de red para que los ocho modales le propusieran a Karla un folio
+que el sistema no va a emitir. Con el emisor prendido ahora devuelve `null`; los ocho llamadores ya
+hacen `f||""`.
+
+Eliminada `db.previewNextFolio`: 0 llamadores, el mismo defecto y un `padStart(4)` que ya no
+corresponde. Código muerto y equivocado a un scroll del bueno es una trampa para quien venga después.
+
+### v10.80.20 — el preview de OC Corona enseñaba $300,000 y la base creaba $348,000
+
+Le preguntaba al folio si había IVA, y con el emisor prendido el folio es la **cadena vacía**: pintaba
+"Sin IVA (remisión)" y un total 16% menor al que `credit_deposit` iba a crear. La gemela de
+CobranzaFlow ya estaba arreglada; ésta se quedó atrás.
+
+### v10.80.16 — "Regresar a…" era la llave que abría todas las demás puertas
+
+`revert_order_from_terminal` no consultaba **ninguna** de las cuatro patas fiscales. Ahora bloquea
+cuando el CFDI está timbrado y, si no, permite el revert conservando `delivered_at` y dejando fila de
+auditoría.
+
+---
+
 ## v10.72.44 — Dashboard: label "Tu Semana" para vendedor + hint de orientación (/impeccable, quick wins)
 
 Auditoría multi-agente del Dashboard (WeeklyReport + Pipeline + MaquilaTracker). Veredicto: **vista
