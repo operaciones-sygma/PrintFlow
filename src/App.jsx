@@ -4544,8 +4544,14 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   const [notes,setNotes]=useState("");
   // v10.54.7 — busy state previene duplicados por click múltiple (mismo patrón CreditAdjustModal)
   const [busy,setBusy]=useState(false);
-  const n=parseInt(qty,10);
-  const valid=Number.isFinite(n)&&n!==0;
+  // v10.81.1 — CONVERTIDOR kg→unidades TAMBIÉN en el ajuste (faltaba; sí estaba en la venta, BulkSellModal). Producto
+  // por kilo (specs.sell_unit='kg'): se captura KG y se convierte a UNIDADES = round(kg*units_per_kg), IGUAL que la
+  // venta. La BD siempre guarda unidades; solo cambia la unidad de CAPTURA. Piezas: entero tal cual (como antes).
+  const isKg=product.specs?.sell_unit==="kg";
+  const upk=Number(product.specs?.units_per_kg)||0;
+  const kgNum=isKg?parseFloat(qty):null;
+  const n=isKg?(Number.isFinite(kgNum)?Math.round(kgNum*upk):NaN):parseInt(qty,10);
+  const valid=Number.isFinite(n)&&n!==0&&(!isKg||upk>0);
   const preview=valid?(product.stock_actual+n):product.stock_actual;
   const canSubmit=valid&&preview>=0&&!busy;
   const submit=async()=>{
@@ -4557,16 +4563,18 @@ function AdjustStockModal({product, userLogin, onSave, onClose}) {
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
     <div style={{background:C.bg,borderRadius:20,padding:22,maxWidth:420,width:"94%"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px"}}><ChartBarIcon size={17} weight="bold"/>Ajuste de Stock</h3>
-      <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{product.name}</div>
+      <div style={{fontSize:12,color:C.t2,marginBottom:14}}>{product.name}{isKg&&upk>0?<span style={{color:C.emr,fontWeight:700}}> · por kg ({upk.toLocaleString()} u/kg)</span>:null}</div>
       <div style={{background:C.sf,borderRadius:10,padding:10,marginBottom:12,display:"flex",justifyContent:"space-between"}}>
-        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:18,fontWeight:800}}>{product.stock_actual}</div></div>
+        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Actual</div><div style={{fontSize:18,fontWeight:800}}>{product.stock_actual.toLocaleString()}</div>{isKg&&kgEquiv(product.stock_actual,product.specs)&&<div style={{fontSize:10,color:C.emr,fontWeight:700}}>≈{kgEquiv(product.stock_actual,product.specs)}</div>}</div>
         <div style={{fontSize:24,color:C.t2,alignSelf:"center"}}>→</div>
-        <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Nuevo saldo</div><div style={{fontSize:18,fontWeight:800,color:preview<0?C.dn:C.ok}}>{preview}</div></div>
+        <div style={{textAlign:"right"}}><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Nuevo saldo</div><div style={{fontSize:18,fontWeight:800,color:preview<0?C.dn:C.ok}}>{preview.toLocaleString()}</div>{isKg&&kgEquiv(preview,product.specs)&&<div style={{fontSize:10,color:preview<0?C.dn:C.emr,fontWeight:700}}>≈{kgEquiv(preview,product.specs)}</div>}</div>
       </div>
       <div style={{marginBottom:10}}>
-        <label style={lbl} htmlFor="adjust-qty">Cantidad (positiva o negativa) *</label>
-        <input id="adjust-qty" aria-label="Cantidad de ajuste (positiva suma, negativa resta)" style={inp} type="number" value={qty} onChange={e=>setQty(e.target.value)} placeholder="ej. +100 (sumar) o -50 (restar)" autoFocus disabled={busy}/>
-        <div style={{fontSize:10,color:C.t2,marginTop:3}}>Positiva: sumar inventario · Negativa: restar (merma, error)</div>
+        <label style={lbl} htmlFor="adjust-qty">{isKg?"Cantidad en KG (positiva o negativa) *":"Cantidad (positiva o negativa) *"}</label>
+        <input id="adjust-qty" aria-label={isKg?"Cantidad de ajuste en kilos (positiva suma, negativa resta)":"Cantidad de ajuste (positiva suma, negativa resta)"} style={inp} type="number" step={isKg?"0.5":"1"} value={qty} onChange={e=>setQty(e.target.value)} placeholder={isKg?"ej. +25 (kg) o -10 (kg)":"ej. +100 (sumar) o -50 (restar)"} autoFocus disabled={busy}/>
+        {isKg
+          ? <div style={{fontSize:10,marginTop:3,color:valid?C.emr:C.t2,fontWeight:valid?700:400}}>{valid?<>= {n>0?"+":""}{n.toLocaleString()} unidades{Number.isFinite(kgNum)?` (${kgNum} kg × ${upk.toLocaleString()})`:""}</>:(upk>0?"Captura en kilos → se convierte a unidades":"⚠ Falta units_per_kg en el producto; no se puede convertir")}</div>
+          : <div style={{fontSize:10,color:C.t2,marginTop:3}}>Positiva: sumar inventario · Negativa: restar (merma, error)</div>}
       </div>
       <div style={{marginBottom:16}}>
         <label style={lbl} htmlFor="adjust-notes">Motivo (recomendado)</label>
