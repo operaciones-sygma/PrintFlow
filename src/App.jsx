@@ -19006,6 +19006,60 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }catch(e){
           console.error("[assignInvoice] Error:",e);
           const errMsg=e?.message||"";
+          // 🔗 v10.80.21 — ESTE TRABAJO YA SE FACTURÓ POR ADELANTADO.
+          // El guard de assign_invoice (v3.7.465) frena ANTES de acuñar un folio nuevo cuando el
+          // cliente ya tiene una factura emitida sin orden por este mismo importe. Sin esta salida,
+          // frenar solo cambiaría el doble cobro por un callejón sin salida.
+          //
+          // EL FOLIO NO SE LEE DEL FORMULARIO. En modo emisor ese campo está oculto y llega vacío
+          // — por eso el camino de abajo (v10.73.45), que usa `folio`, dejó de alcanzarse cuando se
+          // prendió el emisor. Aquí las candidatas las da la BD, que aplica los MISMOS criterios
+          // que link_invoice_to_order, así que nunca se ofrece una que el ligado vaya a rechazar.
+          if(/emitida por adelantado/i.test(errMsg)&&(invoiceType==="factura"||invoiceType==="remision")){
+            const oid=invoiceModal.id, actor=userLogin||user, otype=invoiceModal.order_type;
+            const capturedPay=(paymentStatus==="paid"||paymentStatus==="partial");
+            const _aMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0, _aMethods=_aMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+            const aMethod=_aMulti?(_aMethods.length>1?"mixed":_aMethods[0]):paymentMethod;
+            const aRef=_aMulti?(paymentRefs.length>1?("MULTIPLES ("+paymentRefs.length+" pagos)"):(paymentRefs[0]?.bank_reference||null)):bankReference;
+            let cand=null;
+            try{
+              const {data:cands,error:cErr}=await supabase.rpc("list_linkable_invoices_for_order",{p_order_id:oid});
+              if(cErr) throw cErr;   // supabase-js NO lanza solo: sin esto, cands queda null y seguiría de largo
+              cand=(cands||[]).find(c=>c.monto_cuadra&&c.doc_type===invoiceType)||null;
+            }catch(eL){ console.warn("[linkable] no se pudieron leer las candidatas:",eL); }
+            if(cand){
+              // el folio no se asignó → revertir el tercero huérfano, igual que el camino de abajo
+              if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
+              setInvoiceModal(null);setAllowNoPriceForOrder(null);
+              setConfirmModal({
+                title:"Este trabajo ya se facturó por adelantado",
+                message:"El cliente ya tiene "+cand.doc_number+" por $"+Number(cand.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+", emitida sin orden hace "+cand.dias_sin_orden+" día(s), y el importe coincide con esta orden."+"\n\n¿Ligarla a esta orden?"+"\n\nSe usa la factura que YA existe y la orden queda entregada. Si en vez de eso emites un folio nuevo, al cliente se le cobraría dos veces el mismo trabajo.",
+                confirmLabel:"🔗 Sí, ligar "+cand.doc_number,
+                confirmColor:C.fac,
+                onConfirm:async()=>{
+                  setConfirmModal(null);
+                  try{
+                    const r=await db.linkInvoiceToOrder(oid, cand.doc_number, actor, aMethod, aRef);
+                    const paid=r?.invoice_status==="pagada", partial=r?.invoice_status==="parcial";
+                    const newStage=otype==="maquila"?"maq_delivered":"delivered";
+                    setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:cand.doc_number,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,stage:newStage}:o));
+                    try{ await db.addTimeline(oid,"🔗 "+cand.doc_number+" (emitida por adelantado) ligada a esta orden",user,C.fac); }catch(_){}
+                    const payMismatch=capturedPay&&!paid&&!partial;
+                    showToast("🔗 "+cand.doc_number+" ligada"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+" — orden entregada"+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""),"success");
+                    reload();
+                  }catch(e2){
+                    console.error("[linkInvoiceToOrder/adelantada] Error:",e2);
+                    showToast("❌ "+(e2?.message||"No se pudo ligar la factura"),"error");
+                    reload();
+                  }
+                }
+              });
+              return;
+            }
+            // Sin candidata que cuadre no se inventa nada: se muestra el motivo real del rechazo.
+            if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
+            showToast("❌ "+errMsg,"error"); reload(); return;
+          }
           // 🔗 v10.73.45 · Opción A · Fase 2 — el folio ya existe en cobranza (factura de Alpha importada por conciliación/manual):
           // en vez de morir con error, ofrecer LIGAR la factura existente a esta orden (mismo cliente + mismo monto + sin ligar previo).
           // Solo para factura/remisión (stock_load / no_folio retornan antes y no llegan aquí).

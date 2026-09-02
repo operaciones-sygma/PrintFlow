@@ -12,6 +12,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.80.21 — "Ligar folio" vuelve a existir — 2-sep-2026
+
+Salió en el scan post-corte como **P0**, y era estructural: desde que se prendió el emisor de
+folios, la segunda mitad del flujo *factura sin orden* no tenía entrada.
+
+`assign_invoice`, en modo emisor, **descarta el folio que recibe** y acuña uno nuevo del contador
+—"Ignora el p_folio entrante", dice su propio comentario— y sólo *después* pregunta si ese folio ya
+está registrado en cobranza. Como el folio recién acuñado nunca colisiona, esa excepción quedó
+**inalcanzable**. Y era la única que disparaba el diálogo "¿Ligarlo a esta orden?" de v10.73.45, que
+a su vez es el único llamador de `link_invoice_to_order` para órdenes individuales. La RPC seguía
+perfecta y se había quedado huérfana.
+
+**Lo que costaba.** Al llegar el trabajo de una factura emitida por adelantado (Castores), foliar la
+orden por la vía normal acuñaba un folio nuevo, el puente creaba una **segunda factura por el mismo
+trabajo** y al cliente se le cobraba dos veces. La única alarma era el panel "facturas esperando su
+orden" — que vive en CobranzaFlow, mientras el error se comete aquí.
+
+**El arreglo son dos piezas, porque una sola no basta:**
+
+- **El guard** (`v3.7.465` en la base) detiene el foliado *antes* de acuñar cuando el cliente ya
+  tiene una factura sin orden por el mismo importe. Protege aunque nadie mire el panel.
+- **La salida** (este cambio) ofrece ligar esa factura. El folio **no se lee del formulario**: en
+  modo emisor ese campo está oculto y llega vacío — por eso el camino viejo dejó de alcanzarse. Las
+  candidatas las da `list_linkable_invoices_for_order`, que aplica los **mismos criterios** que
+  `link_invoice_to_order`, así que nunca se ofrece una que el ligado vaya a rechazar.
+
+Sin la segunda pieza, el guard sólo habría cambiado el doble cobro por un callejón sin salida.
+
+---
+
 ## v10.80.16–20 — Cierre del scan 5 en PrintFlow — 31-ago-2026
 
 ### 🔴 v10.80.19 — "Marcar como Entregada" llevaba ROTO en producción
