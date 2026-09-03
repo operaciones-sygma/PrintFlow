@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
+// v10.81.0 — "RE-FACTURAR ORDEN": herramienta reusable para el caso F-14↔P-0415 (antes se resolvía a mano por SQL).
+//   Cuando la factura de una orden se CANCELA (en Cancelaciones o en el portal del SAT + barrido), la orden queda
+//   colgando con su invoice_folio apuntando a un CFDI muerto. El botón "Re-facturar orden" (detalle, admin/karla)
+//   libera ese folio y regresa la orden a facturable (salidas/maq_received) para asignarle uno nuevo o ligar otro.
+//   CANDADO FISCAL en el RPC public.release_cancelled_invoice_folio: solo libera si NINGUNA factura viva lleva ese
+//   folio (maneja folio reusado D-5957 ×2) y bloquea splits/OC-agrupada/folio compartido por varias órdenes. El botón
+//   se muestra SOLO si order_folio_is_cancelled() lo confirma al abrir el detalle. verify_actor_role(admin/karla) real.
 // v10.71.1 — C (tema) al tope para evitar TDZ: muchos const de nivel superior (filtros, NAV, mapas de color) lo referencian via C.token desde la tokenizacion v10.71.0.
 const C={bg:"#fcfdfe",canvas:"#f0f3f7",card:"#fcfdfe",sf:"#eff2f6",bd:"#e4e8ee",bdSt:"#d4dae2",tx:"#1a1a1f",t2:"#6c6c75",t3:"#73737b",ph:"#8c8c95",ac:"#4a6572",acH:"#3a5460",acL:"rgba(74,101,114,0.09)",ok:"#30a85a",wn:"#e58a12",dn:"#e03b30",fac:"#5856d6",cart:"#06b6d4",emp:"#af52de",sal:"#16a34a",live:"#34c759",maq:"#e67e22",maqin:"#32ade6",emr:"#10b981",ctp:"#0891b2",dsn:"#ec4899",ios:"#007aff",amb:"#ff9500",dig:"#7c3aed",prf:"#8b5cf6",sh1:"0 1px 2px rgba(26,26,31,.05)",sh2:"0 1px 3px rgba(26,26,31,.08),0 1px 2px rgba(26,26,31,.04)",sh3:"0 14px 34px -10px rgba(26,26,31,.20),0 0 0 .5px rgba(0,0,0,.04)",tCard:"box-shadow .18s cubic-bezier(.22,1,.36,1),transform .18s cubic-bezier(.22,1,.36,1)"};
 // v10.73.10 — /impeccable typeset: escala tipográfica de 5 pasos (antes OCard mezclaba 9/10/10.5/11/12/13/15/16, varios
@@ -1175,6 +1182,7 @@ const ACTION_ROLES = {
   pre_invoice:          { allowed:["admin","karla"], ownerBound:[] },
   cancel_order:         { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   cancel_with_nc:       { allowed:["admin"], ownerBound:[] },
+  refacturar:           { allowed:["admin","karla"], ownerBound:[] }, // v10.81.0 — liberar folio de factura cancelada para re-facturar (candado fiscal real en el RPC)
   move_to_oc:           { allowed:["admin","secretaria","karla"], ownerBound:[] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
 };
@@ -1625,6 +1633,19 @@ const db = {
     });
     if(error) throw new Error(error.message);
     return data; // { invoice_status, amount, payment_status, payment_method, ... }
+  },
+  // v10.81.0 — "Re-facturar orden": libera el folio de una orden cuya factura se CANCELÓ (candado fiscal en el RPC:
+  // solo si NINGUNA factura viva lleva ese folio). La orden regresa a facturable (asignar folio nuevo o ligar uno).
+  async releaseInvoiceFolio(orderId, actor) {
+    const {data, error} = await supabase.rpc("release_cancelled_invoice_folio", {p_order_id: orderId, p_actor: actor});
+    if(error) throw new Error(error.message);
+    return data; // { ok, released_folio, new_stage, msg }
+  },
+  // ¿el folio de esta orden está cancelado y ninguna factura viva lo lleva? — decide si ofrecer "Re-facturar".
+  async orderFolioIsCancelled(orderId) {
+    const {data, error} = await supabase.rpc("order_folio_is_cancelled", {p_order_id: orderId});
+    if(error) return false; // fail-safe: si no se puede consultar, no ofrecer la acción
+    return !!data;
   },
   // 🆕 v10.72.87 — Facturar a un tercero: alta/selección + enriquecimiento de la razón social destinataria.
   async upsertBillingClient(clientId, name, rfc, email, whatsapp, byUser) {
@@ -3903,6 +3924,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||isVendedorOwnerByAgent(role,userLogin,o);
   const [showDeletePrompt,setShowDeletePrompt]=useState(false);
   const [deleting,setDeleting]=useState(false);
+  // v10.81.0 — "Re-facturar orden": si el folio de la orden ya apunta a una factura CANCELADA (y nadie vivo lo lleva),
+  // ofrecer liberarlo para volver a facturar. Se consulta al RPC al abrir el detalle (solo admin/karla con folio).
+  const [folioCancelado,setFolioCancelado]=useState(false);
+  const canRefacturar=(role==="admin"||role==="karla")&&!!o.invoice_folio&&!o.stage.includes("cancelled");
+  useEffect(()=>{let alive=true;if(canRefacturar){db.orderFolioIsCancelled(o.id).then(v=>{if(alive)setFolioCancelado(v)}).catch(()=>{})}return ()=>{alive=false}},[o.id,canRefacturar]);
   const deleteFile=async()=>{
     // v10.54.10 — defensa en profundidad: aunque el prompt solo se muestra a
     // preprensa/german/admin, validar también aquí por si llegan por otro path.
@@ -4045,6 +4071,20 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           </div>
         </div>
         <button onClick={()=>dispatch("cancel_with_nc")} style={{...bt(C.dn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><XIcon size={14} weight="bold"/>Cancelar Orden (con NC)</button>
+      </div>}
+
+      {/* 🆕 v10.81.0 — "Re-facturar orden": el folio de esta orden apunta a una factura CANCELADA. Liberarlo la regresa
+          a facturable (asignar folio nuevo o ligar uno existente). El RPC re-valida el candado fiscal (solo si ninguna
+          factura viva lleva ese folio). Reemplaza el arreglo a mano por SQL que se hizo con F-14↔P-0415. */}
+      {canRefacturar&&folioCancelado&&<div style={{marginTop:14,padding:14,background:C.live+"0D",border:"1.5px solid "+C.live+"40",borderRadius:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <ArrowsClockwiseIcon size={24} weight="bold" color={C.live} style={{flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.live}}>Re-facturar orden</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>La factura <b>{o.invoice_folio}</b> está cancelada. Libera el folio para volver a facturar esta orden (asignarle un folio nuevo o ligar uno existente).</div>
+          </div>
+        </div>
+        <button onClick={()=>dispatch("refacturar")} style={{...bt(C.live),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Liberar folio y re-facturar</button>
       </div>}
 
       {/* v10.72.34/42 — barra de acciones STICKY al fondo. v10.72.42: las acciones de flujo del rol (avanzar/validar)
@@ -15944,6 +15984,7 @@ export default function PrintFlow() {
   const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
+  const [refacturarModal,setRefacturarModal]=useState(null); // 🆕 v10.81.0 — Re-facturar: confirmar liberación de folio cancelado
   const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
   const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
   const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
@@ -18111,6 +18152,12 @@ export default function PrintFlow() {
       if(!o.invoice_folio){showToast("❌ Esta orden no tiene folio. Usa la cancelación normal.","error");return}
       setCancelInvoicedModal(o);
     }
+    // 🆕 v10.81.0 — Re-facturar: liberar el folio de una orden cuya factura se canceló (el RPC valida el candado fiscal)
+    if(action==="refacturar"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(!canExecuteAction("refacturar",o,user,userLogin)){showToast(actionDeniedToast("refacturar",o,user,userLogin),"error");return}
+      if(!o.invoice_folio){showToast("❌ Esta orden no tiene folio que liberar","error");return}
+      setRefacturarModal(o);
+    }
     if(action==="approve_proof")approveProof(id);
     if(action==="send_maquila"){
       // 🔒 v10.12.0.3 Phase 2 — Hardstop: admin/sec/vendedor (vendedor solo propias)
@@ -19287,6 +19334,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           reload();
         }
       }} onClose={()=>setCancelInvoicedModal(null)}/>}
+      {/* 🆕 v10.81.0 — Re-facturar: confirmar liberación del folio cancelado. El RPC re-valida todo el candado fiscal. */}
+      {refacturarModal&&<ConfirmModal
+        title={"Re-facturar orden "+(refacturarModal.production_number||refacturarModal.id)}
+        message={"Se liberará el folio "+refacturarModal.invoice_folio+" (factura cancelada) y la orden volverá a estado facturable. Después podrás asignarle un folio nuevo o ligar uno existente. ¿Continuar?"}
+        confirmLabel="Sí, liberar folio"
+        confirmColor={C.live}
+        onConfirm={async()=>{
+          try{
+            const r=await db.releaseInvoiceFolio(refacturarModal.id,userLogin||user);
+            const tlMsg="🔄 Folio "+refacturarModal.invoice_folio+" liberado (factura cancelada) — orden lista para re-facturar";
+            try{await db.addTimeline(refacturarModal.id,tlMsg,user,C.live)}catch(_){}
+            showToast("✅ Folio "+(r?.released_folio||refacturarModal.invoice_folio)+" liberado · orden lista para re-facturar");
+            setRefacturarModal(null);
+            reload();
+          }catch(e){
+            console.error("[refacturar] Error:",e);
+            showToast("❌ "+(e?.message||"No se pudo liberar el folio"),"error");
+          }
+        }}
+        onClose={()=>setRefacturarModal(null)}/>}
       {/* v10.73.82 (scan w1sw90ei4) — dos arreglos: (a) el modal se cierra ANTES de notificar y las notificaciones
           quedan en su PROPIO try. addNotification hace throw en cualquier error, así que un blip de red EN LA
           NOTIFICACIÓN saltaba al catch: Gerardo leía "no se pudo iniciar mantenimiento" y el modal seguía abierto,
