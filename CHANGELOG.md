@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.81.0-1 — "Re-facturar orden": liberar el folio de una factura cancelada — 2/3-sep-2026
+
+Contraparte en PrintFlow de la herramienta que en CobranzaFlow es v3.7.474-475. Cuando la factura de una
+orden se cancela, la orden quedaba colgando con su `invoice_folio` apuntando a un CFDI muerto y no había
+forma de re-facturarla (el caso F-14↔P-0415 se resolvió a mano por SQL). Ahora es un botón.
+
+**Botón "Re-facturar orden"** en el detalle (admin/karla) → RPC `release_cancelled_invoice_folio` que
+libera el folio y regresa la orden a facturable (`delivered→salidas`, `maq_delivered→maq_received`); luego
+Karla le asigna folio nuevo o liga uno existente. **Candado fiscal en el RPC** (no en la UI): libera SOLO
+si ninguna factura viva lleva ese folio; bloquea splits / grupo-OC / folio compartido. El botón aparece
+SOLO si el helper `order_folio_is_cancelled` lo confirma al abrir el detalle (si no, saldría en cientos de
+entregadas). `ACTION_ROLES.refacturar` + `canExecuteAction` como defensa en profundidad.
+
+**Se le corrió un scan adversarial** (12 hallazgos → 7 confirmados) y se arregló todo (v10.81.1):
+- 🔴 **P1 (bloqueante):** el release no borraba `order_payment_refs` → al re-foliar, el puente los
+  re-aplicaba como pago fantasma sobre la factura NUEVA (candidato vivo H-3597/R-1218 $9,000). Ahora los borra.
+- 🟠 **P2:** el helper no replicaba los candados del RPC → botón muerto en H-3515/H-3516 (folio de OC
+  compartido). Ahora los replica.
+- 🟡 **P3:** `ConfirmModal` con guard de doble-submit (`saving`), guard TOCTOU y limpieza de estado híbrido
+  en el RPC. Un **dry-run con sesión simulada** halló además que una fila legacy de Alpha con fechas
+  imposibles reventaba el unlink y abortaba todo el release → se envolvió en un catch best-effort.
+
+⚖ **Frontera por origen:** el botón NO aparece para folios de serie ALPHA (`D-`/`R-`); el backlog pre-corte
+queda fuera de alcance. Es para el mundo post-corte (CFDI de SYGMA que se cancela).
+
+---
+
 ## v10.80.21 — "Ligar folio" vuelve a existir — 2-sep-2026
 
 Salió en el scan post-corte como **P0**, y era estructural: desde que se prendió el emisor de
