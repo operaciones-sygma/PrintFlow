@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
+// v10.81.3 — BUG: la hoja impresa de una orden GENUINAMENTE cancelada (cancel_with_nc / stage terminal) salía
+//   idéntica a una viva — sin la marca de agua roja CANCELADA. El watermark .vcancel-wm solo lo disparaba
+//   isVoidStockSale (el bug de venta-stock con folio P-). Ahora también isCancelledOrder (stage incluye
+//   'cancelled' o cancelled_at): marca de agua "CANCELADA" + folio tachado + leyenda con motivo/quién/cuándo.
 // v10.81.2 — /impeccable critique (desde la sesión de corte): el botón "Re-facturar orden" competía con el
 //   "Re-facturar este documento" de CobranzaFlow (v3.7.497+). Verificado que NO son redundantes sino
 //   COMPLEMENTARIOS: el de CBF opera sobre facturas VIVAS (!isCancelled → las sustituye); éste opera sobre
@@ -3495,6 +3499,10 @@ function PrintOrder({order:o,onClose,role,userLogin,onPrintError}) {
   // por error y queda anulado (no es una orden de producción real; la venta se cobra por su folio fiscal D-/R-).
   // Las ventas nuevas ya nacen sin P- (trigger), así que NO matchean (production_number NULL).
   const isVoidStockSale=o.stock_role==="sale"&&/^P-/.test(String(o.production_number||""));
+  // v10.81.3 — orden GENUINAMENTE cancelada (cancel_with_nc / stage terminal): su hoja impresa debe llevar
+  // la marca de agua roja CANCELADA + leyenda. Antes solo isVoidStockSale la disparaba, así que una orden
+  // cancelada de verdad salía impresa idéntica a una viva — se podía producir/entregar por error.
+  const isCancelledOrder=String(o.stage||"").includes("cancelled")||!!o.cancelled_at;
   // mode: "full" = con precio y contacto (secretaría/admin), "production" = sin precio ni contacto (para piso)
   // v10.53.0 — async: registra la impresión ANTES de abrir el window para incluir versión + hash en la hoja.
   // v10.53.1 C1 — try/finally global para garantizar setPrinting(false) en TODOS los paths.
@@ -3647,7 +3655,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   }
 </script>
 <div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>
-${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
+${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':'')}
 <div id="pf-pageref" style="position:absolute;top:0;left:0;width:1px;height:257mm;visibility:hidden;pointer-events:none"></div>
 <div id="pf-sheet">`;
 
@@ -3662,13 +3670,22 @@ ${isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':''}
     h+=`<div class="header">
       <div class="header-logo">${logoHtml}</div>
       <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isWebOrder?'<div style="font-size:8px;color:#fff;background:#06b6d4;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
-      <div class="header-folio"><div class="lbl">Folio</div><div class="num"${isVoidStockSale?' style="text-decoration:line-through;text-decoration-thickness:3px;color:#888"':''}>${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
+      <div class="header-folio"><div class="lbl">Folio</div><div class="num"${(isVoidStockSale||isCancelledOrder)?' style="text-decoration:line-through;text-decoration-thickness:3px;color:#888"':''}>${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
     // v10.72.62 — banner de VERSIÓN, muy visible y B&N-proof: ADMINISTRATIVA = barra negra sólida (invertida);
     // PRODUCCIÓN = barra blanca con borde. Reemplaza el badge rojo de 8px (que en fotocopia B&N era ilegible).
     h+=`<div class="vbanner ${isProd?'prod':'admin'}"><span class="vt">${isProd?'Copia de Producción':'Copia Administrativa'}</span><span class="vs">${isProd?'Para taller · sin precios ni datos fiscales':'Completa · con precios y datos fiscales'}</span></div>`;
 
+    // v10.81.3 — leyenda de orden GENUINAMENTE cancelada: explica por qué esta hoja no debe producirse ni entregarse.
+    // Los campos cancellation_reason/cancelled_by pueden no venir cargados; degrada a la leyenda genérica sin romper.
+    if(isCancelledOrder && !isVoidStockSale){
+      const crsn=o.cancellation_reason?esc(o.cancellation_reason):null;
+      const cby=o.cancelled_by?esc(o.cancelled_by):null;
+      let cwhen='';
+      try{ if(o.cancelled_at){ const cd=new Date(o.cancelled_at); cwhen=' el '+cd.getDate()+' '+months[cd.getMonth()].slice(0,3)+' '+cd.getFullYear(); } }catch(e){}
+      h+=`<div class="vcancel-note"><div class="vct">⚠ Orden CANCELADA</div><div class="vcd">Esta orden de producción está <b>CANCELADA</b> y <b>no debe producirse ni entregarse</b>.${crsn?` Motivo: <b>${crsn}</b>.`:''}${cby?` Cancelada por <b>${cby}</b>${cwhen}.`:''}${o.invoice_folio?` Su folio fiscal <b>${esc(o.invoice_folio)}</b> se cancela o acredita por separado.`:''}</div></div>`;
+    }
     // v10.72.65 — leyenda de venta de stock que tomó folio P- por el bug (ver isVoidStockSale arriba)
     if(isVoidStockSale){
       const pf=esc(o.production_number||"");

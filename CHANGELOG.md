@@ -12,6 +12,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.81.2-3 — Critique del re-facturar + la hoja cancelada que no decía CANCELADA — 4-sep-2026
+
+**v10.81.3 (bug):** la copia impresa de una orden **genuinamente cancelada** (por `cancel_with_nc`, stage
+terminal) salía **idéntica a una viva** — sin la marca de agua roja. El watermark `.vcancel-wm` solo lo
+disparaba `isVoidStockSale` (el bug histórico de venta-de-stock que tomó folio `P-`), nunca una cancelación
+real. Riesgo directo: una orden cancelada se imprime y alguien la produce o entrega. Fix: nuevo predicado
+`isCancelledOrder` (`stage` incluye `cancelled` o `cancelled_at` no nulo) → marca de agua **CANCELADA**,
+folio tachado, y leyenda con motivo/quién/cuándo (degrada a leyenda genérica si esos campos no vienen).
+
+**v10.81.2 (`/impeccable critique`):** el botón "Re-facturar orden" (v10.81.0) se leía como rival del
+"Re-facturar este documento" de CobranzaFlow. Verificado que son **complementarios**: el de CBF opera sobre
+facturas **vivas** (las sustituye), éste sobre folios **ya cancelados** (los libera). Se renombró a
+**"Liberar folio cancelado"** y el copy remite a CBF para sustituir una factura vigente.
+
+---
+
 ## v10.81.0-1 — "Re-facturar orden": liberar el folio de una factura cancelada — 2/3-sep-2026
 
 Contraparte en PrintFlow de la herramienta que en CobranzaFlow es v3.7.474-475. Cuando la factura de una
