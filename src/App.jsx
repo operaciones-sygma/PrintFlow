@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
+// v10.81.2 — /impeccable critique (desde la sesión de corte): el botón "Re-facturar orden" competía con el
+//   "Re-facturar este documento" de CobranzaFlow (v3.7.497+). Verificado que NO son redundantes sino
+//   COMPLEMENTARIOS: el de CBF opera sobre facturas VIVAS (!isCancelled → las sustituye); éste opera sobre
+//   folios YA CANCELADOS (los libera). Se renombra a "Liberar folio cancelado" / botón "Liberar folio" para
+//   que no se lea como un re-facturar rival; el copy remite a CBF para sustituir una factura vigente.
 // v10.81.1 — SCAN adversarial de "Re-facturar orden" (wf_4c57ea01, 12 hallazgos→7 confirmados). Fixes:
 //   🔴 P1: release_cancelled_invoice_folio NO borraba order_payment_refs → al re-foliar, el puente los re-aplicaba
 //      como pago fantasma sobre la factura NUEVA (CxC subvaluada; candidato vivo H-3597/R-1218 $9,000). Ahora los borra.
@@ -4087,11 +4092,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <ArrowsClockwiseIcon size={24} weight="bold" color={C.live} style={{flexShrink:0}}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.live}}>Re-facturar orden</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>La factura <b>{o.invoice_folio}</b> está cancelada. Libera el folio para volver a facturar esta orden (asignarle un folio nuevo o ligar uno existente).</div>
+            <div style={{fontSize:13,fontWeight:700,color:C.live}}>Liberar folio cancelado</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>La factura <b>{o.invoice_folio}</b> ya está cancelada y esta orden quedó atada a ella. Libera el folio para que la orden vuelva a ser facturable — luego asígnale un folio nuevo o ligale uno existente. <span style={{color:C.t3}}>(Para sustituir una factura que aún está vigente, usa “Re-facturar” en CobranzaFlow.)</span></div>
           </div>
         </div>
-        <button onClick={()=>dispatch("refacturar")} style={{...bt(C.live),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Liberar folio y re-facturar</button>
+        <button onClick={()=>dispatch("refacturar")} style={{...bt(C.live),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Liberar folio</button>
       </div>}
 
       {/* v10.72.34/42 — barra de acciones STICKY al fondo. v10.72.42: las acciones de flujo del rol (avanzar/validar)
@@ -19347,7 +19352,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       }} onClose={()=>setCancelInvoicedModal(null)}/>}
       {/* 🆕 v10.81.0 — Re-facturar: confirmar liberación del folio cancelado. El RPC re-valida todo el candado fiscal. */}
       {refacturarModal&&<ConfirmModal
-        title={"Re-facturar orden "+(refacturarModal.production_number||refacturarModal.id)}
+        title={"Liberar folio de "+(refacturarModal.production_number||refacturarModal.id)}
         message={"Se liberará el folio "+refacturarModal.invoice_folio+" (factura cancelada) y la orden volverá a estado facturable. Después podrás asignarle un folio nuevo o ligar uno existente. ¿Continuar?"}
         confirmLabel="Sí, liberar folio"
         confirmColor={C.live}
