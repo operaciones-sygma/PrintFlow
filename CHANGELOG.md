@@ -12,6 +12,55 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.82.0 — Devolver el saldo aplicado a la orden equivocada — 4-sep-2026
+
+Aplicar saldo a favor era la única salida de dinero de la app **sin marcha atrás a la mano**. Se
+cierra con un botón en el pie del detalle de la orden, justo donde v10.80.13 *suprime* «Folio de
+Alpha» para estas órdenes — que es exactamente el hueco donde alguien buscaba una salida y no
+encontraba nada.
+
+### Lo que el barrido reportó, y lo que resultó al medirlo
+
+El hallazgo decía *«la reversa no existe»*. Falso: `credit_reverse_by_order` **sí existe** y además
+es **automática** — el puente (`sync_cancellation_to_cobranza`) la dispara sola al cancelar la orden.
+Lo que de verdad no tenía salida era el otro caso: **el saldo se aplicó a la orden equivocada**. Esa
+orden es legítima y no debe cancelarse; sólo hay que devolver el dinero y facturarla normal. Antes
+eso se arreglaba con SQL.
+
+### 🔥 Cablear el botón directo a la reversa habría sido un medio deshacer
+
+`apply_credit_no_folio` hace **cinco** cosas, no una: mete el CONSUMO, mueve la orden a `delivered`,
+sella `delivered_at`, `credit_applied_at` e `invoiced_by`/`invoice_reason`. Revertir sólo el ledger
+deja la orden **marcada como pagada** y el dinero de vuelta en la bolsa: el trabajo sale gratis.
+
+Por eso la reversa cruda **sigue cerrada** a `authenticated`; sólo se llega por
+`public.deshacer_saldo_aplicado`, que además despinta las marcas del pago. **No toca `stage` ni
+`delivered_at`**: la orden sí salió, lo que se deshace es el *pago*. Y `delivered` es justo el estado
+desde el que PrintFlow factura, así que aterriza en la cola normal.
+
+### Los seis candados, cada uno probado en rojo
+
+Motivo mínimo · orden sin saldo aplicado · **orden ya facturada** (la prueba de 4 patas, no sólo el
+folio) · doble reversa · orden cancelada (a esa el puente ya se la devolvió) · **rol equivocado**: un
+`vendedor` es rechazado aunque mande `p_user='karla'` — el gate es JWT-first, no confía en el parámetro.
+
+El botón repite las 4 patas del servidor: no ofrecer lo que se va a negar es la lección que este
+mismo lugar aprendió en v10.80.13.
+
+### Y el hueco que abría esta misma puerta, tapado en la de entrada
+
+El índice `credit_ledger_order_tipo_uniq` permite **un solo consumo por orden, para siempre**. La
+guarda de idempotencia de `apply_credit_no_folio` buscaba el CONSUMO a secas, y ese renglón sigue
+vivo tras el REVERSO (el ledger es append-only a propósito) — así que al re-aplicar devolvía «ya
+aplicado previamente» **como si hubiera funcionado, sin consumir nada**.
+
+> El primer intento de arreglo fue peor y lo cazó la prueba: dejar pasar el CONSUMO reversado
+> convertía el éxito-falso en un **crash 23505 crudo**. Probar que un candado *puede* ponerse en rojo
+> es lo que separó las dos cosas. Ahora distingue: CONSUMO vivo → «ya aplicado previamente»;
+> CONSUMO con REVERSO → error claro diciendo qué hacer.
+
+---
+
 ## v10.81.2-3 — Critique del re-facturar + la hoja cancelada que no decía CANCELADA — 4-sep-2026
 
 **v10.81.3 (bug):** la copia impresa de una orden **genuinamente cancelada** (por `cancel_with_nc`, stage

@@ -2206,6 +2206,15 @@ const db = {
     if(error)throw new Error("applyCreditNoFolio: "+error.message);
     return data;
   },
+  // v10.82.0 — DESHACER un saldo aplicado a la orden equivocada. La reversa cruda
+  // (credit_reverse_by_order) sigue CERRADA a authenticated a proposito: solo se llega por esta
+  // funcion, que ademas despinta las marcas de pago de la orden. Revertir solo el ledger seria un
+  // medio deshacer: la orden quedaria marcada como pagada con saldo Y el dinero de vuelta.
+  async deshacerSaldoAplicado(orderId, motivo, user) {
+    const {data,error}=await supabase.rpc("deshacer_saldo_aplicado",{p_order_id:orderId,p_motivo:motivo,p_user:user});
+    if(error)throw new Error(error.message);
+    return data;
+  },
   // v10.43.5 — Crea/actualiza cliente en cobranza desde captura de orden
   async upsertClientFromOrder({name, rfc=null, email=null, whatsapp=null, lada=null, agent=null, created_by=null}) {
     if(!name||!name.trim())return null;
@@ -4129,6 +4138,13 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
           {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
           {(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>{o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha"}</button>}
+          {/* v10.82.0 — DEVOLVER EL SALDO APLICADO A LA ORDEN EQUIVOCADA.
+              Va exactamente aqui, donde v10.80.13 SUPRIME "Folio de Alpha" para estas ordenes: ese
+              es el hueco donde alguien buscaba una salida y no encontraba nada. Se gatea por
+              credit_applied_at -la columna, no el regex sobre invoice_reason, que es texto
+              editable-: los 21 consumos contra orden la tienen, asi que cubre todo.
+              Las canceladas NO lo ofrecen: a esas el puente ya les devolvio el saldo solo. */}
+          {(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("deshacer_saldo")} style={{...bt(C.dn),flex:1,justifyContent:"center"}} title="Regresa el saldo a la bolsa del cliente y deja la orden pendiente de facturar"><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
           {/* v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central, asi
               que el visor (solo lectura) podia abrirlo. Se le pone el mismo gate que a las tarjetas. */}
           {vOwns&&canExecuteAction("print",o,role,userLogin)&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
@@ -4264,6 +4280,59 @@ function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) 
       Registra una <b style={{color:C.tx}}>{isD?"factura":"remisión"}</b> en CobranzaFlow por <b style={{color:C.ok}}>{fmt(total)}</b>{isD?<span style={{color:C.t3}}> (base + IVA 16%)</span>:<span style={{color:C.t3}}> (sin IVA)</span>}. Si el folio ya existe, solo se vincula (no se duplica).
     </div>}
     <div style={{display:"flex",gap:8,marginTop:18}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={submit} disabled={!valid||busy||base<=0} style={{...bt((valid&&base>0)?C.ok:"#9ca3af"),flex:1,justifyContent:"center",opacity:(valid&&base>0&&!busy)?1:.6,cursor:(valid&&base>0&&!busy)?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Aplicando...</>:<><ReceiptIcon size={14} weight="bold"/>Aplicar folio</>}</button></div>
+  </div></div>;
+}
+// v10.82.0 — DESHACER EL SALDO APLICADO A LA ORDEN EQUIVOCADA.
+//
+// Aplicar saldo es la unica salida de dinero de la app que no tenia marcha atras a la mano. La
+// reversa SI existia en la base y ademas es AUTOMATICA al cancelar la orden, pero el caso que no
+// tenia salida es el otro: la orden es legitima y NO debe cancelarse, solo se aplico el saldo en el
+// lugar equivocado. Antes eso se arreglaba con SQL.
+//
+// El aviso de "no se le puede volver a aplicar" no es defensivo: el indice unico del ledger permite
+// UN solo consumo por orden, para siempre. Vale mas decirlo antes que descubrirlo despues.
+function DeshacerSaldoModal({order,user,userLogin,onDone,onClose,showToast}) {
+  useEscClose(onClose);
+  const [motivo,setMotivo]=useState("");
+  const [busy,setBusy]=useState(false);
+  const base=order.order_type==="maquila"?Number(order.maq_price||0):Number(order.price||0);
+  const valid=motivo.trim().length>=8;
+  const submit=async()=>{
+    if(!valid||busy)return;
+    setBusy(true);
+    try{
+      const data=await db.deshacerSaldoAplicado(order.id,motivo.trim(),userLogin||user);
+      showToast("💰 "+(data?.nota||"Saldo devuelto"),"success");
+      // Se despintan las MISMAS tres columnas que toca el RPC. stage y delivered_at NO: la orden salio.
+      onDone(order.id,{credit_applied_at:null,invoiced_by:null,invoice_reason:null});
+      onClose();
+    }catch(e){showToast("❌ "+(e?.message||"No se pudo deshacer"),"error")}
+    finally{setBusy(false)}
+  };
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
+    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><ArrowUUpLeftIcon size={17} weight="bold"/>Devolver el saldo a favor</h3>
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>
+      El dinero regresa a la bolsa del cliente y esta orden queda <b>entregada y pendiente de facturar</b>,
+      como cualquier otra. No se cancela: la orden si salio.
+    </p>
+    <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:12}}>
+      <div style={{fontWeight:700,color:C.tx}}>{order.client}{order.client_company&&order.client_company!==order.client?" · "+order.client_company:""}</div>
+      <div style={{color:C.t2,marginTop:2}}>{order.production_number} · {(order.product_type||"").replace("🔴 ATRASADA · ","")}</div>
+      <div style={{color:C.t2,marginTop:2}}>Se devuelve: <b style={{color:C.ok}}>{fmt(base)}</b> <span style={{color:C.t3}}>(sin IVA, que es como se descuento)</span></div>
+    </div>
+    <div style={{background:C.wn+"14",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"9px 12px",marginBottom:14,fontSize:11.5,color:C.t2,display:"flex",gap:7}}>
+      <WarningIcon size={14} weight="fill" style={{flexShrink:0,marginTop:1,color:C.wn}}/>
+      <span>A esta orden <b>ya no se le podra volver a aplicar saldo</b>: el registro guarda un solo consumo por orden. Si el saldo va en otra orden, aplicalo alla.</span>
+    </div>
+    <label style={lbl}>¿Por que se deshace?</label>
+    <textarea style={{...inp,minHeight:62,resize:"vertical",fontFamily:"inherit"}} value={motivo} onChange={e=>setMotivo(e.target.value)}
+      placeholder="Lo va a leer quien revise el saldo del cliente en seis meses" autoFocus/>
+    {motivo.length>0&&!valid&&<div style={{fontSize:11,color:C.dn,marginTop:6}}>Escribe al menos 8 caracteres.</div>}
+    <div style={{display:"flex",gap:8,marginTop:18}}>
+      <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+      <button onClick={submit} disabled={!valid||busy} style={{...bt(valid?C.dn:"#9ca3af"),flex:1,justifyContent:"center",opacity:(valid&&!busy)?1:.6,cursor:(valid&&!busy)?"pointer":"not-allowed"}}>
+        {busy?<><HourglassIcon size={14} weight="bold"/>Devolviendo...</>:<><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</>}</button>
+    </div>
   </div></div>;
 }
 function MaqModal({onSend,onClose,providers=[]}) {
@@ -15988,6 +16057,7 @@ export default function PrintFlow() {
   // v10.39.0 — Agregar producto existente a OC: lista órdenes del mismo cliente sin folio
   const [addExistingModal,setAddExistingModal]=useState(null);
   const [invoiceModal,setInvoiceModal]=useState(null); // 🆕 v10.7.0 — Modal Karla asigna folio fiscal
+  const [deshacerSaldoOrder,setDeshacerSaldoOrder]=useState(null); // v10.82.0 — devolver un saldo aplicado a la orden equivocada
   const [histFolioOrder,setHistFolioOrder]=useState(null); // v10.72.56 — captura de folio fiscal en órdenes históricas (import-historico)
   // v10.77.6 — el emisor, a nivel App. Se guarda en estado (para forzar el re-render cuando llega)
   // y ademas en un modulo (EMISOR_ON) para que OCard y DetailModal lo lean sin enhebrar un prop por
@@ -18045,6 +18115,7 @@ export default function PrintFlow() {
     if(action==="snooze"){const o=orders.find(x=>x.id===id);if(o)setSnoozeTarget(o);return} // v10.73.18 — poner en espera (SnoozeModal)
     if(action==="unsnooze"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
     if(action==="apply_historic_folio"){const o=orders.find(x=>x.id===id);if(o)setHistFolioOrder(o);return}
+    if(action==="deshacer_saldo"){const o=orders.find(x=>x.id===id);if(o)setDeshacerSaldoOrder(o);return} // v10.82.0
     // v10.58.50: 📣 Recordar al responsable de la etapa (cards sin acción para el rol).
     // Notifica in-app + Telegram (db.notify ya copia a admin) con el bloqueo concreto.
     if(action==="nudge_responsible"){const o=orders.find(x=>x.id===id);if(!o)return;
@@ -19428,6 +19499,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       }} onClose={()=>setMaintModal(null)}/>}
       {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
       {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
+      {deshacerSaldoOrder&&<DeshacerSaldoModal order={deshacerSaldoOrder} user={user} userLogin={userLogin} showToast={showToast} onDone={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setDeshacerSaldoOrder(null)}/>}
       {snoozeTarget&&<SnoozeModal order={snoozeTarget} onConfirm={(data)=>applySnooze(snoozeTarget,data)} onClose={()=>setSnoozeTarget(null)}/>}
       {printModal&&<PrintOrder order={printModal} role={user} userLogin={userLogin} onClose={()=>setPrintModal(null)} onPrintError={(msg)=>showToast(msg,"warning")}/>}
       {clientHistory&&<ClientHistory clientName={clientHistory} orders={viewOrders} role={user} userLogin={userLogin} onClose={()=>setClientHistory(null)}/>}
