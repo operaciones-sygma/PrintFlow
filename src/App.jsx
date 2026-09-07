@@ -4304,7 +4304,10 @@ function DeshacerSaldoModal({order,user,userLogin,onDone,onClose,showToast}) {
       const data=await db.deshacerSaldoAplicado(order.id,motivo.trim(),userLogin||user);
       showToast("💰 "+(data?.nota||"Saldo devuelto"),"success");
       // Se despintan las MISMAS tres columnas que toca el RPC. stage y delivered_at NO: la orden salio.
-      onDone(order.id,{credit_applied_at:null,invoiced_by:null,invoice_reason:null});
+      // v10.83.0 — el merge refleja las MISMAS columnas que toca la RPC, stage incluido: sin esto la
+      // tarjeta se quedaba en "Entregada" hasta recargar, justo despues de decir que volvio a la cola.
+      onDone(order.id,{credit_applied_at:null,invoiced_by:null,invoice_reason:null,delivered_at:null,
+        stage: order.order_type==="maquila" ? "maq_received" : "salidas"});
       onClose();
     }catch(e){showToast("❌ "+(e?.message||"No se pudo deshacer"),"error")}
     finally{setBusy(false)}
@@ -4312,8 +4315,11 @@ function DeshacerSaldoModal({order,user,userLogin,onDone,onClose,showToast}) {
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
     <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",display:"flex",alignItems:"center",gap:6}}><ArrowUUpLeftIcon size={17} weight="bold"/>Devolver el saldo a favor</h3>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>
-      El dinero regresa a la bolsa del cliente y esta orden queda <b>entregada y pendiente de facturar</b>,
-      como cualquier otra. No se cancela: la orden si salio.
+      {/* v10.83.0 — decia "queda entregada y pendiente de facturar" y era FALSO: la reversa dejaba la
+          orden en delivered, y TODAS las puertas de folio exigen salidas/maq_received, asi que quedaba
+          varada -en maquila sin regreso posible-. Desde v3.7.568 la RPC si la devuelve a la cola. */}
+      El dinero regresa a la bolsa del cliente y esta orden <b>vuelve a Salidas</b>, lista para
+      facturarse normal. No se cancela: solo se deshace el pago.
     </p>
     <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:12}}>
       <div style={{fontWeight:700,color:C.tx}}>{order.client}{order.client_company&&order.client_company!==order.client?" · "+order.client_company:""}</div>
