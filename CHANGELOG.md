@@ -12,6 +12,56 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## Nota de infraestructura — la fecha del cobro ahora es obligatoria — 7-sep-2026
+
+**No es un cambio de PrintFlow, pero le pega al puente y conviene que quede escrito aquí.**
+
+`cobranza.payments.payment_date` (el día en que ENTRÓ el dinero, distinto de `applied_at`, que es
+cuándo se capturó) estaba en NULL en 153 pagos vivos. La causa: **dieciséis sitios de inserción en
+once funciones** creaban pagos y ninguna la guardaba. **Siete de esas funciones son del puente y
+viven en el schema `public`**, o sea que las dispara PrintFlow:
+
+`assign_folios_split_oc` · `bulk_sell_from_stock` · `create_voucher_multi` · `sync_invoice_from_oc` ·
+`sync_invoice_from_oc_split_group` · `sync_invoice_from_orders` · `sync_invoice_from_split` ·
+`apply_payment_to_oc_split_plan`
+
+### Lo que cambió, y por qué PrintFlow no se entera
+
+- La columna tiene **`DEFAULT (now() AT TIME ZONE 'America/Mexico_City')::date`**. Para el puente esa
+  ES la fecha correcta: el saldo a favor de una OC, la venta de stock y el pago de MercadoPago
+  **ocurren** en el momento en que el puente dispara. Las funciones que omiten la columna siguen
+  funcionando igual.
+- Hay un **`CHECK pago_con_fecha_de_cobro`** (validado sobre las 526 filas). Con el DEFAULT puesto,
+  sólo salta ante un **NULL explícito**.
+- Dos funciones sí se parchearon porque tenían una fecha real y la tiraban:
+  **`apply_payment_to_oc_split_plan`** (el pago consolidado del plan matriz) recibía `p_payment_date`,
+  la metía en `applied_at`, la escribía **en el texto de la nota** y no en su columna; y
+  **`create_voucher_multi`** tenía la fecha del vale y usaba sólo `applied_at`.
+
+### ⚠ Para quien agregue una puerta nueva
+
+Si escribes una función que inserte en `cobranza.payments` **y tengas una fecha real del cobro,
+pásala explícitamente**. Dejar que el DEFAULT ponga «hoy» donde había una fecha capturada es
+exactamente el bug que esto vino a cerrar. El invariante **#17** de
+`cobranzaflow/supabase/invariantes.sql` vigila que el DEFAULT y el CHECK sigan en su sitio.
+
+Detalle completo en `cobranzaflow/CHANGELOG.md` (v3.7.588–589).
+
+---
+
+## v10.83.0 — El modal decía lo que no era, y la tarjeta se quedaba mintiendo — 4-sep-2026
+
+El texto prometía que tras «Devolver saldo» la orden quedaba *«entregada y pendiente de facturar,
+como cualquier otra»*. **Era falso**: la reversa la dejaba en `delivered` y todas las puertas de folio
+exigen `salidas`/`maq_received`, así que quedaba **varada** —en maquila sin regreso posible—. Desde
+`v3.7.568` la RPC sí la devuelve a la cola; aquí se dice lo que de verdad pasa.
+
+Y el merge optimista sólo despintaba `credit_applied_at` / `invoiced_by` / `invoice_reason`, así que
+**la tarjeta seguía diciendo «Entregada» hasta recargar** — justo después de avisar que había vuelto
+a la cola. Ahora refleja las mismas columnas que toca la RPC, `stage` y `delivered_at` incluidos.
+
+---
+
 ## v10.82.0 — Devolver el saldo aplicado a la orden equivocada — 4-sep-2026
 
 Aplicar saldo a favor era la única salida de dinero de la app **sin marcha atrás a la mano**. Se
