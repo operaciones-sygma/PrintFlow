@@ -1,5 +1,22 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
+// v10.81.6 — CTP contador: 5 arreglos del scan adversarial (wf wzsz8pawt, 10 dimensiones + verificación).
+//   🔥 P1 fail-open: db.loadCtpMaintenance() ignoraba `error` (patrón supabase-js) → un fallo transitorio SOLO
+//      en esa consulta mostraba el m² HISTÓRICO como "sin mantenimiento base" y SUPRIMÍA la alarma de vencido.
+//      Ahora revisa error y lanza (fail-closed → loadErr). Único llamador = load() del contador.
+//   P2 realtime inerte: public.ctp_maintenance no estaba en la publicación supabase_realtime → el canal
+//      ctp-maint-rt nunca recargaba en OTRA sesión. Se agregó a la publicación.
+//   P2 candado de reset ancho: la RLS de INSERT/UPDATE usaba pf_puede_escribir() (7 roles) mientras la UI solo
+//      ofrece el botón a german/admin → 5 roles podían reiniciar/anular por API el semáforo COMPARTIDO y ocultar
+//      una alarma de "vencido". Se acotó a admin/german (IN positivo = fail-closed). Verificado: german/admin sí, karla no.
+//   P3 total≠desglose: 3 placas sin tamaño (basura de parseo, 0 m²) inflaban el total (110) sobre el desglose
+//      (107). Ahora total = chicas+grandes y las sin tamaño se muestran aparte ("N sin clasificar").
+//   P3 "última falla" no determinista: desempate .order("id") en el query de v_ctp_fallas.
+//   VERDE: m² desde el mantenimiento, placas fallidas (408 dedup), semáforo/umbrales 300-350, RLS de las 3 vistas,
+//   regresión de Salud, concordancia con el contador de la máquina. FALSO POSITIVO refutado: el "histórico
+//   113,593 imposible" es la lectura MANUAL del Suprasetter (ctp_baseline), no el Device counter — deliberado.
+//   NOTA: db_max_rows del proyecto = null (sin tope de 1000) → el .limit() del contador NO trunca en ciclos largos.
+//   Migración ctp_maintenance_realtime_y_reset_gate.
 // v10.81.5 — CTP: "Placas fallidas" en el widget de mantenimiento de Germán (desde el mantenimiento e
 //   históricas). Fuente: vista almacen.v_ctp_fallas = ctp_errores con los 12 códigos RECORDER del Suprasetter
 //   que significan placa perdida/dañada (7806 se suelta, 7412/7403 al llevarla a la mesa, 5126/7504 perdida,
@@ -1486,7 +1503,12 @@ const db = {
   // v10.79.0 — mantenimientos del CTP: cada fila es un punto de reset del contador de m²/placas
   // "desde el último mantenimiento" (el CTP se mantiene cada 300-350 m²).
   async loadCtpMaintenance() {
-    const { data } = await supabase.from("ctp_maintenance").select("*").is("voided_at", null).order("performed_at", { ascending: false });
+    // v10.81.6 (scan) — fail-CLOSED: revisar `error` y lanzar. Antes ignoraba el error (patrón fail-open de
+    //   supabase-js) y devolvía []; un fallo transitorio SOLO en esta consulta hacía que el contador mostrara
+    //   el m² HISTÓRICO como si NO hubiera mantenimiento base y SUPRIMÍA la alarma de "vencido". Único llamador
+    //   es el load() del contador (envuelto en try/catch → loadErr), así que lanzar es seguro.
+    const { data, error } = await supabase.from("ctp_maintenance").select("*").is("voided_at", null).order("performed_at", { ascending: false });
+    if (error) throw new Error("loadCtpMaintenance: " + error.message);
     return data || [];
   },
   async addCtpMaintenance(performedAt, notes, byUser) {
@@ -5975,7 +5997,9 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     let q=supabase.schema("almacen").from("v_ctp_placas").select("m2,tamano").limit(20000);
     if(lastM&&lastM.performed_at)q=q.gte("expuesta_at",lastM.performed_at);
     const {data:pl,error:pe}=await q; if(pe)throw pe;
-    const ag={ch:0,gr:0,total:0,m2:0};(pl||[]).forEach(p=>{ag.total++;if(p.tamano==="chica")ag.ch++;else if(p.tamano==="grande")ag.gr++;ag.m2+=Number(p.m2)||0;});
+    // v10.81.6 (scan) — total = chicas+grandes; las filas SIN tamaño (jid/tamano/m2 = null, basura de parseo
+    //   del log de Prinect; aportan 0 m²) NO inflan el total — se cuentan aparte como "sin clasificar".
+    const ag={ch:0,gr:0,total:0,m2:0,sc:0};(pl||[]).forEach(p=>{if(p.tamano==="chica")ag.ch++;else if(p.tamano==="grande")ag.gr++;else ag.sc++;ag.m2+=Number(p.m2)||0;});ag.total=ag.ch+ag.gr;
     setPSince(ag);
     // v10.81.5 — PLACAS FALLIDAS: fallas donde se PIERDE o DAÑA una placa física (almacen.v_ctp_fallas,
     //   códigos RECORDER del Suprasetter: 7806 se suelta, 7412/7403 al llevarla a la mesa, 5126/7504 perdida,
@@ -5984,7 +6008,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     //   v10.81.5 (scan adversarial wyygh2k7e) — degradación INDEPENDIENTE: una falla al leer v_ctp_fallas NO
     //   debe tumbar el medidor de m² (señal primaria de mantenimiento); se atrapa aquí, no en el catch global.
     try{
-      const {data:fl,error:fe}=await supabase.schema("almacen").from("v_ctp_fallas").select("ocurrio_at,texto,codigo").order("ocurrio_at",{ascending:false}).limit(5000);
+      const {data:fl,error:fe}=await supabase.schema("almacen").from("v_ctp_fallas").select("id,ocurrio_at,texto,codigo").order("ocurrio_at",{ascending:false}).order("id",{ascending:false}).limit(5000);
       if(fe)throw fe;
       const fperf=(lastM&&lastM.performed_at)?new Date(lastM.performed_at).getTime():null;
       const fSince=fperf?(fl||[]).filter(r=>new Date(r.ocurrio_at).getTime()>=fperf).length:(fl||[]).length;
@@ -6077,7 +6101,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
         <div style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>{hasBase?"Placas desde el mantenimiento":"Placas registradas (sin base)"}</div>
         <div style={{fontSize:18,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{nf(since.total)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
-        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{nf(since.ch)} chicas · {nf(since.gr)} grandes{since.sc>0?" · "+nf(since.sc)+" sin clasificar":""}</div>
       </div>
       <div style={{background:C.sf,borderRadius:12,padding:"10px 12px"}}>
         <div style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".04em",marginBottom:4}}>Placas históricas</div>
