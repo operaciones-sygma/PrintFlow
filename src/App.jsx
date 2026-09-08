@@ -1,5 +1,21 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
+// v10.81.5 — CTP: "Placas fallidas" en el widget de mantenimiento de Germán (desde el mantenimiento e
+//   históricas). Fuente: vista almacen.v_ctp_fallas = ctp_errores con los 12 códigos RECORDER del Suprasetter
+//   que significan placa perdida/dañada (7806 se suelta, 7412/7403 al llevarla a la mesa, 5126/7504 perdida,
+//   7407/7628 doble hoja, 7609/7619/7611 vacío no sujeta, 7950 timeout tambor, 7610 atasco). 🔥 La vista
+//   DEDUPLICA el par FE/SE (Prinect registra CADA falla dos veces con tags distintos, mismo instante/texto:
+//   572 crudas → 408 reales) y exige es_error. Histórico 408 desde 16-ene-2025; 1 desde el mantenimiento.
+//   Las REPETICIONES de ctp_placas tampoco son fallas: son re-registros del log (~cada 15 min; lo confirma
+//   Device.TotalPlates ≈ placas ÚNICAS). v_ctp_resumen expone placas_fallidas_hoy/mes/total + ultima_falla_at
+//   para Salud (SygmaAlmacen, pend. de cablear). La lectura de fallas degrada SOLA (su propio try): si
+//   v_ctp_fallas falla NO tumba el medidor de m². Migraciones ctp_placas_fallidas_view +
+//   ctp_fallas_dedup_fe_se_y_set_expandido. Verificado por scan adversarial (wf wyygh2k7e: 2 P1 cerrados).
+//   ⚠ 7950 (timeout tambor, 42) es el único código discutible como "placa fallida" — ajustable en la vista.
+//   ── Contexto del arco CTP↔Prinect (el commit se etiquetó mal como "v10.81.0", que ya era Re-facturar) ──
+//   El contador y el m² del CTP salen del COLECTOR de Prinect en la DELL (agente PowerShell → almacen.ctp_placas
+//   cada hora), NO de captura manual. La captura manual de placas de Germán al soltar en CTP/Procesadora se
+//   RETIRÓ (el drop asigna la máquina directo, sin PlateModal; onPlateRequired/platedIds quedan inertes).
 // v10.81.4 — CTP: el contador de m² desde el mantenimiento (CTPMaintenanceCounter) leía almacen.ctp_placas
 //   CRUDO, pero el log de Prinect escribe la MISMA placa varias veces (hasta 8; un renglón por etapa del
 //   flujo) → conteo y m² inflados ~2x (contra el contador propio del Suprasetter). Se lee ahora de la vista
@@ -5948,6 +5964,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const [loaded,setLoaded]=useState(false);   // v10.80.2 (/impeccable critique) — evita el parpadeo de ceros mientras carga
   const [loadErr,setLoadErr]=useState(false); // v10.80.2 — fail-open→cerrado: si Supabase falla, se avisa en vez de mostrar 0
   const [pSince,setPSince]=useState(null); // v10.81.0 — m² desde el último mantenimiento, medido por Prinect (almacen.ctp_placas)
+  const [fallas,setFallas]=useState(null); // v10.81.5 — placas fallidas (placa perdida/dañada, almacen.v_ctp_fallas): desde el mantenimiento + históricas
   const load=async()=>{setLoadErr(false);try{const [cfg,base,m]=await Promise.all([db.loadConfig("chemical_prices"),db.loadConfig("ctp_baseline"),db.loadCtpMaintenance()]);setPrices(cfg||{});setBaseline(base||null);setMaints(m||[]);
     // v10.81.0 — "desde el último mantenimiento" sale del colector de Prinect (m² EXACTO por placa),
     //   ya NO de la captura manual de Germán (plate_log). El agente del CTP en la DELL lo alimenta cada hora.
@@ -5960,6 +5977,19 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
     const {data:pl,error:pe}=await q; if(pe)throw pe;
     const ag={ch:0,gr:0,total:0,m2:0};(pl||[]).forEach(p=>{ag.total++;if(p.tamano==="chica")ag.ch++;else if(p.tamano==="grande")ag.gr++;ag.m2+=Number(p.m2)||0;});
     setPSince(ag);
+    // v10.81.5 — PLACAS FALLIDAS: fallas donde se PIERDE o DAÑA una placa física (almacen.v_ctp_fallas,
+    //   códigos RECORDER del Suprasetter: 7806 se suelta, 7412/7403 al llevarla a la mesa, 5126/7504 perdida,
+    //   7407/7628 doble hoja, 7609/7619/7611 vacío no sujeta, 7950 timeout tambor, 7610 atasco). La vista
+    //   DEDUPLICA el par FE/SE (Prinect registra cada falla 2 veces) y respeta RLS (es_empleado). 408 hist.
+    //   v10.81.5 (scan adversarial wyygh2k7e) — degradación INDEPENDIENTE: una falla al leer v_ctp_fallas NO
+    //   debe tumbar el medidor de m² (señal primaria de mantenimiento); se atrapa aquí, no en el catch global.
+    try{
+      const {data:fl,error:fe}=await supabase.schema("almacen").from("v_ctp_fallas").select("ocurrio_at,texto,codigo").order("ocurrio_at",{ascending:false}).limit(5000);
+      if(fe)throw fe;
+      const fperf=(lastM&&lastM.performed_at)?new Date(lastM.performed_at).getTime():null;
+      const fSince=fperf?(fl||[]).filter(r=>new Date(r.ocurrio_at).getTime()>=fperf).length:(fl||[]).length;
+      setFallas({total:(fl||[]).length,since:fSince,last:(fl&&fl.length)?fl[0]:null});
+    }catch(ef){console.error("[CTPCounter fallas]",ef);setFallas({error:true,total:0,since:0,last:null});}
   }catch(e){console.error("[CTPCounter load] Error:",e);setLoadErr(true);}finally{setLoaded(true);}};
   useEffect(()=>{load();},[]);
   // v10.80.3 (scan) — el contador es un semáforo COMPARTIDO. `plates` ya es realtime (prop), pero maints/
@@ -5988,6 +6018,7 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
   const lastMs=last?new Date(last.performed_at).getTime():null;
   const since=pSince||{ch:0,gr:0,total:0,m2:0};  // v10.81.0 — de Prinect (m² exacto por placa), no de plate_log
   const m2s=since.m2;
+  const fal=fallas||{total:0,since:0,last:null}; // v10.81.5 — placas fallidas (v_ctp_fallas)
   // El semáforo del ciclo SOLO tiene sentido con un mantenimiento base; sin él no dispara la alarma
   // (el acumulado sería de toda la historia de PrintFlow, no de un ciclo real).
   const hasBase=!!last;
@@ -6053,6 +6084,20 @@ function CTPMaintenanceCounter({plates,user,userLogin}) {
         {hasBaseline?<><div style={{fontSize:18,fontWeight:600,color:C.t2,fontVariantNumeric:"tabular-nums"}}>{nf(totPlacas)} <span style={{fontSize:11,fontWeight:600,color:C.t2}}>placas</span></div>
         <div style={{fontSize:11,color:C.t2,marginTop:2}}>{m2f(totM2)} m²</div></>:<div style={{fontSize:12,color:C.t3,marginTop:2}}>Sin lectura base del Suprasetter</div>}
       </div>
+    </div>
+    {/* v10.81.5 — PLACAS FALLIDAS (placa perdida/dañada en el CTP): desde el mantenimiento · históricas */}
+    <div style={{background:C.sf,borderRadius:12,padding:"10px 12px",marginTop:10}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:F.micro,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:".04em",display:"inline-flex",alignItems:"center",gap:5}}><WarningIcon size={12} weight="bold" color={(hasBase&&fal.since>0)?"#b45309":C.t2}/>Placas fallidas</span>
+        <span style={{fontSize:11,color:C.t3}}>placa perdida o dañada en el CTP</span>
+      </div>
+      {fal.error?<div style={{fontSize:11,color:C.t3,marginTop:6}}>No se pudieron cargar las fallas ahora.</div>:<>
+      <div style={{display:"flex",gap:20,marginTop:6,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:18,fontWeight:800,color:(hasBase&&fal.since>0)?"#b45309":C.tx,fontVariantNumeric:"tabular-nums"}}>{nf(fal.since)}</span><span style={{fontSize:11,color:C.t2}}>{hasBase?"desde el mantenimiento":"registradas"}</span></div>
+        <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:18,fontWeight:600,color:C.t2,fontVariantNumeric:"tabular-nums"}}>{nf(fal.total)}</span><span style={{fontSize:11,color:C.t2}}>históricas</span></div>
+      </div>
+      {fal.last&&<div style={{fontSize:11,color:C.t3,marginTop:4}}>Última: <strong style={{color:C.t2}}>{fD(fal.last.ocurrio_at)}</strong> · {fal.last.texto}</div>}
+      </>}
     </div>
     <div style={{fontSize:11,color:C.t3,marginTop:10,lineHeight:1.5}}>
       {last?<>Último mantenimiento: <strong style={{color:C.t2}}>{fD(last.performed_at)}</strong>{last.registered_by?" · "+(AUTHOR_NAME[last.registered_by]||last.registered_by):""}</>:<>Aún sin mantenimiento registrado. Al registrar el primero, el contador "desde el último mantenimiento" arranca de cero.</>}
