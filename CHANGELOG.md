@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## Nota de infraestructura — dos cosas de la base compartida — 8-sep-2026
+
+**No son cambios de PrintFlow, pero tocan objetos que comparte.**
+
+- **`public.cancel_invoice_split` y `public.cancel_oc_invoice_split_line` dejaron de ser ejecutables
+  por `anon`** (CobranzaFlow v3.7.597). No tienen ningún `INSERT` ni `UPDATE`: su cuerpo entero es un
+  `verify_actor_role` y un `RETURN` de un `_internal`, y **ese** escribe — o sea que la puerta abierta
+  era la fachada. No era un agujero (un `anon` se topaba con el gate en la primera línea) sino una
+  capa de menos. **PrintFlow define el wrapper `applyPaymentToOCSplitPlan` pero no tiene llamador**,
+  así que no le afecta; se anota por si algún día se cablea.
+- **`public.apply_payment_to_oc_split_plan` estuvo ROTA unas horas** el 7-sep (CobranzaFlow
+  v3.7.588d → v3.7.590): un parche le dejó 9 columnas contra 8 valores en el `INSERT` y PL/pgSQL no
+  valida el cuerpo al crear la función, así que reventaba en la primera ejecución con `42601`. Ya
+  está arreglada y **verificada ejecutándola** sobre un plan matriz real. Exposición: cero usos
+  históricos.
+
+---
+
 ## Nota de infraestructura — la fecha del cobro ahora es obligatoria — 7-sep-2026
 
 **No es un cambio de PrintFlow, pero le pega al puente y conviene que quede escrito aquí.**
