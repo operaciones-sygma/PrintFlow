@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.0 — Facturar una orden por partes A LO LARGO DEL TIEMPO — 14-sep-2026
+
+**El caso (Karla).** Un cliente grande pide que de una orden se le facture **una parte hoy y el resto
+después, conforme vaya pagando**. No quiere una PPD por el total con complementos: quiere facturas
+separadas, cada una en su momento. Karla emitió una factura sin ligar a la orden como parche,
+porque no había con qué.
+
+**Lo que había, y por qué no servía.** «Facturar por partes» parte una orden en N facturas **en el
+mismo acto**: mínimo dos partes, cada una acuña su folio ahí mismo, y la suma es el 100%. No existía
+una parte que pudiera vivir *sin folio todavía*. Y como la orden pasa a entregada, **sale de
+«Pendientes de Folio»**: aunque la parte existiera, nadie la volvería a ver.
+
+**Lo que se hace: una parte más del mismo mecanismo, que se llama «el resto».**
+`doc_type = 'por_facturar'`: vive sin folio y dice cuánto falta. Cada vez que Karla factura la
+siguiente parte (`facturar_siguiente_parte`) se inserta una parte normal con folio —el puente crea
+la factura en cobranza como hoy— y el resto se descuenta; al agotarse se cierra solo con motivo
+«Consumida: …». No es un módulo nuevo: reusa los candados, el puente, el timbrado, las comisiones
+(se pagan al cobrar cada factura) y la cancelación por parte.
+
+**La regla que lo sostiene (invariante 31):**
+`partes vivas (facturadas + resto) + restos cerrados por decisión = precio de la orden`.
+Y si se cancela una parte **ya facturada** de una orden por partes, **su dinero regresa al resto** —
+sin eso quedaba un hueco mudo que nadie volvería a facturar.
+
+**La UI, en tres toques:**
+- **Al facturar por partes:** la opción **⏳ Después (el resto)** en el tipo de cada parte, y el botón
+  **«El resto, después»** que manda a la última parte todo lo que no esté en las otras — Karla
+  captura la de hoy y no teclea ninguna resta.
+- **En la ficha de la orden:** *«Facturado $60,000 de $100,000 · faltan $40,000»* y el botón
+  **Facturar siguiente parte**. La pantalla es chica a propósito: el caso normal es «todo lo que
+  queda», y las piezas se calculan en proporción.
+- **En Pendientes de Folio:** la sección **«Por facturar en partes (N)»** — cliente, cuánto falta,
+  desde hace cuántos días. Es el seguimiento: nada se olvida.
+
+**Verificado con rollback sobre P-0070 (Castores, $21,700):** plan de 2 → siguiente parte →
+cierre → cancelar una parte regresa $6,200 al resto → los dos candados rechazan. La suma dio el
+precio en los cuatro estados. La invariante 31 se puso en **rojo** cuando se alteró una parte a mano
+(control positivo) y en verde cuando el resto se cerró por decisión.
+
+⚠ **Dos cosas para quien toque esto:**
+- `showToast` es del componente App: los modales de módulo **no lo ven**. Los avisos del modal de
+  partes y del de siguiente parte son locales a propósito. Lo cazó `scripts/probar-alcance.sh`,
+  que este commit trae a PrintFlow (antes sólo vivía en CobranzaFlow).
+- Sólo puede haber **un** resto por orden, y **nunca todas** las partes pueden ser resto: «para
+  dejarlo todo pendiente no hace falta partir la orden». El RPC y el modal dicen lo mismo.
+
+**El caso de hoy** cabe sin arreglos: el split ya sabe *ligar* un folio existente del mismo cliente
+por el mismo monto (`p_allow_link`). Parte 1 = la factura que Karla ya emitió, parte 2 = el resto.
+
+---
+
 ## Nota de infraestructura — dos cosas de la base compartida — 8-sep-2026
 
 **No son cambios de PrintFlow, pero tocan objetos que comparte.**

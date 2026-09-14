@@ -1110,6 +1110,9 @@ const esFolioRemision = f => PREFIJOS_REMISION.some(x => String(f||"").toUpperCa
 // reescribe esa nota, la orden deja de estar protegida y vuelve a salir el boton de folio. La señal
 // dura es `credit_applied_at`, que la escribe apply_credit_no_folio y ya viene en el select('*').
 // El regex se queda SOLO como respaldo para filas viejas que quizas no tengan la columna poblada.
+// v10.84.0 — EL RESTO POR FACTURAR. Una orden facturada por partes en el tiempo tiene una parte
+// viva de tipo 'por_facturar' que dice cuanto falta. Si no la tiene, no esta en ese modo.
+const restoPorFacturar = o => (o?.splits||[]).find(s => !s.cancelled_at && s.doc_type === "por_facturar") || null;
 const liquidadaConSaldoAFavor = o => !o?.invoice_folio && (
      !!o?.credit_applied_at
   || (String(o?.stage||"").includes("delivered")
@@ -1920,6 +1923,16 @@ const db = {
       p_user: byUser
     });
     if(error) throw new Error(error.message);
+    return data;
+  },
+  // v10.84.0 — Facturar la SIGUIENTE parte de una orden facturada por partes en el tiempo.
+  // amount y qty son la porcion de HOY en SUBTOTAL (sin IVA), igual que amount_portion. El RPC inserta
+  // una parte normal con folio (el puente crea la factura en cobranza) y descuenta el resto.
+  async facturarSiguienteParte(splitId, amount, qty, actor, notes) {
+    const {data, error} = await supabase.rpc("facturar_siguiente_parte", {
+      p_split_id: splitId, p_amount: amount, p_qty: qty, p_actor: actor, p_notes: notes || null
+    });
+    if(error) throw error;
     return data;
   },
   // 🆕 v10.58.34 — Asignar N facturas (splits) a una sola orden.
@@ -6596,6 +6609,72 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 //
 // NO confundir con AssignOCFolioModal > "Dividir en N facturas" que arrastra
 // órdenes ENTERAS a grupos. Este modal divide UNA orden en porciones.
+// v10.84.0 — FACTURAR LA SIGUIENTE PARTE. Una pantalla chica a proposito: el caso normal es «factura
+// todo lo que queda», y lo unico que Karla decide es cuanto. Las piezas se calculan en proporcion y
+// se pueden corregir. Se captura en SUBTOTAL, que es la base con la que se armo el plan.
+function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
+  const restoSinIva = Number(resto?.amount_portion||0);
+  const restoQty = Number(resto?.qty_portion||0);
+  const [amount,setAmount] = useState(restoSinIva);
+  const [qty,setQty] = useState(restoQty);
+  const [qtyTocada,setQtyTocada] = useState(false);
+  const [notes,setNotes] = useState("");
+  const [saving,setSaving] = useState(false);
+  const [err,setErr] = useState("");   // showToast es de App: el error se pinta aqui mismo
+  const fmtMx = n => Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const todo = Math.abs(Number(amount) - restoSinIva) <= 0.01;
+  // las piezas siguen al dinero mientras Karla no las toque a mano
+  const onAmount = v => {
+    const a = Math.max(0, parseFloat(v)||0);
+    setAmount(a);
+    if(!qtyTocada){
+      if(Math.abs(a - restoSinIva) <= 0.01) setQty(restoQty);
+      else setQty(Math.min(restoQty-1, Math.max(1, Math.round(restoQty * (a / (restoSinIva||1))))));
+    }
+  };
+  const amountOk = Number(amount) > 0 && Number(amount) <= restoSinIva + 0.005;
+  const qtyOk = todo ? Number(qty) === restoQty : (Number(qty) >= 1 && Number(qty) < restoQty);
+  const can = !saving && amountOk && qtyOk;
+  useEffect(()=>{const k=e=>{const t=e.target?.tagName;if(t==="INPUT"||t==="TEXTAREA")return;if(e.key==="Escape"&&!saving)onClose()};window.addEventListener("keydown",k);return()=>window.removeEventListener("keydown",k)},[saving,onClose]);
+  return <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%"}}>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><FileTextIcon size={17} weight="bold"/>Facturar siguiente parte · {order?.production_number}</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{order?.client} · quedan <b style={{color:C.tx}}>${fmtMx(restoSinIva)}</b> sin IVA ({restoQty.toLocaleString("es-MX")} pzas) por facturar.</p>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <button onClick={()=>{setQtyTocada(false);setAmount(restoSinIva);setQty(restoQty)}} style={{...bs(todo?C.ac:C.sf,todo?"#fff":C.t2),padding:"6px 12px",border:todo?"none":"0.5px solid "+C.bd}}>Todo lo que queda</button>
+        <span style={{fontSize:10,color:C.t2,alignSelf:"center"}}>o captura una parte:</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+        <div>
+          <label style={lbl}>Subtotal a facturar (sin IVA)</label>
+          <input type="number" step="0.01" min="0" value={amount} onChange={e=>onAmount(e.target.value)} style={{...inp,fontSize:15,fontWeight:700}}/>
+          <div style={{fontSize:9,color:C.t2,marginTop:2}}>Total con IVA: ${fmtMx(Number(amount)*1.16)}</div>
+          {!amountOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>Tiene que ser mayor a cero y no más de ${fmtMx(restoSinIva)}</div>}
+        </div>
+        <div>
+          <label style={lbl}>Piezas</label>
+          <input type="number" min="1" max={restoQty} value={qty} onChange={e=>{setQtyTocada(true);setQty(Math.max(0,parseInt(e.target.value||0,10)))}} style={inp}/>
+          <div style={{fontSize:9,color:C.t2,marginTop:2}}>{todo?"Todas las que quedan":"Se calculan en proporción; puedes corregirlas"}</div>
+          {!qtyOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>{todo?`Si facturas todo, son las ${restoQty.toLocaleString("es-MX")} piezas`:`Entre 1 y ${(restoQty-1).toLocaleString("es-MX")}: deja piezas en el resto`}</div>}
+        </div>
+      </div>
+      <label style={lbl}>Nota (opcional)</label>
+      <input type="text" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="p. ej. segunda entrega, pagó la anterior" style={{...inp,marginBottom:14}}/>
+      <div style={{background:C.sf,borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,marginBottom:14,lineHeight:1.5}}>
+        Se emite <b style={{color:C.tx}}>una factura por ${fmtMx(Number(amount)*1.16)}</b> (con IVA) ligada a esta orden.
+        {todo ? <> Era la última parte: la orden queda <b style={{color:C.ok}}>facturada completa</b>.</> : <> Quedarán <b style={{color:C.wn}}>${fmtMx(restoSinIva-Number(amount))}</b> sin IVA por facturar después.</>}
+      </div>
+      {err&&<div style={{background:"#ff3b3010",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dn}}>❌ {err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Cancelar</button>
+        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
+          <FileTextIcon size={14} weight="bold"/>{saving?"Facturando…":"Facturar"}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
 function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const isMaq = order?.order_type === "maquila";
   // v10.73.11 — orden histórica (Alpha): los folios los teclea Karla (los REALES de Alpha), NO se sugieren del contador interno.
@@ -6629,6 +6708,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // Toggle a CON IVA para quien tenga el total a la mano. La fuente de verdad interna sigue siendo
   // amountConIva (NO se toca reconciliación/submit/divideEqual): solo cambia la capa de edición.
   const [captureMode, setCaptureMode] = useState("subtotal"); // "subtotal" | "con_iva"
+  const [avisoResto, setAvisoResto] = useState("");           // v10.84.0 — showToast es de App, no llega aqui
 
   // ESC close (solo cuando NO está guardando)
   // v10.58.43 #25: guard de INPUT/TEXTAREA (convención escStack) — ESC dentro de un
@@ -6684,7 +6764,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       let nextF = baseF, nextR = baseR;
       return prev.map(s => {
         // Solo auto-sugerir si folio vacío
-        if (s.doc_type === "corona_saldo") return {...s, folio: ""};
+        if (s.doc_type === "corona_saldo" || s.doc_type === "por_facturar") return {...s, folio: ""};
         if (s.folio && s.folio.length > 2) return s;  // respetar lo que el usuario ya tecleó
         if (s.doc_type === "factura" && nextF != null) {
           const f = "D-" + nextF;
@@ -6748,7 +6828,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const coronaOk = !hasCoronaSaldo || coronaTotalSinIva <= coronaBalance;
 
   // Validación de folios fiscales (factura/remision)
-  const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo");
+  const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo" && s.doc_type !== "por_facturar");
   const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
   const foliosFmtOk = folioAuto ? true : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
@@ -6776,10 +6856,14 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const amountsOk = splits.every(s => amountToBackend(Number(s.amountConIva||0), s.doc_type) > 0);
   const splitsMin = splits.length >= 2;
   const coronaTypesValid = !hasCoronaSaldo || isCorona;  // corona_saldo solo si cliente Corona
+  // v10.84.0 — «Despues (el resto)»: a lo mas UNA parte (es el resto, se va partiendo al facturar)
+  // y nunca todas (para dejarlo todo pendiente no hace falta partir nada). Mismas reglas que el RPC.
+  const nRestos = splits.filter(s => s.doc_type === "por_facturar").length;
+  const restoOk = nRestos <= 1 && nRestos < splits.length;
 
   const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosUnicos
                     && foliosPrefixOk && reasonOk && qtysOk && amountsOk && splitsMin
-                    && coronaOk && coronaTypesValid;
+                    && coronaOk && coronaTypesValid && restoOk;
 
   // Actions
   const updateSplit = (idx, patch) => {
@@ -6834,6 +6918,27 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     setSplits(newSplits);
   };
 
+  // v10.84.0 — EL BOTON QUE RESUELVE EL CASO. Karla captura la parte de hoy; lo que falta para
+  // llegar al total se va a la ULTIMA parte como «Despues (el resto)». Reparte el residuo entero:
+  // asi el semaforo cierra solo y no hay que teclear una resta con centavos.
+  const elRestoDespues = () => {
+    if (splits.length < 2) return;
+    const last = splits.length - 1;
+    const otras = splits.slice(0, last);
+    const qtyOtras = otras.reduce((a, sp) => a + Number(sp.qty||0), 0);
+    const sinIvaOtras = otras.reduce((a, sp) => a + amountToBackend(Number(sp.amountConIva||0), sp.doc_type), 0);
+    const qtyResto = totalQty - qtyOtras;
+    const restoSinIva = Math.round((totalSinIva - sinIvaOtras) * 100) / 100;
+    if (qtyResto <= 0 || restoSinIva <= 0) {
+      setAvisoResto("Las otras partes ya cubren toda la orden: no queda resto que dejar para después.");
+      return;
+    }
+    setAvisoResto("");
+    setSplits(prev => prev.map((sp, i) => i === last
+      ? {...sp, doc_type: "por_facturar", folio: "", qty: qtyResto, amountConIva: restoSinIva, montoTocado: true}
+      : sp));
+  };
+
   const onChangeQty = (idx, val) => {
     const qty = Math.max(0, parseInt(val||0, 10));
     const split = splits[idx];
@@ -6860,7 +6965,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           qty: Number(s.qty),
           amount: amountSinIva,
           doc_type: s.doc_type,
-          folio: s.doc_type === "corona_saldo" ? null : (s.folio||"").toUpperCase(),
+          folio: (s.doc_type === "corona_saldo" || s.doc_type === "por_facturar") ? null : (s.folio||"").toUpperCase(),
           pre_assigned: allPreAssigned,
           reason: allPreAssigned ? (globalReason||"").trim() : null,
           payment_status: s.payment_status || "unpaid"
@@ -6877,7 +6982,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:920,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><FilesIcon size={17} weight="bold"/>Facturar por partes · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
-        Divide UNA orden en varias facturas con cantidades parciales.
+        Divide UNA orden en varias facturas con cantidades parciales. Si el cliente quiere una parte hoy y
+        el resto después (conforme pague), captura la de hoy y pulsa <b>⏳ El resto, después</b>: lo que falte
+        queda como pendiente y se factura desde la ficha de la orden cuando toque.
         No confundir con "🔀 Dividir en N facturas" del modal de OC (que agrupa órdenes enteras).
       </p>
       {isHistoric && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span><strong>Orden histórica (Alpha):</strong> en cada parte teclea el <strong>folio REAL que ya emitió Alpha</strong> — el sistema NO lo sugiere (el consecutivo interno no aplica a estas órdenes).</span></div>}
@@ -6918,6 +7025,11 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           onChange={e=>{const v=e.target.value;if(v==="")return;setSplitsCountSafe(parseInt(v,10))}}
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
         <div style={{flex:1}}/>
+        <button onClick={elRestoDespues}
+          style={{...bs(C.amb+"18",C.wn),padding:"6px 12px",border:"1px solid "+C.amb+"55"}}
+          title="Lo que no esté en las otras partes se deja como resto para facturarlo después, conforme el cliente pague">
+          ⏳ El resto, después
+        </button>
         <button onClick={divideEqualBetweenN}
           style={{...bs(C.fac),padding:"6px 12px"}}>
           <MagicWandIcon size={13} weight="bold"/>Dividir igual entre {splits.length}
@@ -6971,8 +7083,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 placeholder="0.00"/>
               <div style={{fontSize:9,color:C.t2,marginTop:2,marginLeft:2}}>
                 {captureMode==="subtotal"
-                  ? (isFactura ? `Total con IVA: $${fmtMx(s.amountConIva)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)")
-                  : (isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : "Sin IVA (remisión)")}
+                  ? (isFactura ? `Total con IVA: $${fmtMx(s.amountConIva)}` : isCoronaSld ? "Sin IVA (descuento directo)" : s.doc_type === "por_facturar" ? "Sin IVA · se factura después" : "Sin IVA (remisión)")
+                  : (isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : s.doc_type === "por_facturar" ? "Sin IVA · se factura después" : "Sin IVA (remisión)")}
               </div>
             </div>
             <div>
@@ -6988,13 +7100,14 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 style={{...inp,padding:"6px 10px",fontSize:12,width:"130px",appearance:"auto"}}>
                 <option value="factura">📄 Factura D-</option>
                 <option value="remision">📋 Remisión R-</option>
+                <option value="por_facturar">⏳ Después (el resto)</option>
                 {isCorona && <option value="corona_saldo">💎 Saldo Corona</option>}
               </select>
             </div>
             <div>
-              {isCoronaSld ? (
+              {(isCoronaSld || s.doc_type === "por_facturar") ? (
                 <div style={{fontSize:11,color:C.t2,fontStyle:"italic",padding:"6px 0"}}>
-                  Sin folio fiscal
+                  {isCoronaSld ? "Sin folio fiscal" : "Se asigna al facturarla"}
                 </div>
               ) : folioAuto ? (
                 /* F1: en modo emisor el folio nace del counter → chip en vez de input */
@@ -7044,6 +7157,18 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         </div>
       )}
 
+      {/* v10.84.0 — el resto: uno, y no todos */}
+      {avisoResto && (
+        <div style={{background:C.amb+"10",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn,display:"flex",alignItems:"center",gap:4}}>
+          <WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>{avisoResto}
+        </div>
+      )}
+      {!restoOk && (
+        <div style={{background:C.amb+"10",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn,display:"flex",alignItems:"center",gap:4}}>
+          <WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>
+          {nRestos > 1 ? "Solo puede haber UNA parte «Después»: es el resto, y se va partiendo conforme se factura." : "Al menos una parte se tiene que facturar hoy; para dejarlo todo pendiente no hace falta partir la orden."}
+        </div>
+      )}
       {/* Validación folios */}
       {(!foliosFmtOk || !foliosUnicos || !foliosPrefixOk) && (
         <div style={{background:C.amb+"10",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn}}>
@@ -11668,6 +11793,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
                 <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>#{s.position}</span>
                 {s.doc_type==="corona_saldo"
                   ? <span style={{color:C.emr}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
+                  : s.doc_type==="por_facturar"
+                  ? <span style={{color:C.wn,fontFamily:"'Geist',sans-serif"}}>⏳ por facturar</span>
                   : <span style={{color:s.doc_type==="factura"?C.fac:C.live}}>{s.doc_type==="factura"?<FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>:<ReceiptIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>}{s.invoice_folio}</span>}
                 <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                 {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:F.micro,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
@@ -11677,6 +11804,12 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
               {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
             </div>}
           </div>
+          {/* v10.84.0 — el resto se factura desde aqui, cuando el cliente pida la siguiente parte */}
+          {(()=>{const r=restoPorFacturar(o);if(!r)return null;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;
+            return <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed "+C.ac+"40",fontFamily:"'Geist',sans-serif"}}>
+              <div style={{fontSize:F.meta,color:C.tx,fontWeight:600}}>Facturado ${fac.toLocaleString("es-MX",{minimumFractionDigits:2})} de ${tot.toLocaleString("es-MX",{minimumFractionDigits:2})} · <span style={{color:C.wn}}>faltan ${Number(r.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})}</span> <span style={{color:C.t2,fontWeight:500}}>(sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas)</span></div>
+              {(role==="admin"||role==="karla")&&!o.stage.includes("cancelled")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6}}><button onClick={()=>onAction(o.id,"facturar_siguiente_parte")} style={{...bt(C.fac),width:"100%",justifyContent:"center"}} title="Emite la siguiente factura sobre el resto; el resto se descuenta solo"><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>}
+            </div>;})()}
         </div>}
         {/* v10.73.14 — /impeccable distill (re-critique P1): los 5 banners de flag full-width a medida pasan a UNA fila
             de chips Badge con tonos semánticos, ordenados por urgencia (reimprimir/devuelta → info). Demotados bajo el
@@ -16178,6 +16311,7 @@ export default function PrintFlow() {
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
   const [refacturarModal,setRefacturarModal]=useState(null); // 🆕 v10.81.0 — Re-facturar: confirmar liberación de folio cancelado
   const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
+  const [siguienteParteModal,setSiguienteParteModal]=useState(null); // v10.84.0 — {order, resto}: facturar la siguiente parte
   const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
   const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
   const [matrixCancelModal,setMatrixCancelModal]=useState(null); // 🆕 v10.58.40 — Modal confirmar cancel línea/grupo del plan matriz
@@ -18263,6 +18397,14 @@ export default function PrintFlow() {
     }
     if(action==="detail"){setDetailModalId(id)}
     if(action==="advance")advance(id,payload);
+    // v10.84.0 — Facturar la siguiente parte de una orden por partes en el tiempo
+    if(action==="facturar_siguiente_parte"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(user!=="admin"&&user!=="karla"){showToast("❌ Solo admin o Karla pueden facturar.","error");return}
+      const r=restoPorFacturar(o);
+      if(!r){showToast("Esta orden no tiene resto por facturar.","warning");return}
+      setSiguienteParteModal({order:o,resto:r});
+      return;
+    }
     // v10.58.34 — Facturar por partes: abre SplitInvoiceModal
     if(action==="split_invoice"){const o=orders.find(x=>x.id===id);if(!o)return;
       // Gate: alineado con assign_invoice_splits backend (admin/karla only)
@@ -18970,7 +19112,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               lector. Aquí está: los cierres sin costo, con input inline. setMaintenanceCost solo toca `cost`. */}
           {user==="admin"&&(()=>{const pend=maintenance.filter(m=>m.ended_at&&m.cost==null).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));if(!pend.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.wn,display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={15} weight="bold"/>Costos de mantenimiento pendientes ({pend.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Reparaciones cerradas sin costo. Captúralo cuando llegue la factura del técnico; el reporte semanal lo excluye hasta entonces.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:8}}>{pend.map(rec=><MaintCostRow key={rec.id} rec={rec} onSave={async(id,cost)=>{try{await db.setMaintenanceCost(id,cost);const m=await db.loadMaintenance();setMaintenance(m);showToast("✅ Costo capturado","success")}catch(e){console.error("[setMaintenanceCost] Error:",e);showToast("❌ "+(e?.message||"No se pudo guardar el costo"),"error")}}}/>)}</div></div>})()}
           {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));/* v10.84.0 — las ordenes facturadas por partes en el tiempo ya estan ENTREGADAS y no viven en salidas: sin esta lista, el resto por facturar no lo veria nadie. Se ordenan de la mas vieja a la mas nueva: la que mas tiempo lleva esperando va primero. */const partes=filteredOrders.filter(o=>restoPorFacturar(o)&&!o.stage.includes("cancelled")).sort((a,b)=>String(restoPorFacturar(a).created_at||"").localeCompare(String(restoPorFacturar(b).created_at||"")));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,o.invoice_folio?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{o.invoice_folio?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!o.invoice_folio&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0&&partes.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}{partes.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.amb+"22",color:C.wn,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.amb+"55"}}>{partes.length}</span><FilesIcon size={14} weight="bold" color={C.wn} style={{flexShrink:0}}/>Por facturar en partes <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· ya entregadas; se factura el resto cuando el cliente pida la siguiente</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{partes.map(o=>{const r=restoPorFacturar(o);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const desde=r.created_at?Math.floor((Date.now()-new Date(r.created_at).getTime())/86400000):null;return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+C.amb+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}<div style={{fontSize:12,color:C.tx,marginTop:6}}>Facturado <b>{fmt(fac)}</b> de {fmt(tot)}</div><div style={{fontSize:13,fontWeight:700,color:C.wn,marginTop:2}}>Faltan {fmt(Number(r.amount_portion))} <span style={{fontSize:10,fontWeight:500,color:C.t2}}>sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas{desde!=null?" · desde hace "+desde+" día"+(desde===1?"":"s"):""}</span></div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"facturar_siguiente_parte")}} style={{...bt(C.fac),marginTop:10,width:"100%",justifyContent:"center"}}><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>})}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
@@ -19390,6 +19532,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }}
         onClose={()=>setMatrixCancelModal(null)}/>}
       {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
+      {siguienteParteModal&&<FacturarSiguienteParteModal order={siguienteParteModal.order} resto={siguienteParteModal.resto}
+        onClose={()=>setSiguienteParteModal(null)}
+        onConfirm={async({amount,qty,notes})=>{
+          const actor = userLogin || user;
+          const r = await db.facturarSiguienteParte(siguienteParteModal.resto.id, amount, qty, actor, notes);
+          showToast(r?.cerrado
+            ? `📄 ${r.folio} · era la última parte: ${siguienteParteModal.order.production_number} queda facturada completa`
+            : `📄 ${r.folio} por $${Number(amount).toLocaleString("es-MX",{minimumFractionDigits:2})} · quedan $${Number(r.resto).toLocaleString("es-MX",{minimumFractionDigits:2})} por facturar`, "success");
+          setSiguienteParteModal(null);
+          reload();
+        }}/>}
       {splitInvoiceModal&&<SplitInvoiceModal order={splitInvoiceModal} user={user} userLogin={userLogin}
         onConfirm={async(payload)=>{
           const actor = userLogin || user;
