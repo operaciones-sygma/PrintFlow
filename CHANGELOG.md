@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.1 — Lo que cazó el scan de «por partes en el tiempo» — 14-sep-2026
+
+Scan adversarial sobre v10.84.0 con tope duro: 8 buscadores + un verificador por hallazgo, **28
+agentes**. 20 confirmados, 0 refutados, 14 P3 sin verificar. Agrupados, **9 causas raíz**. Las dos
+más serias las verifiqué a mano antes de tocar nada.
+
+🔴 **Cancelar la orden dejaba un resto VIVO colgando de una orden cancelada.** La cascada de
+cancelación recorre las partes con un cursor de foto fija; al cancelar una parte facturada, mi
+bloque «regresa al resto» **reabría** un resto que el cursor ya no veía. Quedaba una parte viva
+que CobranzaFlow pintaba como «faltan $X» y que la invariante 31 no veía (excluye órdenes
+canceladas). Arreglo: el dinero de una orden muerta **no regresa a ningún resto**; y **el resto
+tiene que ser la última parte** (el RPC lo exige; el botón ya lo producía así). + **invariante 32**:
+orden cancelada ⇒ cero partes vivas.
+
+🔴 **Con el emisor activo no había forma de ligar un folio existente.** El bloque de ligado vivía
+dentro de `IF NOT v_emitter`: un folio tecleado se ignoraba y se acuñaba otro — **CxC duplicada**.
+Y era exactamente lo que PENDIENTES prometía para el caso de Karla. Ahora todo folio escrito pasa
+por la validación: sin `p_allow_link` levanta «ya está registrado» (el front pregunta y reintenta),
+con él **liga** sin acuñar; si no existe, se rechaza. En la UI, con el emisor activo, cada parte
+tiene **«¿ya existe? ligar»** que destapa el campo del folio.
+
+🔴 **Cancelar el CFDI de una parte ante el SAT no cerraba la parte.** Era la única puerta para una
+parte timbrada, y dejaba el hueco mudo. Nuevo trigger `split_sigue_a_su_cfdi`: cierra la parte y
+regresa su dinero al resto. **No toca pagos** (la regla del dueño del 4-sep los deja registrados
+para decidir) y **no cancela la orden**; sólo aplica a órdenes que tienen un resto.
+
+Lo demás, en un renglón cada uno:
+- `facturar_siguiente_parte`: candados en el mismo orden que las cancelaciones (orden → parte,
+  antes al revés: posible deadlock); `p_folio` con emisor activo se rechaza en vez de ignorarse;
+  un resto de **una pieza** sólo se factura completo (la cantidad manda sobre el dinero y el modal
+  lo dice); si el plan es pre-asignado y la orden sigue en producción, la parte nueva hereda la
+  marca y la razón.
+- El modal de siguiente parte deja elegir **Factura o Remisión** (propone el tipo del plan; antes
+  siempre salía factura con IVA) y pide el folio cuando el emisor está apagado.
+- `corona_saldo` cancelado también regresa al resto (si no, la invariante 31 quedaba en rojo fijo).
+- El resto no nace «anticipado» ni con razón; `invoice_reason`, `splits_count`, el toast y el
+  badge **«Dividida en N folios»** ya no lo cuentan como folio; un resto «Consumida» no cuenta
+  como cancelado.
+- Los avisos de «El resto, después» distinguen *dinero* de *piezas*.
+- Invariante 31 blindada con `COALESCE` (un precio NULL se tragaba la fila y salía «OK»).
+
+Verificado con rollback sobre P-0070: resto en medio rechazado; ligar con emisor pide
+confirmación y luego liga **sin mover el contador** (46→46); CFDI cancelado regresa $6,200 al
+resto; cancelar la orden por UPDATE directo deja **cero** partes vivas; facturar sobre orden
+cancelada se rechaza.
+
+**Quedan 14 P3 sin verificar** (etiquetas, bordes de flotantes, el pisado de la última fila por
+«El resto, después» sin confirmar). Anotados; ninguno toca dinero.
+
+---
+
 ## v10.84.0 — Facturar una orden por partes A LO LARGO DEL TIEMPO — 14-sep-2026
 
 **El caso (Karla).** Un cliente grande pide que de una orden se le facture **una parte hoy y el resto

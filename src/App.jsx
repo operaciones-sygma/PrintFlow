@@ -1928,9 +1928,10 @@ const db = {
   // v10.84.0 — Facturar la SIGUIENTE parte de una orden facturada por partes en el tiempo.
   // amount y qty son la porcion de HOY en SUBTOTAL (sin IVA), igual que amount_portion. El RPC inserta
   // una parte normal con folio (el puente crea la factura en cobranza) y descuenta el resto.
-  async facturarSiguienteParte(splitId, amount, qty, actor, notes) {
+  async facturarSiguienteParte(splitId, amount, qty, actor, notes, docType="factura", folio=null) {
     const {data, error} = await supabase.rpc("facturar_siguiente_parte", {
-      p_split_id: splitId, p_amount: amount, p_qty: qty, p_actor: actor, p_notes: notes || null
+      p_split_id: splitId, p_amount: amount, p_qty: qty, p_actor: actor, p_notes: notes || null,
+      p_doc_type: docType || "factura", p_folio: folio || null   // v10.84.1: remision y modo manual
     });
     if(error) throw error;
     return data;
@@ -6621,6 +6622,19 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const [notes,setNotes] = useState("");
   const [saving,setSaving] = useState(false);
   const [err,setErr] = useState("");   // showToast es de App: el error se pinta aqui mismo
+  // v10.84.1 (scan) — EL TIPO NO ERA ELEGIBLE: siempre salia factura con IVA, aunque el plan fuera
+  // de remisiones. Se propone el tipo de la ultima parte facturada del plan, y se puede cambiar.
+  const tipoDelPlan = (order?.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar"&&x.doc_type!=="corona_saldo")
+    .sort((a,b)=>(a.position||0)-(b.position||0)).at(-1)?.doc_type || "factura";
+  const [docType,setDocType] = useState(tipoDelPlan);
+  const conIva = docType === "factura";
+  // v10.84.1 (scan) — con el emisor apagado (u orden historica) el folio lo teclea Karla, como en el split
+  const [folioAuto,setFolioAuto] = useState(true);
+  const [folio,setFolio] = useState("");
+  useEffect(()=>{let alive=true;(async()=>{try{const e=await db.getFolioEmitterEnabled();if(alive)setFolioAuto(e===true&&order?.created_by!=="import-historico")}catch{if(alive)setFolioAuto(false)}})();return()=>{alive=false}},[order?.created_by]);
+  const folioRegex = docType==="factura" ? /^[DF]-[1-9]\d*$/ : /^(?:RS|R)-[1-9]\d*$/;
+  const folioOk = folioAuto || folioRegex.test((folio||"").toUpperCase());
+  const unaPieza = restoQty === 1;   // v10.84.1 (scan) — con 1 pieza solo cabe «todo lo que queda»
   const fmtMx = n => Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   const todo = Math.abs(Number(amount) - restoSinIva) <= 0.01;
   // las piezas siguen al dinero mientras Karla no las toque a mano
@@ -6632,24 +6646,29 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
       else setQty(Math.min(restoQty-1, Math.max(1, Math.round(restoQty * (a / (restoSinIva||1))))));
     }
   };
-  const amountOk = Number(amount) > 0 && Number(amount) <= restoSinIva + 0.005;
+  const amountOk = Number(amount) > 0 && Number(amount) <= restoSinIva + 0.005 && (!unaPieza || todo);
   const qtyOk = todo ? Number(qty) === restoQty : (Number(qty) >= 1 && Number(qty) < restoQty);
-  const can = !saving && amountOk && qtyOk;
+  const can = !saving && amountOk && qtyOk && folioOk;
   useEffect(()=>{const k=e=>{const t=e.target?.tagName;if(t==="INPUT"||t==="TEXTAREA")return;if(e.key==="Escape"&&!saving)onClose()};window.addEventListener("keydown",k);return()=>window.removeEventListener("keydown",k)},[saving,onClose]);
   return <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><FileTextIcon size={17} weight="bold"/>Facturar siguiente parte · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{order?.client} · quedan <b style={{color:C.tx}}>${fmtMx(restoSinIva)}</b> sin IVA ({restoQty.toLocaleString("es-MX")} pzas) por facturar.</p>
-      <div style={{display:"flex",gap:8,marginBottom:12}}>
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
         <button onClick={()=>{setQtyTocada(false);setAmount(restoSinIva);setQty(restoQty)}} style={{...bs(todo?C.ac:C.sf,todo?"#fff":C.t2),padding:"6px 12px",border:todo?"none":"0.5px solid "+C.bd}}>Todo lo que queda</button>
-        <span style={{fontSize:10,color:C.t2,alignSelf:"center"}}>o captura una parte:</span>
+        <span style={{fontSize:10,color:C.t2}}>{unaPieza ? "El resto tiene una sola pieza: solo se puede facturar completo." : "o captura una parte:"}</span>
+        <div style={{flex:1}}/>
+        <select value={docType} onChange={e=>setDocType(e.target.value)} style={{...inp,width:150,padding:"6px 10px",fontSize:12,appearance:"auto"}} title="Tipo de documento de esta parte">
+          <option value="factura">📄 Factura (con IVA)</option>
+          <option value="remision">📋 Remisión (sin IVA)</option>
+        </select>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
         <div>
           <label style={lbl}>Subtotal a facturar (sin IVA)</label>
-          <input type="number" step="0.01" min="0" value={amount} onChange={e=>onAmount(e.target.value)} style={{...inp,fontSize:15,fontWeight:700}}/>
-          <div style={{fontSize:9,color:C.t2,marginTop:2}}>Total con IVA: ${fmtMx(Number(amount)*1.16)}</div>
-          {!amountOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>Tiene que ser mayor a cero y no más de ${fmtMx(restoSinIva)}</div>}
+          <input type="number" step="0.01" min="0" value={amount} onChange={e=>onAmount(e.target.value)} disabled={unaPieza} style={{...inp,fontSize:15,fontWeight:700,opacity:unaPieza?.6:1}}/>
+          <div style={{fontSize:9,color:C.t2,marginTop:2}}>{conIva?`Total con IVA: $${fmtMx(Number(amount)*1.16)}`:"Remisión: sin IVA"}</div>
+          {!amountOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>{unaPieza?"Con una sola pieza solo se factura todo lo que queda":`Tiene que ser mayor a cero y no más de $${fmtMx(restoSinIva)}`}</div>}
         </div>
         <div>
           <label style={lbl}>Piezas</label>
@@ -6658,16 +6677,21 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
           {!qtyOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>{todo?`Si facturas todo, son las ${restoQty.toLocaleString("es-MX")} piezas`:`Entre 1 y ${(restoQty-1).toLocaleString("es-MX")}: deja piezas en el resto`}</div>}
         </div>
       </div>
+      {!folioAuto&&<div style={{marginBottom:12}}>
+        <label style={lbl}>Folio {docType==="factura"?"(D-/F-)":"(R-/RS-)"}</label>
+        <input type="text" value={folio} onChange={e=>setFolio(e.target.value.toUpperCase())} placeholder={docType==="factura"?"F-XXXX":"RS-XXXX"} style={{...inp,fontFamily:"'Geist Mono',monospace",border:(folio&&!folioOk)?"1px solid "+C.dn:undefined}}/>
+        <div style={{fontSize:9,color:C.t2,marginTop:2}}>El emisor está apagado (u orden histórica): teclea el folio real.</div>
+      </div>}
       <label style={lbl}>Nota (opcional)</label>
       <input type="text" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="p. ej. segunda entrega, pagó la anterior" style={{...inp,marginBottom:14}}/>
       <div style={{background:C.sf,borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,marginBottom:14,lineHeight:1.5}}>
-        Se emite <b style={{color:C.tx}}>una factura por ${fmtMx(Number(amount)*1.16)}</b> (con IVA) ligada a esta orden.
+        Se emite <b style={{color:C.tx}}>{conIva?`una factura por $${fmtMx(Number(amount)*1.16)}`:`una remisión por $${fmtMx(Number(amount))}`}</b> {conIva?"(con IVA)":"(sin IVA)"} ligada a esta orden.
         {todo ? <> Era la última parte: la orden queda <b style={{color:C.ok}}>facturada completa</b>.</> : <> Quedarán <b style={{color:C.wn}}>${fmtMx(restoSinIva-Number(amount))}</b> sin IVA por facturar después.</>}
       </div>
       {err&&<div style={{background:"#ff3b3010",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dn}}>❌ {err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Cancelar</button>
-        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
+        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:folioAuto?null:(folio||"").toUpperCase()})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
           <FileTextIcon size={14} weight="bold"/>{saving?"Facturando…":"Facturar"}
         </button>
       </div>
@@ -6831,7 +6855,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const foliosNoCorona = splits.filter(s => s.doc_type !== "corona_saldo" && s.doc_type !== "por_facturar");
   const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
-  const foliosFmtOk = folioAuto ? true : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
+  // v10.84.1: con emisor ON solo se validan los folios ESCRITOS (los de ligar); el resto va vacio
+  const foliosFmtOk = folioAuto ? foliosNoCorona.every(s => !s.ligar || folioRegex.test((s.folio||"").toUpperCase()))
+                                : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
   const foliosUnicos = folioAuto ? true : (() => {
     const set = new Set();
     for (const s of foliosNoCorona) {
@@ -6859,7 +6885,10 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // v10.84.0 — «Despues (el resto)»: a lo mas UNA parte (es el resto, se va partiendo al facturar)
   // y nunca todas (para dejarlo todo pendiente no hace falta partir nada). Mismas reglas que el RPC.
   const nRestos = splits.filter(s => s.doc_type === "por_facturar").length;
-  const restoOk = nRestos <= 1 && nRestos < splits.length;
+  // v10.84.1 (scan): el resto tiene que ser la ULTIMA parte (el RPC lo exige: en medio, la cascada de
+  // cancelacion lo cerraba antes que las partes posteriores y cada una lo reabria).
+  const restoAlFinal = nRestos === 0 || splits[splits.length - 1]?.doc_type === "por_facturar";
+  const restoOk = nRestos <= 1 && nRestos < splits.length && restoAlFinal;
 
   const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosUnicos
                     && foliosPrefixOk && reasonOk && qtysOk && amountsOk && splitsMin
@@ -6929,10 +6958,9 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     const sinIvaOtras = otras.reduce((a, sp) => a + amountToBackend(Number(sp.amountConIva||0), sp.doc_type), 0);
     const qtyResto = totalQty - qtyOtras;
     const restoSinIva = Math.round((totalSinIva - sinIvaOtras) * 100) / 100;
-    if (qtyResto <= 0 || restoSinIva <= 0) {
-      setAvisoResto("Las otras partes ya cubren toda la orden: no queda resto que dejar para después.");
-      return;
-    }
+    // v10.84.1 (scan): distinguir dinero de piezas — el resto necesita al menos 1 pieza y $0.01
+    if (restoSinIva <= 0) { setAvisoResto("Las otras partes ya cubren todo el dinero de la orden: no queda resto que dejar para después."); return; }
+    if (qtyResto <= 0) { setAvisoResto("Las otras partes ya reparten todas las piezas: baja la cantidad de alguna para dejar al menos 1 en el resto."); return; }
     setAvisoResto("");
     setSplits(prev => prev.map((sp, i) => i === last
       ? {...sp, doc_type: "por_facturar", folio: "", qty: qtyResto, amountConIva: restoSinIva, montoTocado: true}
@@ -6965,9 +6993,11 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           qty: Number(s.qty),
           amount: amountSinIva,
           doc_type: s.doc_type,
-          folio: (s.doc_type === "corona_saldo" || s.doc_type === "por_facturar") ? null : (s.folio||"").toUpperCase(),
-          pre_assigned: allPreAssigned,
-          reason: allPreAssigned ? (globalReason||"").trim() : null,
+          // v10.84.1: con emisor ON solo viaja el folio si se pidio LIGAR; el resto nunca lleva pre_assigned
+          folio: (s.doc_type === "corona_saldo" || s.doc_type === "por_facturar") ? null
+               : (folioAuto && !s.ligar) ? null : (s.folio||"").toUpperCase(),
+          pre_assigned: s.doc_type === "por_facturar" ? false : allPreAssigned,
+          reason: (allPreAssigned && s.doc_type !== "por_facturar") ? (globalReason||"").trim() : null,
           payment_status: s.payment_status || "unpaid"
         };
       });
@@ -7109,14 +7139,21 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 <div style={{fontSize:11,color:C.t2,fontStyle:"italic",padding:"6px 0"}}>
                   {isCoronaSld ? "Sin folio fiscal" : "Se asigna al facturarla"}
                 </div>
-              ) : folioAuto ? (
-                /* F1: en modo emisor el folio nace del counter → chip en vez de input */
-                <div style={{fontSize:11,fontWeight:600,color:C.fac,padding:"6px 0",display:"flex",alignItems:"center",gap:4,width:"130px"}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span></div>
+              ) : folioAuto && !s.ligar ? (
+                /* F1: en modo emisor el folio nace del counter → chip en vez de input.
+                   v10.84.1 (scan): «¿ya existe?» destapa el input para LIGAR una factura que ya esta en cobranza
+                   (mismo cliente, mismo monto). Antes, con el emisor activo, no habia forma: se acuñaba otra. */
+                <div style={{fontSize:11,fontWeight:600,color:C.fac,padding:"6px 0",display:"flex",alignItems:"center",gap:4,width:"130px",flexWrap:"wrap"}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span>
+                  <button onClick={()=>updateSplit(i,{ligar:true})} style={{background:"none",border:"none",padding:0,fontSize:10,color:C.ac,cursor:"pointer",textDecoration:"underline"}} title="Si esta parte ya se facturó (p. ej. una factura emitida antes de partir la orden), escribe su folio para ligarla en vez de emitir otra">¿ya existe? ligar</button>
+                </div>
               ) : (
+                <>
                 <input type="text" value={s.folio||""}
                   onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
                   style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
-                  placeholder={isFactura ? "D-XXXX" : "R-XXXX"}/>
+                  placeholder={folioAuto ? (isFactura ? "F-XXXX existente" : "RS-XXXX existente") : (isFactura ? "D-XXXX" : "R-XXXX")}/>
+                {folioAuto&&s.ligar&&<button onClick={()=>updateSplit(i,{ligar:false,folio:""})} style={{background:"none",border:"none",padding:0,fontSize:10,color:C.t2,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:2}}>mejor que se asigne solo</button>}
+                </>
               )}
             </div>
           </div>;
@@ -7166,7 +7203,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
       {!restoOk && (
         <div style={{background:C.amb+"10",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wn,display:"flex",alignItems:"center",gap:4}}>
           <WarningIcon size={11} weight="fill" style={{flexShrink:0}}/>
-          {nRestos > 1 ? "Solo puede haber UNA parte «Después»: es el resto, y se va partiendo conforme se factura." : "Al menos una parte se tiene que facturar hoy; para dejarlo todo pendiente no hace falta partir la orden."}
+          {nRestos > 1 ? "Solo puede haber UNA parte «Después»: es el resto, y se va partiendo conforme se factura." : !restoAlFinal ? "La parte «Después» tiene que ser la última: es el resto." : "Al menos una parte se tiene que facturar hoy; para dejarlo todo pendiente no hace falta partir la orden."}
         </div>
       )}
       {/* Validación folios */}
@@ -11786,7 +11823,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         {o.grouped_invoice_folio&&!o.invoice_folio&&<div style={{fontSize:F.body,fontWeight:700,color:C.t2,marginBottom:4}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Facturada agrupada en {o.grouped_invoice_folio}</div>}
         {/* v10.58.34 — Badge de splits: muestra "Dividida en N folios" + lista expandible */}
         {o.has_splits&&<div style={{fontSize:F.body,fontWeight:700,color:C.ac,marginBottom:4,padding:"6px 10px",background:C.acL,borderRadius:8,border:"1px solid "+C.ac+"25"}}>
-          <FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {o.splits_alive_count} folio{o.splits_alive_count===1?"":"s"}
+          {/* v10.84.1 (scan): contar FOLIOS, no partes — el resto no tiene folio */}
+          {(()=>{const nf=(o.splits||[]).filter(x=>!x.cancelled_at&&x.invoice_folio).length;return <><FilesIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Dividida en {nf} folio{nf===1?"":"s"}{restoPorFacturar(o)?<span style={{color:C.wn,fontWeight:600}}> · resto por facturar</span>:null}</>})()}
           <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
             {(o.splits||[]).filter(s=>!s.cancelled_at).map(s=>(
               <div key={s.id} style={{fontSize:F.meta,color:C.tx,fontWeight:600,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -11800,9 +11838,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
                 {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:F.micro,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
               </div>
             ))}
-            {(o.splits||[]).some(s=>s.cancelled_at)&&<div style={{fontSize:F.micro,color:C.t2,marginTop:2,fontStyle:"italic"}}>
-              {(o.splits||[]).filter(s=>s.cancelled_at).length} cancelado{(o.splits||[]).filter(s=>s.cancelled_at).length===1?"":"s"}
-            </div>}
+            {/* v10.84.1 (scan): un resto «Consumida» no es una cancelacion, es que ya se facturo */}
+            {(()=>{const nc=(o.splits||[]).filter(s=>s.cancelled_at&&!/^Consumida:/.test(s.cancellation_reason||"")).length;return nc>0?<div style={{fontSize:F.micro,color:C.t2,marginTop:2,fontStyle:"italic"}}>{nc} cancelado{nc===1?"":"s"}</div>:null})()}
           </div>
           {/* v10.84.0 — el resto se factura desde aqui, cuando el cliente pida la siguiente parte */}
           {(()=>{const r=restoPorFacturar(o);if(!r)return null;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;
@@ -19534,9 +19571,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas */}
       {siguienteParteModal&&<FacturarSiguienteParteModal order={siguienteParteModal.order} resto={siguienteParteModal.resto}
         onClose={()=>setSiguienteParteModal(null)}
-        onConfirm={async({amount,qty,notes})=>{
+        onConfirm={async({amount,qty,notes,docType,folio})=>{
           const actor = userLogin || user;
-          const r = await db.facturarSiguienteParte(siguienteParteModal.resto.id, amount, qty, actor, notes);
+          const r = await db.facturarSiguienteParte(siguienteParteModal.resto.id, amount, qty, actor, notes, docType, folio);
           showToast(r?.cerrado
             ? `📄 ${r.folio} · era la última parte: ${siguienteParteModal.order.production_number} queda facturada completa`
             : `📄 ${r.folio} por $${Number(amount).toLocaleString("es-MX",{minimumFractionDigits:2})} · quedan $${Number(r.resto).toLocaleString("es-MX",{minimumFractionDigits:2})} por facturar`, "success");
@@ -19554,7 +19591,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             const preMsg = result?.all_pre_assigned ? " pre-asignados" : "";
             const nLinked = result?.linked_folios?.length || 0;
             const linked = nLinked ? ` · 🔗 ${nLinked} ligada(s)` : "";
-            showToast(`📑 ${result.splits_count} folios${preMsg}${corona}${linked} para ${splitInvoiceModal.production_number}`, "success");
+            const resto = result?.por_facturar ? " · el resto queda por facturar después" : "";
+            showToast(`📑 ${result.splits_count} folio${result.splits_count===1?"":"s"}${preMsg}${corona}${linked}${resto} para ${splitInvoiceModal.production_number}`, "success");
             setSplitInvoiceModal(null);
             reload();
           };
