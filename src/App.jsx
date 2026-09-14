@@ -6636,17 +6636,22 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const folioOk = folioAuto || folioRegex.test((folio||"").toUpperCase());
   const unaPieza = restoQty === 1;   // v10.84.1 (scan) — con 1 pieza solo cabe «todo lo que queda»
   const fmtMx = n => Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
-  const todo = Math.abs(Number(amount) - restoSinIva) <= 0.01;
+  // v10.84.2 (scan): en centavos enteros. Con flotantes, 8620.68 vs 8620.69 daba 0.0100000002 > 0.01 y el
+  // modal decía «parcial» mientras el RPC decía «todo»: dos aritméticas, dos respuestas. Una sola ahora.
+  const cents = n => Math.round(Number(n||0) * 100);
+  const todo = Math.abs(cents(amount) - cents(restoSinIva)) <= 1;
   // las piezas siguen al dinero mientras Karla no las toque a mano
   const onAmount = v => {
-    const a = Math.max(0, parseFloat(v)||0);
+    let a = Math.max(0, parseFloat(v)||0);
+    // a un centavo del resto ES el resto: se ajusta para que lo que se ve sea lo que se manda
+    if(Math.abs(cents(a) - cents(restoSinIva)) <= 1 && a > 0) a = restoSinIva;
     setAmount(a);
     if(!qtyTocada){
-      if(Math.abs(a - restoSinIva) <= 0.01) setQty(restoQty);
+      if(cents(a) === cents(restoSinIva)) setQty(restoQty);
       else setQty(Math.min(restoQty-1, Math.max(1, Math.round(restoQty * (a / (restoSinIva||1))))));
     }
   };
-  const amountOk = Number(amount) > 0 && Number(amount) <= restoSinIva + 0.005 && (!unaPieza || todo);
+  const amountOk = cents(amount) > 0 && cents(amount) <= cents(restoSinIva) && (!unaPieza || todo);
   const qtyOk = todo ? Number(qty) === restoQty : (Number(qty) >= 1 && Number(qty) < restoQty);
   const can = !saving && amountOk && qtyOk && folioOk;
   useEffect(()=>{const k=e=>{const t=e.target?.tagName;if(t==="INPUT"||t==="TEXTAREA")return;if(e.key==="Escape"&&!saving)onClose()};window.addEventListener("keydown",k);return()=>window.removeEventListener("keydown",k)},[saving,onClose]);
@@ -6952,8 +6957,16 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // asi el semaforo cierra solo y no hay que teclear una resta con centavos.
   const elRestoDespues = () => {
     if (splits.length < 2) return;
-    const last = splits.length - 1;
-    const otras = splits.slice(0, last);
+    // v10.84.2 (scan): si ya hay una fila «Después», se recalcula ESA; si no, la última. Y si la última
+    // trae datos capturados (cantidad, monto, folio) de otro tipo, se pregunta antes de pisarla —
+    // el mismo cuidado que ya tenía «N facturas» al recortar.
+    const idxResto = splits.findIndex(sp => sp.doc_type === "por_facturar");
+    const last = idxResto >= 0 ? idxResto : splits.length - 1;
+    const destino = splits[last];
+    if (destino.doc_type !== "por_facturar" && (Number(destino.qty||0) > 0 || Number(destino.amountConIva||0) > 0 || (destino.folio||"").trim())) {
+      if (!window.confirm("La última parte ya tiene datos capturados. ¿Convertirla en «Después (el resto)»? Se recalcula con lo que falte.")) return;
+    }
+    const otras = splits.filter((_, i) => i !== last);
     const qtyOtras = otras.reduce((a, sp) => a + Number(sp.qty||0), 0);
     const sinIvaOtras = otras.reduce((a, sp) => a + amountToBackend(Number(sp.amountConIva||0), sp.doc_type), 0);
     const qtyResto = totalQty - qtyOtras;
@@ -7244,7 +7257,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         </button>
         <button onClick={handleSubmit} disabled={!canSubmit}
           style={{...bt(canSubmit?C.ac:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {saving ? "Creando..." : <><FilesIcon size={14} weight="bold"/>Crear {splits.length} {splits.length===1?"folio":"folios"}</>}
+          {saving ? "Creando..." : (()=>{const nf=splits.filter(sp=>sp.doc_type!=="por_facturar"&&sp.doc_type!=="corona_saldo").length;return <><FilesIcon size={14} weight="bold"/>Crear {nf} {nf===1?"folio":"folios"}{nRestos>0?" + resto":""}</>})()}
         </button>
       </div>
 

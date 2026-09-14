@@ -1,0 +1,9 @@
+-- v10.84.2 — los P3 del scan que tocan la base (aplicada 14-sep-2026; definiciones vivas registradas).
+--
+-- 1. split_sigue_a_su_cfdi: el WHEN ya no exige source='printflow_bridge_split'. Una parte LIGADA
+--    (la factura de Karla, o una de Alpha) cuyo CFDI se cancela tambien cierra la parte y regresa
+--    el dinero al resto. Adentro se sigue exigiendo: parte viva con ese folio Y orden con resto.
+-- 2. cancel_invoice_split_internal: «Consumida:» es un motivo RESERVADO al sistema (la invariante 31
+--    lo usa); se rechaza en la unica puerta humana. Y al cancelar una parte LIGADA la nota dice que
+--    el documento externo queda DESLIGADO y sigue vivo/pagado en cobranza.
+-- El SQL exacto esta en la migracion v10_84_2_por_partes_los_p3_del_scan de supabase_migrations.

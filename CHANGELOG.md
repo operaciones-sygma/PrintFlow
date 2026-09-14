@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.2 — Los 14 P3 que el scan dejó sin verificar — 14-sep-2026
+
+Dirección pidió cerrarlos, con cuidado. **Siete ya habían caído** con v10.84.1 (corona al resto,
+pre-asignado, una pieza, badge, «Consumida», factura/remisión). De los siete que quedaban:
+
+- 🔴 **Uno tenía un pariente serio.** El trigger del CFDI cancelado sólo miraba facturas del puente
+  (`source = 'printflow_bridge_split'`). Una parte **ligada** —justo la factura de Karla, o una de
+  Alpha— cuyo CFDI se cancelara dejaba la parte viva. Ahora cubre cualquier factura con
+  `source_order_id`; adentro sigue exigiendo parte viva con ese folio y orden con resto.
+  Probado con rollback: la ligada pierde su CFDI → parte cerrada, resto $19,220 → $21,700.
+- **«Consumida:» es un motivo reservado.** La invariante 31 lo usa para no sumar dos veces un
+  resto que ya vive en la parte que lo facturó; si Karla lo escribiera al cancelar un resto por
+  decisión, la cuenta saldría mal. La única puerta humana lo rechaza.
+- **Aritmética en centavos enteros** en el modal de siguiente parte. Con flotantes, `8620.68` vs
+  `8620.69` daba `0.0100000002 > 0.01`: el modal decía «parcial» y el RPC «todo». Dos aritméticas,
+  dos respuestas; ahora es una, y a un centavo del resto **es** el resto (se ajusta lo que se ve a
+  lo que se manda).
+- **«El resto, después» ya no pisa sin preguntar.** Si ya hay una fila «Después» la recalcula; si
+  la última trae datos de otro tipo, confirma antes — el mismo cuidado que ya tenía «N facturas».
+- El botón dice **«Crear N folios + resto»** contando folios, no partes.
+- Al cancelar una parte **ligada**, la nota dice que el documento externo queda *desligado* y
+  sigue vivo o pagado en cobranza — no parezca que se canceló.
+- En CobranzaFlow (v3.7.667) el detalle de la factura separa *facturado*, *remitido* y *saldo
+  Corona*: cada peso dice de dónde es.
+
+---
+
 ## v10.84.1 — Lo que cazó el scan de «por partes en el tiempo» — 14-sep-2026
 
 Scan adversarial sobre v10.84.0 con tope duro: 8 buscadores + un verificador por hallazgo, **28
