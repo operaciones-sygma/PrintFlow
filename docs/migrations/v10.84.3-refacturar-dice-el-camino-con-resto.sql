@@ -1,0 +1,5 @@
+-- v10.84.3 — refacturar_documento y release_cancelled_invoice_folio: el candado contra ordenes con
+-- partes vivas YA existia (y con un resto vivo siempre las hay). Solo el mensaje decia «usa facturar
+-- por partes», que no es el camino: con un resto, es cancelar el CFDI de la parte (su dinero regresa
+-- al resto) y «Facturar siguiente parte». Un candado que rechaza sin decir la salida es un callejon.
+-- SQL exacto en supabase_migrations: v10_84_3_refacturar_dice_el_camino_con_resto (+ definiciones vivas).

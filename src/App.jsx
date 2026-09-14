@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
 // v10.81.7 — CTP contador: cierre de los P3 restantes del scan (wf wzsz8pawt). Se retiró código muerto
 //   (aCh/aGr/live/agg + prop `plates`, residuo del cálculo por plate_log previo a v10.81.0; el m² del ciclo
@@ -6738,6 +6739,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // amountConIva (NO se toca reconciliación/submit/divideEqual): solo cambia la capa de edición.
   const [captureMode, setCaptureMode] = useState("subtotal"); // "subtotal" | "con_iva"
   const [avisoResto, setAvisoResto] = useState("");           // v10.84.0 — showToast es de App, no llega aqui
+  const [avisoCuadre, setAvisoCuadre] = useState("");         // v10.84.3 — que cambio al cuadrar, con numeros
 
   // ESC close (solo cuando NO está guardando)
   // v10.58.43 #25: guard de INPUT/TEXTAREA (convención escStack) — ESC dentro de un
@@ -6974,10 +6976,33 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     // v10.84.1 (scan): distinguir dinero de piezas — el resto necesita al menos 1 pieza y $0.01
     if (restoSinIva <= 0) { setAvisoResto("Las otras partes ya cubren todo el dinero de la orden: no queda resto que dejar para después."); return; }
     if (qtyResto <= 0) { setAvisoResto("Las otras partes ya reparten todas las piezas: baja la cantidad de alguna para dejar al menos 1 en el resto."); return; }
-    setAvisoResto("");
+    setAvisoResto(""); setAvisoCuadre("");
     setSplits(prev => prev.map((sp, i) => i === last
       ? {...sp, doc_type: "por_facturar", folio: "", qty: qtyResto, amountConIva: restoSinIva, montoTocado: true}
       : sp));
+  };
+
+  // v10.84.3 — CUADRAR, calcado del editor de conceptos de CobranzaFlow (cuadrarLineas):
+  //   · lo dispara Karla, nunca solo: cambia piezas y dinero que van al CFDI del cliente;
+  //   · dos modos porque ninguno es «el bueno» — «piezas» conserva las cantidades que ella capturo
+  //     y recalcula el dinero al unitario de la orden; «importes» conserva los montos y recalcula las
+  //     piezas. Si los dos dan lo mismo se ofrece UNO: preguntar entre dos iguales es ruido;
+  //   · el residuo (centavos y piezas sueltas) va al RESTO si existe, o a la parte mayor;
+  //   · fail-closed: si alguna parte quedaria en 0 piezas o $0, no toca nada y lo dice;
+  //   · y dice exactamente que cambio, parte por parte.
+  const calcularCuadre = (modo) => {
+    if (!totalQty || !totalSinIva || priceUnitario <= 0) return null;
+    const base = splits.map(sp => ({ q: Math.floor(Number(sp.qty||0)), sub: amountToBackend(Number(sp.amountConIva||0), sp.doc_type), doc_type: sp.doc_type }));
+    return cuadrarPartes(base, totalQty, totalSinIva, modo);
+  };
+  const cuadrePiezas = (!qtyOk || !amountOk) ? calcularCuadre("piezas") : null;
+  const cuadreImportes = (!qtyOk || !amountOk) ? calcularCuadre("importes") : null;
+  const cuadresIguales = !!(cuadrePiezas?.ls && cuadreImportes?.ls && cuadrePiezas.firma === cuadreImportes.firma);
+  const aplicarCuadre = (c) => {
+    if (!c) return;
+    if (c.error) { setAvisoCuadre(c.error); return; }
+    setSplits(prev => prev.map((sp, i) => ({ ...sp, qty: c.ls[i].q, amountConIva: subtotalToStored(c.ls[i].sub, sp.doc_type), montoTocado: true })));
+    setAvisoCuadre(c.cambios.length ? "Cuadrado · " + c.cambios.join(" · ") : "Ya cuadraba: no cambió nada.");
   };
 
   const onChangeQty = (idx, val) => {
@@ -7128,6 +7153,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 {captureMode==="subtotal"
                   ? (isFactura ? `Total con IVA: $${fmtMx(s.amountConIva)}` : isCoronaSld ? "Sin IVA (descuento directo)" : s.doc_type === "por_facturar" ? "Sin IVA · se factura después" : "Sin IVA (remisión)")
                   : (isFactura ? `Subtotal sin IVA: $${fmtMx(subtotal)}` : isCoronaSld ? "Sin IVA (descuento directo)" : s.doc_type === "por_facturar" ? "Sin IVA · se factura después" : "Sin IVA (remisión)")}
+                {/* v10.84.3 — el precio por pieza IMPLICITO de esta parte; en ambar si se aleja >1% del de la orden */}
+                {(()=>{const q=Number(s.qty||0);if(!(q>0)||!(subtotal>0)||!(priceUnitario>0))return null;const u=subtotal/q;const off=Math.abs(u-priceUnitario)/priceUnitario>0.01;return <span style={{marginLeft:6,color:off?C.wn:C.t3,fontWeight:off?600:400}} title={`La orden vale $${fmtMx(priceUnitario)} por pieza (sin IVA)`}>· ${fmtMx(u)}/pza{off?" ≠ orden":""}</span>})()}
               </div>
             </div>
             <div>
@@ -7194,6 +7221,22 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           </div>}
         </div>
       </div>
+
+      {/* v10.84.3 — CUADRAR: aparece solo cuando el semaforo no esta en verde */}
+      {(!qtyOk || !amountOk) && (cuadrePiezas || cuadreImportes) && (
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+          <span style={{fontSize:10,color:C.t2}}>No cuadra. Que lo arregle el sistema:</span>
+          {cuadresIguales ? (
+            <button onClick={()=>aplicarCuadre(cuadrePiezas)} style={{...bs(C.ac),padding:"6px 12px"}} title="Mueve el faltante o sobrante al resto (o a la parte mayor)"><MagicWandIcon size={13} weight="bold"/>Cuadrar</button>
+          ) : (<>
+            <button onClick={()=>aplicarCuadre(cuadrePiezas)} style={{...bs(C.ac),padding:"6px 12px"}} title="Conserva las PIEZAS que capturaste; el dinero se recalcula al precio por pieza de la orden y el residuo va al resto"><MagicWandIcon size={13} weight="bold"/>Cuadrar conservando piezas</button>
+            <button onClick={()=>aplicarCuadre(cuadreImportes)} style={{...bs(C.sf,C.tx),padding:"6px 12px",border:"0.5px solid "+C.bd}} title="Conserva los IMPORTES que capturaste; las piezas se recalculan en proporción y el residuo va al resto"><MagicWandIcon size={13} weight="bold"/>Cuadrar conservando importes</button>
+          </>)}
+        </div>
+      )}
+      {avisoCuadre && (
+        <div style={{background:C.live+"10",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+C.ok+"40",fontSize:11,color:C.tx,lineHeight:1.5}}>{avisoCuadre}</div>
+      )}
 
       {/* Saldo Corona requerido */}
       {hasCoronaSaldo && (

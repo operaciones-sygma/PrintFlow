@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.3 — «Cuadrar» en el modal de partes, calcado de CobranzaFlow — 14-sep-2026
+
+Dirección pidió que repartir piezas y dinero fuera fácil, como ya lo es en el editor de conceptos
+de CobranzaFlow. Se calcó el mismo patrón (`cuadrarLineas` → `src/lib/cuadrarPartes.js`):
+
+- **Aparece sólo cuando el semáforo no está en verde**, y lo dispara Karla — nunca solo, porque
+  mueve piezas y dinero que van al CFDI del cliente.
+- **Dos modos, porque ninguno es «el bueno»:** *conservando piezas* (las cantidades que capturó
+  mandan; el dinero se recalcula al precio por pieza de la orden) y *conservando importes* (los
+  montos mandan; las piezas se recalculan en proporción). Si los dos dan lo mismo se ofrece **un
+  solo botón** — preguntar entre dos iguales es ruido.
+- **El residuo va al resto** «por facturar» si existe —es lo que menos duele mover— o, si no hay,
+  a la parte mayor.
+- **Fail-closed:** si alguna parte quedaría en 0 piezas o $0, no toca nada y dice cuál.
+- **Dice qué cambió**, parte por parte: *«#2: 0 → 62,000 pzas · $0.00 → $19,220.00»*.
+- Cada parte muestra su **precio por pieza implícito**, en ámbar si se aleja más de 1% del de la
+  orden — la pista de que el dinero y las piezas no van juntos.
+
+La aritmética vive fuera de `App.jsx` y se prueba con Node: `scripts/probar-cuadrar-partes.mjs`,
+**20 pruebas** (el caso real de P-0070, centavos con unitario feo, sin resto, fail-closed, un
+botón vs dos, control negativo).
+
+### Y los tres cruces que quedaban sin verificar
+
+- **Re-facturar sobre una parte:** las dos vías (`refacturar_documento` en CobranzaFlow,
+  `release_cancelled_invoice_folio` en PrintFlow) **ya rechazaban** una orden con partes vivas, y con
+  un resto vivo siempre las hay — no había doble dinero. Lo que faltaba era que el mensaje dijera la
+  salida: *cancela el CFDI de la parte (su dinero regresa al resto) y «Facturar siguiente parte»*.
+- **Un pago mayor que la parte facturada:** `cobranza.invoices` tiene `CHECK (balance >= 0)`, así
+  que **se rechaza**, no se cuela. El hueco real es el de siempre: un depósito que cubre una parte
+  facturada *y* un adelanto de lo no facturado no se puede partir en el tiempo. Eso es el diseño
+  de **anticipos/Prepago**, ya anotado, no de esta función.
+- **Tercero y re-trabajo cubierto:** los candados de siempre impiden partir esas órdenes. Deliberado.
+
+---
+
 ## v10.84.2 — Los 14 P3 que el scan dejó sin verificar — 14-sep-2026
 
 Dirección pidió cerrarlos, con cuidado. **Siete ya habían caído** con v10.84.1 (corona al resto,
