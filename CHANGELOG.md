@@ -64,6 +64,9 @@ expuesta a cualquier autenticado — el gate vive en `resolve_anticipo_leader`.
 SQL: `docs/migrations/v10.84.6-por-partes-scan3.sql`; en la base `v10_84_6_por_partes_scan3` +
 `v10_84_6_definiciones_vivas`.
 
+**La spec completa de la herramienta** (modelo, flujos, integración con cancelaciones/PPD/saldo a favor,
+invariantes, minas y los tres scans) vive en `cobranzaflow/docs/SPEC-facturar-por-partes.md`.
+
 ---
 
 ## v10.84.5 — Los tres P3 que quedaban de «por partes» — 14-sep-2026
