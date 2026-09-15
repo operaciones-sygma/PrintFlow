@@ -12,6 +12,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.6 — Lo que cazó el TERCER scan de «por partes» (10 confirmados) — 14-sep-2026
+
+Dirección pidió un scan más para confirmar que la herramienta funciona: 31 agentes → 16 hallazgos,
+**10 confirmados (2 P1, 5 P2, 3 P3), 1 dudoso, 1 refutado**, 4 P3 sin verificar; 81 cosas verificadas
+en verde. Todos los confirmados y los sin verificar quedaron cerrados. Antes de tocar nada corrió un
+**ensayo punta a punta con rollback** (partir → siguiente parte ×2 → rechazos → remisión → cancelar
+parte → convertir rechazada → CFDI cancelado → saldo a favor aplicar/cancelar → cambio de precio →
+última parte → cancelar la orden): 12/12 pasos con los números esperados. Después de los arreglos,
+otros 7 escenarios en verde.
+
+**Los dos P1 (dinero real):**
+- **Convertir una remisión con saldo a favor sin vale aplicado dejaba crédito doble.** convertir mueve
+  el pago a la factura nueva y luego cancela la remisión; el trigger de v10.84.4 encontraba el
+  consumo (que seguía apuntando a la remisión) y lo reversaba. Ahora el consumo **sigue al dinero**
+  (se re-apunta a la factura nueva) y el trigger no reversa en una sustitución.
+- **Enter en el input «Saldo a favor a aplicar» registraba una TRANSFERENCIA fantasma** por el saldo
+  completo (CobranzaFlow v3.7.671): el `onKeyDown` del modal disparaba «Aplicar pago». Bloqueado.
+
+**P2:**
+- **Ligar con emisor ON perdía la captura:** el primer intento fallaba siempre («ya está registrado»),
+  el modal se cerraba para preguntar y cualquier rechazo del enlace tiraba las filas. Ahora el modal
+  manda `allowLink` desde el primer intento, no se cierra (el confirm se pinta encima, z 1100) y
+  «Dividir igual» respeta las partes fijas (ligadas/Corona) como ya hacía Cuadrar.
+- **Split clásico (sin resto) con factura cancelada dejaba la parte viva** y las salidas apuntaban a
+  un resto que no existía (5 órdenes así en prod). El trigger cierra la parte SIEMPRE y, si la orden
+  vive, abre un resto con ese dinero: la orden pasa a ser por partes y aparece «Facturar siguiente
+  parte». Nueva **invariante 33**: ninguna parte viva cuelga de un documento cancelado.
+- **Cancelación ante el SAT con motivo 01 (sustitución)** regresaba el dinero al resto aunque la
+  sustituta ya lo cobrara. El trigger resuelve la sustituta por UUID: si salió del resto → regresa;
+  si es una factura suelta del mismo importe → la parte **adopta** ese folio; si no cuadra → cierra
+  sin regresar y abre discrepancia.
+- **La discrepancia «sobrante» del CFDI cancelado contaba el saldo a favor** que el trigger ya
+  regresaba (crédito doble al resolverla). Se excluye y la nota lo dice.
+- **Por Timbrar decidía PPD/PUE con el saldo de la lista** (rancio): si alguien cobró la factura
+  después de cargarla, timbraba PPD una factura pagada. Ahora re-lee el saldo vivo y frena.
+
+**P3:** «N facturas» con resto lo dejaba en medio (las nuevas van antes; «El resto, después» lo manda
+al final); el error de Cuadrar iba a la caja verde y el «Cuadrado» se quedaba aunque ya no cuadrara
+(caja ámbar propia; se borra al editar); «Facturar siguiente parte» trabajaba sobre una foto del
+resto (se monta sobre el resto vivo y se reinicia si el realtime lo mueve); la card de Pendientes
+de Folio ofrecía «Asignar Folio y Entregar» y el snooze a una orden ya por partes (4 patas, como la
+ficha); `facturar_remision_parcial` era la tercera puerta sin candado; y `InvoiceOrderInfo` decía
+«completa» aunque la orden se hubiera cancelado o el resto cerrado por decisión.
+
+**Dudoso cerrado igual:** el resto seguía al precio pero no a la **cantidad**; ahora
+`sync_post_invoice_edit` mueve también las piezas (o abre discrepancia si no caben) y la
+**invariante 34** vigila piezas como la 31 vigila dinero. **Refutado:** `client_credit_libre`
+expuesta a cualquier autenticado — el gate vive en `resolve_anticipo_leader`.
+
+SQL: `docs/migrations/v10.84.6-por-partes-scan3.sql`; en la base `v10_84_6_por_partes_scan3` +
+`v10_84_6_definiciones_vivas`.
+
+---
+
 ## v10.84.5 — Los tres P3 que quedaban de «por partes» — 14-sep-2026
 
 - **Las partes se ven en vivo entre pestañas.** `order_invoice_splits` entró a la publicación
