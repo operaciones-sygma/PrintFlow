@@ -58,6 +58,21 @@ t('firmas distintas => dos botones', a2.firma !== b2.firma);
 t('orden sin precio -> null', cuadrarPartes([{ q: 1, sub: 1, doc_type: 'factura' }], 10, 0, 'piezas') === null);
 t('lista vacia -> null', cuadrarPartes([], 10, 100, 'piezas') === null);
 
+// 10. v10.84.4 — PARTES FIJAS: una ligada conserva su dinero y NO absorbe residuo; corona tampoco
+const fj = cuadrarPartes([{ q: 8000, sub: 2480, doc_type: 'factura', fijo: true }, { q: 0, sub: 0, doc_type: 'por_facturar' }], Q, P, 'importes');
+t('fija: conserva sus piezas y dinero', fj.ls[0].q === 8000 && c2(fj.ls[0].sub) === c2(2480));
+t('fija: el resto absorbe todo lo demas', fj.ls[1].q === 62000 && c2(fj.ls[1].sub) === c2(19220));
+const fj2 = cuadrarPartes([{ q: 8000, sub: 5000, doc_type: 'factura', fijo: true }, { q: 62000, sub: 16700, doc_type: 'factura' }], Q, P, 'piezas');
+t('fija sin resto: el residuo va a la NO fija aunque sea menor', c2(fj2.ls[0].sub) === c2(5000) && c2(fj2.ls[1].sub) === c2(16700));
+const cor = cuadrarPartes([{ q: 1000, sub: 310, doc_type: 'corona_saldo' }, { q: 0, sub: 0, doc_type: 'por_facturar' }], Q, P, 'piezas');
+t('corona es fija por definicion', c2(cor.ls[0].sub) === c2(310) && cor.ls[0].q === 1000);
+const todasFijas = cuadrarPartes([{ q: 8000, sub: 2480, doc_type: 'factura', fijo: true }, { q: 1000, sub: 310, doc_type: 'corona_saldo' }], Q, P, 'piezas');
+t('todas fijas y no cuadra: error claro, no toca nada', !!todasFijas.error && /fijas/.test(todasFijas.error));
+
+// 11. v10.84.4 — el mensaje culpa a quien se paso, no a quien absorbe
+const pasado = cuadrarPartes([{ q: 60000, sub: 30000, doc_type: 'factura' }, { q: 20000, sub: 0, doc_type: 'por_facturar' }], Q, P, 'importes');
+t('se paso del total: el error lo dice', !!pasado.error && /de m/.test(pasado.error));
+
 // CONTROL NEGATIVO: la prueba tiene que poder reprobar
 t('autoprueba en rojo: distingue un reparto que NO cuadra', !cuadra([{ q: 1, sub: 1 }], Q, P));
 

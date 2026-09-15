@@ -12,6 +12,55 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.4 — Lo que cazó el SEGUNDO scan de «por partes» (16 confirmados, 0 refutados) — 14-sep-2026
+
+Dirección pidió otro scan sobre la herramienta ya arreglada: 23 agentes, **16 confirmados**, todos
+arreglados. Los tres P1 eran caminos para **cobrar dos veces** o para que el cliente **perdiera saldo**:
+
+- **Convertir remisiones → factura (y la mixta) aceptaban una remisión que es PARTE VIVA** de una
+  orden por partes: salía una factura nueva sin tocar el plan de la orden (la parte seguía viva + la
+  factura nueva). Las dos RPC la rechazan y dicen el camino: *cancela la parte desde su orden en
+  PrintFlow y emite con «Facturar siguiente parte»*.
+- **Mi propio trigger `split_sigue_a_su_cfdi` (v10.84.2) trataba la SUSTITUCIÓN como cancelación**
+  y devolvía el dinero al resto: la remisión sustituida + la factura nueva + el resto = doble. Ahora
+  distingue *Sustituida por X* / *CFDI cancelado ante el SAT* / *Remisión cancelada*; el dinero
+  regresa **sólo** si de verdad se canceló y la orden sigue viva. Queda en `audit_log` con
+  `regreso_al_resto`.
+- **Saldo a favor SIN vale aplicado a una factura que después se cancela** se quedaba consumido.
+  Nuevo trigger en `cobranza.invoices`: REVERSO en el ledger + el pago «saldo a favor» se cancela +
+  audit. Espejo de lo que ya hacían las cinco puertas con vale.
+
+Y lo demás (P2/P3), del lado PrintFlow:
+
+- **Cuadrar respeta las partes FIJAS:** una parte «¿ya existe? ligar» trae el dinero de la factura
+  que ya existe — si cuadrar se lo movía, el RPC rechazaba el enlace y la captura se perdía. Corona
+  también es fija. Si todas son fijas y no cuadra, lo dice en vez de tocar nada (26 pruebas, +6).
+- **Ligar con emisor ON:** el input nace vacío y ya **no se sugiere** el D-/R- de la serie retirada
+  (Karla mandaba un folio inventado); el folio de ligar **sí se valida**: único y de serie correcta
+  (factura → D-/F-, remisión → R-/RS-).
+- **El semáforo de dinero en centavos enteros**, igual que `cuadra()` y que el RPC: a un centavo
+  exacto el flotante decía rojo.
+- **Cancelar UNA parte desde la ficha** (admin): una parte facturada con error y sin timbrar no tenía
+  salida — Re-facturar pedía cancelar un CFDI que no existe. Su dinero regresa al resto. Si choca con
+  el trigger del CFDI (40P01) reintenta una vez.
+- **Las cascadas de cancelación cierran el resto al último** (`ORDER BY (doc_type='por_facturar'),
+  position`): antes la parte que se cancelaba después reabría un resto ya cerrado.
+- **`cancel_invoice_split_internal` toma candados ORDEN → PARTE**, como las demás.
+- **Si cambia el precio de la orden, el resto sigue al precio** (si puede absorberlo; si quedaría en
+  ≤ 0 no se toca y la invariante 31 lo grita).
+- El toast de «Facturar siguiente parte» dice el total **con IVA** cuando es factura; `.at(-1)` →
+  `slice(-1)[0]` (Safari viejo).
+
+Lado CobranzaFlow en v3.7.670. SQL: `docs/migrations/v10.84.4-por-partes-scan2-p1-p2.sql` y en la base
+`v10_84_4_por_partes_scan2_p1_p2` + `v10_84_4_definiciones_vivas`.
+
+**Sin verificar (P3, no arreglados):** no hay realtime de `order_invoice_splits` entre pestañas
+(dos Karlas verían el resto viejo hasta recargar; el RPC rechaza la segunda); DetailModal no dice
+nada fiscal de una orden por partes (la ficha sí); una orden histórica con emisor ON no llega al
+modal (no es alcanzable hoy).
+
+---
+
 ## v10.84.3 — «Cuadrar» en el modal de partes, calcado de CobranzaFlow — 14-sep-2026
 
 Dirección pidió que repartir piezas y dinero fuera fácil, como ya lo es en el editor de conceptos
