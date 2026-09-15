@@ -1,190 +1,156 @@
-# CLAUDE.md — Contexto para Claude Code en este repo
+# CLAUDE.md — Contexto para Claude Code en PrintFlow
 
-> **Instrucciones para Claude Code:** Lee este archivo al inicio de cada sesión. Contiene reglas técnicas, convenciones del proyecto, y contexto que SIEMPRE se aplica.
-
----
-
-## 🏗️ Stack y arquitectura
-
-- **Frontend:** React 18, single-file `src/App.jsx` (~4,500+ líneas, código compacto)
-- **Backend:** Supabase project `uvhardaeooaxjrrgdjwa` (PostgreSQL + Realtime + Storage + Auth)
-- **Storage:** Supabase Storage bucket `order-files` (auto-cleanup 30 días)
-- **Hosting:** Vercel auto-deploy desde `main` branch → `print-flow-eosin.vercel.app`
-- **Repo:** `operaciones-sygma/PrintFlow`
-- **Build tool:** Vite (ver `vite.config.js`)
-- **Styling:** Inline JSX styles con objeto `C` (colors) — **no hay CSS externo**, no hay Tailwind
-
-**El proyecto es un SaaS interno** para Padilla Hnos. Impresora (León, Guanajuato, México). Manejado por el dueño/operador (Marcelo) como único desarrollador.
+> Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **14-sep-2026** (v10.84.6). La versión
+> anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
+> folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
 ---
 
-## 👥 Roles del sistema
+## 🏗️ Qué es esto
 
-| Role key (técnico) | Display name | Persona | Función principal |
+**PrintFlow** es el sistema de producción de Padilla Hnos. Impresora (SYGMA, León, Gto.). Es una de
+las apps del **SYGMA ERP** que comparten la **misma base Supabase** (`uvhardaeooaxjrrgdjwa`):
+
+| app | repo | qué hace | schema |
 |---|---|---|---|
-| `admin` | Admin | Marcelo | Acceso total, configuración, edits sensibles |
-| `secretaria` | **Lupita** | Lupita | Crear órdenes, atención cliente |
-| `produccion` | Producción | Gerardo | Validar specs, operar tablero, planificar |
-| `preprensa` | Pre-prensa | Noemí | Diseño, gestión de archivos, aprobar pruebas |
-| `german` | Germán/CTP | Germán | CTP, procesadora, placas, químicos |
-| `vendedor` | Vendedor | Genaro | Ventas, ve solo SUS órdenes (aislamiento) |
-| `karla` | Facturación | Karla | Asignar folios fiscales D/R, marcar entregadas |
+| **PrintFlow** | `operaciones-sygma/PrintFlow` (éste) | órdenes de producción, tablero, CTP, maquila, folios fiscales | `public` |
+| **CobranzaFlow** | `../cobranzaflow` | cobranza, conciliación bancaria, CFDI (emisión propia desde 1-sep-2026), comisiones, anticipos | `cobranza` (+ RPC en `public`) |
+| SygmaAlmacen · SygmaContabilidad · cotizador · sygma-web | otros repos | almacén, contabilidad, cotizador, tienda web | `almacen`, … |
 
-**Importante:** El display name "Secretaría" se renombró a "Lupita" en v10.7.0, pero el technical key es `secretaria` (no breaking change).
+**Las dos apps se hablan por triggers de base («el puente»)**: foliar una orden en PrintFlow crea la
+factura en `cobranza.invoices` (`sync_invoice_from_split`, `deliver_with_invoice`…); cancelar un
+CFDI en CobranzaFlow cierra la parte en PrintFlow (`split_sigue_a_su_cfdi`). **Un cambio de base afecta
+a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 
----
-
-## ⚠️ 22 Reglas técnicas críticas (NO romper)
-
-### React + Supabase
-1. **`supabase.update()` NUNCA incluye `id`** — PostgREST rechaza silenciosamente updates que intentan modificar la PK.
-2. **`wixData.update()` reemplaza TODO el documento** — siempre spread: `{...existingRecord, fieldToChange: value}`.
-3. **Float a Mercado Pago siempre redondeado:** `Math.round(x * 100) / 100`.
-4. **IPN endpoints responden 200 SIEMPRE** — incluso en error interno. Evita retry storms.
-5. **`supabase.update()` nunca lanza** — siempre destructure `{data, error}` y `throw error` manualmente en operaciones críticas.
-6. **`orders.id` es TEXT format `OP-XXXXX...`** (no UUID) — todas las funciones SQL deben usar `TEXT` type para parámetros.
-7. **`users` table tiene `display_name TEXT NOT NULL`** — incluirlo en todos los INSERTs.
-8. **`users_role_check` constraint** — debe ser dropped y recreated cuando agregas un nuevo rol.
-9. **`orders.update` debe ejecutarse ANTES** de cualquier insert en tablas relacionadas (`order_timeline`, `order_machine_log`) para prevenir race conditions con Realtime.
-10. **Realtime refs estables:** usar `useRef` para canales Realtime — previene recreación en re-renders.
-
-### Hooks y estado
-11. **Orden requerido de declaración** (JavaScript temporal dead zone): `viewOrders → searchFilter → filteredOrders → myTasks → staleTasks`.
-12. **`.slice().sort()` en arrays memoizados** — nunca mutar in place.
-13. **`isSec(role)`** — helper para identificar roles tipo secretaria.
-14. **`secOwns`** — gate de acciones (bloquea secretaria + vendedor en órdenes ajenas).
-15. **`vOwns`** — gate de visibilidad (bloquea solo vendedor).
-16. **`userLogin`** — username autenticado, separado del `role`.
-17. **`notifKey`** — vendedores cargan notificaciones por username, no por rol.
-18. **Ownership en `created_by`** se guarda como username real, NO como rol.
-
-### Notificaciones
-19. **`db.addNotification` directo** — usar para casos donde el self-skip guard de `db.notify` interfiere.
-20. **Admin notifications para maquila stage advances** requieren handling explícito.
-
-### IPN / Mercado Pago
-21. **`sessionId` (browser-generated)** sirve como `external_reference` a MP.
-22. **HMAC-SHA256 validation** está implementada pero NO bloqueante (la seguridad real viene de verificar el pago directamente con MP API).
+- **Frontend:** React 18 + Vite, **un solo archivo** `src/App.jsx` (~20,000 líneas). Estilos inline con
+  el objeto `C`; sin CSS externo ni Tailwind. Módulos aparte sólo cuando hay que probarlos con Node
+  (`src/lib/cuadrarPartes.js`).
+- **Hosting:** Vercel auto-deploy desde `main` → `print-flow-eosin.vercel.app`.
+- **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
+  Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
+  `verify_actor_role(p_actor, roles[])` (JWT-first: la identidad la da `auth.uid()`, `p_actor` es
+  etiqueta).
+- **Marcelo** es dueño y único desarrollador; **Karla** factura; **Lupita** captura; **Gerardo/Noemí/
+  Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
 
 ---
 
-## 📐 Convenciones de código
+## ⚠️ Reglas que NO se rompen
 
-### Estilo del archivo App.jsx
-- **Single file**, código compacto, **mínimos saltos de línea** entre funciones cortas
-- Inline styles con objeto `C` (colors) y helpers `bt()` (button), `Row` (detail row)
-- Prefijo `🆕 vX.X.X — ` en comentarios cuando agregas features nuevas (para tracking)
-- Prefijo `// ═══ SECTION ═══` para secciones grandes
-- Prefijo `// ─── COMPONENT ───` para componentes principales
+### Base y permisos
+1. `supabase.update()` **nunca** incluye `id` (PostgREST lo rechaza en silencio).
+2. **supabase-js no lanza**: siempre `{data, error}` y mirar `error`. Ignorarlo deja `data=null` y la
+   app sigue (fail-open) — v10.80.13 lo pagó con las 4 patas fiscales apagadas.
+3. `orders.id` es **TEXT** (`OP-…`), no UUID. Toda RPC con orden usa `text`.
+4. **RLS es por rol**, no `allow_all`: `orders_select_role` es **cross-app** (CobranzaFlow la usa con
+   `pf_uid_role()=NULL`) — **no endurecerla**. Escribir en `cobranza.*` desde PrintFlow = RPC
+   `SECURITY DEFINER`.
+5. **Toda RPC nueva nace con EXECUTE para `anon`** (ACL por defecto). `REVOKE … FROM PUBLIC, anon` por
+   nombre y `GRANT … TO authenticated, service_role`. La **invariante 9** lo vigila.
+6. **Cambiar la firma de una función CREA otra** (sobrecarga abierta a PUBLIC). `DROP FUNCTION` la
+   vieja primero. Invariante 16.
+7. Los **parches de texto** a funciones vivas (`pg_get_functiondef` + `replace` con ancla contada) se
+   registran después en `supabase_migrations.schema_migrations` como `*_definiciones_vivas` — si no,
+   un re-apply resucita la versión mala.
+8. **Candados ORDEN → PARTE** en toda RPC/trigger que toque `orders` y `order_invoice_splits`.
+9. `UPDATE OF col` en un trigger mira las columnas **listadas**, no las que cambian.
+10. **Agregar una FK** a una tabla con otra FK al mismo destino rompe los embeds de PostgREST
+    (PGRST201 → pantalla en blanco). Correr `cobranzaflow/scripts/probar-embeds.sh` en el mismo commit.
 
-### Edits seguros
-- **Siempre validar sintaxis JSX** antes de guardar cambios grandes:
-  ```bash
-  cd /tmp && npm install acorn acorn-jsx
-  node -e "
-  const acorn = require('acorn');
-  const jsx = require('acorn-jsx');
-  const code = require('fs').readFileSync('PATH/App.jsx', 'utf8');
-  acorn.Parser.extend(jsx()).parse(code, {sourceType:'module', ecmaVersion:'latest'});
-  console.log('✅ Sintaxis válida — ' + code.split('\\n').length + ' líneas');
-  "
-  ```
-- **Surgical edits only** — usar `str_replace` con strings únicos, NO rewrites completos
-- **Verificar antes de editar:** grep para confirmar que el string a reemplazar existe y es único
+### React / App.jsx
+11. **Orden de declaración** (TDZ): `viewOrders → searchFilter → filteredOrders → myTasks → staleTasks`.
+12. `.slice().sort()` en arrays memoizados; nunca mutar.
+13. `showToast` es de `App`: los modales definidos a nivel módulo **no lo ven** — avisos locales
+    (`err`, `avisoResto`). `scripts/probar-alcance.sh` caza helpers usados fuera de su componente.
+14. **Modal reusado sin `key`** muestra el estado del anterior. Un modal que trabaja sobre datos que el
+    realtime puede mover se monta sobre el dato **vivo** con `key` (v10.84.6).
+15. Un botón **antes** del primer input de un Modal roba el foco; un input **nuevo** bajo un
+    `onKeyDown(Enter)` dispara la acción del contenedor, no la suya.
+16. `has_splits`, `has_matrix_lines`, `splits`, `fiscal_desconocido` **no son columnas**: las calcula
+    `reload()` cruzando `order_invoice_splits`. No van en `.or()` de PostgREST.
+17. **Las 4 patas fiscales**: «ya está facturada» = `invoice_folio || grouped_invoice_folio ||
+    has_splits || has_matrix_lines` (helper `fiscalOk`). Todo predicado de foliar/entregar/snooze las usa.
+18. `isSec(role)` / `secOwns` / `vOwns` / `userLogin` / `notifKey` — gates de siempre; `created_by`
+    guarda username, no rol.
+19. Prefijo `// vX.Y.Z — ` en cada cambio, con el **porqué** (los comentarios son el historial que sí
+    se lee).
 
-### Helpers de formato (ya existen, NO reimplementar)
-- `fmt(n)` → currency MXN
-- `fD(d)` → fecha corta `5 may`
-- `fDT(d)` → fecha + hora `5 may, 14:30`
-- `pct(c, p)` → percentage
-- `fmtM(m)` → minutes a `Xh Ym`
-- `gid()` → genera ID `OP-XXXXX...`
-
----
-
-## 🗄️ Schema importante (database)
-
-### Tablas principales (14)
-1. `orders` — órdenes de producción y maquila
-2. `order_timeline` — historial de eventos
-3. `order_comments` — comentarios
-4. `order_waste` — registros de merma
-5. `order_machine_log` — uso de máquinas
-6. `order_notes` — notas rápidas
-7. `users` — usuarios + roles
-8. `notifications` — push notifications persistentes
-9. `chemical_log` — químicos (revelador, reforzador)
-10. `plate_log` — placas (chicas, grandes)
-11. `maintenance_log` — mantenimiento de máquinas
-12. `app_config` — configuración global
-13. `invoice_counters` — contadores D/R/P/W (v10.7.0+)
-14. `production_plans` — cola del Planificador (v10.8.x)
-
-### RLS
-**Patrón consistente:** Todas las tablas usan `CREATE POLICY "allow_all" FOR ALL USING (true) WITH CHECK (true)`. El control de acceso real está en la app (frontend).
-
-### Folios importantes
-- **P-XXXX** — production_number (P-1, P-2, ..., P-3434, P-3435...). Continuidad preservada vía `OP-SEED-P3434-DO-NOT-DELETE` phantom record. **NO BORRAR.**
-- **D-XXXX** — facturas (empezó en D-5745)
-- **R-XXXX** — remisiones (empezó en R-1172)
-- **C-XXXX** — cart folio (web, pedidos agrupados)
-- **W-XXXX** — web order folio (cada producto del cart)
+### Proceso
+20. **Edits quirúrgicos** (`str_replace` con anclas únicas; en Python `assert s.count(a)==1`). Nunca
+    rewrites de `App.jsx`.
+21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
+    `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
+    (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
+22. **Un cambio de base se ensaya contra producción con rollback** (`DO $$ … RAISE EXCEPTION 'ENSAYO'
+    $$`, sesión simulada con `set_config('request.jwt.claims', …)`) **antes** de tocar el front.
+23. **Push a `main` de PrintFlow está autorizado de forma permanente** (Marcelo, sep-2026).
+    **CobranzaFlow requiere confirmación** explícita. Commits: un tema por commit, mensaje que explique
+    el porqué, `Co-Authored-By` al final.
+24. **Scans/workflows de agentes: decir agentes + orden de magnitud en tokens y esperar OK**; tope
+    duro en el script. Dos scans de 170 agentes agotaron la semana de Marcelo en agosto; el 10-sep un
+    «25-40» fueron 187.
+25. Las 15 skills de diseño (`/impeccable`…) son **manuales**: sólo si Marcelo las escribe. La UI es
+    de otra sesión.
 
 ---
 
-## 🚦 Workflow de desarrollo
+## 🗄️ La base, lo que importa
 
-### Marcelo trabaja así (5 may 2026 en adelante)
-1. **Planeación:** Chat web Claude.ai con Project Knowledge → decisiones, snippets, briefs
-2. **Implementación:** Claude Code en VS Code → edita archivos, valida sintaxis
-3. **Commit + Push:** VS Code Source Control → mensaje → Commit → Push
-4. **Deploy:** Vercel auto-deploy desde `main` (~30-60 seg)
-5. **Verificación:** abrir `print-flow-eosin.vercel.app`
-
-### SQL migrations
-- Si una feature requiere cambios de schema, **el SQL debe correrse en Supabase SQL Editor ANTES de hacer push** del App.jsx que lo usa.
-- Naming convention: `migration_vX.X.X_description.sql`
-
-### Documentación
-- **Solo `CHANGELOG.md` se actualiza por sesión** (entrada nueva al inicio)
-- **Base docs (`PrintFlow-Contexto.md`, `Roadmap.md`, `Documentacion.md`) NO se tocan** salvo en versiones mayores (v11, v12...)
-- Edits surgicales, NUNCA rewrites completos de docs
-
----
-
-## 🚫 Cosas que Claude Code NO debe hacer (sin pedir confirmación)
-
-1. **NO hacer rewrites completos del App.jsx** — surgical str_replace only
-2. **NO modificar `OP-SEED-P3434-DO-NOT-DELETE`** ni nada con sufijo `DO-NOT-DELETE`
-3. **NO borrar tablas SQL** sin confirmación explícita
-4. **NO hacer push directo a `main`** sin pedir review del diff primero
-5. **NO ejecutar `npm install`** de paquetes nuevos sin discutirlo (puede romper Vercel build)
-6. **NO modificar `package.json`** sin avisar
-7. **NO modificar variables de entorno** (`.env`) — están en Vercel
-8. **NO incluir `id` en `supabase.update()`** — regla #1
-9. **NO hacer commits que mezclen features no relacionadas** — un cambio = un commit
-10. **NO agregar dependencias externas** sin necesidad real (mantener minimal footprint)
+- **Órdenes:** `public.orders` (stage, `production_number` **P-XXXX** nuevo consecutivo desde el corte;
+  las viejas se renumeraron **H-XXXX**), `order_timeline`, `order_comments`, `order_notes`,
+  `order_waste`, `order_machine_log`, `purchase_orders` (OC), `production_plans`.
+- **Facturación desde PrintFlow:** `invoice_counters` (F-/RS-/P-…; con **emisor propio ON** desde
+  1-sep-2026 los folios nacen del counter — las series **D-/R- eran de Alpha y están retiradas**);
+  `order_invoice_splits` (partes de una orden: `factura | remision | corona_saldo | por_facturar`);
+  `oc_invoice_split_groups/lines` (plan matriz de una OC); `order_payment_refs`.
+- **Cobranza (schema `cobranza`):** `invoices` (`source_order_id` ↔ orden), `payments`,
+  `bank_movements`, `cash_vouchers`, `client_credit_ledger`, `cfdi_documents`, `audit_log`,
+  `audit_discrepancies`, `app_config` (`folio_emitter_enabled`, `corona_credit_bridge_enabled`).
+- **CTP:** `ctp_placas` (cruda cuenta ~2×; usar `v_ctp_placas`), `ctp_maintenance`, `chemical_log`,
+  `plate_log`, `maintenance_log`.
+- **Realtime:** canal `orders-realtime` (orders, timeline, comments, waste, machine_log,
+  notifications, notes, purchase_orders, **order_invoice_splits**). Una tabla nueva debe entrar a la
+  publicación `supabase_realtime`.
+- **Storage:** bucket `order-files` **privado** desde 18-ago (lectura firmada).
+- **Migraciones:** se aplican con `apply_migration` del MCP y viven en
+  `supabase_migrations.schema_migrations`; copia legible de las de facturación en
+  `docs/migrations/v10.84.*.sql`. Ver `cobranzaflow/supabase/migrations/LEEME-*.md`.
 
 ---
 
-## 🎯 Versión actual y próximos pasos
+## 📚 Dónde está el contexto (léelo antes de tocar el tema)
 
-- **Versión LIVE:** v10.9.0+ (folio anticipado + captura manual + fecha creación visible)
-- **Próximo:** v10.9.1 — Vista de Auditoría + Gap Detection (decisiones pendientes)
-- **Roadmap mid-term:** v10.10 (purchase_orders) → v11 (invoices independientes) → CobranzaFlow (app separada)
+| tema | documento |
+|---|---|
+| Historial de cambios (entrada nueva al inicio, cada sesión) | `CHANGELOG.md` |
+| **Facturar por partes en el tiempo** (resto, siguiente parte, cuadrar, ligar, cancelaciones, 46 hallazgos de 3 scans) | `../cobranzaflow/docs/SPEC-facturar-por-partes.md` |
+| Re-facturar / convertir remisiones / nota de crédito | `../cobranzaflow/docs/SPEC-refacturacion-y-conversion.md` |
+| Cancelación de CFDI, traslados, comisiones, importaciones bancarias, vale multi-doc, lista negra SAT | `../cobranzaflow/docs/SPEC-*.md` |
+| Lo pendiente (decisiones de personas, no código) | `../cobranzaflow/docs/PENDIENTES.md` |
+| Invariantes de clase (34) | `../cobranzaflow/supabase/invariantes.sql` |
+| Memoria de Claude (minas, decisiones del dueño, preferencias) | `~/.claude/projects/c--Users-padil-Projects-cobranzaflow/memory/MEMORY.md` |
+| Diseño / tokens / DESIGN.md | `../cobranzaflow/DESIGN.md` (convergencia CBF↔PF) |
 
-Ver `CHANGELOG.md` para historial completo y `PrintFlow-Contexto.md` / `Roadmap.md` (en chat web project knowledge) para detalles.
+Los docs base de mayo (`PrintFlow-Contexto.md`, `Roadmap.md`, `Documentacion.md`) **viven en el project
+knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
+
+---
+
+## 🎯 Estado (14-sep-2026)
+
+- **LIVE:** v10.84.6. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
+- **Lo último:** facturar por partes a lo largo del tiempo (v10.84.0-6), realtime de partes, Cuadrar.
+  Estreno pendiente: **P-0070 Castores** (ligar la factura que Karla emitió sin orden + el resto).
+- **Backlog conocido:** Tablero activa fantasma (`delivered` en pos 0 bloquea auto-promoción);
+  validaciones pendientes del roadmap de estabilización; decisiones de Marcelo en PENDIENTES.
 
 ---
 
 ## 💬 Comunicación con Marcelo
 
-- Marcelo prefiere **implementación directa sobre explicaciones largas**
-- Usa **español mexicano** en respuestas
-- Para multi-step tasks: dar **checklist claro** y avanzar paso a paso
-- Cuando hay dudas de diseño: **proponer 2-3 opciones** con pros/cons, no preguntar abierto
-- **Validar sintaxis** antes de declarar un cambio "listo"
-
----
-
-*Última actualización: 5 mayo 2026 — Setup inicial Claude Code*
+- **Ejecución sobre análisis**: haz la tarea y para; respuestas cortas, en español mexicano, liderando
+  con el resultado. Nada de «opciones» cuando hay una obvia.
+- Si algo huele mal, decirlo en una línea y seguir; parar sólo si seguir sería inseguro.
+- **Reportar lo que pasó de verdad**: si una prueba falló, decirlo con la salida; si algo se saltó,
+  decirlo.
