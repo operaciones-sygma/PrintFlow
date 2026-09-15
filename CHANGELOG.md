@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.5 — Los tres P3 que quedaban de «por partes» — 14-sep-2026
+
+- **Las partes se ven en vivo entre pestañas.** `order_invoice_splits` entró a la publicación
+  `supabase_realtime` y PrintFlow se suscribe a sus cambios: cuando Karla factura la siguiente parte
+  en una pestaña —o CobranzaFlow cancela el CFDI de una parte y su dinero regresa al resto— la otra
+  pestaña ve el resto nuevo sin recargar. Antes veía el viejo hasta F5 (el RPC rechazaba la segunda,
+  pero la pantalla mentía).
+- **El detalle de la orden dice lo fiscal de una orden por partes.** La ficha ya decía «Dividida en
+  N folios · resto por facturar»; el detalle —donde se lee con calma— no decía nada y sin folio propio
+  parecía sin facturar. Nueva sección *Info Fiscal · por partes*: cada parte con folio/piezas/dinero/pago,
+  el **Avance** (facturado $X de $Y · faltan $Z, o *Completa*) y las canceladas.
+- **Orden histórica (Alpha) con el emisor activo: nunca se acuña un folio nuevo.** Cada parte se
+  liga al folio real que ya está en cobranza; el chip «se asigna solo» no se ofrece. Hoy no es
+  alcanzable (las históricas están entregadas y el RPC exige salidas/maq_received), pero el modal
+  ya no depende de eso para no inventar una factura.
+
+---
+
 ## v10.84.4 — Lo que cazó el SEGUNDO scan de «por partes» (16 confirmados, 0 refutados) — 14-sep-2026
 
 Dirección pidió otro scan sobre la herramienta ya arreglada: 23 agentes, **16 confirmados**, todos

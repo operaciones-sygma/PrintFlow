@@ -4106,6 +4106,33 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
       {/* 🆕 v10.9.0 — Sección INFO FISCAL */}
       {o.grouped_invoice_folio&&!o.invoice_folio&&!hp&&vOwns&&<Row l="Facturada agrupada en" v={<span style={{color:C.fac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.grouped_invoice_folio}</span>}/>}
+      {/* v10.84.5 — INFO FISCAL de una orden facturada POR PARTES. La ficha lo decia («Dividida en N folios · resto por
+          facturar»); el detalle, que es donde se lee con calma, no decia nada: sin folio propio parecia SIN facturar. */}
+      {!o.invoice_folio&&!hp&&vOwns&&(o.splits||[]).some(x=>!x.cancelled_at)&&(()=>{
+        const todas=o.splits||[];
+        const vivas=todas.filter(x=>!x.cancelled_at).slice().sort((a,b)=>(a.position||0)-(b.position||0));
+        const resto=vivas.find(x=>x.doc_type==="por_facturar");
+        const huboResto=todas.some(x=>x.doc_type==="por_facturar");
+        const tot=Number(isMaq?o.maq_price:o.price)||0;
+        const fac=vivas.filter(x=>x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);
+        const nCanc=todas.filter(x=>x.cancelled_at&&!/^Consumida:/.test(x.cancellation_reason||"")).length;
+        const pagoBadge=x=>x.payment_status==="paid"?<Badge color={C.ok} icon={<CheckCircleIcon size={11} weight="fill"/>}>Pagada</Badge>:x.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>Parcial</Badge>:null;
+        return <>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold" color={C.ac}/>Info Fiscal · por partes</div>
+          {vivas.map(x=><Row key={x.id} l={"Parte #"+x.position} v={<span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {x.doc_type==="corona_saldo"?<span style={{color:C.emr,fontWeight:700}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
+             :x.doc_type==="por_facturar"?<span style={{color:C.wn,fontWeight:700}}>⏳ por facturar</span>
+             :<span style={{color:x.doc_type==="factura"?C.fac:C.live,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{x.doc_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{x.invoice_folio}</span>}
+            <span style={{color:C.t2}}>{Number(x.qty_portion||0).toLocaleString("es-MX")} pzas · {fmt(x.amount_portion)}</span>
+            {x.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:10,fontWeight:700}}>anticipado</span>}
+            {pagoBadge(x)}
+          </span>}/>)}
+          {huboResto&&<Row l="Avance" v={resto
+            ?<span>Facturado <b>{fmt(fac)}</b> de {fmt(tot)} · faltan <b style={{color:C.wn}}>{fmt(resto.amount_portion)}</b> ({Number(resto.qty_portion||0).toLocaleString("es-MX")} pzas). Se factura desde la ficha con <b>Facturar siguiente parte</b>.</span>
+            :<span><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Completa: {fmt(fac)} de {fmt(tot)} en {vivas.filter(x=>x.invoice_folio).length} folio{vivas.filter(x=>x.invoice_folio).length===1?"":"s"}</span>}/>}
+          {nCanc>0&&<Row l="Canceladas" v={nCanc+" parte"+(nCanc===1?"":"s")+" (su dinero "+(huboResto?"regresó al resto":"salió del plan")+")"}/>}
+        </>;
+      })()}
       {(o.invoice_folio||o.cancellation_reason)&&!hp&&vOwns&&<>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold" color={o.invoice_type==="factura"?C.fac:C.live}/>Info Fiscal</div>
         {o.invoice_folio&&<>
@@ -6732,6 +6759,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const [folioSugFactura, setFolioSugFactura] = useState("");
   const [folioSugRemision, setFolioSugRemision] = useState("");
   const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folios autogenerados, se ocultan los inputs
+  // v10.84.5 — orden HISTORICA (Alpha) con el emisor activo: acuñar un F- nuevo para una orden de la era de
+  // Alpha seria inventar una factura. Cada parte se LIGA al folio real que ya esta en cobranza (p_allow_link);
+  // el chip «se asigna solo» no se ofrece. Hoy no es alcanzable (las historicas estan entregadas y el RPC exige
+  // salidas/maq_received), pero el modal no debe depender de eso para no acuñar.
+  const ligarForzado = isHistoric && folioAuto;
+  const esLigar = sp => !!sp?.ligar || ligarForzado;
   // v10.75.10 — Karla se confundía: el campo pedía CON IVA pero el objetivo del semáforo es el
   // SUBTOTAL (misma base que "subtotal $56,900" de la orden), así que tecleaba subtotales y "no cuadraba".
   // Default = capturar en SUBTOTAL (misma base que ve por todos lados → cero conversión mental).
@@ -6867,10 +6900,10 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
   // v10.84.1: con emisor ON solo se validan los folios ESCRITOS (los de ligar); el resto va vacio
-  const foliosFmtOk = folioAuto ? foliosNoCorona.every(s => !s.ligar || folioRegex.test((s.folio||"").toUpperCase()))
+  const foliosFmtOk = folioAuto ? foliosNoCorona.every(s => !esLigar(s) || folioRegex.test((s.folio||"").toUpperCase()))
                                 : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
   // v10.84.4 (scan 2): con emisor ON solo llevan folio las filas de LIGAR; esas SI se validan.
-  const foliosConFolio = folioAuto ? foliosNoCorona.filter(s => s.ligar) : foliosNoCorona;
+  const foliosConFolio = folioAuto ? foliosNoCorona.filter(s => esLigar(s)) : foliosNoCorona;
   const foliosUnicos = (() => {
     const set = new Set();
     for (const s of foliosConFolio) {
@@ -7001,7 +7034,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     // v10.84.4 (scan 2): una parte «¿ya existe? ligar» trae el dinero de la factura que ya existe -> FIJA;
     // si cuadrar se lo movia, el RPC rechazaba el enlace y la captura se perdia. Corona tambien es fija.
     const base = splits.map(sp => ({ q: Math.floor(Number(sp.qty||0)), sub: amountToBackend(Number(sp.amountConIva||0), sp.doc_type), doc_type: sp.doc_type,
-                                     fijo: !!(folioAuto && sp.ligar) || sp.doc_type === "corona_saldo" }));
+                                     fijo: !!(folioAuto && esLigar(sp)) || sp.doc_type === "corona_saldo" }));
     return cuadrarPartes(base, totalQty, totalSinIva, modo);
   };
   const cuadrePiezas = (!qtyOk || !amountOk) ? calcularCuadre("piezas") : null;
@@ -7042,7 +7075,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
           doc_type: s.doc_type,
           // v10.84.1: con emisor ON solo viaja el folio si se pidio LIGAR; el resto nunca lleva pre_assigned
           folio: (s.doc_type === "corona_saldo" || s.doc_type === "por_facturar") ? null
-               : (folioAuto && !s.ligar) ? null : (s.folio||"").toUpperCase(),
+               : (folioAuto && !esLigar(s)) ? null : (s.folio||"").toUpperCase(),
           pre_assigned: s.doc_type === "por_facturar" ? false : allPreAssigned,
           reason: (allPreAssigned && s.doc_type !== "por_facturar") ? (globalReason||"").trim() : null,
           payment_status: s.payment_status || "unpaid"
@@ -7064,7 +7097,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
         queda como pendiente y se factura desde la ficha de la orden cuando toque.
         No confundir con "🔀 Dividir en N facturas" del modal de OC (que agrupa órdenes enteras).
       </p>
-      {isHistoric && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span><strong>Orden histórica (Alpha):</strong> en cada parte teclea el <strong>folio REAL que ya emitió Alpha</strong> — el sistema NO lo sugiere (el consecutivo interno no aplica a estas órdenes).</span></div>}
+      {isHistoric && <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:11.5,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span><strong>Orden histórica (Alpha):</strong> en cada parte teclea el <strong>folio REAL que ya emitió Alpha</strong> — el sistema NO lo sugiere (el consecutivo interno no aplica a estas órdenes).{ligarForzado&&<> Con el emisor activo cada parte se <strong>liga</strong> a esa factura que ya está en cobranza: no se emite ninguna nueva.</>}</span></div>}
 
       {/* HEADER de contexto */}
       <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14}}>
@@ -7188,7 +7221,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 <div style={{fontSize:11,color:C.t2,fontStyle:"italic",padding:"6px 0"}}>
                   {isCoronaSld ? "Sin folio fiscal" : "Se asigna al facturarla"}
                 </div>
-              ) : folioAuto && !s.ligar ? (
+              ) : folioAuto && !esLigar(s) ? (
                 /* F1: en modo emisor el folio nace del counter → chip en vez de input.
                    v10.84.1 (scan): «¿ya existe?» destapa el input para LIGAR una factura que ya esta en cobranza
                    (mismo cliente, mismo monto). Antes, con el emisor activo, no habia forma: se acuñaba otra. */
@@ -7201,7 +7234,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                   onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
                   style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
                   placeholder={folioAuto ? (isFactura ? "F-XXXX existente" : "RS-XXXX existente") : (isFactura ? "D-XXXX" : "R-XXXX")}/>
-                {folioAuto&&s.ligar&&<button onClick={()=>updateSplit(i,{ligar:false,folio:""})} style={{background:"none",border:"none",padding:0,fontSize:10,color:C.t2,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:2}}>mejor que se asigne solo</button>}
+                {folioAuto&&s.ligar&&!ligarForzado&&<button onClick={()=>updateSplit(i,{ligar:false,folio:""})} style={{background:"none",border:"none",padding:0,fontSize:10,color:C.t2,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:2}}>mejor que se asigne solo</button>}
                 </>
               )}
             </div>
@@ -16790,6 +16823,10 @@ export default function PrintFlow() {
       .on("postgres_changes", { event: "*", schema: "public", table: "plate_log" }, () => { setChemKey(k=>k+1); db.loadPlates().then(setPlates); })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "order_notes" }, doReload)
       .on("postgres_changes", { event: "*", schema: "public", table: "purchase_orders" }, doReload)
+      // v10.84.5 — las PARTES de una orden por partes cambian desde otra pestaña (Karla factura la siguiente)
+      // o desde CobranzaFlow (cancelar el CFDI de una parte regresa su dinero al resto). Sin esto la otra
+      // pestaña veia el resto viejo hasta recargar. La tabla se agrego a la publicacion supabase_realtime.
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_invoice_splits" }, doReload)
       .subscribe((status) => {
         const ok = status==="SUBSCRIBED";
         setConnected(ok);
