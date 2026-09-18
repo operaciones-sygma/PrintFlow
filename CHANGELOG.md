@@ -12,6 +12,29 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.7 — «Facturar siguiente parte» sabe LIGAR una factura que ya existe (caso Portland) — 18-sep-2026
+
+Karla, sobre P-0465 (Portland Leather, $44,000, 100,000 pzas en tres entregas): «esta factura por
+timbrar [F-65] se generó de la orden con las piezas mal; a esa entrega le corresponde F-66, hecha sin
+orden… ¿se pueden ligar las facturas aún faltando una por x monto?». Sí. Antes de que existiera
+facturar por partes (v10.84.0) las dos primeras entregas se facturaron sin orden desde CobranzaFlow
+(F-35, 26,100 pzas; F-66, 43,900 pzas); luego alguien partió la orden desde PrintFlow y salió F-65
+(35,000 pzas, sin timbrar), duplicada y con las piezas equivocadas.
+
+- **RPC:** `facturar_siguiente_parte(…, p_folio, p_allow_link := true)` liga una factura que YA
+  vive en cobranza como la siguiente parte del resto, sin acuñar folio (espejo de la Opción A de
+  `assign_invoice_splits`: mismo cliente, sin orden previa, folio libre en PrintFlow, importe = parte
+  × 1.16 ± 0.02; el puente la salta y la factura recibe `source_order_id`). Firma nueva → DROP de la
+  vieja + REVOKE/GRANT. Copia en `docs/migrations/v10.84.7-siguiente-parte-liga-factura-existente.sql`.
+- **Datos (Dirección, ensayo con rollback antes):** parte F-65 cancelada (su dinero regresó al resto),
+  F-35 y F-66 ligadas como partes 3 y 4, resto **$13,200 / 30,000 pzas** para la entrega del 24-sep
+  (Karla lo factura con «Facturar siguiente parte», como siempre). Invariantes 31-34 verdes.
+- **Pendiente (lunes):** la opción en el modal «Facturar siguiente parte» («ligar una factura que ya
+  existe») para no depender de SQL; y `cancel_invoice_split` deja la factura cancelada sin timbrar
+  con saldo y CFDI `pending` (F-65 se corrigió a mano: saldo 0, cfdi `none`).
+
+---
+
 ## v10.84.6 — Lo que cazó el TERCER scan de «por partes» (10 confirmados) — 14-sep-2026
 
 Dirección pidió un scan más para confirmar que la herramienta funciona: 31 agentes → 16 hallazgos,
