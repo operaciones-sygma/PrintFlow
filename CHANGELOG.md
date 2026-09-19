@@ -12,6 +12,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.9 — «Facturar a un tercero» dice quién paga, con todas sus letras — 18-sep-2026
+
+Marcelo (18-sep, tras el caso Poder Judicial / Congregación): en PrintFlow el tercero sigue siendo
+quien paga y se da de alta como cliente (así se hizo para KFC); «sólo un mensaje aclarando todo, que
+la UI ayude a que sea más claro». Al encender la casilla aparece un panel antes de escoger a nadie:
+**El tercero es quien paga** (factura/remisión, cobranza, estado de cuenta y portal a su nombre; si no
+existe se da de alta; el cliente de la orden sigue sólo en producción) y el caso que NO es este botón:
+quien pidió paga y sólo quiere el CFDI a otra razón social → eso se registra en CobranzaFlow como
+«CFDI a nombre de» (con Dirección hasta que llegue a Por Timbrar), nunca cambiando el RFC del cliente
+(candado v3.7.724 de CobranzaFlow). Los chips «Facturar a:» y el badge de la tarjeta dicen «el tercero
+paga». Sin cambios de lógica.
+
+---
+
 ## v10.84.8 — El guard de «ligar» habla bien y mira `grouped_invoice_folio` — 18-sep-2026
 
 Hallazgo del verificador del 18-sep (P3). `assign_invoice_splits` (Opción A) y

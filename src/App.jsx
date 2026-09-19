@@ -3397,6 +3397,15 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
         <span style={{fontSize:12.5,fontWeight:700,color:C.tx,display:"inline-flex",alignItems:"center",gap:6}}><UsersIcon size={13} weight="bold" color={accent}/>Facturar a un tercero <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>(razón social distinta a la de la orden)</span></span>
       </label>
       {on&&<div style={{marginTop:10}}>
+        {/* v10.84.9 (Marcelo, 18-sep) — que quede claro QUIÉN PAGA antes de escoger a nadie. Este botón hace
+            al tercero el cliente de cobranza (paga, estado de cuenta, portal); si no existe se da de alta. El otro
+            caso —quien pidió paga pero el CFDI sale a otra razón social— NO es este botón: es «CFDI a nombre
+            de» en CobranzaFlow, y nunca cambiando el RFC del cliente (candado v3.7.724). */}
+        <div style={{marginBottom:10,background:accent+"0e",border:"1px solid "+accent+"40",borderRadius:10,padding:"9px 12px",fontSize:11,color:C.tx,lineHeight:1.5}}>
+          <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}><UsersIcon size={12} weight="bold" color={accent}/>El tercero es quien paga</div>
+          <div>La factura o remisión, <b>su cobranza, el estado de cuenta y el portal</b> quedan a nombre del tercero (si no existe, se da de alta como cliente). El cliente de la orden sigue sólo en producción.</div>
+          <div style={{marginTop:4,color:C.t2}}>Si <b>quien pidió el trabajo es quien va a pagar</b> y sólo quiere el CFDI a otra razón social (por ejemplo, Poder Judicial pagando y el CFDI a la Congregación), <b>no uses esto</b>: eso se registra en CobranzaFlow como «CFDI a nombre de» (pídelo a Dirección mientras llega a Por Timbrar). Nunca cambiando el RFC de un cliente.</div>
+        </div>
         {!picked&&<>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <button type="button" onClick={()=>setMode("pick")} style={{...bs(mode==="pick"?accent+"15":C.sf,mode==="pick"?accent:C.t2),fontSize:11,border:"1px solid "+(mode==="pick"?accent+"40":C.bd)}}><MagnifyingGlassIcon size={11} weight="bold"/>Buscar existente</button>
@@ -3422,7 +3431,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{picked.name}</div>{picked.rfc?<div style={{fontSize:10.5,color:C.t2}}>{picked.rfc}</div>:<div style={{fontSize:10.5,fontWeight:700,color:isFactura?C.dn:C.t2}}>{isFactura?"Sin RFC — requerido para factura":"sin RFC"}</div>}</div>
           <button type="button" onClick={()=>{setPicked(null);setQ("");}} style={{...bs(C.sf,C.t2),fontSize:10.5,padding:"4px 9px",border:"1px solid "+C.bd}}><XIcon size={11} weight="bold"/>Cambiar</button>
         </div>}
-        <div style={{fontSize:10.5,color:C.t2,marginTop:8,lineHeight:1.4}}>La factura/remisión y su cobranza quedan a nombre de este tercero; la producción sigue a nombre del cliente de la orden.</div>
+        <div style={{fontSize:10.5,color:C.t2,marginTop:8,lineHeight:1.4}}>Al foliar, la factura/remisión, la cobranza, el estado de cuenta y el portal quedan a nombre de este tercero (él paga); la producción sigue a nombre del cliente de la orden.</div>
       </div>}
     </div>
   );
@@ -8948,7 +8957,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
             <div style={{fontSize:folioAuto?18:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}>{folioAuto?"🔢 Folio automático":folio}</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>({type==="factura"?"Factura":"Remisión"}){folioAuto?" · se asigna al confirmar":""}</div>
           </div>
-          {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
+          {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""} <span style={{color:C.t2}}>· el tercero paga</span></div></div>}
           <div style={{background:paymentStatus==="paid"?C.live+"10":paymentStatus==="partial"?C.fac+"10":C.amb+"10",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?C.live+"40":paymentStatus==="partial"?C.fac+"40":C.amb+"40")}}>
             <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
             {/* v10.50.1 F1 — Si hay paymentRefs (multi-pago), mostrar info correcta en lugar de null */}
@@ -9224,7 +9233,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:folioAuto?18:28,fontWeight:800,color:type==="factura"?C.fac:C.live,fontFamily:"'Geist Mono',monospace",letterSpacing:0.5}}><LightningIcon size={24} weight="fill"/>{folioAuto?"🔢 Folio automático":folio}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:4}}>{type==="factura"?"Factura":"Remisión"} · Razón: {finalReason}</div>
         </div>
-        {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""}</div></div>}
+        {billTo&&!billTo.incomplete&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.ac+"0e",border:"1px solid "+C.ac+"40",borderRadius:10,padding:"9px 12px",marginBottom:12}}><UsersIcon size={14} weight="bold" color={C.ac}/><div style={{fontSize:12,color:C.tx,minWidth:0}}><b>Facturar a:</b> {billTo.name}{billTo.rfc?" · "+billTo.rfc:""}{billTo.isNew?" · nueva razón social":""} <span style={{color:C.t2}}>· el tercero paga</span></div></div>}
         <div style={{background:paymentStatus==="paid"?C.live+"10":paymentStatus==="partial"?C.fac+"10":C.amb+"10",borderRadius:10,padding:12,marginBottom:14,textAlign:"center",border:"1px solid "+(paymentStatus==="paid"?C.live+"40":paymentStatus==="partial"?C.fac+"40":C.amb+"40")}}>
           <div style={{fontSize:11,color:C.t2}}>Estado de pago:</div>
           {/* v10.50.1 F1 — Soporte multi-pago en confirmación PreInvoiceModal */}
@@ -11989,7 +11998,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
           {o.returned_at&&<Badge tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>}
           {o.has_post_invoice_edits&&<Badge tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>}
           {o.returned_from_order_id&&<Badge tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>}
-          {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión y su cobranza van a este tercero (RFC "+(o.bill_to_rfc||"—")+"), distinto del cliente de la orden"} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
+          {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión, su cobranza, el estado de cuenta y el portal van a este tercero (RFC "+(o.bill_to_rfc||"—")+"): él paga. El cliente de la orden sigue sólo en producción."} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
         </div>}
         </div>}
         {!compact&&!inEsperaView&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}
