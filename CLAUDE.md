@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **14-sep-2026** (v10.84.6). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **18-sep-2026** (v10.84.7). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -137,11 +137,20 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ---
 
-## 🎯 Estado (14-sep-2026)
+## 🎯 Estado (18-sep-2026)
 
-- **LIVE:** v10.84.6. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
-- **Lo último:** facturar por partes a lo largo del tiempo (v10.84.0-6), realtime de partes, Cuadrar.
-  Estreno pendiente: **P-0070 Castores** (ligar la factura que Karla emitió sin orden + el resto).
+- **LIVE:** v10.84.7. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
+- **Lo último (18-sep):** `facturar_siguiente_parte(…, p_folio, p_allow_link := true)` **liga una
+  factura que ya existe en cobranza** como la siguiente parte, sin acuñar folio (mismos guards que la
+  Opción A de `assign_invoice_splits`; el puente la salta). Caso Portland P-0465: F-35 y F-66 hechas
+  sin orden antes de «por partes», F-65 duplicada cancelada, resto $13,200 / 30,000 pzas. Firma nueva
+  → DROP de la vieja + REVOKE/GRANT. **Sin botón todavía** (se llamó desde SQL); la opción en el modal
+  «Facturar siguiente parte» va en el lote del lunes.
+- **Antes (14-sep):** facturar por partes a lo largo del tiempo (v10.84.0-6), realtime de partes, Cuadrar.
+- **Pendientes de PrintFlow para el lunes 22-sep:** la opción «ligar factura existente» en el modal;
+  ligar por anticipado F-25 ↔ P-0437 (`link_invoice_to_order` sólo liga en Salidas); **P2
+  `cancel_invoice_split`**: cancelar una parte con factura propia sin timbrar la deja `cancelada` con
+  saldo vivo y `cfdi_status = 'pending'` (F-65 se corrigió a mano; debe poner saldo 0 y `none`).
 - **Backlog conocido:** Tablero activa fantasma (`delivered` en pos 0 bloquea auto-promoción);
   validaciones pendientes del roadmap de estabilización; decisiones de Marcelo en PENDIENTES.
 
