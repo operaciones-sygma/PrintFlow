@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **18-sep-2026** (v10.84.7). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **18-sep-2026** (v10.84.8). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -139,7 +139,7 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (18-sep-2026)
 
-- **LIVE:** v10.84.7. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
+- **LIVE:** v10.84.8 (v10.84.8: el guard de ligar habla bien y mira `grouped_invoice_folio`). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
 - **Lo último (18-sep):** `facturar_siguiente_parte(…, p_folio, p_allow_link := true)` **liga una
   factura que ya existe en cobranza** como la siguiente parte, sin acuñar folio (mismos guards que la
   Opción A de `assign_invoice_splits`; el puente la salta). Caso Portland P-0465: F-35 y F-66 hechas

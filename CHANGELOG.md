@@ -12,6 +12,19 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.8 — El guard de «ligar» habla bien y mira `grouped_invoice_folio` — 18-sep-2026
+
+Hallazgo del verificador del 18-sep (P3). `assign_invoice_splits` (Opción A) y
+`facturar_siguiente_parte` (v10.84.7) declaraban `v_ex_src uuid` y `invoices.source_order_id` es
+text: al toparse con una factura ya ligada a otra orden tronaban con «invalid input syntax for type
+uuid» antes de llegar a su mensaje. Cerraban bien, hablaban mal. Ahora `v_ex_src text`, y los dos
+guards rechazan también un folio que esté en `orders.grouped_invoice_folio`. Ensayo: ligar F-35
+(parte de P-0465) → «ya está ligado a otra orden». Copia en
+`docs/migrations/v10.84.8-guard-de-ligar-habla-bien.sql`; definiciones vivas en
+`v3_7_723_definiciones_vivas` (cobranzaflow).
+
+---
+
 ## v10.84.7 — «Facturar siguiente parte» sabe LIGAR una factura que ya existe (caso Portland) — 18-sep-2026
 
 Karla, sobre P-0465 (Portland Leather, $44,000, 100,000 pzas en tres entregas): «esta factura por
