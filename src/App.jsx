@@ -19955,9 +19955,58 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           setPreInvoiceModal(null);
         }catch(e){
           console.error("[assignPreInvoice] Error:",e);
+          const errMsg=e?.message||"";
           // v10.72.88 (#9): revertir bill_to huérfano si el folio anticipado falló (applyBillTo commiteó aparte).
           if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(preInvoiceModal.id, null, userLogin||user); }catch(_){} }
-          showToast("❌ "+(e?.message||"No se pudo asignar folio anticipado"),"error");
+          // 🔗 v10.84.15 (P2 del verificador del 21-sep) — «LIGAR POR ANTICIPADO» desde aquí.
+          // v10.84.13 enseñó a link_invoice_to_order a ligar ANTES de Salidas (queda pre-asignada), pero el
+          // único front que lo ofrecía era el InvoiceModal, que sólo abre en Salidas: en producción Karla veía
+          // el candado «emitida por adelantado» como un toast, sin botón. Mismo flujo que ese modal: las
+          // candidatas las da la BD (list_linkable_invoices_for_order, ya sin exigir la etapa) y el confirm
+          // dice lo que hace la RPC en esta etapa: liga sin entregar; en Salidas «Entregar» sólo entrega.
+          if(/emitida por adelantado/i.test(errMsg)&&(invoiceType==="factura"||invoiceType==="remision")){
+            const oid=preInvoiceModal.id, actor=userLogin||user;
+            const capturedPay=(paymentStatus==="paid"||paymentStatus==="partial");
+            const _aMulti=Array.isArray(paymentRefs)&&paymentRefs.length>0, _aMethods=_aMulti?[...new Set(paymentRefs.map(r=>r.method))]:[];
+            const aMethod=_aMulti?(_aMethods.length>1?"mixed":_aMethods[0]):paymentMethod;
+            const aRef=_aMulti?(paymentRefs.length>1?("MULTIPLES ("+paymentRefs.length+" pagos)"):(paymentRefs[0]?.bank_reference||null)):bankReference;
+            let cand=null;
+            try{
+              const {data:cands,error:cErr}=await supabase.rpc("list_linkable_invoices_for_order",{p_order_id:oid});
+              if(cErr) throw cErr;
+              cand=(cands||[]).find(c=>c.monto_cuadra&&c.doc_type===invoiceType)||null;
+            }catch(eL){ console.warn("[linkable/anticipado] no se pudieron leer las candidatas:",eL); }
+            if(cand){
+              setPreInvoiceModal(null);
+              setConfirmModal({
+                title:"Este trabajo ya se facturó por adelantado",
+                message:"El cliente ya tiene "+cand.doc_number+" por $"+Number(cand.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+", emitida sin orden hace "+cand.dias_sin_orden+" día(s), y el importe coincide con esta orden."+"\n\n¿Ligarla a esta orden?"+"\n\nSe usa la factura que YA existe: queda pre-asignada a la orden, la etapa no cambia y no se entrega; en Salidas, «Entregar» sólo entrega. Si en vez de eso emites un folio nuevo, al cliente se le cobraría dos veces el mismo trabajo.",
+                confirmLabel:"🔗 Sí, ligar "+cand.doc_number,
+                confirmColor:C.fac,
+                onConfirm:async()=>{
+                  setConfirmModal(null);
+                  try{
+                    const r=await db.linkInvoiceToOrder(oid, cand.doc_number, actor, aMethod, aRef);
+                    const paid=r?.invoice_status==="pagada", partial=r?.invoice_status==="parcial";
+                    const pre=r?.pre_assigned===true;
+                    const newStage=pre?(r?.stage||preInvoiceModal.stage):(preInvoiceModal.order_type==="maquila"?"maq_delivered":"delivered");
+                    setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:cand.doc_number,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:pre,stage:newStage}:o));
+                    try{ await db.addTimeline(oid,"🔗 "+cand.doc_number+" (emitida por adelantado) ligada a esta orden"+(pre?" · pre-asignada, se entrega en Salidas":""),user,C.fac); }catch(_){}
+                    const payMismatch=capturedPay&&!paid&&!partial;
+                    showToast("🔗 "+cand.doc_number+" ligada"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+(pre?" — queda pre-asignada; en Salidas sólo se entrega":" — orden entregada")+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""),"success");
+                    reload();
+                  }catch(e2){
+                    console.error("[linkInvoiceToOrder/anticipado] Error:",e2);
+                    showToast("❌ "+(e2?.message||"No se pudo ligar la factura"),"error");
+                    reload();
+                  }
+                }
+              });
+              return;
+            }
+            showToast("❌ "+errMsg,"error"); reload(); return;
+          }
+          showToast("❌ "+(errMsg||"No se pudo asignar folio anticipado"),"error");
           reload();
         }
       }} onClose={()=>setPreInvoiceModal(null)}/>}

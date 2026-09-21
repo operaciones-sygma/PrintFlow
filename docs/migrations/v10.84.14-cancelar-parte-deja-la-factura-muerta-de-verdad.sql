@@ -22,7 +22,6 @@ BEGIN
     '        UPDATE cobranza.invoices' || E'\n' ||
     '           SET status = ''cancelada'', balance = 0,' || E'\n' ||
     '               cfdi_status = CASE WHEN COALESCE(cfdi_status,''none'') IN (''pending'',''error'') THEN ''none'' ELSE cfdi_status END' || E'\n' ||
-    '         WHERE id = v_invoice.id;' || E'\n' ||
     '         WHERE id = v_invoice.id;');
   EXECUTE v_new;
 END $$;

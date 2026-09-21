@@ -12,6 +12,16 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.15 — «Ligar por anticipado» ahora sí tiene botón (P2 del verificador) — 21-sep-2026
+
+El verificador de sólo lectura del 21-sep encontró que v10.84.13 dejó la RPC lista pero sin puerta: el
+único front que llamaba `list_linkable_invoices_for_order` era el `InvoiceModal`, que sólo abre en Salidas;
+en producción el candado «emitida por adelantado» de `assign_invoice` salía como toast en el modal de folio
+anticipado, sin «Sí, ligar». Ahora el `PreInvoiceModal` ofrece el mismo flujo (candidatas de la BD →
+confirm que dice que queda pre-asignada y no se entrega → `link_invoice_to_order`). Comprobado en la base:
+P-0523 lista F-63 con `monto_cuadra`. También: la copia legible de v10.84.14 traía un `WHERE` duplicado
+(sólo el archivo; la función viva estaba bien).
+
 ## v10.84.12-14 — Ligar una factura existente como siguiente parte · ligar por anticipado · la parte cancelada muere de verdad — 21-sep-2026
 
 Tercero del lote (los tres pendientes de PrintFlow del 18-sep):
