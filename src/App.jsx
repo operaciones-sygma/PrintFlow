@@ -1068,6 +1068,11 @@ const WORKFLOW_ZONES=[
 
 const gid=()=>"OP-"+Date.now().toString(36).toUpperCase()+Math.random().toString(36).substring(2,5).toUpperCase();
 const fmt=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n||0);
+// v10.84.10 — EL PRECIO DE VENTA DE UNA ORDEN ES UNO SOLO Y LO DECIDE order_type, como en la base
+// (assign_folio_to_oc / refacturar_documento / el puente: CASE WHEN order_type='maquila' THEN maq_price
+// ELSE price END). Las tarjetas y los reportes hacian `price || maq_price`, asi que una maquila con un
+// `price` de relleno (P-0445: price=11, maq_price=11,381.90) se pintaba en $11.00 y se sumaba en $11.00.
+const precioVenta=o=>o?.order_type==="maquila"?(parseFloat(o.maq_price)||0):(parseFloat(o?.price)||0);
 // v10.23.0 — Fix timezone bug: strings ISO YYYY-MM-DD se parsean como mediodía local (no UTC midnight)
 const fD=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short"})};
 const fDT=d=>{if(!d)return"";const s=typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d+"T12:00:00":d;return new Date(s).toLocaleDateString("es-MX",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})};
@@ -9831,7 +9836,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   // For vendedor, only count their own orders in basic stats
   const myOrders=orders;
   const created=myOrders.filter(o=>new Date(o.created_at)>=wa);const delivered=myOrders.filter(o=>(o.deliveredAt||o.delivered_at)&&new Date(o.deliveredAt||o.delivered_at)>=wa);
-  const rev=delivered.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+  const rev=delivered.reduce((s,o)=>s+(precioVenta(o)),0);
   const late=myOrders.filter(o=>o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
   const St=({l,v,c=C.tx})=><div style={{background:C.bg,borderRadius:10,padding:10,flex:"1 1 90px",textAlign:"center"}}><div style={{fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div></div>;
 
@@ -9846,7 +9851,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const avgDays=delivered.length>0?(delivered.reduce((s,o)=>{const c=new Date(o.created_at);const d=new Date(o.delivered_at||o.deliveredAt);return s+(d-c)/86400000},0)/delivered.length).toFixed(1):"—";
 
   // Top 5 clients
-  const cMap={};delivered.forEach(o=>{const k=o.client||"?";cMap[k]=(cMap[k]||0)+(parseFloat(o.price)||parseFloat(o.maq_price)||0)});
+  const cMap={};delivered.forEach(o=>{const k=o.client||"?";cMap[k]=(cMap[k]||0)+(precioVenta(o))});
   const topClients=Object.entries(cMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   // Top 5 products
@@ -11950,7 +11955,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
             {(o.created_at||o.due_date)&&<div style={{fontSize:compact?F.micro:F.meta,marginTop:1,color:C.t3}}>{o.created_at&&<><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{color:late?C.dn:"inherit"}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.due_date)}</span>}</div>}
           </div>
           {!compact&&!inEsperaView&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
-            {!hp&&vOwns?(o.price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.price)}</div>:isMaq&&o.maq_price?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(o.maq_price)}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(o.price||o.maq_price?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span title="Precio pendiente" aria-label="Precio pendiente" style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
+            {!hp&&vOwns?(precioVenta(o)>0?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(precioVenta(o))}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(precioVenta(o)>0?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span title="Precio pendiente" aria-label="Precio pendiente" style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
           </div>}
         </div>
         {/* v10.73.8 — /impeccable layout: el bloque de estado fiscal + flags (folio, agrupada, splits, post-edit,
@@ -12216,7 +12221,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:18,fontWeight:800,color:urgColor}}>{days}d</div>
               <div style={{fontSize:10,color:C.t3}}>en maquila</div>
-              {!hp&&oOwns&&(o.price||o.maq_price)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</div>}
+              {!hp&&oOwns&&(precioVenta(o)>0)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(precioVenta(o))}</div>}
             </div>
           </div>
           {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{isOverdue(o.due_date)?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
@@ -13205,7 +13210,7 @@ function Archive({orders,role,onAction,userLogin}) {
   const cancelledCount=delivered.filter(o=>o.stage.includes("cancelled")).length;
   const owns=o=>role!=="vendedor"||!o.created_by||o.created_by===userLogin;
   const myDel=role==="vendedor"?delivered.filter(o=>owns(o)&&!o.stage.includes("cancelled")):delivered.filter(o=>!o.stage.includes("cancelled"));
-  const totalRev=myDel.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+  const totalRev=myDel.reduce((s,o)=>s+(precioVenta(o)),0);
 
   const hp=role==="produccion"||role==="preprensa"||role==="german";
 
@@ -13236,7 +13241,7 @@ function Archive({orders,role,onAction,userLogin}) {
       const yOpen=openYear===yi;
       const months=Object.keys(tree[y]).sort((a,b)=>b-a);
       const yCount=months.reduce((s,m)=>s+Object.values(tree[y][m]).reduce((s2,w)=>s2+w.length,0),0);
-      const yRev=months.reduce((s,m)=>s+Object.values(tree[y][m]).reduce((s2,w)=>s2+w.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s3,o)=>s3+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0),0),0);
+      const yRev=months.reduce((s,m)=>s+Object.values(tree[y][m]).reduce((s2,w)=>s2+w.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s3,o)=>s3+(precioVenta(o)),0),0),0);
 
       return <div key={y} style={{marginBottom:8}}>
         <button onClick={()=>setOpenYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
@@ -13254,7 +13259,7 @@ function Archive({orders,role,onAction,userLogin}) {
             const mOpen=openMonth===mKey;
             const weeks=Object.keys(tree[y][m]).sort((a,b)=>b-a);
             const mCount=weeks.reduce((s,w)=>s+tree[y][m][w].length,0);
-            const mRev=weeks.reduce((s,w)=>s+tree[y][m][w].filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s2,o)=>s2+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0),0);
+            const mRev=weeks.reduce((s,w)=>s+tree[y][m][w].filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s2,o)=>s2+(precioVenta(o)),0),0);
 
             return <div key={m} style={{marginBottom:4}}>
               <button onClick={()=>setOpenMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?C.dsn+"08":C.bg,border:"0.5px solid "+(mOpen?C.dsn+"20":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
@@ -13270,7 +13275,7 @@ function Archive({orders,role,onAction,userLogin}) {
                   const wKey=mKey*10+parseInt(w);
                   const wOpen=openWeek===wKey;
                   const wOrders=tree[y][m][w].slice().sort((a,b)=>new Date(b.delivered_at||b.deliveredAt)-new Date(a.delivered_at||a.deliveredAt));
-                  const wRev=wOrders.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0);
+                  const wRev=wOrders.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s,o)=>s+(precioVenta(o)),0);
 
                   return <div key={w} style={{marginBottom:4}}>
                     <button onClick={()=>setOpenWeek(wOpen?null:wKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:wOpen?C.ios+"06":C.bg,border:"0.5px solid "+(wOpen?C.ios+"20":C.bd),borderRadius:8,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
@@ -13304,7 +13309,7 @@ function Archive({orders,role,onAction,userLogin}) {
                           <div style={{fontSize:10,color:C.t2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
                             <span style={{fontSize:9,color:isCancelled?C.dn:C.t3}}>{isCancelled?"Cancelada":"Entregada"}: {fD(o.delivered_at||o.deliveredAt||o.created_at)}</span>
-                            {!hp&&owns(o)&&!isCancelled&&(o.price||o.maq_price)&&<span style={{fontSize:12,fontWeight:800,color:C.ok}}>{fmt(parseFloat(o.price)||parseFloat(o.maq_price))}</span>}
+                            {!hp&&owns(o)&&!isCancelled&&(precioVenta(o)>0)&&<span style={{fontSize:12,fontWeight:800,color:C.ok}}>{fmt(precioVenta(o))}</span>}
                           </div>
                         </div>;
                       })}
@@ -13507,10 +13512,10 @@ function Analytics({orders,onReload}) {
   const mR=delMaq.reduce((s,o)=>s+(parseFloat(o.maq_price)||0),0);
   const mC=delMaq.reduce((s,o)=>s+(parseFloat(o.maq_cost)||0),0);
   const totalRev=tR+mR;
-  const avgTicket=del.length>0?del.reduce((s,o)=>s+(parseFloat(o.price)||parseFloat(o.maq_price)||0),0)/del.length:0;
+  const avgTicket=del.length>0?del.reduce((s,o)=>s+(precioVenta(o)),0)/del.length:0;
 
   // Monthly revenue trend (only delivered orders count as revenue)
-  const byMonth={};orders.forEach(o=>{const d=o.created_at?o.created_at.slice(0,7):"";if(!d)return;if(!byMonth[d])byMonth[d]={rev:0,cnt:0,del:0};byMonth[d].cnt++;if(o.stage.includes("delivered")){byMonth[d].rev+=(parseFloat(o.price)||parseFloat(o.maq_price)||0);byMonth[d].del++}});
+  const byMonth={};orders.forEach(o=>{const d=o.created_at?o.created_at.slice(0,7):"";if(!d)return;if(!byMonth[d])byMonth[d]={rev:0,cnt:0,del:0};byMonth[d].cnt++;if(o.stage.includes("delivered")){byMonth[d].rev+=(precioVenta(o));byMonth[d].del++}});
   const months=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
   const maxMR=Math.max(...months.map(([,d])=>d.rev),1);
   // v10.34.4 fix #4 — mes calendario real (antes -30d cae en mismo mes para días 28-31)
@@ -13528,15 +13533,15 @@ function Analytics({orders,onReload}) {
   const workDays=firstOrder?countWorkDays(firstOrder,new Date()):0;
   const availHrsPerMachine=workDays*WORK_HRS_DAY;
 
-  const byM={};orders.forEach(o=>{const isDel=o.stage?.includes("delivered");const price=isDel?(parseFloat(o.price)||parseFloat(o.maq_price)||0):0;const totalMin=(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0);(o.machine_log||[]).forEach(e=>{if(!e.minutes)return;if(!byM[e.machine])byM[e.machine]={j:0,m:0,rev:0,types:{},orders:[]};byM[e.machine].j++;byM[e.machine].m+=e.minutes;if(totalMin>0)byM[e.machine].rev+=price*(e.minutes/totalMin);byM[e.machine].types[o.product_type]=(byM[e.machine].types[o.product_type]||0)+1;byM[e.machine].orders.push({id:o.id,client:o.client,type:o.product_type,min:e.minutes,price})})});
+  const byM={};orders.forEach(o=>{const isDel=o.stage?.includes("delivered");const price=isDel?(precioVenta(o)):0;const totalMin=(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0);(o.machine_log||[]).forEach(e=>{if(!e.minutes)return;if(!byM[e.machine])byM[e.machine]={j:0,m:0,rev:0,types:{},orders:[]};byM[e.machine].j++;byM[e.machine].m+=e.minutes;if(totalMin>0)byM[e.machine].rev+=price*(e.minutes/totalMin);byM[e.machine].types[o.product_type]=(byM[e.machine].types[o.product_type]||0)+1;byM[e.machine].orders.push({id:o.id,client:o.client,type:o.product_type,min:e.minutes,price})})});
   const mStats=Object.entries(byM).map(([mid,d])=>{const m=MACHINES.find(x=>x.id===mid);const hrs=d.m/60;const util=availHrsPerMachine>0?Math.round((hrs/availHrsPerMachine)*100):0;const mxnHrReal=availHrsPerMachine>0?d.rev/availHrsPerMachine:0;const mxnHrWork=hrs>0?d.rev/hrs:0;return{mid,m,j:d.j,t:d.m,hrs,a:Math.round(d.m/d.j),rev:d.rev,mxnHr:mxnHrReal,mxnHrWork,util,types:d.types,orders:d.orders}}).filter(x=>x.m).sort((a,b)=>b.rev-a.rev);
 
   // Product type stats
-  const byType={};orders.forEach(o=>{const p=o.product_type;if(!byType[p])byType[p]={cnt:0,rev:0};byType[p].cnt++;byType[p].rev+=(parseFloat(o.price)||parseFloat(o.maq_price)||0)});
+  const byType={};orders.forEach(o=>{const p=o.product_type;if(!byType[p])byType[p]={cnt:0,rev:0};byType[p].cnt++;byType[p].rev+=(precioVenta(o))});
   const sT=Object.entries(byType).sort((a,b)=>b[1].rev-a[1].rev);const mxT=sT[0]?.[1]?.rev||1;
 
   // Top clients
-  const byClient={};orders.forEach(o=>{const c=o.client;if(!c)return;if(!byClient[c])byClient[c]={cnt:0,rev:0,last:o.created_at};byClient[c].cnt++;byClient[c].rev+=(parseFloat(o.price)||parseFloat(o.maq_price)||0);if(o.created_at>byClient[c].last)byClient[c].last=o.created_at});
+  const byClient={};orders.forEach(o=>{const c=o.client;if(!c)return;if(!byClient[c])byClient[c]={cnt:0,rev:0,last:o.created_at};byClient[c].cnt++;byClient[c].rev+=(precioVenta(o));if(o.created_at>byClient[c].last)byClient[c].last=o.created_at});
   const topClients=Object.entries(byClient).sort((a,b)=>b[1].rev-a[1].rev).slice(0,10);
 
   // Efficiency metrics
@@ -16260,7 +16265,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
 
   const Row=({r,inCron})=>{
     const {o,diag}=r;
-    const m=parseFloat(o.price)||parseFloat(o.maq_price)||0;
+    const m=precioVenta(o);
     return <div style={{border:"1.5px solid "+sevColor[diag.sev]+"66",borderRadius:10,padding:"10px 14px",background:diag.sev==="red"?C.dn+"05":C.bg,marginBottom:6}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <span style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>

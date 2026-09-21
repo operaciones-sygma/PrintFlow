@@ -12,6 +12,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.10 — El precio de venta de una orden es uno solo: maquila → `maq_price`, lo demás → `price` — 21-sep-2026
+
+Karla: «en la OCard P-0445 sale a $11 pesos pero el precio son 11,000». La orden es de maquila con
+`maq_price` $11,381.90 y un `price` de relleno de $11; la tarjeta hacía `price || maq_price` y ganaba el
+relleno. Lo mismo hacían 14 lugares más (tarjeta compacta, agenda, ingresos por mes/cliente/tipo, ticket
+promedio): sumaban $11 donde la venta valía $11,381.90.
+
+- Helper `precioVenta(o)` junto a `fmt`: la MISMA regla que la base (`CASE WHEN order_type='maquila' THEN
+  maq_price ELSE price END`, la que usan `assign_folio_to_oc`, `refacturar_documento` y el puente). Las 15
+  lecturas de `price||maq_price` pasan a él; la OCard pinta «Sin precio» sólo cuando la regla da cero.
+- Dato aparte para Karla: **P-0432** (Modelo, maquila entregada sin folio) trae `price` 6,552 y
+  `maq_price` 2,502 (= 6,552 − costo 4,050): cuando se facture saldrá por **$2,502**; si la venta es de
+  $6,552 hay que corregir `maq_price` antes de foliar. H-3565 (cancelada) trae 1,590 vs 1,589.98: sin
+  efecto.
+
 ## v10.84.9 — «Facturar a un tercero» dice quién paga, con todas sus letras — 18-sep-2026
 
 Marcelo (18-sep, tras el caso Poder Judicial / Congregación): en PrintFlow el tercero sigue siendo
