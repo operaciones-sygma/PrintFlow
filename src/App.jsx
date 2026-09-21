@@ -1255,6 +1255,7 @@ const ACTION_ROLES = {
   pre_invoice:          { allowed:["admin","karla"], ownerBound:[] },
   cancel_order:         { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   cancel_with_nc:       { allowed:["admin"], ownerBound:[] },
+  deshacer_cancelacion: { allowed:["admin"], ownerBound:[] }, // v10.84.11 — deshacer una cancelación hecha por error (alcance acotado en el RPC)
   refacturar:           { allowed:["admin","karla"], ownerBound:[] }, // v10.81.0 — liberar folio de factura cancelada para re-facturar (candado fiscal real en el RPC)
   move_to_oc:           { allowed:["admin","secretaria","karla"], ownerBound:[] },
   // ─── Diferidos: flow, client_history (gate especial en handleAction, no via ACTION_ROLES), etc. ───
@@ -1714,10 +1715,30 @@ const db = {
   },
   // v10.81.0 — "Re-facturar orden": libera el folio de una orden cuya factura se CANCELÓ (candado fiscal en el RPC:
   // solo si NINGUNA factura viva lleva ese folio). La orden regresa a facturable (asignar folio nuevo o ligar uno).
+  // v10.84.11 — «Deshacer cancelación» (sólo admin). Alcance acotado en el RPC: sin folio, factura ligada que el puente
+  // desligó, o parte prorrateada de un folio compartido (si la factura sigue tal cual). Lo demás lo rechaza con el motivo.
+  async revertOrderCancellation(orderId, targetStage, actor) {
+    const {data, error} = await supabase.rpc("revert_order_cancellation", {p_order_id: orderId, p_target_stage: targetStage || null, p_actor: actor});
+    if(error) throw new Error(error.message);
+    return data; // { ok, stage, cobranza, msg }
+  },
   async releaseInvoiceFolio(orderId, actor) {
     const {data, error} = await supabase.rpc("release_cancelled_invoice_folio", {p_order_id: orderId, p_actor: actor});
     if(error) throw new Error(error.message);
     return data; // { ok, released_folio, new_stage, msg }
+  },
+  // v10.84.11 — lo mismo a nivel OC (folio COMPARTIDO): ¿la factura compartida ya está cancelada en cobranza?
+  async ocSharedFolioIsCancelled(ocId) {
+    const {data, error} = await supabase.rpc("oc_shared_folio_is_cancelled", {p_oc_id: ocId});
+    if(error) return false; // fail-safe: si no se puede consultar, no ofrecer la acción
+    return !!data;
+  },
+  // v10.84.11 — suelta el folio compartido de la OC, la reabre y regresa sus órdenes a Salidas / Recibida de
+  // maquila; luego «Asignar folio → compartido» acuña el nuevo. (Desde CobranzaFlow, «Re-facturar» hace todo en un paso.)
+  async releaseOcSharedFolio(ocId, actor) {
+    const {data, error} = await supabase.rpc("release_cancelled_oc_shared_folio", {p_oc_id: ocId, p_actor: actor});
+    if(error) throw new Error(error.message);
+    return data; // { ok, released_folio, orders, orders_count, msg }
   },
   // ¿el folio de esta orden está cancelado y ninguna factura viva lo lleva? — decide si ofrecer "Re-facturar".
   async orderFolioIsCancelled(orderId) {
@@ -4223,6 +4244,18 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {/* 🆕 v10.81.0 — "Re-facturar orden": el folio de esta orden apunta a una factura CANCELADA. Liberarlo la regresa
           a facturable (asignar folio nuevo o ligar uno existente). El RPC re-valida el candado fiscal (solo si ninguna
           factura viva lleva ese folio). Reemplaza el arreglo a mano por SQL que se hizo con F-14↔P-0415. */}
+      {/* v10.84.11 — «Deshacer cancelación» (admin): P-0350 se canceló por error el 21-sep y sólo se pudo revertir por SQL.
+          El RPC sólo deshace lo que se puede deshacer sin adivinar (ver revert_order_cancellation); si no, dice por qué. */}
+      {role==="admin"&&o.stage?.includes("cancelled")&&o.cancelled_at&&<div style={{marginTop:14,padding:14,background:C.wn+"0D",border:"1.5px solid "+C.wn+"40",borderRadius:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <ArrowsClockwiseIcon size={24} weight="bold" color={C.wn} style={{flexShrink:0}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.wn}}>Deshacer cancelación</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Si se canceló por error. La orden vuelve a {o.invoice_folio||o.grouped_invoice_folio?"entregada":"Salidas"}{o.invoice_folio?" con su folio "+o.invoice_folio:""}; si el puente había quitado su parte de una factura compartida, se la devuelve. Si la cancelación canceló una factura propia con cobros, no se deshace desde aquí (Dirección).</div>
+          </div>
+        </div>
+        <button onClick={()=>dispatch("deshacer_cancelacion")} style={{...bt(C.wn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>
+      </div>}
       {canRefacturar&&folioCancelado&&<div style={{marginTop:14,padding:14,background:C.live+"0D",border:"1.5px solid "+C.live+"40",borderRadius:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
           <ArrowsClockwiseIcon size={24} weight="bold" color={C.live} style={{flexShrink:0}}/>
@@ -15772,6 +15805,37 @@ function ProductionOrderDetailModal({order, purchaseOrders, onNavigateToOC, onNa
   </div>;
 }
 
+// v10.84.11 — panel «Liberar folio de la OC»: aparece sólo si oc_shared_folio_is_cancelled() lo confirma al abrir la
+// OC (la factura compartida ya está cancelada en cobranza y ninguna factura viva lleva ese folio). El RPC re-valida
+// todos los candados (saldo a favor, partes, plan matriz, OC bloqueada). Después: «Asignar folio → compartido».
+function OcFolioCanceladoPanel({oc, role, userLogin, showToast, onReload}) {
+  const [cancelado, setCancelado] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(()=>{let alive=true;setCancelado(false);db.ocSharedFolioIsCancelled(oc.id).then(v=>{if(alive)setCancelado(v)}).catch(()=>{});return ()=>{alive=false}},[oc.id, oc.shared_invoice_folio]);
+  if(!cancelado) return null;
+  const liberar = async () => {
+    if(busy) return;
+    if(!window.confirm("La factura "+oc.shared_invoice_folio+" ya está cancelada en Cobranza y la OC "+oc.id+" quedó atada a ella.\n\nLiberar el folio: la OC vuelve a estar abierta y sus órdenes regresan a Salidas (o Recibida de maquila) para volver a facturarlas con «Asignar folio → compartido».\n\n¿Liberar?")) return;
+    setBusy(true);
+    try {
+      const r = await db.releaseOcSharedFolio(oc.id, userLogin||role);
+      showToast?.(r?.msg || ("Folio "+oc.shared_invoice_folio+" liberado."), "success");
+      onReload?.();
+    } catch(e) { showToast?.(e.message || "No se pudo liberar el folio", "error"); }
+    setBusy(false);
+  };
+  return <div style={{marginTop:10,padding:12,background:C.live+"0D",border:"1.5px solid "+C.live+"40",borderRadius:12}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+      <ArrowsClockwiseIcon size={22} weight="bold" color={C.live} style={{flexShrink:0}}/>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.live}}>Liberar folio cancelado de la OC</div>
+        <div style={{fontSize:11,color:C.t2,marginTop:2}}>La factura <b>{oc.shared_invoice_folio}</b> ya está cancelada en Cobranza y esta OC quedó atada a ella. Al liberar, la OC se reabre y sus órdenes regresan a Salidas para facturarlas de nuevo con «Asignar folio → compartido». (Si la factura sigue viva y sólo cambia la fecha, en CobranzaFlow «Re-facturar» hace todo en un paso.)</div>
+      </div>
+    </div>
+    <button onClick={liberar} disabled={busy} style={{...bt(C.live),width:"100%",justifyContent:"center",fontSize:13,padding:"10px",opacity:busy?.6:1}}><ArrowsClockwiseIcon size={14} weight="bold"/>{busy?"Liberando…":"Liberar folio de la OC"}</button>
+  </div>;
+}
+
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
 function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC}){
   const [selectedOCId, setSelectedOCId] = useState(null);
@@ -15891,6 +15955,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const ocAgent = ocOrders.find(o => (o.client_agent||"").trim())?.client_agent || "";
     const isLocked = selectedOC.folios_locked === true;
     const hasShared = !!selectedOC.shared_invoice_folio;
+    // v10.84.11 — «Liberar folio de la OC»: si la factura compartida ya se canceló en cobranza (y nadie vivo lleva
+    // ese folio), la OC se puede volver a facturar. Espejo del botón de una orden (v10.81.0), a nivel OC. Caso
+    // D-6186 / OC-0657 (21-sep): el cliente pidió fecha de septiembre y ningún botón lo permitía.
+    const canReleaseOcFolio = (role === "admin" || role === "karla") && hasShared && !isLocked && selectedOC.status !== "cancelled";
     // 🌐 v10.12.0 Sub-fase C — Flag de OC web + cart_folio para D5 hierarchy
     const isWeb = selectedOC.is_web_oc === true;
     const cartFolio = isWeb ? getCartFolio(selectedOC) : null;
@@ -15939,6 +16007,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         </div>
         {selectedOC.notes && <div style={{marginTop:10,padding:"8px 10px",background:C.bd+"40",borderRadius:6,fontSize:12,color:C.t2}}>{selectedOC.notes}</div>}
         {isLocked && selectedOC.folios_lock_reason && <div style={{marginTop:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"30",borderRadius:6,fontSize:11,color:C.wn}}><LockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Razón del bloqueo:</strong> {selectedOC.folios_lock_reason}</div>}
+        {canReleaseOcFolio && <OcFolioCanceladoPanel oc={selectedOC} role={role} userLogin={userLogin} showToast={showToast} onReload={onReload}/>}
       </div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"0 0 10px",flexWrap:"wrap",gap:8}}>
         <h3 style={{fontSize:14,fontWeight:800,letterSpacing:"-0.005em",margin:0}}>Productos ({ocOrders.length})</h3>
@@ -18690,6 +18759,13 @@ export default function PrintFlow() {
       setCancelInvoicedModal(o);
     }
     // 🆕 v10.81.0 — Re-facturar: liberar el folio de una orden cuya factura se canceló (el RPC valida el candado fiscal)
+    if(action==="deshacer_cancelacion"){const o=orders.find(x=>x.id===id);if(!o)return;
+      if(!canExecuteAction("deshacer_cancelacion",o,user,userLogin)){showToast(actionDeniedToast("deshacer_cancelacion",o,user,userLogin),"error");return}
+      const pn=o.production_number||o.id;
+      if(!window.confirm("Deshacer la cancelación de "+pn+"."+bs+"n"+bs+"nLa orden vuelve a "+(o.invoice_folio||o.grouped_invoice_folio?"entregada":"Salidas")+(o.invoice_folio?" con su folio "+o.invoice_folio:"")+". Si el puente había quitado su parte de una factura compartida, se la devuelve. Si no se puede deshacer sin adivinar, el sistema lo dirá y no tocará nada."+bs+"n"+bs+"n¿Deshacer?"))return;
+      (async()=>{try{const r=await db.revertOrderCancellation(o.id,null,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
+      return;
+    }
     if(action==="refacturar"){const o=orders.find(x=>x.id===id);if(!o)return;
       if(!canExecuteAction("refacturar",o,user,userLogin)){showToast(actionDeniedToast("refacturar",o,user,userLogin),"error");return}
       if(!o.invoice_folio){showToast("❌ Esta orden no tiene folio que liberar","error");return}

@@ -12,6 +12,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.11 — «Liberar folio de la OC» y «Deshacer cancelación» — 21-sep-2026
+
+Dos botones que faltaron el 21-sep en la mañana (D-6186 / P-0350 se arreglaron por SQL):
+
+- **OC → «Liberar folio cancelado de la OC»** (admin/karla): aparece en la OC cuando su factura compartida
+  ya está cancelada en Cobranza y ninguna factura viva lleva ese folio (`oc_shared_folio_is_cancelled`).
+  `release_cancelled_oc_shared_folio` suelta el folio, reabre la OC y regresa sus órdenes a Salidas /
+  Recibida de maquila; luego «Asignar folio → compartido» de siempre. (Desde CobranzaFlow, «Re-facturar»
+  hace todo en un paso: v3.7.730.)
+- **Orden cancelada → «Deshacer cancelación»** (admin): `revert_order_cancellation`. Alcance acotado a lo
+  que se deshace sin adivinar: sin folio; factura ligada que el puente desligó (se vuelve a ligar); parte
+  prorrateada de un folio compartido (se devuelve, sólo si la factura sigue tal cual). Si la cancelación
+  canceló una factura propia con cobros, o cerró partes / plan matriz, el RPC lo dice y no toca nada.
+- Ensayos con rollback: cancelar P-0371 (OC-0747, D-6198 $25,670.80 → $13,943.20) y deshacer → $25,670.80
+  y entregada; P-0528 sin folio → su etapa; liberar OC-0747 → Salidas → asignar → F-84 con fecha de hoy.
+
 ## v10.84.10 — El precio de venta de una orden es uno solo: maquila → `maq_price`, lo demás → `price` — 21-sep-2026
 
 Karla: «en la OCard P-0445 sale a $11 pesos pero el precio son 11,000». La orden es de maquila con
