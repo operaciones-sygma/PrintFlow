@@ -12,6 +12,26 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.12-14 — Ligar una factura existente como siguiente parte · ligar por anticipado · la parte cancelada muere de verdad — 21-sep-2026
+
+Tercero del lote (los tres pendientes de PrintFlow del 18-sep):
+
+- **v10.84.12 «Facturar siguiente parte» → «Esta entrega ya tiene factura o remisión (ligar una que ya
+  existe)»**: la RPC ya sabía ligar (v10.84.7, caso Portland resuelto por SQL); ahora el modal lo ofrece.
+  `list_linkable_invoices_for_split` lista las facturas/remisiones del cliente que viven en cobranza sin
+  orden y que nadie usa (`cabe` = no rebasa el resto); elegir una fija tipo e importe (÷1.16 si es
+  factura) y se liga con `p_allow_link` sin acuñar folio. Ensayo: P-0465 lista D-6187 y D-6174.
+- **v10.84.13 ligar por anticipado**: `link_invoice_to_order` acepta etapas antes de Salidas y liga como
+  **pre-asignado** (la etapa no cambia, no se entrega; «Entregar» en Salidas sólo entrega);
+  `list_linkable_invoices_for_order` ya no exige la etapa, así el «Sí, ligar F-xx» del candado «emitida
+  por adelantado» aparece también en producción. F-25 ↔ P-0437 ya estaba ligada; ensayo con P-0523
+  (Castores, en producción): ligada pre-asignada → Salidas → Entregar. Dato: Castores tiene **F-63 sin
+  orden que cuadra con P-0523** ($4,315.20): candidata real para Karla.
+- **v10.84.14 (P2 del verificador del 18-sep)**: cancelar una parte propia sin timbrar dejaba la factura
+  `cancelada` con saldo vivo y `cfdi_status='pending'` (F-65/F-73 se corrigieron a mano). Ahora queda
+  con saldo 0 y `cfdi_status='none'`; los cobros vivos ya abrían discrepancia (la duplicada del primer
+  ensayo se quitó). Ensayo: RS-12 (P-0430).
+
 ## v10.84.11 — «Liberar folio de la OC» y «Deshacer cancelación» — 21-sep-2026
 
 Dos botones que faltaron el 21-sep en la mañana (D-6186 / P-0350 se arreglaron por SQL):

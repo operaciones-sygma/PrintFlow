@@ -1959,13 +1959,21 @@ const db = {
   // v10.84.0 — Facturar la SIGUIENTE parte de una orden facturada por partes en el tiempo.
   // amount y qty son la porcion de HOY en SUBTOTAL (sin IVA), igual que amount_portion. El RPC inserta
   // una parte normal con folio (el puente crea la factura en cobranza) y descuenta el resto.
-  async facturarSiguienteParte(splitId, amount, qty, actor, notes, docType="factura", folio=null) {
+  async facturarSiguienteParte(splitId, amount, qty, actor, notes, docType="factura", folio=null, allowLink=false) {
     const {data, error} = await supabase.rpc("facturar_siguiente_parte", {
       p_split_id: splitId, p_amount: amount, p_qty: qty, p_actor: actor, p_notes: notes || null,
-      p_doc_type: docType || "factura", p_folio: folio || null   // v10.84.1: remision y modo manual
+      p_doc_type: docType || "factura", p_folio: folio || null,   // v10.84.1: remision y modo manual
+      p_allow_link: !!allowLink                                    // v10.84.12: ligar una factura que ya existe (v10.84.7)
     });
     if(error) throw error;
     return data;
+  },
+  // v10.84.12 — candidatas para LIGAR como siguiente parte: facturas/remisiones del cliente que viven en cobranza
+  // sin orden y que ninguna orden/OC/parte usa. `cabe` = no rebasa lo que queda por facturar.
+  async listLinkableInvoicesForSplit(splitId) {
+    const {data, error} = await supabase.rpc("list_linkable_invoices_for_split", {p_split_id: splitId});
+    if(error) throw new Error(error.message);
+    return data || [];
   },
   // 🆕 v10.58.34 — Asignar N facturas (splits) a una sola orden.
   // splits: [{qty, amount (sin IVA), doc_type, folio (null si corona_saldo), pre_assigned, reason}]
@@ -6712,7 +6720,18 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const [folio,setFolio] = useState("");
   useEffect(()=>{let alive=true;(async()=>{try{const e=await db.getFolioEmitterEnabled();if(alive)setFolioAuto(e===true&&order?.created_by!=="import-historico")}catch{if(alive)setFolioAuto(false)}})();return()=>{alive=false}},[order?.created_by]);
   const folioRegex = docType==="factura" ? /^[DF]-[1-9]\d*$/ : /^(?:RS|R)-[1-9]\d*$/;
-  const folioOk = folioAuto || folioRegex.test((folio||"").toUpperCase());
+  // v10.84.12 — «Esta entrega ya tiene factura»: ligar una que existe en cobranza (Portland: F-44/F-74 se hicieron
+  // sin orden antes de facturar por partes). La RPC ya lo sabía (v10.84.7); faltaba la opción en el modal.
+  const [ligar,setLigar] = useState(false);
+  const [candidatas,setCandidatas] = useState(null);   // null = cargando
+  const [ligada,setLigada] = useState(null);           // la candidata elegida
+  useEffect(()=>{if(!ligar||!resto?.id)return;let alive=true;setCandidatas(null);db.listLinkableInvoicesForSplit(resto.id).then(v=>{if(alive)setCandidatas(v)}).catch(()=>{if(alive)setCandidatas([])});return()=>{alive=false}},[ligar,resto?.id]);
+  const elegir = c => {
+    setLigada(c); setDocType(c.doc_type);
+    const sub = c.doc_type==="factura" ? Math.round(Number(c.amount)/1.16*100)/100 : Math.round(Number(c.amount)*100)/100;
+    onAmount(sub);
+  };
+  const folioOk = ligar ? !!ligada : (folioAuto || folioRegex.test((folio||"").toUpperCase()));
   const unaPieza = restoQty === 1;   // v10.84.1 (scan) — con 1 pieza solo cabe «todo lo que queda»
   const fmtMx = n => Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   // v10.84.2 (scan): en centavos enteros. Con flotantes, 8620.68 vs 8620.69 daba 0.0100000002 > 0.01 y el
@@ -6761,7 +6780,25 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
           {!qtyOk&&<div style={{fontSize:10,color:C.dn,marginTop:2}}>{todo?`Si facturas todo, son las ${restoQty.toLocaleString("es-MX")} piezas`:`Entre 1 y ${(restoQty-1).toLocaleString("es-MX")}: deja piezas en el resto`}</div>}
         </div>
       </div>
-      {!folioAuto&&<div style={{marginBottom:12}}>
+      <div style={{marginBottom:12,padding:"10px 12px",background:C.sf,borderRadius:10,border:"0.5px solid "+C.bd}}>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,color:C.tx,cursor:"pointer"}}>
+          <input type="checkbox" checked={ligar} onChange={e=>{setLigar(e.target.checked);if(!e.target.checked){setLigada(null)}}} disabled={saving}/>
+          Esta entrega ya tiene factura o remisión (ligar una que ya existe)
+        </label>
+        <div style={{fontSize:10,color:C.t2,marginTop:3}}>Para cuando la factura se hizo sin orden (p. ej. desde CobranzaFlow) antes de facturar por partes. No se acuña folio: se liga la existente y se descuenta del resto.</div>
+        {ligar&&<div style={{marginTop:8}}>
+          {candidatas===null?<div style={{fontSize:11,color:C.t2}}>Buscando facturas del cliente sin orden…</div>
+          :candidatas.length===0?<div style={{fontSize:11,color:C.wn}}>Este cliente no tiene facturas ni remisiones sin orden en cobranza. Si ya la hiciste, revisa que sea del mismo cliente; si no, desmarca y factura normal.</div>
+          :<div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {candidatas.map(c=><button key={c.doc_number} type="button" disabled={saving||!c.cabe} onClick={()=>elegir(c)} title={c.cabe?"Ligar esta":"Rebasa lo que queda por facturar"}
+              style={{textAlign:"left",padding:"7px 10px",borderRadius:8,border:"1px solid "+(ligada?.doc_number===c.doc_number?C.ac:C.bd),background:ligada?.doc_number===c.doc_number?C.ac+"12":C.bg,color:C.tx,cursor:c.cabe?"pointer":"not-allowed",opacity:c.cabe?1:.5,fontSize:11}}>
+              <b style={{fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</b> · {c.doc_type==="factura"?"factura":"remisión"} · <b>${fmtMx(c.amount)}</b>{c.doc_type==="factura"?" con IVA":""} · {c.issued_date}{c.cfdi_status==="stamped"?" · timbrada":""}{!c.cabe?" · rebasa el resto":""}
+            </button>)}
+          </div>}
+          {ligada&&<div style={{fontSize:10,color:C.t2,marginTop:6}}>Al ligar <b>{ligada.doc_number}</b> la parte queda por <b>${fmtMx(amount)}</b> sin IVA; ajusta las piezas si hace falta.</div>}
+        </div>}
+      </div>
+      {!folioAuto&&!ligar&&<div style={{marginBottom:12}}>
         <label style={lbl}>Folio {docType==="factura"?"(D-/F-)":"(R-/RS-)"}</label>
         <input type="text" value={folio} onChange={e=>setFolio(e.target.value.toUpperCase())} placeholder={docType==="factura"?"F-XXXX":"RS-XXXX"} style={{...inp,fontFamily:"'Geist Mono',monospace",border:(folio&&!folioOk)?"1px solid "+C.dn:undefined}}/>
         <div style={{fontSize:9,color:C.t2,marginTop:2}}>El emisor está apagado (u orden histórica): teclea el folio real.</div>
@@ -6769,14 +6806,16 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
       <label style={lbl}>Nota (opcional)</label>
       <input type="text" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="p. ej. segunda entrega, pagó la anterior" style={{...inp,marginBottom:14}}/>
       <div style={{background:C.sf,borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,marginBottom:14,lineHeight:1.5}}>
-        Se emite <b style={{color:C.tx}}>{conIva?`una factura por $${fmtMx(Number(amount)*1.16)}`:`una remisión por $${fmtMx(Number(amount))}`}</b> {conIva?"(con IVA)":"(sin IVA)"} ligada a esta orden.
+        {ligar&&ligada
+          ? <>Se liga <b style={{color:C.tx}}>{ligada.doc_number}</b> (ya existe en cobranza por ${fmtMx(ligada.amount)}) a esta orden como la siguiente parte; no se acuña folio nuevo.</>
+          : <>Se emite <b style={{color:C.tx}}>{conIva?`una factura por $${fmtMx(Number(amount)*1.16)}`:`una remisión por $${fmtMx(Number(amount))}`}</b> {conIva?"(con IVA)":"(sin IVA)"} ligada a esta orden.</>}
         {todo ? <> Era la última parte: la orden queda <b style={{color:C.ok}}>facturada completa</b>.</> : <> Quedarán <b style={{color:C.wn}}>${fmtMx(restoSinIva-Number(amount))}</b> sin IVA por facturar después.</>}
       </div>
       {err&&<div style={{background:"#ff3b3010",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dn}}>❌ {err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Cancelar</button>
-        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:folioAuto?null:(folio||"").toUpperCase()})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
-          <FileTextIcon size={14} weight="bold"/>{saving?"Facturando…":"Facturar"}
+        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:ligar?ligada?.doc_number:(folioAuto?null:(folio||"").toUpperCase()),allowLink:!!(ligar&&ligada)})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
+          <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Facturando…"):(ligar?"Ligar":"Facturar")}
         </button>
       </div>
     </div>
@@ -19701,11 +19740,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   try{
                     const r=await db.linkInvoiceToOrder(oid, cand.doc_number, actor, aMethod, aRef);
                     const paid=r?.invoice_status==="pagada", partial=r?.invoice_status==="parcial";
-                    const newStage=otype==="maquila"?"maq_delivered":"delivered";
-                    setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:cand.doc_number,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:false,stage:newStage}:o));
-                    try{ await db.addTimeline(oid,"🔗 "+cand.doc_number+" (emitida por adelantado) ligada a esta orden",user,C.fac); }catch(_){}
+                    // v10.84.13 — antes de Salidas el RPC liga como PRE-ASIGNADO: la etapa no cambia y no se entrega.
+                    const pre=r?.pre_assigned===true;
+                    const newStage=pre?(r?.stage||invoiceModal.stage):(otype==="maquila"?"maq_delivered":"delivered");
+                    setOrders(p=>p.map(o=>o.id===oid?{...o,invoice_type:invoiceType,invoice_folio:cand.doc_number,invoiced_at:new Date().toISOString(),invoiced_by:user,invoice_pre_assigned:pre,stage:newStage}:o));
+                    try{ await db.addTimeline(oid,"🔗 "+cand.doc_number+" (emitida por adelantado) ligada a esta orden"+(pre?" · pre-asignada, se entrega en Salidas":""),user,C.fac); }catch(_){}
                     const payMismatch=capturedPay&&!paid&&!partial;
-                    showToast("🔗 "+cand.doc_number+" ligada"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+" — orden entregada"+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""),"success");
+                    showToast("🔗 "+cand.doc_number+" ligada"+(paid?" · 💰 ya pagada":partial?" · 🔶 parcial":"")+(pre?" — queda pre-asignada; en Salidas sólo se entrega":" — orden entregada")+(payMismatch?" · ⚠️ registra el pago en CobranzaFlow":""),"success");
                     reload();
                   }catch(e2){
                     console.error("[linkInvoiceToOrder/adelantada] Error:",e2);
@@ -19821,9 +19862,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         if(cambio){ setTimeout(()=>{ setSiguienteParteModal({order:liveO,resto:liveR}); showToast("El resto de "+(liveO.production_number||liveO.id)+" cambio: ahora quedan $"+Number(liveR.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})+" ("+Number(liveR.qty_portion).toLocaleString("es-MX")+" pzas). Revisa antes de facturar.","warning"); },0); }
         return <FacturarSiguienteParteModal key={liveR.id+":"+liveR.amount_portion+":"+liveR.qty_portion} order={liveO} resto={liveR}
         onClose={()=>setSiguienteParteModal(null)}
-        onConfirm={async({amount,qty,notes,docType,folio})=>{
+        onConfirm={async({amount,qty,notes,docType,folio,allowLink})=>{
           const actor = userLogin || user;
-          const r = await db.facturarSiguienteParte(liveR.id, amount, qty, actor, notes, docType, folio);
+          const r = await db.facturarSiguienteParte(liveR.id, amount, qty, actor, notes, docType, folio, allowLink);
           const conIva = (r?.doc_type||docType||"factura") === "factura";
           const montoDoc = conIva ? Number(amount)*1.16 : Number(amount);
           showToast(r?.cerrado
