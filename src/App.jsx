@@ -1119,6 +1119,13 @@ const esFolioRemision = f => PREFIJOS_REMISION.some(x => String(f||"").toUpperCa
 // v10.84.0 — EL RESTO POR FACTURAR. Una orden facturada por partes en el tiempo tiene una parte
 // viva de tipo 'por_facturar' que dice cuanto falta. Si no la tiene, no esta en ese modo.
 const restoPorFacturar = o => (o?.splits||[]).find(s => !s.cancelled_at && s.doc_type === "por_facturar") || null;
+
+// v10.84.22 (scan 5 de CobranzaFlow, P3) — A DÓNDE VUELVE UNA ORDEN AL DESHACER SU CANCELACIÓN.
+// El panel de la ficha decía «vuelve a entregada» y el confirm, dos clics después, «vuelve a Salidas»:
+// dos textos contradictorios en la misma pantalla para el caso de una pre-asignada que nunca se
+// produjo (la RPC la manda a Salidas). Una sola expresión, un solo lugar.
+const vuelveAlDeshacer = o =>
+  (o?.invoice_folio || o?.grouped_invoice_folio) && (o?.delivered_at || !o?.invoice_pre_assigned) ? "entregada" : "Salidas";
 // v10.84.6 (scan 3) — «ya esta comprometida fiscalmente» con las CUATRO patas (folio propio, agrupado, partes, plan
 // matriz), como el DetailModal. La card del grid de Pendientes de Folio solo miraba invoice_folio: a una orden con
 // partes (y resto vivo) le ofrecia «Asignar Folio y Entregar» (la base lo rechazaba) y el snooze «no ha pedido factura».
@@ -1251,7 +1258,10 @@ const ACTION_ROLES = {
   // Antes confiaban solo en que el botón no aparezca para roles no autorizados; ahora gate
   // server-style en handleAction (defense in depth contra DevTools/llamadas directas).
   deliver_with_invoice: { allowed:["admin","karla","secretaria"], ownerBound:[] },
-  deliver_only:         { allowed:["admin","karla","secretaria"], ownerBound:[] },
+  // v10.84.22 (scan 5): la RPC deliver_only exige admin/karla (verify_actor_role). Dejar a secretaria
+  // aquí era prometer un botón que contesta 42501 en cuanto alguien lo pinte. deliver_covered reusa
+  // este rol a propósito: mismo permiso, misma consecuencia fiscal.
+  deliver_only:         { allowed:["admin","karla"], ownerBound:[] },
   pre_invoice:          { allowed:["admin","karla"], ownerBound:[] },
   cancel_order:         { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   cancel_with_nc:       { allowed:["admin"], ownerBound:[] },
@@ -4263,7 +4273,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <ArrowsClockwiseIcon size={24} weight="bold" color={C.wn} style={{flexShrink:0}}/>
           <div style={{flex:1}}>
             <div style={{fontSize:13,fontWeight:700,color:C.wn}}>Deshacer cancelación</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Si se canceló por error. La orden vuelve a {o.invoice_folio||o.grouped_invoice_folio?"entregada":"Salidas"}{o.invoice_folio?" con su folio "+o.invoice_folio:""}; si el puente había quitado su parte de una factura compartida, se la devuelve. Si la cancelación canceló una factura propia con cobros, no se deshace desde aquí (Dirección).</div>
+            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Si se canceló por error. La orden vuelve a {vuelveAlDeshacer(o)}{o.invoice_folio?" con su folio "+o.invoice_folio:""}; si el puente había quitado su parte de una factura compartida, se la devuelve. Si la cancelación canceló una factura propia con cobros, no se deshace desde aquí (Dirección).</div>
           </div>
         </div>
         <button onClick={()=>dispatch("deshacer_cancelacion")} style={{...bt(C.wn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>
@@ -6865,7 +6875,7 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
         <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Cancelar</button>
         <button onClick={async()=>{if(!can)return;
           // v10.84.17 (P3 del verificador) — ligar un CFDI que ya existe es un acto fiscal: se confirma con folio, importe y lo que hace la RPC.
-          if(ligar&&ligada&&!window.confirm("Vas a ligar "+ligada.doc_number+" ($"+Number(ligada.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+(ligada.cfdi_status==="stamped"?", timbrada":"")+") a esta parte de "+(order?.production_number||order?.id)+".\n\nNo se acuña folio nuevo: la factura que ya existe queda como esta parte y la orden avanza a entregada. Si no es de esta orden, cancela.\n\n¿Ligar?"))return;
+          if(ligar&&ligada&&!window.confirm("Vas a ligar "+ligada.doc_number+" ($"+Number(ligada.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+(ligada.cfdi_status==="stamped"?", timbrada":"")+") a esta parte de "+(order?.production_number||order?.id)+".\n\nNo se acuña folio nuevo: la factura que ya existe queda como esta parte de la orden y se descuenta del resto por facturar. La ETAPA de la orden no cambia (si sigue en producción, ahí se queda). Si no es de esta orden, cancela.\n\n¿Ligar?"))return;
           setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:ligar?ligada?.doc_number:(folioAuto?null:(folio||"").toUpperCase()),allowLink:!!(ligar&&ligada)})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
           <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Facturando…"):(ligar?"Ligar":"Facturar")}
         </button>
@@ -18891,9 +18901,23 @@ export default function PrintFlow() {
       // v10.84.16 (scan 4, P3) — el diálogo concatenaba la función de estilo `bs` en vez de saltos de línea (enseñaba
       // código fuente). Y desde v3.7.735/737 una orden con folio PRE-ASIGNADO cancelada antes de producirse vuelve a
       // Salidas, no a entregada: el texto lo dice como lo hace la RPC.
-      const vuelveA=(o.invoice_folio||o.grouped_invoice_folio)&&(o.delivered_at||!o.invoice_pre_assigned)?"entregada":"Salidas";
+      const vuelveA=vuelveAlDeshacer(o);
       if(!window.confirm("Deshacer la cancelación de "+pn+".\n\nLa orden vuelve a "+vuelveA+(o.invoice_folio?" con su folio "+o.invoice_folio+(o.invoice_pre_assigned&&!o.delivered_at?" (pre-asignado)":""):"")+". Si el puente había quitado su parte de una factura compartida, se la devuelve. Si no se puede deshacer sin adivinar, el sistema lo dirá y no tocará nada.\n\n¿Deshacer?"))return;
-      (async()=>{try{const r=await db.revertOrderCancellation(o.id,null,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
+      // v10.84.22 (scan 5 de CobranzaFlow, P3) — LA ETAPA PREVIA LA SABE EL TIMELINE. Sin p_target_stage
+      // la RPC manda a Salidas TODA pre-asignada no producida: una orden ligada por adelantado que se
+      // canceló estando en diseño o en producción volvía a quedar a un clic de «Marcar como Entregada»,
+      // sin haberse hecho. La última entrada del timeline con `to` distinto de cancelada es esa etapa;
+      // la RPC valida que sea válida para el tipo de orden, así que si no cuadra ella lo rechaza.
+      const etapaPrevia = (() => {
+        if (o.invoice_folio || o.grouped_invoice_folio) { if (o.delivered_at || !o.invoice_pre_assigned) return null; }
+        const tl = Array.isArray(o.timeline) ? o.timeline : [];
+        for (let i = tl.length - 1; i >= 0; i--) {
+          const to = tl[i]?.to;
+          if (to && !String(to).includes("cancelled")) return to;
+        }
+        return null;
+      })();
+      (async()=>{try{const r=await db.revertOrderCancellation(o.id,etapaPrevia,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
       return;
     }
     if(action==="refacturar"){const o=orders.find(x=>x.id===id);if(!o)return;
@@ -19831,6 +19855,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 message:"El cliente ya tiene "+cand.doc_number+" por $"+Number(cand.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+", emitida sin orden hace "+cand.dias_sin_orden+" día(s), y el importe coincide con esta orden."+"\n\n¿Ligarla a esta orden?"+"\n\nSe usa la factura que YA existe y la orden queda entregada. Si en vez de eso emites un folio nuevo, al cliente se le cobraría dos veces el mismo trabajo.",
                 confirmLabel:"🔗 Sí, ligar "+cand.doc_number,
                 confirmColor:C.fac,
+                // v10.84.22 (scan 5 de CobranzaFlow, P3) — si dice que no (o cierra), el tercero recién
+                // fijado se deshace: la orden se queda sin folio, así que quedarse con el bill_to puesto
+                // no describe nada real. Antes sólo se revertía cuando el ligado FALLABA.
+                onCancel:async()=>{ if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} } showToast("Folio anticipado cancelado: no se ligó nada.","info"); reload(); },
                 onConfirm:async()=>{
                   setConfirmModal(null);
                   try{
@@ -19963,7 +19991,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           const actor = userLogin || user;
           const r = await db.facturarSiguienteParte(liveR.id, amount, qty, actor, notes, docType, folio, allowLink);
           const conIva = (r?.doc_type||docType||"factura") === "factura";
-          const montoDoc = conIva ? Number(amount)*1.16 : Number(amount);
+          // v10.84.22 (scan 5 de CobranzaFlow, P3) — al LIGAR, el importe es el de la factura que ya
+          // existe, no el recompuesto. El modal convierte amount = round(factura/1.16, 2) y puede
+          // ajustarlo a un centavo del resto; recomponerlo con ×1.16 decía «F-44 por $8,700.01» cuando
+          // el CFDI dice $8,700.00 (la RPC lo acepta con ±0.02). La RPC devuelve invoice_amount desde v3.7.761.
+          const montoDoc = r?.invoice_amount != null ? Number(r.invoice_amount) : (conIva ? Number(amount)*1.16 : Number(amount));
           showToast(r?.cerrado
             ? `${conIva?"📄":"📋"} ${r.folio} por $${montoDoc.toLocaleString("es-MX",{minimumFractionDigits:2})}${conIva?" con IVA":""} · era la última parte: ${siguienteParteModal.order.production_number} queda facturada completa`
             : `${conIva?"📄":"📋"} ${r.folio} por $${montoDoc.toLocaleString("es-MX",{minimumFractionDigits:2})}${conIva?" con IVA":""} · quedan $${Number(r.resto).toLocaleString("es-MX",{minimumFractionDigits:2})} sin IVA por facturar`, "success");
@@ -20083,6 +20115,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 message:"El cliente ya tiene "+cand.doc_number+" por $"+Number(cand.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+", emitida sin orden hace "+cand.dias_sin_orden+" día(s), y el importe coincide con esta orden."+"\n\n¿Ligarla a esta orden?"+"\n\nSe usa la factura que YA existe: queda pre-asignada a la orden, la etapa no cambia y no se entrega; en Salidas, «Entregar» sólo entrega. Si en vez de eso emites un folio nuevo, al cliente se le cobraría dos veces el mismo trabajo.",
                 confirmLabel:"🔗 Sí, ligar "+cand.doc_number,
                 confirmColor:C.fac,
+                // v10.84.22 (scan 5 de CobranzaFlow, P3) — mismo caso del otro flujo: si dice que no o
+                // cierra, el tercero recién fijado se deshace (la orden se queda sin folio).
+                onCancel:async()=>{ await revertirBillTo(); showToast("Folio anticipado cancelado: no se ligó nada.","info"); reload(); },
                 onConfirm:async()=>{
                   setConfirmModal(null);
                   try{
@@ -20224,7 +20259,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         try{const msg="✅ "+mach.name+" reparada"+(cn==null?"":" — Costo: $"+cn.toLocaleString("es-MX",{minimumFractionDigits:2}));if(user!=="admin")await db.addNotification("admin",null,"new_order",msg,null,user);if(user!=="produccion")await db.addNotification("produccion",null,"new_order",msg,null,user)}
         catch(e){console.warn("[endMaintenance] notif warn:",e?.message)}
       }} onClose={()=>setMaintModal(null)}/>}
-      {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>setConfirmModal(null)}/>}
+      {/* v10.84.22 (scan 5 de CobranzaFlow, P3) — el diálogo puede traer onCancel: hay flujos que dejan
+          algo a medias mientras se decide (el «facturar a un tercero» recién fijado, esperando a que
+          Karla diga si liga la factura por adelantado). Si dice que no, o cierra, hay que deshacerlo:
+          antes sólo se revertía cuando el ligado FALLABA, así que cerrar el diálogo dejaba la orden con
+          el tercero puesto y sin folio — el «bill_to huérfano» que v10.72.88 vino a evitar. */}
+      {confirmModal&&<ConfirmModal {...confirmModal} onClose={()=>{ const c=confirmModal?.onCancel; setConfirmModal(null); if(c) c(); }}/>}
       {histFolioOrder&&<HistoricFolioModal order={histFolioOrder} user={user} userLogin={userLogin} showToast={showToast} onApplied={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setHistFolioOrder(null)}/>}
       {deshacerSaldoOrder&&<DeshacerSaldoModal order={deshacerSaldoOrder} user={user} userLogin={userLogin} showToast={showToast} onDone={(id,fields)=>setOrders(p=>p.map(x=>x.id===id?{...x,...fields}:x))} onClose={()=>setDeshacerSaldoOrder(null)}/>}
       {snoozeTarget&&<SnoozeModal order={snoozeTarget} onConfirm={(data)=>applySnooze(snoozeTarget,data)} onClose={()=>setSnoozeTarget(null)}/>}

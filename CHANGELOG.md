@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.22 — Scan 5 (P3): los diálogos de ligar y deshacer dicen lo que pasa, y el tercero no se queda huérfano — 22-sep-2026
+
+- **«Ligar» en Facturar siguiente parte** decía «la orden avanza a entregada» y la RPC no toca la
+  etapa: sólo inserta la parte, liga la factura y descuenta del resto. Ahora lo dice así.
+- **«Deshacer cancelación»**: el panel de la ficha decía «vuelve a entregada» y el confirm, dos clics
+  después, «vuelve a Salidas» (que es lo que hace la RPC con una pre-asignada no producida). Una sola
+  expresión, `vuelveAlDeshacer`, para los dos.
+- **El tercero (facturar a un tercero) ya no se queda huérfano**: si Karla dice «No» al diálogo de
+  ligar por adelantado, o lo cierra, el `bill_to` recién fijado se revierte. Antes sólo se revertía
+  cuando el ligado FALLABA, así que cerrar el diálogo dejaba la orden con el tercero y sin folio.
+  `ConfirmModal` acepta ahora un `onCancel`.
+- **Deshacer una pre-asignada no producida** ya no la manda siempre a Salidas: se le propone a la RPC
+  la etapa que dice el timeline (diseño, producción…). Una orden no hecha estaba quedando a un clic de
+  «Marcar como Entregada».
+- **`ACTION_ROLES.deliver_only`** deja de incluir a secretaria: la RPC exige admin/karla, así que era
+  prometer un botón que contesta 42501 en cuanto alguien lo pinte.
+- **El toast tras ligar** usa el importe REAL de la factura (`invoice_amount`, que la RPC devuelve
+  desde v3.7.761) en vez de recomponerlo como subtotal × 1.16: decía «F-44 por $8,700.01» cuando el
+  CFDI dice $8,700.00.
+
+Base (CobranzaFlow v3.7.761): el guard de cancelar por tabla cubre el folio compartido de la OC y
+rechaza el PATCH que sólo pone `stage='cancelled'` sin fechar; `deliver_only` deja de borrar la marca
+«anticipado» (es historia, y quien pregunta «¿sigue anticipada?» ya mira `delivered_at`);
+`revert_order_cancellation` rechaza deshacer cuando la cancelación devolvió saldo a la bolsa.
+
+---
+
 ## v10.84.21 — Scan 5 (P3): cancelar una orden con vínculo fiscal se frena ANTES del modal — 22-sep-2026
 
 - El pre-chequeo de «Cancelar orden» sólo miraba `invoice_folio`, `oc_invoice_group_id` y
