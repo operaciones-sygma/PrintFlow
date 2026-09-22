@@ -5947,6 +5947,23 @@ function CancelOrderModal({order,onConfirm,onClose}) {
   const [reason,setReason]=useState("");
   // v10.54.7 — busy state previene duplicados por click múltiple
   const [busy,setBusy]=useState(false);
+  // v10.84.18 (scan 5 de CobranzaFlow, P3) — LO QUE ESTA CANCELACIÓN MUEVE EN DINERO.
+  // Una orden de Corona liquidada con su bolsa (sin folio) devuelve su importe al saldo del cliente
+  // cuando se cancela — hasta $180,920 en un caso real — y aquí no se decía nada. La RPC
+  // ordenes_saldo_consumido (v3.7.751) es SECURITY DEFINER a propósito: el ledger tiene RLS de
+  // CobranzaFlow y desde PrintFlow cualquier lectura directa contestaría «no hay saldo» siempre.
+  const [saldoVuelve,setSaldoVuelve]=useState(null);
+  useEffect(()=>{
+    let vivo=true;
+    if(!order?.id){setSaldoVuelve(null);return;}
+    (async()=>{
+      const {data,error}=await supabase.rpc("ordenes_saldo_consumido",{p_order_ids:[order.id]});
+      if(!vivo)return;
+      // Error ≠ cero: si no se pudo preguntar, no se afirma que no hay saldo.
+      setSaldoVuelve(error?"?":(data&&data[0]?Number(data[0].monto):0));
+    })();
+    return()=>{vivo=false;};
+  },[order?.id]);
   const valid=!!reason.trim();
   const canSubmit=valid&&!busy;
   const submit=async()=>{
@@ -5962,7 +5979,14 @@ function CancelOrderModal({order,onConfirm,onClose}) {
       <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
       {order?.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{order.production_number}</div>}
     </div>
-    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Esta acción es permanente. La orden quedará marcada como cancelada y no se podrá revertir.</p>
+    {/* v10.84.18 — «no se podrá revertir» dejó de ser cierto en v10.84.11: Dirección puede deshacer
+        la cancelación desde la ficha (salvo si devolvió saldo, que entonces la rechaza). */}
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 10px"}}>La orden queda marcada como cancelada. Dirección puede deshacerlo después desde la ficha de la orden, salvo si la cancelación devolvió saldo al cliente.</p>
+    {saldoVuelve==="?"
+      ? <p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:11.5,color:C.t2,margin:"0 0 14px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>No se pudo comprobar si esta orden se pagó con el saldo del cliente. Si es de Corona, cancelarla le devolvería ese importe a su bolsa.</p>
+      : saldoVuelve>0
+        ? <p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Esta orden se liquidó con el saldo del cliente: al cancelarla, ${Number(saldoVuelve).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})} regresan a su bolsa en CobranzaFlow. Y entonces ya no se podrá deshacer.</p>
+        : <div style={{marginBottom:14}}/>}
     <div style={{marginBottom:16}}><label style={lbl}>Motivo de cancelación (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se cancela esta orden?" disabled={busy}/></div>
     <div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:busy?.5:1,cursor:busy?"wait":"pointer"}}>No, conservar</button><button onClick={submit} disabled={!canSubmit} style={{...bt(canSubmit?C.dn:"#9ca3af"),flex:1,justifyContent:"center",opacity:canSubmit?1:.6,cursor:canSubmit?"pointer":(busy?"wait":"not-allowed")}}>{busy?<><HourglassIcon size={14} weight="bold"/>Cancelando...</>:<><XCircleIcon size={14} weight="bold"/>Sí, Cancelar Orden</>}</button></div>
   </div></div>;
@@ -9485,7 +9509,18 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
       alert("La razón debe tener al menos 5 caracteres");
       return;
     }
-    if(!confirm("⚠️ Vas a cancelar la orden "+(order?.production_number||order?.id)+" que tiene folio "+order?.invoice_folio+" asignado.\n\nEsto genera una NOTA DE CRÉDITO PENDIENTE que deberás emitir manualmente en SAT.\n\n¿Continuar?")){
+    // v10.84.18 (scan 5 de CobranzaFlow, P3) — EL DIÁLOGO DESCRIBE LO QUE HACE LA RPC.
+    // Decía «genera una NOTA DE CRÉDITO PENDIENTE que deberás emitir manualmente en SAT», y eso no es
+    // lo que pasa: cancel_invoiced_order sólo marca nc_emitted=FALSE (un aviso para auditoría) y lo
+    // que de verdad se mueve es el puente hacia CobranzaFlow: cancela la factura con saldo 0, anula
+    // sus cobros LIBRES, deja vivos los amarrados abriendo discrepancia, devuelve el saldo a favor,
+    // y si el folio es compartido de una OC no la cancela: le resta la parte de esta orden. Con un
+    // CFDI timbrado la rechaza. Nada de eso se decía, y una NC que nadie emite tampoco existe.
+    if(!confirm("Vas a cancelar la orden "+(order?.production_number||order?.id)+", que tiene el folio "+order?.invoice_folio+" asignado.\n\n"
+      +"En CobranzaFlow, si ese folio es sólo de esta orden: la factura queda CANCELADA con saldo 0, sus cobros libres se anulan y los que estén amarrados a un vale, a un saldo otorgado o a un depósito quedan vivos y abren una discrepancia para que alguien decida. Si el cliente la pagó con su saldo a favor, ese saldo regresa a su bolsa.\n\n"
+      +"Si el folio lo comparten varias órdenes de una OC, la factura NO se cancela: se le resta la parte de esta orden.\n\n"
+      +"Si su CFDI ya está timbrado ante el SAT, esto se RECHAZA: primero hay que cancelar el CFDI en CobranzaFlow.\n\n"
+      +"Aquí sólo queda marcada la nota de crédito como pendiente, para auditoría: PrintFlow no emite ninguna NC.\n\n¿Continuar?")){
       return;
     }
     setBusy(true);
@@ -9508,7 +9543,10 @@ function CancelInvoicedModal({order,onConfirm,onClose}) {
         {order?.invoice_pre_assigned&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.amb,fontWeight:600,marginTop:4}}><LightningIcon size={10} weight="fill"/>Era folio anticipado</div>}
       </div>
 
-      <p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 12px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>La cancelación NO emite la NC automáticamente. Deberás emitir la Nota de Crédito en SAT manualmente. PrintFlow registrará la NC como pendiente para auditoría.</p>
+      {/* v10.84.18 — lo fiscal se resuelve en CobranzaFlow (cancelar el CFDI, o la nota de crédito si
+          ya se cobró): aquí sólo queda la marca de pendiente. El texto anterior mandaba a emitir una NC
+          en el SAT «manualmente» como si fuera el camino normal, y no lo es. */}
+      <p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 12px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>Esto no emite ninguna nota de crédito: sólo la marca como pendiente para auditoría. Lo fiscal se resuelve en CobranzaFlow — si el folio ya tiene CFDI timbrado hay que cancelarlo ahí primero, y si además ya se cobró, ahí se decide la nota de crédito.</p>
 
       <label style={lbl}>Razón de cancelación (mínimo 5 caracteres)</label>
       <textarea
@@ -14996,12 +15034,29 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
   // Gate amplio: folio propio o grupo OC (vínculo visible en el order); matriz/compartido los enforcea cancel_order_safe server-side.
   const selLinked=selObjs.filter(o=>o.invoice_folio||o.oc_invoice_group_id||o.has_splits).length;
   const blockedByRole=role!=="admin"&&selLinked>0;
+  // v10.84.18 — cuánto saldo del cliente devolvería la selección (ordenes_saldo_consumido es SECDEF:
+  // el ledger tiene RLS de CobranzaFlow y desde aquí una lectura directa diría siempre «cero»).
+  const [saldoSel,setSaldoSel]=useState(0);
+  useEffect(()=>{
+    let vivo=true;
+    const ids=[...sel];
+    if(!ids.length){setSaldoSel(0);return;}
+    (async()=>{
+      const {data,error}=await supabase.rpc("ordenes_saldo_consumido",{p_order_ids:ids});
+      if(!vivo)return;
+      setSaldoSel(error?0:(data||[]).reduce((s,r)=>s+Number(r.monto||0),0));
+    })();
+    return()=>{vivo=false;};
+  },[sel]);
   const canSubmit=sel.size>0&&reason.trim().length>=5&&!busy&&!blockedByRole;
   const submit=async()=>{ if(!canSubmit)return; setBusy(true); try{ const failed=await onCancelOrders([...sel],reason); setSel(new Set(failed||[])); if(!(failed&&failed.length))setReason(""); }finally{ setBusy(false); } };
   return (
     <div>
       <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2>
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",maxWidth:700}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección). Sin folio: cancelación directa.</p>
+      {/* v10.84.18 (scan 5 de CobranzaFlow, P3) — «Sin folio: cancelación directa» escondía lo que más
+          mueve: una orden de Corona liquidada con su bolsa devuelve ese importe al saldo del cliente. */}
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 10px",maxWidth:700}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección); sus cobros libres se anulan y los amarrados a un vale, a un saldo otorgado o a un depósito quedan vivos y abren una discrepancia. Sin folio la cancelación es directa, <b>pero si la orden se liquidó con el saldo del cliente ese importe regresa a su bolsa</b>.</p>
+      {saldoSel>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px",maxWidth:700}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>De lo seleccionado, ${saldoSel.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})} regresan al saldo del cliente en CobranzaFlow.</p>}
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
       <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
         <div style={{fontSize:13,fontWeight:800,color:C.tx,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><XCircleIcon size={14} weight="bold" color={C.dn}/>Cancelar órdenes</div>
