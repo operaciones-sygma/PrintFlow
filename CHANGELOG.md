@@ -12,6 +12,19 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## Base (sin versión de PrintFlow) — Scan 5 de CobranzaFlow v3.7.740-742 — 22-sep-2026
+
+Cambios en funciones que PrintFlow usa (detalle en `../cobranzaflow/CHANGELOG.md`): cambiar precio/cantidad/
+vendedor/cliente de una orden facturada o liquidada con saldo por PATCH exige admin o karla
+(`trg_guard_order_price_direct_write`); `cancel_order_safe` trata el saldo de Corona y `grouped_invoice_folio`
+como vínculo fiscal (sólo Dirección); cancelar una orden o una parte cuya factura propia timbrada sólo estaba
+LIGADA se rechaza («cancela primero el CFDI»); las cancelaciones marcan «pendiente de cancelar en Alpha» cuando
+el folio es D-/R-; `revert_order_from_terminal` mira partes y plan matriz; `revert_order_cancellation` rechaza
+si la cancelación devolvió saldo de Corona; «Liberar folio de la OC» rechaza folios pre-corte también en el RPC;
+`merge_clients` rechaza dos RFC válidos distintos (RFC_CONFLICTO) y dos razones sociales del mismo grupo;
+`upsert_client_from_order` / `create_client_from_printflow` / `create_purchase_order` / `add_client_agent` no
+las usan visor ni almacen; editar el precio de una orden liquidada con saldo ajusta el consumo de la bolsa.
+
 ## v10.84.17 — «Ligar» en siguiente parte confirma y fija el tipo (P3 del verificador) — 21-sep-2026
 
 Ligar un CFDI que ya existe como parte de la orden es un acto fiscal: el botón «Ligar» ahora confirma
