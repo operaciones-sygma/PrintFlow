@@ -4187,7 +4187,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <Row l="Tipo" v={o.invoice_type==="factura"?"Factura":(o.invoice_type==="remision"?"Remisión":null)}/>
           <Row l="Asignado por" v={o.invoiced_by}/>
           <Row l="Fecha asignación" v={o.invoiced_at?fDT(o.invoiced_at):null}/>
-          {o.invoice_reason&&<Row l="Razón anticipo" v={o.invoice_reason}/>}
+          {/* v10.84.19 (scan 5 de CobranzaFlow, P3) — invoice_reason es la nota de ORIGEN (por que se
+              anticipo el folio, o como se reconcilio una orden historica) y NO se recalcula al facturar
+              partes nuevas: P-0465 decia «Dividida en 1 facturas» con dos partes vivas. Se etiqueta como
+              lo que es; el conteo de verdad lo da el bloque «Por partes» de arriba. */}
+          {o.invoice_reason&&<Row l={(o.splits||[]).some(s=>!s.cancelled_at)?"Nota de origen":"Razón anticipo"} v={o.invoice_reason}/>}
           {o.payment_status&&<Row l="Pago" v={o.payment_status==="paid"?<Badge color={C.ok} icon={<CheckCircleIcon size={11} weight="fill"/>}>{"Pagada ("+(o.payment_method||"—")+")"}</Badge>:o.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>{"Parcial · $"+Number(o.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" ("+(o.payment_method||"—")+")"}</Badge>:<Badge color={C.t2} icon={<HourglassIcon size={11} weight="bold"/>}>No pagada (en cobranza)</Badge>}/>}
         </>}
         {o.cancellation_reason&&<>
@@ -6740,13 +6744,22 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const [docType,setDocType] = useState(tipoDelPlan);
   const conIva = docType === "factura";
   // v10.84.1 (scan) — con el emisor apagado (u orden historica) el folio lo teclea Karla, como en el split
-  const [folioAuto,setFolioAuto] = useState(true);
   const [folio,setFolio] = useState("");
-  useEffect(()=>{let alive=true;(async()=>{try{const e=await db.getFolioEmitterEnabled();if(alive)setFolioAuto(e===true&&order?.created_by!=="import-historico")}catch{if(alive)setFolioAuto(false)}})();return()=>{alive=false}},[order?.created_by]);
+  // v10.84.19 (scan 5 de CobranzaFlow, P3) — CAMINO MUERTO: con el emisor ENCENDIDO y una orden
+  // historica el modal pedia teclear el folio real, y facturar_siguiente_parte rechaza cualquier
+  // p_folio sin p_allow_link («con el emisor activo el folio lo asigna el sistema»). La unica salida
+  // de verdad es ligar una factura que ya exista, asi que en ese caso se fuerza «ligar» y el input
+  // de folio no se ofrece. Con el emisor APAGADO el folio si se teclea, como siempre.
+  const [emisorOn,setEmisorOn] = useState(null);   // null = todavia no se sabe
+  const esHistorica = order?.created_by==="import-historico";
+  useEffect(()=>{let alive=true;(async()=>{try{const e=await db.getFolioEmitterEnabled();if(alive)setEmisorOn(e===true)}catch{if(alive)setEmisorOn(false)}})();return()=>{alive=false}},[]);
+  const folioAuto = emisorOn===null ? true : (emisorOn && !esHistorica);
+  const debeLigar = emisorOn===true && esHistorica;
   const folioRegex = docType==="factura" ? /^[DF]-[1-9]\d*$/ : /^(?:RS|R)-[1-9]\d*$/;
   // v10.84.12 — «Esta entrega ya tiene factura»: ligar una que existe en cobranza (Portland: F-44/F-74 se hicieron
   // sin orden antes de facturar por partes). La RPC ya lo sabía (v10.84.7); faltaba la opción en el modal.
-  const [ligar,setLigar] = useState(false);
+  const [ligarManual,setLigar] = useState(false);
+  const ligar = ligarManual || debeLigar;   // v10.84.19: en una orden historica con el emisor ON, ligar es el unico camino
   const [candidatas,setCandidatas] = useState(null);   // null = cargando
   const [ligada,setLigada] = useState(null);           // la candidata elegida
   useEffect(()=>{if(!ligar||!resto?.id)return;let alive=true;setCandidatas(null);db.listLinkableInvoicesForSplit(resto.id).then(v=>{if(alive)setCandidatas(v)}).catch(()=>{if(alive)setCandidatas([])});return()=>{alive=false}},[ligar,resto?.id]);
@@ -6754,6 +6767,12 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
     setLigada(c); setDocType(c.doc_type);
     const sub = c.doc_type==="factura" ? Math.round(Number(c.amount)/1.16*100)/100 : Math.round(Number(c.amount)*100)/100;
     onAmount(sub);
+    // v10.84.19 (scan 5 de CobranzaFlow, P3) — LAS PIEZAS LAS DICE EL CFDI, no la proporcion del
+    // dinero. Con un precio unitario distinto al de la orden, onAmount proponia 26,100 piezas para
+    // una factura cuyo comprobante declara 24,000, y la parte quedaba diciendo otra cosa que el CFDI.
+    // Desde v3.7.752 la RPC lo rechaza; aqui se propone directamente lo que el comprobante dice.
+    const q = Number(c.qty_cfdi||0);
+    if(q>1){ setQty(q); setQtyTocada(true); }
   };
   const folioOk = ligar ? !!ligada : (folioAuto || folioRegex.test((folio||"").toUpperCase()));
   const unaPieza = restoQty === 1;   // v10.84.1 (scan) — con 1 pieza solo cabe «todo lo que queda»
@@ -6806,10 +6825,13 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
       </div>
       <div style={{marginBottom:12,padding:"10px 12px",background:C.sf,borderRadius:10,border:"0.5px solid "+C.bd}}>
         <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:600,color:C.tx,cursor:"pointer"}}>
-          <input type="checkbox" checked={ligar} onChange={e=>{setLigar(e.target.checked);if(!e.target.checked){setLigada(null)}}} disabled={saving}/>
+          <input type="checkbox" checked={ligar} onChange={e=>{setLigar(e.target.checked);if(!e.target.checked){setLigada(null)}}} disabled={saving||debeLigar}/>
           Esta entrega ya tiene factura o remisión (ligar una que ya existe)
         </label>
         <div style={{fontSize:10,color:C.t2,marginTop:3}}>Para cuando la factura se hizo sin orden (p. ej. desde CobranzaFlow) antes de facturar por partes. No se acuña folio: se liga la existente y se descuenta del resto.</div>
+        {/* v10.84.19 — orden historica con el emisor encendido: acuñar folio nuevo no aplica (el trabajo
+            ya lo documento Alpha) y teclearlo lo rechaza la RPC. Ligar es el unico camino, y se dice. */}
+        {debeLigar&&<div style={{fontSize:10,color:C.amb,fontWeight:600,marginTop:4}}>Esta orden viene del historico: su factura ya existe en cobranza, asi que aqui solo se liga (no se acuña folio nuevo).</div>}
         {ligar&&<div style={{marginTop:8}}>
           {candidatas===null?<div style={{fontSize:11,color:C.t2}}>Buscando facturas del cliente sin orden…</div>
           :candidatas.length===0?<div style={{fontSize:11,color:C.wn}}>Este cliente no tiene facturas ni remisiones sin orden en cobranza. Si ya la hiciste, revisa que sea del mismo cliente; si no, desmarca y factura normal.</div>

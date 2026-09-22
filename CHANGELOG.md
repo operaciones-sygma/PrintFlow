@@ -12,6 +12,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.19 — Scan 5 (P3): facturar por partes — las piezas las dice el CFDI, y el camino muerto de la orden histórica — 22-sep-2026
+
+- **Ligar una factura ya timbrada:** el modal proponía las piezas en proporción al DINERO, así que con
+  un precio unitario distinto al de la orden salían 26,100 contra las 24,000 que declara el
+  comprobante, y la parte quedaba diciendo otra cosa que el CFDI. Ahora se propone lo que el CFDI dice
+  (`list_linkable_invoices_for_split` devuelve `qty_cfdi` desde v3.7.752) y la RPC rechaza si no cuadran.
+- **Orden histórica con el emisor encendido:** el modal pedía teclear el folio real y
+  `facturar_siguiente_parte` rechaza cualquier folio sin «ligar» — un camino muerto. Ahora se fuerza
+  «ligar», se oculta el input de folio y se dice por qué.
+- **`invoice_reason` es la nota de ORIGEN**, no el conteo de partes: no se recalcula al facturar partes
+  nuevas (P-0465 decía «Dividida en 1 facturas» con dos vivas). Se etiqueta como «Nota de origen»
+  cuando la orden tiene partes vivas; el conteo real ya lo da el bloque «Por partes».
+
+Base: v3.7.752 (+752b). Ahí también se alineó el gate de la lista de candidatas a admin/karla, se
+documentó `order_invoice_splits.payment_status` como dato no mantenido y se arregló que un motivo de
+cancelación que empezara con «Consumida:» tumbara toda la cascada.
+
+---
+
 ## v10.84.18 — Scan 5 (P3): los tres diálogos de cancelar dicen lo que de verdad pasa — 22-sep-2026
 
 Los tres textos describían otra cosa que la que ocurre:
