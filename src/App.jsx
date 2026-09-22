@@ -1124,8 +1124,37 @@ const restoPorFacturar = o => (o?.splits||[]).find(s => !s.cancelled_at && s.doc
 // El panel de la ficha decía «vuelve a entregada» y el confirm, dos clics después, «vuelve a Salidas»:
 // dos textos contradictorios en la misma pantalla para el caso de una pre-asignada que nunca se
 // produjo (la RPC la manda a Salidas). Una sola expresión, un solo lugar.
-const vuelveAlDeshacer = o =>
-  (o?.invoice_folio || o?.grouped_invoice_folio) && (o?.delivered_at || !o?.invoice_pre_assigned) ? "entregada" : "Salidas";
+// 🔥 v10.84.23 — …y la expresión tiene que ser LA MISMA que se manda. v10.84.22 unificó el texto
+// aquí y, en la misma versión, empezó a mandarle a revert_order_cancellation la etapa sacada del
+// timeline: el diálogo decía «vuelve a Salidas» y la orden volvía a Diseño o a En producción, que
+// es lo que la RPC escribe además en el comentario de la orden. Tercera versión del mismo texto,
+// la única real, y en ningún lado. Ahora el texto SE CALCULA de la etapa que se va a mandar.
+const ETAPA_NOMBRE = {
+  draft:"Borrador", design:"Diseño", proof_printing:"Prueba de color", proof_client:"Aprobación del cliente",
+  ctp:"CTP", placas_listas:"Placas listas", ready:"Lista para producción", in_production:"En producción",
+  packaging:"Empaque", salidas:"Salidas", delivered:"entregada",
+  maq_created:"Maquila creada", maq_sent:"Enviada a maquila", maq_in_progress:"En maquila",
+  maq_received:"Recibida de maquila", maq_delivered:"entregada",
+};
+// La etapa que se le pasa a la RPC. `null` = que decida ella (con folio y producida → entregada;
+// si no → Salidas / Recibida de maquila, v3.7.735/737). Sólo se devuelve una etapa que la RPC
+// acepta: si el timeline trae otra cosa, mandarla sería un 22023 seguro.
+const etapaPreviaDeshacer = o => {
+  if (o?.invoice_folio || o?.grouped_invoice_folio) { if (o?.delivered_at || !o?.invoice_pre_assigned) return null; }
+  const tl = Array.isArray(o?.timeline) ? o.timeline : [];
+  for (let i = tl.length - 1; i >= 0; i--) {
+    const to = tl[i]?.to;
+    if (to && !String(to).includes("cancelled") && ETAPA_NOMBRE[to]) return to;
+  }
+  return null;
+};
+const vuelveAlDeshacer = o => {
+  const st = etapaPreviaDeshacer(o);
+  if (st) return ETAPA_NOMBRE[st];
+  return (o?.invoice_folio || o?.grouped_invoice_folio) && (o?.delivered_at || !o?.invoice_pre_assigned)
+    ? "entregada"
+    : (o?.order_type === "maquila" ? "Recibida de maquila" : "Salidas");
+};
 // v10.84.6 (scan 3) — «ya esta comprometida fiscalmente» con las CUATRO patas (folio propio, agrupado, partes, plan
 // matriz), como el DetailModal. La card del grid de Pendientes de Folio solo miraba invoice_folio: a una orden con
 // partes (y resto vivo) le ofrecia «Asignar Folio y Entregar» (la base lo rechazaba) y el snooze «no ha pedido factura».
@@ -15079,7 +15108,11 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
     (async()=>{
       const {data,error}=await supabase.rpc("ordenes_saldo_consumido",{p_order_ids:ids});
       if(!vivo)return;
-      setSaldoSel(error?0:(data||[]).reduce((s,r)=>s+Number(r.monto||0),0));
+      // 🔥 v10.84.23 — ERROR ≠ CERO. `error?0:` dejaba la pantalla de cancelación MASIVA idéntica a
+      // cuando de verdad no hay saldo comprometido: se cancelaba creyendo que no mueve dinero y el
+      // puente sí devolvía el importe a la bolsa del cliente. El hermano de esta misma versión
+      // (CancelOrderModal, `setSaldoVuelve(error?"?":…)`) ya lo distinguía; aquí faltó.
+      setSaldoSel(error?null:(data||[]).reduce((s,r)=>s+Number(r.monto||0),0));
     })();
     return()=>{vivo=false;};
   },[sel]);
@@ -15091,6 +15124,8 @@ function CancelacionesView({orders, role, onCancelOrders, onDetail}){
       {/* v10.84.18 (scan 5 de CobranzaFlow, P3) — «Sin folio: cancelación directa» escondía lo que más
           mueve: una orden de Corona liquidada con su bolsa devuelve ese importe al saldo del cliente. */}
       <p style={{fontSize:11,color:C.t2,margin:"0 0 10px",maxWidth:700}}>Cancela una o varias órdenes. Si la orden ya tiene folio fiscal se marca con <b>nota de crédito pendiente</b> y se cancela su factura en CobranzaFlow (solo Dirección); sus cobros libres se anulan y los amarrados a un vale, a un saldo otorgado o a un depósito quedan vivos y abren una discrepancia. Sin folio la cancelación es directa, <b>pero si la orden se liquidó con el saldo del cliente ese importe regresa a su bolsa</b>.</p>
+      {/* v10.84.23 — null = no se pudo preguntar. Se dice, en vez de enseñar lo mismo que un cero. */}
+      {saldoSel===null&&sel.size>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px",maxWidth:700}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>No se pudo comprobar si lo seleccionado se pagó con saldo del cliente. Si lo tenía, cancelar se lo devuelve a su bolsa y eso ya no se deshace.</p>}
       {saldoSel>0&&<p style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:12,color:C.amb,fontWeight:600,margin:"0 0 14px",maxWidth:700}}><WarningCircleIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>De lo seleccionado, ${saldoSel.toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})} regresan al saldo del cliente en CobranzaFlow.</p>}
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por cliente, folio (D-/R-), P-XXXX, producto…" style={{width:"100%",maxWidth:520,boxSizing:"border-box",padding:"9px 12px",border:"1px solid "+C.bd,borderRadius:10,fontSize:13,fontFamily:"'Geist',sans-serif",background:C.bg,color:C.tx,marginBottom:14}}/>
       <div style={{background:C.card,borderRadius:16,boxShadow:C.sh2,padding:16,marginBottom:18}}>
@@ -18527,12 +18562,20 @@ export default function PrintFlow() {
       // Hoy no se manifestaba porque las órdenes con credit_applied_at están en stage final.
       const upd={
         stage:ns,
-        current_machine:null,
-        machine_queue_position:null,
         cancelled_at:new Date().toISOString(),
         cancelled_by:userLogin||user,
         cancellation_reason:reason
       };
+      // 🔥 v10.84.23 — LAS DOS COLUMNAS DE LA COLA SÓLO SE LIMPIAN AQUÍ SI LA RPC NO VA A CORRER.
+      // v10.84.21 movió moveOrderInQueue para después del UPDATE (bien), pero dejó el UPDATE
+      // poniendo current_machine y machine_queue_position en NULL. La RPC lee esas dos columnas DE
+      // LA FILA al entrar (v_old_machine / v_old_position): al correr después las veía vacías, se
+      // saltaba entero el bloque que corre a los hermanos una posición y devolvía new_active_id en
+      // NULL. O sea: cancelar la orden activa dejaba la máquina SIN activa, la cola con hueco
+      // (1,2,3… sin 0) y el machine_log de la que debía subir sin abrir. Ahora la fila llega a la
+      // RPC todavía con su máquina y su posición, y es la RPC la que las pone en NULL (Caso 1).
+      const sacaLaRpc=wasInQueue;
+      if(!sacaLaRpc){ upd.current_machine=null; upd.machine_queue_position=null; }
       const {error}=await supabase.from("orders").update(upd).eq("id",id);
       if(error)throw new Error(error.message);
       // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente).
@@ -18541,8 +18584,17 @@ export default function PrintFlow() {
       // un vínculo fiscal, el guard contesta 42501 y la cancelación no ocurre — pero la cola ya se
       // había movido y eso no se deshace solo.
       let queueResult=null;
-      if(wasInQueue){
-        queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
+      if(sacaLaRpc){
+        // v10.84.23 — con el UPDATE ya hecho, un fallo aquí NO deshace la cancelación: la orden
+        // queda cancelada pero todavía colgada de la máquina. Se dice con nombre y máquina en vez
+        // de tragárselo, porque lo arregla una persona sacándola del Tablero.
+        try{
+          queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
+        }catch(eq){
+          console.error("[cancelOrder] no se pudo sacar de la cola:",eq);
+          const maq=MACHINES.find(x=>x.id===o.current_machine)?.name||o.current_machine||"su máquina";
+          showToast("⚠️ Se canceló, pero sigue en la cola de "+maq+": sácala a mano desde el Tablero.","error");
+        }
       }
       deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (conserva imágenes)
       await db.closeMachineLog(id);
@@ -18908,15 +18960,9 @@ export default function PrintFlow() {
       // canceló estando en diseño o en producción volvía a quedar a un clic de «Marcar como Entregada»,
       // sin haberse hecho. La última entrada del timeline con `to` distinto de cancelada es esa etapa;
       // la RPC valida que sea válida para el tipo de orden, así que si no cuadra ella lo rechaza.
-      const etapaPrevia = (() => {
-        if (o.invoice_folio || o.grouped_invoice_folio) { if (o.delivered_at || !o.invoice_pre_assigned) return null; }
-        const tl = Array.isArray(o.timeline) ? o.timeline : [];
-        for (let i = tl.length - 1; i >= 0; i--) {
-          const to = tl[i]?.to;
-          if (to && !String(to).includes("cancelled")) return to;
-        }
-        return null;
-      })();
+      // v10.84.23 — la misma función que arma el texto del confirm (arriba, `vuelveAlDeshacer`):
+      // así lo que se dice y lo que se manda no pueden separarse otra vez.
+      const etapaPrevia = etapaPreviaDeshacer(o);
       (async()=>{try{const r=await db.revertOrderCancellation(o.id,etapaPrevia,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
       return;
     }

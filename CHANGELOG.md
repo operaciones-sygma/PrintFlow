@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.23 — Lo que cazó la verificación adversarial del scan 5 — 22-sep-2026
+
+Workflow de sólo lectura sobre los commits del día (8 buscadores + 1 refutador por hallazgo). Tres
+eran de PrintFlow, y el primero es **P1**: entró con v10.84.21 y v10.84.22, o sea que llevaba vivo
+unas horas.
+
+- 🔥 **Cancelar una orden dejaba la máquina sin trabajo activo.** v10.84.21 movió
+  `moveOrderInQueue` para después del `UPDATE` (bien: si el UPDATE rebota, la cola no se mueve),
+  pero dejó ese mismo UPDATE poniendo `current_machine` y `machine_queue_position` en NULL. La RPC
+  lee esas dos columnas **de la fila** al entrar: al correr después las veía vacías, se saltaba
+  entero el bloque que corre a los hermanos una posición y devolvía `new_active_id` en NULL.
+  Cancelar la orden de la posición 0 dejaba la máquina sin activa, la cola con hueco (1, 2, 3… sin
+  0) y el `machine_log` de la que debía subir sin abrir. Ahora la fila llega a la RPC todavía con su
+  máquina y su posición, y es la RPC la que las limpia. Si la RPC falla después del UPDATE se dice
+  con nombre y máquina, porque eso lo arregla una persona desde el Tablero.
+- **«Deshacer cancelación» decía «vuelve a Salidas» y la mandaba a Diseño.** v10.84.22 unificó el
+  texto en un helper y, en la misma versión, empezó a mandarle a la RPC la etapa sacada del
+  timeline: quedó una tercera versión del texto —la real— que no se enseñaba en ningún lado, y la
+  RPC además escribe la etapa de verdad en el comentario de la orden. Ahora el texto **se calcula de
+  la etapa que se va a mandar**, y sólo se manda una etapa que la RPC acepta.
+- **En Cancelaciones, un error al consultar el saldo se leía como «no hay saldo».** La franja
+  «de lo seleccionado, $X regresan al saldo del cliente» no se pintaba, así que la pantalla de
+  cancelación **masiva** se veía igual que cuando de verdad no hay nada comprometido. El hermano
+  escrito el mismo día (`CancelOrderModal`) ya distinguía el caso; aquí faltó.
+
+---
+
 ## v10.84.22 — Scan 5 (P3): los diálogos de ligar y deshacer dicen lo que pasa, y el tercero no se queda huérfano — 22-sep-2026
 
 - **«Ligar» en Facturar siguiente parte** decía «la orden avanza a entregada» y la RPC no toca la
