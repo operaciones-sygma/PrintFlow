@@ -12,6 +12,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.18 — Scan 5 (P3): los tres diálogos de cancelar dicen lo que de verdad pasa — 22-sep-2026
+
+Los tres textos describían otra cosa que la que ocurre:
+
+- **«Cancelar con Nota de Crédito»** prometía «una NOTA DE CRÉDITO PENDIENTE que deberás emitir
+  manualmente en SAT». `cancel_invoiced_order` sólo marca `nc_emitted=FALSE` (un aviso para auditoría);
+  quien mueve algo es el puente hacia CobranzaFlow: cancela la factura con saldo 0, anula los cobros
+  **libres**, deja vivos los **amarrados** abriendo discrepancia, devuelve el saldo a favor, y si el folio
+  es compartido de una OC **no** la cancela — le resta la parte de esta orden. Con el CFDI timbrado la
+  rechaza. El confirm lo dice ahora por ramas y el aviso del modal manda lo fiscal a CobranzaFlow.
+- **CancelOrderModal** afirmaba «no se podrá revertir» cuando desde v10.84.11 existe «Deshacer
+  cancelación», y callaba lo que más mueve: una orden de Corona liquidada con su bolsa **devuelve ese
+  importe al saldo del cliente** (hay un caso de $180,920). Ahora se pregunta antes de abrir y se dice el
+  importe exacto, y que en ese caso ya no se podrá deshacer.
+- **Cancelaciones** decía «Sin folio: cancelación directa», que es justo donde el saldo se mueve en
+  silencio. Ahora lo nombra, y con una selección hecha suma cuánto regresaría.
+
+Base (CobranzaFlow v3.7.751): `public.ordenes_saldo_consumido(text[])` nueva y `orden_con_saldo_vivo`
+pasa a SECURITY DEFINER. `client_credit_ledger` tiene RLS de CobranzaFlow (admin de cobranza o dueño del
+cliente): una lectura desde una sesión de PrintFlow contestaba **siempre** «no hay saldo» — un candado que
+desde la otra app siempre dice que no es fail-open.
+
+---
+
 ## Base (sin versión de PrintFlow) — Scan 5 de CobranzaFlow v3.7.740-742 — 22-sep-2026
 
 Cambios en funciones que PrintFlow usa (detalle en `../cobranzaflow/CHANGELOG.md`): cambiar precio/cantidad/
