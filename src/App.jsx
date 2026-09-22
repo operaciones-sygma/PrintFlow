@@ -18511,11 +18511,6 @@ export default function PrintFlow() {
     const cancelledByActor=userLogin||user;
     setOrders(p=>p.map(x=>x.id!==id?x:{...x,stage:ns,current_machine:null,machine_queue_position:null,cancelled_at:cancelledAtIso,cancelled_by:cancelledByActor,cancellation_reason:reason,machine_log:closeML(x),timeline:addTL(x,"❌ Cancelada: "+reason,{to:ns})}));
     try{
-      // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente)
-      let queueResult=null;
-      if(wasInQueue){
-        queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
-      }
       // v10.58.25: agregados cancelled_at/cancelled_by/cancellation_reason para que el trigger
       // sync_cancellation_to_cobranza se dispare (chequea IF NEW.cancelled_at IS NULL → RETURN).
       // Antes faltaban estos 3 campos → trigger NO ejecutaba → cobranza nunca enteraba.
@@ -18530,6 +18525,15 @@ export default function PrintFlow() {
       };
       const {error}=await supabase.from("orders").update(upd).eq("id",id);
       if(error)throw new Error(error.message);
+      // v10.26.0 — Si estaba en cola, sacarla via RPC (puede promover siguiente).
+      // v10.84.21 (scan 5 de CobranzaFlow, P3) — DESPUÉS del UPDATE, no antes. Sacarla de la cola es
+      // un efecto REAL (promueve a la siguiente orden de esa máquina) y el UPDATE puede rebotar: con
+      // un vínculo fiscal, el guard contesta 42501 y la cancelación no ocurre — pero la cola ya se
+      // había movido y eso no se deshace solo.
+      let queueResult=null;
+      if(wasInQueue){
+        queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema");
+      }
       deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (conserva imágenes)
       await db.closeMachineLog(id);
       await db.addTimeline(id,"❌ Cancelada: "+reason,user,"#ff3b30");
@@ -19186,9 +19190,14 @@ export default function PrintFlow() {
         return;
       }
       // v10.72.83 — vínculo fiscal sin folio propio (grupo OC / splits vivos): la cancelación cascada a
-      // CobranzaFlow requiere Dirección. (Matriz/compartido los enforcea cancel_order_safe en el flujo masivo.)
-      if((o.oc_invoice_group_id||o.has_splits)&&user!=="admin"){
-        showToast("❌ Esta orden tiene vínculo fiscal (grupo OC / factura por partes) — solo Dirección puede cancelarla con nota de crédito.","error");
+      // CobranzaFlow requiere Dirección.
+      // v10.84.21 (scan 5 de CobranzaFlow, P3) — ESPEJO COMPLETO DE orden_ya_facturada. Faltaban dos
+      // de las cuatro patas: la factura AGRUPADA (grouped_invoice_folio) y las líneas del plan matriz
+      // (has_matrix_lines). Un no-admin con una orden así abría el modal, escribía el motivo, el
+      // optimistic update la pintaba cancelada, y el UPDATE rebotaba con el 42501 del guard. Ahora se
+      // frena antes, con el mismo mensaje que el guard.
+      if((o.oc_invoice_group_id||o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&user!=="admin"){
+        showToast("❌ Esta orden tiene vínculo fiscal (grupo OC, factura agrupada, por partes o plan matriz) — solo Dirección puede cancelarla con nota de crédito.","error");
         return;
       }
       setCancelModal(o);

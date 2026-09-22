@@ -12,6 +12,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.21 — Scan 5 (P3): cancelar una orden con vínculo fiscal se frena ANTES del modal — 22-sep-2026
+
+- El pre-chequeo de «Cancelar orden» sólo miraba `invoice_folio`, `oc_invoice_group_id` y
+  `has_splits`: faltaban las otras dos patas de `orden_ya_facturada` — la factura **agrupada**
+  (`grouped_invoice_folio`) y las **líneas del plan matriz**. Un no-admin con una orden así abría el
+  modal, escribía el motivo, el optimistic update la pintaba cancelada y el UPDATE rebotaba con el
+  42501 del guard. Ahora se frena antes, con el mismo mensaje.
+- Y sacarla de la cola (`moveOrderInQueue`, que **promueve a la siguiente orden de esa máquina**)
+  pasa a correr DESPUÉS del UPDATE: es un efecto real, y el UPDATE puede rebotar.
+
+---
+
 ## v10.84.20 — Scan 5 (P3): la bolsa de Corona deja de llamarse «saldo a favor» — 22-sep-2026
 
 La regla 10 («la bolsa de Corona no es dinero del cliente») se aplicó en CobranzaFlow en v3.7.676 y
