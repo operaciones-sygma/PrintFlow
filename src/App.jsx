@@ -6761,7 +6761,7 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
         <button onClick={()=>{setQtyTocada(false);setAmount(restoSinIva);setQty(restoQty)}} style={{...bs(todo?C.ac:C.sf,todo?"#fff":C.t2),padding:"6px 12px",border:todo?"none":"0.5px solid "+C.bd}}>Todo lo que queda</button>
         <span style={{fontSize:10,color:C.t2}}>{unaPieza ? "El resto tiene una sola pieza: solo se puede facturar completo." : "o captura una parte:"}</span>
         <div style={{flex:1}}/>
-        <select value={docType} onChange={e=>setDocType(e.target.value)} style={{...inp,width:150,padding:"6px 10px",fontSize:12,appearance:"auto"}} title="Tipo de documento de esta parte">
+        <select value={docType} onChange={e=>setDocType(e.target.value)} disabled={!!(ligar&&ligada)} style={{...inp,width:150,padding:"6px 10px",fontSize:12,appearance:"auto",opacity:(ligar&&ligada)?.6:1}} title={ligar&&ligada?"El tipo lo fija la factura que vas a ligar":"Tipo de documento de esta parte"}>
           <option value="factura">📄 Factura (con IVA)</option>
           <option value="remision">📋 Remisión (sin IVA)</option>
         </select>
@@ -6814,7 +6814,10 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
       {err&&<div style={{background:"#ff3b3010",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dn}}>❌ {err}</div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Cancelar</button>
-        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:ligar?ligada?.doc_number:(folioAuto?null:(folio||"").toUpperCase()),allowLink:!!(ligar&&ligada)})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
+        <button onClick={async()=>{if(!can)return;
+          // v10.84.17 (P3 del verificador) — ligar un CFDI que ya existe es un acto fiscal: se confirma con folio, importe y lo que hace la RPC.
+          if(ligar&&ligada&&!window.confirm("Vas a ligar "+ligada.doc_number+" ($"+Number(ligada.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+(ligada.cfdi_status==="stamped"?", timbrada":"")+") a esta parte de "+(order?.production_number||order?.id)+".\n\nNo se acuña folio nuevo: la factura que ya existe queda como esta parte y la orden avanza a entregada. Si no es de esta orden, cancela.\n\n¿Ligar?"))return;
+          setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:ligar?ligada?.doc_number:(folioAuto?null:(folio||"").toUpperCase()),allowLink:!!(ligar&&ligada)})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
           <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Facturando…"):(ligar?"Ligar":"Facturar")}
         </button>
       </div>

@@ -12,6 +12,15 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.17 — «Ligar» en siguiente parte confirma y fija el tipo (P3 del verificador) — 21-sep-2026
+
+Ligar un CFDI que ya existe como parte de la orden es un acto fiscal: el botón «Ligar» ahora confirma
+(folio, importe, timbrada o no, y lo que hace la RPC) y el tipo de documento queda fijado por la factura
+elegida (antes cambiarlo hacía que la RPC rechazara). En la base (CobranzaFlow v3.7.738):
+`oc_shared_folio_is_cancelled` ya no ofrece «Liberar folio» para folios pre-corte (D-/R- o entregadas antes
+del 1-sep); `refacturar_oc_compartida` rechaza si la OC tiene órdenes vivas sin folio; el puente escribe la
+orden en la discrepancia de sobrepago y `revert_order_cancellation` la cierra por eso.
+
 ## v10.84.16 — Scan 4 (21-sep): tres P3 del puente — 21-sep-2026
 
 - El confirm de «Deshacer cancelación» enseñaba código (`bs` en vez de saltos de línea) y decía «entregada»
