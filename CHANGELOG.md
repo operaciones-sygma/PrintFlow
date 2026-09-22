@@ -12,6 +12,19 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.16 — Scan 4 (21-sep): tres P3 del puente — 21-sep-2026
+
+- El confirm de «Deshacer cancelación» enseñaba código (`bs` en vez de saltos de línea) y decía «entregada»
+  para toda orden con folio; ahora dice lo que hace la RPC (v3.7.735/737): con folio pre-asignado y sin
+  producir vuelve a Salidas.
+- «Ligar por anticipado» con tercero (bill_to): el front quitaba el tercero ANTES de buscar la candidata, así
+  que `link_invoice_to_order` la rechazaba por «OTRO cliente». Ahora el tercero se queda mientras se liga y
+  sólo se revierte si no hay candidata o el ligado falla (PreInvoiceModal e InvoiceModal).
+- En la base (CobranzaFlow v3.7.736-737): las tres puertas de partes/matriz ya no cancelan cobros amarrados;
+  cancelar por PATCH directo una orden facturada exige admin (`trg_guard_order_cancel_direct_write`);
+  `link_invoice_to_order` con `v_ex_src text` (un folio ya ligado a otra orden ya no revienta con 22P02);
+  `deliver_only` limpia `invoice_pre_assigned`.
+
 ## v10.84.15 — «Ligar por anticipado» ahora sí tiene botón (P2 del verificador) — 21-sep-2026
 
 El verificador de sólo lectura del 21-sep encontró que v10.84.13 dejó la RPC lista pero sin puerta: el

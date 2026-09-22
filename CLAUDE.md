@@ -139,7 +139,7 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (18-sep-2026)
 
-- **LIVE:** v10.84.15 (v10.84.15: «ligar por anticipado» con botón en el modal de folio anticipado; v10.84.12-14: ligar existente en «siguiente parte», ligar por anticipado (pre-asignado), la parte cancelada muere de verdad; v10.84.11: «Liberar folio de la OC» + «Deshacer cancelación» (admin, alcance acotado); v10.84.9: «Facturar a un tercero» dice que el tercero PAGA y cuándo NO usarlo; v10.84.10: `precioVenta(o)` = maquila→`maq_price`, lo demás→`price`, la misma regla que la base; antes las tarjetas y los reportes hacían `price||maq_price`). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
+- **LIVE:** v10.84.16 (v10.84.16: P3 del scan 4; v10.84.15: «ligar por anticipado» con botón en el modal de folio anticipado; v10.84.12-14: ligar existente en «siguiente parte», ligar por anticipado (pre-asignado), la parte cancelada muere de verdad; v10.84.11: «Liberar folio de la OC» + «Deshacer cancelación» (admin, alcance acotado); v10.84.9: «Facturar a un tercero» dice que el tercero PAGA y cuándo NO usarlo; v10.84.10: `precioVenta(o)` = maquila→`maq_price`, lo demás→`price`, la misma regla que la base; antes las tarjetas y los reportes hacían `price||maq_price`). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
 - **Lo último (18-sep):** `facturar_siguiente_parte(…, p_folio, p_allow_link := true)` **liga una
   factura que ya existe en cobranza** como la siguiente parte, sin acuñar folio (mismos guards que la
   Opción A de `assign_invoice_splits`; el puente la salta). Caso Portland P-0465: F-35 y F-66 hechas

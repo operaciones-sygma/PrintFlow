@@ -18801,7 +18801,11 @@ export default function PrintFlow() {
     if(action==="deshacer_cancelacion"){const o=orders.find(x=>x.id===id);if(!o)return;
       if(!canExecuteAction("deshacer_cancelacion",o,user,userLogin)){showToast(actionDeniedToast("deshacer_cancelacion",o,user,userLogin),"error");return}
       const pn=o.production_number||o.id;
-      if(!window.confirm("Deshacer la cancelación de "+pn+"."+bs+"n"+bs+"nLa orden vuelve a "+(o.invoice_folio||o.grouped_invoice_folio?"entregada":"Salidas")+(o.invoice_folio?" con su folio "+o.invoice_folio:"")+". Si el puente había quitado su parte de una factura compartida, se la devuelve. Si no se puede deshacer sin adivinar, el sistema lo dirá y no tocará nada."+bs+"n"+bs+"n¿Deshacer?"))return;
+      // v10.84.16 (scan 4, P3) — el diálogo concatenaba la función de estilo `bs` en vez de saltos de línea (enseñaba
+      // código fuente). Y desde v3.7.735/737 una orden con folio PRE-ASIGNADO cancelada antes de producirse vuelve a
+      // Salidas, no a entregada: el texto lo dice como lo hace la RPC.
+      const vuelveA=(o.invoice_folio||o.grouped_invoice_folio)&&(o.delivered_at||!o.invoice_pre_assigned)?"entregada":"Salidas";
+      if(!window.confirm("Deshacer la cancelación de "+pn+".\n\nLa orden vuelve a "+vuelveA+(o.invoice_folio?" con su folio "+o.invoice_folio+(o.invoice_pre_assigned&&!o.delivered_at?" (pre-asignado)":""):"")+". Si el puente había quitado su parte de una factura compartida, se la devuelve. Si no se puede deshacer sin adivinar, el sistema lo dirá y no tocará nada.\n\n¿Deshacer?"))return;
       (async()=>{try{const r=await db.revertOrderCancellation(o.id,null,userLogin||user);showToast(r?.msg||"Cancelación deshecha","success");await reload();}catch(e){showToast(e.message||"No se pudo deshacer","error")}})();
       return;
     }
@@ -19727,8 +19731,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               cand=(cands||[]).find(c=>c.monto_cuadra&&c.doc_type===invoiceType)||null;
             }catch(eL){ console.warn("[linkable] no se pudieron leer las candidatas:",eL); }
             if(cand){
-              // el folio no se asignó → revertir el tercero huérfano, igual que el camino de abajo
-              if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
+              // v10.84.16 (scan 4, P3) — el tercero recién fijado se QUEDA mientras se liga: la candidata es suya y
+              // link_invoice_to_order la rechazaría sin él («OTRO cliente»). Se revierte sólo si el ligado falla.
               setInvoiceModal(null);setAllowNoPriceForOrder(null);
               setConfirmModal({
                 title:"Este trabajo ya se facturó por adelantado",
@@ -19750,6 +19754,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     reload();
                   }catch(e2){
                     console.error("[linkInvoiceToOrder/adelantada] Error:",e2);
+                    if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(oid, null, actor); }catch(_){} }
                     showToast("❌ "+(e2?.message||"No se pudo ligar la factura"),"error");
                     reload();
                   }
@@ -19957,7 +19962,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           console.error("[assignPreInvoice] Error:",e);
           const errMsg=e?.message||"";
           // v10.72.88 (#9): revertir bill_to huérfano si el folio anticipado falló (applyBillTo commiteó aparte).
-          if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(preInvoiceModal.id, null, userLogin||user); }catch(_){} }
+          // v10.84.16 (scan 4, P3) — pero NO antes de ofrecer «ligar»: la factura que assign_invoice detectó es del
+          // tercero recién fijado; quitarlo aquí hacía que link_invoice_to_order la rechazara por «OTRO cliente».
+          // Se revierte sólo cuando no hay candidata o el ligado falla (abajo).
+          const revertirBillTo=async()=>{ if(billTo&&!billTo.incomplete){ try{ await db.setOrderBillTo(preInvoiceModal.id, null, userLogin||user); }catch(_){} } };
           // 🔗 v10.84.15 (P2 del verificador del 21-sep) — «LIGAR POR ANTICIPADO» desde aquí.
           // v10.84.13 enseñó a link_invoice_to_order a ligar ANTES de Salidas (queda pre-asignada), pero el
           // único front que lo ofrecía era el InvoiceModal, que sólo abre en Salidas: en producción Karla veía
@@ -19997,6 +20005,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     reload();
                   }catch(e2){
                     console.error("[linkInvoiceToOrder/anticipado] Error:",e2);
+                    await revertirBillTo();
                     showToast("❌ "+(e2?.message||"No se pudo ligar la factura"),"error");
                     reload();
                   }
@@ -20004,8 +20013,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               });
               return;
             }
+            await revertirBillTo();
             showToast("❌ "+errMsg,"error"); reload(); return;
           }
+          await revertirBillTo();
           showToast("❌ "+(errMsg||"No se pudo asignar folio anticipado"),"error");
           reload();
         }
