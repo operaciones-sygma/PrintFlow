@@ -5483,7 +5483,10 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
   </div>;
 }
 
-// v10.43.0 — Apartado Corona (saldo a favor / anticipo abierto).
+// v10.43.0 — Apartado Corona (trabajo facturado por adelantado; «anticipo abierto»).
+// v10.84.20 (regla 10 de CobranzaFlow) — NO se llama «saldo a favor»: esa bolsa es trabajo que ya se
+// facturo y todavia no se entrega, no dinero del cliente. Ofrecersela como saldo seria regalarle
+// dinero que no tiene. CobranzaFlow lo corrigio en v3.7.676; aqui vivia igual desde entonces.
 // Lista clientes con billing_mode='anticipo', su saldo y el ledger de cada uno.
 // Karla/Admin/Secretaria pueden ver historial; los DEPOSITOS los registra Lucero en CobranzaFlow.
 function CoronaModal({onClose, user, userLogin, showToast}) {
@@ -5540,7 +5543,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
     <div role="dialog" aria-modal="true" aria-label="Saldos a favor Corona" style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
-          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><DiamondIcon size={17} weight="fill"/>Apartado Corona — Saldo a favor</h3>
+          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><DiamondIcon size={17} weight="fill"/>Apartado Corona — Facturado por adelantado</h3>
           <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} cliente{clients.length===1?"":"s"} con saldo · {clients.reduce((s,c)=>s+(Array.isArray(c.pool_members)?c.pool_members.length:0),0)} sub-cuentas en pools</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -9014,7 +9017,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
             const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
             const negative=newBalance<0;
             return <div style={{background:C.emr+"10",border:"1px solid "+C.emr+"40",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.emr,textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Aplicar saldo a favor (Corona) · sin folio fiscal</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.emr,textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Descontar de lo facturado por adelantado (Corona) · sin folio fiscal</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:C.emr}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:9,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
@@ -9059,7 +9062,7 @@ function InvoiceModal({order,onConfirm,onClose}) {
         })() : isNoFolio ? <>
           <div style={{background:C.emr+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+C.emr+"40"}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a aplicar:</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:24,fontWeight:800,color:C.emr}}><CurrencyDollarIcon size={22} weight="bold"/>Saldo a favor (Corona)</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:24,fontWeight:800,color:C.emr}}><CurrencyDollarIcon size={22} weight="bold"/>Facturado por adelantado (Corona)</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>Sin folio fiscal · solo descuento del saldo</div>
           </div>
           <div style={{background:C.emr+"08",borderRadius:10,padding:12,marginBottom:14}}>
@@ -9341,7 +9344,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
               (si Karla quiere descontar saldo debe usar la 3ra opción "Aplicar saldo" en
               InvoiceModal al entregar). */}
           {reasonValid&&isCorona&&<div style={{background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
-            <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente tiene saldo a favor (Corona) de <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b>. Esta factura/remisión <b>NO descontará el saldo automáticamente</b> — captura el pago como con cualquier otro cliente. Si quieres aplicar saldo, usa la opción "Aplicar saldo" al entregar la orden.
+            <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente <b>factura por adelantado</b> (Corona) y le quedan <b>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b> de trabajo ya facturado — <b>no es dinero suyo</b>. Esta factura/remisión <b>no descuenta nada sola</b>: captura el pago como con cualquier otro cliente. Lo facturado por adelantado se descuenta con "Aplicar saldo" al entregar la orden.
           </div>}
           {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al pre-asignar folio */}
           {reasonValid&&!isCorona&&Number(coronaInfo?.current_balance||0)>0.005&&<SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
@@ -11730,7 +11733,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/><strong>Cliente Corona (anticipo):</strong> el bridge automático YA NO consume saldo al facturar (v10.57.0). Captura los pagos como con cualquier cliente — quedarán en CobranzaFlow para que Lucero cobre. Si quieres descontar saldo Corona, usa "Aplicar saldo · sin folio" en cada orden al entregar.
             {typeof coronaInfo?.current_balance === "number" && (
               <div style={{marginTop:6,fontWeight:700}}>
-                Saldo a favor del pool: <span style={{fontFamily:"'Geist Mono',monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+                Facturado por adelantado del pool: <span style={{fontFamily:"'Geist Mono',monospace"}}>${Number(coronaInfo.current_balance).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
               </div>
             )}
           </div>
@@ -19441,7 +19444,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
           {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button {...hoverLift} onClick={()=>setInventoryOpen(true)} aria-label="Inventario Cuadra (producción a stock y venta)" title="Inventario Cuadra (producción a stock + venta)" style={{...bs(C.emr),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
-          {(user==="admin"||user==="secretaria"||user==="karla")&&<button {...hoverLift} onClick={()=>setCoronaOpen(true)} aria-label="Apartado Corona (saldo a favor)" title="Apartado Corona (saldo a favor)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
+          {(user==="admin"||user==="secretaria"||user==="karla")&&<button {...hoverLift} onClick={()=>setCoronaOpen(true)} aria-label="Apartado Corona (facturado por adelantado)" title="Apartado Corona (facturado por adelantado)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
           {(user==="admin"||isSec(user))&&<button {...hoverLift} aria-label="Exportar CSV" title="Exportar CSV" onClick={exportCSV} style={{...bs(C.ac),padding:"6px 9px",flexShrink:0}}><DownloadSimpleIcon size={16} weight="bold"/></button>}
         </div>
         <div style={{width:1,height:24,background:C.bdSt,flexShrink:0}}/>

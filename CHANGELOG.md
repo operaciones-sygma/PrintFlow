@@ -12,6 +12,20 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.20 — Scan 5 (P3): la bolsa de Corona deja de llamarse «saldo a favor» — 22-sep-2026
+
+La regla 10 («la bolsa de Corona no es dinero del cliente») se aplicó en CobranzaFlow en v3.7.676 y
+aquí vivía igual desde entonces, en las cinco pantallas que Karla y Lupita leen a diario: el Apartado
+Corona, el modal de aplicar saldo, el banner al foliar y el saldo del pool. Ahora todas dicen
+**«facturado por adelantado»**, y el banner además aclara que no es dinero suyo.
+
+Base (CobranzaFlow v3.7.753-754): `client_credit_libre` devuelve `libre = 0` y `es_bolsa = true` en
+modo anticipo (la protección vivía sólo en el front), y los mensajes de `create_voucher_multi`,
+`register_prepayment` y `apply_client_credit_to_invoice` dejan de mandar al «módulo Saldo a Favor» y
+dicen dónde se descuenta de verdad: al aplicar el saldo a la orden, aquí, al entregarla.
+
+---
+
 ## v10.84.19 — Scan 5 (P3): facturar por partes — las piezas las dice el CFDI, y el camino muerto de la orden histórica — 22-sep-2026
 
 - **Ligar una factura ya timbrada:** el modal proponía las piezas en proporción al DINERO, así que con
