@@ -383,13 +383,45 @@ const pathDeOrderFile=(url)=>{
   if(!p)return null;
   try{ return decodeURIComponent(p.split("?")[0]) }catch{ return p.split("?")[0] }
 };
+/* 🔥 v10.84.24 — LA MISMA FOTO SE FIRMABA UNA VEZ POR CADA VEZ QUE SE PINTABA.
+   `useSignedFile` firma al MONTAR, y en el tablero cada tarjeta se monta y desmonta al filtrar,
+   scrollear o cambiar de pestaña. Medido el 24-sep contra produccion: **1,970 peticiones de firma
+   en 1.34 horas — 1,470 por hora, 24 por minuto**, sobre 716 archivos distintos. O sea, la misma
+   foto una y otra vez.
+
+   El precio no era el trafico: era que el Storage API mantenia **21 de las 60 conexiones** de la
+   base ocupadas para atenderlas, y con eso PostgREST se quedaba sin cupo y las dos apps dejaban de
+   responder (Supabase las marcaba Unhealthy). Ese dia hubo que reiniciar el proyecto, y el pool se
+   volvio a llenar en DOS HORAS. Cada lookup de firma tardaba 168 ms — porque la base ya iba ahogada,
+   que es el circulo.
+
+   El token dura una HORA, asi que guardarlo cinco minutos no arriesga nada y corta de raiz el
+   re-montaje. Mismo arreglo que CobranzaFlow v3.7.851.
+
+   ⚠ La clave incluye `opts`: la firma de DESCARGA lleva otros parametros (Content-Disposition) y
+     servir la de vista en su lugar rompe la descarga.
+   ⚠ Solo se guarda lo que de VERDAD se firmo. Esta funcion hace fail-open —si no puede firmar
+     devuelve la URL guardada—, y cachear esa caida dejaria la foto rota durante cinco minutos
+     aunque el siguiente intento hubiera funcionado. */
+const FIRMAS_CACHE=new Map();            // path|opts -> { url, at }
+const FIRMA_VIDA=300000;                 // 5 min, muy por dentro de la hora del token
+const FIRMAS_TOPE=300;
 const firmarOrderFile=async(url,opts)=>{
   const path=pathDeOrderFile(url);
   if(!path)return url||null;
+  const clave=path+"|"+(opts?JSON.stringify(opts):"");
+  const hit=FIRMAS_CACHE.get(clave);
+  if(hit&&Date.now()-hit.at<FIRMA_VIDA)return hit.url;
   try{
     const {data,error}=await supabase.storage.from("order-files").createSignedUrl(path,3600,opts);
-    return (!error&&data?.signedUrl)?data.signedUrl:(url||null);
-  }catch{ return url||null }
+    if(!error&&data?.signedUrl){
+      if(FIRMAS_CACHE.size>=FIRMAS_TOPE)FIRMAS_CACHE.delete(FIRMAS_CACHE.keys().next().value);
+      FIRMAS_CACHE.set(clave,{url:data.signedUrl,at:Date.now()});
+      return data.signedUrl;
+    }
+    FIRMAS_CACHE.delete(clave);          // que no quede una firma vieja tapando un archivo que murio
+    return url||null;
+  }catch{ FIRMAS_CACHE.delete(clave); return url||null }
 };
 // Arranca en null cuando hay algo que firmar, para no pintar la URL publica ni un instante: el dia
 // del volteo su 400 le ganaria la carrera a la firma y la foto se ocultaria aunque la firma llegue
