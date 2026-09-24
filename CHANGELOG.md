@@ -12,6 +12,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.24 — La misma foto se firmaba una vez por cada vez que se pintaba — 24-sep-2026
+
+Este cambio no salió de PrintFlow: salió de perseguir por qué **las dos apps dejaron de responder**
+el 24-sep. PostgREST y Auth se declararon *Unhealthy* en Supabase mientras la base seguía sana, y al
+medir apareció el reparto: **53 de 60 conexiones tomadas con un tráfico de 1 transacción por
+segundo**, y el **Storage API con 22 de ellas**.
+
+**El culpable estaba aquí.** `useSignedFile` firma la URL al **montar**, sin caché, y en el tablero
+cada tarjeta se monta y desmonta al filtrar, scrollear o cambiar de pestaña. Medido contra
+producción:
+
+| | |
+|---|---|
+| Peticiones de firma | **1,970 en 1.34 horas** |
+| Ritmo | **1,470 por hora · 24 por minuto** |
+| Archivos distintos que existen | **716** |
+| Cada firma tardaba | **168 ms** |
+
+O sea: la misma foto, una y otra vez. El precio no era el tráfico —es una imprenta, no un portal—
+sino que ese goteo mantenía el pool del Storage caliente, PostgREST se quedaba sin cupo, y las dos
+apps dejaban de responder. Y cada firma tardaba 168 ms **porque la base ya iba ahogada**: ése era el
+círculo que había que romper.
+
+El token dura una **hora**, así que guardarlo **cinco minutos** no arriesga nada y corta de raíz el
+re-montaje. Mismo arreglo que CobranzaFlow **v3.7.851**, que se hizo el mismo día por el otro lado.
+
+**Medido después**: **24 → 4 firmas por minuto**. Tras el reinicio de Marcelo, conexiones **53 → 27**
+y Storage **22 → 2**.
+
+⚠ **Dos cuidados que la caché tenía que respetar:**
+
+- **La clave incluye `opts`.** La firma de **descarga** lleva otros parámetros
+  (`Content-Disposition`) y servir la de vista en su lugar rompe la descarga.
+- **Sólo se guarda lo que de verdad se firmó.** Esta función hace *fail-open* —si no puede firmar
+  devuelve la URL guardada—, y cachear esa caída dejaría la foto rota cinco minutos aunque el
+  siguiente intento hubiera funcionado.
+
+Aquí **no** hace falta la puerta de «firma fresca» que CobranzaFlow sí necesita: sus `onError`
+re-firman para distinguir «token vencido» de «archivo muerto», y servirles la misma cadena
+guardada los volvería inertes (v3.7.355). Los `onError` de PrintFlow sólo marcan la foto como
+fallida.
+
+---
+
 ## v10.84.23 — Lo que cazó la verificación adversarial del scan 5 — 22-sep-2026
 
 Workflow de sólo lectura sobre los commits del día (8 buscadores + 1 refutador por hallazgo). Tres
