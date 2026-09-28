@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.26 — El carrito de Cuadra pregunta si el importe es subtotal o total — 28-sep-2026
+
+El campo decía **«Total de venta (CON IVA)»** y el 28-sep Karla tecleó ahí el **subtotal**: $34,150 =
+5,000 × 1.71 + 10,000 × 2.10 + 2,000 × 2.30, con los precios de lista de Cuadra, **que son sin IVA** (así
+salieron F-1 a F-87: total = suma × 1.16). El sistema le sacó el IVA de adentro y la **F-101 nació en
+$34,150 cuando era de $39,614**. Karla lo vio en el editor de conceptos como «Sobran $5,464» y lo reportó
+como bug de la suma del IVA. El editor tenía razón: lo que estaba mal era el monto.
+
+Es el mismo tropiezo de la F-13 en Factura sin orden (CBF v3.7.458), y lleva el mismo arreglo: un selector
+**«El importe que tecleo es: Subtotal (sin IVA) / Total (con IVA)»**, con **default Subtotal** (como allá y
+como Facturar por partes, v10.75.10), y el desglose **Subtotal · IVA · Total factura** a la vista. El RPC,
+los pagos y `MultiPaymentPicker` siguen recibiendo el total con IVA. La conversión usa la misma fórmula
+que el picker (`× 116 / 100`), y de ida y vuelta al subtotal sale exacta (probado con 34,150, 12,345.67,
+0.01, 999.99, 29,439.66 y 78,720).
+
+**Lo que NO se arregló (decisión pendiente):** el carrito sólo pide un total (decisión de Marcelo del
+2-jun, v10.55.1) y `bulk_sell_from_stock` lo reparte entre las órdenes **por piezas**. Con productos de
+distinto precio, cada orden queda con un precio que no es el suyo, y la precarga de conceptos del CFDI
+pone **el mismo precio unitario a los tres productos** ($1.7317). Karla lo corrige a mano. Hay 39 ventas
+de stock multiproducto con ese reparto. Ver `cobranzaflow/docs/PENDIENTES.md`.
+
+---
+
+## v10.84.25 — Una recarga a la vez por navegador — 28-sep-2026
+
+**PostgREST se declaró *Unhealthy* el 28-sep a las 9:45.** Entre las 9:45 y las 10:15 PrintFlow pidió
+**~200 recargas completas** (cada una ≈ 12 consultas: `orders`, `purchase_orders`, partes, plan matriz,
+mantenimiento…), y cada una tardaba **15-35 s**. p95 de la API hasta **126 s**, **124 statement
+timeouts** en hora y media. **No fue ataque**: el 91% del tráfico salía de PrintFlow, desde **4 IPs**
+nuestras y con sesión de usuarios nuestros.
+
+La causa: cada cambio en `orders`, `purchase_orders`, partes, timeline, etc. hace que **todas** las
+pestañas llamen `reload()`. El debounce de 350 ms (v10.58.6) junta los eventos que llegan juntos, pero
+**no impedía arrancar otra recarga con la anterior todavía en vuelo**. Con el servidor lento, cada cambio
+de otra estación encimaba una recarga completa más, que lo hacía más lento, que encimaba más. **La
+chispa fueron correcciones de datos hechas por SQL** (precios de las órdenes de la F-101), sobre un
+servidor que ya iba cargado.
+
+**Arreglo:** `reload` es ahora *single-flight* (`reloadCore` + envoltura). Si hay una en vuelo, las
+llamadas nuevas se juntan en **una sola** recarga que corre al terminar, con 1 s de respiro, y quien hace
+`await reload()` espera esa, así que sigue viendo lo que acaba de escribir. Cubre todas las entradas:
+realtime, reconexión, regreso a la pestaña y el polling de 20 s con el socket caído.
+
+⚠ **Las pestañas abiertas de antes siguen con el código viejo hasta F5.** Una sola basta para volver a
+encimar recargas.
+
+Ese mismo día se subió el compute de **Nano a Small** (60 → 90 conexiones, 0.5 → 2 GB). Detalle y
+mediciones día por día en `cobranzaflow/docs/HANDOFF-SUPABASE-28SEP.md`.
+
+---
+
 ## v10.84.24 — La misma foto se firmaba una vez por cada vez que se pintaba — 24-sep-2026
 
 Este cambio no salió de PrintFlow: salió de perseguir por qué **las dos apps dejaron de responder**
