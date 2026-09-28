@@ -4978,6 +4978,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   const [folioAuto, setFolioAuto] = useState(false); // F1: emisor ON → folio autogenerado, se oculta el input
   const [suggestionByType, setSuggestionByType] = useState({factura:"", remision:""});
   const [totalAmount, setTotalAmount] = useState("");
+  const [totalBase, setTotalBase] = useState("subtotal"); // v10.84.26 — 'subtotal' | 'con_iva' (sólo factura)
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [paymentRefs, setPaymentRefs] = useState([]);
   const [agent, setAgent] = useState("");
@@ -5108,7 +5109,15 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   };
   const pref = invoiceType==="factura"?"D-":"R-";
   const folioOK = folioAuto ? true : (parseFolio(folio) !== null && folio.toUpperCase().startsWith(pref)); // F1: emisor ON → no exige folio manual
-  const totalNum = parseFloat(totalAmount);
+  // v10.84.26 — LA BASE DEL IMPORTE, EXPLÍCITA. El campo decía "Total de venta (CON IVA)" y el 28-sep
+  // Karla tecleó ahí el SUBTOTAL ($34,150 = piezas × precio de lista, que es SIN IVA): la F-101 nació
+  // $5,464 corta (el IVA entero) y los conceptos no cuadraban. Mismo tropiezo que la F-13 de Factura sin
+  // orden (CBF v3.7.458), y mismo arreglo: se elige qué se teclea, default SUBTOTAL (como allá y como
+  // Facturar por partes v10.75.10), y abajo se ve el desglose completo. `totalNum` sigue siendo el total
+  // CON IVA para la factura: el RPC, los pagos y el picker no cambian.
+  const typedNum = parseFloat(totalAmount);
+  const baseSub = invoiceType==="factura" && totalBase==="subtotal";
+  const totalNum = baseSub ? Math.round(typedNum*116)/100 : typedNum;
   const totalOK = Number.isFinite(totalNum) && totalNum > 0;
   // MultiPaymentPicker espera SUBTOTAL SIN IVA (lo multiplica × 1.16 si factura).
   // Karla captura el total CON IVA si factura, SIN IVA si remisión.
@@ -5116,7 +5125,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
   // luego hace round((round(X/1.16))*116)/100 y puede diferir 1¢ vs round(X*100)
   // → bloquea facturas grandes con "Cubierto" verde pero sumCents !== totalCents.
   // Pasamos el cociente exacto y dejamos que el picker haga UN solo redondeo final.
-  const subtotalSinIVA = invoiceType==="factura" ? (totalNum/1.16) : totalNum;
+  // v10.84.26 — si se tecleó el subtotal, ÉSE es el exacto (no se re-deriva del total redondeado).
+  const subtotalSinIVA = invoiceType==="factura" ? (baseSub ? typedNum : totalNum/1.16) : totalNum;
 
   const validCart = cart.length>0 && cart.every(c=>c.qty>0 && c.qty<=c.stock_actual);
   const validDest = !hasPooled || !!destClientId;
@@ -5302,9 +5312,23 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
 
             {/* Total venta */}
             <div style={{background:C.sal+"08",border:"1.5px solid "+(totalOK?C.sal+"40":C.amb+"60"),borderRadius:10,padding:12,marginBottom:10}}>
-              <label style={{...lbl,display:"flex",alignItems:"center",gap:5,marginTop:0,fontSize:10,color:C.sal,fontWeight:700}}><CurrencyDollarIcon size={11} weight="bold"/>Total de venta * <span style={{color:C.t3,fontWeight:400}}>({invoiceType==="factura"?"CON IVA":"SIN IVA"})</span></label>
+              {/* v10.84.26 — qué se está tecleando, explícito (ver comentario de typedNum). */}
+              {invoiceType==="factura" && <div role="group" aria-label="Base del importe" style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+                <span style={{fontSize:10,color:C.t2}}>El importe que tecleo es:</span>
+                {[{k:"subtotal",l:"Subtotal (sin IVA)"},{k:"con_iva",l:"Total (con IVA)"}].map(m => (
+                  <button key={m.k} type="button" onClick={()=>setTotalBase(m.k)} aria-pressed={totalBase===m.k} disabled={busy}
+                    style={{...bs(totalBase===m.k?C.ac:C.sf, totalBase===m.k?"#fff":C.t2),padding:"4px 10px",fontSize:10,border:totalBase===m.k?"none":"0.5px solid "+C.bd}}>
+                    {m.l}
+                  </button>
+                ))}
+              </div>}
+              <label style={{...lbl,display:"flex",alignItems:"center",gap:5,marginTop:0,fontSize:10,color:C.sal,fontWeight:700}}><CurrencyDollarIcon size={11} weight="bold"/>{baseSub?"Subtotal de la venta":"Total de venta"} * <span style={{color:C.t3,fontWeight:400}}>({baseSub||invoiceType!=="factura"?"SIN IVA":"CON IVA"})</span></label>
               <input style={{...inp,fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:C.sal,textAlign:"right",border:"1.5px solid "+(totalOK?C.bd:C.amb+"60")}} type="number" step="0.01" value={totalAmount} onChange={e=>setTotalAmount(e.target.value)} placeholder="0.00" disabled={busy}/>
-              {invoiceType==="factura" && totalOK && <div style={{fontSize:10,color:C.t3,marginTop:4,textAlign:"right"}}>Subtotal sin IVA: <b>${(Math.round(subtotalSinIVA*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}</b></div>}
+              {invoiceType==="factura" && totalOK && (()=>{const f=n=>"$"+(Math.round(n*100)/100).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});const sub=Math.round(subtotalSinIVA*100)/100;return(
+                <div style={{display:"flex",justifyContent:"flex-end",alignItems:"baseline",gap:10,flexWrap:"wrap",marginTop:6,fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>
+                  <span>Subtotal {f(sub)}</span><span>IVA 16% {f(totalNum-sub)}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:C.tx}}>Total factura {f(totalNum)}</span>
+                </div>);})()}
             </div>
 
             {/* MultiPaymentPicker: estado de pago + multi-pago */}
