@@ -16839,7 +16839,7 @@ export default function PrintFlow() {
   // Load orders from Supabase
   // When archive not loaded yet: loads ALL order rows but only related data for active orders (fast)
   // When archive loaded: loads everything including related data for historical (full)
-  const reload = useCallback(async () => {
+  const reloadCore = useCallback(async () => {
    try {
     // v10.73.82 (scan w1sw90ei4) — `maintenance` es un GATE DE ESCRITURA desde v74 (deshabilita el <option> del
     //   select, rechaza el drop, deshabilita "Activar" y respalda el handler de reorder), pero setMaintenance solo
@@ -16958,6 +16958,33 @@ export default function PrintFlow() {
      showToast?.("⚠️ Sin conexión — no se pudieron cargar las órdenes. Revisa tu red.","error");
    }
   }, []);
+
+  // v10.84.25 — UNA RECARGA A LA VEZ POR NAVEGADOR.
+  // El 28-sep PostgREST se puso "Unhealthy": en 45 minutos PrintFlow pidió ~200 recargas completas
+  // (cada una ≈ 12 consultas: orders, purchase_orders, splits, matriz, mantenimiento…), y cada una
+  // tardaba 15-35 s. El debounce de 350 ms junta los eventos que llegan juntos, pero NO impedía que
+  // arrancara una recarga nueva mientras la anterior seguía en vuelo: con el servidor lento, cada
+  // cambio de otra estación encimaba otra recarga completa, que hacía más lento al servidor, que
+  // encimaba más. Se ahogaba solo (124 statement timeouts en hora y media, p95 de 75 s).
+  // Ahora: si hay una recarga en vuelo, las llamadas nuevas se juntan en UNA sola recarga que corre
+  // al terminar la actual (con 1 s de respiro). Quien hace `await reload()` espera ESA recarga, así
+  // que sigue viendo lo que acaba de escribir. Cubre todas las entradas: realtime, reconexión,
+  // regreso a la pestaña y el polling de 20 s con el socket caído.
+  const reloadInFlightRef = useRef(null);
+  const reloadQueuedRef = useRef(null);
+  const reload = useCallback(function runReload() {
+    if (reloadInFlightRef.current) {
+      if (!reloadQueuedRef.current) {
+        reloadQueuedRef.current = reloadInFlightRef.current
+          .then(() => new Promise(r => setTimeout(r, 1000)))
+          .then(() => { reloadQueuedRef.current = null; return runReload(); });
+      }
+      return reloadQueuedRef.current;
+    }
+    const p = reloadCore().finally(() => { if (reloadInFlightRef.current === p) reloadInFlightRef.current = null; });
+    reloadInFlightRef.current = p;
+    return p;
+  }, [reloadCore]);
 
   // Lazy-load full related data when Archive or Analytics tab is first opened
   const loadArchive=useCallback(async()=>{
