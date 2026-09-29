@@ -6995,7 +6995,7 @@ function CancelarParteModal({order,parte,onConfirm,onClose}) {
   return <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%"}}>
       <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.dn}}><XCircleIcon size={17} weight="bold"/>Cancelar la parte {parte?.invoice_folio} · {order?.production_number}</h3>
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}><b style={{color:C.tx}}>{parte?.invoice_folio}</b> es una parte de {order?.production_number}: <b style={{color:C.tx}}>${fmtMx(monto)}</b> de ${fmtMx(precio)} sin IVA. Si ya está timbrada por nosotros, cancela primero su CFDI en CobranzaFlow (ahí se hace la misma pregunta).</p>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}><b style={{color:C.tx}}>{parte?.invoice_folio}</b> es una parte de {order?.production_number}: <b style={{color:C.tx}}>${fmtMx(monto)}</b> de ${fmtMx(precio)} sin IVA. Si su documento ya está timbrado por nosotros, o no lo creó PrintFlow (una factura de Alpha que se ligó después), se cancela en CobranzaFlow: la parte se cierra sola y ahí se hace la misma pregunta.</p>
       <div style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:4}}>¿Por qué se cancela?</div>
       <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} disabled={saving} placeholder="Mínimo 5 caracteres" style={{...inp,resize:"vertical",marginBottom:14}}/>
       <div style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:6}}>Al cancelarse, ese pedazo:</div>
@@ -20162,9 +20162,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         return <CancelarParteModal key={liveP.id} order={liveO} parte={liveP}
           onClose={()=>setCancelParteModal(null)}
           onConfirm={async({reason,alCancelar})=>{
-            await db.cancelInvoiceSplit(liveP.id, reason, userLogin||user, alCancelar);
+            const r = await db.cancelInvoiceSplit(liveP.id, reason, userLogin||user, alCancelar);
             setCancelParteModal(null);
-            showToast(alCancelar==="reabrir"
+            // v10.84.28 — si era la última parte, la RPC cancela la orden (order_cancelled): el aviso lo dice en vez de
+            // afirmar que la orden «queda facturada de menos», que da a entender que sigue viva
+            showToast(r?.order_cancelled
+              ? `Parte ${liveP.invoice_folio} cancelada · era la única que quedaba: ${liveO.production_number} se canceló`
+              : alCancelar==="reabrir"
               ? `Parte ${liveP.invoice_folio} cancelada · sus $${Number(liveP.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})} vuelven a quedar por facturar`
               : `Parte ${liveP.invoice_folio} cancelada · se dio por perdida: ${liveO.production_number} queda facturada de menos`, "success");
             reload();

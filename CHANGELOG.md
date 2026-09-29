@@ -12,6 +12,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.28 — Lo que encontró la verificación de v10.84.27 — 29-sep-2026
+
+La verificación de CobranzaFlow v3.7.900 (agentes de sólo lectura) encontró un P1 y varios P2 en esta puerta.
+
+- 🔥 **P1, ya arreglado en la base el mismo día (CobranzaFlow v3.7.900b): no se podía cancelar ninguna orden facturada
+  por partes.** La cascada de `cancel_invoiced_order` llamaba a la `cancel_invoice_split` pública sin decisión, con la
+  orden todavía viva, y la puerta nueva la rechazaba con «di qué pasa… F5». Ahora la cascada llama a la interna, que no
+  pregunta (la orden entera se va). Ensayado con P-0249 y P-0430.
+- **Una parte ligada a un documento que PrintFlow no creó** (una factura de Alpha que se ligó después: D-6087, D-5930,
+  D-5775) **ya no se cancela desde aquí.** La RPC sólo la desligaba: el documento seguía vivo y cobrado, «vuelve a
+  quedar por facturar» lo habría facturado dos veces y «se da por perdido» afirmaba algo falso. Ahora rechaza y manda a
+  CobranzaFlow, donde cancelar el documento cierra la parte con la misma pregunta. La cascada de la orden entera sigue
+  desligando como siempre.
+- Si la parte que se da por perdida era **la última**, la orden se cancela, y el aviso ya lo dice (antes: «queda
+  facturada de menos», como si siguiera viva).
+- La discrepancia de un cobro amarrado ya no dice «la orden se canceló» cuando sólo se canceló una parte.
+- SQL en `../cobranzaflow/docs/migrations/v3.7.900c_lo_que_encontro_la_verificacion_de_900.sql` (copia aquí,
+  `docs/migrations/v10.84.28_lo_que_encontro_la_verificacion.sql`).
+
 ## v10.84.27 — Cancelar una parte pregunta qué pasa con su dinero — 29-sep-2026
 
 Pregunta del scan 5 de CobranzaFlow (`cancelar-una-parte-de-un-split-clasico`): las dos puertas hacían cosas
