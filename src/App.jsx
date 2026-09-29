@@ -2077,8 +2077,10 @@ const db = {
   // 🆕 v10.58.34 — Cancelar 1 split individual (admin-only). Si era corona_saldo o
   // factura con Corona consumida, reversa el ledger. Si todos los splits quedan
   // cancelados, marca la orden como cancelled.
-  async cancelInvoiceSplit(splitId, reason, actor) {
-    const llamar = () => supabase.rpc("cancel_invoice_split", { p_split_id: splitId, p_reason: reason, p_actor: actor });
+  // v10.84.27 — alCancelar ('reabrir' | 'perder'): qué pasa con el dinero de la parte; la RPC lo exige para una parte
+  // facturada de una orden viva.
+  async cancelInvoiceSplit(splitId, reason, actor, alCancelar) {
+    const llamar = () => supabase.rpc("cancel_invoice_split", { p_split_id: splitId, p_reason: reason, p_actor: actor, p_al_cancelar: alCancelar || null });
     let {data, error} = await llamar();
     // v10.84.4 (scan 2): si choca con el trigger del CFDI cancelado (deadlock 40P01), un reintento basta:
     // el otro lado ya cerro la parte ("Split ya fue cancelado") o esta completa la cancelacion.
@@ -6963,6 +6965,51 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
           if(ligar&&ligada&&!window.confirm("Vas a ligar "+ligada.doc_number+" ($"+Number(ligada.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+(ligada.cfdi_status==="stamped"?", timbrada":"")+") a esta parte de "+(order?.production_number||order?.id)+".\n\nNo se acuña folio nuevo: la factura que ya existe queda como esta parte de la orden y se descuenta del resto por facturar. La ETAPA de la orden no cambia (si sigue en producción, ahí se queda). Si no es de esta orden, cancela.\n\n¿Ligar?"))return;
           setSaving(true);setErr("");try{await onConfirm({amount:Math.round(Number(amount)*100)/100,qty:Number(qty),notes,docType,folio:ligar?ligada?.doc_number:(folioAuto?null:(folio||"").toUpperCase()),allowLink:!!(ligar&&ligada)})}catch(e){setErr(e?.message||"No se pudo facturar")}finally{setSaving(false)}}} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
           <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Facturando…"):(ligar?"Ligar":"Facturar")}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
+// v10.84.27 (Marcelo, 29-sep: «que sea flexible… que se puedan ambas opciones con una UI simple») — CANCELAR UNA PARTE
+// PREGUNTA QUÉ PASA CON SU DINERO, sin opción marcada de entrada: sin elegir no se cancela. Antes el pedazo regresaba al
+// resto sólo si la orden había tenido resto alguna vez, y si no, se perdía sin avisar (y el botón ni aparecía). La misma
+// pregunta la hace CobranzaFlow al cancelar el documento (v3.7.900), y la RPC la exige (cancel_invoice_split).
+function CancelarParteModal({order,parte,onConfirm,onClose}) {
+  const [reason,setReason] = useState("");
+  const [alCancelar,setAlCancelar] = useState(null);   // null = sin elegir
+  const [saving,setSaving] = useState(false);
+  const [err,setErr] = useState("");
+  const fmtMx = n => Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const monto = Number(parte?.amount_portion||0);
+  const precio = Number(order?.order_type==="maquila" ? order?.maq_price : order?.price) || 0;
+  const vivas = (order?.splits||[]).filter(x=>!x.cancelled_at);
+  const esLaUltima = vivas.length===1 && vivas[0]?.id===parte?.id;
+  const can = !saving && !!alCancelar && reason.trim().length>=5;
+  useEffect(()=>{const k=e=>{const t=e.target?.tagName;if(t==="INPUT"||t==="TEXTAREA")return;if(e.key==="Escape"&&!saving)onClose()};window.addEventListener("keydown",k);return()=>window.removeEventListener("keydown",k)},[saving,onClose]);
+  const opcion = (valor,titulo,detalle) => <label style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 12px",borderRadius:10,cursor:"pointer",
+      border:"1px solid "+(alCancelar===valor?C.ac:C.bd),background:alCancelar===valor?C.ac+"12":C.bg}}>
+      <input type="radio" name="al_cancelar_parte" checked={alCancelar===valor} onChange={()=>setAlCancelar(valor)} disabled={saving} style={{marginTop:2}}/>
+      <span><span style={{fontSize:12,fontWeight:600,color:C.tx}}>{titulo}</span><br/><span style={{fontSize:10,color:C.t2}}>{detalle}</span></span>
+    </label>;
+  return <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%"}}>
+      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.dn}}><XCircleIcon size={17} weight="bold"/>Cancelar la parte {parte?.invoice_folio} · {order?.production_number}</h3>
+      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}><b style={{color:C.tx}}>{parte?.invoice_folio}</b> es una parte de {order?.production_number}: <b style={{color:C.tx}}>${fmtMx(monto)}</b> de ${fmtMx(precio)} sin IVA. Si ya está timbrada por nosotros, cancela primero su CFDI en CobranzaFlow (ahí se hace la misma pregunta).</p>
+      <div style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:4}}>¿Por qué se cancela?</div>
+      <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} disabled={saving} placeholder="Mínimo 5 caracteres" style={{...inp,resize:"vertical",marginBottom:14}}/>
+      <div style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:6}}>Al cancelarse, ese pedazo:</div>
+      <div style={{display:"grid",gap:8,marginBottom:14}}>
+        {opcion("reabrir","Vuelve a quedar por facturar",`La orden vuelve a pedir factura por $${fmtMx(monto)} sin IVA.`)}
+        {opcion("perder","Se da por perdido",esLaUltima?"Es la única parte que queda: la orden se cancela.":`La orden queda facturada de menos por $${fmtMx(monto)} sin IVA, a propósito.`)}
+      </div>
+      {err&&<div style={{background:"#ff3b3010",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dn}}>❌ {err}</div>}
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Volver</button>
+        <button onClick={async()=>{if(!can)return;setSaving(true);setErr("");try{await onConfirm({reason:reason.trim(),alCancelar})}catch(e){setErr(e?.message||"No se pudo cancelar la parte");setSaving(false)}}}
+          disabled={!can} title={!alCancelar?"Elige qué pasa con ese pedazo":reason.trim().length<5?"Escribe por qué (mínimo 5 caracteres)":""}
+          style={{...bs(can?C.dn:C.sf,can?"#fff":C.t2),display:"flex",alignItems:"center",gap:6,cursor:can?"pointer":"not-allowed"}}>
+          <XCircleIcon size={14} weight="bold"/>{saving?"Cancelando…":"Cancelar la parte"}
         </button>
       </div>
     </div>
@@ -12215,7 +12262,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
                 <span style={{color:C.t2,fontFamily:"'Geist',sans-serif",fontWeight:500}}>· {Number(s.qty_portion).toLocaleString("es-MX")} pza · ${Number(s.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
                 {s.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:F.micro,fontFamily:"'Geist',sans-serif",fontWeight:700}}><LightningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>anticipado</span>}
                 {/* v10.84.4 (scan 2): una parte facturada con error y SIN timbrar no tenia salida (Re-facturar pedia cancelar un CFDI que no existe). Admin la cancela aqui; su dinero regresa al resto. */}
-                {role==="admin"&&s.invoice_folio&&restoPorFacturar(o)&&!o.stage.includes("cancelled")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"cancel_split_part:"+s.id)}} style={{background:"none",border:"1px solid "+C.dn+"55",color:C.dn,borderRadius:6,padding:"1px 6px",fontSize:F.micro,fontFamily:"'Geist',sans-serif",cursor:"pointer"}} title="Cancela esta parte (sin timbrar o ya cancelado su CFDI); su dinero regresa al resto por facturar">cancelar parte</button>}
+                {/* v10.84.27 — también sin resto: el modal pregunta si el pedazo vuelve a quedar por facturar o se da por perdido */}
+                {role==="admin"&&s.invoice_folio&&!o.stage.includes("cancelled")&&<button onClick={e=>{e.stopPropagation();onAction(o.id,"cancel_split_part:"+s.id)}} style={{background:"none",border:"1px solid "+C.dn+"55",color:C.dn,borderRadius:6,padding:"1px 6px",fontSize:F.micro,fontFamily:"'Geist',sans-serif",cursor:"pointer"}} title="Cancela esta parte (sin timbrar o ya cancelado su CFDI) y pregunta si su dinero vuelve a quedar por facturar o se da por perdido">cancelar parte</button>}
               </div>
             ))}
             {/* v10.84.1 (scan): un resto «Consumida» no es una cancelacion, es que ya se facturo */}
@@ -16788,6 +16836,7 @@ export default function PrintFlow() {
   const [refacturarModal,setRefacturarModal]=useState(null); // 🆕 v10.81.0 — Re-facturar: confirmar liberación de folio cancelado
   const [splitInvoiceModal,setSplitInvoiceModal]=useState(null); // 🆕 v10.58.34 — Modal Karla parte UNA orden en N facturas
   const [siguienteParteModal,setSiguienteParteModal]=useState(null); // v10.84.0 — {order, resto}: facturar la siguiente parte
+  const [cancelParteModal,setCancelParteModal]=useState(null); // v10.84.27 — {order, parte}: cancelar una parte eligiendo qué pasa con su dinero
   const [orderSplitsCache,setOrderSplitsCache]=useState({}); // 🆕 v10.58.34 — cache de splits por order_id para vista post-split
   const [ocMatrixModal,setOcMatrixModal]=useState(null); // 🆕 v10.58.36 — Modal plan matriz por OC (KFC: N órdenes × N facturas)
   const [matrixCancelModal,setMatrixCancelModal]=useState(null); // 🆕 v10.58.40 — Modal confirmar cancel línea/grupo del plan matriz
@@ -18929,12 +18978,9 @@ export default function PrintFlow() {
     if(action.startsWith("cancel_split_part:")){const splitId=action.slice("cancel_split_part:".length);const o=orders.find(x=>x.id===id);if(!o)return;
       if(user!=="admin"){showToast("❌ Solo admin puede cancelar una parte.","error");return}
       const parte=(o.splits||[]).find(x=>x.id===splitId);if(!parte){showToast("No encuentro esa parte.","warning");return}
-      const reason=window.prompt(`¿Por qué se cancela la parte ${parte.invoice_folio}? Si ya está timbrada, cancela primero su CFDI en CobranzaFlow.\n(mínimo 5 caracteres)`);
-      if(reason==null)return;if((reason||"").trim().length<5){showToast("Escribe un motivo de al menos 5 caracteres.","warning");return}
-      setActionLoading(id);
-      (async()=>{try{await db.cancelInvoiceSplit(splitId,reason.trim(),userLogin||user);showToast(`Parte ${parte.invoice_folio} cancelada · su dinero regresa al resto por facturar`,"success");reload();}
-      catch(e){showToast("❌ "+(e?.message||"No se pudo cancelar la parte"),"error");}
-      finally{setActionLoading(null);}})();
+      // v10.84.27 — el motivo y QUÉ PASA CON EL DINERO se piden en CancelarParteModal (antes: window.prompt, y el toast
+      // decía «regresa al resto» aunque en una orden sin resto se perdía).
+      setCancelParteModal({order:o,parte});
       return;
     }
     // v10.84.0 — Facturar la siguiente parte de una orden por partes en el tiempo
@@ -20108,6 +20154,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* v10.84.6 (scan 3): el modal se monta sobre el resto VIVO de `orders` (el realtime de v10.84.5 lo mueve si en
           otra pestaña se cancela una parte); si el resto cambia, el key lo reinicia con los numeros nuevos, y si
           desaparece (se consumio / la orden se cancelo) el modal se cierra en vez de facturar sobre una foto. */}
+      {cancelParteModal&&(()=>{
+        // v10.84.27 — la orden VIVA (el realtime pudo cambiarla mientras el modal estaba abierto)
+        const liveO = orders.find(x=>x.id===cancelParteModal.order.id) || cancelParteModal.order;
+        const liveP = (liveO.splits||[]).find(x=>x.id===cancelParteModal.parte.id);
+        if(!liveP || liveP.cancelled_at){ setTimeout(()=>{ setCancelParteModal(null); showToast("Esa parte ya no está viva: se recargó la orden.","warning"); },0); return null; }
+        return <CancelarParteModal key={liveP.id} order={liveO} parte={liveP}
+          onClose={()=>setCancelParteModal(null)}
+          onConfirm={async({reason,alCancelar})=>{
+            await db.cancelInvoiceSplit(liveP.id, reason, userLogin||user, alCancelar);
+            setCancelParteModal(null);
+            showToast(alCancelar==="reabrir"
+              ? `Parte ${liveP.invoice_folio} cancelada · sus $${Number(liveP.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})} vuelven a quedar por facturar`
+              : `Parte ${liveP.invoice_folio} cancelada · se dio por perdida: ${liveO.production_number} queda facturada de menos`, "success");
+            reload();
+          }}/>;
+      })()}
       {siguienteParteModal&&(()=>{
         const liveO = orders.find(x=>x.id===siguienteParteModal.order.id) || siguienteParteModal.order;
         const liveR = restoPorFacturar(liveO);

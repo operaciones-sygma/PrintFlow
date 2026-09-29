@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.27 — Cancelar una parte pregunta qué pasa con su dinero — 29-sep-2026
+
+Pregunta del scan 5 de CobranzaFlow (`cancelar-una-parte-de-un-split-clasico`): las dos puertas hacían cosas
+distintas. **PrintFlow** regresaba el pedazo al resto sólo si la orden había tenido resto alguna vez; si no, **se
+perdía sin avisar** (la orden quedaba facturada de menos y nadie la volvía a ver; el botón ni aparecía). **CobranzaFlow**
+siempre lo reabría. Marcelo: *«que sea flexible… que se puedan ambas opciones con una UI simple»*, y sin opción marcada
+de entrada.
+
+- **«cancelar parte»** abre un modal (antes, un `window.prompt`): el motivo y **qué pasa con ese pedazo** — *vuelve a
+  quedar por facturar* o *se da por perdido* (la orden queda facturada de menos, a propósito; si es la última parte, la
+  orden se cancela). Sin elegir no se cancela. El botón aparece también en órdenes sin resto.
+- `cancel_invoice_split(…, p_al_cancelar)` **exige** la decisión para una parte facturada de una orden viva (una pestaña
+  vieja recibe «di qué pasa… recarga»), y «reabrir» regresa el pedazo **aunque la orden nunca haya tenido resto**. La
+  decisión queda en la parte (`order_invoice_splits.al_cancelar`, `al_cancelar_por`). La cascada al cancelar la orden
+  entera no decide nada y se queda como estaba.
+- El aviso final dice lo que pasó de verdad (antes decía «regresa al resto» también cuando se perdía).
+- En CobranzaFlow (v3.7.900) cancelar el documento hace la misma pregunta. La **invariante 31** ahora vigila **toda**
+  orden partida (antes sólo las que tuvieron resto: justo por donde se perdía el dinero), contando lo perdido por
+  decisión. Ensayado contra producción con rollback en las dos puertas y con las tres respuestas (reabrir, perder, sin
+  elegir). SQL en `../cobranzaflow/docs/migrations/v3.7.900_al_cancelar_una_parte_se_elige.sql` (copia aquí,
+  `docs/migrations/v10.84.27_al_cancelar_una_parte_se_elige.sql`).
+
 ## v10.84.26 — El carrito de Cuadra pregunta si el importe es subtotal o total — 28-sep-2026
 
 El campo decía **«Total de venta (CON IVA)»** y el 28-sep Karla tecleó ahí el **subtotal**: $34,150 =
