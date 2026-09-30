@@ -12,6 +12,26 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.29 — Foliar una OC ya ve la factura hecha por adelantado, y ofrece ligarla — 30-sep-2026
+
+Marcelo: *«La F-111 es una factura que se creó sin orden de producción, se quedó huérfana porque en realidad P-0558 y
+P-0557, que son la F-115, debían ser la F-111. El problema es que al hacer una OC éstas no se ligan, no aparece la opción
+en PrintFlow para ligarla»*.
+
+- **La causa.** Foliar una orden sola (`assign_invoice`) frena desde v10.80.21 cuando el cliente ya tiene una factura
+  emitida por adelantado sin orden por el mismo importe, y ofrece ligarla. Foliar una OC (`assign_folio_to_oc`) no tenía
+  ese candado, y en modo emisor ni siquiera usa el folio que se escribe: acuñó F-115 encima de F-111. Y
+  `link_invoice_to_order` liga una sola orden y rechaza a propósito las de una OC con folio compartido.
+- **En la base (CobranzaFlow v3.7.931):** el candado en `assign_folio_to_oc` (la OC entera y cada orden por su lado),
+  `list_linkable_invoices_for_oc` y `link_invoice_to_oc`, que liga la OC entera con las mismas guardas que una orden
+  (mismo cliente, sin ligar, importe al centavo, nada facturado por otro lado) y deja el rastro en la bitácora de cada orden.
+- **Aquí:** al foliar una OC (folio compartido o anticipado), si el candado dice que la OC entera ya se facturó por
+  adelantado, sale «Este trabajo ya se facturó por adelantado» con la factura, el importe y las órdenes, y «Sí, ligar».
+  Si la que coincide es una sola orden de la OC, el aviso manda a ligarla desde esa orden (ahí ya se ofrece).
+- **Lo que ya había pasado:** OC-0877 (P-0557 + P-0558) quedó ligada a F-111 y F-115, que nunca se timbró, se canceló
+  (CobranzaFlow v3.7.931b). Medido ese día: el candado también habría frenado OC-0870 (P-0561, contra F-105 de CABLESERV)
+  y OC-0872 (P-0563, contra F-108 de Castores), las dos por el importe exacto.
+
 ## v10.84.28 — Lo que encontró la verificación de v10.84.27 — 29-sep-2026
 
 La verificación de CobranzaFlow v3.7.900 (agentes de sólo lectura) encontró un P1 y varios P2 en esta puerta.

@@ -1784,6 +1784,19 @@ const db = {
     if(error) throw new Error(error.message);
     return data; // { invoice_status, amount, payment_status, payment_method, ... }
   },
+  // 🔗 v10.84.29 — Lo mismo para una OC entera (CobranzaFlow v3.7.931). El 30-sep la OC-0877 (P-0557 + P-0558) acuñó
+  // F-115 encima de F-111, hecha sin orden por el mismo importe: foliar una OC no revisaba las facturas por adelantado
+  // y link_invoice_to_order sólo liga una orden. Las candidatas las da la BD con los criterios del ligado.
+  async listLinkableInvoicesForOC(ocId) {
+    const {data, error} = await supabase.rpc("list_linkable_invoices_for_oc", {p_oc_id: ocId});
+    if(error) throw new Error(error.message);
+    return data || []; // [{doc_number, doc_type, amount, dias_sin_orden, monto_cuadra, total_oc, ordenes, ...}]
+  },
+  async linkInvoiceToOC(ocId, folio, actor) {
+    const {data, error} = await supabase.rpc("link_invoice_to_oc", {p_oc_id: ocId, p_folio: folio, p_actor: actor});
+    if(error) throw new Error(error.message);
+    return data; // {ok, oc_id, folio, orders, order_ids, count, pre_assigned, delivered, invoice_status, amount}
+  },
   // v10.81.0 — "Re-facturar orden": libera el folio de una orden cuya factura se CANCELÓ (candado fiscal en el RPC:
   // solo si NINGUNA factura viva lleva ese folio). La orden regresa a facturable (asignar folio nuevo o ligar uno).
   // v10.84.11 — «Deshacer cancelación» (sólo admin). Alcance acotado en el RPC: sin folio, factura ligada que el puente
@@ -17744,6 +17757,52 @@ export default function PrintFlow() {
         reload();
         return result;
       }catch(e){
+        // 🔗 v10.84.29 — ESTE TRABAJO YA SE FACTURÓ POR ADELANTADO (la OC entera). assign_folio_to_oc frena antes de
+        // acuñar (CobranzaFlow v3.7.931: el candado que una orden sola tiene desde v10.80.21) y aquí se ofrece ligar la
+        // factura que ya existe, como en la orden; sin esto el candado sería un toast sin salida. El 30-sep la OC-0877
+        // acuñó F-115 encima de F-111. El tercero recién fijado se queda mientras se liga (la candidata es suya) y se
+        // deshace si dice que no o si el ligado falla. Si la que coincide es UNA orden de la OC, la BD lo dice con otro
+        // texto («su importe») y el toast manda a ligarla desde esa orden.
+        if(/importe de esta OC/i.test(e?.message||"")){
+          let cand=null;
+          try{
+            const cands=await db.listLinkableInvoicesForOC(ocId);
+            cand=cands.find(c=>c.monto_cuadra&&c.doc_type===invoiceType)||null;
+          }catch(eL){ console.warn("[linkable OC] no se pudieron leer las candidatas:",eL); }
+          if(cand){
+            const revertirTercero=async()=>{ if(ocBillToSet){ try{ await db.setOcBillTo(ocId, null, actor); }catch(_){} } };
+            const ordenes=Array.isArray(cand.ordenes)&&cand.ordenes.length?" ("+cand.ordenes.join(", ")+")":"";
+            setFolioOCModal(null);
+            setConfirmModal({
+              title:"Este trabajo ya se facturó por adelantado",
+              message:"El cliente ya tiene "+cand.doc_number+" por $"+Number(cand.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+
+                ", emitida sin orden hace "+cand.dias_sin_orden+" día(s), y el importe coincide con esta OC"+ordenes+". Se liga "+cand.doc_number+
+                " a la OC en vez de emitir un folio nuevo"+(preAssigned?" (queda pre-asignada; en Salidas sólo se entrega)":"")+
+                ": otro folio le daría al cliente dos facturas por el mismo trabajo.",
+              confirmLabel:"🔗 Sí, ligar "+cand.doc_number,
+              confirmColor:C.fac,
+              onCancel:async()=>{ await revertirTercero(); showToast("No se ligó nada: la OC sigue sin folio.","info"); reload(); },
+              onConfirm:async()=>{
+                setConfirmModal(null);
+                try{
+                  const r=await db.linkInvoiceToOC(ocId, cand.doc_number, actor);
+                  const partes=[];
+                  if(r?.delivered) partes.push(r.delivered+" entregada(s)");
+                  if(r?.pre_assigned) partes.push(r.pre_assigned+" pre-asignada(s): se entregan en Salidas");
+                  // El traslado (Cuadra) iba después del folio nuevo; al ligar no se emite, y se dice.
+                  if(traslado?.destino_id) partes.push("⚠️ el traslado no se emitió: hazlo en CobranzaFlow → Traslados");
+                  showToast("🔗 "+cand.doc_number+" ligada a "+ocId+(partes.length?" · "+partes.join(" · "):""));
+                }catch(e2){
+                  console.error("[linkInvoiceToOC] Error:",e2);
+                  await revertirTercero();
+                  showToast("❌ "+(e2?.message||"No se pudo ligar la factura"),"error");
+                }
+                reload();
+              }
+            });
+            return null;
+          }
+        }
         // 🆕 Fase 2 — el folio falló pero el tercero quedó fijado (RPC aparte): revertirlo para no dejar la OC marcada.
         if(ocBillToSet){ try{ await db.setOcBillTo(ocId, null, actor); }catch(_){} }
         throw e;
