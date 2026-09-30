@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **18-sep-2026** (v10.84.9). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **30-sep-2026** (v10.84.29). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -137,20 +137,28 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ---
 
-## 🎯 Estado (18-sep-2026)
+## 🎯 Estado (30-sep-2026)
 
-- **LIVE:** v10.84.17 (v10.84.16: P3 del scan 4; v10.84.15: «ligar por anticipado» con botón en el modal de folio anticipado; v10.84.12-14: ligar existente en «siguiente parte», ligar por anticipado (pre-asignado), la parte cancelada muere de verdad; v10.84.11: «Liberar folio de la OC» + «Deshacer cancelación» (admin, alcance acotado); v10.84.9: «Facturar a un tercero» dice que el tercero PAGA y cuándo NO usarlo; v10.84.10: `precioVenta(o)` = maquila→`maq_price`, lo demás→`price`, la misma regla que la base; antes las tarjetas y los reportes hacían `price||maq_price`). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no.
-- **Lo último (18-sep):** `facturar_siguiente_parte(…, p_folio, p_allow_link := true)` **liga una
-  factura que ya existe en cobranza** como la siguiente parte, sin acuñar folio (mismos guards que la
-  Opción A de `assign_invoice_splits`; el puente la salta). Caso Portland P-0465: F-35 y F-66 hechas
-  sin orden antes de «por partes», F-65 duplicada cancelada, resto $13,200 / 30,000 pzas. Firma nueva
-  → DROP de la vieja + REVOKE/GRANT. **Sin botón todavía** (se llamó desde SQL); la opción en el modal
-  «Facturar siguiente parte» va en el lote del lunes.
-- **Antes (14-sep):** facturar por partes a lo largo del tiempo (v10.84.0-6), realtime de partes, Cuadrar.
-- **Pendientes de PrintFlow para el lunes 22-sep:** la opción «ligar factura existente» en el modal;
-  ligar por anticipado F-25 ↔ P-0437 (`link_invoice_to_order` sólo liga en Salidas); **P2
-  `cancel_invoice_split`**: cancelar una parte con factura propia sin timbrar la deja `cancelada` con
-  saldo vivo y `cfdi_status = 'pending'` (F-65 se corrigió a mano; debe poner saldo 0 y `none`).
+- **LIVE:** v10.84.29. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+  `CHANGELOG.md`; lo grande desde el 18-sep:
+  - **Ligar una factura que ya existe en cobranza, por cuatro puertas**: como siguiente parte (v10.84.12), por
+    anticipado con la orden todavía en producción (v10.84.13 y 15: queda pre-asignada y se entrega en Salidas), la
+    orden sola al foliar (el candado «emitida por adelantado» de `assign_invoice`, con «Sí, ligar» desde v10.80.21) y,
+    desde **v10.84.29, la OC entera** (`link_invoice_to_oc`, CobranzaFlow v3.7.931).
+  - **Cancelar una parte pregunta qué pasa con su dinero** (v10.84.27-28): vuelve a quedar por facturar o se da por
+    perdido; sin elegir no se cancela. La parte cancelada sin timbrar queda con saldo 0 (v10.84.14).
+  - **Rendimiento** (v10.84.24-25): la firma de cada foto se guarda y se reusa (antes se pedía cada vez que la tarjeta
+    se pintaba), y cada navegador hace una recarga a la vez; una pestaña abierta desde antes necesita F5.
+  - «Liberar folio de la OC» y «Deshacer cancelación» (v10.84.11, admin); `precioVenta(o)`: maquila → `maq_price`, lo
+    demás → `price`, la misma regla que la base (v10.84.10); el carrito de Cuadra pregunta si el importe es subtotal o
+    total (v10.84.26); y los P3 del scan 5 (v10.84.18-23: los diálogos de cancelar y ligar dicen lo que de verdad pasa, y
+    la bolsa de Corona ya no se llama «saldo a favor»).
+- **Lo último (30-sep):** F-111 (Gobierno del Estado) se emitió sin orden y su trabajo, P-0557 + P-0558, se folió como
+  OC-0877 y acuñó **F-115** por el mismo importe. 🔥 **Dos puertas al mismo cuarto**: foliar una orden sola revisaba las
+  facturas por adelantado del cliente; foliar una OC (`assign_folio_to_oc`) no, y no había con qué ligar la OC entera.
+  Ahora frena (la OC entera y cada orden por su lado) y el modal ofrece «Sí, ligar F-xxx»; si la que coincide es una sola
+  orden de la OC, el aviso manda a ligarla desde esa orden. F-111 ya tiene su OC y F-115 se canceló sin timbrar.
+  OC-0870/F-105 (CABLESERV) y OC-0872/F-108 (Castores) son el mismo caso, todavía en producción: se ofrecerá ligarlas.
 - **Backlog conocido:** Tablero activa fantasma (`delivered` en pos 0 bloquea auto-promoción);
   validaciones pendientes del roadmap de estabilización; decisiones de Marcelo en PENDIENTES.
 
