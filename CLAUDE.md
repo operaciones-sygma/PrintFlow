@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **30-sep-2026** (v10.84.29). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **30-sep-2026** (v10.84.30). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -139,8 +139,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (30-sep-2026)
 
-- **LIVE:** v10.84.29. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.30. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
+  - **Un nombre por dato** (v10.84.30, pedido de Marcelo): `orders.client_agent` es el **«Agente de compras»** del
+    cliente (quien pide, como Eva de Modelo) y `orders.agent` es **«Vendedor» / «Nuestro vendedor»** (el nuestro, el que
+    cobra la comisión). Ningún texto nuevo llama «agente» a secas a ninguno de los dos: compartir la palabra hizo que
+    40 órdenes traigan al vendedor escrito en el agente del cliente.
   - **Ligar una factura que ya existe en cobranza, por cuatro puertas**: como siguiente parte (v10.84.12), por
     anticipado con la orden todavía en producción (v10.84.13 y 15: queda pre-asignada y se entrega en Salidas), la
     orden sola al foliar (el candado «emitida por adelantado» de `assign_invoice`, con «Sí, ligar» desde v10.80.21) y,
