@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.30 — «Agente de compras» del cliente y «nuestro vendedor» ya no se confunden — 30-sep-2026
+
+Marcelo: *«Al crear una orden se confunden: el de arriba se refiere al agente de compras del cliente, y el de más
+abajo es nuestro agente de ventas, a quien se le comisiona el trabajo y lleva el trabajo.»* En la nueva orden decía
+**«Agente»** (la persona del cliente que pide, como Eva de Cervecería Modelo, `orders.client_agent`) y, más abajo,
+**«Agente / Vendedor»** (el nuestro, `orders.agent`, el que cobra la comisión). Compartían la palabra y ninguno decía de
+qué lado estaba. Y la confusión ya se ve en los datos: medido el 30-sep, **40 órdenes** traen el nombre de nuestro
+vendedor en el «Agente» del cliente (Genaro 36, Jaime 3, Christian Díaz 1; la última del 28-sep). No se tocaron: el
+cambio es de aquí en adelante.
+
+Ahora cada dato tiene un solo nombre en toda la app:
+- **El del cliente es «Agente de compras»**: «Agente de compras del cliente» en la nueva orden (con «Quién pide por
+  parte del cliente (ej. Eva)»), en el formulario de la OC y en el carrito de Cuadra; «Agente de compras» en el
+  detalle de la orden, en la hoja impresa y en el historial de cambios. Su alta dice «Nuevo agente de compras: la
+  persona que nos pide los trabajos por parte de … No es nuestro vendedor».
+- **El nuestro es «Vendedor»**: «Nuestro vendedor», con la línea *«El agente de ventas de SYGMA que lleva este trabajo y
+  cobra su comisión»*, en la nueva orden y en los dos formularios de OC; «Vendedor» en la hoja impresa, en la
+  exportación a CSV (decía «Agente»), en «Sin vendedor asignado» y en el aviso al duplicar.
+
+Sólo textos: ningún campo, cálculo ni regla cambió (`client_agent` y `agent` siguen igual). Build y
+`probar-alcance.sh` en verde.
+
 ## v10.84.29 — Foliar una OC ya ve la factura hecha por adelantado, y ofrece ligarla — 30-sep-2026
 
 Marcelo: *«La F-111 es una factura que se creó sin orden de producción, se quedó huérfana porque en realidad P-0558 y
