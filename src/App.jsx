@@ -4409,7 +4409,7 @@ function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose
   // (p.ej. Re-facturar) disparaba la RPC 2 veces (la 2ª rebotaba sola por FOR UPDATE, pero mostraba toast rojo tras el verde).
   const [saving,setSaving]=useState(false);
   const doConfirm=async()=>{if(saving)return;setSaving(true);try{await onConfirm()}finally{setSaving(false)}};
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>No, cancelar</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p><div style={{display:"flex",gap:8}}><button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>No, cancelar</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
 }
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
@@ -18931,6 +18931,45 @@ export default function PrintFlow() {
     return null;
   },[user,userLogin,orders]);
 
+  // 🔗 v10.84.31 — UNA FACTURA POR ADELANTADO DE OTRO IMPORTE (un anticipo). El candado de assign_invoice (CobranzaFlow
+  // v3.7.465) sólo frena cuando la factura sin orden del cliente es del MISMO importe que la orden, al centavo, y ahí se
+  // ofrece ligarla. Un anticipo del 50% no lo veía: el 2-oct Karla le asignó folio anticipado a P-0544 por el trabajo
+  // completo ($13,920), y F-90, el 50% que ya estaba facturado y pagado, se quedó sin ligar (F-136 se canceló sin timbrar,
+  // CobranzaFlow v3.7.956b). Antes de asignar se pregunta. Las candidatas las da la base (list_linkable_invoices_for_order:
+  // las facturas sin orden del cliente, de cualquier importe, con monto_cuadra); las del mismo importe las sigue atendiendo
+  // el candado de la base, con su «Sí, ligar». Si la lectura falla, no se pregunta: el candado de la base sigue igual.
+  const anticiposDeOtroImporte=useCallback(async(orderId, invoiceType)=>{
+    if(invoiceType!=="factura"&&invoiceType!=="remision") return [];
+    try{
+      const {data,error}=await supabase.rpc("list_linkable_invoices_for_order",{p_order_id:orderId});
+      if(error) throw error;   // supabase-js no lanza solo
+      return (data||[]).filter(c=>!c.monto_cuadra&&c.doc_type===invoiceType);
+    }catch(e){ console.warn("[anticipos] no se pudieron leer:",e); return []; }
+  },[]);
+  // Resuelve true (asignar el folio de todos modos) o false (no se asigna). `enSalidas`: ahí ya se puede facturar por partes;
+  // antes de Salidas, todavía no («Facturar por partes» sólo abre en salidas/maq_received).
+  const preguntarPorAnticipos=useCallback((cands, enSalidas)=>new Promise(resolve=>{
+    const fmt$=n=>"$"+Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+    const motivo=c=>{ const m=/Motivo:\s*([^.]+)/i.exec(c.notas||""); return m?" («"+m[1].trim()+"»)":""; };
+    const lista=cands.slice(0,3).map(c=>c.doc_number+" por "+fmt$(c.amount)+", emitida sin orden hace "+c.dias_sin_orden+" día(s)"+motivo(c)).join("; ");
+    const mas=cands.length>3?" y "+(cands.length-3)+" más":"";
+    const primera=cands[0].doc_number;
+    setConfirmModal({
+      zIndex:1100,
+      title:"Este cliente tiene una factura por adelantado sin ligar",
+      message:"Ya tiene "+lista+mas+". No es del importe de esta orden, así que no se liga sola."
+        +"\n\nSi es un anticipo de este trabajo, un folio por el trabajo completo se lo cobraría dos veces. "
+        +(enSalidas
+          ?"Usa «Facturar por partes» y en la primera parte elige «Esta entrega ya tiene factura» → "+primera+"."
+          :"No le asignes folio todavía: cuando llegue a Salidas, «Facturar por partes» y en la primera parte «Esta entrega ya tiene factura» → "+primera+".")
+        +"\n\nSi no tiene que ver con este trabajo, asigna el folio.",
+      confirmLabel:"Asignar el folio de todos modos",
+      confirmColor:C.wn,
+      onConfirm:async()=>{ setConfirmModal(null); resolve(true); },
+      onCancel:()=>resolve(false),
+    });
+  }),[]);
+
   // 🆕 v10.72.83 — Devolución (re-trabajo): RPC create_return + abre la(s) orden(es) nueva(s) para capturar/ajustar y mandar a producción.
   const doCreateReturn=useCallback(async(ids,reason)=>{
     if(!ids?.length||!reason||reason.trim().length<3){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 3 caracteres)","error");return null;}
@@ -19982,6 +20021,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // con verify_actor_role que busca en public.users.username. Hoy funcionaba por casualidad
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
+          // 🔗 v10.84.31 — un anticipo de otro importe (ver preguntarPorAnticipos): se pregunta antes de acuñar el folio.
+          {const otros=await anticiposDeOtroImporte(invoiceModal.id, invoiceType);
+           if(otros.length&&!(await preguntarPorAnticipos(otros, true))) return;}
           const appliedBillTo=await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
           // 💵 v10.73.65 Nivel 3 F1 — Efectivo→vale: si hay alguna porción en efectivo, va por la RPC atómica assign_invoice_cash
           // (folia + crea el/los vale(s) de caja + baja el balance). Self-contained (su propio try/catch → NO cae al flujo "ligar").
@@ -20305,6 +20347,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
+          // 🔗 v10.84.31 — el caso de P-0544 (2-oct): folio anticipado por el trabajo completo con su 50% ya facturado.
+          {const otros=await anticiposDeOtroImporte(preInvoiceModal.id, invoiceType);
+           if(otros.length&&!(await preguntarPorAnticipos(otros, false))) return;}
           const appliedBillTo=await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
           // #2 scan final: usar el RETORNO del RPC (en emisor el folio nace del counter, ignora la entrada).
           const assignedFolio=(await db.assignInvoice(preInvoiceModal.id,invoiceType,folio,true,reason,userLogin||user,paymentStatus,paymentMethod,paymentAmount,bankReference,false,paymentRefs))||folio;

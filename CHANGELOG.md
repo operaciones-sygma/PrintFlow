@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.31 — Un anticipo de otro importe también se pregunta antes de asignar folio — 2-oct-2026
+
+El 2-oct Karla le asignó folio anticipado a **P-0544** (DISEÑO EN ESTRUCTURAS DE EXPOSICION, 2,000 tarjetas, $12,000 + IVA)
+por el trabajo **completo**, y CobranzaFlow acuñó **F-136** por $13,920. Pero el 50% ya estaba facturado por adelantado en
+**F-90** ($6,887.50, «PORQUE PIDEN QUE FACTURE EL 50% PARA HACER EL PEDIDO»), timbrada y pagada. Marcelo lo vio: F-136 se
+canceló sin timbrar y la orden se liberó (CobranzaFlow v3.7.956b).
+
+**Por qué pasó.** El candado de `assign_invoice` (CobranzaFlow v3.7.465) frena sólo cuando el cliente tiene una factura sin
+orden del **mismo importe** que la orden, al centavo, y ahí PrintFlow ofrece «Sí, ligar». Un anticipo no es del mismo
+importe: el candado no lo veía y el folio salió.
+
+**Ahora**, antes de asignar folio —al entregar con factura y en «Folio anticipado»—, si el cliente tiene facturas sin orden
+de **otro** importe, se pregunta: «Este cliente tiene una factura por adelantado sin ligar», con el folio, el importe, hace
+cuántos días y el motivo que se escribió al emitirla, y el camino: si es un anticipo de este trabajo, «Facturar por partes» y
+en la primera parte «Esta entrega ya tiene factura» → F-90 (antes de Salidas: no asignar folio todavía). Si no tiene que ver,
+«Asignar el folio de todos modos». Las candidatas las da la base (`list_linkable_invoices_for_order`, que ya traía las de
+cualquier importe con `monto_cuadra`); las del mismo importe las sigue atendiendo el candado de la base. Si la lectura falla,
+no se pregunta y todo sigue como antes. Además, el diálogo de confirmación respeta los saltos de línea de su mensaje
+(`white-space: pre-line`): los que ya se escribían con párrafos salían en uno solo.
+
+Medido con la sesión de Karla en PrintFlow: para P-0544 sale F-90, $6,887.50, 9 días, con su motivo. Sólo front.
+
 ## v10.84.30 — «Agente de compras» del cliente y «nuestro vendedor» ya no se confunden — 30-sep-2026
 
 Marcelo: *«Al crear una orden se confunden: el de arriba se refiere al agente de compras del cliente, y el de más
