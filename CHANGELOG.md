@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.33 — «Facturar por partes», probado tratando de romperlo: 8 fallas arregladas — 5-oct-2026
+
+Marcelo: *«siempre que implementemos algo hagas pruebas como usuario limit testing, tratando de romper cosas»*. Una prueba
+escrita (Playwright, en el banco de PrintFlow: los tres modales extraídos de `App.jsx` con la base simulada y variantes de
+emisor apagado, orden histórica, Corona, saldo a favor, una pieza, sin candidatas y la base respondiendo con error) afirma
+lo que debería pasar. Contra la v10.84.32: 31 pasaban y 11 fallaban. Ahora, con las pruebas que se agregaron: 50 de 50.
+
+1. **El teclado se salía de los diálogos.** Tab y Mayús+Tab llevaban el foco al tablero de atrás, en los tres modales y en
+   `ConfirmModal`. `atraparTab` (función de módulo, en el `onKeyDown` del panel): del último control al primero y al revés,
+   con un grupo de radios contado como una sola parada.
+2. **Ligar con el folio vacío decía dos cosas falsas**: «un folio no se lee» y «trae la serie del otro tipo». Ahora «falta
+   escribir el folio de una parte» (`foliosVacios`, que también bloquea «Crear»); forma y serie miran sólo lo escrito.
+3. **Una orden histórica pedía «F-XXXX existente»**, y lo que se liga es el D- o R- de Alpha. Ahora pide «D-XXXX de Alpha»,
+   en el split y en «Siguiente parte».
+4. **Esc con un plan capturado lo tiraba sin preguntar** cuando el foco estaba en un botón («Dividir igual», «Cuadrar»).
+   Ahora pregunta «¿Cerrar sin crear los folios?»; con el plan vacío, Esc sigue cerrando de inmediato.
+5. **Con el emisor apagado, un folio que no sirve apagaba «Facturar» sin decir por qué** (sólo se ponía rojo el borde). Ahora
+   dice si le sobran ceros o si trae la serie del otro tipo.
+6. **En una histórica, el clic fuera tiraba la factura elegida para ligar** (la caja abre sola y elegirla no contaba como
+   captura).
+7. **«Al menos una parte se factura hoy» nunca salía**: con todas las partes en «Después» decía «sólo puede haber una»; y
+   sin cantidades capturadas sólo salía la pista neutra. Ahora el error de fondo va primero y se dice aunque no haya
+   cantidades.
+8. **Arrepentirse de ligar dejaba el importe de la factura elegida.** Al elegir F-90 la parte se ponía en $5,937.50; con
+   «Mejor facturar normal» se quedaba así, y un clic de más facturaba de menos. Ahora vuelve a «todo lo que queda» (si no
+   se había elegido ninguna, se respeta lo tecleado).
+
+Lo que se intentó y aguantó: importes mayores que el resto, negativos y con tres decimales, 0 piezas y todas las piezas
+con parte del dinero, una sola pieza, la factura que rebasa el resto, doble clic en Facturar, Crear y Cancelar (una sola
+vez), Esc mientras guarda, la base que rechaza (el modal y el plan siguen para reintentar), 20 partes en la laptop, de 20 a
+2 con datos, dos «Después», el resto en medio, Corona sin saldo suficiente, anticipados sin razón, Cuadrar, y el monitor de
+1920. La prueba vive en `claude-navegador/banco-printflow/romper-partes.mjs`. `npm run build`, `probar-alcance.sh` y
+`probar-cuadrar-partes.mjs` (26) en verde. Sólo front.
+
 ## v10.84.32 — «Facturar por partes», la critique (25/40): un Esc ya no se lleva el plan — 5-oct-2026
 
 Primera pasada de diseño (`/impeccable critique`) a lo que entró nuevo desde la v10.84: «Facturar por partes», «Facturar

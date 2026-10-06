@@ -2802,6 +2802,22 @@ function useEscClose(onClose) {
   const ref=useRef(onClose);ref.current=onClose;
   useEffect(()=>{const fn=()=>ref.current();escStack.push(fn);return ()=>escStack.pop(fn)},[]);
 }
+// v10.84.33 — EL TAB NO SE SALE DE UN DIÁLOGO. aria-modal no lo hace solo: con Tab o Mayús+Tab el foco se iba al tablero de
+// atrás (probado tratando de romper «Facturar por partes»). Del último control vuelve al primero y al revés; y como un grupo
+// de radios es UNA parada para el navegador, si el foco igual sale, se regresa. Va en el onKeyDown del panel role="dialog".
+const FOCOS_DIALOGO='button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])';
+function atraparTab(e){
+  if(e.key!=="Tab")return;
+  const dlg=e.currentTarget, atras=e.shiftKey;
+  const f=[...dlg.querySelectorAll(FOCOS_DIALOGO)].filter(el=>!el.disabled&&el.getClientRects().length>0);
+  if(!f.length){e.preventDefault();return}
+  const act=document.activeElement;
+  // un grupo de radios es UNA parada: cualquiera de sus radios cuenta como el primero (o el último) del diálogo
+  const misma=(a,b)=>a===b||(!!a&&!!b&&a.type==="radio"&&b.type==="radio"&&!!a.name&&a.name===b.name);
+  if(atras&&(misma(act,f[0])||act===dlg)){e.preventDefault();f[f.length-1].focus();return}
+  if(!atras&&misma(act,f[f.length-1])){e.preventDefault();f[0].focus();return}
+  setTimeout(()=>{if(!dlg.contains(document.activeElement))(atras?f[f.length-1]:f[0]).focus()},0);
+}
 
 // ─── FIRST-TIME CONTEXTUAL HINTS ──────────────────
 function FirstTimeHint({hintKey,text,color=C.ac,role}) {
@@ -4413,7 +4429,7 @@ function ConfirmModal({title,message,confirmLabel,confirmColor,onConfirm,onClose
   const doConfirm=async()=>{if(saving)return;setSaving(true);try{await onConfirm()}finally{setSaving(false)}};
   // v10.84.32 — el foco entra al diálogo en la acción segura: antes se quedaba en el botón que lo abrió, detrás del velo.
   // Y el título es el nombre accesible del diálogo.
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p><div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>No, cancelar</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3><p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p><div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>No, cancelar</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
 }
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
@@ -6916,7 +6932,8 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   // que antes era un window.confirm). Con un listener propio en window se cerraba aunque hubiera otro diálogo encima.
   useEscClose(()=>{ if(!saving) onClose(); });
   // ...y el clic fuera ya no tira lo capturado: sólo cierra si no se ha tocado nada.
-  const capturado = qtyTocada || !!notes.trim() || ligarManual || !!folio || cents(amount)!==cents(restoSinIva) || docType!==tipoDelPlan;
+  // v10.84.33: también la factura elegida para ligar (en una histórica la caja abre sola y elegirla no cambiaba nada más)
+  const capturado = qtyTocada || !!notes.trim() || ligarManual || !!ligada || !!folio || cents(amount)!==cents(restoSinIva) || docType!==tipoDelPlan;
   const [pregunta,setPregunta] = useState(null);
   const panelRef = useRef(null);
   useEffect(()=>{ panelRef.current?.focus(); },[]);
@@ -6945,7 +6962,7 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const linkBtn = {background:"none",border:"none",padding:"4px 0",fontSize:12,fontWeight:600,color:C.ac,cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2,display:"inline-flex",alignItems:"center",gap:5,fontFamily:"'Geist',sans-serif"};
   return <>
   <div onClick={()=>!saving&&!capturado&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dlg-siguiente-parte-titulo" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto",outline:"none"}}>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dlg-siguiente-parte-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto",outline:"none"}}>
       <h3 id="dlg-siguiente-parte-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:F.title,fontWeight:700,margin:"0 0 4px",color:C.tx}}><FileTextIcon size={17} weight="bold" color={C.fac}/>Facturar siguiente parte · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{order?.client} · quedan <b style={{color:C.tx}}>${fmtMx(restoSinIva)}</b> sin IVA ({restoQty.toLocaleString("es-MX")} pzas) por facturar.</p>
       <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
@@ -6992,12 +7009,21 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
             </div>}
             {ligada&&<div style={{fontSize:F.meta,color:C.t2,marginTop:6}}>Al ligar <b style={{color:C.tx}}>{ligada.doc_number}</b> la parte queda por <b style={{color:C.tx}}>${fmtMx(amount)}</b> sin IVA; ajusta las piezas si hace falta.</div>}
           </div>
-          {!debeLigar&&<button type="button" onClick={()=>{setLigar(false);setLigada(null)}} disabled={saving} style={{...linkBtn,fontSize:11,fontWeight:500,color:C.t2,marginTop:6}}>Mejor facturar normal</button>}
+          {/* v10.84.33 (probado tratando de romperlo) — si ya había elegido una factura, ésta le había puesto SU importe, piezas
+              y tipo: al arrepentirse se vuelve a «todo lo que queda». Antes se quedaba, p. ej., en $5,937.50 y un clic de más
+              facturaba de menos. Si no eligió ninguna, lo que había tecleado se respeta. */}
+          {!debeLigar&&<button type="button" onClick={()=>{if(ligada){setQtyTocada(false);setAmount(restoSinIva);setQty(restoQty);setDocType(tipoDelPlan)}setLigar(false);setLigada(null)}} disabled={saving} style={{...linkBtn,fontSize:11,fontWeight:500,color:C.t2,marginTop:6}}>Mejor facturar normal</button>}
         </div>}
       {!folioAuto&&!ligar&&<div style={{marginBottom:12}}>
         <label htmlFor="sp-folio" style={lbl}>Folio {docType==="factura"?"(D-/F-)":"(R-/RS-)"}</label>
-        <input id="sp-folio" type="text" value={folio} onChange={e=>setFolio(e.target.value.toUpperCase())} placeholder={docType==="factura"?"F-XXXX":"RS-XXXX"} style={{...inp,fontFamily:"'Geist Mono',monospace",border:(folio&&!folioOk)?"1px solid "+C.dn:undefined}}/>
-        <div style={{fontSize:F.meta,color:C.t2,marginTop:3}}>El emisor está apagado (u orden histórica): teclea el folio real.</div>
+        {/* v10.84.33 — una histórica pide el folio de Alpha (D-/R-), no un F-; y un folio que no sirve dice por qué (antes sólo
+            se ponía rojo el borde y «Facturar» se apagaba sin explicar). */}
+        <input id="sp-folio" type="text" value={folio} onChange={e=>setFolio(e.target.value.toUpperCase())} placeholder={esHistorica?(docType==="factura"?"D-XXXX de Alpha":"R-XXXX de Alpha"):(docType==="factura"?"F-XXXX":"RS-XXXX")} style={{...inp,fontFamily:"'Geist Mono',monospace",border:(folio&&!folioOk)?"1px solid "+C.dn:undefined}}/>
+        {folio&&!folioOk
+          ? <div style={{fontSize:F.meta,color:C.dnInk,marginTop:3}}>{(docType==="factura"?/^(?:RS|R)-/:/^[DF]-/).test(folio)
+              ? (docType==="factura"?"Una factura lleva folio F- o D-.":"Una remisión lleva folio RS- o R-.")
+              : "Va la serie, un guion y el número, sin ceros a la izquierda (p. ej. "+(docType==="factura"?(esHistorica?"D-5880":"F-123"):(esHistorica?"R-864":"RS-45"))+")."}</div>
+          : <div style={{fontSize:F.meta,color:C.t2,marginTop:3}}>El emisor está apagado (u orden histórica): teclea el folio real.</div>}
       </div>}
       <label htmlFor="sp-nota" style={lbl}>Nota (opcional)</label>
       <input id="sp-nota" type="text" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="p. ej. segunda entrega, pagó la anterior" style={{...inp,marginBottom:14}}/>
@@ -7047,7 +7073,7 @@ function CancelarParteModal({order,parte,onConfirm,onClose}) {
       <span><span style={{fontSize:12,fontWeight:600,color:C.tx}}>{titulo}</span><br/><span style={{fontSize:F.meta,color:grave?C.dnInk:C.t2,fontWeight:grave?600:400}}>{grave&&<WarningIcon size={11} weight="fill" color={C.dn} style={{verticalAlign:"-1px",marginRight:3}}/>}{detalle}</span></span>
     </label>;
   return <div onClick={()=>!saving&&!capturado&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-    <div role="dialog" aria-modal="true" aria-labelledby="dlg-cancelar-parte-titulo" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
+    <div role="dialog" aria-modal="true" aria-labelledby="dlg-cancelar-parte-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"100%",maxHeight:"90vh",overflow:"auto"}}>
       <h3 id="dlg-cancelar-parte-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:F.title,fontWeight:700,margin:"0 0 4px",color:C.tx}}><XCircleIcon size={17} weight="bold" color={C.dn}/>Cancelar la parte {parte?.invoice_folio} · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}><b style={{color:C.tx}}>{parte?.invoice_folio}</b> es una parte de {order?.production_number}: <b style={{color:C.tx}}>${fmtMx(monto)}</b> de ${fmtMx(precio)} sin IVA.</p>
       <div id="cp-destino" style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:6}}>Al cancelarse, ese pedazo:</div>
@@ -7114,13 +7140,20 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const [avisoCuadre, setAvisoCuadre] = useState("");         // v10.84.3 — que cambio al cuadrar, con numeros
   const [avisoCuadreErr, setAvisoCuadreErr] = useState("");   // v10.84.6 (scan 3) — el error de cuadre iba a la caja VERDE
 
+  const [pregunta, setPregunta] = useState(null);           // v10.84.32 — los confirms, dentro del sistema (antes window.confirm)
+  const [verAnticipados, setVerAnticipados] = useState(false);
   // ESC close (solo cuando NO está guardando). v10.58.43 #25: dentro de un input no cierra (convención escStack).
   // v10.84.32 (/impeccable critique) — por el escStack de la app, no con un listener propio en window: con el
   // «Folio ya existe en cobranza» encima (ConfirmModal, zIndex 1100), un Esc cerraba el confirm Y este modal, y el plan
   // entero se perdía, que es justo lo que v10.84.6 quiso evitar. El stack cierra sólo el diálogo de arriba.
-  useEscClose(()=>{ if(!saving) onClose(); });
-  const [pregunta, setPregunta] = useState(null);           // v10.84.32 — los confirms, dentro del sistema (antes window.confirm)
-  const [verAnticipados, setVerAnticipados] = useState(false);
+  // v10.84.33 (probado tratando de romperlo) — con un plan capturado, Esc PREGUNTA: con el foco en un botón («Dividir igual»,
+  // «Cuadrar») un Esc tiraba las partes sin avisar. `capturado` se calcula más abajo; esto corre al apretar Esc, ya calculado.
+  useEscClose(()=>{
+    if(saving) return;
+    if(capturado){ setPregunta({ title:"¿Cerrar sin crear los folios?", message:"Lo que llevas capturado en las "+splits.length+" partes se pierde.",
+      confirmLabel:"Cerrar sin crear", confirmColor:C.dnInk, onConfirm:()=>{ setPregunta(null); onClose(); } }); return; }
+    onClose();
+  });
   const panelRef = useRef(null);
   useEffect(()=>{ panelRef.current?.focus(); }, []);       // el foco entra al diálogo (antes se quedaba en la tarjeta de atrás)
 
@@ -7237,10 +7270,13 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const folioRegex = /^(?:RS|[DFR])-[1-9]\d*$/;
   // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
   // v10.84.1: con emisor ON solo se validan los folios ESCRITOS (los de ligar); el resto va vacio
-  const foliosFmtOk = folioAuto ? foliosNoCorona.every(s => !esLigar(s) || folioRegex.test((s.folio||"").toUpperCase()))
-                                : foliosNoCorona.every(s => folioRegex.test((s.folio||"").toUpperCase()));
   // v10.84.4 (scan 2): con emisor ON solo llevan folio las filas de LIGAR; esas SI se validan.
   const foliosConFolio = folioAuto ? foliosNoCorona.filter(s => esLigar(s)) : foliosNoCorona;
+  // v10.84.33 (probado tratando de romperlo) — un folio VACÍO es «falta el folio», no «no se lee» ni «serie del otro tipo»:
+  // con «Ya tiene factura: ligarla» y el campo sin escribir, la lista decía las dos cosas falsas. Forma y serie miran sólo lo
+  // escrito; lo vacío se cuenta aparte y también bloquea.
+  const foliosVacios = foliosConFolio.filter(s => !(s.folio||"").trim()).length;
+  const foliosFmtOk = foliosConFolio.every(s => !(s.folio||"").trim() || folioRegex.test((s.folio||"").toUpperCase()));
   const foliosUnicos = (() => {
     const set = new Set();
     for (const s of foliosConFolio) {
@@ -7254,7 +7290,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // Serie correcta según tipo: factura D-/F-, remisión R-/RS- (las dos series, la de Alpha y la propia)
   const foliosPrefixOk = foliosConFolio.every(s => {
     const f = (s.folio||"").toUpperCase();
-    return s.doc_type === "factura" ? /^[DF]-/.test(f) : /^(?:RS|R)-/.test(f);
+    return !f || (s.doc_type === "factura" ? /^[DF]-/.test(f) : /^(?:RS|R)-/.test(f));
   });
 
   const reasonOk = !allPreAssigned || (globalReason||"").trim().length >= 3;
@@ -7273,9 +7309,12 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const restoAlFinal = nRestos === 0 || splits[splits.length - 1]?.doc_type === "por_facturar";
   const restoOk = nRestos <= 1 && nRestos < splits.length && restoAlFinal;
 
-  const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosUnicos
+  const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosVacios === 0 && foliosUnicos
                     && foliosPrefixOk && reasonOk && qtysOk && amountsOk && splitsMin
                     && coronaOk && coronaTypesValid && restoOk;
+  // v10.84.33 — el plan ya tiene algo capturado: el clic fuera no lo tira y Esc pregunta antes (arriba, en useEscClose).
+  const sinTocar = splits.every(s => !Number(s.qty||0) && !Number(s.amountConIva||0));
+  const capturado = !sinTocar || splits.length !== 2 || splits.some(s => s.ligar || s.doc_type !== "factura") || allPreAssigned || !!globalReason.trim();
 
   // Actions
   const updateSplit = (idx, patch) => {
@@ -7473,32 +7512,34 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // v10.84.32 (/impeccable critique) — LO QUE FALTA PARA CREAR, en una sola lista junto al botón y en palabras de Karla. Antes:
   // dos avisos sueltos arriba (resto, folios) y, bajo el botón, la misma lista en jerga («Prefix», «splits», «leading zeros»,
   // «corona_saldo»), con la serie vieja («D-NNNN o R-NNNN») aunque el emisor saca F-/RS- desde el 1-sep.
-  const sinTocar = splits.every(s => !Number(s.qty||0) && !Number(s.amountConIva||0));
   const fmtN = n => Number(n||0).toLocaleString("es-MX");
   // Frases cortas: van en el pie fijo, en un solo párrafo, y no deben tapar el semáforo en la laptop.
+  // v10.84.33: cada una con su clase. «reparto» es lo de repartir piezas y dinero; si sólo falta eso y no se ha capturado
+  // nada, sale la pista neutra. Lo demás (dos «Después», el folio que falta) se dice aunque no haya cantidades.
   const faltas = [
-    !qtyOk && (sumQty < totalQty ? `faltan ${fmtN(totalQty - sumQty)} piezas por repartir` : `sobran ${fmtN(sumQty - totalQty)} piezas`),
-    !amountOk && `el dinero no cuadra por $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}`,
-    !qtysOk && "hay una parte sin piezas",
-    !amountsOk && "hay una parte sin importe",
-    !restoOk && (nRestos > 1 ? "sólo puede haber una parte «Después» (es el resto)"
-      : !restoAlFinal ? "la parte «Después» va al final (es el resto)"
-      : "al menos una parte se factura hoy (para dejarlo todo pendiente no hace falta partir)"),
-    !foliosFmtOk && "un folio no se lee: serie, guion y número sin ceros a la izquierda (F-123, RS-45, D-5880)",
-    !foliosPrefixOk && "un folio trae la serie del otro tipo (factura F- o D-, remisión RS- o R-)",
-    !foliosUnicos && "hay un folio repetido en dos partes",
-    !coronaTypesValid && "«Saldo Corona» sólo aplica a clientes Corona",
-    !coronaOk && `el saldo Corona no alcanza por $${fmtMx(coronaTotalSinIva - coronaBalance)}`,
-    !reasonOk && "falta escribir por qué se anticipan (mínimo 3 caracteres)",
+    !qtyOk && { k: "reparto", t: sumQty < totalQty ? `faltan ${fmtN(totalQty - sumQty)} piezas por repartir` : `sobran ${fmtN(sumQty - totalQty)} piezas` },
+    !amountOk && { k: "reparto", t: `el dinero no cuadra por $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}` },
+    !qtysOk && { k: "reparto", t: "hay una parte sin piezas" },
+    !amountsOk && { k: "reparto", t: "hay una parte sin importe" },
+    // todas «Después» va primero: es el error de fondo (con dos partes también son «dos restos», pero eso no es lo que falla)
+    !restoOk && { k: "resto", t: nRestos >= splits.length ? "al menos una parte se factura hoy (para dejarlo todo pendiente no hace falta partir)"
+      : nRestos > 1 ? "sólo puede haber una parte «Después» (es el resto)"
+      : "la parte «Después» va al final (es el resto)" },
+    foliosVacios > 0 && { k: "folio", t: foliosVacios === 1 ? "falta escribir el folio de una parte" : `falta escribir el folio de ${foliosVacios} partes` },
+    !foliosFmtOk && { k: "folio", t: "un folio no se lee: serie, guion y número sin ceros a la izquierda (F-123, RS-45, D-5880)" },
+    !foliosPrefixOk && { k: "folio", t: "un folio trae la serie del otro tipo (factura F- o D-, remisión RS- o R-)" },
+    !foliosUnicos && { k: "folio", t: "hay un folio repetido en dos partes" },
+    !coronaTypesValid && { k: "corona", t: "«Saldo Corona» sólo aplica a clientes Corona" },
+    !coronaOk && { k: "corona", t: `el saldo Corona no alcanza por $${fmtMx(coronaTotalSinIva - coronaBalance)}` },
+    !reasonOk && { k: "anticipo", t: "falta escribir por qué se anticipan (mínimo 3 caracteres)" },
   ].filter(Boolean);
-  // El clic fuera ya no tira un plan con datos (Esc y «Volver» sí cierran).
-  const capturado = !sinTocar || splits.length !== 2 || splits.some(s => s.ligar || s.doc_type !== "factura") || allPreAssigned || !!globalReason.trim();
+  const soloPista = sinTocar && faltas.every(f => f.k === "reparto");
   const linkSutil = {background:"none",border:"none",padding:"4px 0",fontSize:11,fontWeight:500,color:C.t2,cursor:"pointer",textDecoration:"underline",textUnderlineOffset:2,display:"inline-flex",alignItems:"center",gap:5,fontFamily:"'Geist',sans-serif"};
   return <>
   <div onClick={()=>!saving&&!capturado&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
     {/* v10.84.32 — el pie (lo que falta y los botones) queda FIJO y sólo el cuerpo hace scroll: en la laptop (1366×768)
         «Crear» quedaba debajo del pliegue. */}
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dlg-split-titulo" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,maxWidth:920,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}}>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dlg-split-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,maxWidth:920,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}}>
       <div style={{overflow:"auto",padding:"24px 24px 10px"}}>
       <h3 id="dlg-split-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:F.title,fontWeight:700,margin:"0 0 4px",color:C.tx}}><FilesIcon size={17} weight="bold" color={C.fac}/>Facturar por partes · {order?.production_number}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
@@ -7641,7 +7682,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                 <input type="text" value={s.folio||""} aria-label={"Folio de la parte "+(i+1)}
                   onChange={e=>updateSplit(i, {folio: e.target.value.toUpperCase()})}
                   style={{...inp,padding:"6px 10px",fontSize:13,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,width:"130px",border:(s.folio && !folioRegex.test(s.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}
-                  placeholder={folioAuto ? (isFactura ? "F-XXXX existente" : "RS-XXXX existente") : (isFactura ? "D-XXXX" : "R-XXXX")}/>
+                  placeholder={isHistoric ? (isFactura ? "D-XXXX de Alpha" : "R-XXXX de Alpha") : folioAuto ? (isFactura ? "F-XXXX existente" : "RS-XXXX existente") : (isFactura ? "D-XXXX" : "R-XXXX")}/>{/* v10.84.33: la histórica liga el folio de Alpha */}
                 {folioAuto&&s.ligar&&!ligarForzado&&<button onClick={()=>updateSplit(i,{ligar:false,folio:""})} style={{background:"none",border:"none",padding:0,fontSize:10,color:C.t2,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:2}}>mejor que se asigne solo</button>}
                 </>
               )}
@@ -7739,11 +7780,11 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
 
       <div style={{padding:"12px 24px 20px",borderTop:"0.5px solid "+C.bd}}>
       {/* v10.84.32 — lo que falta, junto al botón (antes: bajo el botón, en jerga) */}
-      {!canSubmit && !saving && (sinTocar
+      {!canSubmit && !saving && (soloPista
         ? <div style={{fontSize:11,color:C.t2,marginBottom:10}}>Reparte las piezas y el dinero: a mano, con «Dividir igual» o con «El resto, después».</div>
         : faltas.length > 0 && <div role="status" style={{display:"flex",gap:6,alignItems:"flex-start",background:C.amb+"10",borderRadius:8,padding:"7px 12px",marginBottom:10,border:"0.5px solid "+C.wn+"40",fontSize:11,color:C.wnInk,lineHeight:1.5}}>
             <WarningIcon size={12} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/>
-            <span><b>Falta para crear los folios:</b> {faltas.join(" · ")}.</span>
+            <span><b>Falta para crear los folios:</b> {faltas.map(f => f.t).join(" · ")}.</span>
           </div>)}
 
       {/* Total y submit */}
