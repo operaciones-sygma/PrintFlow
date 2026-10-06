@@ -12,6 +12,46 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.44 — «Folio por OC» a 39/40: la cuarta pasada — 6-oct-2026
+
+Marcelo: *«¿podemos subir la calificación a 39/40 con /impeccable antes de movernos a otro?»*. Quedaban en 3 el estado, la
+consistencia, la flexibilidad, la estética y la ayuda.
+
+- **No se deja crear mientras llegan el saldo y el traslado del cliente.** Con Cuadra, un clic rápido creaba la factura antes
+  de que apareciera la opción del CFDI de traslado. El pie dice «Revisando el saldo y el traslado del cliente…».
+- **Nada espera para siempre.** Si la base nunca contesta, a los 8 s el saldo y el traslado siguen el camino que ya tenían
+  cuando la base daba error, y la consulta del folio ofrece «Reintentar». Antes «Revisando…» (de esta misma versión) y
+  «Consultando…» (desde v10.84.42) se quedaban así.
+- **Una sola palabra: «producto».** La OC «agrega productos», y en Dividir se decía «orden» para lo mismo («Una factura por
+  orden», «1 orden sin documento», «no tiene órdenes»). También el aviso de folio menor que el siguiente libre («ningún otro
+  documento lo tiene») y el del tercero por producto.
+- **«Mover a» sólo cuando hay a dónde**: con un documento, no sale y el nombre del producto se lee completo. Ya no trae «sin
+  documento», que es la «×».
+- **La pista de Dividir según el caso**: con un solo producto («basta un documento: aquí eliges su tipo y capturas sus
+  pagos»), con un documento («Agrega otro documento… o arma una factura por producto de un clic») o con varios («Pasa los
+  productos con «Mover a» o arrastrándolos»).
+- **«Todo en una factura»**, la vuelta de «Una factura por producto» de un clic. Antes había que eliminar documento por
+  documento. Pregunta si se pierden pagos capturados, y los dos atajos se alternan.
+- **Ctrl+Enter (o Cmd+Enter) abre la misma pregunta que el botón**: nunca crea sin ella, respeta lo que falta y no la abre dos
+  veces ni mientras guarda. El botón lo declara en `aria-keyshortcuts`.
+- **En Simple, donde se decide**: «¿Facturas y remisiones juntas, o pagos al facturar? Pasar a Dividir». El recuadro de Corona
+  ya no lo repite.
+- El aviso del bloqueo, más corto: «La OC queda bloqueada: no se le agregan productos, nuevos ni de otra OC».
+- **No toca** la base, las RPC, ni lo que se manda al guardar.
+- **La prueba tratando de romperlo**: `tests/romper/oc.mjs` pasa de 85 a 108 casos, y el banco suma `lento=1|colgado` y
+  `emisor=colgado`.
+  - Vuelta 1 contra v10.84.43: fallaban los 10 casos nuevos.
+  - Vuelta 2: dos fallas, las dos de la prueba (las corregí):
+    - oc-19 buscaba el texto viejo «Una factura por orden»;
+    - oc-75 encontraba la ficha por su «Mover a…», que con un documento ya no existe a propósito.
+  - Vuelta 3, por donde no se diseñó (11 casos): dos fallas.
+    - Una real: con un solo producto, la pista ofrecía «una factura por producto».
+    - Una de la prueba: leía el pie después de que los datos ya habían llegado; el banco ahora tarda 2.5 s.
+  - Vuelta 4, la base que nunca contesta: «Revisando…» y «Consultando…» esperaban para siempre.
+  - Corrida doble: contra v10.84.43 fallan 20 de los 23 casos nuevos; los 85 de antes pasan en las dos. Todas las tandas:
+    265 de 265.
+  - Cuarta critique: 39/40, con un P3 (los tres recuadros de Simple).
+
 ## v10.84.43 — «Folio por OC», segunda pasada de la critique (30 → 35/40) — 6-oct-2026
 
 La segunda `/impeccable critique` dio 30/40 (era 20). Lo que la separaba de 35:

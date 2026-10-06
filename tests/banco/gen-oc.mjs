@@ -3,7 +3,8 @@
 // y la base simulada. BillToSection va simulado (trae el buscador de clientes).
 // Uso: node gen-oc.mjs <App.jsx> <dirSalida>
 // Variantes por URL: emisor=off|falla|falla1|falla2 · cliente=corona|cuadra|saldo · pre=1 (pre-asignar) · traslado=no|falla ·
-//   ordenes=N (pendientes, por defecto 5) · facturadas=N (ya con folio, por defecto 2) · falla=1 (la base rechaza al confirmar)
+//   ordenes=N (pendientes, por defecto 5) · facturadas=N (ya con folio, por defecto 2) · falla=1 (la base rechaza al confirmar) ·
+//   lento=1 (el saldo del cliente y el traslado tardan 2.5 s) · lento=colgado · emisor=colgado (nunca contestan)
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -29,16 +30,21 @@ const partes = [
 const EMISOR = Q.get("emisor") || "on", CLIENTE = Q.get("cliente") || "normal", PRE = Q.get("pre") === "1";
 const TRASLADO = Q.get("traslado") || "listo", FALLA = Q.get("falla") === "1";
 const N_PEND = Number(Q.get("ordenes") || 5), N_FACT = Number(Q.get("facturadas") || 2);
+// lento: el saldo del cliente y el traslado tardan 2.5 s en llegar (lo que se ve y se puede hacer mientras)
+const LENTO = Q.get("lento") === "1", COLGADO = Q.get("lento") === "colgado";
+// colgado: nunca contestan (la red que se queda pensando): la ventana no puede quedarse esperando para siempre
+const tarda = () => COLGADO ? new Promise(() => {}) : new Promise(r => setTimeout(r, LENTO ? 2500 : 0));
 let emisorLlamadas = 0;
 const db = {
   // falla: nunca se sabe · falla1: la primera consulta falla y la segunda sí contesta (para «Reintentar») · falla2: las dos
   //   primeras fallan (al pasar a Dividir se vuelve a consultar: así «Reintentar» se prueba en Dividir)
-  getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; if (EMISOR === "falla2") return emisorLlamadas <= 2 ? null : true; return EMISOR !== "off"; },
+  getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "colgado") return new Promise(() => {}); if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; if (EMISOR === "falla2") return emisorLlamadas <= 2 ? null : true; return EMISOR !== "off"; },
   getNextFolioSuggestion: async t => EMISOR === "off" ? (t === "factura" ? "D-5781" : "R-1903") : (t === "factura" ? "F-137" : "RS-1250"),
-  getClientBillingInfo: async () => CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: 30000 }
+  getClientBillingInfo: async () => (await tarda(), CLIENTE === "corona") ? { billing_mode: "anticipo", current_balance: 30000 }
     : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" }
     : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? 5000 : 0 },
   trasladoPreviewOC: async () => {
+    await tarda();
     if (CLIENTE !== "cuadra") return { aplica: false };
     if (TRASLADO === "falla") throw new Error("timeout");
     if (TRASLADO === "no") return { aplica: true, listo: false, motivo: "Falta la clave SAT de 2 productos." };

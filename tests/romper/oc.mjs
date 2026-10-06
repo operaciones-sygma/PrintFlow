@@ -36,6 +36,7 @@ const texto = p => p.evaluate(() => { const pre = document.getElementById("log")
 const panel = p => p.evaluate(() => { const h = [...document.querySelectorAll("h1,h2,h3")].find(x => /OC-1003/.test(x.textContent)); return !!h; });
 const primario = p => p.getByRole("button", { name: /^(Asignar (Factura|Remisi)|Crear |Pre-asignar|Dividir en \d)/ }).last();
 const aDividir = async p => { await p.getByRole("button", { name: /^Dividir( en N facturas)?$/ }).first().click(); await espera(p, 500); };
+const unaPorProducto = p => p.getByRole("button", { name: /Una factura por (orden|producto)/ }).click();
 const agregarGrupo = async p => { await p.getByRole("button", { name: /Agregar otra (factura|documento)/ }).click(); await espera(p, 300); };
 const preguntaAbierta = async p => (await p.getByRole("dialog").count()) >= 2 || await p.getByRole("dialog", { name: /cerrar|crear|asignar|seguro|pre-asignar/i }).count() > 0 && (await p.getByRole("dialog").count()) >= 2;
 // contraste de todo el texto de la ventana: compone los fondos hacia arriba y mide contra el color del texto
@@ -180,7 +181,7 @@ await caso("oc-18-mover-sin-arrastrar", "", async p => {
 });
 await caso("oc-19-una-por-orden", "", async p => {
   await aDividir(p);
-  const b = p.getByRole("button", { name: /Una (factura )?por orden/ });
+  const b = p.getByRole("button", { name: /Una (factura )?por (orden|producto)/ });   // la palabra la vigila oc-86
   const hay = await b.count(); if (hay) { await b.click(); await espera(p, 400); }
   const grupos = await p.getByText(/^(Factura|Remisión) [1-9]$/).count();
   ok("oc-19-una-por-orden", hay > 0 && grupos === 5, hay ? `«Una factura por orden» armó ${grupos} grupos (deben ser 5)` : "no hay «Una factura por orden»");
@@ -316,19 +317,19 @@ await caso("oc-43-una-por-orden-con-pagos-pregunta", "", async p => {
   await p.getByRole("button", { name: "Pagada", exact: true }).first().click(); await espera(p, 200);
   await p.getByRole("radio", { name: "Transferencia" }).first().click().catch(() => {});
   await p.getByLabel("Monto del pago 1").first().fill("111627.38").catch(() => {}); await espera(p, 200);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   const preg = (await p.getByRole("dialog").count()) >= 2;
   ok("oc-43-una-por-orden-con-pagos-pregunta", preg && p.nativos.length === 0, `con un pago capturado, «Una factura por orden» ${preg ? "pregunta" : "NO pregunta"} antes de borrarlo`);
 });
 await caso("oc-44-manual-una-por-orden-folios", "emisor=off", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 400);
+  await unaPorProducto(p); await espera(p, 400);
   const folios = await p.getByLabel(/^Folio de Factura/).evaluateAll(xs => xs.map(x => x.value));
   ok("oc-44-manual-una-por-orden-folios", folios.join(",") === "D-5781,D-5782,D-5783,D-5784,D-5785" && !(await primario(p).isDisabled()), `a mano, «una por orden» sugiere ${folios.join(", ")}`);
 });
 await caso("oc-45-folio-repetido-lo-dice", "emisor=off", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 400);
+  await unaPorProducto(p); await espera(p, 400);
   await p.getByLabel("Folio de Factura 2").fill("D-5781"); await espera(p);
   const t = await texto(p);
   ok("oc-45-folio-repetido-lo-dice", /D-5781 está repetido/.test(t) && await primario(p).isDisabled(), /repetido/.test(t) ? "dice que el folio está repetido y no deja crear" : "no dice que el folio está repetido");
@@ -336,7 +337,7 @@ await caso("oc-45-folio-repetido-lo-dice", "emisor=off", async p => {
 await caso("oc-46-documento-vacio-lo-dice", "", async p => {
   await aDividir(p); await agregarGrupo(p);
   const t = await texto(p);
-  ok("oc-46-documento-vacio-lo-dice", /Factura 2 no tiene órdenes/.test(t) && await primario(p).isDisabled(), /no tiene órdenes/.test(t) ? "dice cuál documento está vacío" : "no dice qué documento está vacío");
+  ok("oc-46-documento-vacio-lo-dice", /Factura 2 no tiene (órdenes|productos)/.test(t) && await primario(p).isDisabled(), /no tiene (órdenes|productos)/.test(t) ? "dice cuál documento está vacío" : "no dice qué documento está vacío");
 });
 await caso("oc-47-eliminar-documento-regresa-ordenes", "", async p => {
   await aDividir(p); await agregarGrupo(p);
@@ -386,10 +387,11 @@ await caso("oc-53-pie-a-la-vista-cuadra", "cliente=cuadra&traslado=listo", async
 });
 await caso("oc-54-dividir-con-teclado", "", async p => {
   await aDividir(p);
+  await agregarGrupo(p);
   const sel = p.getByLabel("Mover P-0611 a");
   await sel.focus(); await p.keyboard.press("ArrowDown"); await espera(p, 300);
-  const t = await texto(p);
-  ok("oc-54-dividir-con-teclado", /1 orden sin documento/.test(t), "con el teclado (flecha abajo en «Mover a») P-0611 " + (/1 orden sin documento/.test(t) ? "sale del documento" : "NO se mueve"));
+  const enLaSegunda = await p.evaluate(() => { const g = document.querySelector('[aria-label="Tipo de Factura 2"]'); return !!g && /P-0611/.test(g.parentElement.textContent); });
+  ok("oc-54-dividir-con-teclado", enLaSegunda, "con el teclado (flecha abajo en «Mover a») P-0611 " + (enLaSegunda ? "pasa a Factura 2" : "NO se mueve"));
 });
 await caso("oc-55-falla-simple-conserva", "falla=1&emisor=off", async p => {
   await p.getByPlaceholder(/NNNN/).first().fill("D-5790"); await espera(p);
@@ -442,7 +444,7 @@ await caso("oc-58-razon-a-la-vista", "pre=1", async p => {
 });
 await caso("oc-59-eliminar-con-pagos-pregunta", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await capturarPago(p, 1);
   await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 400);
   const preg = (await p.getByRole("dialog").count()) >= 2;
@@ -451,7 +453,7 @@ await caso("oc-59-eliminar-con-pagos-pregunta", "", async p => {
 });
 await caso("oc-60-eliminar-sin-pagos-no-pregunta", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 400);
   const preg = (await p.getByRole("dialog").count()) >= 2;
   const quedan = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
@@ -465,7 +467,7 @@ await caso("oc-61-reintentar-en-dividir", "emisor=falla", async p => {
 });
 await caso("oc-62-folio-del-sistema-una-vez", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   const veces = ((await texto(p)).match(/el sistema/gi) || []).length;   // «El sistema pone el folio», «Los folios los pone el sistema»…
   ok("oc-62-folio-del-sistema-una-vez", veces === 1, `con 5 documentos, «el sistema pone el folio» se dice ${veces} veces`);
 });
@@ -477,7 +479,7 @@ await caso("oc-63-agregar-a-la-vista", "", async p => {
 });
 await caso("oc-64-pregunta-mismo-sustantivo", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   const boton = ((await primario(p).textContent()) || "").trim();
   await primario(p).click(); await espera(p, 400);
   const titulo = ((await p.getByRole("dialog").last().locator("h3").textContent()) || "").trim();
@@ -486,7 +488,7 @@ await caso("oc-64-pregunta-mismo-sustantivo", "", async p => {
 });
 await caso("oc-65-pregunta-importes-alineados", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await primario(p).click(); await espera(p, 400);
   const bordes = await p.evaluate(() => {
     const dlg = [...document.querySelectorAll('[role="dialog"]')].pop();
@@ -500,14 +502,14 @@ await caso("oc-65-pregunta-importes-alineados", "", async p => {
 });
 await caso("oc-66-pregunta-dice-productos", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await primario(p).click(); await espera(p, 400);
   const t = (await p.getByRole("dialog").last().textContent()) || "";
   ok("oc-66-pregunta-dice-productos", /Bolsa kraft/.test(t) && /Stickers/.test(t), "la pregunta de dividir " + (/Bolsa kraft/.test(t) ? "dice" : "NO dice") + " qué producto va en cada documento");
 });
 await caso("oc-67-folio-repetido-se-marca", "emisor=off", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await p.getByLabel("Folio de Factura 2").fill("D-5781"); await espera(p, 300);
   const b1 = await p.getByLabel("Folio de Factura 1").evaluate(x => getComputedStyle(x).borderTopColor);
   const b2 = await p.getByLabel("Folio de Factura 2").evaluate(x => getComputedStyle(x).borderTopColor);
@@ -527,7 +529,7 @@ await caso("oc-69-textos-de-hoy", "pre=1", async p => {
 });
 await caso("oc-70-encabezado-dividir", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   const t = await texto(p);
   ok("oc-70-encabezado-dividir", /en 5 facturas/.test(t), "encabezado: «" + ((t.match(/Total[^\n]*/) || [""])[0]) + "»");
 });
@@ -535,7 +537,7 @@ await caso("oc-70-encabezado-dividir", "", async p => {
 // ── Tercera vuelta de la segunda pasada: por donde NO se diseñó ───────────────────────────────────────────────────────
 await caso("oc-71-eliminar-con-pagos-arrepentirse", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await capturarPago(p, 1);
   await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 300);
   await p.getByRole("button", { name: /^No, cancelar/ }).click(); await espera(p, 300);
@@ -548,7 +550,7 @@ await caso("oc-71-eliminar-con-pagos-arrepentirse", "", async p => {
 });
 await caso("oc-72-eliminar-con-pagos-confirmado", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await capturarPago(p, 1);
   await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 300);
   await p.getByRole("button", { name: /^Eliminar y borrar/ }).click(); await espera(p, 300);
@@ -558,7 +560,7 @@ await caso("oc-72-eliminar-con-pagos-confirmado", "", async p => {
 });
 await caso("oc-73-eliminar-la-primera-dice-a-cual", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await capturarPago(p, 0);
   await p.getByRole("button", { name: "Eliminar Factura 1" }).click(); await espera(p, 300);
   const t = (await p.getByRole("dialog").last().textContent()) || "";
@@ -566,7 +568,7 @@ await caso("oc-73-eliminar-la-primera-dice-a-cual", "", async p => {
 });
 await caso("oc-74-folio-repetido-se-desmarca", "emisor=off", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await p.getByLabel("Folio de Factura 2").fill("d-5781"); await espera(p, 300);
   const marcado = rojizo(await p.getByLabel("Folio de Factura 1").evaluate(x => getComputedStyle(x).borderTopColor));
   await p.getByLabel("Folio de Factura 2").fill("D-5786"); await espera(p, 300);
@@ -576,7 +578,7 @@ await caso("oc-74-folio-repetido-se-desmarca", "emisor=off", async p => {
 });
 await caso("oc-75-soltar-en-agregar", "", async p => {
   await aDividir(p);
-  const ficha = p.getByLabel("Mover P-0612 a").locator("xpath=ancestor::div[@draggable='true']");
+  const ficha = p.locator("div[draggable='true']", { hasText: "P-0612" });   // por su número: con un documento no hay «Mover a»
   // se toma la ficha del P-número: su centro cae en el «Mover a…», y ahí un clic abre la lista en vez de arrastrar
   await ficha.dragTo(p.getByRole("button", { name: /Agregar otra factura/ }), { sourcePosition: { x: 14, y: 10 } }); await espera(p, 400);
   const enLaNueva = await p.evaluate(() => { const g = document.querySelector('[aria-label="Tipo de Factura 2"]'); return !!g && /P-0612/.test(g.parentElement.textContent); });
@@ -610,7 +612,7 @@ await caso("oc-78-una-por-producto-pregunta-con-lista", "", async p => {
 });
 await caso("oc-79-mezcla-dice-documentos", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await p.getByRole("group", { name: "Tipo de Factura 2" }).getByRole("button", { name: /Remisión/ }).click(); await espera(p, 300);
   const t = await texto(p);
   const boton = ((await primario(p).textContent()) || "").trim();
@@ -628,7 +630,7 @@ await caso("oc-80-vacio-se-desmarca", "", async p => {
 });
 await caso("oc-81-contraste-de-la-pregunta", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await primario(p).click(); await espera(p, 400);
   const malos = await peoresContrastes(p, true);
   ok("oc-81-contraste-de-la-pregunta", malos.length === 0, malos.length ? "en la pregunta: " + malos.slice(0, 4).join(" · ") : "la pregunta se lee (≥ 4.5:1)");
@@ -647,12 +649,12 @@ await caso("oc-82-eliminar-dice-remision", "", async p => {
 });
 await caso("oc-83-soltar-la-ultima-deja-vacio-marcado", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
-  const ficha = p.getByLabel("Mover P-0612 a").locator("xpath=ancestor::div[@draggable='true']");
+  await unaPorProducto(p); await espera(p, 300);
+  const ficha = p.locator("div[draggable='true']", { hasText: "P-0612" });   // por su número: con un documento no hay «Mover a»
   await ficha.dragTo(p.getByRole("button", { name: /Agregar otra factura/ }), { sourcePosition: { x: 14, y: 10 } }); await espera(p, 400);
   const borde = await bordeDeTarjeta(p, "Factura 3");
   const pie = await texto(p);
-  ok("oc-83-soltar-la-ultima-deja-vacio-marcado", rojizo(borde) && /Factura 3 no tiene órdenes/.test(pie) && await primario(p).isDisabled(), `Factura 3 se quedó sin órdenes: borde ${borde}; el pie ${/Factura 3 no tiene/.test(pie) ? "lo dice" : "NO lo dice"}`);
+  ok("oc-83-soltar-la-ultima-deja-vacio-marcado", rojizo(borde) && /Factura 3 no tiene (órdenes|productos)/.test(pie) && await primario(p).isDisabled(), `Factura 3 se quedó sin órdenes: borde ${borde}; el pie ${/Factura 3 no tiene/.test(pie) ? "lo dice" : "NO lo dice"}`);
 });
 await caso("oc-84-documento-nuevo-a-mano-se-marca", "emisor=off", async p => {
   await aDividir(p);
@@ -663,10 +665,193 @@ await caso("oc-84-documento-nuevo-a-mano-se-marca", "emisor=off", async p => {
 });
 await caso("oc-85-doble-clic-en-eliminar", "", async p => {
   await aDividir(p);
-  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await unaPorProducto(p); await espera(p, 300);
   await p.getByRole("button", { name: "Eliminar Factura 2" }).dblclick(); await espera(p, 500);
   const quedan = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
   ok("oc-85-doble-clic-en-eliminar", quedan === 4, `doble clic en la papelera de Factura 2: quedan ${quedan} documentos (debería borrar uno)`);
+});
+
+// ── Cuarta pasada de la critique (35/40) hacia 39: lo que quedó en 3 ─────────────────────────────────────────────────
+const sinOrden = t => !/\bórdenes\b|\borden\b/i.test(t);   // una sola palabra: «producto» (la OC «agrega productos»)
+const opcionesDe = (p, etiqueta) => p.getByLabel(etiqueta).evaluate(s => [...s.options].map(o => o.textContent.trim()));
+const enDoc = (p, n, pn) => p.evaluate(([n, pn]) => { const g = document.querySelector(`[aria-label="Tipo de ${n}"]`); return !!g && new RegExp(pn).test(g.parentElement.textContent); }, [n, pn]);
+
+await caso("oc-86-una-sola-palabra", "", async p => {
+  let t = await texto(p);
+  await aDividir(p); t += "\n" + await texto(p);
+  await agregarGrupo(p); t += "\n" + await texto(p);
+  await p.getByRole("button", { name: "Quitar P-0610 de Factura 1" }).click(); await espera(p, 300); t += "\n" + await texto(p);
+  const boton = await p.getByRole("button", { name: /Una factura por producto/ }).count();
+  const malas = (t.match(/[^\n]*\b(órdenes|orden)\b[^\n]*/gi) || []).map(x => x.trim().slice(0, 60));
+  ok("oc-86-una-sola-palabra", sinOrden(t) && boton === 1, `«Una factura por producto»: ${boton ? "sí" : "NO"}; renglones que dicen «orden»: ${malas.slice(0, 3).join(" | ") || "ninguno"}`);
+});
+await caso("oc-87-una-sola-palabra-corona", "cliente=corona", async p => {
+  let t = await texto(p);
+  await aDividir(p); t += "\n" + await texto(p);
+  const malas = (t.match(/[^\n]*\b(órdenes|orden)\b[^\n]*/gi) || []).map(x => x.trim().slice(0, 60));
+  ok("oc-87-una-sola-palabra-corona", sinOrden(t), "Corona: " + (malas.slice(0, 2).join(" | ") || "sin «orden»"));
+});
+await caso("oc-88-mover-a-no-repite-quitar", "", async p => {
+  await aDividir(p);
+  const conUno = await p.getByLabel("Mover P-0610 a").count();
+  await agregarGrupo(p);
+  const enDocumento = await opcionesDe(p, "Mover P-0610 a");
+  await p.getByRole("button", { name: "Quitar P-0610 de Factura 1" }).click(); await espera(p, 300);
+  const suelta = await opcionesDe(p, "Mover P-0610 a");
+  ok("oc-88-mover-a-no-repite-quitar", conUno === 0 && enDocumento.join("|") === "Mover a…|a Factura 2" && suelta.join("|") === "Mover a…|a Factura 1|a Factura 2",
+    `con un documento «Mover a» ${conUno ? "SÍ sale (no hay a dónde)" : "no sale"}; en un documento: ${enDocumento.join(", ")}; sin documento: ${suelta.join(", ")}`);
+});
+await caso("oc-89-pista-segun-documentos", "", async p => {
+  await aDividir(p);
+  const t1 = await texto(p);
+  await agregarGrupo(p);
+  const t2 = await texto(p);
+  ok("oc-89-pista-segun-documentos", /Agrega otro documento/.test(t1) && /Pasa los productos/.test(t2) && !/Agrega otro documento/.test(t2),
+    `con uno: ${/Agrega otro documento/.test(t1) ? "dice cómo empezar" : "NO dice cómo empezar"}; con dos: ${/Pasa los productos/.test(t2) ? "dice cómo pasar" : "NO dice cómo pasar"}`);
+});
+await caso("oc-90-todo-en-una", "", async p => {
+  await aDividir(p);
+  await unaPorProducto(p); await espera(p, 300);
+  const b = p.getByRole("button", { name: /Todo en una factura/ });
+  const hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 300); }
+  const docs = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  ok("oc-90-todo-en-una", hay === 1 && docs === 1 && await enDoc(p, "Factura 1", "P-0614") && /^Crear la factura/.test(((await primario(p).textContent()) || "").trim()),
+    `«Todo en una factura» ${hay ? "está" : "NO está"}; quedan ${docs} documentos`);
+});
+await caso("oc-91-todo-en-una-con-pagos-pregunta", "", async p => {
+  await aDividir(p);
+  await unaPorProducto(p); await espera(p, 300);
+  await capturarPago(p, 1);
+  const b = p.getByRole("button", { name: /Todo en una factura/ });
+  if (await b.count()) { await b.click(); await espera(p, 300); }
+  const preg = (await p.getByRole("dialog").count()) >= 2;
+  const docs = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  ok("oc-91-todo-en-una-con-pagos-pregunta", preg && docs === 5, `con un pago capturado: ${preg ? "pregunta" : "NO pregunta"}; documentos: ${docs}`);
+});
+await caso("oc-92-ctrl-enter-abre-la-pregunta", "", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  const titulo = await p.getByRole("dialog").count() >= 2 ? ((await p.getByRole("dialog").last().locator("h3").textContent()) || "") : "";
+  const creo = await cuenta(p, "simple:confirm");
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const quedan = await p.getByRole("dialog").count();
+  ok("oc-92-ctrl-enter-abre-la-pregunta", /¿Crear la factura/.test(titulo) && creo === 0 && quedan === 1, `Ctrl+Enter: ${titulo ? "abre «" + titulo.trim() + "»" : "NO abre la pregunta"}; creó ${creo}; tras Esc quedan ${quedan} diálogos`);
+});
+await caso("oc-93-ctrl-enter-respeta-lo-que-falta", "pre=1", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const sinRazon = await p.getByRole("dialog").count();
+  await p.fill("#oc-razon", "Pago adelantado"); await espera(p);
+  await p.focus("#oc-razon"); await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  const conRazon = await p.getByRole("dialog").count();
+  const valor = await p.inputValue("#oc-razon").catch(() => "");
+  ok("oc-93-ctrl-enter-respeta-lo-que-falta", sinRazon === 1 && conRazon === 2 && valor === "Pago adelantado", `sin razón: ${sinRazon === 1 ? "no hace nada" : "ABRE la pregunta"}; con razón, desde el campo: ${conRazon === 2 ? "abre la pregunta" : "no abre"}${valor === "Pago adelantado" ? "" : " y cambió el texto"}`);
+});
+await caso("oc-94-espera-los-datos-del-cliente", "lento=1", async p => {
+  const apagado = await primario(p).isDisabled();
+  const pie = await texto(p);
+  await espera(p, 2600);
+  const despues = await primario(p).isDisabled();
+  ok("oc-94-espera-los-datos-del-cliente", apagado && /Revisando/.test(pie) && !despues, `mientras llegan el saldo y el traslado: botón ${apagado ? "apagado" : "ENCENDIDO"}, el pie ${/Revisando/.test(pie) ? "lo dice" : "no lo dice"}; al llegar: ${despues ? "SIGUE apagado" : "se enciende"}`);
+});
+await caso("oc-95-pasar-a-dividir-desde-simple", "", async p => {
+  const b = p.getByRole("button", { name: /Pasar a Dividir/ });
+  const hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  const enDividir = await p.getByRole("group", { name: "Tipo de Factura 1" }).count();
+  ok("oc-95-pasar-a-dividir-desde-simple", hay === 1 && enDividir === 1, `en Simple, la pista hacia Dividir ${hay ? "está" : "NO está"}${hay ? (enDividir ? " y lleva a Dividir" : " pero no lleva") : ""}`);
+});
+
+// ── Tercera vuelta de la cuarta pasada: por donde NO se diseñó ────────────────────────────────────────────────────────
+await caso("oc-96-ctrl-enter-dos-veces", "", async p => {
+  await p.keyboard.press("Control+Enter"); await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  ok("oc-96-ctrl-enter-dos-veces", (await p.getByRole("dialog").count()) === 2, `Ctrl+Enter dos veces seguidas: ${await p.getByRole("dialog").count()} diálogos (deben ser 2: la ventana y UNA pregunta)`);
+});
+await caso("oc-97-ctrl-enter-despues-de-confirmar", "", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  await p.getByRole("button", { name: /^Sí/ }).click();
+  await p.keyboard.press("Control+Enter"); await espera(p, 600);
+  ok("oc-97-ctrl-enter-despues-de-confirmar", (await cuenta(p, "simple:confirm")) === 1 && (await p.getByRole("dialog").count()) <= 1, `Ctrl+Enter justo después de «Sí»: creó ${await cuenta(p, "simple:confirm")} vez/veces; diálogos ${await p.getByRole("dialog").count()}`);
+});
+await caso("oc-98-ctrl-enter-en-dividir", "", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const conVacio = await p.getByRole("dialog").count();
+  await p.getByLabel("Mover P-0611 a").selectOption({ label: "a Factura 2" }); await espera(p, 300);
+  await p.locator('[role="dialog"]').first().focus();
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  const titulo = (await p.getByRole("dialog").count()) >= 2 ? ((await p.getByRole("dialog").last().locator("h3").textContent()) || "").trim() : "";
+  ok("oc-98-ctrl-enter-en-dividir", conVacio === 1 && /¿Crear 2 facturas/.test(titulo), `con un documento vacío: ${conVacio === 1 ? "no hace nada" : "ABRE la pregunta"}; con el plan listo: ${titulo || "no abre"}`);
+});
+await caso("oc-99-cargando-tambien-en-dividir", "lento=1", async p => {
+  await aDividir(p);
+  const apagado = await primario(p).isDisabled();
+  const pie = await texto(p);   // antes de que lleguen los datos (2.5 s en el banco)
+  await p.keyboard.press("Control+Enter"); await espera(p, 200);
+  const dialogos = await p.getByRole("dialog").count();
+  ok("oc-99-cargando-tambien-en-dividir", apagado && dialogos === 1 && /Revisando/.test(pie), `Dividir mientras llegan los datos: botón ${apagado ? "apagado" : "ENCENDIDO"}, Ctrl+Enter ${dialogos === 1 ? "no hace nada" : "ABRE la pregunta"}`);
+});
+await caso("oc-100-todo-en-una-con-remision", "", async p => {
+  await aDividir(p);
+  await unaPorProducto(p); await espera(p, 300);
+  await p.getByRole("group", { name: "Tipo de Factura 2" }).getByRole("button", { name: /Remisión/ }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: /Todo en una factura/ }).click(); await espera(p, 300);
+  const t = await texto(p);
+  ok("oc-100-todo-en-una-con-remision", /en 1 factura, con IVA/.test(t) && await enDoc(p, "Factura 1", "P-0611"), "con una remisión en el plan, «Todo en una factura»: «" + ((t.match(/Total[^\n]*/) || [""])[0]) + "»");
+});
+await caso("oc-101-los-atajos-se-alternan", "", async p => {
+  await aDividir(p);
+  const al = async () => [await p.getByRole("button", { name: /Una factura por producto/ }).count(), await p.getByRole("button", { name: /Todo en una factura/ }).count()].join("");
+  const inicio = await al();
+  await unaPorProducto(p); await espera(p, 300);
+  const porProducto = await al();
+  await p.getByRole("button", { name: /Todo en una factura/ }).click(); await espera(p, 300);
+  const juntas = await al();
+  ok("oc-101-los-atajos-se-alternan", inicio === "10" && porProducto === "01" && juntas === "10", `[por producto, todo en una] al empezar ${inicio}, en una por producto ${porProducto}, al juntar ${juntas}`);
+});
+await caso("oc-102-pasar-a-dividir-solo-donde-va", "ordenes=0", async p => {
+  const sinPendientes = await p.getByRole("button", { name: /Pasar a Dividir/ }).count();
+  ok("oc-102-pasar-a-dividir-solo-donde-va", sinPendientes === 0, `sin productos por facturar, «Pasar a Dividir» ${sinPendientes ? "SALE" : "no sale"}`);
+});
+await caso("oc-103-sin-documento-se-mueve", "", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  await p.getByRole("button", { name: "Quitar P-0612 de Factura 1" }).click(); await espera(p, 300);
+  const quitar = await p.getByRole("button", { name: /^Quitar P-0612/ }).count();
+  await p.getByLabel("Mover P-0612 a").selectOption({ label: "a Factura 2" }); await espera(p, 300);
+  ok("oc-103-sin-documento-se-mueve", quitar === 0 && await enDoc(p, "Factura 2", "P-0612") && !/sin documento/.test(await texto(p)), `suelta: ${quitar ? "TIENE «×»" : "sin «×»"}; «Mover a» ${await enDoc(p, "Factura 2", "P-0612") ? "la pasa a Factura 2" : "NO la pasa"}`);
+});
+await caso("oc-104-producto-sin-cortar", "", async p => {
+  await aDividir(p);
+  const cortado = await p.evaluate(() => { const el = [...document.querySelectorAll('[draggable="true"] div')].find(d => d.textContent === "Tarjetas de presentación"); return el ? el.scrollWidth > el.clientWidth + 1 : null; });
+  ok("oc-104-producto-sin-cortar", cortado === false, `con un documento (sin «Mover a»), «Tarjetas de presentación» ${cortado === null ? "no se encontró" : cortado ? "sale cortado" : "se lee completo"}`);
+});
+await caso("oc-105-todo-en-una-a-mano", "emisor=off", async p => {
+  await aDividir(p);
+  await unaPorProducto(p); await espera(p, 300);
+  await p.getByRole("button", { name: /Todo en una factura/ }).click(); await espera(p, 300);
+  const folio = await p.getByLabel("Folio de Factura 1").inputValue();
+  ok("oc-105-todo-en-una-a-mano", folio === "D-5781" && !(await primario(p).isDisabled()), `a mano, al juntar: folio «${folio}», botón ${await primario(p).isDisabled() ? "apagado" : "listo"}`);
+});
+await caso("oc-106-un-solo-producto", "ordenes=1", async p => {
+  await aDividir(p);
+  const t = await texto(p);
+  const boton = await p.getByRole("button", { name: /Una factura por producto/ }).count();
+  ok("oc-106-un-solo-producto", boton === 0 && !/factura por producto/i.test(t), `con un solo producto: botón ${boton ? "SALE" : "no sale"}; la pista ${/factura por producto/i.test(t) ? "OFRECE «una factura por producto»" : "no lo ofrece"}`);
+});
+
+// ── Cuarta vuelta: la base que nunca contesta (la red colgada) no deja la ventana esperando para siempre ────────────
+await caso("oc-107-cliente-colgado", "lento=colgado", async p => {
+  await espera(p, 9500);
+  const apagado = await primario(p).isDisabled();
+  const pie = await texto(p);
+  ok("oc-107-cliente-colgado", !apagado && !/Revisando/.test(pie), `si el saldo y el traslado nunca contestan, a los 10 s: botón ${apagado ? "SIGUE apagado" : "listo"}${/Revisando/.test(pie) ? " y sigue «Revisando…»" : ""}`);
+});
+await caso("oc-108-emisor-colgado", "emisor=colgado", async p => {
+  await espera(p, 9500);
+  const reintentar = await p.getByRole("button", { name: /Reintentar/ }).count();
+  const t = await texto(p);
+  ok("oc-108-emisor-colgado", reintentar === 1 && !/Consultando/.test(t), `si la consulta del folio nunca contesta, a los 10 s: ${reintentar ? "ofrece «Reintentar»" : /Consultando/.test(t) ? "SIGUE «Consultando…»" : "no ofrece salida"}`);
 });
 
 await browser.close();

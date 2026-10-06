@@ -375,4 +375,10 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   `detalle` ({filas:[{titulo, sub, monto}], total}) pinta cada documento con su importe alineado a la derecha.
 - **El problema tiene lugar** (v10.84.43): lo que el pie dice que falta se marca donde está (el borde rojo del documento,
   los dos campos de un folio repetido).
+- **No se decide antes de tiempo, ni se espera para siempre** (v10.84.44): mientras llega lo que puede cambiar la decisión (el
+  saldo del cliente, el traslado), el botón principal se apaga y el pie dice «Revisando…»; y todo lo que se consulta al abrir
+  lleva un tope (8 s) que lo trata como un error con su salida («Reintentar»).
+- **Ctrl+Enter abre la pregunta, nunca crea** (v10.84.44): el atajo del botón principal hace exactamente lo que hace el botón,
+  con la misma pregunta antes de crear; el botón lo declara en `aria-keyshortcuts`.
+- **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.
 - **El botón apagado dice por qué**: en el pie, junto al botón, una línea en `C.wnInk` con lo que falta («Remisión 1 no tiene órdenes», «Falta confirmar cómo se asigna el folio»). El botón apagado va en `bt(C.sf, C.t2)`, que se lee; blanco sobre gris daba 1.4:1.
