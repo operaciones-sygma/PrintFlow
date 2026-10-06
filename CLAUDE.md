@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.32). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.33). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -139,8 +139,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.32. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.33. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
+  - **Todo lo que se implementa se prueba como usuario tratando de romperlo** (Marcelo, 5-oct), con pruebas escritas que
+    afirman lo que debería pasar. PrintFlow no tiene cuenta de pruebas: el **banco** extrae los modales de `App.jsx` con la
+    base simulada (`claude-navegador/banco-printflow/`: `gen-banco.mjs`, `romper-partes.mjs`, `LEEME.md`). La primera
+    vuelta (v10.84.33) encontró 8 fallas en «Facturar por partes» y quedó en 50 de 50. Los diálogos atrapan el Tab con
+    `atraparTab` en el `onKeyDown` del panel.
   - **«Facturar por partes» pasó por `/impeccable critique`** (v10.84.32, 25/40): un Esc sobre «Folio ya existe en
     cobranza» cerraba también el plan (listener propio en `window`; ahora todo por el escStack), el dinero en tinta
     (`C.wnInk`, `C.dnInk`, `C.okInk`, `C.emrInk`), sin «Factura D-» ni jerga, el pie fijo y «Cancelar la parte y la
