@@ -146,12 +146,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.43 (7-oct: «Folio por OC» pasó tres veces por `/impeccable critique`, 20 → 30 → 35/40, y por la prueba tratando de romperlo, 85 casos: cuánto y a quién, una pregunta con lista antes de crear, el emisor que no contesta con «Reintentar», «Mover a» para dividir sin arrastrar, un solo «seleccionado», eliminar con pagos pregunta; antes, v10.84.36-41: «Archivos» desde la base, las fotos por lotes, el `visor` sin escribir y las vistas del CTP de almacén sin repetidos; el detalle, en el CHANGELOG). El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.44 (6-oct: «Folio por OC» pasó cuatro veces por `/impeccable critique`, 20 → 30 → 35 → 39/40, y por la prueba tratando de romperlo, 108 casos: cuánto y a quién, una pregunta con lista antes de crear, el emisor que no contesta con «Reintentar», «Mover a» para dividir sin arrastrar, un solo «seleccionado», no crear mientras llegan el saldo y el traslado, nada espera para siempre, Ctrl+Enter; antes, v10.84.36-41: «Archivos» desde la base, las fotos por lotes, el `visor` sin escribir y las vistas del CTP de almacén sin repetidos; el detalle, en el CHANGELOG). El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
   - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
     preguntar), botones legibles, y `getFolioEmitterEnabled` devuelve `null` en un error (antes «apagado», que abría el modo
-    manual con la serie de Alpha). El folio por OC (`AssignOCFolioModal`) la siguió en v10.84.42-43 (35/40, 85 casos, `tests/romper/oc.mjs`).
+    manual con la serie de Alpha). El folio por OC (`AssignOCFolioModal`) la siguió en v10.84.42-44 (39/40, 108 casos, `tests/romper/oc.mjs`).
     Siguen en la lista: el detalle de la orden (DetailModal), el Kanban, las puertas de cancelar, OrderForm y el plan matriz.
   - **Todo lo que se implementa se prueba como usuario tratando de romperlo** (Marcelo, 5-oct), con pruebas escritas que
     afirman lo que debería pasar. PrintFlow no tiene cuenta de pruebas: el **banco** extrae los modales de `App.jsx` con la
