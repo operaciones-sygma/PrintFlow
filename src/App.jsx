@@ -407,18 +407,59 @@ const pathDeOrderFile=(url)=>{
      aunque el siguiente intento hubiera funcionado. */
 const FIRMAS_CACHE=new Map();            // path|opts -> { url, at }
 const FIRMA_VIDA=300000;                 // 5 min, muy por dentro de la hora del token
-const FIRMAS_TOPE=300;
+// v10.84.40 — 2000 y no 300: «Todas» enseña ~570 fotos; con 300 se expulsaban a media pintura y volver a abrirla
+// re-firmaba 300 (medido en tests/romper/firmas.mjs). 2000 firmas son ~0.6 MB de memoria.
+const FIRMAS_TOPE=2000;
+const guardarFirma=(clave,url)=>{
+  if(FIRMAS_CACHE.size>=FIRMAS_TOPE)FIRMAS_CACHE.delete(FIRMAS_CACHE.keys().next().value);
+  FIRMAS_CACHE.set(clave,{url,at:Date.now()});
+};
+/* 🔥 v10.84.40 — LA VISTA SE FIRMA POR LOTES. Cada foto pedía su propia firma: abrir «Todas» eran ~570 POST a Storage
+   (7-15 s, en todos los roles; lo midió el recorrido del 5-oct), y cada una es una consulta a la base. Ahora las fotos
+   que se piden en la misma pintura se juntan (16 ms) y se firman con createSignedUrls de 100 en 100: ~6 peticiones.
+   Dos tarjetas con la misma foto comparten la firma en vuelo. La descarga (opts) sigue firmándose sola: lleva su
+   nombre de archivo. Se conserva lo de antes: si una foto no se pudo firmar regresa su URL (fail-open) y no se guarda. */
+const FIRMAS_LOTE=100;
+const FIRMAS_EN_VUELO=new Map();         // path -> Promise de su firma
+let FIRMAS_COLA=[];                      // [{path, url, resolver}]
+let FIRMAS_TIMER=null;
+const firmarLote=async(lote)=>{
+  const porPath=new Map();
+  try{
+    const {data,error}=await supabase.storage.from("order-files").createSignedUrls(lote.map(x=>x.path),3600);
+    // por ruta y no por posición; NFC por si un nombre con acentos regresa en otra forma Unicode (hoy ninguno los trae)
+    if(!error&&Array.isArray(data))data.forEach(d=>{ if(d&&!d.error&&d.signedUrl&&d.path)porPath.set(d.path.normalize("NFC"),d.signedUrl); });
+  }catch{ /* la red se cayó: cada foto regresa su URL, como antes */ }
+  for(const x of lote){
+    const u=porPath.get(x.path.normalize("NFC"));
+    if(u)guardarFirma(x.path+"|",u); else FIRMAS_CACHE.delete(x.path+"|");
+    FIRMAS_EN_VUELO.delete(x.path);
+    x.resolver(u||x.url||null);
+  }
+};
+const vaciarColaDeFirmas=()=>{
+  FIRMAS_TIMER=null;
+  const cola=FIRMAS_COLA;FIRMAS_COLA=[];
+  for(let i=0;i<cola.length;i+=FIRMAS_LOTE)firmarLote(cola.slice(i,i+FIRMAS_LOTE));
+};
 const firmarOrderFile=async(url,opts)=>{
   const path=pathDeOrderFile(url);
   if(!path)return url||null;
   const clave=path+"|"+(opts?JSON.stringify(opts):"");
   const hit=FIRMAS_CACHE.get(clave);
   if(hit&&Date.now()-hit.at<FIRMA_VIDA)return hit.url;
+  if(!opts){
+    const enVuelo=FIRMAS_EN_VUELO.get(path);
+    if(enVuelo)return enVuelo;
+    const p=new Promise(resolver=>{ FIRMAS_COLA.push({path,url,resolver}); });
+    FIRMAS_EN_VUELO.set(path,p);
+    if(!FIRMAS_TIMER)FIRMAS_TIMER=setTimeout(vaciarColaDeFirmas,16);
+    return p;
+  }
   try{
     const {data,error}=await supabase.storage.from("order-files").createSignedUrl(path,3600,opts);
     if(!error&&data?.signedUrl){
-      if(FIRMAS_CACHE.size>=FIRMAS_TOPE)FIRMAS_CACHE.delete(FIRMAS_CACHE.keys().next().value);
-      FIRMAS_CACHE.set(clave,{url:data.signedUrl,at:Date.now()});
+      guardarFirma(clave,data.signedUrl);
       return data.signedUrl;
     }
     FIRMAS_CACHE.delete(clave);          // que no quede una firma vieja tapando un archivo que murio

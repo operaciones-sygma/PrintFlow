@@ -28,6 +28,8 @@ const TANDAS = [
   { nombre: "ctp", romper: "tests/romper/ctp.mjs" },
   // sin banco: quién puede escribir con las RPC que no pasaban por pf_puede_escribir() (v10.84.39); cada caso se deshace
   { nombre: "permisos", romper: "tests/romper/permisos.mjs" },
+  // sin banco: cómo se firman las fotos (el código vivo de App.jsx contra un Storage simulado que cuenta peticiones)
+  { nombre: "firmas", romper: "tests/romper/firmas.mjs" },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 

@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.40 — Las fotos se firman por lotes: «Todas» pasa de ~580 peticiones a 17 — 5-oct-2026
+
+Lo encontró el recorrido (v10.84.36): cada foto pedía su propia firma a Storage, y abrir «Todas» eran ~570 POST cada vez,
+en todos los roles (6-15 s). Medido contra producción: una firma suelta tarda ~163 ms; un lote de 101 rutas, 327 ms. Y el
+caché de 300 firmas era más chico que las 568 fotos de «Todas»: se expulsaban a media pintura y volver a abrirla re-firmaba.
+
+- `firmarOrderFile` junta las fotos que se piden en la misma pintura (16 ms) y las firma con `createSignedUrls` de 100 en
+  100. Dos tarjetas con la misma foto comparten la firma en vuelo. El caché sube a 2,000 firmas (~0.6 MB). Empata cada
+  firma con su foto por ruta (normalizada a NFC), no por posición. La descarga sigue firmándose sola (lleva su nombre de
+  archivo). Lo de antes se conserva: si una foto no se pudo firmar regresa su URL y no se guarda.
+- **Antes → después** (el recorrido, 8 roles): «Todas» 579-608 peticiones y 6-15 s → **17-41 peticiones y ~3.3 s**; en todo
+  el recorrido, 0 firmas sueltas y 56 lotes; el recorrido completo, 224 s → 158 s. Las fotos se ven en las tarjetas y en el
+  detalle (capturas). Nada truena.
+- **`tests/romper/firmas.mjs`, tanda nueva en el candado (10 casos):** recorta el código vivo de `App.jsx` y lo corre en Node
+  contra un Storage simulado que cuenta peticiones. **Vuelta 1 contra el código de antes: 4 fallaban** (250 fotos = 250
+  peticiones, la misma foto dos veces, sin lotes, reabrir «Todas» re-firmaba 300). Con el cambio, 10 de 10.
+- `SignedImg` es compartido (tarjetas, tablero, detalle, Torre…): lo cubre el recorrido, que abre todas las vistas.
+
 ## v10.84.39 — El rol de sólo lectura ya no escribe, y el autor sale de la sesión — 5-oct-2026
 
 Sin cambios en la app; cambio en la base (aplicado el 5-oct, copia en

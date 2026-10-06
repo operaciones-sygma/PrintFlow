@@ -31,6 +31,7 @@ cada subida y no deja subir si algo falla (un push de puros documentos pasa dire
 |---|---|---|---|
 | partes | `gen-partes.mjs` | `partes.mjs` (50) | Facturar por partes, Facturar siguiente parte, Cancelar la parte |
 | folio | `gen-folio.mjs` | `folio.mjs` (44) | Asignar folio y entregar, Folio anticipado, el selector de pagos |
+| firmas | (sin banco) | `firmas.mjs` (10) | cómo se firman las fotos de las órdenes: recorta el código VIVO de `src/App.jsx` (de `pathDeOrderFile` a `useSignedFile`) y lo corre en Node contra un Storage simulado que cuenta peticiones: por lotes de 100, una sola vez por foto, que «Todas» quepa en el caché, y lo de antes (la que no existe y la red caída regresan su URL; la descarga va sola) |
 | permisos | (sin banco) | `permisos.mjs` (13) | quién puede escribir con `register_print`, `log_wakeup_ack` y `save_app_config` (el `visor` no; los precios, sólo admin) y que el autor salga de la sesión. Cada caso llama la RPC como una persona real dentro de una transacción que se deshace; `--ensayar <migración>` prueba una migración sin aplicarla |
 | ctp | (sin banco) | `ctp.mjs` (16) | que el contador de placas del CTP, y lo que enseña la pantalla CTP de SygmaAlmacen, no vuelvan a inflarse: el código lee las vistas que deduplican, y en la base sólo ellas leen el crudo y lo demás cuadra contra ellas (necesita `SUPABASE_ACCESS_TOKEN`; `--sabotajes` prueba que cada revisión se pone en rojo) |
 
