@@ -12,6 +12,38 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.36 — El recorrido de toda la app, y lo que encontró — 5-oct-2026
+
+Marcelo: *«un scan sin agentes para cuidar el presupuesto»*. Las tandas de `tests/romper/` cubren dos pantallas; el resto de
+la app no tenía quién la abriera antes de subir.
+
+- **`npm run recorrido`** (`tests/recorrido/recorrido.mjs`) entra a la app compilada (o a la publicada, si se le pasa la URL)
+  con la cuenta de pruebas `claude-pruebas` (rol `visor`, sólo lectura en la base) y, como cada uno de los 8 roles, abre cada
+  vista del menú y el detalle de una orden. Reporta lo que truena (el «Algo salió mal», errores de JS, llamadas que fallan),
+  lo lento (cuántas peticiones lanzó el paso, la más lenta y las que se quedan colgadas) y **las escrituras que una vista
+  intenta con sólo abrirla**. Tres candados a la vez: el navegador sólo deja pasar lecturas (las RPC STABLE/IMMUTABLE; todo lo
+  demás se contesta con 418 y queda en el reporte), la cuenta es `visor` en la base, y el rol se cambia sólo en el navegador.
+  Nunca cierra sesión de verdad. 8 roles, 94 pasos, ~4 min, cero agentes. Cómo se usa, en `tests/LEEME.md`.
+- **Lo que encontró y se arregló:**
+  - Los avisos de fondo de la sesión del admin (órdenes estancadas, pedidos web nuevos) llamaban `db.addNotification` sin
+    `await` ni `catch`: si la base rechazaba el aviso, quedaba un «Uncaught (in promise)». Ahora pasan por `avisar`, que lo
+    deja en la consola.
+  - **«Archivos» nunca terminaba de calcular el almacenamiento.** El listado de la raíz del bucket
+    (`list("", {limit: 1000})`) contesta **544 DatabaseTimeout a los 30 s**, siempre: con 663 carpetas, el listado de Storage
+    con la policy por renglón crece más que lineal (50 renglones 0.9 s, 100 2.5 s, 200 8.6 s). El código ignoraba el error
+    (supabase-js no lanza) y la pantalla habría dicho «0 MB usados»; ahora dice «Error». El arreglo de fondo (leer
+    `storage.objects` de un jalón) queda pendiente: hoy el bucket usa 111 MB de 100 GB. ⚠ Cuando se arregle, «Limpiar
+    huérfanos» vuelve a tener lista: comprobar antes que las órdenes que recibe la pantalla sean TODAS, o borraría archivos
+    de órdenes que no cargó.
+- **Lo que reportó y queda pendiente:** «Todas» firma una URL por imagen al abrir (~570 peticiones a Storage, 7-15 s, en
+  todos los roles). Y `save_app_config`, `register_print` y `log_wakeup_ack` las puede llamar cualquier empleado, también el
+  `visor`. La limpieza de archivos del admin (v10.73.51) y sus avisos de fondo escriben al entrar, a propósito: salen como
+  «conocidas».
+- Dos minas del propio recorrido: en `localhost:4173` contestó la vista previa de CobranzaFlow (vive en `[::1]`); ahora usa
+  `127.0.0.1:4273`, comprueba que la página sea PrintFlow antes de teclear la contraseña, y los bancos de `probar` también van
+  a `127.0.0.1`. Y `networkidle` nunca llega con el realtime prendido: cada paso espera sólo a SUS peticiones.
+- `.env.local` (la URL y la llave pública de Supabase, para compilar en local) queda fuera de git.
+
 ## v10.84.35 — Las pruebas viven en el repo, y un candado no deja subir si algo se rompe — 5-oct-2026
 
 Sin cambios en la app. Marcelo: *«¿qué podemos hacer para resolver lo de las regresiones?»*. Hasta hoy las pruebas «tratando

@@ -87,6 +87,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
     **Nunca `--no-verify`.** Cada bug que se encuentra deja su prueba en `tests/romper/` (Marcelo, 5-oct-2026).
+    🔎 **Y `npm run recorrido`** (v10.84.36) después de un cambio grande y después de subir: abre TODA la app como cada rol con
+    la cuenta de pruebas `visor` y las escrituras cortadas en el navegador (~4 min, cero agentes; `tests/LEEME.md`).
 22. **Un cambio de base se ensaya contra producción con rollback** (`DO $$ … RAISE EXCEPTION 'ENSAYO'
     $$`, sesión simulada con `set_config('request.jwt.claims', …)`) **antes** de tocar el front.
 23. **Push a `main` de PrintFlow está autorizado de forma permanente** (Marcelo, sep-2026).
@@ -144,7 +146,7 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.35 (la app, igual que v10.84.34; esta versión agrega las pruebas al repo y el candado). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.36 (el recorrido de toda la app y dos arreglos que encontró: los avisos de fondo y «Archivos», que ya dice «Error» en vez de «0 MB»). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
   - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin

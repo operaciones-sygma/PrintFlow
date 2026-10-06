@@ -15,7 +15,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
-    await page.goto(`http://localhost:${PORT}/?${query}`);
+    await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
     await page.waitForSelector("#abrir-inv");
     await fn(page);
   } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }

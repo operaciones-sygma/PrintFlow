@@ -13428,7 +13428,11 @@ function StorageTab({orders,onReload}) {
         // v10.34.4 fix #8 — paginar el list de raíz (evita truncado silencioso a 1000 folders)
         let data=[];let offset=0;const pageSize=1000;
         while(true){
-          const {data:page}=await supabase.storage.from("order-files").list("",{limit:pageSize,offset});
+          // v10.84.36 (recorrido) — supabase-js NO lanza: el error se ignoraba y la pantalla decía «0 MB usados». Hoy la raíz
+          //   con limit 1000 contesta 544 DatabaseTimeout a los 30 s (5-oct, 663 carpetas: el listado de Storage con la policy
+          //   por renglón crece más que lineal; 200 = 8.6 s). Lanzar lleva al catch → «Error», que es la verdad.
+          const {data:page,error:listErr}=await supabase.storage.from("order-files").list("",{limit:pageSize,offset});
+          if(listErr)throw listErr;
           if(!page||page.length===0)break;
           data=data.concat(page);
           if(page.length<pageSize)break;
@@ -17629,6 +17633,9 @@ export default function PrintFlow() {
   // Banner in Pendientes is visible for ALL roles regardless
   useEffect(() => {
     if (!loaded || !user || user !== "admin") return;
+    // v10.84.36 — los avisos de fondo ATRAPAN su error: addNotification lanza si el insert falla y aquí nadie hacía await,
+    // así que cada falla (red, permisos) dejaba una promesa rechazada suelta. Lo destapó el recorrido de pruebas.
+    const avisar = (...a) => db.addNotification(...a).catch(e => console.warn("[stale] el aviso no se guardó:", e?.message));
     const checkStale = async () => {
       // v10.58.64 A8: dedup PERSISTENTE en BD (24h) además del Set en memoria — antes
       // cada F5/pestaña re-alertaba TODAS las estancadas (ruido masivo en campana+Telegram).
@@ -17648,15 +17655,15 @@ export default function PrintFlow() {
         const target = responsibleNotifyTarget(o, who);
         const msg = "⚠️ Orden estancada: " + (o.client || "") + " — " + (o.product_type || "") + " lleva " + stale.lb + " en " + (SM[o.stage]?.l || o.stage);
         if (who === "both") {
-          db.addNotification("produccion", o.id, "stale_alert", msg, null, "sistema");
-          db.addNotification("preprensa", o.id, "stale_alert", msg, null, "sistema");
+          avisar("produccion", o.id, "stale_alert", msg, null, "sistema");
+          avisar("preprensa", o.id, "stale_alert", msg, null, "sistema");
         } else if (target && target !== "admin") {
-          db.addNotification(target, o.id, "stale_alert", msg, null, "sistema");
+          avisar(target, o.id, "stale_alert", msg, null, "sistema");
         }
         // Notify vendedor creator if applicable (y distinto del responsable ya notificado)
         const stdR=["secretaria","produccion","preprensa","german","admin"];
-        if(o.created_by && !stdR.includes(o.created_by) && o.created_by!==target) db.addNotification(o.created_by, o.id, "stale_alert", msg, null, "sistema");
-        db.addNotification("admin", o.id, "stale_alert", msg, null, "sistema");
+        if(o.created_by && !stdR.includes(o.created_by) && o.created_by!==target) avisar(o.created_by, o.id, "stale_alert", msg, null, "sistema");
+        avisar("admin", o.id, "stale_alert", msg, null, "sistema");
       });
     };
     checkStale();
@@ -17676,6 +17683,7 @@ export default function PrintFlow() {
   useEffect(() => {
     if (!loaded || !user || user !== "admin") return;
     const fmtMXN = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN"}).format(n);
+    const avisar = (...a) => db.addNotification(...a).catch(e => console.warn("[web] el aviso no se guardó:", e?.message));   // v10.84.36, igual que el de estancadas
     // Agrupar pending por cart_folio (o por orden si no tiene carrito)
     const byCart = {};
     orders.forEach(o => {
@@ -17697,8 +17705,8 @@ export default function PrintFlow() {
         const total = group.orders.reduce((s,o)=>s+(parseFloat(o.price)||0),0);
         msg = "🌐 Nuevo carrito " + group.cart + " (" + group.orders.length + " productos) — " + (first.client || "Sin nombre") + (total>0 ? " · " + fmtMXN(total) : "");
       }
-      db.addNotification("secretaria", first.id, "new_order", msg, null, "sistema");
-      db.addNotification("admin", first.id, "new_order", msg, null, "sistema");
+      avisar("secretaria", first.id, "new_order", msg, null, "sistema");
+      avisar("admin", first.id, "new_order", msg, null, "sistema");
     });
   }, [loaded, user, orders]);
 

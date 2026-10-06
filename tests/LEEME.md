@@ -50,6 +50,31 @@ y los componentes simulados (en folio, BillToSection y StageLbl).
 - Pantalla nueva: un generador nuevo (copiar uno, cambiar qué se extrae, el `db` simulado y la página) y una tanda nueva;
   se agrega a `TANDAS` en `scripts/probar.mjs`.
 
+## El recorrido de toda la app (`npm run recorrido`)
+
+Las tandas cubren pantallas sueltas; el recorrido abre **toda** la app como cada rol, en un navegador, contra la base real,
+y reporta lo que truena, lo lento y lo que intenta escribir con sólo abrir una vista. No corre en el candado (~4 min): se
+corre a mano después de un cambio grande y después de subir, contra la app publicada.
+
+```
+npm run build && npm run recorrido                          # la app compilada (dist/) en 127.0.0.1:4273
+node tests/recorrido/recorrido.mjs https://produccion.sygma.mx # la app publicada
+node tests/recorrido/recorrido.mjs "" karla,german            # sólo esos roles
+```
+
+- Entra con la cuenta `claude-pruebas` (rol `visor`). La contraseña vive sólo en
+  `C:\Users\padil\claude-navegador\credencial-printflow.json` (o en `PF_CREDENCIAL`) y nunca se imprime. Para compilar en
+  local hace falta `.env.local` con `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` (la llave pública; está fuera de git).
+- **Sólo lee.** El navegador deja pasar GET, entrar, firmar y listar archivos, y las RPC de la lista `LECTURAS` (todas
+  STABLE/IMMUTABLE, comprobado en `pg_proc`); todo lo demás se contesta con 418 y sale en el reporte como «ESCRIBE al abrir».
+  Una RPC nueva de lectura se agrega a `LECTURAS` sólo si es STABLE/IMMUTABLE. La base, además, ve un `visor`. El cierre de
+  sesión se contesta sin llegar al servidor (un logout real es global).
+- El rol de cada pasada se cambia **en el navegador** (la respuesta de `get_user_session`); el menú es el de ese rol.
+- El reporte queda en `tests/salida/recorrido/reporte.txt` (y `.json`), con una captura por paso. Sale con 1 si algo truena.
+  Lo «lento» (más de 5 s) dice qué peticiones lanzó el paso y cuáles se quedaron colgadas; no cambia la salida.
+- Lo que la app escribe a propósito al entrar (la limpieza de archivos del admin, sus avisos de fondo, el «Buenos días»)
+  está en `ESCRITURA_CONOCIDA` con su porqué. Una vista nueva del menú que no esté en `VISTAS` sale como «sin recorrer».
+
 ## Minas del banco (no de la app)
 
 - La primera carga hace que vite prepare sus dependencias: `probar.mjs` las declara (`optimizeDeps.include`) y calienta el

@@ -56,7 +56,7 @@ async function calentar(puerto) {
   try {
     for (let i = 0; i < 4; i++) {
       const p = await nav.newPage();
-      try { await p.goto(`http://localhost:${puerto}/`, { timeout: 60000 }); await p.waitForSelector("button", { timeout: 20000 }); return; }
+      try { await p.goto(`http://127.0.0.1:${puerto}/`, { timeout: 60000 }); await p.waitForSelector("button", { timeout: 20000 }); return; }
       catch { /* vite todavía preparando: otra vuelta */ }
       finally { await p.close(); }
     }
@@ -74,7 +74,7 @@ async function tanda(t) {
     // Las dependencias se preparan TODAS al arrancar: si vite descubre una a media carga, reoptimiza y la página recibe
     // 504 «Outdated Optimize Dep» (la primera prueba de cada tanda caía por eso, no por la app).
     server = await createServer({ configFile: path.join(dir, "vite.config.mjs"), logLevel: "error", clearScreen: false,
-      server: { port: t.puerto, strictPort: true },
+      server: { host: "127.0.0.1", port: t.puerto, strictPort: true },
       optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-dev-runtime", "@phosphor-icons/react"] } });
     await server.listen();
     await calentar(t.puerto);

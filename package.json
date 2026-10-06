@@ -7,7 +7,8 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "probar": "node scripts/probar.mjs"
+    "probar": "node scripts/probar.mjs",
+    "recorrido": "node tests/recorrido/recorrido.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
