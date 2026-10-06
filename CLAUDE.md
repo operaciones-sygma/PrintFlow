@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.33). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.34). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -139,8 +139,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.33. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.34. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
+  - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
+    `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
+    preguntar), botones legibles, y `getFolioEmitterEnabled` devuelve `null` en un error (antes «apagado», que abría el modo
+    manual con la serie de Alpha). Sigue en la lista: el folio por OC (`AssignOCFolioModal`).
   - **Todo lo que se implementa se prueba como usuario tratando de romperlo** (Marcelo, 5-oct), con pruebas escritas que
     afirman lo que debería pasar. PrintFlow no tiene cuenta de pruebas: el **banco** extrae los modales de `App.jsx` con la
     base simulada (`claude-navegador/banco-printflow/`: `gen-banco.mjs`, `romper-partes.mjs`, `LEEME.md`). La primera
