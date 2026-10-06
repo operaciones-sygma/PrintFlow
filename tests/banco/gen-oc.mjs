@@ -2,7 +2,7 @@
 // atraparTab, ConfirmModal, FolioAutoNote, SaldoFavorAmarreBanner, MultiPaymentPicker, OTRO_CATS, refComplete, toBackendRef)
 // y la base simulada. BillToSection va simulado (trae el buscador de clientes).
 // Uso: node gen-oc.mjs <App.jsx> <dirSalida>
-// Variantes por URL: emisor=off|falla|falla1 · cliente=corona|cuadra|saldo · pre=1 (pre-asignar) · traslado=no|falla ·
+// Variantes por URL: emisor=off|falla|falla1|falla2 · cliente=corona|cuadra|saldo · pre=1 (pre-asignar) · traslado=no|falla ·
 //   ordenes=N (pendientes, por defecto 5) · facturadas=N (ya con folio, por defecto 2) · falla=1 (la base rechaza al confirmar)
 import fs from "node:fs";
 import path from "node:path";
@@ -31,8 +31,9 @@ const TRASLADO = Q.get("traslado") || "listo", FALLA = Q.get("falla") === "1";
 const N_PEND = Number(Q.get("ordenes") || 5), N_FACT = Number(Q.get("facturadas") || 2);
 let emisorLlamadas = 0;
 const db = {
-  // falla: nunca se sabe · falla1: la primera consulta falla y la segunda sí contesta (para «Reintentar»)
-  getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; return EMISOR !== "off"; },
+  // falla: nunca se sabe · falla1: la primera consulta falla y la segunda sí contesta (para «Reintentar») · falla2: las dos
+  //   primeras fallan (al pasar a Dividir se vuelve a consultar: así «Reintentar» se prueba en Dividir)
+  getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; if (EMISOR === "falla2") return emisorLlamadas <= 2 ? null : true; return EMISOR !== "off"; },
   getNextFolioSuggestion: async t => EMISOR === "off" ? (t === "factura" ? "D-5781" : "R-1903") : (t === "factura" ? "F-137" : "RS-1250"),
   getClientBillingInfo: async () => CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: 30000 }
     : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" }

@@ -39,9 +39,10 @@ const aDividir = async p => { await p.getByRole("button", { name: /^Dividir( en 
 const agregarGrupo = async p => { await p.getByRole("button", { name: /Agregar otra (factura|documento)/ }).click(); await espera(p, 300); };
 const preguntaAbierta = async p => (await p.getByRole("dialog").count()) >= 2 || await p.getByRole("dialog", { name: /cerrar|crear|asignar|seguro|pre-asignar/i }).count() > 0 && (await p.getByRole("dialog").count()) >= 2;
 // contraste de todo el texto de la ventana: compone los fondos hacia arriba y mide contra el color del texto
-const peoresContrastes = p => p.evaluate(() => {
+// (ultimo = true: el diálogo de hasta arriba, p. ej. la pregunta antes de crear)
+const peoresContrastes = (p, ultimo = false) => p.evaluate((ultimo) => {
   const h = [...document.querySelectorAll("h1,h2,h3")].find(x => /OC-1003/.test(x.textContent));
-  const raiz = h ? (h.closest('[role="dialog"]') || h.parentElement) : document.body;
+  const raiz = ultimo ? [...document.querySelectorAll('[role="dialog"]')].pop() : h ? (h.closest('[role="dialog"]') || h.parentElement) : document.body;
   const parse = s => { const m = String(s).match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(",").map(x => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
   const mezcla = (t, b) => ({ r: t.r * t.a + b.r * (1 - t.a), g: t.g * t.a + b.g * (1 - t.a), b: t.b * t.a + b.b * (1 - t.a), a: 1 });
   const lum = c => { const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
@@ -58,7 +59,7 @@ const peoresContrastes = p => p.evaluate(() => {
     if (cr < (grande ? 3 : 4.5)) malos.push(cr.toFixed(1) + ":1 «" + el.textContent.trim().slice(0, 34) + "»");
   }
   return malos;
-});
+}, ultimo);
 
 // ── Es un diálogo de verdad ──────────────────────────────────────────────────────────────────────────────────────────
 await caso("oc-01-es-dialogo", "", async p => {
@@ -396,6 +397,276 @@ await caso("oc-55-falla-simple-conserva", "falla=1&emisor=off", async p => {
   await p.getByRole("button", { name: /^Sí/ }).click(); await espera(p, 600);
   const valor = await p.getByPlaceholder(/NNNN/).first().inputValue().catch(() => "");
   ok("oc-55-falla-simple-conserva", await panel(p) && valor === "D-5790" && /toast:error/.test(await log(p)), `si la base rechaza: la ventana ${await panel(p) ? "sigue" : "SE CERRÓ"} y el folio ${valor === "D-5790" ? "se conserva" : "SE PERDIÓ"}`);
+});
+
+// ── Segunda pasada de la critique (30/40): lo que la separa de 35 ─────────────────────────────────────────────────────
+// el fondo REAL de cada botón visible del diálogo (compuesto hacia arriba) y su luminancia: «relleno» = oscuro o saturado
+const botonesRellenos = p => p.evaluate(() => {
+  const dlg = document.querySelector('[role="dialog"]');
+  const parse = s => { const m = String(s).match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(",").map(x => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+  const mezcla = (t, b) => ({ r: t.r * t.a + b.r * (1 - t.a), g: t.g * t.a + b.g * (1 - t.a), b: t.b * t.a + b.b * (1 - t.a), a: 1 });
+  const lum = c => { const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const fondo = el => { const capas = []; for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c.a > 0) capas.push(c); } let base = { r: 255, g: 255, b: 255, a: 1 }; for (let i = capas.length - 1; i >= 0; i--) base = mezcla(capas[i], base); return base; };
+  return [...dlg.querySelectorAll("button")].filter(b => b.offsetParent && !b.disabled && b.textContent.trim())
+    .map(b => ({ t: b.textContent.trim().slice(0, 30), l: lum(fondo(b)) })).filter(x => x.l < 0.4).map(x => x.t);
+});
+// el estilo de «seleccionado» de un botón: su fondo y su borde
+const estiloDe = (loc) => loc.evaluate(b => { const s = getComputedStyle(b); return s.backgroundColor + " | " + s.borderTopColor; });
+const rojizo = c => { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return false; const [r, g, b] = m[1].split(",").map(Number); return r > g + 50 && r > b + 50; };
+const bordeDeTarjeta = (p, nombre) => p.evaluate(n => { const g = document.querySelector(`[aria-label="Tipo de ${n}"]`); const card = g && g.parentElement; return card ? getComputedStyle(card).borderTopColor : null; }, nombre);
+// ¿se ve sin bajar? (dentro de lo visible del cuerpo que hace scroll)
+const aLaVista = (p, sel) => p.evaluate(s => { const el = typeof s === "string" ? document.querySelector(s) : null; if (!el) return null;
+  let c = el.parentElement; while (c && !/(auto|scroll)/.test(getComputedStyle(c).overflowY)) c = c.parentElement;
+  const r = el.getBoundingClientRect(), v = c ? c.getBoundingClientRect() : { top: 0, bottom: innerHeight };
+  return r.top >= v.top - 1 && r.bottom <= v.bottom + 1; }, sel);
+const capturarPago = async (p, i) => {
+  await p.locator("summary").filter({ hasText: /Pagos/ }).nth(i).click(); await espera(p, 300);
+  await p.getByRole("button", { name: "Pagada", exact: true }).first().click(); await espera(p, 200);
+  await p.getByRole("radio", { name: "Transferencia" }).first().click().catch(() => {});
+  await p.getByLabel("Monto del pago 1").first().fill("14906.58").catch(() => {}); await espera(p, 200);
+};
+
+await caso("oc-56-solo-la-accion-rellena", "", async p => {
+  const rellenos = await botonesRellenos(p);
+  ok("oc-56-solo-la-accion-rellena", rellenos.length === 1 && /^Crear la factura/.test(rellenos[0]), `botones rellenos: ${rellenos.join(" | ")}`);
+});
+await caso("oc-57-seleccionado-igual-en-los-dos-modos", "", async p => {
+  const simple = await estiloDe(p.getByRole("group", { name: "Tipo de documento" }).getByRole("button", { name: /Factura/ }));
+  await aDividir(p);
+  const dividir = await estiloDe(p.getByRole("group", { name: "Tipo de Factura 1" }).getByRole("button", { name: /Factura/ }));
+  ok("oc-57-seleccionado-igual-en-los-dos-modos", simple === dividir, `«Factura» seleccionada: en Simple ${simple} · en Dividir ${dividir}`);
+});
+await caso("oc-58-razon-a-la-vista", "pre=1", async p => {
+  const v = await aLaVista(p, "#oc-razon");
+  ok("oc-58-razon-a-la-vista", v === true, `a 1366x768, la razón de la pre-asignación (obligatoria) ${v === null ? "no existe" : v ? "se ve al abrir" : "queda bajo el pliegue"}`);
+});
+await caso("oc-59-eliminar-con-pagos-pregunta", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await capturarPago(p, 1);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 400);
+  const preg = (await p.getByRole("dialog").count()) >= 2;
+  const sigue = await p.getByRole("group", { name: "Tipo de Factura 5" }).count();
+  ok("oc-59-eliminar-con-pagos-pregunta", preg && sigue === 1, `eliminar Factura 2 con un pago capturado: ${preg ? "pregunta" : "NO pregunta"}${sigue ? "" : " y ya la borró"}`);
+});
+await caso("oc-60-eliminar-sin-pagos-no-pregunta", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 400);
+  const preg = (await p.getByRole("dialog").count()) >= 2;
+  const quedan = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  ok("oc-60-eliminar-sin-pagos-no-pregunta", !preg && quedan === 4, `sin pagos: ${preg ? "PREGUNTA" : "no pregunta"}, quedan ${quedan} documentos`);
+});
+await caso("oc-61-reintentar-en-dividir", "emisor=falla", async p => {
+  await aDividir(p);
+  const hay = await p.getByRole("button", { name: /Reintentar/ }).count();
+  const t = await texto(p); const veces = (t.match(/falta confirmar/gi) || []).length;
+  ok("oc-61-reintentar-en-dividir", hay === 1 && veces <= 2, `en Dividir, si no se pudo saber cómo va el folio: «Reintentar» ${hay ? "está" : "NO está"}; «falta confirmar» sale ${veces} veces`);
+});
+await caso("oc-62-folio-del-sistema-una-vez", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  const veces = ((await texto(p)).match(/el sistema/gi) || []).length;   // «El sistema pone el folio», «Los folios los pone el sistema»…
+  ok("oc-62-folio-del-sistema-una-vez", veces === 1, `con 5 documentos, «el sistema pone el folio» se dice ${veces} veces`);
+});
+await caso("oc-63-agregar-a-la-vista", "", async p => {
+  await aDividir(p);
+  const v = await p.evaluate(() => { const b = [...document.querySelectorAll("button")].find(x => /Agregar otra/.test(x.textContent)); if (!b) return null; b.id = b.id || "boton-agregar"; return b.id; });
+  const vis = v ? await aLaVista(p, "#" + v) : null;
+  ok("oc-63-agregar-a-la-vista", vis === true, `a 1366x768 con un documento, «Agregar otra factura» ${vis === null ? "no existe" : vis ? "se ve" : "queda bajo el pliegue"}`);
+});
+await caso("oc-64-pregunta-mismo-sustantivo", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  const boton = ((await primario(p).textContent()) || "").trim();
+  await primario(p).click(); await espera(p, 400);
+  const titulo = ((await p.getByRole("dialog").last().locator("h3").textContent()) || "").trim();
+  const si = ((await p.getByRole("button", { name: /^Sí/ }).textContent()) || "").trim();
+  ok("oc-64-pregunta-mismo-sustantivo", /5 facturas/.test(boton) && /5 facturas/.test(titulo) && /5 facturas/.test(si), `botón «${boton}» · pregunta «${titulo}» · «${si}»`);
+});
+await caso("oc-65-pregunta-importes-alineados", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await primario(p).click(); await espera(p, 400);
+  const bordes = await p.evaluate(() => {
+    const dlg = [...document.querySelectorAll('[role="dialog"]')].pop();
+    return ["$66,004.00", "$14,906.58", "$3,944.00", "$1,136.80", "$25,636.00"].map(s => {
+      const w = document.createTreeWalker(dlg, NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) { const i = n.textContent.indexOf(s); if (i >= 0) { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + s.length); return Math.round(r.getBoundingClientRect().right); } }
+      return null; });
+  });
+  const ok2 = bordes.every(x => x !== null) && Math.max(...bordes) - Math.min(...bordes) <= 2;
+  ok("oc-65-pregunta-importes-alineados", ok2, `borde derecho de cada importe en la pregunta: ${bordes.join(", ")}`);
+});
+await caso("oc-66-pregunta-dice-productos", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await primario(p).click(); await espera(p, 400);
+  const t = (await p.getByRole("dialog").last().textContent()) || "";
+  ok("oc-66-pregunta-dice-productos", /Bolsa kraft/.test(t) && /Stickers/.test(t), "la pregunta de dividir " + (/Bolsa kraft/.test(t) ? "dice" : "NO dice") + " qué producto va en cada documento");
+});
+await caso("oc-67-folio-repetido-se-marca", "emisor=off", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await p.getByLabel("Folio de Factura 2").fill("D-5781"); await espera(p, 300);
+  const b1 = await p.getByLabel("Folio de Factura 1").evaluate(x => getComputedStyle(x).borderTopColor);
+  const b2 = await p.getByLabel("Folio de Factura 2").evaluate(x => getComputedStyle(x).borderTopColor);
+  ok("oc-67-folio-repetido-se-marca", rojizo(b1) && rojizo(b2), `D-5781 en Factura 1 y 2: bordes ${b1} y ${b2}`);
+});
+await caso("oc-68-documento-vacio-se-marca", "", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  const borde = await bordeDeTarjeta(p, "Factura 2");
+  ok("oc-68-documento-vacio-se-marca", rojizo(borde), `Factura 2 sin órdenes (el pie lo dice): su borde es ${borde}`);
+});
+await caso("oc-69-textos-de-hoy", "pre=1", async p => {
+  let t = await texto(p);
+  await aDividir(p); t += "\n" + await texto(p);
+  const malos = ["ciclo fiscal", "emisión SYGMA", "las facturas con IVA"].filter(s => t.includes(s));
+  ok("oc-69-textos-de-hoy", malos.length === 0, malos.length ? "dice: " + malos.join(" · ") : "sin textos viejos");
+});
+await caso("oc-70-encabezado-dividir", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  const t = await texto(p);
+  ok("oc-70-encabezado-dividir", /en 5 facturas/.test(t), "encabezado: «" + ((t.match(/Total[^\n]*/) || [""])[0]) + "»");
+});
+
+// ── Tercera vuelta de la segunda pasada: por donde NO se diseñó ───────────────────────────────────────────────────────
+await caso("oc-71-eliminar-con-pagos-arrepentirse", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await capturarPago(p, 1);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: /^No, cancelar/ }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 300);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const docs = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  const dialogos = await p.getByRole("dialog").count();
+  const pagos = await p.locator("summary").filter({ hasText: /Pagos \(1\)/ }).count();
+  ok("oc-71-eliminar-con-pagos-arrepentirse", docs === 5 && dialogos === 1 && pagos === 1, `«No» y luego Esc en la pregunta: quedan ${docs} documentos, ${dialogos} diálogo(s) abiertos y ${pagos} documento con su pago`);
+});
+await caso("oc-72-eliminar-con-pagos-confirmado", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await capturarPago(p, 1);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: /^Eliminar y borrar/ }).click(); await espera(p, 300);
+  const docs = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  const enLaPrimera = await p.evaluate(() => { const g = document.querySelector('[aria-label="Tipo de Factura 1"]'); return !!g && /P-0611/.test(g.parentElement.textContent); });
+  ok("oc-72-eliminar-con-pagos-confirmado", docs === 4 && enLaPrimera, `confirmado: quedan ${docs} documentos; P-0611 ${enLaPrimera ? "pasó" : "NO pasó"} a Factura 1`);
+});
+await caso("oc-73-eliminar-la-primera-dice-a-cual", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await capturarPago(p, 0);
+  await p.getByRole("button", { name: "Eliminar Factura 1" }).click(); await espera(p, 300);
+  const t = (await p.getByRole("dialog").last().textContent()) || "";
+  ok("oc-73-eliminar-la-primera-dice-a-cual", /pasa a Factura 2/.test(t), "al eliminar Factura 1, la pregunta dice: «" + (t.match(/Su orden[^.]*\./) || ["(nada)"])[0] + "»");
+});
+await caso("oc-74-folio-repetido-se-desmarca", "emisor=off", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await p.getByLabel("Folio de Factura 2").fill("d-5781"); await espera(p, 300);
+  const marcado = rojizo(await p.getByLabel("Folio de Factura 1").evaluate(x => getComputedStyle(x).borderTopColor));
+  await p.getByLabel("Folio de Factura 2").fill("D-5786"); await espera(p, 300);
+  const b1 = await p.getByLabel("Folio de Factura 1").evaluate(x => getComputedStyle(x).borderTopColor);
+  const pie = await texto(p);
+  ok("oc-74-folio-repetido-se-desmarca", marcado && !rojizo(b1) && !/repetido/.test(pie), `«d-5781» (minúscula) ${marcado ? "se marca" : "NO se marca"}; arreglado a D-5786: ${rojizo(b1) ? "SIGUE marcado" : "se desmarca"}`);
+});
+await caso("oc-75-soltar-en-agregar", "", async p => {
+  await aDividir(p);
+  const ficha = p.getByLabel("Mover P-0612 a").locator("xpath=ancestor::div[@draggable='true']");
+  // se toma la ficha del P-número: su centro cae en el «Mover a…», y ahí un clic abre la lista en vez de arrastrar
+  await ficha.dragTo(p.getByRole("button", { name: /Agregar otra factura/ }), { sourcePosition: { x: 14, y: 10 } }); await espera(p, 400);
+  const enLaNueva = await p.evaluate(() => { const g = document.querySelector('[aria-label="Tipo de Factura 2"]'); return !!g && /P-0612/.test(g.parentElement.textContent); });
+  ok("oc-75-soltar-en-agregar", enLaNueva, "arrastrar P-0612 a «Agregar otra factura» " + (enLaNueva ? "la pone en un documento nuevo" : "NO crea un documento con ella"));
+});
+await caso("oc-76-reintentar-en-dividir-recupera", "emisor=falla2", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Reintentar/ }).click(); await espera(p, 600);
+  const t = await texto(p);
+  ok("oc-76-reintentar-en-dividir-recupera", /asigna el sistema/.test(t) && !(await primario(p).isDisabled()), "en Dividir, «Reintentar» " + (/asigna el sistema/.test(t) ? "recupera" : "NO recupera") + " cómo va el folio");
+});
+await caso("oc-77-razon-sigue-al-cambiar-de-modo", "pre=1", async p => {
+  await p.fill("#oc-razon", "Pago adelantado del cliente"); await espera(p);
+  await aDividir(p);
+  const v = await p.inputValue("#oc-razon").catch(() => "");
+  const vis = await aLaVista(p, "#oc-razon");
+  ok("oc-77-razon-sigue-al-cambiar-de-modo", v === "Pago adelantado del cliente" && vis === true, `en Dividir la razón ${v ? "sigue" : "SE PERDIÓ"} y ${vis ? "se ve" : "no se ve"}`);
+});
+await caso("oc-78-una-por-producto-pregunta-con-lista", "", async p => {
+  await p.getByRole("button", { name: /Una por producto/ }).click(); await espera(p);
+  await primario(p).click(); await espera(p, 400);
+  const bordes = await p.evaluate(() => {
+    const dlg = [...document.querySelectorAll('[role="dialog"]')].pop();
+    return ["$66,004.00", "$14,906.58", "$3,944.00", "$1,136.80", "$25,636.00", "$111,627.38"].map(s => {
+      const w = document.createTreeWalker(dlg, NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) { const i = n.textContent.indexOf(s); if (i >= 0) { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + s.length); return Math.round(r.getBoundingClientRect().right); } }
+      return null; });
+  });
+  const ok2 = bordes.every(x => x !== null) && Math.max(...bordes) - Math.min(...bordes) <= 2;
+  ok("oc-78-una-por-producto-pregunta-con-lista", ok2, `«una por producto»: borde derecho de los 5 importes y el total: ${bordes.join(", ")}`);
+});
+await caso("oc-79-mezcla-dice-documentos", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await p.getByRole("group", { name: "Tipo de Factura 2" }).getByRole("button", { name: /Remisión/ }).click(); await espera(p, 300);
+  const t = await texto(p);
+  const boton = ((await primario(p).textContent()) || "").trim();
+  await primario(p).click(); await espera(p, 400);
+  const preg = (await p.getByRole("dialog").last().textContent()) || "";
+  ok("oc-79-mezcla-dice-documentos", /en 5 documentos \(facturas con IVA, remisiones sin IVA\)/.test(t) && /5 documentos/.test(boton) && /5 documentos/.test(preg) && /remisiones, sin IVA/.test(preg),
+    `con una remisión: encabezado «${(t.match(/Total[^\n]*/) || [""])[0]}», botón «${boton}», la pregunta ${/remisiones, sin IVA/.test(preg) ? "explica el IVA" : "NO explica el IVA"}`);
+});
+await caso("oc-80-vacio-se-desmarca", "", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  await p.getByLabel("Mover P-0611 a").selectOption({ label: "a Factura 2" }); await espera(p, 300);
+  const b1 = await bordeDeTarjeta(p, "Factura 1"), b2 = await bordeDeTarjeta(p, "Factura 2");
+  ok("oc-80-vacio-se-desmarca", !rojizo(b1) && !rojizo(b2) && !(await primario(p).isDisabled()), `con P-0611 en Factura 2: bordes ${b1} y ${b2}`);
+});
+await caso("oc-81-contraste-de-la-pregunta", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await primario(p).click(); await espera(p, 400);
+  const malos = await peoresContrastes(p, true);
+  ok("oc-81-contraste-de-la-pregunta", malos.length === 0, malos.length ? "en la pregunta: " + malos.slice(0, 4).join(" · ") : "la pregunta se lee (≥ 4.5:1)");
+});
+
+// ── Cuarta vuelta: lo que se arrastra y se borra ─────────────────────────────────────────────────────────────────────
+await caso("oc-82-eliminar-dice-remision", "", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  await p.getByLabel("Mover P-0614 a").selectOption({ label: "a Factura 2" }); await espera(p, 300);
+  await p.getByRole("group", { name: "Tipo de Factura 2" }).getByRole("button", { name: /Remisión/ }).click(); await espera(p, 300);
+  await capturarPago(p, 0);
+  await p.getByRole("button", { name: "Eliminar Factura 1" }).click(); await espera(p, 300);
+  const t = (await p.getByRole("dialog").last().textContent()) || "";
+  ok("oc-82-eliminar-dice-remision", /pasan a Remisión 2/.test(t), "eliminar Factura 1 con la otra siendo remisión: «" + (t.match(/Sus? [^.]*pasan? a[^.]*\./) || ["(nada)"])[0] + "»");
+});
+await caso("oc-83-soltar-la-ultima-deja-vacio-marcado", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  const ficha = p.getByLabel("Mover P-0612 a").locator("xpath=ancestor::div[@draggable='true']");
+  await ficha.dragTo(p.getByRole("button", { name: /Agregar otra factura/ }), { sourcePosition: { x: 14, y: 10 } }); await espera(p, 400);
+  const borde = await bordeDeTarjeta(p, "Factura 3");
+  const pie = await texto(p);
+  ok("oc-83-soltar-la-ultima-deja-vacio-marcado", rojizo(borde) && /Factura 3 no tiene órdenes/.test(pie) && await primario(p).isDisabled(), `Factura 3 se quedó sin órdenes: borde ${borde}; el pie ${/Factura 3 no tiene/.test(pie) ? "lo dice" : "NO lo dice"}`);
+});
+await caso("oc-84-documento-nuevo-a-mano-se-marca", "emisor=off", async p => {
+  await aDividir(p);
+  await agregarGrupo(p);
+  const borde = await bordeDeTarjeta(p, "Factura 2");
+  const pie = await texto(p);
+  ok("oc-84-documento-nuevo-a-mano-se-marca", rojizo(borde) && /Factura 2/.test(pie), `a mano, el documento nuevo: borde ${borde}; el pie ${/Factura 2/.test(pie) ? "lo nombra" : "NO lo nombra"}`);
+});
+await caso("oc-85-doble-clic-en-eliminar", "", async p => {
+  await aDividir(p);
+  await p.getByRole("button", { name: /Una factura por orden/ }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: "Eliminar Factura 2" }).dblclick(); await espera(p, 500);
+  const quedan = await p.getByRole("group", { name: /^Tipo de Factura \d$/ }).count();
+  ok("oc-85-doble-clic-en-eliminar", quedan === 4, `doble clic en la papelera de Factura 2: quedan ${quedan} documentos (debería borrar uno)`);
 });
 
 await browser.close();
