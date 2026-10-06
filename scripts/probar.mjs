@@ -86,7 +86,10 @@ async function tanda(t) {
   try {
     // Las dependencias se preparan TODAS al arrancar: si vite descubre una a media carga, reoptimiza y la página recibe
     // 504 «Outdated Optimize Dep» (la primera prueba de cada tanda caía por eso, no por la app).
+    // Cada banco con SU caché de vite: con tres en paralelo compartían node_modules/.vite/deps y en Windows uno la borraba
+    //   mientras otro la usaba (EPERM rmdir; la tanda «partes» no corrió el 5-oct). Queda entre corridas: arranca rápido.
     server = await createServer({ configFile: path.join(dir, "vite.config.mjs"), logLevel: "error", clearScreen: false,
+      cacheDir: path.join(RAIZ, "node_modules", ".vite-banco-" + t.nombre),
       server: { host: "127.0.0.1", port: t.puerto, strictPort: true },
       optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-dev-runtime", "@phosphor-icons/react"] } });
     await server.listen();
