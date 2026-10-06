@@ -12,6 +12,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.39 — El rol de sólo lectura ya no escribe, y el autor sale de la sesión — 5-oct-2026
+
+Sin cambios en la app; cambio en la base (aplicado el 5-oct, copia en
+`docs/migrations/v10.84.39_solo_lectura_y_autor_de_la_sesion.sql`). Lo encontró el recorrido (v10.84.36): tres RPC sólo
+pedían ser «personal interno».
+
+- **El rol `visor` es de Dulce** (sólo lectura desde v10.77) y de la cuenta de pruebas. Podía registrar impresiones
+  (`register_print`: sube la versión de la hoja y firma), firmar el «Buenos días» (`log_wakeup_ack`) y cambiar los precios
+  de los químicos (`save_app_config`). Ahora las dos primeras piden `pf_puede_escribir()` (los 7 roles que escriben), y los
+  precios, **sólo admin**: german y secretaria también podían cambiarlos aunque la pantalla sólo le enseña «Editar Precios»
+  a admin.
+- **El autor sale de la sesión**, no de lo que mande la pantalla: quién imprimió (`printed_by`, `last_printed_by`), quién
+  cambió los precios (`updated_by`) y quién firmó el «Buenos días» (el disparador de `audit_log` ya sellaba el autor; el
+  detalle no). Medido: en 60 días `printed_by` siempre fue el usuario de quien imprimía, así que lo registrado no cambia;
+  sólo deja de poder falsearse.
+- **Para Dulce no cambia nada en pantalla**: la ventana de impresión imprime sin esperar el registro y, si no se registró,
+  lo avisa (eso ya existía); el «Buenos días» se firma sin esperar respuesta y un visor no tiene pendientes; y no ve
+  «Químicos». En 60 días no imprimió ninguna hoja.
+- **`tests/romper/permisos.mjs`, tanda nueva en el candado (13 casos):** cada uno llama la RPC como una persona real (JWT
+  simulado) dentro de una transacción que se deshace. **Vuelta 1 contra la base de antes: 9 de 13 fallaban** (justo lo de
+  arriba). `--ensayar <migración>` corre los casos contra una migración sin aplicarla: 13 de 13, y la base siguió igual.
+  Aplicada: 13 de 13; lo vivo es idéntico al archivo; `plpgsql_check` sin errores (487 funciones); 75 invariantes en verde.
+- Sólo PrintFlow las llama (grep en las apps; sygma-web trae los tipos generados y ya no se usa).
+
 ## v10.84.38 — Las vistas del CTP de SygmaAlmacen dejan de contar repetidos — 5-oct-2026
 
 Sin cambios en la app; cambio en la base (aplicado el 5-oct, copia en `docs/migrations/v10.84.38_vistas_ctp_sin_repetidos.sql`).

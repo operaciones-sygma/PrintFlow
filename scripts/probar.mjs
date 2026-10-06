@@ -26,6 +26,8 @@ const TANDAS = [
   { nombre: "folio", gen: "tests/banco/gen-folio.mjs", romper: "tests/romper/folio.mjs", puerto: 5198 },
   // sin banco: revisa el código y la base (sólo lectura) para que el contador del CTP no vuelva a inflarse (v10.81.4-6)
   { nombre: "ctp", romper: "tests/romper/ctp.mjs" },
+  // sin banco: quién puede escribir con las RPC que no pasaban por pf_puede_escribir() (v10.84.39); cada caso se deshace
+  { nombre: "permisos", romper: "tests/romper/permisos.mjs" },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
