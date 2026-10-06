@@ -1,7 +1,7 @@
 # CLAUDE.md — Contexto para Claude Code en PrintFlow
 
 > Léelo al inicio de cada sesión. **Se actualiza cuando cambia la arquitectura o una regla**, no por
-> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.34). La versión
+> sesión (para eso está `CHANGELOG.md`). Última actualización: **5-oct-2026** (v10.84.35). La versión
 > anterior era del 5-may-2026 y afirmaba cosas que ya no eran ciertas (RLS `allow_all`, 14 tablas,
 > folios D-/R-, «CobranzaFlow app futura»): **un CLAUDE.md viejo estorba más que ayuda.**
 
@@ -82,6 +82,11 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 94 pruebas, ~2 min; ver
+    `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
+    El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
+    falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
+    **Nunca `--no-verify`.** Cada bug que se encuentra deja su prueba en `tests/romper/` (Marcelo, 5-oct-2026).
 22. **Un cambio de base se ensaya contra producción con rollback** (`DO $$ … RAISE EXCEPTION 'ENSAYO'
     $$`, sesión simulada con `set_config('request.jwt.claims', …)`) **antes** de tocar el front.
 23. **Push a `main` de PrintFlow está autorizado de forma permanente** (Marcelo, sep-2026).
@@ -139,7 +144,7 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.34. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.35 (la app, igual que v10.84.34; esta versión agrega las pruebas al repo y el candado). Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
   - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
