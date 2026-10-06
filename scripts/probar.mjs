@@ -24,6 +24,8 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TANDAS = [
   { nombre: "partes", gen: "tests/banco/gen-partes.mjs", romper: "tests/romper/partes.mjs", puerto: 5199 },
   { nombre: "folio", gen: "tests/banco/gen-folio.mjs", romper: "tests/romper/folio.mjs", puerto: 5198 },
+  // sin banco: revisa el código y la base (sólo lectura) para que el contador del CTP no vuelva a inflarse (v10.81.4-6)
+  { nombre: "ctp", romper: "tests/romper/ctp.mjs" },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
@@ -64,6 +66,10 @@ async function calentar(puerto) {
 }
 
 async function tanda(t) {
+  if (!t.gen) {   // tanda sin banco (sin vite ni navegador): se corre tal cual
+    const r = await correrNode(path.join(RAIZ, t.romper), []);
+    return { t, salida: r.salida, codigo: r.codigo };
+  }
   const dir = path.join(RAIZ, ".banco-" + t.nombre);
   const capturas = path.join(RAIZ, "tests", "salida", t.nombre);
   fs.rmSync(dir, { recursive: true, force: true });

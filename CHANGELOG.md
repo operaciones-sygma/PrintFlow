@@ -12,6 +12,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.37 — El contador del CTP entra al candado — 5-oct-2026
+
+Sin cambios en la app. Marcelo: *«sobre el contador de CTP de German… se inflaba el contador… solo quiero ver que no hagamos
+una regresión»*. El arreglo de septiembre (v10.81.4-6) no había dejado prueba: el colector de Prinect escribe la misma placa
+hasta 8 veces y cada falla dos veces (FE y SE), y el contador quedó leyendo las vistas que deduplican.
+
+- **Verificado hoy, sin regresión.** El contador lee `almacen.v_ctp_placas` y `v_ctp_fallas`. Las vistas siguen sin repetir
+  placa (5,267 placas de 7,886 renglones crudos: el colector sigue mandando repetidos; el 1-oct, 30 renglones para 18 placas)
+  ni falla (411). `ctp_maintenance` sigue en la publicación realtime, y reiniciar el contador sigue siendo sólo de admin y
+  german. Desde el mantenimiento del 25-ago: 360 placas, 109.34 m².
+- **`tests/romper/ctp.mjs`**, una tanda sin banco dentro de `npm run probar` (y por eso, en el candado):
+  - 5 revisiones del código: nada en `src/` lee las tablas crudas; el contador lee las dos vistas; `loadCtpMaintenance`
+    falla cerrado; el canal realtime.
+  - 6 de la base, de sólo lectura por la API de administración (`SUPABASE_ACCESS_TOKEN`): las vistas sin repetidos,
+    `security_invoker`, el resumen sin el crudo, la publicación realtime y el candado del reinicio. Sin token, las de la base
+    fallan: un candado que se salta solo no es candado.
+  - `--sabotajes` rompe cada cosa a propósito y comprueba que las 11 revisiones se ponen en rojo.
+- `scripts/probar.mjs` acepta tandas sin banco (sin vite ni navegador).
+- **Encontrado de paso, sin tocar** (espera el OK de Marcelo):
+  - Tres vistas de SygmaAlmacen siguen contando el crudo; nunca se repuntaron:
+    - `v_ctp_placas_dia` (placas por día): +9% en 30 días, y agrupa por fecha UTC, así que lo de después de las 18:00 cae al
+      día siguiente.
+    - `v_ctp_errores_top`: +28% en 120 días, por el par FE/SE.
+    - Los `errores_hoy/semana` de `v_ctp_resumen`.
+  - `Device.TotalPlates`, el «odómetro» que lee el colector, **no cuenta placas**: desde el 25-ago subió 277 contra 359 placas,
+    y día por día no cuadra ni con placas ni con trabajos. La comprobación buena es la pantalla del CTP: el 21-ago decía «Total
+    plate count» 113,593, y desde entonces el contador lleva 370 placas.
+
 ## v10.84.36 — El recorrido de toda la app, y lo que encontró — 5-oct-2026
 
 Marcelo: *«un scan sin agentes para cuidar el presupuesto»*. Las tandas de `tests/romper/` cubren dos pantallas; el resto de
