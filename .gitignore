@@ -26,3 +26,7 @@ secrets/
 graphify-out/
 _fix_diff.txt
 *.diff.txt
+
+# Pruebas «tratando de romperlo» (scripts/probar.mjs): bancos temporales y capturas
+.banco-*/
+tests/salida/

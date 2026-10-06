@@ -1,0 +1,2 @@
+# El candado de git es un script de sh: con CRLF falla («/bin/sh^M»). Siempre LF.
+.githooks/* text eol=lf

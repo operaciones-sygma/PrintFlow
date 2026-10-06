@@ -12,6 +12,26 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.35 — Las pruebas viven en el repo, y un candado no deja subir si algo se rompe — 5-oct-2026
+
+Sin cambios en la app. Marcelo: *«¿qué podemos hacer para resolver lo de las regresiones?»*. Hasta hoy las pruebas «tratando
+de romperlo» vivían fuera del repo (`claude-navegador/banco-printflow/`) y se corrían a mano, una pantalla a la vez: un
+cambio en algo compartido (ConfirmModal, el selector de pagos) podía romper otra pantalla y nadie lo vería hasta producción,
+y PrintFlow sube directo a producción sin preguntar.
+
+- **Las pruebas viven en `tests/`** y viajan con el código: los bancos (`tests/banco/`) y las tandas (`tests/romper/`: partes
+  50, folio 44). Cada bug que se encuentra deja su prueba aquí. Cómo se corren y cómo se agregan, en `tests/LEEME.md`.
+- **`npm run probar`** corre todas las tandas en paralelo (~2 min) y compara cada prueba con la última corrida en verde:
+  **REGRESIÓN** (pasaba y ahora falla), pendiente, arreglada, nueva. Sale con 1 si algo falla. Se probó metiendo a propósito
+  una regresión (Esc volvía a tirar el plan del split sin preguntar): la marcó como REGRESIÓN y se negó a seguir.
+- **El candado de git** (`.githooks/pre-push`, activo con `git config core.hooksPath .githooks`) corre `npm run build` y
+  `probar` antes de cada subida y **no deja subir** si algo falla. Un push de puros documentos pasa directo (probado).
+- **Playwright 1.63.0** como dependencia de desarrollo (no baja navegadores al instalarse: el build de Vercel no cambia; usa
+  el Chrome instalado si falta el suyo). La app no lo carga.
+- Dos minas del arranque, del banco y no de la app: la primera carga de vite prepara sus dependencias (>6 s) y a media carga
+  las reoptimizaba (504 «Outdated Optimize Dep»). `probar.mjs` las declara al arrancar y calienta el banco en un navegador
+  antes de soltar cada tanda.
+
 ## v10.84.34 — «Asignar folio», la critique (24/40) y la prueba tratando de romperlo — 5-oct-2026
 
 `/impeccable critique` a «Asignar folio y entregar» (InvoiceModal), «Folio anticipado» (PreInvoiceModal) y el selector de

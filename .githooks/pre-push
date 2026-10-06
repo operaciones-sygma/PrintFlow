@@ -1,0 +1,24 @@
+#!/bin/sh
+# Candado antes de subir (Marcelo, 5-oct-2026). PrintFlow sube directo a producción (Vercel publica cada push a main), así que
+# no se sube nada que rompa el build o una prueba. Corre el build y TODAS las tandas «tratando de romperlo» (scripts/probar.mjs);
+# si algo falla, el push se cancela y la salida dice qué. Nunca saltarlo con --no-verify.
+# Sólo corre si lo que se sube toca código; un push de puros documentos pasa directo.
+# Se activa una vez por copia del repo:  git config core.hooksPath .githooks
+
+z40=0000000000000000000000000000000000000000
+cambios=""
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$z40" ] && continue                       # se borra una rama: nada que probar
+  if [ "$remote_sha" = "$z40" ]; then cambios="$cambios src/"; continue; fi   # rama nueva: se prueba todo
+  cambios="$cambios $(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null || echo src/)"
+done
+
+case "$cambios" in
+  *src/*|*tests/*|*scripts/probar*|*index.html*|*package.json*|*package-lock.json*|*vite.config*) ;;
+  *) echo "candado: sólo documentos; no hace falta correr las pruebas"; exit 0 ;;
+esac
+
+echo "candado: build y pruebas antes de subir…"
+npm run build --silent >/dev/null 2>&1 || { echo "candado: el build falló (corre: npm run build). No se sube."; exit 1; }
+node scripts/probar.mjs --base || { echo "candado: hay pruebas que fallan (arriba dice cuáles). No se sube."; exit 1; }
+echo "candado: todo en verde, se sube."
