@@ -82,7 +82,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 157 pruebas, ~2 min; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 212 pruebas, ~2.5 min; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -146,12 +146,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.41 (5-oct: «Archivos» lee el bucket de la base y «huérfano» lo decide la base; antes, las fotos por lotes, el `visor` sin escribir y las vistas del CTP de almacén sin repetidos — el detalle de v10.84.36-41, en el CHANGELOG). El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
+- **LIVE:** v10.84.42 (6-oct: «Folio por OC» pasó por `/impeccable critique`, 20/40, y por la prueba tratando de romperlo, 55 casos: cuánto y a quién, una pregunta antes de crear, el emisor que no contesta con «Reintentar», «Mover a» para dividir sin arrastrar; antes, v10.84.36-41: «Archivos» desde la base, las fotos por lotes, el `visor` sin escribir y las vistas del CTP de almacén sin repetidos; el detalle, en el CHANGELOG). El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Cada versión, en
   `CHANGELOG.md`; lo grande desde el 18-sep:
   - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
     preguntar), botones legibles, y `getFolioEmitterEnabled` devuelve `null` en un error (antes «apagado», que abría el modo
-    manual con la serie de Alpha). Sigue en la lista: el folio por OC (`AssignOCFolioModal`).
+    manual con la serie de Alpha). El folio por OC (`AssignOCFolioModal`) la siguió en v10.84.42 (55 casos, `tests/romper/oc.mjs`).
+    Siguen en la lista: el detalle de la orden (DetailModal), el Kanban, las puertas de cancelar, OrderForm y el plan matriz.
   - **Todo lo que se implementa se prueba como usuario tratando de romperlo** (Marcelo, 5-oct), con pruebas escritas que
     afirman lo que debería pasar. PrintFlow no tiene cuenta de pruebas: el **banco** extrae los modales de `App.jsx` con la
     base simulada (`claude-navegador/banco-printflow/`: `gen-banco.mjs`, `romper-partes.mjs`, `LEEME.md`). La primera

@@ -12,6 +12,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.42 — «Folio por OC»: la critique (20/40) y la prueba tratando de romperlo — 6-oct-2026
+
+`/impeccable critique` a «Folio por OC» (AssignOCFolioModal): 20/40, el reporte en `.impeccable/critique/`. Se quedó atrás
+de sus hermanas «Asignar folio» y «Facturar por partes». Marcelo eligió arreglar los 5 problemas y los menores, y para
+dividir, «Mover a» en cada orden.
+
+- **Cuánto y a quién, y una pregunta antes de crear.** En modo simple no aparecía ni un importe, y un clic creaba los
+  documentos fiscales sin preguntar. Ahora:
+  - el encabezado dice el cliente y el total (con IVA en factura, sin IVA en remisión);
+  - una lista dice lo que entra (P-número, producto, cantidad e importe);
+  - la vista previa dice «Factura por $111,627.38 con IVA a PORTLAND STUDIO» (o al tercero);
+  - antes de crear, una pregunta con el importe, a quién, qué productos, los folios, el traslado y, si es pre-asignación, el
+    bloqueo de la OC. En dividir, un renglón por documento y el total.
+- **El emisor que no contesta ya no deja sin salida.** Caía callado a captura manual con la serie de Alpha y rechazaba su
+  propia sugerencia («F-137… Debe ser D-NNNN»). Ahora tiene tres estados: consultando, sabido, o «No se pudo confirmar»
+  con «Reintentar», y el botón se apaga mientras no se sepa. A mano acepta F-/D- en factura y RS-/R- en remisión, como
+  «Asignar folio».
+- **Dividir sin arrastrar.**
+  - Cada orden lleva «Mover a» (a otro documento o «sin documento»), que funciona con teclado, en tablet y con lector de
+    pantalla. Arrastrar sigue funcionando.
+  - «Una factura por orden» arma el caso común de un clic; a mano, con los folios consecutivos desde el sugerido.
+  - Cada ficha dice el producto (antes sólo el P-número y el subtotal).
+  - El documento se llama «Remisión 2» si es remisión (decía «Factura #1»), y el botón ya no dice «Dividir en 1 facturas».
+- **No se pierde lo capturado.**
+  - El clic fuera ya no cierra con algo capturado, y Esc pregunta «¿Cerrar sin asignar el folio?».
+  - Cambiar el tipo de un documento con pagos pregunta en la página (antes `window.confirm`).
+  - Es un diálogo de verdad (`role="dialog"`, foco adentro, Tab no se sale) y tiene el pie fijo: con Corona en dividir, a
+    1366, los botones quedaban bajo el borde. El pie dice por qué el botón está apagado.
+- **Se lee:**
+  - el texto de estado va en tinta: el verde de «ya facturados», el ámbar del aviso de dividir, el naranja de pre-asignar y
+    del traslado, el rojo del folio mal escrito;
+  - los botones de remisión y de pre-asignar, en verde y ámbar oscuros;
+  - el botón apagado ya se lee (era blanco sobre gris, 1.4:1);
+  - los botones de cada documento y las «×» estaban en Arial; ahora todo va en Geist;
+  - sin emojis (🔢 ⚠);
+  - textos de hoy: sin «(D-)», «inmutables», «bridge… (v10.57.0)», «capturado por Karla, verificado contra AlphaERP».
+- **Corona** dice lo que es: queda por cobrar en CobranzaFlow, el saldo se aplica al entregar cada orden, y lo facturado por
+  adelantado «no es dinero del cliente».
+- `FolioAutoNote` (compartido con «Asignar folio», el folio anticipado y «Facturar por partes»): la etiqueta en `C.t2`. En
+  `C.t3` sobre el tinte daba 4.3:1.
+- **La prueba tratando de romperlo**: banco nuevo `tests/banco/gen-oc.mjs` (la ventana real, con las variantes de emisor,
+  Corona, Cuadra con traslado, pre-asignar, saldo a favor y una OC sin pendientes) y `tests/romper/oc.mjs`, 55 casos.
+  - **Vuelta 1 contra la ventana de antes: 34 de 39 fallaban**, justo lo de arriba; además, «No, cancelar» no existía (el
+    primer clic ya creaba).
+  - Vuelta 2: 38 de 39. La que fallaba era un supuesto de la prueba (la ficha mide 53 px porque ahora trae dos renglones a
+    propósito), y se corrigió para medir lo que importa: que no esté estirada.
+  - Tercera vuelta, por donde no se diseñó: 16 casos más (doble clic, Esc con la pregunta abierta y mientras guarda, folio
+    repetido, documento vacío, eliminar un documento, pre-asignar, tercero, traslado, una por producto a mano, más de 6
+    órdenes, dividir sólo con teclado, la base que rechaza). 55 de 55.
+  - Corrida doble: contra la ventana de antes, 50 de 55 fallan.
+  - Todas las tandas: 212 de 212.
+
 ## v10.84.41 — «Archivos» vuelve a funcionar, y «huérfano» lo decide la base — 5-oct-2026
 
 Cambio en la base (aplicado el 5-oct, copia en `docs/migrations/v10.84.41_archivos_del_bucket.sql`) y en la pantalla. Lo

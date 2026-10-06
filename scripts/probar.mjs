@@ -24,6 +24,7 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TANDAS = [
   { nombre: "partes", gen: "tests/banco/gen-partes.mjs", romper: "tests/romper/partes.mjs", puerto: 5199 },
   { nombre: "folio", gen: "tests/banco/gen-folio.mjs", romper: "tests/romper/folio.mjs", puerto: 5198 },
+  { nombre: "oc", gen: "tests/banco/gen-oc.mjs", romper: "tests/romper/oc.mjs", puerto: 5195 },
   // sin banco: revisa el código y la base (sólo lectura) para que el contador del CTP no vuelva a inflarse (v10.81.4-6)
   { nombre: "ctp", romper: "tests/romper/ctp.mjs" },
   // sin banco: quién puede escribir con las RPC que no pasaban por pf_puede_escribir() (v10.84.39); cada caso se deshace
