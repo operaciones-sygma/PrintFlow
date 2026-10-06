@@ -12,6 +12,51 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.43 — «Folio por OC», segunda pasada de la critique (30 → 35/40) — 6-oct-2026
+
+La segunda `/impeccable critique` dio 30/40 (era 20). Lo que la separaba de 35:
+
+- **Un solo «seleccionado».** «Tipo» y «Cuántos documentos» iban rellenos (violeta y pizarra) y pesaban lo mismo que «Crear
+  la factura»; el tipo de cada documento en Dividir iba teñido. Ahora todo lo seleccionado va teñido con contorno y la letra
+  en su color, y el único bloque relleno es la acción.
+- **La razón de pre-asignar, arriba.** Es obligatoria y estaba al final, bajo el pliegue a 1366: el pie pedía escribirla y
+  no se veía dónde. Ahora va junto al aviso del bloqueo y sigue ahí al pasar a Dividir.
+- **El aviso del bloqueo dice lo que la base hace**: «La OC queda bloqueada: ya no se le agregan productos ni se le mueven
+  órdenes». Antes decía «hasta completar el ciclo fiscal», pero la base no la desbloquea sola: sólo al cancelar su folio
+  (`release_cancelled_oc_shared_folio`).
+- **Eliminar un documento con pagos capturados pregunta**: cuántos pagos se borran y a qué documento pasan sus órdenes, con
+  el nombre que se ve en ese momento. Y un doble clic en la papelera borra uno: la tarjeta de al lado caía bajo el cursor y
+  el segundo clic la borraba.
+- **Dividir sin repetir.**
+  - «El sistema pone el folio» iba en cada documento; ahora se dice una vez, arriba.
+  - Si no se pudo saber cómo va el folio, el aviso con «Reintentar» también sale en Dividir. Antes cada documento decía
+    «falta confirmar» y para reintentar había que volver a Simple.
+  - «Agregar otra factura» es la celda que sigue en la rejilla (abajo quedaba bajo el pliegue con un documento), y soltar
+    una orden ahí crea un documento con ella.
+- **El documento con el problema se marca**: el que nombra el pie lleva el borde rojo, y un folio escrito dos veces se marca
+  en los dos campos (también en minúsculas).
+- **La pregunta antes de crear**, en Dividir y en «una por producto», es una lista: cada documento con sus productos, el
+  importe alineado a la derecha y el total a quién. Usa el mismo sustantivo que el botón («¿Crear 5 facturas?»; «documentos»
+  si hay de los dos tipos).
+  - `ConfirmModal` (compartido) acepta `detalle`, opcional. Las otras 6 ventanas que lo usan no lo piden y no cambian.
+- **Totales y textos.**
+  - El total de «una por producto» suma el IVA de cada factura, como el motor, y no el IVA de la suma.
+  - El encabezado de Dividir dice «en 5 facturas, con IVA», o «(facturas con IVA, remisiones sin IVA)».
+  - `FolioAutoNote` (compartido) ya no dice «(emisión SYGMA)».
+- **No toca** la base, las RPC, ni lo que se manda al guardar. El diff no tiene un renglón de `db.`, `rpc(`, `supabase`, ni de
+  `onConfirmSimple`/`onConfirmSplit`.
+- **La prueba tratando de romperlo**: `tests/romper/oc.mjs` pasa de 55 a 85 casos, y el banco suma la variante
+  `emisor=falla2` (las dos primeras consultas fallan, para probar «Reintentar» en Dividir).
+  - Vuelta 1 contra lo subido: 14 de 15 fallaban.
+  - Vuelta 2: 69 de 70. La celda «Agregar» se estiraba al alto del documento y su texto quedaba bajo el pliegue.
+  - Vuelta 3, por donde no se diseñó (11 casos), con dos fallas:
+    - una real: al eliminar Factura 1, decía que su orden pasaba «a Factura 1»;
+    - una de la prueba: arrastraba tomando la ficha del centro, donde está «Mover a…» y un clic abre la lista; una persona
+      la toma del número, y así funciona.
+  - Vuelta 4 (4 casos): el doble clic en la papelera borraba dos documentos.
+  - Corrida doble: contra v10.84.42 fallan 27 de los 30 nuevos; los 55 de antes pasan en las dos.
+  - Tercera critique: 35/40, sin P0, P1 ni P2.
+
 ## v10.84.42 — «Folio por OC»: la critique (20/40) y la prueba tratando de romperlo — 6-oct-2026
 
 `/impeccable critique` a «Folio por OC» (AssignOCFolioModal): 20/40, el reporte en `.impeccable/critique/`. Se quedó atrás
