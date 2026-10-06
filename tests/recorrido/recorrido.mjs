@@ -36,7 +36,7 @@ const LECTURAS = new Set(["client_credit_balance", "get_app_config", "get_client
   "get_client_seller_label", "get_folio_emitter_enabled", "get_last_contact_for_client", "get_pantone_by_code", "get_user_session",
   "list_anticipo_clients", "list_consecutive_cobranza_folios", "list_corona_oc_invoices", "list_linkable_invoices_for_oc",
   "list_linkable_invoices_for_order", "list_linkable_invoices_for_split", "list_stock_clients", "load_credit_ledger",
-  "oc_shared_folio_is_cancelled", "ordenes_saldo_consumido", "order_folio_is_cancelled", "resolve_client_for_order",
+  "oc_shared_folio_is_cancelled", "ordenes_saldo_consumido", "order_folio_is_cancelled", "pf_archivos_del_bucket", "resolve_client_for_order",
   "search_clients_typeahead", "search_pantone", "sugerencia_folios", "validate_production_number"]);
 
 // Las vistas del menú (title del botón sin el conteo). Una vista nueva que no esté aquí sale en el reporte como «sin recorrer».
@@ -51,9 +51,18 @@ const NO_VISTAS = ["Notificaciones", "Exportar CSV", "Ver detalle"];   // botone
 //  · el registro del «Buenos días» (log_wakeup_ack): lo provoca el propio recorrido al escribir «SI ENTIENDO»
 const ESCRITURA_CONOCIDA = (rol, c) => c === "POST rpc/log_wakeup_ack"
   || (rol === "admin" && /^(POST|PUT|DELETE) \/storage\/v1\/object\/order-files|^PATCH orders$|^POST notifications$/.test(c));
-// Errores que ya se conocen y no son del cambio que se prueba (cada uno con su porqué):
+// Errores que ya se conocen y no son del cambio que se prueba (cada uno con su porqué y SÓLO en su paso):
 //  · la app pregunta por el emisor ANTES de entrar, sin sesión, y la base contesta 401 (existía antes del 5-oct; inofensivo)
-const CONOCIDOS = [/^HTTP 401 POST \/rest\/v1\/rpc\/get_folio_emitter_enabled$/, /^consola: Failed to load resource: the server responded with a status of 401/];
+//  · «Archivos»: la base ve a la cuenta de pruebas como visor y pf_archivos_del_bucket sólo es de admin, preprensa y german
+//    (v10.84.41): contesta 403 y la pantalla dice «Error», que es lo correcto. La lista de verdad la prueban
+//    tests/romper/archivos.mjs (en la base, como german/noemi/admin) y archivos-pantalla.mjs (la pantalla, en su banco).
+const CONOCIDOS = [
+  { vista: "entrar", rx: /^HTTP 401 POST \/rest\/v1\/rpc\/get_folio_emitter_enabled$/ },
+  { vista: "entrar", rx: /^consola: Failed to load resource: the server responded with a status of 401/ },
+  { vista: "Archivos", rx: /^HTTP 403 POST \/rest\/v1\/rpc\/pf_archivos_del_bucket$/ },
+  { vista: "Archivos", rx: /^consola: Failed to load resource: the server responded with a status of 403/ },
+  { vista: "Archivos", rx: /^consola: \[StorageTab list\]/ },
+];
 
 function candado(ctx, rol, reg) {
   return ctx.route("**/*", async route => {
@@ -200,7 +209,7 @@ try {
   if (servidor) await new Promise(r => servidor.httpServer.close(r));
 }
 
-for (const f of todas) f.errores = f.errores.filter(e => !(f.vista === "entrar" && CONOCIDOS.some(rx => rx.test(e))));
+for (const f of todas) f.errores = f.errores.filter(e => !CONOCIDOS.some(c => c.vista === f.vista && c.rx.test(e)));
 const malas = todas.filter(f => f.errores.length);
 const lentas = todas.filter(f => f.ms > 5000);
 const lineas = [`recorrido: ${ROLES.length} roles, ${todas.length} pasos en ${Math.round((performance.now() - t0) / 1000)} s · ${base}`];

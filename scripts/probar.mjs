@@ -30,6 +30,9 @@ const TANDAS = [
   { nombre: "permisos", romper: "tests/romper/permisos.mjs" },
   // sin banco: cómo se firman las fotos (el código vivo de App.jsx contra un Storage simulado que cuenta peticiones)
   { nombre: "firmas", romper: "tests/romper/firmas.mjs" },
+  // «Archivos»: la lista y los huérfanos que decide la base (sin banco), y los botones que borran (con banco)
+  { nombre: "archivos", romper: "tests/romper/archivos.mjs" },
+  { nombre: "archivos-pantalla", gen: "tests/banco/gen-archivos.mjs", romper: "tests/romper/archivos-pantalla.mjs", puerto: 5197 },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 

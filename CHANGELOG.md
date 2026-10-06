@@ -12,6 +12,41 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.41 — «Archivos» vuelve a funcionar, y «huérfano» lo decide la base — 5-oct-2026
+
+Cambio en la base (aplicado el 5-oct, copia en `docs/migrations/v10.84.41_archivos_del_bucket.sql`) y en la pantalla. Lo
+encontró el recorrido (v10.84.36): «Archivos» (preprensa, german, y admin desde Analytics) listaba el bucket con
+`storage.list` y la raíz contestaba **544 DatabaseTimeout a los 30 s, siempre**; después venían 663 listas más, una por carpeta.
+
+- **`public.pf_archivos_del_bucket()`:** los 759 archivos en UNA consulta (ruta, tamaño, cuándo se subió) y si alguna orden
+  lo usa. Sólo para admin, preprensa y german.
+- ⚠ **Arreglar el listado volvía a armar «Limpiar huérfanos»**, que borra sin deshacer. Por eso «huérfano» lo decide la base:
+  - contra **todas** las órdenes, no sólo las que cargó la pantalla, en sus tres columnas y con la ruta decodificada;
+  - **lo de menos de un día nunca es huérfano**: es la foto de una orden que alguien está capturando (se sube antes de
+    guardar la orden), y la limpieza se la habría llevado;
+  - la pantalla ofrece como huérfano sólo lo que la base marca con un `false` explícito y que tampoco usa lo cargado. Si
+    el dato no viene, nada es huérfano (con `=== true`, una función cambiada mañana habría vuelto todo borrable: lo cazó la
+    tercera vuelta).
+  - Medido: 20 huérfanos de verdad (4.9 MB; 15 de «replica», 3 subidas de órdenes que no se guardaron), ninguno de los
+    últimos días. Las rutas también aparecen en `order_change_log`, pero eso es historial, no una referencia viva.
+- **Los botones que borran ya miran lo que contestó Storage** (supabase-js no lanza; Storage contesta 200 sin borrar nada
+  si no puede):
+  - **Bug de antes, confirmado en la vuelta 1:** si Storage fallaba al borrar el archivo de una orden, **la orden se
+    quedaba sin su archivo**, que seguía en el bucket. Ahora un error de Storage detiene ese archivo.
+  - La limpieza de +30 días avisa cuántos no se pudieron borrar (antes los contaba como borrados).
+  - «Limpiar Todos» cuenta sólo lo que Storage borró.
+  - En el Top 5, un archivo que usa una orden no cargada ya no se borra (habría dejado a esa orden apuntando a la nada).
+- **Error no es vacío:** si la lista no se puede leer, el medidor dice «No se pudo leer» en rojo, con «Reintentar», y las
+  tarjetas «—»; antes, «Error» en el verde de la barra vacía y «0 · 0 B».
+- **Pruebas:**
+  - `tests/romper/archivos.mjs` (12, en la base, cada caso como una persona real y deshecho): la lista completa, los permisos,
+    y los huérfanos recalculados aparte uno por uno. Vuelta 1: 12 de 12 fallaban (no existía); ensayo y aplicada, 12 de 12.
+  - `tests/romper/archivos-pantalla.mjs` (12, banco nuevo `tests/banco/gen-archivos.mjs`, con Storage y la tabla de órdenes
+    simulados para probar los botones que borran). Vuelta 1 contra la pantalla de antes: 8 de 10 fallaban; hoy 12 de 12.
+  - El recorrido: «Archivos» contesta en 0.6 s (antes, 30 s y 544). Como la cuenta de pruebas es `visor`, la base no le
+    enseña el bucket y la pantalla dice «No se pudo leer», que es lo correcto; `pf_archivos_del_bucket` entra a su lista de
+    lecturas (es STABLE).
+
 ## v10.84.40 — Las fotos se firman por lotes: «Todas» pasa de ~580 peticiones a 17 — 5-oct-2026
 
 Lo encontró el recorrido (v10.84.36): cada foto pedía su propia firma a Storage, y abrir «Todas» eran ~570 POST cada vez,

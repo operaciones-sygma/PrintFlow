@@ -13466,31 +13466,16 @@ function StorageTab({orders,onReload}) {
     (async()=>{
       setLoadingSize(true);setListError(false);
       try{
-        // v10.34.4 fix #8 — paginar el list de raíz (evita truncado silencioso a 1000 folders)
-        let data=[];let offset=0;const pageSize=1000;
-        while(true){
-          // v10.84.36 (recorrido) — supabase-js NO lanza: el error se ignoraba y la pantalla decía «0 MB usados». Hoy la raíz
-          //   con limit 1000 contesta 544 DatabaseTimeout a los 30 s (5-oct, 663 carpetas: el listado de Storage con la policy
-          //   por renglón crece más que lineal; 200 = 8.6 s). Lanzar lleva al catch → «Error», que es la verdad.
-          const {data:page,error:listErr}=await supabase.storage.from("order-files").list("",{limit:pageSize,offset});
-          if(listErr)throw listErr;
-          if(!page||page.length===0)break;
-          data=data.concat(page);
-          if(page.length<pageSize)break;
-          offset+=pageSize;if(offset>50000)break; // safety
-        }
-        const rootFiles=data.filter(x=>x.id).map(x=>({path:x.name,name:x.name,folder:"",size:x.metadata?.size||0,created_at:x.created_at}));
-        const folders=data.filter(x=>!x.id);
-        const all=[...rootFiles];
-        const BATCH=16; // concurrencia: 16 list() en paralelo por lote (antes: 1 a la vez)
-        for(let i=0;i<folders.length;i+=BATCH){
-          if(!alive)return;
-          const chunk=folders.slice(i,i+BATCH);
-          const res=await Promise.all(chunk.map(folder=>
-            supabase.storage.from("order-files").list(folder.name,{limit:100}).then(r=>({folder,files:r.data})).catch(()=>({folder,files:null}))
-          ));
-          for(const {folder,files} of res){ if(files)files.forEach(fl=>all.push({path:folder.name+"/"+fl.name,name:fl.name,folder:folder.name,size:fl.metadata?.size||0,created_at:fl.created_at})); }
-        }
+        // v10.84.41 — UNA consulta (public.pf_archivos_del_bucket) en vez de storage.list(): la raíz con limit 1000
+        //   contestaba 544 DatabaseTimeout a los 30 s, siempre (663 carpetas; el listado de Storage con la policy por
+        //   renglón crece más que lineal), y después venían 663 list() más, uno por carpeta. Además la base dice si una
+        //   orden usa cada archivo, contra TODAS las órdenes (no sólo las que cargó esta pantalla), y lo de menos de un
+        //   día cuenta como usado (la foto de una orden que alguien está capturando). supabase-js no lanza: se mira error.
+        const {data,error}=await supabase.rpc("pf_archivos_del_bucket");
+        if(error)throw error;
+        // referenciado: sólo un `false` EXPLÍCITO de la base hace huérfano; si el dato no viene, cuenta como usado (lo que
+        //   falla tiene que fallar hacia NO borrar: con `=== true`, una función cambiada mañana volvería todo «huérfano»).
+        const all=(data||[]).map(f=>{const i=f.ruta.lastIndexOf("/");return {path:f.ruta,name:i>=0?f.ruta.slice(i+1):f.ruta,folder:i>=0?f.ruta.slice(0,i):"",size:Number(f.tamano)||0,created_at:f.creado,referenciado:f.referenciado!==false};});
         if(alive)setRawFiles(all);
       }catch(err){ console.error("[StorageTab list]",err); if(alive){setListError(true);setRawFiles(null);setStorageUsed(null);} }
       if(alive)setLoadingSize(false);
@@ -13513,20 +13498,31 @@ function StorageTab({orders,onReload}) {
       totalBytes+=f.size;
       if(prodRefPaths.has(f.path)){bd.prod.count++;bd.prod.bytes+=f.size}
       else if(imgRefPaths.has(f.path)){bd.img.count++;bd.img.bytes+=f.size}
-      else orphanList.push(f); // ni en file_url ni en image_url/image_url_2 → huérfano
+      // ni en file_url ni en image_url/image_url_2 de lo cargado, Y la base dice que ninguna orden lo usa (v10.84.41):
+      // las dos tienen que estar de acuerdo para ofrecerlo como huérfano.
+      else if(f.referenciado===false)orphanList.push(f);
     });
     setStorageUsed(Math.round(totalBytes/1024/1024*10)/10);
     setBreakdown(bd);setOrphans(orphanList);
-    const top=[...rawFiles].sort((a,b)=>b.size-a.size).slice(0,5).map(f=>({...f,order:orderByPath[f.path]||null,isOrphan:!prodRefPaths.has(f.path)&&!imgRefPaths.has(f.path),isImage:imgRefPaths.has(f.path)}));
+    const top=[...rawFiles].sort((a,b)=>b.size-a.size).slice(0,5).map(f=>({...f,order:orderByPath[f.path]||null,isOrphan:!prodRefPaths.has(f.path)&&!imgRefPaths.has(f.path)&&f.referenciado===false,isImage:imgRefPaths.has(f.path)}));
     setTopFiles(top);
   },[rawFiles,orders]);
 
   const usedPct=storageUsed!==null?Math.min((storageUsed/maxStorage)*100,100):0;
   const barColor=usedPct>=90?"#ff3b30":usedPct>=70?C.amb:C.live;
 
-  const cleanup=async()=>{if(!confirm("¿Borrar archivos de órdenes con más de 30 días? ("+oldFiles.length+" archivos)\n\nEsta acción no se puede deshacer."))return;setCleaning(true);let c=0;for(const o of oldFiles){try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);c++}catch{}}setCleaned(c);setCleaning(false);if(c>0&&onReload)onReload()};
+  // v10.84.41 — supabase-js NO lanza: antes se contaba como borrado aunque Storage o la orden contestaran con error, y si
+  //   el archivo no se borraba se quitaba igual la referencia de la orden (el archivo se quedaba huérfano). Ahora un error
+  //   de Storage detiene ese archivo; si Storage no encontró el archivo (ya no estaba), sí se limpia la referencia.
+  const borrarArchivoDeOrden=async(o)=>{
+    const path=o.file_url.split("/order-files/")[1];
+    if(path){const {error:rmErr}=await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);if(rmErr)throw rmErr;}
+    const {error:upErr}=await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);
+    if(upErr)throw upErr;
+  };
+  const cleanup=async()=>{if(!confirm("¿Borrar archivos de órdenes con más de 30 días? ("+oldFiles.length+" archivos)\n\nEsta acción no se puede deshacer."))return;setCleaning(true);let c=0,f=0;for(const o of oldFiles){try{await borrarArchivoDeOrden(o);c++}catch(e){f++;console.error("[cleanup]",o.id,e)}}setCleaned(c);setCleaning(false);if(f>0)alert("Se borraron "+c+" de "+oldFiles.length+"; "+f+" no se pudieron borrar (ver la consola).");if(c>0&&onReload)onReload()};
 
-  const deleteOne=async(o)=>{if(!confirm("¿Borrar archivo de "+o.client+"?\n"+o.file_name))return;setDeleting(o.id);try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);if(onReload)onReload()}catch{alert("Error al borrar")}setDeleting(null)};
+  const deleteOne=async(o)=>{if(!confirm("¿Borrar archivo de "+o.client+"?\n"+o.file_name))return;setDeleting(o.id);try{await borrarArchivoDeOrden(o);if(onReload)onReload()}catch(e){alert("Error al borrar: "+(e?.message||e))}setDeleting(null)};
 
   // v10.18.0 — Limpiar archivos huérfanos (sin referencia en orders.file_url ni orders.image_url)
   const cleanupOrphans=async()=>{
@@ -13552,7 +13548,8 @@ function StorageTab({orders,onReload}) {
     setCleaningOrphans(true);
     let c=0;
     for(const f of orphans){
-      try{await supabase.storage.from("order-files").remove([f.path]);c++}catch(e){console.error("[cleanupOrphans]",f.path,e)}
+      // v10.84.41 — cuenta sólo lo que Storage dice que borró (sin permiso o sin archivo contesta 200 con la lista vacía)
+      try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(rm&&rm.length)c++;}catch(e){console.error("[cleanupOrphans]",f.path,e)}
     }
     setCleaningOrphans(false);
     setRefreshKey(k=>k+1);
@@ -13562,16 +13559,20 @@ function StorageTab({orders,onReload}) {
   // v10.18.0 — Borrar un archivo huérfano individual
   const deleteOrphan=async(f)=>{
     if(!confirm("¿Borrar archivo huérfano?\n"+f.path+" ("+fmtBytes(f.size)+")"))return;
-    try{await supabase.storage.from("order-files").remove([f.path]);setRefreshKey(k=>k+1)}catch(e){alert("Error al borrar: "+e.message)}
+    try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(!rm||!rm.length)throw new Error("Storage no lo borró (ya no estaba, o falta permiso)");setRefreshKey(k=>k+1)}catch(e){alert("Error al borrar: "+(e?.message||e))}
   };
 
   // v10.18.0 — Borrar un archivo del Top 5 (puede ser archivo de producción, imagen o huérfano)
   const deleteTopFile=async(f)=>{
     if(f.isOrphan){return deleteOrphan(f)}
+    // v10.84.41 — la base dice que una orden lo usa pero esa orden no está cargada aquí: borrarlo dejaría a la orden
+    //   apuntando a un archivo que ya no existe, sin poder limpiar su referencia. No se ofrece.
+    if(!f.order){alert("Este archivo lo usa una orden que no está cargada en esta pantalla. Recarga antes de borrarlo.");return}
     const label=f.isImage?"imagen":"archivo";
     if(!confirm("¿Borrar "+label+" de "+(f.order?.client||"orden")+"?\n"+f.name+" ("+fmtBytes(f.size)+")"))return;
     try{
-      await supabase.storage.from("order-files").remove([f.path]);
+      const {error:rmErr}=await supabase.storage.from("order-files").remove([f.path]);
+      if(rmErr)throw rmErr;
       if(f.order){
         // v10.72.71 — al borrar una imagen del Top-5, distinguir image_url vs image_url_2 por el path (antes
         // siempre nulaba image_url → si la borrada era la 2a imagen, dejaba image_url_2 colgando a un archivo borrado).
@@ -13580,7 +13581,8 @@ function StorageTab({orders,onReload}) {
           const pathOf=u=>{const s=(u||"").split("/order-files/")[1];return s?decodeURIComponent(s):null};
           upd = pathOf(f.order.image_url_2)===f.path ? {image_url_2:null} : {image_url:null};
         } else { upd={file_url:null,file_name:null}; }
-        await supabase.from("orders").update(upd).eq("id",f.order.id);
+        const {error:upErr}=await supabase.from("orders").update(upd).eq("id",f.order.id);
+        if(upErr)throw upErr;
       }
       setRefreshKey(k=>k+1);
       if(onReload)onReload();
@@ -13594,13 +13596,14 @@ function StorageTab({orders,onReload}) {
     <div style={{background:C.sf,borderRadius:14,padding:20,marginBottom:16}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:700}}><FloppyDiskIcon size={14} weight="bold"/>Almacenamiento Supabase</div>
-        <div style={{fontSize:12,fontWeight:700,color:barColor}}>{listError?"Error":((loadingSize||storageUsed===null)?<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Calculando...</>:(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"))}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
+        {/* v10.84.41 — «Error» en rojo de texto (antes salía en el verde de la barra vacía: parecía que todo estaba bien) */}
+        <div style={{fontSize:12,fontWeight:700,color:listError?C.dnInk:barColor}}>{listError?"No se pudo leer":((loadingSize||storageUsed===null)?<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Calculando...</>:(storageUsed>=1024?(storageUsed/1024).toFixed(2)+" GB":storageUsed+" MB"))}<span style={{color:C.t3,fontWeight:400}}> / {maxStorage>=1024?(maxStorage/1024).toFixed(0)+" GB":maxStorage+" MB"}</span></div>
       </div>
       <div style={{background:C.bg,borderRadius:8,height:20,overflow:"hidden",border:"0.5px solid "+C.bd}}>
         <div style={{width:usedPct+"%",height:"100%",background:barColor,borderRadius:8,transition:"width .8s ease",minWidth:usedPct>0?"8px":"0"}}/>
       </div>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-        <span style={{fontSize:9,color:C.t3}}>{usedPct.toFixed(1)}% usado</span>
+        {listError?<button onClick={()=>setRefreshKey(k=>k+1)} style={{fontSize:10,fontWeight:700,color:C.ac,background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>Reintentar</button>:<span style={{fontSize:9,color:C.t3}}>{usedPct.toFixed(1)}% usado</span>}
         <span style={{fontSize:9,color:C.t3}}>{storageUsed!==null?(maxStorage-storageUsed>=1024?((maxStorage-storageUsed)/1024).toFixed(1)+" GB libres":(maxStorage-storageUsed).toFixed(1)+" MB libres"):"—"}</span>
       </div>
       {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{usedPct>=90?<><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Almacenamiento casi lleno — limpia archivos antiguos</>:<><LightningIcon size={13} weight="fill" style={{flexShrink:0}}/>Más del 70% usado — considera limpiar archivos antiguos</>}</div>}
@@ -13610,12 +13613,12 @@ function StorageTab({orders,onReload}) {
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
       <div style={{flex:"1 1 200px",minWidth:180,background:C.ac+"08",border:"1px solid "+C.ac+"20",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.ac,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={11} weight="bold"/>Archivos Producción</div>
-        <div style={{fontSize:20,fontWeight:800,color:C.ac}}>{breakdown.prod.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.prod.bytes)}</span></div>
+        <div style={{fontSize:20,fontWeight:800,color:C.ac}}>{listError?"—":<>{breakdown.prod.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.prod.bytes)}</span></>}</div>
         <div style={{fontSize:9,color:C.t3,marginTop:2}}>PDF, AI, PSD para imprenta</div>
       </div>
       <div style={{flex:"1 1 200px",minWidth:180,background:C.dsn+"08",border:"1px solid "+C.dsn+"20",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.dsn,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><CameraIcon size={11} weight="bold"/>Imágenes Referencia</div>
-        <div style={{fontSize:20,fontWeight:800,color:C.dsn}}>{breakdown.img.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.img.bytes)}</span></div>
+        <div style={{fontSize:20,fontWeight:800,color:C.dsn}}>{listError?"—":<>{breakdown.img.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.img.bytes)}</span></>}</div>
         <div style={{fontSize:9,color:C.t3,marginTop:2}}>Se conservan siempre · se comprimen tras 30 días</div>
       </div>
     </div>
