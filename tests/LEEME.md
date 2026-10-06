@@ -31,7 +31,7 @@ cada subida y no deja subir si algo falla (un push de puros documentos pasa dire
 |---|---|---|---|
 | partes | `gen-partes.mjs` | `partes.mjs` (50) | Facturar por partes, Facturar siguiente parte, Cancelar la parte |
 | folio | `gen-folio.mjs` | `folio.mjs` (44) | Asignar folio y entregar, Folio anticipado, el selector de pagos |
-| ctp | (sin banco) | `ctp.mjs` (11) | que el contador de placas del CTP no vuelva a inflarse: el código lee las vistas que deduplican y la base las mantiene (necesita `SUPABASE_ACCESS_TOKEN`; `--sabotajes` prueba que cada revisión se pone en rojo) |
+| ctp | (sin banco) | `ctp.mjs` (16) | que el contador de placas del CTP, y lo que enseña la pantalla CTP de SygmaAlmacen, no vuelvan a inflarse: el código lee las vistas que deduplican, y en la base sólo ellas leen el crudo y lo demás cuadra contra ellas (necesita `SUPABASE_ACCESS_TOKEN`; `--sabotajes` prueba que cada revisión se pone en rojo) |
 
 **Cómo funciona un banco.** PrintFlow no tiene (todavía) cuenta de pruebas, así que el generador EXTRAE de `src/App.jsx` los
 componentes de la pantalla con sus dependencias reales (tokens, estilos, escStack, `atraparTab`, ConfirmModal…), les pone una

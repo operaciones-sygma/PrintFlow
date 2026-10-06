@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.38 — Las vistas del CTP de SygmaAlmacen dejan de contar repetidos — 5-oct-2026
+
+Sin cambios en la app; cambio en la base (aplicado el 5-oct, copia en `docs/migrations/v10.84.38_vistas_ctp_sin_repetidos.sql`).
+Marcelo: *«sí, corrígelas»*. Lo encontrado al revisar el contador (v10.84.37): tres cosas que lee la pantalla CTP de
+SygmaAlmacen seguían contando lo crudo del colector.
+
+- **Antes → después** (medido como la cuenta de pruebas, por la RLS):
+  - placas por día (`v_ctp_placas_dia`): 282 placas en 30 días → **259**, que son las reales. Ahora agrupa por día de
+    México: lo expuesto después de las 18:00 caía en el día siguiente.
+  - errores por código (`v_ctp_errores_top`): 1,076 «veces» en 120 días → **839**, los eventos distintos.
+  - errores de hoy y de la semana del resumen (`v_ctp_resumen`): se cuenta cada evento una vez.
+  - **la pantalla consultaba ~14 s → 0.2 s** (13.9 s con la caché caliente): la policy de lectura de las tres tablas del
+    colector corría `es_empleado()` una vez por renglón. Ahora es `(SELECT almacen.es_empleado())`, una vez por consulta;
+    mismo resultado.
+- **`almacen.v_ctp_errores`, nueva:** un renglón por evento del equipo (equipo, código, momento), como `v_ctp_placas` lo es por
+  placa. Medido: un evento llega una vez (FE o SE) o dos (FE y SE, mismo texto); nunca más. Desde aquí, **las tablas crudas
+  sólo las leen las tres vistas que deduplican**.
+- **`tests/romper/ctp.mjs` pasa de 11 a 16 revisiones**, y cada una corre en su propia consulta (una vista que no existe ya no
+  tumba a las demás). Las nuevas: `v_ctp_errores` sin repetidos y sin perder eventos, placas por día que cuadran día por día,
+  errores por código que cuadran, los errores del resumen, el crudo sólo en las vistas que deduplican, y la policy una vez
+  por consulta. **Vuelta 1 contra la base de antes: 6 fallaban** (justo el problema). Después de aplicar, 16 de 16, y los 10
+  sabotajes se ponen en rojo.
+- **Cómo se probó:** ensayo con vuelta atrás (la migración real dentro de una transacción que se deshace, midiendo como la
+  cuenta de pruebas); las tres consultas exactas de `sygma-almacen/src/views/CTP.jsx` por PostgREST (0.2-0.3 s, mismas
+  columnas; sin sesión, 401); y la pantalla CTP de SygmaAlmacen abierta en local con Playwright, con las escrituras cortadas:
+  pinta en 0.8 s, sin errores.
+- **Visto de paso, sin tocar:** en la gráfica de placas por día de SygmaAlmacen, el número de la barra más alta se corta
+  (el contenedor mide 130 px y la barra llega a 118 más las etiquetas).
+
 ## v10.84.37 — El contador del CTP entra al candado — 5-oct-2026
 
 Sin cambios en la app. Marcelo: *«sobre el contador de CTP de German… se inflaba el contador… solo quiero ver que no hagamos
