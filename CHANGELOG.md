@@ -12,6 +12,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.34 — «Asignar folio», la critique (24/40) y la prueba tratando de romperlo — 5-oct-2026
+
+`/impeccable critique` a «Asignar folio y entregar» (InvoiceModal), «Folio anticipado» (PreInvoiceModal) y el selector de
+pagos que comparten (MultiPaymentPicker): 24/40, el reporte en `.impeccable/critique/`. Después, la prueba tratando de
+romperlo: 44 casos en el banco. Contra el código anterior fallan 30 (casi todos, lo que aquí se arregló; el resto, textos que
+cambiaron) y pasan 14 (lo que ya funcionaba). Con esta versión, 44 de 44.
+
+**Cuánto.** Ningún paso decía el importe: sólo aparecía dentro del selector de pagos al elegir Parcial o Pagada, y con «No
+pagada» nunca. Ahora el encabezado dice el total (con IVA en factura, sin IVA en remisión) y la vista previa dice «Factura
+por $66,004.00 con IVA a PORTLAND STUDIO». El folio anticipado enseñaba `order.price` sin decir que era sin IVA, y en
+maquila (que guarda `maq_price`) no enseñaba nada. Sin precio capturado, lo dice.
+
+**Lo capturado ya no se pierde.** El clic fuera cerraba con los pagos capturados, y Esc también. Ahora el clic fuera no
+cierra si hay algo capturado, y Esc pregunta «¿Cerrar sin asignar el folio?». Al revisar el código salió otro:
+**«Aplicar saldo» (Corona) y «Sin factura · Stock» (Cuadra) borraban los pagos capturados sin preguntar**; sólo Factura y
+Remisión preguntaban. Ahora los cuatro tipos pasan por la misma puerta, con ConfirmModal, y un tercero a medio capturar
+también cuenta como trabajo.
+
+**Contraste.** Los botones de remisión eran blanco sobre verde claro (2.3:1) y los del folio anticipado, blanco sobre
+naranja (2.2:1). Ahora van en verde y ámbar oscuros (`C.okInk`, `C.wnInk`, 5:1). También quedan en tinta la etiqueta y el
+folio de remisión, los textos de Corona y Cuadra, los avisos en ámbar (incluido el de que la orden ya no se podrá cancelar)
+y los del selector de pagos.
+
+**El emisor que falla.** `getFolioEmitterEnabled` devolvía «apagado» si la lectura fallaba. El modal pedía entonces el
+folio a mano, sólo con la serie de Alpha (D-/R-), y rechazaba la sugerencia F-137 que él mismo ofrecía. Ahora devuelve
+`null` en un error (los demás lo leen igual que antes) y los dos modales dicen «No se pudo confirmar si el folio lo asigna
+el sistema», con «Reintentar» y sin dejar seguir. En modo manual aceptan F-/RS- y D-/R-, como «Facturar por partes».
+
+**Diálogos y palabras.** Los `alert`/`confirm` del navegador (folio menor, cambiar de tipo, Cuadra que cambió, tercero
+incompleto) pasan a ConfirmModal o a un aviso dentro del modal. Salen «stage», «billing_mode='stock'», el Title Case,
+«🔢 Folio automático», «→ Usar», las rayas largas y «Solo Marcelo» (ahora «un administrador»). En el flujo de entregar, si
+se dice que no a ligar la factura hecha por adelantado, el aviso decía «Folio anticipado cancelado»; ahora dice «No se
+asignó el folio».
+
+**Menores.** «Volver» en vez de «Cancelar». El foco entra al abrir y Tab no se sale (`atraparTab`). El pie con los botones
+queda fijo: con dos pagos, «Continuar» quedaba debajo del pliegue en la laptop. Sin «Datos completos.». Los colores escritos
+a mano del selector pasan a tokens. Con el emisor, la tarjeta del tipo dice «siguiente», no «sugerido».
+
+Probado en el banco de folio (`claude-navegador/banco-printflow/`: `gen-banco-folio.mjs`, `romper-folio.mjs`; BillToSection
+y StageLbl simulados), a 1366×768. Lo que se intentó y aguantó: «Pagada» que no cuadra, «Parcial» que cubre todo, «Otro» sin
+motivo, «Atrás» conserva lo capturado, Corona en negativo, Cuadra de punta a punta, Esc dentro de un campo, Esc y clic fuera
+mientras guarda, doble clic en Confirmar, la base que rechaza, cliente lento, tercero a medias. `npm run build`,
+`probar-alcance.sh` y `probar-cuadrar-partes.mjs` (26) en verde. Sólo front.
+
 ## v10.84.33 — «Facturar por partes», probado tratando de romperlo: 8 fallas arregladas — 5-oct-2026
 
 Marcelo: *«siempre que implementemos algo hagas pruebas como usuario limit testing, tratando de romper cosas»*. Una prueba
