@@ -12,6 +12,54 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.32 — «Facturar por partes», la critique (25/40): un Esc ya no se lleva el plan — 5-oct-2026
+
+Primera pasada de diseño (`/impeccable critique`) a lo que entró nuevo desde la v10.84: «Facturar por partes», «Facturar
+siguiente parte» y «Cancelar la parte». Calificación 25/40; el reporte, en `.impeccable/critique/`.
+
+**El que mordía: un Esc se llevaba el plan.** Al crear las partes, si un folio ya existe en cobranza sale «Folio ya existe
+en cobranza» encima del modal, para no perder la captura (v10.84.6). Pero el modal de partes escuchaba Escape por su
+cuenta en `window`, además del escStack de la app: un Esc cerraba la pregunta **y** el modal, con sus 4-6 partes y
+folios. Reproducido en un banco con el código anterior (`split:intento | conf:cerrado | split:cerrado`). Ahora los tres
+modales cierran por el escStack (sólo el de arriba), el clic fuera ya no cierra si hay algo capturado, son diálogos con
+nombre (`role="dialog"`, `aria-labelledby`) y el foco entra al abrir (en «Cancelar la parte», en «Volver»). El
+`ConfirmModal` de toda la app enfoca «No, cancelar»; antes el foco se quedaba en el botón que lo abrió, detrás del velo.
+
+**Los `window.confirm`, al sistema.** Quitar partes con datos, «El resto, después» sobre una parte capturada y ligar una
+factura en «Siguiente parte» preguntan con `ConfirmModal`, con las mismas cifras. El de quitar partes vivía dentro del
+updater de `setSplits`.
+
+**El dinero en tinta.** El semáforo, «Quedarán $X», «facturada completa», los avisos y, en la ficha, «faltan $» y «resto
+por facturar» iban en el color pleno del semáforo como texto (2.2 a 4.3:1; AA pide 4.5). Tokens nuevos `C.wnInk`,
+`C.dnInk`, `C.okInk` y `C.emrInk` (4.9 a 6.4:1); el pleno se queda en ícono, borde y tinte.
+
+**Las palabras de Karla, y la serie de hoy.** Salen de pantalla «v10.58.34… splits… stage», «Prefix no coincide con
+tipo», «sin leading zeros» y «corona_saldo». El tipo decía «Factura D-» / «Remisión R-» (la serie de Alpha) y el error de
+formato pedía «D-NNNN o R-NNNN»: ahora «Factura», «Remisión», «Después (el resto)» y «Saldo Corona», y la serie sólo en la
+columna Folio. «N facturas» es «Partes» (cuenta también el resto). Lo que falta para crear va en un renglón junto al
+botón; antes eran dos avisos arriba y la misma lista en jerga debajo.
+
+**El split, más corto.** Una línea de introducción (eran cuatro, con emojis de botones); sin la frase del modo de captura
+ni la nota del folio automático (cada fila dice «se asigna solo»); los folios anticipados detrás de un enlace (abierto si
+ya se marcaron); y el pie con los botones queda fijo: en la laptop (1366×768) «Crear» quedaba debajo del pliegue. En el
+banco, con un plan de dos partes, a 1366×768 se ven la tabla, el semáforo, «Cuadrar» y el botón sin scroll.
+
+**Cancelar la parte.** Primero qué pasa con el dinero y después el porqué. Si es la única parte que queda, «se cancela
+completa» va en rojo en su opción y el botón dice «Cancelar la parte y la orden» (antes, 10px gris y el botón igual). La
+excepción de CobranzaFlow (timbrada, o de Alpha) pasa a una nota al pie.
+
+**Un nombre para ligar.** El enlace se llama «Ya tiene factura: ligarla» en los dos modales («Siguiente parte» tenía una
+caja con casilla siempre visible; ahora es un enlace que la abre). El aviso de anticipos (v10.84.31) mandaba a «Esta
+entrega ya tiene factura» dentro de «Facturar por partes», donde el control se llamaba «¿ya existe? ligar».
+
+Menores: íconos del sistema en vez de emojis (⏳ 🔢 📄 📋 💎 ❌), títulos en la escala (15), «Volver» en lugar de
+«Cancelar» en los modales que facturan, sin rayas largas, «cancelar parte» de la ficha con un objetivo más grande, y el
+aviso del folio automático sin el «Ya no se captura a mano» de la transición del 1-sep.
+
+Probado como usuario en un banco (los tres modales extraídos de `App.jsx`, base simulada, Playwright a 1366×768): 18 de 18
+pasos con el código nuevo, y el mismo flujo con el anterior reproduce el error. `npm run build`, `probar-alcance.sh` y
+`probar-cuadrar-partes.mjs` (26) en verde. Sólo front.
+
 ## v10.84.31 — Un anticipo de otro importe también se pregunta antes de asignar folio — 2-oct-2026
 
 El 2-oct Karla le asignó folio anticipado a **P-0544** (DISEÑO EN ESTRUCTURAS DE EXPOSICION, 2,000 tarjetas, $12,000 + IVA)
