@@ -6,7 +6,7 @@
 // Uso: node gen-tablero.mjs <App.jsx> <dirSalida>
 // Variantes por URL:
 //   vista=produccion|german|fichas (por defecto produccion: el Kanban) · rol=produccion|admin|german|karla|… (por defecto
-//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · mant=off_gto (otra en mantenimiento) · buscar=P-0591 (resalta)
+//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · mant=off_gto (otra en mantenimiento) · buscar=P-0591 (resalta) · aviso=success|error|warning|info (el aviso de App)
 // window.__cambiar(id, {…}) cambia una orden con el tablero abierto (como el tiempo real) · window.__ordenes() las devuelve.
 import fs from "node:fs";
 import path from "node:path";
@@ -16,7 +16,7 @@ const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
-const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard", "WasteModal", "MaqModal"];   // (las ventanas de merma y maquila, v10.84.59)
+const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard", "WasteModal", "MaqModal", "Toast"];   // (las ventanas de merma y maquila, v10.84.59; el aviso de App, v10.84.64)
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
 const { codigo, simuladosUsados } = extraer(fuente, RAICES, { simulados: SIMULADOS });
 const partes = [
@@ -127,6 +127,7 @@ function Banco() {
     {ventana?.tipo === "send_maquila" && <MaqModal order={ordenes.find(o => o.id === ventana.id)} providers={[{ name: "MAKILA", phone: "4771234567", email: "" }]} onClose={() => { anotar("ventana cerrada"); setVentana(null); }}
       onSend={async (prov, ph, em, n) => { anotar("maquila " + (ordenes.find(o => o.id === ventana.id)?.production_number) + " a " + prov); await new Promise(r => setTimeout(r, 300)); if (FALLA === "maquila") { anotar("la base rechazó la maquila"); return; } setVentana(null); }} />}
     <pre id="log" style={{ fontSize: 11, color: C.t2 }}>{bitacora.join("\\n")}</pre>
+    {Q.get("aviso") && <Toast message="P-0591 → Printmaster 74, 2º en la fila" type={Q.get("aviso")} onDone={() => {}} />}
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Banco />);`,

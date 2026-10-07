@@ -2841,7 +2841,7 @@ function Toast({message,type="success",onDone,action=null}) {
     const t=setTimeout(()=>cb.current(),dur);
     return ()=>clearTimeout(t);
   },[type, isSecurityLock, action]);
-  const bg={success:C.ok,error:C.dn,warning:C.wn,info:C.ios}[type]||C.ok;
+  const bg=tintaAA({success:C.ok,error:C.dn,warning:C.wn,info:C.ios}[type]||C.ok,4.6);   // v10.84.64 — blanco encima con AA (el verde daba 3.05:1)
   // v10.76.6 — icono Phosphor por tipo (antes emoji ✅/❌/⚠️/ℹ️). El fondo ya viene del mismo `type`, así icono y color van coherentes.
   const TIcon={success:CheckCircleIcon,error:XCircleIcon,warning:WarningIcon,info:InfoIcon}[type]||CheckCircleIcon;
   const cleanMsg=typeof message==="string"?stripToastEmoji(message):message;
@@ -13614,6 +13614,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   // v10.84.62 — ir a una máquina desde la franja: abre su categoría si está plegada, la trae a la vista, la marca 2.5 s y le pasa
   //   el foco (con el teclado, el Tab sigue desde ahí)
   const [maqVista,setMaqVista]=useState(null);const maqVistaT=useRef(null);
+  // v10.84.64 — en pantalla táctil (tableta), los botones chicos del tablero miden 40 px; con mouse, 28 (eran 21)
+  const toque=useMemo(()=>{try{return matchMedia("(pointer: coarse)").matches}catch{return false}},[]);
+  const chico=toque?40:28;
   const irAMaquina=m=>{if(collapsed[m.type])setCollapsed(c=>({...c,[m.type]:false}));
     setMaqVista(m.id);clearTimeout(maqVistaT.current);maqVistaT.current=setTimeout(()=>setMaqVista(null),2500);
     setTimeout(()=>{const el=document.querySelector('[data-maquina="'+m.id+'"]');if(!el)return;
@@ -13874,20 +13877,20 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                     /* v10.73.80 — /impeccable layout: la máquina va NEUTRA. El borde sigue contando el estado
                        (dashed=libre · solid=trabajando · 2px color=soltar aquí · ámbar=mantenimiento), pero el color
                        y la elevación se gastan SOLO en el drop-target: ahí el color quiere decir algo. */
-                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"1a":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+C.bd:"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:isD?"0 4px 14px "+cc[type]+"33":"none",opacity:inMaint&&!hasWork?0.7:1,scrollMarginTop:72,...(maqVista===m.id?{outline:"2px solid "+C.ac,outlineOffset:2}:{})}}>
+                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"1a":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+C.bd:"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:isD?"0 4px 14px "+cc[type]+"33":"none",scrollMarginTop:72,...(maqVista===m.id?{outline:"2px solid "+C.ac,outlineOffset:2}:{})}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
                       <div>
-                        <div style={{fontSize:F.label,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
+                        <div style={{fontSize:F.label,fontWeight:700,color:inMaint?tintaAA(C.wn,7):C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>
                         {/* v10.73.80 — el subtítulo de la máquina era la 6ª repetición del color de categoría. Neutro. */}
-                        <div style={{fontSize:F.micro,color:inMaint?C.wn:C.t2,fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
+                        <div style={{fontSize:F.micro,color:inMaint?tintaAA(C.wn,7):C.t2,fontWeight:500}}>{inMaint?"En mantenimiento":m.sub}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
                         {/* v10.73.81 — aquí vivía el chip "~ETA" de v10.73.79. Se borra: dependía de machineLoad().mins,
                             que suma estimated_hours = NULL en 441/441 órdenes. NUNCA renderizó (su guard era mins>0).
                             El título del chip también era código muerto. No lo revivas sin un input real para el campo. */}
                         {/* v10.73.80 — contador neutro: la categoría ya la dice la sección; aquí el color solo competía con lo ACTIVO. */}
-                        {hasWork?<div style={{background:C.tx,color:C.bg,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body,fontWeight:800}}>{mo.length}</div>
-                        :<div style={{background:C.sf,color:C.ph,width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:F.body}}>—</div>}
+                        {/* v10.84.64 — era un círculo negro con un número (la segunda revisión: «no se explica» y no está en calma) */}
+                        {hasWork&&<span title={(activa?"1 corriendo":"Ninguna corriendo")+(enEspera.length?" · "+enEspera.length+" en la fila":"")} style={{fontSize:F.meta,color:C.t2,fontWeight:600,whiteSpace:"nowrap"}}>{mo.length===1?"1 orden":mo.length+" órdenes"}</span>}
                         {/* v10.73.81 — MANTENIMIENTO: 0 filas en maintenance_log contra ~890 corridas de máquina en
                             60 días. La feature estaba 100% cableada y su adopción era exactamente cero. Dos huecos,
                             y el ORDEN importa:
@@ -13902,8 +13905,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                                 visible para poder arrastrarlo a otra máquina (el drop de entrada ya está bloqueado).
                             Criterio de salida falsable: si en 3 semanas con los gates abiertos sigue en 0 filas, la
                             respuesta era "Gerardo grita y ya" y se BORRA la feature en vez de seguir puliéndola. */}
-                        {(role==="produccion"||role==="admin")&&!inMaint&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:C.wn,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
-                        {inMaint&&(role==="produccion"||role==="admin")&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:C.ok,border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}} aria-label="Quitar mantenimiento de la máquina" title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
+                        {(role==="produccion"||role==="admin")&&!inMaint&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("start",m)}} style={{background:C.wn+"12",color:tintaAA(C.wn,7),border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer",minHeight:chico,minWidth:chico,display:"inline-flex",alignItems:"center",justifyContent:"center"}} aria-label="Poner máquina en mantenimiento" title="Mantenimiento"><WrenchIcon size={11} weight="bold"/></button>}
+                        {inMaint&&(role==="produccion"||role==="admin")&&<button onClick={e=>{e.stopPropagation();onMaintenance&&onMaintenance("end",m,mRec)}} style={{background:C.ok+"12",color:tintaAA(C.ok,7),border:"none",borderRadius:6,padding:"5px 8px",fontSize:10,fontWeight:600,cursor:"pointer",minHeight:chico,minWidth:chico,display:"inline-flex",alignItems:"center",justifyContent:"center"}} aria-label="Quitar mantenimiento de la máquina" title="Quitar mantenimiento"><CheckCircleIcon size={11} weight="bold"/></button>}
                       </div>
                     </div>
                     {/* v10.73.81 — el aviso estaba gateado con `inMaint&&!hasWork`, o sea el estado "máquina muerta
@@ -13917,7 +13920,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                       {hasWork&&<div style={{fontSize:F.meta,color:C.t2,fontWeight:500,marginTop:3}}>El trabajo sigue montado. Arrástralo a otra máquina.</div>}
                     </div>}
                     {inMaint&&!hasWork?null
-                    :mo.length===0?<div style={{textAlign:"center",padding:"12px 0",color:isD?cc[type]:C.ph,fontSize:isD?12:10,fontWeight:isD?600:400,transition:"all .15s"}}>
+                    :mo.length===0?<div style={{textAlign:"center",padding:"12px 0",color:isD?cc[type]:C.t2,fontSize:isD?12:10,fontWeight:isD?600:400,transition:"all .15s"}}>
                       {isD?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Disponible"}
                     </div>
                     :<>
@@ -13936,7 +13939,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
                           {pend[activa.id]?<FilaPendiente p={pend[activa.id]} onDeshacer={()=>deshacerPend(activa.id,pend[activa.id].accion)}/>:<>
-                          <button data-orden={activa.id} data-accion="advance" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"advance","packaging","Pasa a Empaque","pasó a Empaque")} style={{...bs(tintaAA(C.emp,5)),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
+                          <button data-orden={activa.id} data-accion="advance" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"advance","packaging","Pasa a Empaque","pasó a Empaque")} style={{...bs(C.emp+"14",tintaAA(C.emp,7)),border:"1px solid "+C.emp+"55",...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
                           {/* v10.84.56 — «A Listas» con palabra (era ⟳, el ícono de recargar) y en tono quieto: saca la orden de la máquina y avisa */}
                           {(role==="admin"||role==="produccion")&&<button data-orden={activa.id} data-accion="return_to_ready" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")} style={{...bs(C.sf,C.t2),padding:"4px 9px",boxShadow:"0 0 0 0.5px "+C.bdSt,...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}</>}
                         </div>
@@ -13954,17 +13957,19 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();setDO(null);onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})/* v10.73.84 (L14 drop-target-pegado) — setDO(null) aquí: el reorder hace stopPropagation, así que el drop NO burbujea al onDrop de la card donde vive setDO(null), y el resaltado de drop-target quedaba pegado tras reordenar */}}}
                             style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,cursor:"grab",...hlOf(matchVisto,o)}}>
-                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
-                            <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
-                            <div style={{display:"flex",gap:3}}>
+                          {/* v10.84.64 — si los botones no caben junto al folio, bajan a su renglón (a la derecha): el folio no se encoge (con los
+                              botones sin partirse, «▶ Activar» tapaba el «#P-0593» en las tarjetas angostas de Acabados) */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",rowGap:4,marginBottom:2,gap:4}}>
+                            <span style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
+                            <div style={{display:"flex",gap:3,marginLeft:"auto"}}>
                               {/* v10.73.81 (verificación adversarial) — "Activar" arrancaba una corrida NUEVA (abre
                                   machine_log) en una máquina fuera de servicio: otro estado que el fix de mantenimiento
                                   de esta versión acaba de volver alcanzable. Se DESHABILITA con el motivo, no se
                                   oculta: es la política que este archivo ya escribió para el select en v10.73.74
                                   (ocultarlo lo dejaría buscando el botón justo cuando lo busca). El select "Mover a
                                   máquina…" de abajo queda intacto: es la salida real. */}
-                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="reorder_in_machine" disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();pedirActivar(o,activa,m)}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+tintaAA(C.live)+"80",background:C.card,color:tintaAA(C.live),cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
-                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="return_to_ready" disabled={actionLoading===o.id} onClick={e=>{e.stopPropagation();programar(o,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.bdSt,background:C.card,color:C.t2,cursor:actionLoading===o.id?"wait":"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",opacity:actionLoading===o.id?.5:1}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}
+                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="reorder_in_machine" disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();pedirActivar(o,activa,m)}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+tintaAA(C.live)+"80",background:C.card,color:tintaAA(C.live),cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1,whiteSpace:"nowrap",flexShrink:0,minHeight:chico,display:"inline-flex",alignItems:"center"}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="return_to_ready" disabled={actionLoading===o.id} onClick={e=>{e.stopPropagation();programar(o,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.bdSt,background:C.card,color:C.t2,cursor:actionLoading===o.id?"wait":"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",opacity:actionLoading===o.id?.5:1,whiteSpace:"nowrap",flexShrink:0,minHeight:chico}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}
                             </div>
                           </div>
                           {pend[o.id]&&<FilaPendiente p={pend[o.id]} onDeshacer={()=>deshacerPend(o.id,pend[o.id].accion)}/>}

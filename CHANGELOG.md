@@ -12,6 +12,56 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.64 — El tablero sano en calma, y bien a 1920 y en tableta — 7-oct-2026
+
+Dos P2 de la segunda revisión independiente del tablero. «El tablero sano no está en calma»: color pleno en botones de rutina,
+la llave a 2.6:1, el círculo negro que nadie explica, «Disponible» a 3.3:1, la máquina fuera de servicio al 70% y el aviso de
+éxito a 3.05:1. Y «se rompe fuera de 1366»: a 1920, «▶ / Activar» partido en dos renglones; en tableta, botones de 21-27 px.
+
+- **Lo de rutina va teñido.** «Empaque» de cada máquina (eran 8 botones morados rellenos) lleva fondo al 8%, contorno y letra
+  en su tinta, como «A Salidas» desde v10.84.63. El relleno de color queda para las alarmas.
+- **Todo se lee.**
+  - La llave y la palomita de mantenimiento van en su tinta (la llave, 2.4:1 → 6.5:1; la palomita, 6.4:1).
+  - «Disponible» en el gris de los textos secundarios (3.3:1 → 5.1:1).
+  - La máquina fuera de servicio ya no va al 70% de opacidad, y su nombre y «En mantenimiento» van en la tinta del ámbar (1.8:1
+    → 6.2:1). La llave, el borde y «Fuera de servicio» dicen lo que pasa.
+  - **Los avisos de toda la app**, en la tinta de su color (`tintaAA(…, 4.6)`): éxito 3.1, advertencia 2.6, información
+    4.0 y error 4.3 → 4.8, 4.8, 4.6 y 5.0. Es el componente `Toast`, compartido: cambia sólo el color de fondo, en todas las
+    pantallas.
+- **«3 órdenes»** en el encabezado de cada máquina (con cuántas corren y cuántas esperan en su title). Era un círculo negro
+  con un número.
+- **Los botones de la fila no se parten:** «▶ Activar» y «A Listas» van en un renglón. Si no caben junto al folio, bajan a su
+  renglón, a la derecha. El primer arreglo (botones que no se encogen) hacía que «▶ Activar» **tapara el folio** «#P-0593» en
+  las tarjetas angostas de Acabados. Lo enseñó la captura a 1920, no las pruebas.
+- **En pantalla táctil** (`pointer: coarse`), la llave, «Activar» y «A Listas» de la fila miden 40 px; con mouse, 28 (eran
+  21-24).
+- **No toca** la base, las RPC, los manejadores de App ni el tablero de Germán (`PreprensaBoard`, que conserva su opacidad y sus
+  colores: no fue parte de esta revisión).
+- **Pruebas** (`tablero.mjs`, 107 → 127):
+  - **Vuelta 1**, contra v10.84.63: de las 13 nuevas fallaban 12. «Activar» y «A Listas» de una fila de Acabados se partían a
+    1920 y a 1366; a 1600 cabían.
+  - Dos medían mal y se corrigieron. tab-105 confundía el «A Listas» del marco ACTIVA (40 px de alto táctil, un renglón) con
+    uno partido: ahora cuenta los renglones del texto con un `Range`. tab-107 buscaba «Fuera de servicio» exacto y la tarjeta
+    trae la nota.
+  - El banco pinta el `Toast` real (`aviso=…`), y `caso()` acepta opciones de página para la tableta táctil.
+  - **tab-112** (el folio de la fila, entero y sin nada encima, a 1366, 1600 y 1920) nació de la captura. Sin el arreglo del
+    folio fallaba a 1920 y a 1366.
+  - **Vuelta 2:** la PM52 fuera de servicio con trabajo y su palomita, y «1 orden» en singular. Pasaron.
+  - El mensaje de tab-114 decía «nada» aunque pasaba bien: buscaba «órdenes?» y el singular es «orden». Y la shell metió un
+    carácter de retroceso invisible en esa prueba (un `\b` que llegó como control). Se quitó, y se revisó que ningún archivo
+    del cambio trae caracteres de control.
+  - **Sabotajes: 10, y 9 cazados.** El «Empaque» relleno, «Disponible» tenue, la llave sin tinta, la opacidad del 70%, los
+    avisos sin tinta, sin el tamaño táctil, el círculo sin palabra y la vuelta completa al folio que se encoge (tab-112).
+    **Dos no se cazaban la primera vez:**
+    - Quitar sólo el renglón propio de los botones dejaba el folio entero, pero «A Listas» se salía por la derecha y la fila lo
+      recortaba. Ninguna prueba medía los botones recortados: nació **tab-115** (cada botón de la fila, entero, a 1366, 1600
+      y 1920), y con ella se caza.
+    - Quitar el `nowrap` de «▶ Activar» sigue sin cazarse, y está bien: con su renglón propio los botones tienen ancho de
+      sobra (la tarjeta más angosta, ~242 px) y nunca se parten. El `nowrap` queda de respaldo.
+  - **En la app real** (compilada, con la base de producción y sin escribir), a 1366: «A Salidas» teñido con su «⋯» en cada
+    ficha de Empaque, «Empaque» teñido en cada máquina, las filas en un renglón con el folio entero, «1 orden» y las libres
+    cortas con «Disponible».
+
 ## v10.84.63 — El tablero: las acciones de Empaque, dentro de la ficha y con palabras — 7-oct-2026
 
 Un P2 de la segunda revisión independiente del tablero: las acciones de Empaque eran tres íconos sueltos debajo de cada ficha,

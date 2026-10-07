@@ -11,9 +11,9 @@ const res = [];
 const ok = (n, c, x = "") => res.push((c ? "PASA  " : "FALLA ") + n + (x ? "  · " + x : ""));
 let browser;
 try { browser = await chromium.launch({ headless: true }); } catch { browser = await chromium.launch({ headless: true, channel: "chrome" }); }
-async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) {
+async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }, extra = {}) {   // extra: { hasTouch, isMobile } (la tableta)
   if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ viewport, ...extra });
   const errs = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
   page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
@@ -864,5 +864,105 @@ await caso("tab-100-la-activa-no-cambia", "vista=produccion", async p => {
   const n = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0591") && !x.closest('[aria-label="Así va la planta"]')); return c ? c.querySelectorAll("button").length : -1; });
   ok("tab-100-la-activa-no-cambia", n === 0, `la ficha activa de P-0591 trae ${n} botón(es) adentro`);
 });
+// ── v10.84.64: el tablero sano en calma, y a 1920 y en tableta (P2 de la segunda revisión: color pleno en botones de rutina, la
+//   llave a 2.6:1, el círculo negro sin explicar, «Disponible» a 3.3:1, la máquina fuera de servicio al 70% y su nombre a ~2.4:1,
+//   el aviso de éxito a 3.05:1; a 1920, «▶ / Activar» partido en dos renglones; en tableta, botones de 21-27 px) ──────────────
+// el contraste de cada texto (por su texto propio) DENTRO de una raíz, contra lo que tiene detrás
+const contrastesEn = (p, raiz, textos) => p.evaluate(([raiz, textos]) => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  const opac = el => { let o = 1; for (let x = el; x; x = x.parentElement) o *= Number(getComputedStyle(x).opacity); return o; };
+  const r = document.querySelector(raiz); if (!r) return textos.map(t => t + ": no está la raíz");
+  const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
+  return textos.map(t => { const el = t.startsWith("[") ? r.querySelector(t) : [...r.querySelectorAll("*")].find(e => propio(e).startsWith(t) && e.getClientRects().length); if (!el) return t + ": no está";
+    const fg = nums(getComputedStyle(el).color), bg = fondo(el), o = opac(el), mix = fg.slice(0, 3).map((c, i) => c * o + bg[i] * (1 - o));
+    const a = lum(mix), b = lum(bg); return t + ": " + ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(1); });
+}, [raiz, textos]);
+const valor = x => parseFloat((x.split(": ")[1] || "0"));
+for (const [an, al] of [[1920, 1080], [1600, 900], [1366, 768]])
+  await caso("tab-105-la-fila-no-se-parte-a-" + an, "vista=produccion", async p => {
+    // una fila en una de Acabados (las tarjetas más angostas): P-0593 pasa a la Polar 115, 1ª en la fila
+    await p.evaluate(() => window.__cambiar("P-0593", { current_machine: "ac_polar115", machine_queue_position: 1 })); await espera(p, 400);
+    const r = await p.evaluate(() => [...document.querySelectorAll('[data-maquina] button')].filter(b => /^(Activar|A Listas)$/.test(b.innerText.trim()) && b.getClientRects().length)
+      .map(b => { const rg = document.createRange(); rg.selectNodeContents(b); const cs = [...rg.getClientRects()].filter(x => x.width > 0 && x.height > 0).map(x => x.top + x.height / 2).sort((u, v) => u - v);
+        let lineas = cs.length ? 1 : 0; for (let i = 1; i < cs.length; i++) if (cs[i] - cs[i - 1] > 8) lineas++;
+        return { t: b.innerText.trim(), lineas, m: b.closest("[data-maquina]").getAttribute("data-maquina") }; }));
+    const partidos = r.filter(x => x.lineas > 1);
+    ok("tab-105-la-fila-no-se-parte-a-" + an, r.length >= 4 && partidos.length === 0, r.length ? (partidos.length ? partidos.length + " de " + r.length + " botones en dos renglones: " + partidos.slice(0, 4).map(x => x.t + "@" + x.m + " (" + x.lineas + " renglones)").join(", ") : r.length + " botones de la fila, cada uno en un renglón") : "no hay botones en las filas");
+  }, { width: an, height: al });
+await caso("tab-106-disponible-y-la-llave-se-leen", "vista=produccion", async p => {
+  const r = await contrastesEn(p, '[data-maquina="off_gto"]', ["Disponible", '[aria-label="Poner máquina en mantenimiento"]']);
+  ok("tab-106-disponible-y-la-llave-se-leen", valor(r[0]) >= 4.5 && valor(r[1]) >= 3, r.join(" · ") + " (texto 4.5, ícono 3)");
+});
+await caso("tab-107-fuera-de-servicio-se-lee", "vista=produccion&mant=off_gto", async p => {
+  // la GTO fuera de servicio y sin trabajo: su nombre, «En mantenimiento» y «Fuera de servicio», sin opacidad que los apague
+  const r = await contrastesEn(p, '[data-maquina="off_gto"]', ["GTO 1 Color", "En mantenimiento", "Fuera de servicio"]);
+  ok("tab-107-fuera-de-servicio-se-lee", r.every(x => valor(x) >= 4.5), r.join(" · "));
+});
+await caso("tab-108-el-tablero-sano-en-calma", "vista=produccion", async p => {
+  // ningún botón de rutina relleno de color en las máquinas ni en Empaque (lo relleno queda para las alarmas)
+  const r = await p.evaluate(() => { const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    return [...document.querySelectorAll("[data-maquina] button, [data-ficha] button")].filter(b => b.getClientRects().length).filter(b => { const v = nums(getComputedStyle(b).backgroundColor); return v.length >= 3 && (v.length === 3 || v[3] >= 0.9) && lum(v) < 0.4; }).map(b => b.innerText.trim() || b.getAttribute("aria-label")); });
+  ok("tab-108-el-tablero-sano-en-calma", r.length === 0, r.length ? r.length + " botones rellenos: " + [...new Set(r)].join(", ") : "sin botones rellenos de color");
+});
+await caso("tab-109-cuantas-ordenes-con-palabra", "vista=produccion", async p => {
+  const t = await p.locator('[data-maquina="off_pm74"]').innerText().catch(() => "");
+  ok("tab-109-cuantas-ordenes-con-palabra", /3 órdenes/.test(t), `la tarjeta de la PM74 ${/3 órdenes/.test(t) ? "dice «3 órdenes»" : "NO dice cuántas órdenes trae con palabra («" + t.replace(/\s+/g, " ").slice(0, 50) + "…»)"}`);
+});
+await caso("tab-110-en-tableta-los-botones-chicos-crecen", "vista=produccion", async p => {
+  const coarse = await p.evaluate(() => matchMedia("(pointer: coarse)").matches);
+  const r = await p.evaluate(() => [...document.querySelectorAll('[data-maquina] button')].filter(b => b.getClientRects().length && (/^(Activar|A Listas)$/.test(b.innerText.trim()) || /mantenimiento/.test(b.getAttribute("aria-label") || "")))
+    .map(b => ({ t: b.innerText.trim() || "llave", h: Math.round(b.getBoundingClientRect().height) })));
+  const chicos = r.filter(x => x.h < 40);
+  ok("tab-110-en-tableta-los-botones-chicos-crecen", coarse && r.length > 0 && chicos.length === 0, `pantalla táctil: ${coarse ? "sí" : "NO SE SIMULÓ"}; ${chicos.length ? chicos.length + " de " + r.length + " botones de menos de 40 px (" + [...new Set(chicos.map(x => x.t + " " + x.h + "px"))].slice(0, 4).join(", ") + ")" : r.length + " botones de 40 px o más"}`);
+}, { width: 1024, height: 768 }, { hasTouch: true, isMobile: true });
+for (const tipo of ["success", "error", "warning", "info"])
+  await caso("tab-111-el-aviso-se-lee-" + tipo, "vista=produccion&aviso=" + tipo, async p => {
+    const r = await p.evaluate(() => { const el = [...document.querySelectorAll("div")].find(d => d.style.position === "fixed" && d.style.bottom === "24px"); if (!el) return null;
+      const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+      const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      const a = lum(nums(getComputedStyle(el).color)), b = lum(nums(getComputedStyle(el).backgroundColor)); return ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(1); });
+    ok("tab-111-el-aviso-se-lee-" + tipo, r != null && parseFloat(r) >= 4.5, r == null ? "no salió el aviso" : `el aviso de ${tipo}: blanco sobre su color a ${r}:1`);
+  });
+for (const [an, al] of [[1920, 1080], [1600, 900], [1366, 768]])
+  await caso("tab-112-el-folio-de-la-fila-entero-a-" + an, "vista=produccion", async p => {
+    // con los botones de la fila sin partirse, el folio no puede quedar tapado ni recortado (lo enseñó la captura a 1920)
+    await p.evaluate(() => window.__cambiar("P-0593", { current_machine: "ac_polar115", machine_queue_position: 1 })); await espera(p, 400);
+    const r = await p.evaluate(() => { const malos = []; let n = 0;
+      for (const chip of document.querySelectorAll("[data-maquina] [data-ficha] span")) { const t = chip.innerText.trim(); if (!/^#P-\d{4}$/.test(t) || !chip.getClientRects().length) continue; n++;
+        const c = chip.getBoundingClientRect(), item = chip.closest("[data-ficha]");
+        const tapa = [...item.querySelectorAll("button")].some(b => { const r = b.getBoundingClientRect(); return r.width && r.left < c.right - 1 && r.right > c.left + 1 && r.top < c.bottom - 1 && r.bottom > c.top + 1; });
+        let recorte = chip.scrollWidth > chip.clientWidth + 1; for (let x = chip.parentElement; x && x !== item && !recorte; x = x.parentElement) { const b = x.getBoundingClientRect(); if (getComputedStyle(x).overflow !== "visible" && (c.right > b.right + 1 || c.left < b.left - 1)) recorte = true; }
+        if (tapa || recorte) malos.push(t + (tapa ? " tapado por un botón" : " recortado")); }
+      return { n, malos }; });
+    ok("tab-112-el-folio-de-la-fila-entero-a-" + an, r.n >= 3 && r.malos.length === 0, r.malos.length ? r.malos.join(", ") : r.n + " folios en las filas, enteros");
+  }, { width: an, height: al });
+// ── calma y contraste, vuelta 2 ──
+await caso("tab-113-fuera-de-servicio-con-trabajo-se-lee", "vista=produccion&caso=mantenimiento", async p => {
+  // la PM52 fuera de servicio CON trabajo montado: su nombre, «En mantenimiento» y la palomita para quitarlo
+  const r = await contrastesEn(p, '[data-maquina="off_pm52"]', ["Printmaster 52", "En mantenimiento", '[aria-label="Quitar mantenimiento de la máquina"]']);
+  ok("tab-113-fuera-de-servicio-con-trabajo-se-lee", valor(r[0]) >= 4.5 && valor(r[1]) >= 4.5 && valor(r[2]) >= 3, r.join(" · ") + " (texto 4.5, ícono 3)");
+});
+await caso("tab-114-una-orden-en-singular", "vista=produccion", async p => {
+  const t = await p.locator('[data-maquina="ac_polar115"]').innerText().catch(() => "");
+  ok("tab-114-una-orden-en-singular", /\b1 orden\b/.test(t) && !/1 órdenes/.test(t), `la Polar 115 (una orden) dice «${(t.match(/\d+ (orden|órdenes)\b/) || ["nada"])[0]}»`);
+});
+for (const [an, al] of [[1920, 1080], [1600, 900], [1366, 768]])
+  await caso("tab-115-los-botones-de-la-fila-enteros-a-" + an, "vista=produccion", async p => {
+    // los botones de cada orden en la fila, enteros: ni recortados por la tarjeta (la fila esconde lo que se sale) ni fuera de su
+    //   orden (lo enseñó un sabotaje: con el folio sin encogerse y sin renglón propio, «A Listas» se salía por la derecha)
+    await p.evaluate(() => window.__cambiar("P-0593", { current_machine: "ac_polar115", machine_queue_position: 1 })); await espera(p, 400);
+    const r = await p.evaluate(() => { const malos = []; let n = 0;
+      for (const item of document.querySelectorAll("[data-maquina] [data-ficha]")) { const i = item.getBoundingClientRect();
+        for (const b of item.querySelectorAll("button")) { if (!b.getClientRects().length) continue; n++; const c = b.getBoundingClientRect();
+          let fuera = c.right > i.right + 1 || c.left < i.left - 1;
+          for (let x = b.parentElement; x && !fuera; x = x.parentElement) { const s = getComputedStyle(x); if (s.overflowX !== "visible" || s.overflow !== "visible") { const k = x.getBoundingClientRect(); if (c.right > k.right + 1 || c.left < k.left - 1) fuera = true; } if (x.hasAttribute("data-maquina")) break; }
+          if (fuera) malos.push(b.innerText.trim() + "@" + ((item.innerText.match(/P-\d{4}/) || [""])[0])); } }
+      return { n, malos }; });
+    ok("tab-115-los-botones-de-la-fila-enteros-a-" + an, r.n >= 6 && r.malos.length === 0, r.malos.length ? "recortados o fuera de su orden: " + r.malos.join(", ") : r.n + " botones en las fichas de las máquinas, enteros");
+  }, { width: an, height: al });
 await browser.close();
 for (const r of res) console.log(r);

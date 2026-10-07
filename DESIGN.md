@@ -433,6 +433,13 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   no flotando (lo recortaría el scroll). Su «clic afuera» se escucha con el **clic en captura**: sin captura, la ficha que
   detiene sus clics lo esconde y quedaban dos abiertos; con `mousedown`, cerrarlo encoge la ficha, lo de abajo se mueve antes
   de soltar el botón, y el clic ya no llega al «⋯» que se quería abrir.
+- **El tablero sano está en calma** (v10.84.64): lo de rutina va **teñido** (fondo al 8%, contorno y letra en su tinta:
+  «Empaque» de cada máquina, «A Salidas»); el relleno de color queda para las alarmas («N vencidas», «urgente»). Un estado
+  no se dice con opacidad (la máquina fuera de servicio al 70% dejaba su nombre a 1.8:1): se dice con su llave, su borde y su
+  texto, en su tinta. Los avisos de toda la app llevan su color en tinta (`tintaAA(…, 4.6)`: el verde de éxito daba
+  3.05:1). Un número que nadie explica se dice con palabra («3 órdenes», no un círculo negro). **Cuando no caben, los botones
+  bajan a su renglón y el folio no se encoge**: con «▶ Activar» sin partirse, el botón tapaba el «#P-0593». En pantalla
+  táctil (`pointer: coarse`), los botones chicos del tablero miden 40 px; con mouse, 28.
 - **En una ficha, el nombre primero y completo** (v10.84.57): el cliente va solo en su línea (hasta tres, a 12 px) y lo que
   lo acompaña (la asa, el folio, el reloj) en la segunda; un dato que el marco ya dice (el reloj de la activa) no se repite
   adentro. Se mide a 1366 con foto en la ficha: la miniatura le quita ~46 px al nombre.
