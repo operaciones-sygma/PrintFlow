@@ -12,6 +12,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.63 — El tablero: las acciones de Empaque, dentro de la ficha y con palabras — 7-oct-2026
+
+Un P2 de la segunda revisión independiente del tablero: las acciones de Empaque eran tres íconos sueltos debajo de cada ficha,
+a 8 px de la siguiente, y el camión y el bote de basura se leían «envío» y «borrar» (el bote registra merma; no borra nada).
+
+- **«A Salidas» va dentro de la ficha, con su palabra**, en tono teñido (verde al 8%, su contorno y la letra en su tinta).
+- **«Enviar a maquila» y «Registrar merma» van en «⋯»**, cada una con su explicación («A un proveedor de afuera; se elige
+  en la ventana», «Pliegos o piezas que se perdieron. No borra la orden»).
+  - Medido antes de esconderlas (7-oct, 60 días): 286 pasos a Salidas, **0 mermas registradas y 0 envíos a maquila** desde
+    el tablero (las 25 maquilas nacen como maquila desde el alta).
+  - El «⋯» se abre en la misma ficha: un menú flotante lo recortaría el scroll de la columna de Empaque.
+  - Esc lo cierra y regresa el foco al «⋯»; el clic afuera lo cierra; uno abierto a la vez; si otra estación mueve la
+    orden, se va con su ficha.
+- `DragCard` acepta un `pie` opcional, dentro de la ficha. La ficha que corre en cada máquina no lo pasa y queda igual
+  (probado: sin botones adentro).
+- **No toca** la base, las RPC ni los manejadores de App: «A Salidas» sigue preguntando en App, y maquila y merma abren las
+  mismas ventanas.
+- **Pruebas** (`tablero.mjs`, 92 → 107):
+  - **Vuelta 1**, contra v10.84.62: de las 11 nuevas fallaban 10. La que pasaba es la guarda de la ficha activa.
+  - `abrirDe` abre el «⋯» cuando la acción vive ahí: las 8 pruebas de Merma y Maquila de antes pasan por él.
+  - **Vuelta 2**, por donde no se diseñó: doble clic en «Enviar a maquila», dos «⋯» a la vez, la orden que se va con el «⋯»
+    abierto, todo con el teclado. **Encontró una falla de fondo:** al abrir el «⋯» de otra ficha, quedaban dos abiertos.
+    Cada ficha detiene sus clics para no abrir su detalle, y eso le escondía el clic afuera al primero.
+  - **El primer arreglo traía su propia falla:** escuchar el `mousedown` en captura cerraba el primero, su ficha se encogía, el
+    «⋯» de abajo subía antes de soltar el botón y el clic ya no le llegaba (cero abiertos). Quedó con el **clic** en captura.
+  - **Sabotajes:** su prueba cazó los 7. «A Salidas» sin escudo (un doble clic mandaba dos), el clic afuera en burbuja y en
+    `mousedown` (los dos defectos de arriba), Esc sin regresar el foco, las acciones fuera de la ficha, el clic que además
+    abría el detalle, y el «⋯» sin foco inicial.
+  - En un renglón a 1366 y 1920 (40 px, el alto táctil de `bs()`), y «A Salidas» a 6.1:1.
+
 ## v10.84.62 — El tablero: la planta de un vistazo — 7-oct-2026
 
 El segundo P1 de la segunda revisión independiente del tablero (25/40): a 1366 la primera pantalla enseñaba 3 de las 16

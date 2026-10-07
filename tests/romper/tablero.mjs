@@ -416,7 +416,10 @@ await caso("tab-49-las-alertas-no-se-salen", "vista=produccion&caso=lleno", asyn
 
 // ── v10.84.59: los P2 de la primera revisión: Merma y Maquila (de qué orden, que no acepte basura, diálogos de verdad), el
 //   contraste y lo menor ────────────────────────────────────────────────────────────────────────────────────────────────────
-const abrirDe = async (p, pn, re) => { const b = await botonDe(p, pn, re); if (!b) return false; await b.click(); await espera(p, 700); return true; };
+// (desde v10.84.63, «Enviar a maquila» y «Registrar merma» viven en el «⋯» de la ficha de Empaque: si no está a la vista, se abre)
+const abrirDe = async (p, pn, re) => { let b = await botonDe(p, pn, re);
+  if (!b) { const mas = await botonDe(p, pn, /^Más de /); if (mas) { await mas.click(); await espera(p, 300); b = await botonDe(p, pn, re); } }
+  if (!b) return false; await b.click(); await espera(p, 700); return true; };
 const dialogo = p => p.evaluate(() => { const d = document.querySelector('[role="dialog"]'); return d ? d.innerText.replace(/\s+/g, " ") : ""; });
 const mermas = l => (l.match(/merma P-\d+[^\n]*/g) || []);
 await caso("tab-50-merma-dice-de-que-orden", "vista=produccion", async p => {
@@ -761,5 +764,105 @@ for (const [an, al] of [[1366, 768], [1920, 1080], [768, 1024]])
     const c = await cortesFranja(p), n = await p.locator(FRANJA + " button").count();
     ok("tab-84-la-franja-no-corta-a-" + an, n > 0 && c.length === 0, n ? (c.length ? c.join(" · ") : n + " renglones y libres, sin cortar nombres ni números") : "NO hay franja");
   }, { width: an, height: al });
+// ── v10.84.63: las acciones de Empaque, dentro de la ficha y con palabras (P2 de la segunda revisión: tres íconos sueltos debajo
+//   de cada ficha, a 8 px de la siguiente; el camión y el bote se leían «envío» y «borrar») ───────────────────────────────────
+// (los botones del tablero miden 40 px de alto con un renglón: bs() trae minHeight 40; dos renglones pasan de 44)
+// los botones visibles de la columna de Empaque (la que dice «Empaque» y tiene sus fichas), con su caja, su texto y su ficha
+const empaque = (p, pn) => p.evaluate(pn => {
+  const card = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes(pn) && !x.closest('[aria-label="Así va la planta"]') && /Empaque/.test(x.parentElement?.parentElement?.parentElement?.innerText || ""));
+  if (!card) return null; const c = card.getBoundingClientRect(); let col = card; for (let i = 0; i < 4 && col.parentElement; i++) col = col.parentElement;
+  const botones = [...col.querySelectorAll("button")].filter(b => b.getClientRects().length).map(b => { const r = b.getBoundingClientRect();
+    return { texto: b.innerText.replace(/\s+/g, " ").trim(), nombre: b.getAttribute("aria-label") || "", expandible: b.hasAttribute("aria-expanded"),
+      dentro: r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1, alto: Math.round(r.height), suya: card.contains(b) || (r.top >= c.bottom - 1 && r.top <= c.bottom + 30) }; });
+  return { card: { alto: Math.round(c.height) }, botones };
+}, pn);
+await caso("tab-91-a-salidas-con-palabra-dentro-de-la-ficha", "vista=produccion", async p => {
+  const e = await empaque(p, "P-0585"); const b = e ? e.botones.find(x => /^A Salidas$/.test(x.texto)) : null;
+  ok("tab-91-a-salidas-con-palabra-dentro-de-la-ficha", !!b && b.dentro, e ? (b ? `«A Salidas» ${b.dentro ? "dentro de la ficha de P-0585" : "FUERA de la ficha"}` : "no hay un botón que diga «A Salidas» (" + e.botones.filter(x => x.suya).map(x => x.texto || "[" + x.nombre + "]").join(", ") + ")") : "no encuentro P-0585 en Empaque");
+});
+await caso("tab-92-sin-iconos-sueltos-en-empaque", "vista=produccion", async p => {
+  // en la ficha de P-0585, cada botón dice lo que hace con palabra (el «⋯» se vale: dice lo que guarda en su nombre y se abre)
+  const e = await empaque(p, "P-0585"); const mudos = e ? e.botones.filter(x => x.suya && !x.texto && !x.expandible) : null;
+  ok("tab-92-sin-iconos-sueltos-en-empaque", !!e && mudos.length === 0, e ? (mudos.length ? "botones sin palabra: " + mudos.map(x => "[" + x.nombre + "]").join(", ") : "todos con palabra") : "no encuentro P-0585 en Empaque");
+});
+await caso("tab-93-a-salidas-hace-salidas", "vista=produccion", async p => {
+  const b = await botonDe(p, "P-0585", /^A Salidas/); if (b) { await b.click(); await espera(p, 400); }
+  const l = await log(p), n = (l.match(/accion:advance P-0585 salidas/g) || []).length;
+  const det = /accion:detail P-0585/.test(l);
+  ok("tab-93-a-salidas-hace-salidas", !!b && n === 1 && !det, b ? `«A Salidas» de P-0585: ${n} pedido(s) de pasar a Salidas${det ? "; Y ADEMÁS abre el detalle" : ""}` : "no hay «A Salidas»");
+});
+await caso("tab-94-doble-clic-en-a-salidas", "vista=produccion", async p => {
+  const b = await botonDe(p, "P-0585", /^A Salidas/); if (b) { await b.dblclick(); await espera(p, 600); }
+  const l = await log(p), n = (l.match(/accion:advance P-0\d+ salidas/g) || []).length;
+  ok("tab-94-doble-clic-en-a-salidas", !!b && n === 1, b ? `doble clic en «A Salidas»: ${n} pedido(s) a Salidas (${(l.match(/accion:advance P-0\d+ salidas/g) || []).join(", ")})` : "no hay «A Salidas»");
+});
+await caso("tab-95-mas-abre-maquila-y-merma-en-la-ficha", "vista=produccion", async p => {
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.click(); await espera(p, 300); }
+  const e = await empaque(p, "P-0585"), maq = e?.botones.find(x => /^Enviar a maquila/.test(x.texto)), mer = e?.botones.find(x => /^Registrar merma/.test(x.texto));
+  if (maq) { const b = await botonDe(p, "P-0585", /Enviar a maquila/); if (b) await b.click(); await espera(p, 400); }
+  const l = await log(p);
+  ok("tab-95-mas-abre-maquila-y-merma-en-la-ficha", !!mas && !!maq && maq.dentro && !!mer && mer.dentro && /accion:send_maquila P-0585/.test(l),
+    mas ? `«⋯» de P-0585: ${maq ? "«Enviar a maquila» " + (maq.dentro ? "en la ficha" : "FUERA") : "sin maquila"} · ${mer ? "«Registrar merma» " + (mer.dentro ? "en la ficha" : "FUERA") : "sin merma"}; ${/accion:send_maquila P-0585/.test(l) ? "maquila abre su ventana" : "maquila NO hace nada"}` : "no hay «⋯» en la ficha de P-0585");
+});
+await caso("tab-96-esc-cierra-el-mas-y-regresa-el-foco", "vista=produccion", async p => {
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.click(); await espera(p, 300); }
+  const abierto = !!(await p.getByRole("group", { name: "Más acciones de la orden" }).count());
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const cerrado = !(await p.getByRole("group", { name: "Más acciones de la orden" }).count());
+  const foco = await p.evaluate(() => document.activeElement?.getAttribute("data-accion") || document.activeElement?.tagName);
+  ok("tab-96-esc-cierra-el-mas-y-regresa-el-foco", !!mas && abierto && cerrado && foco === "mas", mas ? `«⋯» ${abierto ? "abre" : "NO abre"}; Esc ${cerrado ? "lo cierra" : "NO lo cierra"}; el foco queda en ${foco}` : "no hay «⋯»");
+});
+await caso("tab-97-clic-fuera-cierra-el-mas", "vista=produccion", async p => {
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.click(); await espera(p, 300); }
+  await p.mouse.click(700, 20); await espera(p, 300);
+  const sigue = await p.getByRole("group", { name: "Más acciones de la orden" }).count(), l = await log(p);
+  ok("tab-97-clic-fuera-cierra-el-mas", !!mas && !sigue && !/accion:(send_maquila|waste) P-0585/.test(l), mas ? `clic fuera con «⋯» abierto: ${sigue ? "SIGUE abierto" : "se cierra"} sin hacer nada` : "no hay «⋯»");
+});
+for (const [an, al] of [[1366, 768], [1920, 1080]])
+  await caso("tab-98-a-salidas-en-un-renglon-a-" + an, "vista=produccion", async p => {
+    const e = await empaque(p, "P-0585"), b = e ? e.botones.find(x => /^A Salidas$/.test(x.texto)) : null;
+    ok("tab-98-a-salidas-en-un-renglon-a-" + an, !!b && b.alto <= 44 && b.dentro, b ? `«A Salidas» mide ${b.alto} px de alto, ${b.dentro ? "dentro de la ficha" : "FUERA de la ficha"}` : "no hay «A Salidas»");
+  }, { width: an, height: al });
+await caso("tab-99-a-salidas-se-lee", "vista=produccion", async p => {
+  const r = await contrastes(p, ["A Salidas"]); const v = parseFloat((r[0].split(": ")[1] || "0"));
+  ok("tab-99-a-salidas-se-lee", v >= 4.5, r.join(" · "));
+});
+// ── Empaque, vuelta 2: por donde no se diseñó ──
+const abiertos = p => p.getByRole("group", { name: "Más acciones de la orden" }).count();
+await caso("tab-101-doble-clic-en-enviar-a-maquila", "vista=produccion", async p => {
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.click(); await espera(p, 300); }
+  const b = await botonDe(p, "P-0585", /Enviar a maquila/); if (b) { await b.dblclick(); await espera(p, 600); }
+  const l = await log(p), n = (l.match(/accion:send_maquila P-0\d+/g) || []).length, det = /accion:detail/.test(l);
+  ok("tab-101-doble-clic-en-enviar-a-maquila", !!b && n === 1 && !det, b ? `doble clic en «Enviar a maquila»: ${n} ventana(s) de maquila${det ? "; Y ADEMÁS abre un detalle" : ""}` : "no hay «Enviar a maquila»");
+});
+await caso("tab-102-un-mas-abierto-a-la-vez", "vista=produccion", async p => {
+  const a = await botonDe(p, "P-0585", /^Más de P-0585/); if (a) { await a.click(); await espera(p, 300); }
+  const b = await botonDe(p, "P-0586", /^Más de P-0586/); if (b) { await b.click(); await espera(p, 300); }
+  const n = await abiertos(p), suyo = await p.evaluate(() => { const g = document.querySelector('[role="group"][aria-label="Más acciones de la orden"]'); return g ? (g.closest("[draggable=true]")?.innerText.match(/P-\d{4}/) || [""])[0] : ""; });
+  ok("tab-102-un-mas-abierto-a-la-vez", !!a && !!b && n === 1 && suyo === "P-0586", a && b ? `abrir el «⋯» de P-0585 y luego el de P-0586: ${n} abierto(s), el de ${suyo || "ninguna"}` : "faltan los «⋯»");
+});
+await caso("tab-103-la-mueven-con-el-mas-abierto", "vista=produccion", async p => {
+  // otra estación la pasa a Salidas mientras el «⋯» está abierto: se va con su ficha, y Esc después no truena ni hace nada
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.click(); await espera(p, 300); }
+  await p.evaluate(() => window.__cambiar("P-0585", { stage: "salidas", current_machine: null, machine_queue_position: null })); await espera(p, 400);
+  const n = await abiertos(p); await p.keyboard.press("Escape"); await espera(p, 300);
+  const l = await log(p);
+  ok("tab-103-la-mueven-con-el-mas-abierto", !!mas && n === 0 && !/accion:(send_maquila|waste) P-0585/.test(l), mas ? `P-0585 se va a Salidas con el «⋯» abierto: ${n ? "el «⋯» SIGUE abierto" : "el «⋯» se va con ella"}; Esc después sin efectos` : "no hay «⋯»");
+});
+await caso("tab-104-merma-con-el-teclado", "vista=produccion", async p => {
+  // el «⋯» abre con el foco en su primera opción; Tab a «Registrar merma» y Enter la abre
+  const mas = await botonDe(p, "P-0585", /^Más de P-0585/); if (mas) { await mas.focus(); await p.keyboard.press("Enter"); await espera(p, 300); }
+  const f1 = await p.evaluate(() => (document.activeElement?.innerText || "").split("\n")[0]);
+  await p.keyboard.press("Tab"); await espera(p, 150);
+  const f2 = await p.evaluate(() => (document.activeElement?.innerText || "").split("\n")[0]);
+  await p.keyboard.press("Enter"); await espera(p, 500);
+  const l = await log(p);
+  ok("tab-104-merma-con-el-teclado", !!mas && /^Enviar a maquila/.test(f1) && /^Registrar merma/.test(f2) && /accion:waste P-0585/.test(l), mas ? `Enter en «⋯» → foco en «${f1}»; Tab → «${f2}»; Enter ${/accion:waste P-0585/.test(l) ? "abre la merma de P-0585" : "NO abre la merma"}` : "no hay «⋯»");
+});
+await caso("tab-100-la-activa-no-cambia", "vista=produccion", async p => {
+  // la ficha de la que corre en cada máquina (la misma DragCard, sin pie) sigue sin botones adentro
+  const n = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0591") && !x.closest('[aria-label="Así va la planta"]')); return c ? c.querySelectorAll("button").length : -1; });
+  ok("tab-100-la-activa-no-cambia", n === 0, `la ficha activa de P-0591 trae ${n} botón(es) adentro`);
+});
 await browser.close();
 for (const r of res) console.log(r);

@@ -426,6 +426,13 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   **Una lista que empuja lo importante fuera de la pantalla se pliega a sus primeras**: Listas enseña las 4 más urgentes,
   con «+N más · Ver las N». «Ver menos» es el mismo botón, para que el foco no se pierda. Se abre sola cuando se busca o se
   va a una de las de abajo, y lo abierto se recuerda en la pestaña.
+- **Una acción va dentro de la ficha que mueve, y con palabra** (v10.84.63): en Empaque eran tres íconos sueltos debajo de
+  cada ficha, a 8 px de la siguiente, y el bote de basura (merma) se leía «borrar». Lo de todos los días va al frente
+  («A Salidas»: 286 en 60 días) y lo raro en «⋯» («Enviar a maquila» y «Registrar merma»: 0 y 0 en 60 días), cada opción
+  con su explicación: **se mide antes de esconder algo**. Un «⋯» dentro de una lista con scroll se abre en la misma ficha,
+  no flotando (lo recortaría el scroll). Su «clic afuera» se escucha con el **clic en captura**: sin captura, la ficha que
+  detiene sus clics lo esconde y quedaban dos abiertos; con `mousedown`, cerrarlo encoge la ficha, lo de abajo se mueve antes
+  de soltar el botón, y el clic ya no llega al «⋯» que se quería abrir.
 - **En una ficha, el nombre primero y completo** (v10.84.57): el cliente va solo en su línea (hasta tres, a 12 px) y lo que
   lo acompaña (la asa, el folio, el reloj) en la segunda; un dato que el marco ya dice (el reloj de la activa) no se repite
   adentro. Se mide a 1366 con foto en la ficha: la miniatura le quita ~46 px al nombre.

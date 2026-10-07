@@ -13430,8 +13430,8 @@ function ListaVencidas({ordenes,donde,onIr,onCerrar}){useEscClose(onCerrar);
       <span style={{color:C.t2,flexShrink:0}}>{donde(o)}</span>
       <span style={{color:C.dnInk,fontWeight:700,flexShrink:0}}>entrega {fD(o.due_date)}</span></button></li>)}
   </ul></div>}
-function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){return <div data-ficha={o.id} draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
-    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start",...hlOf(match,o)}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
+function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true,pie=null}){return <div data-ficha={o.id} draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
+    style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start",...(pie?{flexWrap:"wrap"}:{}),...hlOf(match,o)}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
     {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
     <div style={{fontSize:12,fontWeight:700,lineHeight:1.25,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden",overflowWrap:"anywhere"}}>{o.client}</div>
     <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginTop:3}}>
@@ -13444,7 +13444,40 @@ function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){retu
     {/* v10.84.58 — REIMPRIMIR y URGENTE (antes escritos aquí a mano) y lo demás, de la misma definición que el detalle */}
     <AlertasDeFicha o={o}/>
     {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dnInk:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
-  </div></div>;}
+  </div>{pie}</div>;}
+// v10.84.63 — las acciones de Empaque, DENTRO de la ficha y con palabras (la segunda revisión independiente, P2: eran tres íconos
+//   sueltos debajo de cada ficha, a 8 px de la siguiente, y el camión y el bote se leían «envío» y «borrar»). Al frente lo de
+//   todos los días, «A Salidas» (286 en 60 días); «Enviar a maquila» y «Registrar merma» (0 y 0 en 60 días, medido el 7-oct) en
+//   «⋯», que se abre en la misma ficha: un menú flotante lo recortaría el scroll de la columna. Salidas sigue preguntando en App.
+function AccionesDeEmpaque({o,onAction}){
+  const [mas,setMas]=useState(false);const masRef=useRef(null),caja=useRef(null);
+  const pn=o.production_number||o.client;
+  return <div ref={caja} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{flexBasis:"100%",cursor:"default"}}>
+    <div style={{display:"flex",gap:6}}>
+      <button data-orden={o.id} data-accion="salidas" onClick={()=>{escudoDeClics();onAction(o.id,"advance","salidas")}} aria-label={"A Salidas: "+pn}
+        style={{...bs(C.sal+"14",tintaAA(C.sal,7)),border:"1px solid "+C.sal+"55",flex:1,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,whiteSpace:"nowrap"}}><ExportIcon size={13} weight="bold"/>A Salidas</button>
+      <button ref={masRef} data-orden={o.id} data-accion="mas" onClick={()=>setMas(v=>!v)} aria-expanded={mas} aria-label={"Más de "+pn+": enviar a maquila o registrar merma"} title="Enviar a maquila o registrar merma"
+        style={{...bs(C.sf,mas?C.ac:C.t2),border:"1px solid "+C.bd,padding:"4px 10px",display:"inline-flex",alignItems:"center"}}><DotsThreeIcon size={16} weight="bold"/></button>
+    </div>
+    {mas&&<MasDeEmpaque caja={caja} alCerrar={()=>setMas(false)} alEscape={()=>{setMas(false);masRef.current?.focus()}} onElegir={accion=>{escudoDeClics();setMas(false);onAction(o.id,accion)}}/>}
+  </div>;
+}
+function MasDeEmpaque({caja,alCerrar,alEscape,onElegir}){
+  useEscClose(alEscape);
+  const primero=useRef(null);
+  useEffect(()=>{primero.current?.focus();const fuera=e=>{if(caja.current&&!caja.current.contains(e.target))alCerrar()};
+    // (con el CLIC y en captura: cada ficha detiene sus clics para no abrir su detalle, y sin captura el «⋯» de otra ficha no se
+    //   enteraba; con mousedown, cerrar éste encogía la ficha y el «⋯» de abajo se movía antes de soltar: el clic ya no le llegaba)
+    document.addEventListener("click",fuera,true);return ()=>document.removeEventListener("click",fuera,true)},[]);
+  const opcion=(ref,accion,Icono,t,d)=><button ref={ref} onClick={()=>onElegir(accion)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}
+      style={{display:"flex",alignItems:"flex-start",gap:8,width:"100%",textAlign:"left",border:"none",background:"transparent",fontFamily:"inherit",padding:"7px 8px",borderRadius:7,cursor:"pointer"}}>
+      <Icono size={14} weight="bold" color={C.t2} style={{flexShrink:0,marginTop:1}}/>
+      <span style={{display:"flex",flexDirection:"column",gap:1,minWidth:0}}><span style={{fontSize:12,fontWeight:700,color:C.tx}}>{t}</span><span style={{fontSize:11,color:C.t2,lineHeight:1.35}}>{d}</span></span></button>;
+  return <div role="group" aria-label="Más acciones de la orden" style={{marginTop:6,padding:3,borderRadius:8,border:"1px solid "+C.bd,background:C.bg}}>
+    {opcion(primero,"send_maquila",TruckIcon,"Enviar a maquila","A un proveedor de afuera; se elige en la ventana.")}
+    {opcion(null,"waste",FilesIcon,"Registrar merma","Pliegos o piezas que se perdieron. No borra la orden.")}
+  </div>;
+}
 // v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
 //   de altura (maxHeight 400) con SCROLL interno + auto-scroll al arrastrar cerca del borde sup/inf (reordenar en
@@ -13970,13 +14003,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
               {dO==="vm_manual"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Arrastra órdenes aquí"}
             </div>
             :inManual.map(o=><div key={o.id}>
-              <DragCard o={o} borderColor={C.emp} onAction={onAction} match={matchVisto}/>
-              <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
-                {/* v10.73.75 — clarify: los 3 botones de Empaque no tenían label (los de la cola sí). El del bote de basura NO borra la orden: registra MERMA — el ícono decía una cosa y la acción hacía otra. */}
-                <button onClick={()=>{escudoDeClics();onAction(o.id,"advance","salidas")}} style={bs(C.sal)} title="Enviar a Salidas" aria-label="Enviar a Salidas"><ExportIcon size={14} weight="bold"/></button>
-                <button onClick={()=>{escudoDeClics();onAction(o.id,"send_maquila")}} style={{...bs(C.maq),padding:"4px 8px"}} title="Enviar a maquila" aria-label="Enviar a maquila"><TruckIcon size={14} weight="bold"/></button>
-                <button onClick={()=>{escudoDeClics();onAction(o.id,"waste")}} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}} title="Registrar merma (no borra la orden)" aria-label="Registrar merma"><TrashIcon size={14} weight="bold"/></button>
-              </div>
+              {/* v10.84.63 — las acciones, dentro de la ficha y con palabras (AccionesDeEmpaque) */}
+              <DragCard o={o} borderColor={C.emp} onAction={onAction} match={matchVisto} pie={<AccionesDeEmpaque o={o} onAction={onAction}/>}/>
             </div>)}
           </div>
         </div>
