@@ -408,7 +408,14 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   doble toque en tablet) caía en lo que quedaba debajo: en el tablero, sobre el botón de OTRA orden. El tablero tiene el
   mismo riesgo en sus propios botones (para su critique).
 - **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
-  un campo, y lo que la base rechaza regresa al campo con su aviso.
+  un campo, y lo que la base rechaza regresa al campo con su aviso. «Seguir escribiendo» regresa el foco a ese campo
+  (v10.84.55; caía al `<body>`).
+- **Cambiar de etapa pregunta antes** (v10.84.55): en el detalle, un botón que mueve la orden de etapa (avanzar, «Cliente
+  Aprobó», «Cargar a Stock») pregunta a cuál pasa, de cuál sale, qué máquina deja y a quién le avisa: lo que hace la función de
+  App (`doAdv`, `approveProof`, `loadStock`), no lo que el botón parece. La pregunta abre con el escudo (el segundo clic de un
+  doble clic no la confirma), al cancelarla el foco regresa al botón, y si la orden cambia de etapa con ella abierta se cierra
+  sola y lo dice (confirmarla la movería desde la etapa nueva, de Salidas de regreso a Empaque). Salidas y entregar ya
+  preguntaban en App: no se pregunta dos veces. Los botones del tablero, en su critique.
 - **Actuar no cierra el detalle** (v10.84.53): una acción que abre su propia ventana (folio, cancelar, regresar, espera…) la
   abre ENCIMA del detalle (las ventanas van en zIndex 999-1000 y cierran con Esc por la pila; el detalle es 998), y al
   cerrarla se regresa a la orden, actualizada y con el foco donde estaba. Sólo cierra lo que lleva a otra pantalla (editar,

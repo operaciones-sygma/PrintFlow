@@ -12,6 +12,45 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.55 — El detalle de la orden, tercera revisión independiente (27/40): cambiar de etapa pregunta antes — 7-oct-2026
+
+La tercera y última pasada de un revisor independiente (meta aprobada: 35 sin P1, o 3 pasadas) dio 27/40 con un P1. Con ella el
+detalle se cierra; el P1 se arregla igual.
+
+- **[P1] Cambiar de etapa desde el detalle pregunta antes.**
+  - Qué pasaba (P-0591, producción): «Empaque», relleno y con Ctrl+Enter, sacaba la orden de la Printmaster 74 en un clic, y
+    el detalle se cerraba con un aviso sin «Deshacer». Lo mismo «Cliente Aprobó», «Pide Cambios», «Prueba de Color»,
+    «Directo a CTP», «Recoger Placas», «Marcar Enviada» y «Cargar a Stock».
+  - Ahora pregunta a cuál pasa, de cuál sale (y qué máquina deja) y a quién le avisa: «¿Pasar P-0591 a «Empaque»? Sale de
+    «Máquina» (Printmaster 74).» Lo que dice es lo que hacen `doAdv`, `approveProof` y `loadStock` en App: a quién avisa
+    cada etapa (Germán, Noemí y Lupita, Gerardo, Karla), que «Enviar a Diseño» desde Validar da por hechas las validaciones
+    que falten, y que «Cargar a Stock» suma las piezas al inventario.
+  - «Enviar a Salidas» y entregar ya preguntaban en App: no se pregunta dos veces. Validar y reactivar no preguntan.
+  - La pregunta abre con el escudo (el segundo clic de un doble clic no la confirma) y con el foco en «No, cancelar»;
+    cancelar o Esc regresan el foco al botón, y Ctrl+Enter abre la pregunta, nunca la confirma.
+  - Si la orden cambia de etapa con la pregunta abierta (otra persona la movió), la pregunta se cierra sola y el detalle lo
+    dice: «Mientras decidías, P-0591 pasó a «Salidas» desde otra sesión: no se hizo el cambio a «Empaque».» Confirmarla la
+    habría movido de Salidas de regreso a Empaque.
+- **«Seguir escribiendo» regresa el foco al campo** con lo escrito. Caía al `<body>`, fuera del diálogo.
+- **Compartido:** nada. `StageFlowButtons` y `ConfirmModal` no cambian; el tablero sigue sin preguntar (su critique).
+- **No toca** la base ni las RPC.
+- **Pruebas** (`detalle.mjs`, de 164 a 177; `SOLO=<regex>` corre un caso suelto):
+  - Vuelta 1, contra v10.84.54: de los 5 primeros casos fallaban 4 (avanzaba sin preguntar, también con Ctrl+Enter, y
+    «Seguir escribiendo» dejaba el foco en el body). det-157 (Salidas no pregunta dos veces) pasaba, como debe. det-138
+    cambió por decisión: el doble clic ahora abre la pregunta y no avanza.
+  - Vuelta 2, con el arreglo, más la orden que cambia de etapa con la pregunta abierta, «Cargar a Stock» y «Cliente
+    Aprobó»; y vuelta 3, por donde no se diseñó (doble clic en «Sí, pasar», cancelar y el foco, clic fuera, el teclado,
+    «Enviar a Diseño» con una validación pendiente, la pregunta a 1920): 177 de 177.
+  - La vuelta 3 no encontró fallas, así que se comprobó con sabotajes que sus pruebas cazan lo que dicen: sin el escudo al
+    confirmar, sin regresar el foco, la pregunta dentro del velo del detalle, sin cerrar la pregunta vieja y con el foco
+    inicial en «Sí». Los cinco los cazó su prueba, pero el último sólo después de corregir det-165: con dos Ctrl+Enter
+    pasaba igual, porque Ctrl+Enter no aprieta un botón enfocado. Ahora prueba Ctrl+Enter, Ctrl+Enter y un Enter.
+  - Corrida doble contra v10.84.54: pasan 164 y fallan exactamente las 13 nuevas o cambiadas. Nada que pasaba antes falla.
+- **Queda del detalle** (snapshot `.impeccable/critique/2026-10-07T14-58-20Z__src-app-jsx-detailmodal.md`): el relleno por
+  descarte («Imprimir» relleno cuando no hay nada pendiente), las ventanas de las acciones que no son diálogos (sin
+  `role="dialog"`, sin foco inicial ni Tab atrapado), «Cancelar con nota de crédito» que se contradice con su ventana, el dato
+  de cada oficio en el encabezado y el aviso crudo cuando un avance falla.
+
 ## v10.84.54 — El detalle de la orden, segunda revisión independiente (24/40): el doble clic y lo escrito — 7-oct-2026
 
 La segunda pasada de un revisor independiente (meta aprobada: 35 sin P1, o 3 pasadas) dio 24/40 con un P1.

@@ -4258,6 +4258,8 @@ const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",al
 // v10.84.54: la segunda revisión independiente: el doble clic que actuaba sobre otra orden (escudoDeClics), cerrar no tira
 //   lo escrito, la nota rechazada regresa, «En espera» arriba, «Reimprimir» sólo antes de entregar, «Sin precio», «Recordar»
 //   a la vista, sin «Borrar» con folio, y menores.
+// v10.84.55: la tercera revisión independiente: cambiar de etapa pregunta antes (a cuál, de cuál y qué máquina deja, a quién
+//   avisa), la pregunta que se queda vieja se cierra, y «Seguir escribiendo» regresa al campo.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
   const dialogRef=useRef(null);const prevFocusRef=useRef(null);
@@ -4265,7 +4267,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   //   preguntar). Con algo escrito en un campo del detalle, Esc, el clic fuera, la × y «Cerrar» preguntan antes.
   const [preguntaCerrar,setPreguntaCerrar]=useState(false);
   // (un input sin `type` también es de texto: la nota rápida y el nombre interno no lo declaran, y el selector no los veía)
-  const hayEscrito=()=>[...(dialogRef.current?.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea')||[])].some(el=>(el.value||"").trim());
+  const campoEscrito=()=>[...(dialogRef.current?.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea')||[])].find(el=>(el.value||"").trim());
+  const hayEscrito=()=>!!campoEscrito();
   const cerrarConCuidado=()=>{if(hayEscrito()){setPreguntaCerrar(true);return}onClose()};
   useEscClose(cerrarConCuidado);
   useEffect(()=>{prevFocusRef.current=document.activeElement;const t=requestAnimationFrame(()=>{try{dialogRef.current&&dialogRef.current.focus()}catch{}});return ()=>{cancelAnimationFrame(t);try{prevFocusRef.current&&prevFocusRef.current.focus&&prevFocusRef.current.focus()}catch{}}},[]);
@@ -4329,7 +4332,36 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // v10.73.27 — gate ESPECÍFICO para "Quitar espera": espeja isResp de la card (secretaria estricta, NO isSec que incluye vendedor) para no sobre-otorgar unsnooze de maquila a un vendedor
   const canUnsnooze=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&role==="secretaria")||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&role==="secretaria"));
   // cierra el modal y despacha (mismo patrón que dispatch, pero forwardea el 3er arg de advance)
-  const flowDispatch=(id,action,arg)=>despachar(id,action,arg);
+  // v10.84.55 — cambiar de etapa pregunta antes (la tercera revisión independiente, P1: «Empaque», «Cliente Aprobó», «Directo
+  //   a CTP»… movían la orden en un clic o con Ctrl+Enter, y desde el detalle no hay «Deshacer»). La pregunta dice a qué etapa
+  //   pasa, de cuál sale (y qué máquina deja) y a quién le avisa: lo que hacen doAdv, approveProof y loadStock en App. Salidas
+  //   y entregar ya preguntan en App (no se pregunta dos veces); validar y reactivar, no. Los botones del tablero no cambian.
+  const YA_PREGUNTA=["salidas","delivered","maq_delivered"];
+  const [preguntaAvance,setPreguntaAvance]=useState(null);
+  const [avisoEtapa,setAvisoEtapa]=useState("");
+  const queHaceAvanzar=(action,ns)=>{
+    const num=o.production_number||"la orden";
+    if(action==="load_stock")return {hacia:"En Stock",title:"¿Cargar "+num+" a stock?",message:"Suma "+(Number(o.quantity)||0).toLocaleString("es-MX")+" piezas al inventario del cliente y la orden pasa a «En Stock».",confirmLabel:"Sí, cargar",confirmColor:tintaAA(C.emr,5)};
+    if(action==="approve_proof")return {hacia:"CTP",title:"¿El cliente aprobó la prueba de "+num+"?",message:"Pasa a «CTP» y le avisa a Germán.",confirmLabel:"Sí, la aprobó",confirmColor:tintaAA(C.ok,5)};
+    if(o.stage==="proof_client"&&ns==="design")return {hacia:"Diseño",title:"¿El cliente pidió cambios a "+num+"?",message:"Regresa a «Diseño» y le avisa a Noemí que corrija el archivo.",confirmLabel:"Sí, pidió cambios",confirmColor:tintaAA(C.dn,5)};
+    const maq=o.current_machine&&o.current_machine!=="vm_manual"?(MACHINES.find(x=>x.id===o.current_machine)?.name||o.current_machine):null;
+    const avisa={proof_printing:"Germán",proof_client:"Noemí y Lupita",placas_listas:"Gerardo",maq_received:"Karla"}[ns]||(ns==="ctp"&&o.stage==="design"?"Germán":ns==="ready"&&(o.stage==="design"||o.stage==="maquila_in")?"Gerardo":null);
+    const faltan=o.stage==="draft"?[!o.validated_by_production&&"Producción",!o.validated_by_preprensa&&"Pre-prensa"].filter(Boolean):[];
+    const hacia=SM[ns]?.lt||ns;
+    return {hacia,title:"¿Pasar "+num+" a «"+hacia+"»?",
+      message:["Sale de «"+(st?.lt||o.stage)+"»"+(maq?" ("+maq+")":"")+".",faltan.length>1?"Da por hechas las validaciones de Producción y Pre-prensa.":faltan.length?"Da por hecha la validación de "+faltan[0]+".":null,avisa?"Le avisa a "+avisa+".":null].filter(Boolean).join(" "),
+      confirmLabel:"Sí, pasar",confirmColor:tintaAA(SM[ns]?.c||C.ac,5)};
+  };
+  const flowDispatch=(id,action,arg)=>{
+    if(action==="approve_proof"||action==="load_stock"||(action==="advance"&&!YA_PREGUNTA.includes(arg))){
+      escudoDeClics();   // el segundo clic de un doble clic no cae en la pregunta
+      setAvisoEtapa("");setPreguntaAvance({id,action,arg,desde:o.stage,b:document.activeElement,...queHaceAvanzar(action,arg)});return}
+    despachar(id,action,arg)};
+  // la pregunta se queda vieja si la orden cambia de etapa con ella abierta (el tiempo real: otra persona la movió); «Sí,
+  //   pasar» la movería desde donde ya está (de Salidas, de regreso a Empaque). Se cierra y se dice.
+  useEffect(()=>{if(preguntaAvance&&o.stage!==preguntaAvance.desde){setPreguntaAvance(null);setAvisoEtapa("Mientras decidías, "+(o.production_number||"la orden")+" pasó a «"+(st?.lt||o.stage)+"» desde otra sesión: no se hizo el cambio a «"+preguntaAvance.hacia+"».")}},[o.stage]);
+  // «No, cancelar» o Esc: el foco regresa al botón que preguntó (sin esto caía al body y se perdían el Tab atrapado y los atajos)
+  const cerrarPreguntaAvance=()=>{const b=preguntaAvance?.b;setPreguntaAvance(null);requestAnimationFrame(()=>{const d=dialogRef.current;if(d)(b&&b.isConnected&&d.contains(b)?b:d).focus()})};
   // el foco regresa al detalle cuando la ventana de la acción se cierra. Primero hay que VERLA: una capa encima del detalle
   //   (zIndex 999-1000, como todas las ventanas de la app), un diálogo más, o el foco fuera del detalle (seis ventanas no se
   //   declaran role="dialog" y algunas no toman el foco: «Cancelar orden» y «Poner en espera» lo perdían). Luego, sin capa
@@ -4574,6 +4606,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <div style={{padding:"12px 24px 16px",borderTop:"0.5px solid "+C.bd,background:C.bg}}>
         {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
         {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button>}</div>}
+        {avisoEtapa&&<div role="status" style={{display:"flex",gap:6,alignItems:"flex-start",fontSize:12,fontWeight:600,color:C.wnInk,marginBottom:10,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/><span>{avisoEtapa}</span></div>}
         <div ref={flujoRef} style={{display:flujo.algo?"flex":"none",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>{canActFlow&&!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={flowDispatch} variante="detalle"/>}</div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <button onClick={cerrarConCuidado} style={{...bt(C.sf,C.t2),justifyContent:"center",border:"0.5px solid "+C.bd,minWidth:96}}>Cerrar</button>
@@ -4590,7 +4623,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     </div>
   </div>
   {/* la pregunta va FUERA del detalle (hermana, no hija): así sus clics y su Tab no le llegan al detalle */}
-  {preguntaCerrar&&<ConfirmModal title="¿Cerrar sin guardar lo que escribiste?" message="Hay algo escrito que todavía no se guarda: una nota, un nombre interno o un color." confirmLabel="Cerrar sin guardar" confirmColor={C.dn} cancelLabel="Seguir escribiendo" onConfirm={()=>{setPreguntaCerrar(false);onClose()}} onClose={()=>setPreguntaCerrar(false)}/>}
+  {preguntaCerrar&&<ConfirmModal title="¿Cerrar sin guardar lo que escribiste?" message="Hay algo escrito que todavía no se guarda: una nota, un nombre interno o un color." confirmLabel="Cerrar sin guardar" confirmColor={C.dn} cancelLabel="Seguir escribiendo" onConfirm={()=>{setPreguntaCerrar(false);onClose()}} onClose={()=>{setPreguntaCerrar(false);requestAnimationFrame(()=>{const c=campoEscrito();if(c)c.focus()})}}/>}
+  {preguntaAvance&&<ConfirmModal title={preguntaAvance.title} message={preguntaAvance.message} confirmLabel={preguntaAvance.confirmLabel} confirmColor={preguntaAvance.confirmColor}
+    onConfirm={()=>{const p=preguntaAvance;if(o.stage!==p.desde)return;setPreguntaAvance(null);despachar(p.id,p.action,p.arg)}} onClose={cerrarPreguntaAvance}/>}
   </>;
 }
 // v10.84.46 — el «⋯ Más» del detalle: lo raro y lo destructivo con su explicación (como el de la ficha, v10.73.9). Esc

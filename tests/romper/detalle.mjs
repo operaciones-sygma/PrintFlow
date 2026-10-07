@@ -11,6 +11,7 @@ const ok = (n, c, x = "") => res.push((c ? "PASA  " : "FALLA ") + n + (x ? "  ·
 let browser;
 try { browser = await chromium.launch({ headless: true }); } catch { browser = await chromium.launch({ headless: true, channel: "chrome" }); }
 async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) {
+  if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) return;   // SOLO=det-16[23] corre sólo esos (sabotajes)
   const page = await browser.newPage({ viewport });
   const errs = [], popups = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
@@ -889,9 +890,10 @@ await caso("det-137-ventana-que-no-toma-el-foco", "caso=salidas&rol=admin&ventan
 await caso("det-138-doble-clic-no-llega-al-tablero", "caso=alertas&rol=produccion", async p => {
   // [P1] el primer clic avanzaba y cerraba el detalle; el segundo caía en el tablero (en producción abrió otra orden con su
   // propio «Empaque» bajo el cursor)
+  // desde v10.84.55 avanzar pregunta (el P1 de la tercera revisión): el doble clic abre la pregunta y no avanza solo
   await dlg(p).getByRole("button", { name: "Empaque", exact: true }).dblclick(); await espera(p, 700);
-  const l = await log(p), n = (l.match(/accion:advance/g) || []).length;
-  ok("det-138-doble-clic-no-llega-al-tablero", n === 1 && !/clic en el tablero/.test(l), `doble clic en «Empaque»: avanzó ${n} vez/veces; el 2º clic ${/clic en el tablero/.test(l) ? "LE LLEGÓ AL TABLERO" : "no llegó a nada"}`);
+  const l = await log(p), n = (l.match(/accion:advance/g) || []).length, pregunta = await p.getByText(/¿Pasar P-0591/).count();
+  ok("det-138-doble-clic-no-llega-al-tablero", n === 0 && pregunta > 0 && !/clic en el tablero/.test(l), `doble clic en «Empaque»: avanzó ${n} vez/veces${pregunta ? " (pregunta antes)" : ""}; el 2º clic ${/clic en el tablero/.test(l) ? "LE LLEGÓ AL TABLERO" : "no llegó a nada"}`);
 });
 await caso("det-139-reimprimir-no-en-entregada", "caso=factura&rol=admin", async p => {
   await p.evaluate(() => window.__cambiar({ needs_reprint: true, print_version: 1 })); await espera(p, 300);
@@ -977,6 +979,109 @@ await caso("det-154-doble-clic-en-recordar", "caso=salidas&etapa=ctp&rol=karla",
   const l = await log(p), n = (l.match(/accion:nudge_responsible/g) || []).length;
   ok("det-154-doble-clic-en-recordar", n === 1 && !/clic en el tablero/.test(l), `doble clic en «Recordar»: le avisó ${n} vez/veces; el 2º clic ${/clic en el tablero/.test(l) ? "LE LLEGÓ AL TABLERO" : "no llegó a nada"}`);
 });
+
+// ── v10.84.55: la tercera revisión independiente (27/40, se cierra la pantalla): su P1, avanzar sin pregunta ─────────────
+await caso("det-155-avanzar-pregunta", "caso=alertas&rol=produccion", async p => {
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 700);
+  const t = await p.evaluate(() => document.body.innerText), l1 = await log(p);
+  let l2 = "";
+  if (/¿Pasar P-0591/.test(t)) { await p.getByRole("button", { name: /Sí, pasar/ }).click(); await espera(p, 400); l2 = await log(p); }
+  ok("det-155-avanzar-pregunta", /¿Pasar P-0591 a «Empaque»\?/.test(t) && /Printmaster 74/.test(t) && !/accion:advance/.test(l1) && /accion:advance packaging/.test(l2),
+    `«Empaque»: ${/¿Pasar/.test(t) ? "pregunta" + (/Printmaster 74/.test(t) ? " y dice que deja la Printmaster 74" : " (sin decir qué máquina deja)") : /accion:advance/.test(l1) ? "AVANZÓ SIN PREGUNTAR" : "no hace nada"}; al confirmar, ${/accion:advance packaging/.test(l2) ? "avanza" : "no avanza"}`);
+});
+await caso("det-156-ctrl-enter-avance-pregunta", "caso=alertas&rol=produccion", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  const pregunta = await p.getByText(/¿Pasar P-0591/).count(), l1 = await log(p);
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const queda = await p.getByText(/¿Pasar P-0591/).count(), detalle = await p.locator('[role="dialog"][aria-label^="Detalle de orden"]').count(), l2 = await log(p);
+  ok("det-156-ctrl-enter-avance-pregunta", pregunta > 0 && !/accion:advance/.test(l2) && queda === 0 && detalle === 1,
+    `Ctrl+Enter sobre «Empaque»: ${pregunta ? "pregunta" : /accion:advance/.test(l1) ? "AVANZÓ SIN PREGUNTAR" : "no hace nada"}; Esc ${queda ? "no cierra la pregunta" : "la cierra"} y el detalle ${detalle ? "sigue" : "SE CERRÓ"}`);
+});
+await caso("det-157-salidas-no-pregunta-dos-veces", "caso=empaque&rol=produccion", async p => {
+  // App ya pregunta antes de mandar a Salidas: el detalle no pregunta otra vez
+  await dlg(p).getByRole("button", { name: /Enviar a Salidas/ }).click(); await espera(p, 700);
+  const l = await log(p), pregunta = await p.getByText(/¿Pasar P-0585/).count();
+  ok("det-157-salidas-no-pregunta-dos-veces", /accion:advance salidas/.test(l) && pregunta === 0, `«Enviar a Salidas»: ${pregunta ? "el detalle PREGUNTA (y App también: dos veces)" : /accion:advance salidas/.test(l) ? "va a la pregunta de App" : "no hace nada"}`);
+});
+await caso("det-158-seguir-escribiendo-regresa-al-campo", "caso=factura&rol=admin", async p => {
+  await campoNotaR(p).fill("Llamar antes de entregar"); await p.mouse.click(30, 400); await espera(p, 400);
+  if (await p.getByRole("button", { name: /Seguir escribiendo/ }).count()) { await p.getByRole("button", { name: /Seguir escribiendo/ }).click(); await espera(p, 300); }
+  const foco = await p.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.tagName);
+  ok("det-158-seguir-escribiendo-regresa-al-campo", /Agregar una nota/.test(foco), `«Seguir escribiendo»: el foco queda en ${foco}`);
+});
+await caso("det-159-pregunta-vieja-no-mueve", "caso=alertas&rol=produccion", async p => {
+  // otra persona la pasa a Salidas mientras la pregunta está abierta: «Sí, pasar» la regresaría a Empaque
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 700);
+  const abierta = await p.getByText(/¿Pasar P-0591/).count();
+  await p.evaluate(() => window.__cambiar({ stage: "salidas", current_machine: "vm_manual" })); await espera(p, 400);
+  const sigue = await p.getByRole("button", { name: /Sí, pasar/ }).count();
+  if (sigue) { await p.getByRole("button", { name: /Sí, pasar/ }).click(); await espera(p, 400); }
+  const l = await log(p), t = await p.evaluate(() => document.querySelector('[role="dialog"][aria-label^="Detalle de orden"]')?.innerText || "");
+  ok("det-159-pregunta-vieja-no-mueve", abierta > 0 && !/accion:advance/.test(l) && sigue === 0 && /Salidas/.test(t) && /no se hizo/i.test(t),
+    `la orden cambia a Salidas con la pregunta abierta: ${sigue ? "la pregunta SIGUE" : "la pregunta se cierra"}; ${/accion:advance/.test(l) ? "AVANZÓ (la regresó)" : "no avanzó"}; ${/no se hizo/i.test(t) ? "lo dice" : "no dice nada"}`);
+});
+await caso("det-160-cargar-a-stock-pregunta", "caso=empaque&rol=produccion", async p => {
+  await p.evaluate(() => window.__cambiar({ stock_role: "production", stock_loaded: false, client_product_id: "cp1" })); await espera(p, 400);
+  await dlg(p).getByRole("button", { name: /Cargar a Stock/ }).click(); await espera(p, 700);
+  const t = await p.evaluate(() => document.body.innerText), l1 = await log(p);
+  let l2 = "";
+  if (/¿Cargar P-0585/.test(t)) { await p.getByRole("button", { name: /Sí, cargar/ }).click(); await espera(p, 400); l2 = await log(p); }
+  ok("det-160-cargar-a-stock-pregunta", /¿Cargar P-0585 a stock\?/.test(t) && /inventario/.test(t) && !/accion:load_stock/.test(l1) && /accion:load_stock/.test(l2),
+    `«Cargar a Stock»: ${/¿Cargar/.test(t) ? "pregunta" : /accion:load_stock/.test(l1) ? "CARGÓ SIN PREGUNTAR" : "no hace nada"}; al confirmar, ${/accion:load_stock/.test(l2) ? "carga" : "no carga"}`);
+});
+await caso("det-161-cliente-aprobo-pregunta", "caso=alertas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ stage: "proof_client", current_machine: null })); await espera(p, 400);
+  await dlg(p).getByRole("button", { name: /Cliente Aprobó/ }).click(); await espera(p, 700);
+  const t = await p.evaluate(() => document.body.innerText), l1 = await log(p);
+  let l2 = "";
+  if (/aprobó la prueba de P-0591/.test(t)) { await p.getByRole("button", { name: /Sí, la aprobó/ }).click(); await espera(p, 400); l2 = await log(p); }
+  ok("det-161-cliente-aprobo-pregunta", /aprobó la prueba de P-0591\?/.test(t) && /Germán/.test(t) && !/accion:approve_proof/.test(l1) && /accion:approve_proof/.test(l2),
+    `«Cliente Aprobó»: ${/aprobó la prueba/.test(t) ? "pregunta" : /accion:approve_proof/.test(l1) ? "APROBÓ SIN PREGUNTAR" : "no hace nada"}; al confirmar, ${/accion:approve_proof/.test(l2) ? "aprueba" : "no aprueba"}`);
+});
+// vuelta 3 de v10.84.55, por donde no se diseñó
+await caso("det-162-doble-clic-en-si-pasar", "caso=alertas&rol=produccion", async p => {
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 800);
+  await p.getByRole("button", { name: /Sí, pasar/ }).dblclick(); await espera(p, 800);
+  const l = await log(p), n = (l.match(/accion:advance/g) || []).length;
+  ok("det-162-doble-clic-en-si-pasar", n === 1 && !/clic en el tablero/.test(l), `doble clic en «Sí, pasar»: avanzó ${n} vez/veces; el 2º clic ${/clic en el tablero/.test(l) ? "LE LLEGÓ AL TABLERO" : "no llegó a nada"}`);
+});
+await caso("det-163-cancelar-regresa-al-boton", "caso=alertas&rol=produccion", async p => {
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 800);
+  await p.getByRole("button", { name: /No, cancelar/ }).click(); await espera(p, 400);
+  const foco = await p.evaluate(() => (document.activeElement?.innerText || document.activeElement?.tagName || "").trim());
+  const l = await log(p);
+  ok("det-163-cancelar-regresa-al-boton", foco === "Empaque" && !/accion:advance/.test(l), `«No, cancelar»: el foco queda en «${foco}»${/accion:advance/.test(l) ? " y AVANZÓ" : ""}`);
+});
+await caso("det-164-clic-fuera-de-la-pregunta", "caso=alertas&rol=produccion", async p => {
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 800);
+  await p.mouse.click(20, 20); await espera(p, 400);
+  const pregunta = await p.getByText(/¿Pasar P-0591/).count(), detalle = await p.locator('[role="dialog"][aria-label^="Detalle de orden"]').count(), l = await log(p);
+  // (que la pregunta siga o se cierre da igual: lo que no puede pasar es que avance, que se cierre el detalle o que el clic
+  //   le llegue al tablero)
+  ok("det-164-clic-fuera-de-la-pregunta", detalle === 1 && !/accion:advance/.test(l) && !/clic en el tablero/.test(l),
+    `clic fuera con la pregunta abierta: la pregunta ${pregunta ? "sigue" : "SE CERRÓ"}, el detalle ${detalle ? "sigue" : "SE CERRÓ"}${/accion:advance/.test(l) ? ", AVANZÓ" : ""}${/clic en el tablero/.test(l) ? ", el clic LLEGÓ AL TABLERO" : ""}`);
+});
+await caso("det-165-el-teclado-no-confirma-solo", "caso=alertas&rol=produccion", async p => {
+  // Ctrl+Enter abre la pregunta; otro Ctrl+Enter y un Enter de inercia no la confirman: abre en la respuesta segura
+  //   (la versión de sólo dos Ctrl+Enter pasaba aunque la pregunta abriera con el foco en «Sí»: un sabotaje lo mostró)
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  await p.keyboard.press("Enter"); await espera(p, 400);
+  const l = await log(p), detalle = await p.locator('[role="dialog"][aria-label^="Detalle de orden"]').count();
+  ok("det-165-el-teclado-no-confirma-solo", !/accion:advance/.test(l) && detalle === 1, `Ctrl+Enter, Ctrl+Enter y Enter: ${/accion:advance/.test(l) ? "AVANZÓ (la pregunta abrió con el foco en «Sí»)" : "no avanza"}; el detalle ${detalle ? "sigue" : "se cerró"}`);
+});
+await caso("det-166-enviar-a-diseno-dice-las-validaciones", "caso=alertas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ stage: "draft", current_machine: null, validated_by_production: true, validated_by_preprensa: false })); await espera(p, 400);
+  await dlg(p).getByRole("button", { name: /Enviar a Diseño/ }).click(); await espera(p, 800);
+  const t = await p.evaluate(() => document.body.innerText), l = await log(p);
+  ok("det-166-enviar-a-diseno-dice-las-validaciones", /¿Pasar P-0591 a «Diseño»\?/.test(t) && /validación de Pre-prensa/.test(t) && !/accion:advance/.test(l),
+    `«Enviar a Diseño» con Pre-prensa sin validar: ${/¿Pasar/.test(t) ? "pregunta" + (/validación de Pre-prensa/.test(t) ? " y dice que da por hecha la de Pre-prensa" : " SIN decir que da por hecha la validación") : "no pregunta"}`);
+});
+await caso("det-167-la-pregunta-a-1920", "caso=alertas&rol=produccion", async p => {
+  await dlg(p).getByRole("button", { name: "Empaque", exact: true }).click(); await espera(p, 800);
+  const caja = await p.getByRole("button", { name: /Sí, pasar/ }).boundingBox(), cancelar = await p.getByRole("button", { name: /No, cancelar/ }).boundingBox();
+  ok("det-167-la-pregunta-a-1920", !!caja && !!cancelar && caja.y + caja.height <= 1080 && Math.abs(caja.y - cancelar.y) < 2, `a 1920: «Sí, pasar» ${caja ? "en y=" + Math.round(caja.y) : "NO SE VE"}, junto a «No, cancelar»`);
+}, { width: 1920, height: 1080 });
 
 await browser.close();
 for (const r of res) console.log(r);
