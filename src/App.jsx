@@ -4293,7 +4293,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
-  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!o.return_covered_by_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
+  const {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:canDeshacerCancelacion}=accionesDelDetalle(o,role);   // v10.84.52, la misma definición que la ficha
   const canCancelWithNC=role==="admin"&&o.invoice_folio&&!o.stage.includes("cancelled");
   const dispatch=(action)=>{onClose();if(onAction)onAction(o.id,action)};
   // v10.72.14 — mismo gate de ownership/etapa que OCard (L8525) para mostrar los botones de flujo en el modal.
@@ -4326,9 +4326,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const canHistoricFolio=(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */;
   // v10.82.0 — DEVOLVER EL SALDO APLICADO A LA ORDEN EQUIVOCADA. Se gatea por credit_applied_at (la columna, no el regex
   //   sobre invoice_reason): los 21 consumos contra orden la tienen. Las canceladas NO lo ofrecen: el puente ya les devolvió el saldo.
-  const canDevolverSaldo=(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled");
   // v10.84.11 — «Deshacer cancelación» (admin): P-0350 se canceló por error el 21-sep y sólo se pudo revertir por SQL.
-  const canDeshacerCancelacion=role==="admin"&&o.stage?.includes("cancelled")&&!!o.cancelled_at;
   const canRegresar=canActFlow&&!snoozeActive(o)&&getRevertOptions(o.stage,role).length>0;
   // v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central (el visor podia abrirlo).
   const canPrint=vOwns&&canExecuteAction("print",o,role,userLogin);
@@ -12752,6 +12750,16 @@ function EsperaGroupBatchBtn({count,onReactivate}){
 //   escribir esto, que está tal cual en OCard): el «Más» del detalle las usa para ofrecer lo mismo que la ficha (la quinta
 //   critique del detalle: «dos juegos de acciones»). En la ficha, duplicar, cambiar OC, poner en espera, cancelar y borrar
 //   salen sólo si el rol puede actuar sobre la orden; la merma, recordar y pedir el archivo, con sus propias reglas.
+// v10.84.52 — lo que ofrecía sólo el detalle (folio anticipado, devolver saldo, deshacer cancelación), con sus MISMAS
+//   condiciones movidas tal cual de DetailModal: la ficha del tablero lo ofrece ahora en su «⋯» (la quinta critique: «dos
+//   juegos de acciones»). «Liberar folio cancelado» se queda en el detalle: necesita preguntarle a la base orden por orden.
+function accionesDelDetalle(o,role){
+  const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
+  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!o.return_covered_by_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
+  const canDevolverSaldo=(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled");
+  const canDeshacerCancelacion=role==="admin"&&o.stage?.includes("cancelled")&&!!o.cancelled_at;
+  return {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:!!canDeshacerCancelacion};
+}
 function accionesDeLaFicha(o,role,userLogin){
   const st=SM[o.stage];
   const agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
@@ -12852,6 +12860,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   const canCancelNCBtn=role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio;
   const canDeleteBtn=role==="admin";
   const hasDangerMenu=canRevertBtn||canCancelBtn||canCancelNCBtn||canDeleteBtn;
+  // v10.84.52 — lo que ofrecía sólo el detalle, con sus mismas condiciones (accionesDelDetalle)
+  const delDetalle=accionesDelDetalle(o,role);const hayFiscal=delDetalle.folioAnticipado||delDetalle.devolverSaldo||delDetalle.deshacerCancelacion;
   // v10.73.18 — poner "En espera": admin o el responsable del área de esta etapa (orderResponsible ya maneja maquila→vendedor).
   // v10.73.18b (workflow adversarial): isSec(role) es true también para vendedor → endurecido. El vendedor debe SER dueño
   // de la orden (espejo de secOwns/canAct); la cláusula secretaria exige role==="secretaria" (no isSec) para que un vendedor
@@ -12984,15 +12994,18 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         {/* 🛡️ v10.73.9 — /impeccable harden: las acciones destructivas/raras (Regresar, Cancelar, Cancelar-NC, Borrar)
             salen del muro de iconos a un menú "⋯ Más" con ETIQUETAS de texto + divisor antes de Borrar. Antes eran
             iconos rojos de 15px casi idénticos (label solo en hover) → riesgo de mis-click en acciones con consecuencia fiscal. */}
-        {(hasDangerMenu||canSnooze)&&<div style={{position:"relative"}}>
+        {(hasDangerMenu||canSnooze||hayFiscal)&&<div style={{position:"relative"}}>
           <button onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();setMoreOpen(v=>!v);}} style={bs(C.sf,moreOpen?C.ac:C.t2)} title="Más acciones" aria-haspopup="true" aria-expanded={moreOpen}><DotsThreeIcon size={15} weight="bold"/></button>
           {moreOpen&&<div role="menu" onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,zIndex:41,background:C.bg,border:"1px solid "+C.bd,borderRadius:10,boxShadow:C.sh3,padding:4,minWidth:210,display:"flex",flexDirection:"column",gap:1}}>
             {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"snooze");}} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
             {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{reactLabel}</button>}
-            {canSnooze&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
+            {delDetalle.folioAnticipado&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"pre_invoice");}} style={mi(C.fac)}><LightningIcon size={14} weight="fill"/>Asignar folio anticipado</button>}
+            {delDetalle.devolverSaldo&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_saldo");}} style={mi(C.dn)}><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
+            {delDetalle.deshacerCancelacion&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_cancelacion");}} style={mi(C.wn)}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>}
+            {(canSnooze||hayFiscal)&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
             {canRevertBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"revert");}} style={mi(C.wn)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar a etapa anterior</button>}
             {canCancelBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_order");}} style={mi(C.dn)}><XIcon size={14} weight="bold"/>Cancelar orden</button>}
-            {canCancelNCBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_with_nc");}} style={mi(C.dn)}><ReceiptIcon size={14} weight="bold"/>Cancelar con Nota de Crédito</button>}
+            {canCancelNCBtn&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"cancel_with_nc");}} style={mi(C.dn)}><ReceiptIcon size={14} weight="bold"/>Cancelar con nota de crédito</button>}
             {canDeleteBtn&&<>{(canRevertBtn||canCancelBtn||canCancelNCBtn)&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"delete");}} style={mi(C.dn)}><TrashIcon size={14} weight="bold"/>Borrar orden</button></>}
           </div>}
         </div>}

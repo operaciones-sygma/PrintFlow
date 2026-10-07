@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.52 — La ficha ofrece lo que sólo tenía el detalle — 7-oct-2026
+
+Segunda mitad de «un solo juego de acciones» (la quinta critique del detalle).
+
+- **El «⋯» de la ficha suma lo que sólo tenía el detalle**: «Asignar folio anticipado», «Devolver saldo» y «Deshacer
+  cancelación».
+  - Sus condiciones se movieron TAL CUAL de `DetailModal` a una definición compartida (`accionesDelDetalle`), que
+    ahora usan los dos. El script comprobó que cada una estaba, una vez y tal cual, en el detalle antes de moverla.
+  - El detalle queda igual: su tanda pasa entera (138 de 138).
+  - En la ficha salen donde su «⋯» existe, es decir, donde el rol puede actuar. El folio anticipado de Karla en etapas
+    que no son suyas se queda en el detalle.
+- **«Cancelar con nota de crédito»** en la ficha, con la palabra del detalle; decía «Cancelar con Nota de Crédito».
+- **Se queda sólo en el detalle**: «Liberar folio cancelado», que necesita preguntarle a la base orden por orden si el
+  folio está cancelado ante el SAT.
+- **No toca** la base ni las RPC. Los botones de flujo del tablero, idénticos (161 de 161).
+- **Pruebas**: la ficha no tiene banco, así que lo nuevo de su «⋯» se revisó en producción después de subir, sin escribir.
+  En la revisión de la ficha (el Kanban, la siguiente pantalla) se le hace su banco.
+
 ## v10.84.51 — El detalle de la orden ofrece lo mismo que la ficha — 7-oct-2026
 
 Tercera parte de la quinta critique. El revisor encontró «dos juegos de acciones»:
