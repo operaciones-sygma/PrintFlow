@@ -13442,6 +13442,8 @@ function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){retu
 //   admin) + un predicado `match`. La búsqueda RESALTA las coincidencias donde están. Además contesta mejor la
 //   pregunta real de Gerardo: "¿dónde está P-1234?" se responde viéndolo resaltado DENTRO de Prensa 3, con su
 //   contexto, no borrando las otras 10 máquinas.
+// v10.84.60: la segunda revisión independiente (25/40), P1: soltar en Empaque pasa por la misma espera con «Deshacer» que el
+//   botón, y los avisos de éxito dicen qué orden se movió.
 // v10.84.59: los P2 de la primera revisión: avisos de error con la orden y en palabras, Merma y Maquila que dicen de qué
 //   orden son y no aceptan basura, el texto de color en su tinta.
 // v10.84.58: se ve lo atrasado y lo detenido («N vencidas» con su lista, las alertas de la orden en cada ficha, «desde ayer
@@ -13530,7 +13532,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
     // → `maquila_in` entra y `ready` NO: dos cards visualmente idénticas con comportamientos opuestos. De ahí el toast.
     if(mid==="vm_salidas"){if(["packaging","in_production","maquila_in"].includes(o.stage)){onAction(o.id,"advance","salidas")}else showToast?.("Esa orden todavía no pasa por Empaque. Arrástrala a Empaque primero.","error");return}
     // Special zone: Empaque — skip if already there
-    if(mid==="vm_manual"){if(o.current_machine==="vm_manual"){setDO(null);return}onDrop(oid,"vm_manual");return}
+    // v10.84.60 — soltar en Empaque pasa por la MISMA espera con «Deshacer» que el botón «Empaque» (la segunda revisión
+    //   independiente, P1: el mismo paso con dos redes; arrastrar escribía al instante, y es lo que enseña la pista). Al
+    //   terminar la espera se llama a onDrop como antes: assignMachine no cambia.
+    if(mid==="vm_manual"){if(o.current_machine==="vm_manual"){setDO(null);return}programar(o,null,null,"Pasa a Empaque","pasó a Empaque",()=>onDropRef.current(oid,"vm_manual"));return}
     // Special zone: Maquila — triggers maquila modal
     if(mid==="vm_maquila"){if(["ready","in_production","packaging","maquila_in"].includes(o.stage)){onAction(o.id,"send_maquila")}else showToast?.("Desde su etapa actual esa orden no se puede mandar a maquila.","error");return}
     // Regular machine
@@ -13603,14 +13608,15 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   se dice; al salir del tablero, lo pendiente se hace. «Activar» pregunta cuando detiene lo que corre.
   //   onAction se lee de un ref: el que llega en el primer render trae el `orders` de App de ESE momento.
   const [pend,setPend]=useState({});const pendRef=useRef({});const timersRef=useRef({});
-  const ordRef=useRef(orders);ordRef.current=orders;const onActionRef=useRef(onAction);onActionRef.current=onAction;
+  const ordRef=useRef(orders);ordRef.current=orders;const onActionRef=useRef(onAction);onActionRef.current=onAction;const onDropRef=useRef(onDrop);onDropRef.current=onDrop;
   const [avisoPend,setAvisoPend]=useState("");const [pregActivar,setPregActivar]=useState(null);
   const quitarPend=id=>{clearTimeout(timersRef.current[id]);delete timersRef.current[id];const n={...pendRef.current};delete n[id];pendRef.current=n;setPend(n)};
   const hacerPend=id=>{const p=pendRef.current[id];if(!p)return;quitarPend(id);const o=ordRef.current.find(x=>x.id===id);
     if(!o||o.stage!==p.stage||o.current_machine!==p.maquina){setAvisoPend((p.pn||"La orden")+" ya no estaba en "+p.nombreMaquina+": no se "+p.noSeHizo+".");return}
-    onActionRef.current(id,p.accion,p.arg)};
-  const programar=(o,accion,arg,frase,noSeHizo)=>{escudoDeClics();setAvisoPend("");const mq=MACHINES.find(x=>x.id===o.current_machine);
-    pendRef.current={...pendRef.current,[o.id]:{accion,arg,frase,noSeHizo,pn:o.production_number,stage:o.stage,maquina:o.current_machine,nombreMaquina:mq?"la "+mq.name:"su máquina",hasta:Date.now()+DESHACER_MS}};
+    if(p.hacer)p.hacer();else onActionRef.current(id,p.accion,p.arg)};
+  const programar=(o,accion,arg,frase,noSeHizo,hacer)=>{escudoDeClics();setAvisoPend("");const mq=MACHINES.find(x=>x.id===o.current_machine);
+    const dondeEstaba=mq?"la "+mq.name:(o.stage==="ready"||o.stage==="maquila_in")?"Órdenes Listas":"su lugar";
+    pendRef.current={...pendRef.current,[o.id]:{accion,arg,frase,noSeHizo,hacer,pn:o.production_number,stage:o.stage,maquina:o.current_machine,nombreMaquina:dondeEstaba,hasta:Date.now()+DESHACER_MS}};
     setPend(pendRef.current);timersRef.current[o.id]=setTimeout(()=>hacerPend(o.id),DESHACER_MS)};
   const deshacerPend=(id,accion)=>{quitarPend(id);requestAnimationFrame(()=>{const b=document.querySelector('[data-orden="'+id+'"][data-accion="'+accion+'"]');if(b)b.focus()})};
   useEffect(()=>()=>{Object.keys(pendRef.current).forEach(hacerPend)},[]);   // al salir del tablero, lo pendiente se hace
@@ -13692,6 +13698,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
         {/* v10.84.58 — «Recibida de Maquila (parcial)» iba arriba junto al folio, sin poder encogerse, y se salía de la ficha */}
         {o.stage==="maquila_in"&&<div style={{marginTop:4}}><span style={{background:C.maqin+"12",color:tintaAA(C.maqin),padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>{SM.maquila_in?.lt}</span></div>}
         <AlertasDeFicha o={o}/>
+        {pend[o.id]&&<FilaPendiente p={pend[o.id]} onDeshacer={()=>deshacerPend(o.id,pend[o.id].accion)}/>}
         <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8,position:"relative"}}>
           <select aria-label={"Enviar la orden de "+o.client+" a una máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:9,padding:"7px 26px 7px 10px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}>
             <option value="">Enviar a máquina…</option>
@@ -19159,7 +19166,7 @@ export default function PrintFlow() {
     if(ns==="maq_in_progress"&&user!=="admin")await db.addNotification("admin",id,"new_order","⚙️ Maquila en proceso — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
-    showToast((SM[ns]?.l||"Avance")+" — "+(o?.client||""));
+    showToast(nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
     }catch(e){console.error("[doAdv] Error al avanzar:",e);
       // v10.84.59 — la orden se regresa a donde estaba en el momento (se veía movida mientras salía el aviso, hasta la recarga)
       if(o)setOrders(p=>p.map(x=>x.id===id?o:x));
@@ -19419,7 +19426,7 @@ export default function PrintFlow() {
           //   promovida se pintaba "Activa" sin LiveTimer hasta el reload. El realtime luego solo reconcilia (idempotente).
           setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,...(machineDown(oldMachine)?{}:{machine_log:[...(x.machine_log||[]),{machine:oldMachine,started:new Date().toISOString()}]})}:x));
         }
-        showToast("🏭 "+label,"success",undo);
+        showToast(nombreDeOrden(o)+" pasó a Empaque","success",undo);   // v10.84.60 — con la orden (sólo decía «Empaque»)
         return true; // v10.73.84 (PLACAS-2) — éxito rama Empaque
       }
       // Máquina real (offset/digital/acabados/preprensa): cola por posición
@@ -19457,7 +19464,7 @@ export default function PrintFlow() {
       }
       /* v10.73.83 (scan #2) — el toast anunciaba willBeActive/targetPos (PRE-clamp), mientras el timeline, la bitácora
          y el estado local ya usan finallyActive/finalPos (el resultado real de la RPC). Se alinea con lo que de verdad pasó. */
-      showToast(finallyActive?"🏭 "+label:"⏳ Turno "+finalPos+" · "+label,"success",undo);
+      showToast(nombreDeOrden(o)+(finallyActive?" ya corre en la "+label:" → "+label+", "+finalPos+"º en la fila"),"success",undo);   // v10.84.60 — con la orden
       return true; // v10.73.84 (PLACAS-2) — éxito rama máquina real
     }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ "+nombreDeOrden(o)+" no pasó a "+(mid==="vm_manual"?"Empaque":"la "+(MACHINES.find(x=>x.id===mid)?.name||"máquina"))+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload();return false}
     finally{setActionLoading(null);assignMachineLock.current=false}
@@ -20234,7 +20241,7 @@ export default function PrintFlow() {
             await promoteLog(result.new_active_id,result.old_machine||mach);
           }
           await db.addTimeline(id,willBeActive?"⏯️ Movida a ACTIVA":"📋 Movida al turno "+newPosition,userLogin||user,willBeActive?C.live:C.ios);
-          showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida al turno "+newPosition);
+          showToast(nombreDeOrden(o)+(willBeActive?" ya corre en la "+(MACHINES.find(x=>x.id===mach)?.name||"máquina"):" quedó "+newPosition+"º en la fila"));   // v10.84.60 — con la orden
           // Reload completo para sincronizar todas las positions afectadas
           await reload();
         }catch(e){console.error("[reorder_in_machine] Error:",e);showToast("❌ "+nombreDeOrden(o)+(newPosition===0?" no se arrancó":" no se movió en la fila")+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}
@@ -20315,7 +20322,7 @@ export default function PrintFlow() {
           //   y está en Listas después). Antes de v79 el modal atajaba el mis-drop y no llegaba ninguna.
           //   El TIMELINE sí se conserva a propósito: el assign ocurrió y luego se anuló, y eso es rastro legítimo.
           if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+(backStage==="ctp"?" sacada de la máquina por ":" devuelta a Lista por ")+userDisplayName(user),null,user,o.created_by);/* v10.73.84 (RETURN-1) — el texto ramifica por backStage igual que tlMsg y el toast: una orden de CTP se QUEDA en CTP, no "vuelve a Lista". */
-          showToast(backStage==="ctp"?"🔄 Sacada de la máquina":"🔄 Devuelta a Lista");
+          showToast(nombreDeOrden(o)+(backStage==="ctp"?" salió de la máquina":" regresó a Órdenes Listas"));   // v10.84.60 — con la orden
         }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ "+nombreDeOrden(o)+(backStage==="ctp"?" no salió de la máquina":" no regresó a Listas")+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}
         finally{returnLock.current.delete(id);setActionLoading(null)}
       })();

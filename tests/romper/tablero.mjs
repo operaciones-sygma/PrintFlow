@@ -535,5 +535,32 @@ await caso("tab-63-contraste-de-las-pastillas", "vista=produccion", async p => {
   ok("tab-63-contraste-de-las-pastillas", malos.length === 0, r.join(" · "));
 });
 
+// ── v10.84.60: el mismo paso con la misma red (P1 de la segunda revisión: arrastrar a Empaque escribía al instante, sin
+//   «Deshacer», mientras el botón «Empaque» esperaba con «Deshacer») ──────────────────────────────────────────────────────
+const tituloEmpaque = p => p.locator("div[style*='sticky'] span", { hasText: /^Empaque$/ }).first();
+const drops = (l, pn) => (l.match(new RegExp("drop:" + pn + " → vm_manual", "g")) || []).length;
+await caso("tab-64-arrastrar-a-empaque-espera-con-deshacer", "vista=produccion&deshacer_ms=1500", async p => {
+  await ficha(p, "P-0591").dragTo(tituloEmpaque(p), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 400);
+  const l1 = await log(p), t = await textoFicha(p, "P-0591"), deshacer = await p.getByRole("button", { name: /Deshacer/ }).count();
+  await espera(p, 1800); const l2 = await log(p);
+  ok("tab-64-arrastrar-a-empaque-espera-con-deshacer", drops(l1, "P-0591") === 0 && deshacer > 0 && drops(l2, "P-0591") === 1,
+    `arrastrar P-0591 a Empaque: ${drops(l1, "P-0591") ? "ESCRIBIÓ AL INSTANTE" : "espera"}${deshacer ? " con «Deshacer»" : " SIN «Deshacer»"}; al terminar la espera ${drops(l2, "P-0591") === 1 ? "pasa a Empaque" : "pasó " + drops(l2, "P-0591") + " veces"}`);
+});
+await caso("tab-65-arrastrar-a-empaque-y-deshacer", "vista=produccion&deshacer_ms=1500", async p => {
+  await ficha(p, "P-0591").dragTo(tituloEmpaque(p), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 700);
+  const d = p.getByRole("button", { name: /Deshacer/ }).first(); if (await d.count()) await d.click();
+  await espera(p, 2000);
+  const l = await log(p), e = await etapa(p, "P-0591");
+  ok("tab-65-arrastrar-a-empaque-y-deshacer", drops(l, "P-0591") === 0 && e === "in_production@off_pm74:0", `arrastrar a Empaque y «Deshacer»: ${drops(l, "P-0591") ? "PASÓ IGUAL" : "no pasa"}; P-0591 queda en ${e}`);
+});
+await caso("tab-66-arrastrar-de-listas-a-empaque", "vista=produccion&deshacer_ms=1500", async p => {
+  // P-0603 regresó de maquila y está en Listas: puede ir directo a Empaque, con la misma espera, y la espera se ve en SU ficha
+  await ficha(p, "P-0603").dragTo(tituloEmpaque(p), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 400);
+  const t = await textoFicha(p, "P-0603"), l1 = await log(p);
+  await espera(p, 1800); const l2 = await log(p);
+  ok("tab-66-arrastrar-de-listas-a-empaque", /Pasa a Empaque/.test(t) && drops(l1, "P-0603") === 0 && drops(l2, "P-0603") === 1,
+    `P-0603 de Listas a Empaque: ${/Pasa a Empaque/.test(t) ? "su ficha dice «Pasa a Empaque…»" : drops(l1, "P-0603") ? "ESCRIBIÓ AL INSTANTE" : "no dice nada"}; ${drops(l2, "P-0603") === 1 ? "luego pasa" : "pasó " + drops(l2, "P-0603") + " veces"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);

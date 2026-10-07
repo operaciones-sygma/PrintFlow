@@ -428,7 +428,8 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   cambió de etapa o de máquina, no se hace y se dice; al salir del tablero, lo pendiente se hace. «Activar» detiene lo que
   corre (cierra su reloj): eso se pregunta, con las dos órdenes y cuánto lleva; con la máquina libre no se pregunta. La
   confirmación sigue al daño, no a la costumbre (lo preguntó el revisor del tablero). El detalle de la orden pregunta porque
-  ahí no hay dónde dejar el «Deshacer»: se cierra al actuar.
+  ahí no hay dónde dejar el «Deshacer»: se cierra al actuar. **El mismo paso tiene la misma red por cualquier camino** (v10.84.60): soltar en Empaque
+  espera con «Deshacer» igual que el botón; un aviso de éxito dice qué orden se movió y a dónde.
 - **Cambiar de etapa pregunta antes** (v10.84.55): en el detalle, un botón que mueve la orden de etapa (avanzar, «Cliente
   Aprobó», «Cargar a Stock») pregunta a cuál pasa, de cuál sale, qué máquina deja y a quién le avisa: lo que hace la función de
   App (`doAdv`, `approveProof`, `loadStock`), no lo que el botón parece. La pregunta abre con el escudo (el segundo clic de un

@@ -12,6 +12,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.60 — El tablero: soltar en Empaque con la misma red que el botón — 7-oct-2026
+
+La segunda revisión independiente del tablero dio **25/40** (la primera, 20) con dos P1. Éste es el primero: «el mismo paso tiene
+redes distintas».
+
+- **Soltar una orden en Empaque espera con «Deshacer», como el botón «Empaque».** Antes escribía al instante, y es justo lo que
+  enseña la pista del tablero. La espera se ve en la ficha de donde salió (también en Listas) y al terminar se llama a App igual
+  que antes (`assignMachine` no cambia).
+- **Los avisos de éxito dicen qué orden se movió:** «P-0591 → Printmaster 74, 2º en la fila», «P-0578 pasó a «Empaque» ·
+  CALZADOS…», «P-0593 ya corre en la Printmaster 74», «P-0594 regresó a Órdenes Listas». Antes decían sólo la máquina o
+  «Ahora activa».
+- **No toca** la base, las RPC ni la lógica de App: los avisos son texto, y la espera vive en el tablero.
+- **Pruebas** (`tablero.mjs` +3): soltar en Empaque espera con «Deshacer», «Deshacer» no escribe nada, y desde Listas la espera
+  se ve en su ficha. Contra v10.84.59 fallaban las tres; con el arreglo pasan, junto con las 16 de la espera de antes.
+- **Sigue:** el otro P1, «la planta de un vistazo en la laptop» (la franja con lo que corre en cada máquina, las libres en un
+  renglón, Listas plegable); sus pruebas ya están escritas y fallan contra esta versión.
+
 ## v10.84.59 — El tablero: los avisos de error, Merma y Maquila, y el contraste — 7-oct-2026
 
 Cuarta y última parte de lo que dejó la primera revisión independiente del tablero (20/40): sus P2.
