@@ -410,6 +410,10 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
   un campo, y lo que la base rechaza regresa al campo con su aviso. «Seguir escribiendo» regresa el foco a ese campo
   (v10.84.55; caía al `<body>`).
+- **Un aviso de error dice qué orden, qué no se hizo y por qué en palabras** (v10.84.59): «P-0578 no pasó a «Empaque»: sin
+  conexión», nunca el nombre de una función ni el mensaje crudo de la base (`errorEnPalabras`; el crudo, a la consola). Y lo que
+  se movió en pantalla antes de que la base contestara se regresa en cuanto contesta que no. **Una ventana que guarda dice de
+  qué orden es y no acepta basura** (en el campo, con su porqué), y un doble clic guarda una vez.
 - **Un contador que alarma dice cuáles** (v10.84.58): «N vencidas» se aprieta y abre la lista con dónde está cada una y lleva
   a su ficha; un número rojo que no se puede seguir es ruido. **Y un reloj que cruzó la noche dice desde cuándo** («desde ayer
   05:48», en ámbar): las horas corridas cuentan las noches y se leen igual que unos minutos. **Las alertas de una orden son las

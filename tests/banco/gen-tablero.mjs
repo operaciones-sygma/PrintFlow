@@ -16,7 +16,7 @@ const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
-const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard"];
+const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard", "WasteModal", "MaqModal"];   // (las ventanas de merma y maquila, v10.84.59)
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
 const { codigo, simuladosUsados } = extraer(fuente, RAICES, { simulados: SIMULADOS });
 const partes = [
@@ -35,7 +35,7 @@ function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img 
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `// ── el banco ──
 const Q = new URLSearchParams(location.search);
-const VISTA = Q.get("vista") || "produccion", CASO = Q.get("caso") || "normal";
+const VISTA = Q.get("vista") || "produccion", CASO = Q.get("caso") || "normal", FALLA = Q.get("falla") || "";   // falla=merma|maquila: la base no la acepta (la ventana sigue abierta, como en App)
 const ROL = Q.get("rol") || ({ produccion: "produccion", german: "german", fichas: "produccion" }[VISTA] || "produccion");
 // fechas relativas a hoy, para que «vencida» y «hoy» no cambien con el día en que se corre
 const dia = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -88,6 +88,7 @@ function Banco() {
   const [ordenes, setOrdenes] = useState(ORDENES);
   // salir del tablero a otra vista (window.__vista("fichas")): lo pendiente de deshacer no se puede perder
   const [vista, setVista] = useState(VISTA);
+  const [ventana, setVentana] = useState(null);
   useEffect(() => { window.__vista = v => { anotar("vista:" + v); setVista(v); }; }, []);
   const [, refresca] = useState(0);
   useEffect(() => { const f = () => refresca(x => x + 1); window.addEventListener("bitacora", f); return () => window.removeEventListener("bitacora", f); }, []);
@@ -106,7 +107,9 @@ function Banco() {
   const onAction = (id, accion, arg) => { const pn = ref.current.find(o => o.id === id)?.production_number || id;
     anotar("accion:" + accion + " " + pn + (arg != null ? " " + (typeof arg === "object" ? JSON.stringify(arg) : arg) : ""));
     if (accion === "advance") mover(id, () => arg === "packaging" ? { stage: "packaging", current_machine: "vm_manual", machine_queue_position: null } : { stage: arg, current_machine: null, machine_queue_position: null });
-    if (accion === "return_to_ready") mover(id, () => ({ stage: "ready", current_machine: null, machine_queue_position: null })); };
+    if (accion === "return_to_ready") mover(id, () => ({ stage: "ready", current_machine: null, machine_queue_position: null }));
+    // las ventanas de merma y maquila, las REALES (como App: se cierran cuando se guardó)
+    if (accion === "waste" || accion === "send_maquila") setVentana({ tipo: accion, id }); };
   const showToast = (m, t) => anotar("aviso" + (t ? "(" + t + ")" : "") + ": " + m);
   const buscar = Q.get("buscar") || "";
   const match = buscar ? (o => (o.production_number || "").includes(buscar) || (o.client || "").toLowerCase().includes(buscar.toLowerCase())) : null;
@@ -117,6 +120,10 @@ function Banco() {
     {vista === "german" && <PreprensaBoard orders={ordenes} onDrop={onDrop} onAction={onAction} onPlateRequired={o => anotar("placas:" + o.production_number)} maintenance={MANT} role={ROL} />}
     {vista === "fichas" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(440px,1fr))", gap: 10 }}>
       {ordenes.map(o => <OCard key={o.id} o={o} role={ROL} onAction={onAction} busy={false} noDragHint userLogin={ROL} />)}</div>}
+    {ventana?.tipo === "waste" && <WasteModal order={ordenes.find(o => o.id === ventana.id)} onClose={() => { anotar("ventana cerrada"); setVentana(null); }}
+      onSave={async (pz, pl, n) => { anotar("merma " + (ordenes.find(o => o.id === ventana.id)?.production_number) + " piezas=" + pz + " pliegos=" + pl + " «" + (n || "") + "»"); await new Promise(r => setTimeout(r, 300)); if (FALLA === "merma") { anotar("la base rechazó la merma"); return; } setVentana(null); }} />}
+    {ventana?.tipo === "send_maquila" && <MaqModal order={ordenes.find(o => o.id === ventana.id)} providers={[{ name: "MAKILA", phone: "4771234567", email: "" }]} onClose={() => { anotar("ventana cerrada"); setVentana(null); }}
+      onSend={async (prov, ph, em, n) => { anotar("maquila " + (ordenes.find(o => o.id === ventana.id)?.production_number) + " a " + prov); await new Promise(r => setTimeout(r, 300)); if (FALLA === "maquila") { anotar("la base rechazó la maquila"); return; } setVentana(null); }} />}
     <pre id="log" style={{ fontSize: 11, color: C.t2 }}>{bitacora.join("\\n")}</pre>
   </div>;
 }

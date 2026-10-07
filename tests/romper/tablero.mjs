@@ -411,5 +411,129 @@ await caso("tab-49-las-alertas-no-se-salen", "vista=produccion&caso=lleno", asyn
   ok("tab-49-las-alertas-no-se-salen", r.length === 0, r.length ? "se salen de su ficha: " + r.slice(0, 5).join(", ") : "todas caben");
 });
 
+// ── v10.84.59: los P2 de la primera revisión: Merma y Maquila (de qué orden, que no acepte basura, diálogos de verdad), el
+//   contraste y lo menor ────────────────────────────────────────────────────────────────────────────────────────────────────
+const abrirDe = async (p, pn, re) => { const b = await botonDe(p, pn, re); if (!b) return false; await b.click(); await espera(p, 700); return true; };
+const dialogo = p => p.evaluate(() => { const d = document.querySelector('[role="dialog"]'); return d ? d.innerText.replace(/\s+/g, " ") : ""; });
+const mermas = l => (l.match(/merma P-\d+[^\n]*/g) || []);
+await caso("tab-50-merma-dice-de-que-orden", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  const d = await dialogo(p);
+  ok("tab-50-merma-dice-de-que-orden", /P-0585/.test(d) && /SILVIA/.test(d), `«Registrar merma» de P-0585: ${d ? (/P-0585/.test(d) ? "dice de qué orden es" : "NO dice de qué orden es") : "no es un diálogo (sin role=\"dialog\")"}`);
+});
+await caso("tab-51-merma-vacia-no-se-guarda", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  const g = p.getByRole("button", { name: /Guardar/ }).first(); await g.click({ force: true }).catch(() => {}); await espera(p, 500);
+  const l = await log(p);
+  ok("tab-51-merma-vacia-no-se-guarda", mermas(l).length === 0, `«Guardar» sin capturar nada: ${mermas(l).length ? "GUARDÓ «" + mermas(l)[0] + "»" : "no guarda"}`);
+});
+await caso("tab-52-merma-negativa-o-con-decimales", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  const campos = p.locator('[role="dialog"] input[type="number"], [role="dialog"] input[inputmode="numeric"]');
+  const n = await campos.count(); let r = [];
+  if (n >= 2) {
+    await campos.nth(0).fill("-50"); await p.getByRole("button", { name: /Guardar/ }).first().click({ force: true }).catch(() => {}); await espera(p, 400); r.push(mermas(await log(p)).length);
+    await campos.nth(0).fill(""); await campos.nth(1).fill("2.5"); await p.getByRole("button", { name: /Guardar/ }).first().click({ force: true }).catch(() => {}); await espera(p, 400); r.push(mermas(await log(p)).length);
+  }
+  ok("tab-52-merma-negativa-o-con-decimales", n >= 2 && r[0] === 0 && r[1] === 0, n < 2 ? "no encontré los dos campos (o no es un diálogo)" : `«-50» pliegos: ${r[0] ? "SE GUARDÓ" : "no se guarda"}; «2.5» piezas: ${r[1] ? "SE GUARDÓ" : "no se guarda"}`);
+});
+await caso("tab-53-merma-buena-se-guarda-una-vez", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  const campos = p.locator('[role="dialog"] input[type="number"], [role="dialog"] input[inputmode="numeric"]');
+  if (await campos.count() >= 2) await campos.nth(0).fill("30");
+  const motivo = p.locator('[role="dialog"] input:not([type="number"]):not([inputmode="numeric"])').first(); if (await motivo.count()) await motivo.fill("Registro corrido");
+  const g = p.getByRole("button", { name: /Guardar/ }).first(); if (await g.count()) await g.dblclick(); await espera(p, 900);
+  const m = mermas(await log(p));
+  ok("tab-53-merma-buena-se-guarda-una-vez", m.length === 1 && /piezas=0 pliegos=30/.test(m[0]), `30 pliegos y doble clic en «Guardar»: ${m.length ? m.length + " vez/veces: «" + m[0] + "»" : "no se guardó"}`);
+});
+await caso("tab-54-maquila-dice-de-que-orden-y-pide-proveedor", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Enviar a maquila/);
+  const d = await dialogo(p);
+  const enviar = p.locator('[role="dialog"]').getByRole("button", { name: /^Enviar/ }).first();
+  const apagado = (await enviar.count()) ? await enviar.isDisabled() : null;
+  const prov = p.locator('[role="dialog"] input').first(); if (await prov.count()) await prov.fill("MAKILA");
+  if (await enviar.count()) { await enviar.click(); await espera(p, 700); }
+  const l = await log(p);
+  ok("tab-54-maquila-dice-de-que-orden-y-pide-proveedor", /P-0585/.test(d) && apagado === true && /maquila P-0585 a MAKILA/.test(l),
+    `«Enviar a maquila» de P-0585: ${d ? (/P-0585/.test(d) ? "dice de qué orden es" : "NO dice de qué orden es") : "no es un diálogo"}; sin proveedor «Enviar» ${apagado === true ? "está apagado" : apagado === false ? "se ve vivo (y no hace nada)" : "no está"}; con «MAKILA» ${/maquila P-0585/.test(l) ? "la manda" : "no la manda"}`);
+});
+await caso("tab-55-merma-y-maquila-toman-el-foco", "vista=produccion", async p => {
+  const r = [];
+  for (const re of [/Registrar merma/, /Enviar a maquila/]) {
+    await abrirDe(p, "P-0585", re);
+    const dentro0 = await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+    let fuera = 0; for (let i = 0; i < 12; i++) { await p.keyboard.press("Tab"); if (!(await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')))) fuera++; }
+    r.push((dentro0 ? "foco adentro" : "foco FUERA") + (fuera ? ", Tab se sale " + fuera + "/12" : ", Tab no se sale"));
+    // (se cierra con «Cancelar»: con el foco en un campo, la app ignora Esc a propósito)
+    const cancelar = p.locator('[role="dialog"]').getByRole("button", { name: /Cancelar/ }).first();
+    if (await cancelar.count()) await cancelar.click(); else await p.keyboard.press("Escape");
+    await espera(p, 700);
+  }
+  ok("tab-55-merma-y-maquila-toman-el-foco", r.every(x => /^foco adentro, Tab no se sale$/.test(x)), `Merma: ${r[0]}; Maquila: ${r[1]}`);
+});
+// el contraste de un elemento contra su fondo de verdad (los fondos con transparencia se componen hasta uno opaco)
+const contrastes = (p, cuales) => p.evaluate(cuales => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
+  return cuales.map(t => { const el = [...document.querySelectorAll("body *")].find(e => propio(e) === t && e.getClientRects().length); if (!el) return t + ": no está";
+    const a = lum(nums(getComputedStyle(el).color)), b = lum(fondo(el)); return t + ": " + ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(1); });
+}, cuales);
+await caso("tab-56-contraste-del-tablero", "vista=produccion", async p => {
+  const r = await contrastes(p, ["Activar", "Activa", "Empaque", "A Listas"]);
+  const malos = r.filter(x => !/: (\d+\.\d)$/.test(x) || parseFloat(x.split(": ")[1]) < 4.5);
+  ok("tab-56-contraste-del-tablero", malos.length === 0, r.join(" · "));
+});
+await caso("tab-57-contraste-fuera-de-servicio", "vista=produccion&caso=mantenimiento", async p => {
+  const r = await p.evaluate(() => { const el = [...document.querySelectorAll("div")].find(d => /^Fuera de servicio/.test([...d.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim())); return el ? null : "no está"; });
+  const c = await contrastes(p, ["Fuera de servicio — Rodillo dañado"]);
+  ok("tab-57-contraste-fuera-de-servicio", !/no está/.test(c[0]) && parseFloat(c[0].split(": ")[1]) >= 4.5, c.join(" · "));
+});
+await caso("tab-58-ordenes-con-acento", "vista=produccion", async p => {
+  // dos órdenes en maquila sin proveedor: «2 órdenes», con acento
+  await p.evaluate(() => window.__cambiar("P-0580", { stage: "maquila_out" })); await espera(p, 400);
+  const t = await texto(p);
+  ok("tab-58-ordenes-con-acento", /2 órdenes/.test(t) && !/\bordenes\b/.test(t), `el seguimiento de maquila dice «${(t.match(/\d+ [oó]rdenes?/) || ["(nada)"])[0]}»`);
+});
+
+// vuelta 3 de v10.84.59, por donde no se diseñó
+await caso("tab-59-merma-solo-con-piezas", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  await p.locator("#merma-piezas").fill("25"); await p.getByRole("button", { name: /Guardar/ }).first().click(); await espera(p, 700);
+  const m = mermas(await log(p));
+  ok("tab-59-merma-solo-con-piezas", m.length === 1 && /piezas=25 pliegos=0/.test(m[0]), `25 piezas y pliegos vacío: ${m[0] || "no se guardó"}`);
+});
+await caso("tab-60-merma-que-la-base-rechaza", "vista=produccion&falla=merma", async p => {
+  await abrirDe(p, "P-0585", /Registrar merma/);
+  await p.locator("#merma-pliegos").fill("12"); await p.locator("#merma-motivo").fill("Se corrió el registro");
+  await p.getByRole("button", { name: /Guardar/ }).first().click(); await espera(p, 900);
+  const sigue = await p.locator('[role="dialog"]').count(), pl = sigue ? await p.locator("#merma-pliegos").inputValue() : "", mot = sigue ? await p.locator("#merma-motivo").inputValue() : "";
+  const vivo = sigue ? !(await p.getByRole("button", { name: /Guardar/ }).first().isDisabled()) : false;
+  ok("tab-60-merma-que-la-base-rechaza", sigue === 1 && pl === "12" && /registro/.test(mot) && vivo, `la base no la acepta: la ventana ${sigue ? "sigue" : "SE CERRÓ"}${sigue ? " con «" + pl + "» y «" + mot + "»; «Guardar» " + (vivo ? "listo para reintentar" : "APAGADO") : ""}`);
+});
+await caso("tab-61-proveedor-de-puros-espacios", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Enviar a maquila/);
+  await p.locator('[role="dialog"] input').first().fill("   "); await espera(p, 200);
+  const enviar = p.locator('[role="dialog"]').getByRole("button", { name: /^Enviar/ }).first();
+  const apagado = await enviar.isDisabled(); await enviar.click({ force: true }).catch(() => {}); await espera(p, 500);
+  const l = await log(p);
+  // (el envío es «maquila P-0585 a …»; «accion:send_maquila P-0585» es abrir la ventana)
+  ok("tab-61-proveedor-de-puros-espacios", apagado && !/maquila P-0585 a /.test(l), `proveedor «   »: «Enviar» ${apagado ? "apagado" : "VIVO"}; ${/maquila P-0585 a /.test(l) ? "LA MANDÓ" : "no la manda"}`);
+});
+await caso("tab-62-doble-clic-en-enviar-maquila", "vista=produccion", async p => {
+  await abrirDe(p, "P-0585", /Enviar a maquila/);
+  await p.locator('[role="dialog"] input').first().fill("MAKILA");
+  await p.locator('[role="dialog"]').getByRole("button", { name: /^Enviar/ }).first().dblclick(); await espera(p, 900);
+  const n = ((await log(p)).match(/maquila P-0585 a MAKILA/g) || []).length;
+  ok("tab-62-doble-clic-en-enviar-maquila", n === 1, `doble clic en «Enviar»: la mandó ${n} vez/veces`);
+});
+await caso("tab-63-contraste-de-las-pastillas", "vista=produccion", async p => {
+  const r = await contrastes(p, ["5 en producción", "1 en producción"]);
+  const malos = r.filter(x => !/: \d+\.\d$/.test(x) || parseFloat(x.split(": ")[1]) < 4.5);
+  ok("tab-63-contraste-de-las-pastillas", malos.length === 0, r.join(" · "));
+});
+
 await browser.close();
 for (const r of res) console.log(r);

@@ -12,6 +12,45 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.59 — El tablero: los avisos de error, Merma y Maquila, y el contraste — 7-oct-2026
+
+Cuarta y última parte de lo que dejó la primera revisión independiente del tablero (20/40): sus P2.
+
+- **Cuando la base rechaza, el aviso dice qué orden y por qué, en palabras.**
+  - Antes: «No se pudo avanzar: solo lectura», «closeMachineLog update: …», «addWaste: …».
+  - Ahora: «P-0578 no pasó a «Empaque»: no tienes permiso. El tablero se vuelve a leer de la base.» (`errorEnPalabras`:
+    «no tienes permiso», «sin conexión» o «la base no lo aceptó»). El mensaje crudo sigue en la consola.
+  - Va así en pasar de etapa, asignar máquina, arrancar o mover en la fila, regresar a Listas, mandar a maquila y la merma.
+  - **La orden se regresa a su lugar al momento.** Se veía en Empaque mientras el aviso decía que no se pudo, hasta la recarga.
+- **La merma:**
+  - dice de qué orden es;
+  - sólo acepta números enteros de 0 en adelante, y alguno mayor que 0. Guardaba vacío, «-50» y «2.5»;
+  - 🔥 **un doble clic en «Guardar» la registraba dos veces**: ahora guarda una. Lo encontraron las pruebas, no el revisor;
+  - si la base no la acepta, la ventana sigue con lo escrito.
+- **Maquila:** dice de qué orden es, «Enviar» está apagado sin proveedor (con su porqué; antes se veía vivo y no hacía nada) y
+  un doble clic manda una vez.
+- **Merma y Maquila son diálogos de verdad**: tienen `role="dialog"`, el foco entra al primer campo y el Tab no se sale.
+- **El texto de color va en su tinta:** «Activar» (era 2.2:1), «ACTIVA» (2.1:1), «Empaque» (4.1:1), «Fuera de servicio» (2.3:1)
+  y las pastillas «N en producción» (2.8:1). Todos pasan 4.5:1.
+- Menores: «2 órdenes» con acento (el seguimiento de maquila); la pregunta de Salidas y de entregar dice «¿Pasar P-0585 a
+  «Salidas»?» con «Sí, pasar», como el detalle. Antes era «📤 Salidas» con «Sí, confirmar».
+- **Compartido:** los avisos de error de App son sólo texto: cada manejador sigue haciendo lo mismo, y el único cambio de
+  lógica es que `doAdv` regresa la orden a su lugar antes de recargar. `WasteModal` y `MaqModal` aceptan `order` (sin él, sin
+  encabezado). No toca la base ni las RPC.
+- **Pruebas:**
+  - `tablero.mjs`, de 49 a 63: el banco pinta ahora las ventanas REALES de merma y maquila, y `falla=merma|maquila` simula
+    que la base no acepta.
+  - Prueba nueva con la app real: `tests/recorrido/tablero-errores.mjs`. Aprieta «Empaque» en una orden que corre, deja que
+    la base «rechace» (todo con las escrituras cortadas) y lee el aviso y dónde se ve la orden. El banco no lo puede probar
+    porque el aviso es de App. Contra producción (v10.84.58) dio MAL las dos cosas; contra la compilada nueva, BIEN.
+  - Vuelta 1, contra v10.84.58: fallaban las 9 nuevas, con los mismos números que midió el revisor.
+  - Vuelta 2: 7 de 9. Dos cosas: «Fuera de servicio» quedaba en 4.4:1 sobre el ámbar de la máquina parada (más tinta), y la
+    prueba del foco cerraba con Esc con el foco en un campo, donde la app lo ignora a propósito (ahora cierra con «Cancelar»).
+  - Vuelta 3, por donde no se diseñó (sólo piezas, la base que rechaza, un proveedor de puros espacios, doble clic en
+    «Enviar», las pastillas): una prueba confundía abrir la ventana con mandar y se corrigió.
+  - Cuatro sabotajes, cazados.
+- **Con esto, las cuatro partes de la primera revisión están hechas.** Sigue la segunda revisión independiente.
+
 ## v10.84.58 — El tablero: se ve lo atrasado y lo detenido — 7-oct-2026
 
 Tercera parte de lo que dejó la primera revisión independiente del tablero (20/40). Su P1: «No se ve lo atrasado ni lo

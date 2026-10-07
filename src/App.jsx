@@ -4257,6 +4257,10 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 // v10.84.56 — cuánto espera el tablero antes de escribir lo que se puede deshacer («Empaque», «A Listas»): lo mismo que vive
 //   el «Deshacer» de asignar una máquina (el aviso de 6.5 s). `let`: el banco del tablero lo acorta para probar.
 let DESHACER_MS=6500;
+// v10.84.59 — el porqué de un error EN PALABRAS para un aviso (la primera revisión independiente del tablero: los avisos decían
+//   «closeMachineLog update: …» o «addWaste: …» y no decían qué orden). El mensaje crudo sigue en la consola.
+const errorEnPalabras=e=>{const m=String(e?.message||e||"");return /42501|permis|denied|solo lectura|not allowed|row-level/i.test(m)?"no tienes permiso":/fetch|network|conex|timeout|Load failed|ERR_/i.test(m)?"sin conexión":"la base no lo aceptó"};
+const nombreDeOrden=o=>o?(o.production_number||o.client||"La orden"):"La orden";
 const escudoDeClics=(ms=600)=>{if(typeof document==="undefined")return;const d=document.createElement("div");d.setAttribute("aria-hidden","true");d.dataset.escudo="1";d.style.cssText="position:fixed;inset:0;z-index:2147483000;background:transparent";const tragar=e=>{e.preventDefault();e.stopPropagation()};["click","dblclick","mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","contextmenu"].forEach(t=>d.addEventListener(t,tragar,true));document.body.appendChild(d);setTimeout(()=>d.remove(),ms)};
 const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
 const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
@@ -4865,13 +4869,20 @@ function DeshacerSaldoModal({order,user,userLogin,onDone,onClose,showToast}) {
     </div>
   </div></div>;
 }
-function MaqModal({onSend,onClose,providers=[]}) {
+function MaqModal({onSend,onClose,providers=[],order}) {
   useEscClose(onClose);
   const [p,setP]=useState("");const [ph,setPh]=useState("");const [em,setEm]=useState("");const [n,setN]=useState("");const [showAC,setShowAC]=useState(false);
   const matches=(p||"").length>=2?providers.filter(x=>x.name?.toLowerCase().includes(p.toLowerCase())).slice(0,5):[];
   const selProv=pv=>{setP(pv.name);setPh(pv.phone||"");setEm(pv.email||"");setShowAC(false)};
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-    <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 14px",display:"flex",alignItems:"center",gap:6}}><TruckIcon size={17} weight="bold"/>Enviar a Maquila</h3>
+  // v10.84.59 — de qué orden es, «Enviar» apagado sin proveedor (no hacía nada y se veía vivo), un doble clic manda una vez, y
+  //   un diálogo de verdad (role, el foco en el proveedor, el Tab no se sale)
+  const [saving,setSaving]=useState(false);const enCurso=useRef(false);
+  const enviar=async()=>{const prov=p.trim();if(!prov||enCurso.current)return;enCurso.current=true;setSaving(true);try{await onSend(prov,ph,em,n)}finally{enCurso.current=false;setSaving(false)}};
+  const ref=useRef(null);useEffect(()=>{const t=requestAnimationFrame(()=>{try{ref.current?.querySelector("input")?.focus()}catch{}});return ()=>cancelAnimationFrame(t)},[]);
+  const apagado=!p.trim()||saving;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div ref={ref} role="dialog" aria-modal="true" aria-labelledby="dlg-maquila-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
+    <h3 id="dlg-maquila-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><TruckIcon size={17} weight="bold"/>Enviar a maquila</h3>
+    {order&&<div style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}><b style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{order.production_number}</b> · <b style={{color:C.tx}}>{order.client}</b>{order.product_type?" · "+order.product_type:""}</div>}
     <div style={{marginBottom:10,position:"relative"}}>
       <label style={lbl}>Proveedor *</label>
       <input style={inp} value={p} onChange={e=>{setP(e.target.value);setShowAC(true)}} onFocus={()=>setShowAC(true)} onBlur={()=>setTimeout(()=>setShowAC(false),200)} placeholder="Nombre del proveedor"/>
@@ -4888,13 +4899,34 @@ function MaqModal({onSend,onClose,providers=[]}) {
       <div><label style={lbl}><EnvelopeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Email</label><input style={inp} type="email" value={em} onChange={e=>setEm(e.target.value)} placeholder="correo@ej.com"/></div>
     </div>
     <div style={{marginBottom:16}}><label style={lbl}>Notas (opcional)</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Instrucciones..."/></div>
-    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>{if(p)onSend(p,ph,em,n)}} style={{...bt(C.maq),flex:1,justifyContent:"center"}}><TruckIcon size={14} weight="bold"/>Enviar</button></div>
+    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={enviar} disabled={apagado} title={!p.trim()?"Escribe el proveedor":""} style={{...(apagado?{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,cursor:"not-allowed"}:bt(tintaAA(C.maq,5))),flex:1,justifyContent:"center"}}><TruckIcon size={14} weight="bold"/>{saving?"Enviando…":"Enviar"}</button></div>
+    {!p.trim()&&<div style={{fontSize:11,color:C.t2,marginTop:8,textAlign:"right"}}>Escribe el proveedor para poder enviarla.</div>}
   </div></div>;
 }
-function WasteModal({onSave,onClose}) {
+// v10.84.59 — la merma (la primera revisión independiente del tablero, P2): dice de qué orden es; sólo acepta números enteros de 0
+//   en adelante y alguno mayor que 0 (guardaba vacío, «-50» y «2.5»); un doble clic guarda UNA vez (guardaba dos); y es un diálogo
+//   de verdad (role, el foco en el primer campo, el Tab no se sale). Si la base no la acepta, la ventana sigue con lo escrito.
+function WasteModal({onSave,onClose,order}) {
   useEscClose(onClose);
-  const [pl,setPl]=useState("");const [pz,setPz]=useState("");const [n,setN]=useState("");
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}><h3 style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><TrashIcon size={17} weight="bold"/>Registrar Merma</h3><p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>¿Cuánto material se echó a perder?</p><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}><div><label style={lbl}><FileTextIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pliegos (Impresión)</label><input style={inp} type="number" value={pl} onChange={e=>setPl(e.target.value)} placeholder="0"/></div><div><label style={lbl}><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Piezas (Acabados)</label><input style={inp} type="number" value={pz} onChange={e=>setPz(e.target.value)} placeholder="0"/></div></div><div style={{marginBottom:16}}><label style={lbl}>¿Qué pasó?</label><input style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Motivo..."/></div><div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={()=>onSave(parseInt(pz,10)||0,parseInt(pl,10)||0,n)} style={{...bt(C.wn),flex:1,justifyContent:"center"}}>Guardar</button></div></div></div>;
+  const [pl,setPl]=useState("");const [pz,setPz]=useState("");const [n,setN]=useState("");const [saving,setSaving]=useState(false);const enCurso=useRef(false);
+  const entero=v=>String(v).trim()===""?0:(/^\d+$/.test(String(v).trim())?parseInt(v,10):NaN);
+  const vPl=entero(pl),vPz=entero(pz);
+  const error=Number.isNaN(vPl)||Number.isNaN(vPz)?"Sólo números enteros, sin signo ni decimales.":(vPl+vPz===0?"Escribe cuántos pliegos o cuántas piezas.":"");
+  const guardar=async()=>{if(enCurso.current||error)return;enCurso.current=true;setSaving(true);try{await onSave(vPz,vPl,n.trim())}finally{enCurso.current=false;setSaving(false)}};
+  const ref=useRef(null);useEffect(()=>{const t=requestAnimationFrame(()=>{try{ref.current?.querySelector("input")?.focus()}catch{}});return ()=>cancelAnimationFrame(t)},[]);
+  const apagado=!!error||saving;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}><div ref={ref} role="dialog" aria-modal="true" aria-labelledby="dlg-merma-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:400,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
+    <h3 id="dlg-merma-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 6px",display:"flex",alignItems:"center",gap:6}}><TrashIcon size={17} weight="bold"/>Registrar merma</h3>
+    {order&&<div style={{fontSize:12,color:C.t2,margin:"0 0 8px"}}><b style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{order.production_number}</b> · <b style={{color:C.tx}}>{order.client}</b>{order.product_type?" · "+order.product_type:""}</div>}
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>¿Cuánto material se echó a perder?</p>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
+      <div><label style={lbl} htmlFor="merma-pliegos"><FileTextIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pliegos (impresión)</label><input id="merma-pliegos" style={inp} type="number" min="0" step="1" inputMode="numeric" value={pl} onChange={e=>setPl(e.target.value)} placeholder="0"/></div>
+      <div><label style={lbl} htmlFor="merma-piezas"><PackageIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Piezas (acabados)</label><input id="merma-piezas" style={inp} type="number" min="0" step="1" inputMode="numeric" value={pz} onChange={e=>setPz(e.target.value)} placeholder="0"/></div>
+    </div>
+    {(pl!==""||pz!=="")&&error&&<div role="alert" style={{fontSize:12,fontWeight:600,color:C.dnInk,margin:"0 0 10px"}}>{error}</div>}
+    <div style={{marginBottom:16}}><label style={lbl} htmlFor="merma-motivo">¿Qué pasó?</label><input id="merma-motivo" style={inp} value={n} onChange={e=>setN(e.target.value)} placeholder="Motivo..."/></div>
+    <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={guardar} disabled={apagado} style={{...(apagado?{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,cursor:"not-allowed"}:bt(tintaAA(C.wn,5))),flex:1,justifyContent:"center"}}>{saving?"Guardando…":"Guardar"}</button></div>
+  </div></div>;
 }
 function DevolverModal({onConfirm,onClose}) {
   useEscClose(onClose);
@@ -13275,7 +13307,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
     {provs.map(([prov,d])=>{const vOwnsSample=role==="vendedor"?d.orders.find(o=>(o.maquila_phone||o.maquila_email)&&(!o.created_by||o.created_by===userLogin)):d.orders.find(o=>o.maquila_phone||o.maquila_email);const sample=vOwnsSample;return <div key={prov} style={{marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
         <div style={{background:C.maq+"15",padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,color:C.maq}}>{prov}</div>
-        <span style={{fontSize:10,color:C.t2}}>{d.orders.length} orden{d.orders.length>1?"es":""}</span>
+        <span style={{fontSize:10,color:C.t2}}>{d.orders.length===1?"1 orden":d.orders.length+" órdenes"}</span>
         {sample?.maquila_phone&&<a href={"https://wa.me/"+(sample.maquila_phone.replace(/\D/g,"").replace(/^(?!52|1)/,"52"))} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#25d366",textDecoration:"none",fontWeight:500}}><WhatsappLogoIcon size={11} weight="bold"/>{sample.maquila_phone}</a>}
         {sample?.maquila_email&&<a href={"mailto:"+sample.maquila_email} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500}}><EnvelopeIcon size={11} weight="bold"/>{sample.maquila_email}</a>}
       </div>
@@ -13410,6 +13442,8 @@ function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){retu
 //   admin) + un predicado `match`. La búsqueda RESALTA las coincidencias donde están. Además contesta mejor la
 //   pregunta real de Gerardo: "¿dónde está P-1234?" se responde viéndolo resaltado DENTRO de Prensa 3, con su
 //   contexto, no borrando las otras 10 máquinas.
+// v10.84.59: los P2 de la primera revisión: avisos de error con la orden y en palabras, Merma y Maquila que dicen de qué
+//   orden son y no aceptan basura, el texto de color en su tinta.
 // v10.84.58: se ve lo atrasado y lo detenido («N vencidas» con su lista, las alertas de la orden en cada ficha, «desde ayer
 //   18:05» en lo que cruzó la noche, la búsqueda dice dónde).
 // v10.84.57: se lee qué corre en cada máquina (el cliente completo en la ficha, un solo reloj en la activa, la columna
@@ -13702,7 +13736,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                 <span style={{fontSize:F.meta,color:C.t2}}>{ms.length} máquinas</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {cnt>0&&<div style={{background:cc[type],color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:F.body,fontWeight:700}}>{cnt} en producción</div>}
+                {cnt>0&&<div style={{background:tintaAA(cc[type],5),color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:F.body,fontWeight:700}}>{cnt} en producción</div>}
                 {isCol&&<span style={{fontSize:F.meta,fontWeight:600,color:C.t2}}>clic para abrir</span>}
                 <span style={{fontSize:F.title,color:C.t2,transition:"transform .2s",transform:isCol?"rotate(-90deg)":"rotate(0)",display:"inline-flex"}}><CaretDownIcon size={13} weight="bold"/></span>
               </div>
@@ -13758,7 +13792,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         campante sobre una máquina parada. Ahora el aviso sale SIEMPRE que esté en mantenimiento, y
                         el trabajo se sigue viendo debajo para poder sacarlo. El reloj sigue corriendo a propósito:
                         el pliego sigue montado y esos minutos son trabajo real, no se invalidan. */}
-                    {inMaint&&<div style={{textAlign:"center",padding:"12px 0",color:C.wn,fontSize:11,fontWeight:600}}>
+                    {inMaint&&<div style={{textAlign:"center",padding:"12px 0",color:tintaAA(C.wn,7),fontSize:11,fontWeight:600}}>
                       <WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Fuera de servicio{mRec.notes?" — "+mRec.notes:""}
                       {hasWork&&<div style={{fontSize:F.meta,color:C.t2,fontWeight:500,marginTop:3}}>El trabajo sigue montado. Arrástralo a otra máquina.</div>}
                     </div>}
@@ -13773,7 +13807,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                           único relleno saturado + única elevación (sombra teñida de su propio verde). */}
                       {activa&&<div key={activa.id} style={{border:"2px solid "+C.live,borderRadius:10,padding:8,marginBottom:8,background:C.live+"12",boxShadow:"0 2px 8px "+C.live+"22"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
-                          <span style={{fontSize:9,fontWeight:800,color:C.live,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
+                          <span style={{fontSize:9,fontWeight:800,color:tintaAA(C.live),textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
                           {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started} desde/>:null})()}
                         </div>
                         {/* v10.73.80 — el marco verde ya dice "activa"; el borde de categoría aquí adentro solo repetía
@@ -13782,7 +13816,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
                           {pend[activa.id]?<FilaPendiente p={pend[activa.id]} onDeshacer={()=>deshacerPend(activa.id,pend[activa.id].accion)}/>:<>
-                          <button data-orden={activa.id} data-accion="advance" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"advance","packaging","Pasa a Empaque","pasó a Empaque")} style={{...bs(C.emp),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
+                          <button data-orden={activa.id} data-accion="advance" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"advance","packaging","Pasa a Empaque","pasó a Empaque")} style={{...bs(tintaAA(C.emp,5)),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
                           {/* v10.84.56 — «A Listas» con palabra (era ⟳, el ícono de recargar) y en tono quieto: saca la orden de la máquina y avisa */}
                           {(role==="admin"||role==="produccion")&&<button data-orden={activa.id} data-accion="return_to_ready" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")} style={{...bs(C.sf,C.t2),padding:"4px 9px",boxShadow:"0 0 0 0.5px "+C.bdSt,...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}</>}
                         </div>
@@ -13809,7 +13843,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                                   oculta: es la política que este archivo ya escribió para el select en v10.73.74
                                   (ocultarlo lo dejaría buscando el botón justo cuando lo busca). El select "Mover a
                                   máquina…" de abajo queda intacto: es la salida real. */}
-                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="reorder_in_machine" disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();pedirActivar(o,activa,m)}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:C.card,color:C.live,cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="reorder_in_machine" disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();pedirActivar(o,activa,m)}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+tintaAA(C.live)+"80",background:C.card,color:tintaAA(C.live),cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
                               {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="return_to_ready" disabled={actionLoading===o.id} onClick={e=>{e.stopPropagation();programar(o,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.bdSt,background:C.card,color:C.t2,cursor:actionLoading===o.id?"wait":"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",opacity:actionLoading===o.id?.5:1}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}
                             </div>
                           </div>
@@ -19126,7 +19160,10 @@ export default function PrintFlow() {
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
     showToast((SM[ns]?.l||"Avance")+" — "+(o?.client||""));
-    }catch(e){console.error("[doAdv] Error al avanzar:",e);showToast("❌ No se pudo avanzar: "+(e?.message||"error desconocido"),"error");reload()}finally{setActionLoading(null)}
+    }catch(e){console.error("[doAdv] Error al avanzar:",e);
+      // v10.84.59 — la orden se regresa a donde estaba en el momento (se veía movida mientras salía el aviso, hasta la recarga)
+      if(o)setOrders(p=>p.map(x=>x.id===id?o:x));
+      showToast(e?._stale?"⚠️ "+nombreDeOrden(o)+" cambió de etapa en otra sesión: no se movió.":"❌ "+nombreDeOrden(o)+" no pasó a «"+(SM[ns]?.lt||ns)+"»: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
 
   const advance=useCallback((id,ns)=>{
@@ -19153,7 +19190,7 @@ export default function PrintFlow() {
       const oc=orders.find(x=>x.id===id);
       const who=oc?[oc.production_number,oc.client,oc.product_type].filter(Boolean).join(" · "):"";
       const why=ns==="salidas"?"Karla recibirá aviso para asignarle folio fiscal.":"Se marcará como entregada.";
-      setConfirmModal({title:SM[ns]?.l||"Confirmar",message:(who?who+" — ":"")+why,confirmLabel:"Sí, confirmar",confirmColor:ns.includes("delivered")?C.ok:C.sal,onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})
+      setConfirmModal({title:"¿Pasar "+(oc?.production_number||"la orden")+" a «"+(SM[ns]?.lt||ns)+"»?",message:(who?who+" — ":"")+why,confirmLabel:"Sí, pasar",confirmColor:ns.includes("delivered")?C.ok:C.sal,onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})
     }else doAdv(id,ns)
   },[orders,user,userLogin,showToast,doAdv]);
 
@@ -19422,7 +19459,7 @@ export default function PrintFlow() {
          y el estado local ya usan finallyActive/finalPos (el resultado real de la RPC). Se alinea con lo que de verdad pasó. */
       showToast(finallyActive?"🏭 "+label:"⏳ Turno "+finalPos+" · "+label,"success",undo);
       return true; // v10.73.84 (PLACAS-2) — éxito rama máquina real
-    }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ No se pudo asignar máquina: "+(e?.message||"error desconocido"),"error");reload();return false}
+    }catch(e){console.error("[assignMachine] Error:",e);showToast("❌ "+nombreDeOrden(o)+" no pasó a "+(mid==="vm_manual"?"Empaque":"la "+(MACHINES.find(x=>x.id===mid)?.name||"máquina"))+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload();return false}
     finally{setActionLoading(null);assignMachineLock.current=false}
   },[user,userLogin,orders,showToast,reload]);
 
@@ -19456,7 +19493,7 @@ export default function PrintFlow() {
     }
     showToast("🚚 Enviada a maquila: "+prov);
     setMaqModal(null);
-    }catch(e){console.error("[sendMaquila] Error:",e);showToast("❌ No se pudo enviar a maquila: "+(e?.message||"error desconocido"),"error");reload()}
+    }catch(e){console.error("[sendMaquila] Error:",e);showToast("❌ "+nombreDeOrden(orig)+" no se envió a maquila: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}
   },[user,orders,showToast,reload]);
 
   const addWaste=useCallback(async(oid,pz,pl,note)=>{
@@ -19466,7 +19503,7 @@ export default function PrintFlow() {
     await db.addTimeline(oid,"🗑️ Merma",user,C.wn);
     showToast("🗑️ Merma registrada","warning");
     setWasteModal(null);
-    }catch(e){console.error("[addWaste] Error:",e);showToast("❌ No se pudo registrar merma: "+(e?.message||"error desconocido"),"error");reload()}
+    }catch(e){console.error("[addWaste] Error:",e);showToast("❌ No se registró la merma de "+nombreDeOrden(ordersRef.current.find(x=>x.id===oid))+": "+errorEnPalabras(e)+". Lo escrito sigue en la ventana.","error");reload()}
   },[user,showToast,reload]);
 
   const duplicate=useCallback(async id=>{
@@ -20200,7 +20237,7 @@ export default function PrintFlow() {
           showToast(willBeActive?"⏯️ Ahora activa":"📋 Movida al turno "+newPosition);
           // Reload completo para sincronizar todas las positions afectadas
           await reload();
-        }catch(e){console.error("[reorder_in_machine] Error:",e);showToast("❌ No se pudo reordenar: "+(e?.message||"error desconocido"),"error");reload()}
+        }catch(e){console.error("[reorder_in_machine] Error:",e);showToast("❌ "+nombreDeOrden(o)+(newPosition===0?" no se arrancó":" no se movió en la fila")+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}
         finally{reorderLock.current=false;setActionLoading(null)}
       })();
     }
@@ -20279,7 +20316,7 @@ export default function PrintFlow() {
           //   El TIMELINE sí se conserva a propósito: el assign ocurrió y luego se anuló, y eso es rastro legítimo.
           if(!payload?.silent)await db.notifySecs(id,"machine_change","🔄 Orden "+(o.production_number||o.id)+(backStage==="ctp"?" sacada de la máquina por ":" devuelta a Lista por ")+userDisplayName(user),null,user,o.created_by);/* v10.73.84 (RETURN-1) — el texto ramifica por backStage igual que tlMsg y el toast: una orden de CTP se QUEDA en CTP, no "vuelve a Lista". */
           showToast(backStage==="ctp"?"🔄 Sacada de la máquina":"🔄 Devuelta a Lista");
-        }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ No se pudo regresar: "+(e?.message||"error desconocido"),"error");reload()}
+        }catch(e){console.error("[return_to_ready] Error:",e);showToast("❌ "+nombreDeOrden(o)+(backStage==="ctp"?" no salió de la máquina":" no regresó a Listas")+": "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}
         finally{returnLock.current.delete(id);setActionLoading(null)}
       })();
     }
@@ -20753,8 +20790,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {paletteOpen&&<CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} groups={cmdGroups}/>}
       {showNotifs&&<NotificationTray notifications={notifications} onClose={()=>setShowNotifs(false)} onRead={async id=>{await db.markRead(id);setNotifications(p=>p.map(n=>n.id===id?{...n,read:true}:n))}} onReadAll={async()=>{await db.markAllRead(notifKey);setNotifications(p=>p.map(n=>({...n,read:true})))}} onDelete={async id=>{await db.deleteNotification(id);setNotifications(p=>p.filter(n=>n.id!==id))}} onDeleteAll={async()=>{await db.deleteAllNotifications(notifKey);setNotifications([])}} role={user}/>}
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
-      {maqModal&&<MaqModal onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
-      {wasteModal&&<WasteModal onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
+      {maqModal&&<MaqModal order={orders.find(x=>x.id===maqModal)} onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
+      {wasteModal&&<WasteModal order={orders.find(x=>x.id===wasteModal)} onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}
       {inventoryOpen&&<InventoryModal user={user} userLogin={userLogin} clients={clients} showToast={showToast} onOpenInvoice={order=>{
         // v10.46.9 F3 FIX — Computar el merge SINCRÓNICAMENTE leyendo orders por referencia.
         // En v10.46.5 el merge se hacía dentro del setOrders updater (asíncrono en React 18)
