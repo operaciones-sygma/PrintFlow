@@ -443,8 +443,9 @@ await caso("det-69-cambia-con-el-detalle-abierto", "caso=salidas&rol=karla", asy
 await caso("det-70-ctrl-enter-con-foco-en-cerrar", "caso=salidas&rol=karla", async p => {
   await p.getByRole("button", { name: "Cerrar", exact: true }).last().focus();   // el del pie (arriba está la ×)
   await p.keyboard.press("Control+Enter"); await espera(p, 300);
-  const l = await log(p), cerrado = (l.match(/cerrado/g) || []).length;
-  ok("det-70-ctrl-enter-con-foco-en-cerrar", /accion:deliver_with_invoice/.test(l) && cerrado === 1, `el foco en «Cerrar»: Ctrl+Enter hace ${primeraAccion(l)} (cerrado ${cerrado} vez/veces)`);
+  // desde v10.84.53 el detalle se queda abierto debajo de la ventana de la acción (antes se cerraba: cerrado 1 vez)
+  const l = await log(p), cerrado = (l.match(/(^|\n)cerrado/g) || []).length;
+  ok("det-70-ctrl-enter-con-foco-en-cerrar", /accion:deliver_with_invoice/.test(l) && cerrado === 0, `el foco en «Cerrar»: Ctrl+Enter hace ${primeraAccion(l)} (el detalle se cerró ${cerrado} vez/veces)`);
 });
 await caso("det-71-ctrl-enter-boton-apagado", "caso=maquila&rol=admin", async p => {
   // «Recibimos el Trabajo» apagado (falta el precio al cliente): el atajo nunca lo aprieta. Desde v10.84.49 hace «Editar», que
@@ -805,6 +806,79 @@ await caso("det-128-mas-con-todo-cabe-650", "caso=salidas&rol=admin", async p =>
     return { n: m.querySelectorAll('[role="menuitem"]').length, arriba: Math.round(b.top), abajo: Math.round(b.bottom), dTop: Math.round(d.top), alto: innerHeight }; });
   ok("det-128-mas-con-todo-cabe-650", !!r && r.arriba >= r.dTop && r.abajo <= r.alto, r ? `«Más» de admin con ${r.n} opciones a 1366×650: de y=${r.arriba} a y=${r.abajo} (el diálogo empieza en ${r.dTop})` : "no abrió");
 }, { width: 1366, height: 650 });
+
+// ── v10.84.53: actuar no cierra el detalle (la quinta critique: «abrir una acción destruye el detalle») ──────────────────
+const cuantosDialogos = p => p.getByRole("dialog").count();
+const focoEn = p => p.evaluate(() => { const a = document.activeElement, d = document.querySelector('[role="dialog"]');
+  return { enDetalle: !!(d && a && d.contains(a)), quien: a?.getAttribute("aria-label") || a?.textContent?.trim().slice(0, 30) || a?.tagName }; });
+await caso("det-129-asignar-folio-encima-del-detalle", "caso=salidas&rol=karla", async p => {
+  await dlg(p).getByRole("button", { name: /Asignar Folio y Entregar/ }).click(); await espera(p, 300);
+  const dos = await cuantosDialogos(p), l1 = await log(p);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const uno = await cuantosDialogos(p), f = await focoEn(p), l2 = await log(p);
+  ok("det-129-asignar-folio-encima-del-detalle", dos === 2 && !/cerrado/.test(l1) && uno === 1 && /ventana cerrada/.test(l2) && f.enDetalle && /Asignar Folio/.test(f.quien),
+    `«Asignar Folio y Entregar»: ${dos === 2 ? "su ventana se abre ENCIMA del detalle" : /cerrado/.test(l1) ? "el detalle SE CIERRA antes" : "?"}; Esc: ${uno === 1 ? "cierra sólo la ventana" : "cierra " + (2 - uno) + " cosa(s)"}; el foco en ${f.quien}${f.enDetalle ? "" : " (FUERA del detalle)"}`);
+});
+await caso("det-130-cancelar-desde-mas-regresa", "caso=salidas&rol=admin", async p => {
+  await abrirMas(p); await p.getByRole("menuitem", { name: /Cancelar orden/ }).click(); await espera(p, 300);
+  const dos = await cuantosDialogos(p);
+  if (dos === 2) { await p.getByRole("button", { name: "Cancelar", exact: true }).last().click(); await espera(p, 300); }
+  const uno = await cuantosDialogos(p), f = await focoEn(p);
+  ok("det-130-cancelar-desde-mas-regresa", dos === 2 && uno === 1 && f.enDetalle && /Más acciones/.test(f.quien),
+    `«Cancelar orden» desde «Más»: ${dos === 2 ? "su ventana encima" : "el detalle SE CERRÓ"}; al cancelarla, ${uno === 1 ? "el detalle sigue" : "?"} y el foco en ${f.quien}`);
+});
+await caso("det-131-al-terminar-regresa-a-la-orden", "caso=salidas&rol=karla", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const hay = await p.getByRole("button", { name: "Hecho" }).count();
+  if (hay) { await p.getByRole("button", { name: "Hecho" }).click(); await espera(p, 400); }
+  const t = await textoArriba(p).catch(() => ""), f = await focoEn(p);
+  ok("det-131-al-terminar-regresa-a-la-orden", hay === 1 && /F-300/.test(t) && /Entregada/.test(t) && f.enDetalle,
+    hay ? `al terminar: el detalle ${/F-300/.test(t) ? "enseña la orden ya entregada con F-300" : "NO se actualizó: " + t.slice(0, 60)}; el foco ${f.enDetalle ? "en el detalle" : "FUERA"}` : "Ctrl+Enter no abrió la ventana encima del detalle");
+});
+await caso("det-132-editar-sigue-cerrando", "caso=factura&rol=admin", async p => {
+  await dlg(p).getByRole("button", { name: "Editar", exact: true }).click(); await espera(p, 300);
+  const l = await log(p), n = await cuantosDialogos(p);
+  ok("det-132-editar-sigue-cerrando", /cerrado/.test(l) && /accion:edit/.test(l) && n === 0, `«Editar» (lleva a otra pantalla): ${/cerrado/.test(l) && n === 0 ? "cierra el detalle" : "NO lo cierra"}`);
+});
+await caso("det-133-ventana-sin-rol-tambien-regresa", "caso=salidas&rol=admin&ventana=sinrol", async p => {
+  await abrirMas(p); await p.getByRole("menuitem", { name: /Regresar a etapa anterior/ }).click(); await espera(p, 300);
+  const hay = await p.locator("[data-ventana]").count();
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const sigue = await cuantosDialogos(p), f = await focoEn(p), queda = await p.locator("[data-ventana]").count();
+  ok("det-133-ventana-sin-rol-tambien-regresa", hay === 1 && queda === 0 && sigue === 1 && f.enDetalle,
+    `una ventana sin role="dialog" (como seis de la app): ${hay ? "se abre" : "no se abrió"}; Esc ${queda ? "NO la cierra" : "la cierra"}, el detalle ${sigue ? "sigue" : "SE CERRÓ"}, el foco ${f.enDetalle ? "regresa a él" : "queda FUERA"}`);
+});
+
+// ── v10.84.53, vuelta 3: por donde no se diseñó ─────────────────────────────────────────────────────────────────────
+await caso("det-134-doble-clic-en-asignar", "caso=salidas&rol=karla", async p => {
+  await dlg(p).getByRole("button", { name: /Asignar Folio y Entregar/ }).dblclick(); await espera(p, 400);
+  const l = await log(p), n = (l.match(/accion:deliver_with_invoice/g) || []).length, detalle = await p.locator('[role="dialog"][aria-label^="Detalle de orden"]').count();
+  ok("det-134-doble-clic-en-asignar", n === 1 && detalle === 1, `doble clic en «Asignar Folio y Entregar»: la acción ${n} vez/veces; el detalle ${detalle ? "sigue" : "SE CERRÓ"}${/ventana cerrada/.test(l) ? " (el 2º clic cayó en el fondo de la ventana y la cerró)" : ""}`);
+});
+await caso("det-135-esc-esc", "caso=salidas&rol=karla", async p => {
+  await dlg(p).getByRole("button", { name: /Asignar Folio y Entregar/ }).click(); await espera(p, 300);
+  await p.keyboard.press("Escape"); await espera(p, 250); const uno = await cuantosDialogos(p);
+  await p.keyboard.press("Escape"); await espera(p, 250); const cero = await cuantosDialogos(p);
+  const l = await log(p);
+  ok("det-135-esc-esc", uno === 1 && cero === 0 && /ventana cerrada[\s\S]*cerrado/.test(l), `Esc: quedan ${uno} diálogo(s) (debe ser el detalle); otro Esc: quedan ${cero}`);
+});
+await caso("det-136-sin-ventana-el-detalle-sigue", "caso=salidas&rol=karla&ventana=nunca", async p => {
+  const b = dlg(p).getByRole("button", { name: /Asignar Folio y Entregar/ });
+  await b.click(); await espera(p, 3500);
+  const n = await cuantosDialogos(p), f = await focoEn(p);
+  ok("det-136-sin-ventana-el-detalle-sigue", n === 1 && f.enDetalle && /Asignar Folio/.test(f.quien), `la app no abre ventana (sólo un aviso): el detalle ${n ? "sigue" : "SE CERRÓ"} y el foco en ${f.quien}${f.enDetalle ? "" : " (FUERA)"}`);
+});
+
+await caso("det-137-ventana-que-no-toma-el-foco", "caso=salidas&rol=admin&ventana=sinfoco", async p => {
+  // la encontró la prueba con las ventanas REALES (ver-encima): «Cancelar orden» y «Poner en espera» no se declaran
+  // role="dialog" ni toman el foco, y al cerrarlas con Esc el foco se quedaba en el <body>
+  await abrirMas(p); await p.getByRole("menuitem", { name: /Cancelar orden/ }).click(); await espera(p, 400);
+  const hay = await p.locator("[data-ventana]").count();
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const queda = await p.locator("[data-ventana]").count(), sigue = await cuantosDialogos(p), f = await focoEn(p);
+  ok("det-137-ventana-que-no-toma-el-foco", hay === 1 && queda === 0 && sigue === 1 && f.enDetalle && /Más acciones/.test(f.quien),
+    `una ventana sin rol y sin foco: ${hay ? "se abre" : "no se abrió"}; con Esc ${queda ? "NO se cierra" : "se cierra"}, el detalle ${sigue ? "sigue" : "SE CERRÓ"}, el foco en ${f.quien}${f.enDetalle ? "" : " (FUERA del detalle)"}`);
+});
 
 await browser.close();
 for (const r of res) console.log(r);

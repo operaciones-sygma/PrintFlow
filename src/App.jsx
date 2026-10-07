@@ -4249,6 +4249,7 @@ const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",al
 //   definición), la máquina con su reloj, a quién le toca y «Reimprimir» si la copia impresa quedó obsoleta.
 // v10.84.51: un solo juego de acciones con la ficha: el «Más» suma poner en espera, recordar, avisar que falta el archivo,
 //   merma, duplicar, cambiar OC, cancelar y borrar (accionesDeLaFicha), con las palabras de la ficha; y las notas rápidas.
+// v10.84.53: actuar no cierra el detalle: las ventanas de las acciones se abren encima y, al cerrarse, se regresa a la orden.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
@@ -4295,7 +4296,17 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
   const {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:canDeshacerCancelacion}=accionesDelDetalle(o,role);   // v10.84.52, la misma definición que la ficha
   const canCancelWithNC=role==="admin"&&o.invoice_folio&&!o.stage.includes("cancelled");
-  const dispatch=(action)=>{onClose();if(onAction)onAction(o.id,action)};
+  // v10.84.53 — actuar no cierra el detalle (la quinta critique: «abrir una acción destruye el detalle»). Lo que abre su propia
+  //   ventana la abre ENCIMA (todas van en zIndex 999-1000 y cierran con Esc por la pila; el detalle es 998), y al cerrarla
+  //   —con Esc, «Cancelar» o al terminar— se regresa a la orden, que se actualiza sola (App la busca viva en `orders`), con
+  //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
+  //   validar, recordar, quitar la espera) sí cierra, como antes.
+  const ENCIMA=["deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
+  const volverA=useRef(null);
+  const despachar=(id,action,arg)=>{
+    if(ENCIMA.includes(action)){volverA.current={b:document.activeElement,vista:false,hasta:Date.now()+3000};if(onAction)onAction(id,action,arg);return}
+    onClose();if(onAction)onAction(id,action,arg)};
+  const dispatch=(action)=>despachar(o.id,action);
   // v10.72.14 — mismo gate de ownership/etapa que OCard (L8525) para mostrar los botones de flujo en el modal.
   const _agentMatch=isVendedorOwnerByAgent(role,userLogin,o);
   const _secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||_agentMatch;
@@ -4303,7 +4314,24 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // v10.73.27 — gate ESPECÍFICO para "Quitar espera": espeja isResp de la card (secretaria estricta, NO isSec que incluye vendedor) para no sobre-otorgar unsnooze de maquila a un vendedor
   const canUnsnooze=_secOwns&&(st?.who===role||(st?.who==="secretaria"&&role==="secretaria")||(st?.who==="both"&&(role==="produccion"||role==="preprensa"))||role==="admin"||(o.stage==="proof_client"&&role==="secretaria"));
   // cierra el modal y despacha (mismo patrón que dispatch, pero forwardea el 3er arg de advance)
-  const flowDispatch=(id,action,arg)=>{onClose();if(onAction)onAction(id,action,arg)};
+  const flowDispatch=(id,action,arg)=>despachar(id,action,arg);
+  // el foco regresa al detalle cuando la ventana de la acción se cierra. Primero hay que VERLA: una capa encima del detalle
+  //   (zIndex 999-1000, como todas las ventanas de la app), un diálogo más, o el foco fuera del detalle (seis ventanas no se
+  //   declaran role="dialog" y algunas no toman el foco: «Cancelar orden» y «Poner en espera» lo perdían). Luego, sin capa
+  //   encima y con el foco suelto → al botón que la abrió (o a «Más», si salió de su menú). Si en 3 s no apareció nada (un
+  //   confirm() del navegador, o la app sólo dio un aviso), se olvida.
+  useEffect(()=>{
+    const revisar=()=>{const v=volverA.current,d=dialogRef.current;if(!v||!d)return;
+      const a=document.activeElement,suelto=!a||a===document.body||a===document.documentElement;
+      const encima=document.querySelectorAll('[role="dialog"]').length>1||[...document.querySelectorAll('[style*="z-index: 999"],[style*="z-index: 1000"]')].some(e=>!d.contains(e)&&e.getClientRects().length>0);
+      if(!v.vista){if(encima||(!suelto&&!d.contains(a)))v.vista=true;else if(Date.now()>v.hasta)volverA.current=null;return}
+      if(encima)return;   // la ventana de la acción sigue abierta
+      volverA.current=null;if(!suelto)return;   // el foco ya está en algún lado (no se lo quito)
+      (v.b&&v.b.isConnected&&d.contains(v.b)?v.b:(d.querySelector('[aria-label="Más acciones"]')||d)).focus();};
+    const obs=new MutationObserver(revisar);obs.observe(document.body,{childList:true,subtree:true});
+    document.addEventListener("focusin",revisar);
+    return ()=>{obs.disconnect();document.removeEventListener("focusin",revisar)};
+  },[]);
   // v10.72.28 — botón Editar TAMBIÉN en el modal para el DUEÑO (no solo admin). Genaro abría el detalle de su
   // maquila y no hallaba cómo capturar el costo: el botón "Editar Maquila" vivía solo en la card del tablero,
   // y aquí el costo salía como fila de solo-lectura. Mismos gates que OCard (maquila: isSec+owner; interna:

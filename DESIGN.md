@@ -403,6 +403,11 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **El botón trabado se ve trabado y lo que lo destraba es la acción principal** (v10.84.49): apagado en `bt(C.sf,C.t2)` con
   cursor `not-allowed`, su porqué a la vista en `C.wnInk` (no sólo en el title), y el relleno y el atajo van a la acción que
   lo destraba («Editar Maquila» cuando falta el precio).
+- **Actuar no cierra el detalle** (v10.84.53): una acción que abre su propia ventana (folio, cancelar, regresar, espera…) la
+  abre ENCIMA del detalle (las ventanas van en zIndex 999-1000 y cierran con Esc por la pila; el detalle es 998), y al
+  cerrarla se regresa a la orden, actualizada y con el foco donde estaba. Sólo cierra lo que lleva a otra pantalla (editar,
+  duplicar, imprimir) o se hace de una vez (avanzar, validar, recordar). Una ventana nueva va encima de 998 y usa
+  `useEscClose`; si no, Esc cerraría también el detalle de abajo.
 - **Lo que una pantalla sabe de una orden, lo sabe la otra** (v10.84.50): las alertas y banderas de una orden salen de UNA
   definición (`alertasDeLaOrden`, `banderasDeLaOrden`) que usan la ficha del tablero y el detalle; «a quién le toca», de
   `orderResponsible`. Una regla escrita dos veces se separa: el detalle no decía RETRASO ni «Reimprimir» y la ficha sí.

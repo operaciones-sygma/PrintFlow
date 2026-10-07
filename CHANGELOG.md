@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.53 — Actuar no cierra el detalle de la orden — 7-oct-2026
+
+Cuarta y última parte de la quinta critique. El revisor encontró que abrir una acción destruía el detalle. La app lo cerraba
+antes de abrir la ventana de la acción, y con Esc o «Volver» Karla quedaba en el tablero, sin la orden y con el foco perdido.
+
+- **Lo que abre su propia ventana la abre ENCIMA del detalle.**
+  - Son: asignar folio y entregar, entregar, partes, folio anticipado, folio de Alpha, liberar folio, devolver saldo,
+    deshacer cancelación, cancelar (con o sin nota de crédito), regresar, poner en espera, merma, enviar a maquila y borrar.
+  - Antes de cambiarlo se midió que las 14 ventanas que abren van en zIndex 999-1000, encima del 998 del detalle, y que
+    todas cierran con Esc por la pila (`useEscClose`), sin listener propio: Esc cierra sólo la de arriba.
+  - Al cerrarla, con Esc, «Cancelar» o al terminar, se regresa a la orden. La app la busca viva en `orders`, así que el
+    detalle enseña lo que pasó: por ejemplo, ya entregada y con su folio.
+- **El foco regresa al botón que abrió la ventana**, o a «Más» si la acción salió de su menú.
+  - La primera versión reconocía la ventana por `role="dialog"` o porque tomaba el foco. Seis ventanas de la app no se
+    declaran diálogo y algunas no toman el foco: con «Cancelar orden» y «Poner en espera» el foco se perdía.
+  - Lo encontró la prueba con las ventanas REALES (la app compilada contra la base de producción, sin escribir). Ahora
+    también la reconoce por la capa encima del detalle.
+  - Su prueba (det-137) falla con la regla vieja y pasa con la nueva.
+- **Sigue cerrando** lo que lleva a otra pantalla (editar, duplicar, imprimir) y lo que se hace de una vez (avanzar,
+  validar, recordar, quitar la espera).
+- **No toca** la base, las RPC ni lo que hace cada acción: sólo deja de cerrar el detalle antes de abrirlas.
+- **Pruebas** (`detalle.mjs`, de 138 a 147). El banco abre una ventana de acción como las de la app (`ventana=sinrol`,
+  `ventana=sinfoco`, `ventana=nunca`).
+  - Vuelta 1, contra v10.84.52: de los 5 casos nuevos fallaban 4. El quinto («Editar» sigue cerrando) es una guarda.
+  - det-70 esperaba que Ctrl+Enter cerrara el detalle; ahora espera que se quede debajo.
+  - Vuelta 2, con la vuelta 3 (doble clic en «Asignar», Esc-Esc, la acción que sólo da un aviso): 146 de 146.
+  - Prueba con las ventanas reales, sin escribir (asignar folio, regresar, cancelar orden, poner en espera): el foco que
+    se perdía con dos de ellas; arreglado, con det-137.
+  - Vuelta final: 147 de 147, el tablero idéntico (161 de 161), y la prueba de las ventanas reales, ahora en el repo
+    (`tests/recorrido/ventanas-encima.mjs`): las cuatro bien.
+  - Corrida doble contra v10.84.52: fallan 8 de los 9 nuevos (el otro es la guarda de «Editar») y, de los 138 de antes,
+    sólo det-70, que cambió por decisión.
+  - Todas las tandas: 416 de 416.
+
 ## v10.84.52 — La ficha ofrece lo que sólo tenía el detalle — 7-oct-2026
 
 Segunda mitad de «un solo juego de acciones» (la quinta critique del detalle).

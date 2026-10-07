@@ -141,8 +141,27 @@ const CASOS = {
 const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage: Q.get("etapa"), order_type: Q.get("etapa").startsWith("maq_") ? "maquila" : (CASOS[CASO] || CASOS.factura).order_type } : {}),
   ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}), ...(Q.get("sinentrega") ? { due_date: null } : {}),
   ...(Q.get("agente") ? { agent: Q.get("agente") } : {}) };   // agente=Genaro: la maquila de un vendedor con usuario
+// v10.84.53 — la ventana que abre la app para una acción (folio, cancelar, regresar…), como las de verdad: encima del detalle
+//   (zIndex 999), Esc por la pila (useEscClose), el foco en su panel; «Hecho» la termina (a la orden le ponen folio y se
+//   entrega). ventana=sinrol: sin role="dialog", como seis de las ventanas de la app.
+const ENCIMA_BANCO = new Set(["deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
+  "deshacer_saldo", "deshacer_cancelacion", "cancel_with_nc", "cancel_order", "revert", "snooze", "waste", "send_maquila", "delete"]);
+function VentanaDeAccion({ nombre, onClose, onHecho }) {
+  useEscClose(onClose);
+  const ref = useRef(null);
+  // ventana=sinfoco: sin role="dialog" y SIN tomar el foco, como «Cancelar orden» y «Poner en espera» de la app (v10.84.53:
+  //   el foco se perdía al cerrarlas; lo encontró la prueba con las ventanas reales)
+  useEffect(() => { if (Q.get("ventana") !== "sinfoco") ref.current?.focus(); }, []);
+  const rol = ["sinrol", "sinfoco"].includes(Q.get("ventana")) ? {} : { role: "dialog", "aria-modal": "true", "aria-label": "Ventana de " + nombre };
+  return <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.3)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+    <div ref={ref} tabIndex={-1} {...rol} data-ventana={nombre} onClick={e => e.stopPropagation()} style={{ background: "#fff", padding: 20, borderRadius: 12, outline: "none" }}>
+      <div>Ventana de la acción: {nombre}</div>
+      <button onClick={onClose}>Cancelar</button> <button onClick={onHecho}>Hecho</button>
+    </div></div>;
+}
 function Banco() {
   const [abierto, setAbierto] = useState(Q.get("abrir") === "1");
+  const [ventana, setVentana] = useState(null);
   const [, refresca] = useState(0);
   // el dato que cambia con el detalle abierto (como lo haría el tiempo real): window.__cambiar({ invoice_folio: "F-200" })
   const [orden, setOrden] = useState(ORDEN);
@@ -163,7 +182,10 @@ function Banco() {
     <pre id="log">{bitacora.join("\\n")}</pre>
     {abierto && <DetailModal order={orden} role={ROL} userLogin={LOGIN}
       onClose={() => { anotar("cerrado"); setAbierto(false); }} onPrint={() => anotar("imprimir")}
-      onAction={(id, accion, arg) => anotar("accion:" + accion + (arg ? " " + arg : ""))} />}
+      onAction={(id, accion, arg) => { anotar("accion:" + accion + (arg ? " " + arg : "")); if (ENCIMA_BANCO.has(accion) && Q.get("ventana") !== "nunca") setVentana(accion); }} />}
+    {/* ventana=nunca: la app sólo enseña un aviso (p. ej. «ya tiene folio») y no abre ventana */}
+    {ventana && <VentanaDeAccion nombre={ventana} onClose={() => { anotar("ventana cerrada"); setVentana(null); }}
+      onHecho={() => { anotar("ventana hecha"); setVentana(null); setOrden(o => ({ ...o, invoice_folio: "F-300", invoice_type: "factura", stage: "delivered" })); }} />}
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Banco />);`,
