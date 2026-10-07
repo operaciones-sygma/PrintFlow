@@ -82,7 +82,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 495 pruebas, ~7 min; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 509 pruebas, ~7 min; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -146,12 +146,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.58 (7-oct). **El tablero** (el `Kanban` de Producción) pasó por su primera revisión independiente:
-  20/40 (las de julio, 27 y 25, eran propias). Van tres de cuatro partes: v10.84.56, mover órdenes con red («Empaque» y «A Listas»
+- **LIVE:** v10.84.59 (7-oct). **El tablero** (el `Kanban` de Producción) pasó por su primera revisión independiente:
+  20/40 (las de julio, 27 y 25, eran propias). Sus cuatro partes están hechas: v10.84.56, mover órdenes con red («Empaque» y «A Listas»
   esperan 6.5 s con «Deshacer» antes de escribir, «Activar» pregunta si detiene lo que corre, el número de la orden en el
   tablero de Germán), v10.84.57, se lee qué corre en cada máquina (el cliente completo, un solo reloj), y v10.84.58, se ve lo atrasado
-  («N vencidas» abre cuáles y dónde, las alertas del detalle en cada ficha, «desde ayer 18:55»). Sigue la cuarta parte (los
-  avisos de error, la merma, el arcoíris) y luego la segunda revisión. Snapshot
+  («N vencidas» abre cuáles y dónde, las alertas del detalle en cada ficha, «desde ayer 18:55»), y v10.84.59, los avisos
+  de error con la orden y en palabras (y la orden regresa a su lugar al momento), Merma y Maquila que dicen de qué orden son y no
+  aceptan basura, y el texto de color en su tinta. La segunda revisión, en curso. `tests/recorrido/tablero-errores.mjs` prueba
+  con la app REAL qué pasa cuando la base rechaza lo que pide el tablero. Snapshot
   `.impeccable/critique/2026-10-07T16-33-31Z__src-app-jsx-kanban-tablero-de-produccion.md`; banco `tests/banco/gen-tablero.mjs`
   sobre `tests/banco/extraer.mjs` (junta solo las dependencias con `@babel/parser`). **El detalle de la orden quedó cerrado** en
   v10.84.55 (tres revisiones independientes: 23 → 24 → 27/40); lo que queda, en la entrada v10.84.55 del CHANGELOG.
