@@ -4224,7 +4224,7 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     </div>
   </div>;
 }
-// v10.84.46 (/impeccable critique 23/40) — el detalle de la orden:
+// v10.84.46 (/impeccable critique) — el detalle de la orden:
 //   · el encabezado contesta de quién, qué, cuánto y para cuándo (cliente, producto y cantidad, entrega, importe, folio) con la
 //     imagen en MINIATURA que se amplía; antes la imagen (hasta 280 px) iba antes que el cliente y arriba sólo el id interno.
 //   · el pie FUERA del área que hace scroll: antes era sticky dentro del cuerpo y los renglones se asomaban por debajo.
@@ -4236,13 +4236,18 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 //     conserva y se dice; antes se le quitaba igual y no se avisaba nada.
 //   · menores: «NC emitida en SAT» sólo si hubo folio; sin «FLUJO» vacío; sin emojis; lo de la placa sólo antes de CTP; el
 //     precio una vez; «Descargar»; los textos de estado en tinta.
-// v10.84.48 (cuarta critique, 35/40, mirando los roles de piso): la guía de qué sigue («Arrastra esta orden a una máquina…»)
+// v10.84.48 (cuarta critique, mirando los roles de piso): la guía de qué sigue («Arrastra esta orden a una máquina…»)
 //   vuelve a verse aunque el rol no tenga botón (v10.84.46 la escondía con el renglón); «CLIENTE» sólo con datos de contacto
 //   (los roles de piso veían el rótulo vacío); «El cliente no pide factura» a «⋯ Más» con su explicación (el pie de karla en
 //   Salidas tenía tres renglones); Ctrl+Enter hace la acción del rol (nunca escribiendo en un campo); sin renglones vacíos arriba.
-// v10.84.49 (quinta critique, con revisor independiente: 23/40): el «#HEX» de Pantone ya no guarda a medio teclear
+// v10.84.49 (quinta critique, con revisor independiente): el «#HEX» de Pantone ya no guarda a medio teclear
 //   (HexDelPantone), el botón trabado se ve trabado y «Editar» lo destraba, el historial que falla lo dice, las flechas en
 //   «Más», «sin IVA» junto al importe y el «Nombre interno» con el rótulo de la app.
+// v10.84.54 — [P1 de la segunda revisión independiente] un doble clic actuaba sobre OTRA orden: el primer clic avanzaba y
+//   cerraba el detalle, y el segundo caía en el tablero, sobre el botón de otra orden (en tablet, el doble toque). Después de
+//   actuar desde el detalle, una capa invisible se traga los clics 600 ms: el segundo clic no llega ni al tablero ni a la
+//   ventana que se acaba de abrir. El teclado no se toca.
+const escudoDeClics=(ms=600)=>{if(typeof document==="undefined")return;const d=document.createElement("div");d.setAttribute("aria-hidden","true");d.dataset.escudo="1";d.style.cssText="position:fixed;inset:0;z-index:2147483000;background:transparent";const tragar=e=>{e.preventDefault();e.stopPropagation()};["click","dblclick","mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","contextmenu"].forEach(t=>d.addEventListener(t,tragar,true));document.body.appendChild(d);setTimeout(()=>d.remove(),ms)};
 const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
 const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
 // v10.84.50: lo que sabe la ficha, arriba: sus alertas y banderas (alertasDeLaOrden/banderasDeLaOrden, la misma
@@ -4250,10 +4255,19 @@ const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",al
 // v10.84.51: un solo juego de acciones con la ficha: el «Más» suma poner en espera, recordar, avisar que falta el archivo,
 //   merma, duplicar, cambiar OC, cancelar y borrar (accionesDeLaFicha), con las palabras de la ficha; y las notas rápidas.
 // v10.84.53: actuar no cierra el detalle: las ventanas de las acciones se abren encima y, al cerrarse, se regresa a la orden.
+// v10.84.54: la segunda revisión independiente: el doble clic que actuaba sobre otra orden (escudoDeClics), cerrar no tira
+//   lo escrito, la nota rechazada regresa, «En espera» arriba, «Reimprimir» sólo antes de entregar, «Sin precio», «Recordar»
+//   a la vista, sin «Borrar» con folio, y menores.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
-  useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
   const dialogRef=useRef(null);const prevFocusRef=useRef(null);
+  // v10.84.54 — cerrar no tira lo escrito (la segunda revisión independiente: una nota escrita y un clic fuera cerraban sin
+  //   preguntar). Con algo escrito en un campo del detalle, Esc, el clic fuera, la × y «Cerrar» preguntan antes.
+  const [preguntaCerrar,setPreguntaCerrar]=useState(false);
+  // (un input sin `type` también es de texto: la nota rápida y el nombre interno no lo declaran, y el selector no los veía)
+  const hayEscrito=()=>[...(dialogRef.current?.querySelectorAll('input:not([type]),input[type="text"],input[type="search"],textarea')||[])].some(el=>(el.value||"").trim());
+  const cerrarConCuidado=()=>{if(hayEscrito()){setPreguntaCerrar(true);return}onClose()};
+  useEscClose(cerrarConCuidado);
   useEffect(()=>{prevFocusRef.current=document.activeElement;const t=requestAnimationFrame(()=>{try{dialogRef.current&&dialogRef.current.focus()}catch{}});return ()=>{cancelAnimationFrame(t);try{prevFocusRef.current&&prevFocusRef.current.focus&&prevFocusRef.current.focus()}catch{}}},[]);
   const hp=role==="produccion"||role==="preprensa"||role==="german";const isMaq=o.order_type==="maquila";const st=SM[o.stage];
   // v10.58.23: vendedor también es owner si es el agent (caso Lupita captura por él)
@@ -4290,7 +4304,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   //   volvía a montar todo lo de adentro (se perdía lo escrito en el «#HEX» de un Pantone y se volvían a pedir sus colores a
   //   la base en cada actualización). Lo encontró la vuelta 2 de la quinta critique.
   const Row=FilaDelDetalle,Seccion=SeccionDelDetalle;
-  const printIt=()=>{onPrint(o);onClose()};
+  const printIt=()=>{escudoDeClics();onPrint(o);onClose()};
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
@@ -4302,9 +4316,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
   //   validar, recordar, quitar la espera) sí cierra, como antes.
   const ENCIMA=["deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
-  const volverA=useRef(null);
+  const volverA=useRef(null),revisarRef=useRef(null);
   const despachar=(id,action,arg)=>{
-    if(ENCIMA.includes(action)){volverA.current={b:document.activeElement,vista:false,hasta:Date.now()+3000};if(onAction)onAction(id,action,arg);return}
+    escudoDeClics();   // v10.84.54 — el segundo clic de un doble clic no llega a nada
+    if(ENCIMA.includes(action)){volverA.current={b:document.activeElement,vista:false,hasta:Date.now()+3000};setTimeout(()=>revisarRef.current&&revisarRef.current(),3100);if(onAction)onAction(id,action,arg);return}
     onClose();if(onAction)onAction(id,action,arg)};
   const dispatch=(action)=>despachar(o.id,action);
   // v10.72.14 — mismo gate de ownership/etapa que OCard (L8525) para mostrar los botones de flujo en el modal.
@@ -4324,10 +4339,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     const revisar=()=>{const v=volverA.current,d=dialogRef.current;if(!v||!d)return;
       const a=document.activeElement,suelto=!a||a===document.body||a===document.documentElement;
       const encima=document.querySelectorAll('[role="dialog"]').length>1||[...document.querySelectorAll('[style*="z-index: 999"],[style*="z-index: 1000"]')].some(e=>!d.contains(e)&&e.getClientRects().length>0);
-      if(!v.vista){if(encima||(!suelto&&!d.contains(a)))v.vista=true;else if(Date.now()>v.hasta)volverA.current=null;return}
+      if(!v.vista){if(encima||(!suelto&&!d.contains(a)))v.vista=true;else if(Date.now()>v.hasta){volverA.current=null;if(suelto)(v.b&&v.b.isConnected&&d.contains(v.b)?v.b:(d.querySelector('[aria-label="Más acciones"]')||d)).focus()}return}
       if(encima)return;   // la ventana de la acción sigue abierta
       volverA.current=null;if(!suelto)return;   // el foco ya está en algún lado (no se lo quito)
       (v.b&&v.b.isConnected&&d.contains(v.b)?v.b:(d.querySelector('[aria-label="Más acciones"]')||d)).focus();};
+    revisarRef.current=revisar;
     const obs=new MutationObserver(revisar);obs.observe(document.body,{childList:true,subtree:true});
     document.addEventListener("focusin",revisar);
     return ()=>{obs.disconnect();document.removeEventListener("focusin",revisar)};
@@ -4370,7 +4386,6 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
     canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
     fic.ponerEnEspera&&{k:"snooze",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera",d:"Eliges por qué y hasta cuándo; sale de las listas activas."},
-    fic.recordar&&{k:"nudge_responsible",icono:<MegaphoneIcon size={14} weight="bold"/>,color:C.ac,t:"Recordar a "+fic.recordar.name,d:"Le llega un aviso de que esta orden lo está esperando."},
     fic.pedirArchivo&&{k:"web_request_file",icono:<MegaphoneIcon size={14} weight="bold"/>,color:C.wnInk,t:"Avisar a Lupita: falta archivo",d:"Para que se lo pida al cliente. No valides sin el archivo."},
     fic.merma&&{k:"waste",icono:<TrashIcon size={14} weight="bold"/>,color:C.wnInk,t:"Registrar merma",d:"Pliegos o piezas que se echaron a perder."},
     fic.duplicar&&{k:"duplicate",icono:<CopySimpleIcon size={14} weight="bold"/>,color:C.fac,t:"Duplicar",d:"Crea una orden nueva igual, con su propio número."},
@@ -4414,14 +4429,15 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const primaria=st?.c||C.t3;
   // v10.84.50 — lo que sabe la ficha: sus alertas y banderas (la misma definición; «En espera» no, porque el pie ya lo dice),
   //   la máquina en la que está con su reloj, y a quién le toca
-  const avisos=[...alertasDeLaOrden(o).filter(b=>b&&b.key!=="snz"),...banderasDeLaOrden(o)];
+  const avisos=[...alertasDeLaOrden(o),...banderasDeLaOrden(o)];   // v10.84.54 — también «En espera» (arriba decía RETRASO y la espera sólo en el pie)
   const enMaquina=["in_production","packaging","ctp"].includes(o.stage)?(o.machine_log||[]).find(e=>!e.ended):null;
+  const nombreMaquina=enMaquina?(MACHINES.find(x=>x.id===enMaquina.machine)?.name||enMaquina.machine):null;   // («Empaque» en Empaque no se repite)
   // (a quién le toca: orderResponsible, lo mismo que la ficha —la maquila de un vendedor con usuario le toca a él, no a Lupita—
   //   y con su misma frase cuando le toca a los dos)
   const resp=!isFinal&&!snoozeActive(o)?orderResponsible(o):null;
   const leToca=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):null;
 
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
+  return <><div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={cerrarConCuidado}>
     <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} onKeyDown={e=>{
         if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){
           if(e.target.closest&&e.target.closest("input,textarea,select"))return;   // nunca escribiendo
@@ -4440,21 +4456,22 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
             <span style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>{o.production_number||o.client}</span>
             <Badge color={primaria} style={{color:tintaAA(primaria)}}><StageLbl stage={o.stage} size={10}/></Badge>
             {o.source==="web"&&<Badge color={C.cart} style={{color:tintaAA(C.cart)}} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
-            {enMaquina&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2}}><FactoryIcon size={13} weight="bold"/>{MACHINES.find(x=>x.id===enMaquina.machine)?.name||enMaquina.machine} <LiveTimer started={enMaquina.started}/></span>}
+            {enMaquina&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2}}><FactoryIcon size={13} weight="bold"/>{nombreMaquina!==st?.lt?nombreMaquina+" ":null}<LiveTimer started={enMaquina.started}/></span>}
           </div>
           {o.production_number&&o.client&&<div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:3,lineHeight:1.3}}>{o.client}</div>}
           {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
           {avisos.length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginTop:7}}>{avisos}</div>}
-          {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio||leToca)&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
+          {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio||leToca||(verPrecio&&!isMaq&&!(Number(importe)>0)))&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
             {o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalendarDotsIcon size={13} weight="bold"/>Entrega <b style={{color:C.tx}}>{fD(o.due_date)}</b></span>}
             {verPrecio&&importe?<span><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span> <span style={{fontSize:11,color:C.t2}}>sin IVA</span></span>:null}
+            {verPrecio&&!isMaq&&!(Number(importe)>0)?<span style={{fontWeight:700,color:C.wnInk}}>Sin precio</span>:null}
             {o.invoice_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaFolio,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_pre_assigned?<LightningIcon size={12} weight="fill" color={C.wnInk}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={13} weight="bold"/>:<ReceiptIcon size={13} weight="bold"/>}{o.invoice_folio}{verPrecio&&estadoPago?<span style={{fontFamily:"'Geist',sans-serif",fontWeight:600,color:C.okInk}}>· {estadoPago}</span>:null}</span>}
             {o.cart_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaAA(C.cart)}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</span>}
             {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
             {leToca&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={13} weight="bold"/>Le toca a <b style={{color:C.tx}}>{leToca}</b></span>}
           </div>}
         </div>
-        <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
+        <button onClick={cerrarConCuidado} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
       </div>
 
       {/* el cuerpo: lo único que hace scroll */}
@@ -4462,14 +4479,14 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 4px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dnInk,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {o.plate_status&&antesDeCtp&&<div style={{marginTop:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} style={{color:tintaAA(o.plate_status==="existing"?C.live:C.ctp)}} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
       {/* v10.84.48 — «CLIENTE» sólo con datos de contacto: los roles de piso no los ven y el rótulo quedaba vacío */}
-      {!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)&&<><Seccion>Cliente</Seccion><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
+      {!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)&&<><Seccion>Cliente</Seccion><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?<a href={"tel:"+String((o.client_lada||"+52")+o.client_phone).replace(/[^\d+]/g,"")} style={{color:C.tx,textDecoration:"underline",textDecorationColor:C.bd}}>{(o.client_lada||"+52")+" "+o.client_phone}</a>:null}/><Row l="RFC" v={o.client_rfc}/></>}
       {/* v10.84.47 — el «Nombre interno» después del contacto: se edita poco y arriba pesaba más que los datos del cliente
           (trae su propio rótulo) */}
       {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
       <Seccion>Producto</Seccion>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
-      <Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>
+      {role==="admin"&&<Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>}
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><Seccion>Especificaciones</Seccion><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
       {!hp&&vOwns&&isMaq&&<><Seccion>Maquila</Seccion><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
       {vOwns&&o.maquila_provider&&<><Seccion icono={<TruckIcon size={12} weight="bold" color={C.maq}/>}>Proveedor Maquila</Seccion><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><WhatsappLogoIcon size={11} weight="bold"/>Teléfono</span>} v={o.maquila_phone}/>}{o.maquila_email&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><EnvelopeIcon size={11} weight="bold"/>Email</span>} v={o.maquila_email}/>}</>}
@@ -4508,7 +4525,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         {o.invoice_folio&&<>
           <Row l="Folio" v={<>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.wnInk} style={{verticalAlign:"-1px",marginRight:3}}/>:null}{o.invoice_folio}{o.invoice_pre_assigned?" (anticipado)":""}</>}/>
           <Row l="Tipo" v={o.invoice_type==="factura"?"Factura":(o.invoice_type==="remision"?"Remisión":null)}/>
-          <Row l="Asignado por" v={o.invoiced_by}/>
+          <Row l="Asignado por" v={o.invoiced_by?(AUTHOR_NAME[o.invoiced_by]||o.invoiced_by):null}/>
           <Row l="Fecha asignación" v={o.invoiced_at?fDT(o.invoiced_at):null}/>
           {/* v10.84.19 (scan 5 de CobranzaFlow, P3) — invoice_reason es la nota de ORIGEN (por que se
               anticipo el folio, o como se reconcilio una orden historica) y NO se recalcula al facturar
@@ -4537,9 +4554,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       </div>}
       {errBorrar&&<div role="alert" style={{marginTop:8,display:"flex",gap:6,alignItems:"flex-start",fontSize:11,fontWeight:600,color:C.dnInk,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:1}}/><span>{errBorrar}</span></div>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12 (extensión): campo notes oculto para vendedor en órdenes ajenas (puede contener acuerdos verbales/descuentos/info comercial sensible) */}
-      {vOwns&&o.notes&&<><Seccion>Notas</Seccion><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5,maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{o.notes}</div></>}
+      {vOwns&&String(o.notes||"").trim()&&<><Seccion>Notas</Seccion><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5,maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{o.notes}</div></>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12: quick_notes ocultos para vendedor en órdenes ajenas (mismo gate vOwns que precios/contactos) */}
-      {vOwns&&<><Seccion icono={<ChatCircleIcon size={12} weight="bold" color={C.ac}/>}>Notas Rápidas{(o.notes_log||[]).length?" ("+o.notes_log.length+")":""}</Seccion>{(o.notes_log||[]).length>0&&<div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:tintaAA(AUTHOR_COLOR[n.by]||C.t2)}}>{AUTHOR_NAME[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t2}}>{fDT(n.date)}</span></div>})}</div>}<AgregarNota onAgregar={t=>onAction&&onAction(o.id,"quick_note",t)}/></>}
+      {vOwns&&<><Seccion icono={<ChatCircleIcon size={12} weight="bold" color={C.ac}/>}>Notas Rápidas{(o.notes_log||[]).length?" ("+o.notes_log.length+")":""}</Seccion>{(o.notes_log||[]).length>0&&<div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:tintaAA(AUTHOR_COLOR[n.by]||C.t2)}}>{AUTHOR_NAME[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t2}}>{fDT(n.date)}</span></div>})}</div>}<AgregarNota cuantas={(o.notes_log||[]).length} onAgregar={t=>onAction&&onAction(o.id,"quick_note",t)}/></>}
       {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:10,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.okInk:C.wnInk}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.okInk:C.wnInk}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
       {/* v10.73.19 (F2) — Historial de tiempos por etapa (cuánto en cada una, quién la movió, regresiones). */}
@@ -4556,21 +4573,25 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {/* el pie, FUERA del cuerpo: la acción del rol rellena, lo demás teñido y lo raro en «⋯ Más» */}
       <div style={{padding:"12px 24px 16px",borderTop:"0.5px solid "+C.bd,background:C.bg}}>
         {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
-        {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button>}</div>}
+        {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button>}</div>}
         <div ref={flujoRef} style={{display:flujo.algo?"flex":"none",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>{canActFlow&&!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={flowDispatch} variante="detalle"/>}</div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <button onClick={onClose} style={{...bt(C.sf,C.t2),justifyContent:"center",border:"0.5px solid "+C.bd,minWidth:96}}>Cerrar</button>
+          <button onClick={cerrarConCuidado} style={{...bt(C.sf,C.t2),justifyContent:"center",border:"0.5px solid "+C.bd,minWidth:96}}>Cerrar</button>
           {mas.length>0&&<MasDelDetalle abierto={masAbierto} setAbierto={setMasAbierto} items={mas} onElegir={k=>{setMasAbierto(false);dispatch(k)}}/>}
+          {fic.recordar&&<button onClick={()=>dispatch("nudge_responsible")} title="Le llega un aviso de que esta orden lo está esperando" style={tenueAA(C.wn)}><MegaphoneIcon size={14} weight="bold"/>Recordar a {fic.recordar.name}</button>}
           <div style={{flex:1}}/>
           {canEditSpecsDraft&&<button onClick={()=>dispatch("edit_specs")} style={tenueAA(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar specs</button>}
           {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
           {canEditAdmin&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(C.ac,5)),justifyContent:"center"}:tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(isMaq?C.maq:C.ac,5)),justifyContent:"center"}:tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>{o.needs_reprint?"Reimprimir":"Imprimir"}</button>}
+          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>{o.needs_reprint&&!/delivered|cancelled/.test(o.stage)?"Reimprimir":"Imprimir"}</button>}
         </div>
       </div>
     </div>
-  </div>;
+  </div>
+  {/* la pregunta va FUERA del detalle (hermana, no hija): así sus clics y su Tab no le llegan al detalle */}
+  {preguntaCerrar&&<ConfirmModal title="¿Cerrar sin guardar lo que escribiste?" message="Hay algo escrito que todavía no se guarda: una nota, un nombre interno o un color." confirmLabel="Cerrar sin guardar" confirmColor={C.dn} cancelLabel="Seguir escribiendo" onConfirm={()=>{setPreguntaCerrar(false);onClose()}} onClose={()=>setPreguntaCerrar(false)}/>}
+  </>;
 }
 // v10.84.46 — el «⋯ Más» del detalle: lo raro y lo destructivo con su explicación (como el de la ficha, v10.73.9). Esc
 //   cierra el menú primero (useEscClose: el escStack cierra sólo lo de arriba; nunca un listener propio de Escape) y el
@@ -4619,7 +4640,7 @@ function ClientHistory({clientName,orders,onClose,role,userLogin}) {
 }
 // v10.84.43 — `detalle` (opcional): {filas:[{titulo, sub, monto}], total:{titulo, monto}} se pinta como lista alineada a la
 //   izquierda con los importes en una columna a la derecha. Sin `detalle`, la pregunta queda como siempre (las otras 6 ventanas).
-function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,onConfirm,onClose,zIndex=999}) {
+function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,cancelLabel,onConfirm,onClose,zIndex=999}) {
   useEscClose(onClose);
   // v10.81.1 (scan wf_4c57ea01) — guard de doble-submit: sin esto, un doble clic en un onConfirm async
   // (p.ej. Re-facturar) disparaba la RPC 2 veces (la 2ª rebotaba sola por FOR UPDATE, pero mostraba toast rojo tras el verde).
@@ -4627,7 +4648,7 @@ function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,onConfirm
   const doConfirm=async()=>{if(saving)return;setSaving(true);try{await onConfirm()}finally{setSaving(false)}};
   // v10.84.32 — el foco entra al diálogo en la acción segura: antes se quedaba en el botón que lo abrió, detrás del velo.
   // Y el título es el nombre accesible del diálogo.
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>No, cancelar</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>{cancelLabel||"No, cancelar"}</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
 }
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
@@ -6245,7 +6266,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
         </div>
       ):(
         <div style={{marginBottom:14}}>
-          <label style={lbl}>Stage destino *</label>
+          <label style={lbl}>Etapa destino *</label>
           <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:6}}>
             {options.map(o=>(
               <label key={o.value} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:target===o.value?C.ctp+"10":C.sf,border:"1.5px solid "+(target===o.value?C.ctp:C.bd),borderRadius:8,cursor:"pointer",transition:"all .15s"}}>
@@ -6264,6 +6285,7 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
           style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:"#f59e0b"+"40")}}
           value={reason}
           onChange={e=>setReason(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Escape"&&!reason.trim()){e.preventDefault();onClose()}}}   // v10.84.54 — con la razón vacía, Esc cierra (el foco empieza aquí)
           placeholder="Explica por qué se regresa (ej. placa rayada, archivo cambió, falta empaque, defecto detectado...)"
           autoFocus
         />
@@ -12794,7 +12816,7 @@ function accionesDeLaFicha(o,role,userLogin){
   const secOwns=role==="secretaria"||!isSec(role)||!o.created_by||o.created_by===userLogin||agentMatch;
   const canAct=secOwns&&(st?.who===role||(st?.who==="secretaria"&&isSec(role))||st?.who==="both"&&(role==="produccion"||role==="preprensa")||role==="admin"||(o.stage==="proof_client"&&isSec(role)));
   const canCancelBtn=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns));
-  const canDeleteBtn=role==="admin";
+  const canDeleteBtn=role==="admin"&&!o.invoice_folio&&!o.stock_loaded;
   const _resp=orderResponsible(o);
   const _vendOwns=role!=="vendedor"||agentMatch||o.created_by===userLogin||!o.created_by;
   const isResp=!!_resp&&_vendOwns&&(_resp.role===role||(_resp.role==="both"&&(role==="produccion"||role==="preprensa"))||(_resp.role==="secretaria"&&role==="secretaria")||(o.stage==="proof_client"&&role==="secretaria"));
@@ -12812,13 +12834,23 @@ function accionesDeLaFicha(o,role,userLogin){
   };
 }
 // v10.84.51 — agregar una nota rápida desde el detalle (la ficha ya podía, con sus «Notas Rápidas»); no cierra el detalle
-function AgregarNota({onAgregar}){
+function AgregarNota({onAgregar,cuantas=0}){
   const [t,setT]=useState("");
-  const mandar=()=>{const x=t.trim();if(!x)return;onAgregar(x);setT("")};
-  return <div style={{display:"flex",gap:6,marginTop:6}}>
-    <input value={t} onChange={e=>setT(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();mandar()}}} placeholder="Escribe una nota y Enter" aria-label="Agregar una nota rápida" maxLength={500}
-      style={{...inp,flex:1,fontSize:12,padding:"7px 10px"}}/>
-    <button onClick={mandar} disabled={!t.trim()} style={{...bs(C.sf,t.trim()?C.ac:C.t2),border:"0.5px solid "+C.bd,flexShrink:0}}>Agregar</button>
+  const [aviso,setAviso]=useState("");
+  // v10.84.54 — App la pone en la lista al instante y, si la base la rechaza, la quita al recargar: entonces lo escrito
+  //   regresa al campo con su aviso (antes el campo ya se había vaciado y la nota se perdía)
+  const pend=useRef(null);
+  const mandar=()=>{const x=t.trim();if(!x)return;const pn={texto:x,base:cuantas,visto:false};pend.current=pn;setAviso("");onAgregar(x);setT("");
+    setTimeout(()=>{if(pend.current===pn){pend.current=null;if(!pn.visto){setT(v=>v||pn.texto);setAviso("No se guardó la nota. Vuelve a intentarlo.")}}},15000)};
+  useEffect(()=>{const pn=pend.current;if(!pn)return;if(cuantas>pn.base){pn.visto=true;return}
+    if(pn.visto){pend.current=null;setT(v=>v||pn.texto);setAviso("No se guardó la nota. Vuelve a intentarlo.")}},[cuantas]);
+  return <div style={{marginTop:6}}>
+    <div style={{display:"flex",gap:6}}>
+      <input value={t} onChange={e=>{setT(e.target.value);if(aviso)setAviso("")}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();mandar()}}} placeholder="Escribe una nota y Enter" aria-label="Agregar una nota rápida" maxLength={500}
+        style={{...inp,flex:1,fontSize:12,padding:"7px 10px"}}/>
+      <button onClick={mandar} disabled={!t.trim()} style={{...bs(C.sf,t.trim()?C.ac:C.t2),border:"0.5px solid "+C.bd,flexShrink:0}}>Agregar</button>
+    </div>
+    {aviso&&<div role="alert" style={{fontSize:11,fontWeight:600,color:C.dnInk,marginTop:4}}>{aviso}</div>}
   </div>;
 }
 function alertasDeLaOrden(o,{inEsperaView}={}){
@@ -12838,7 +12870,7 @@ function alertasDeLaOrden(o,{inEsperaView}={}){
 }
 function banderasDeLaOrden(o){
   return [
-    o.needs_reprint&&<Badge key="reprint" tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>,
+    o.needs_reprint&&!/delivered|cancelled/.test(o.stage)&&<Badge key="reprint" tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>,
     o.returned_at&&<Badge key="devuelta" tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>,
     o.has_post_invoice_edits&&<Badge key="editada" tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>,
     o.returned_from_order_id&&<Badge key="retrabajo" tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>,
@@ -12880,13 +12912,13 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
   if(o.created_by){const stdU=["produccion","preprensa","german","admin"];if(!stdU.includes(o.created_by)) bT3.push(o.created_by==="secretaria"?<Badge key="cb" tone="context">Lupita</Badge>:<Badge key="cb" tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>);}
   // v10.73.8 — /impeccable layout: ¿hay alguna fila de estado fiscal/flag? (ahora se renderizan como bloque DEBAJO del cliente)
-  const hasFiscalRows=!compact&&(o.cart_folio||o.web_folio||o.invoice_folio||(o.grouped_invoice_folio&&!o.invoice_folio)||o.has_splits||o.has_post_invoice_edits||o.needs_reprint||o.returned_at||o.returned_from_order_id||o.bill_to_client_id);
+  const hasFiscalRows=!compact&&(o.cart_folio||o.web_folio||o.invoice_folio||(o.grouped_invoice_folio&&!o.invoice_folio)||o.has_splits||o.has_post_invoice_edits||(o.needs_reprint&&!/delivered|cancelled/.test(o.stage))||o.returned_at||o.returned_from_order_id||o.bill_to_client_id);
   // v10.73.9 — /impeccable harden: gates de las acciones destructivas (ESPEJO EXACTO de los originales del cluster),
   // ahora agrupadas en el menú "⋯ Más" con etiquetas + divisor antes de Borrar. El menú aparece solo si hay ≥1.
   const canRevertBtn=role==="admin"&&o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled");
   const canCancelBtn=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns));
   const canCancelNCBtn=role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio;
-  const canDeleteBtn=role==="admin";
+  const canDeleteBtn=role==="admin"&&!o.invoice_folio&&!o.stock_loaded;
   const hasDangerMenu=canRevertBtn||canCancelBtn||canCancelNCBtn||canDeleteBtn;
   // v10.84.52 — lo que ofrecía sólo el detalle, con sus mismas condiciones (accionesDelDetalle)
   const delDetalle=accionesDelDetalle(o,role);const hayFiscal=delDetalle.folioAnticipado||delDetalle.devolverSaldo||delDetalle.deshacerCancelacion;
@@ -12997,7 +13029,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         {/* v10.73.14 — /impeccable distill (re-critique P1): los 5 banners de flag full-width a medida pasan a UNA fila
             de chips Badge con tonos semánticos, ordenados por urgencia (reimprimir/devuelta → info). Demotados bajo el
             folio/pago (la señal fiscal primaria), agrupados en 1 fila vs 5 apiladas. Mismos datos + títulos. */}
-        {(o.needs_reprint||o.returned_at||o.has_post_invoice_edits||o.returned_from_order_id||o.bill_to_client_id)&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
+        {banderasDeLaOrden(o).length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
           {banderasDeLaOrden(o)}
         </div>}
         </div>}
@@ -19048,7 +19080,7 @@ export default function PrintFlow() {
     if(!targetStage){showToast("❌ Sin stage destino","warning");return}
     // Re-validar opción permitida (defensa en profundidad)
     const opts=getRevertOptions(o.stage,user);
-    if(!opts.includes(targetStage)){showToast("❌ Stage destino no permitido para tu rol","error");return}
+    if(!opts.includes(targetStage)){showToast("❌ Esa etapa no está permitida para tu rol","error");return}
     setActionLoading(id);
     autoFixRef.current.delete(id); // v10.64.3 — al revertir, liberar el guard para que el auto-advance vuelva a dispararse si la orden se re-valida en draft
     try{
@@ -19944,7 +19976,7 @@ export default function PrintFlow() {
         return {
           value:s,
           label:(SM[s]?.l||s),
-          hint:isImmediatePrev?"(stage anterior)":(useStagesHint?"(2 stages atrás)":"(antes de tu área)"),
+          hint:isImmediatePrev?"(etapa anterior)":(useStagesHint?"(2 etapas atrás)":"(antes de tu área)"),
         };
       });
       // v10.40.2 #1 — toast informativo cuando admin revierte desde delivered (cobranza no se modifica)
@@ -19967,7 +19999,7 @@ export default function PrintFlow() {
       // 🔒 v10.12.0.2 Phase 1 — Hardstop: vendedor no agrega notas a órdenes ajenas
       const qnOrd=orders.find(x=>x.id===id);
       if(qnOrd&&!canExecuteAction("quick_note",qnOrd,user,userLogin)){showToast(actionDeniedToast("quick_note",qnOrd,user,userLogin),"error");return}
-      const noteObj={text:payload,by:userName||user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,userName||user)}catch(e){console.error("[quick_note] Error:",e);showToast("❌ No se pudo enviar nota: "+(e?.message||"error desconocido"),"error");reload()}})()
+      const noteObj={text:payload,by:userName||user,date:new Date().toISOString()};setOrders(p=>p.map(o=>o.id===id?{...o,notes_log:[...(o.notes_log||[]),noteObj]}:o));(async()=>{try{await db.addNote(id,payload,userName||user)}catch(e){console.error("[quick_note] Error:",e);{const m=String(e?.message||"");showToast("No se guardó la nota ("+(/42501|permis|solo lectura/i.test(m)?"no tienes permiso":/fetch|network|conex/i.test(m)?"sin conexión":"la base no la aceptó")+"). Vuelve a intentarlo.","error")};reload()}})()
     }
     if(action==="duplicate")duplicate(id);
     if(action==="load_stock")loadStock(id);

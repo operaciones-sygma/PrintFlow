@@ -91,7 +91,7 @@ const firmarOrderFile = async src => src;
 const IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#dfe6ee"/><text x="300" y="400" font-size="48" text-anchor="middle" fill="#4a6572">ARTE</text></svg>');
 function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img src={IMG} alt={alt} style={style} onClick={onClick} title={title} />; }`,
   fnBlock("ClientAliasManager"),
-  ...["FilaDelDetalle", "SeccionDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
+  ...["escudoDeClics", "FilaDelDetalle", "SeccionDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
   fnBlock("DetailModal"),
   ...["MasDelDetalle", "MenuMasDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const BASE = { id: "OP-MUH77BVYVQW", client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", client_agent: "ALEJANDRA DELGADO",
@@ -131,6 +131,9 @@ const CASOS = {
     current_machine: "off_pm74", machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: "2026-10-06T15:00:00Z" }], image_url_2: null },
   // un pedido web sin archivo, sin validar (preprensa avisa a Lupita que falta)
   web: { ...BASE, production_number: "P-0613", stage: "draft", source: "web", web_order_ref: "W-1001", file_url: null, validated_by_preprensa: false, image_url_2: null },
+  // en Empaque, montada en la máquina que también se llama «Empaque» (vm_manual)
+  empaque: { ...BASE, production_number: "P-0585", stage: "packaging", current_machine: "vm_manual", machine_queue_position: 0,
+    machine_log: [{ machine: "vm_manual", started: "2026-10-06T15:00:00Z" }], image_url_2: null },
   // TODAS las alertas y banderas a la vez (para ver que el encabezado no se coma el diálogo)
   todas: { ...BASE, production_number: "P-0592", client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN", stage: "in_production", priority: "urgente",
     needs_reprint: true, print_version: 3, returned_at: "2026-10-02T12:00:00Z", return_reason: "Color fuera de tono", has_post_invoice_edits: true,
@@ -177,12 +180,19 @@ function Banco() {
   if (Q.get("flujos") === "1") return <div>{ALL_S.flatMap(s => ["admin", "karla", "produccion", "preprensa", "german", "secretaria", "vendedor"].map(r =>
     <div key={s.id + r} data-k={s.id + "|" + r}><StageFlowButtons o={{ ...BASE, production_number: "P-1", stage: s.id, order_type: s.id.startsWith("maq_") ? "maquila" : "interna" }} role={r} onAction={() => {}} /></div>))}</div>;
   return <div style={{ padding: 20, fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
+    {/* el tablero de atrás (v10.84.54): un clic que le llega se anota, como el que abría otra orden tras un doble clic */}
+    <div id="tablero" style={{ position: "fixed", inset: 0, zIndex: 0 }} onClick={() => anotar("clic en el tablero")} />
+    <div style={{ position: "relative", zIndex: 1 }}>
     <button id="abrir-detalle" onClick={() => setAbierto(true)}>abrir el detalle</button>
     <button id="fondo-1">botón del tablero 1</button> <button id="fondo-2">botón del tablero 2</button>
     <pre id="log">{bitacora.join("\\n")}</pre>
+    </div>
     {abierto && <DetailModal order={orden} role={ROL} userLogin={LOGIN}
       onClose={() => { anotar("cerrado"); setAbierto(false); }} onPrint={() => anotar("imprimir")}
-      onAction={(id, accion, arg) => { anotar("accion:" + accion + (arg ? " " + arg : "")); if (ENCIMA_BANCO.has(accion) && Q.get("ventana") !== "nunca") setVentana(accion); }} />}
+      onAction={(id, accion, arg) => { anotar("accion:" + accion + (arg ? " " + arg : "")); if (ENCIMA_BANCO.has(accion) && Q.get("ventana") !== "nunca") setVentana(accion);
+        // la nota rápida como la hace App: aparece al instante; si la base la rechaza (falla=nota), la recarga la quita
+        if (accion === "quick_note") { setOrden(o => ({ ...o, notes_log: [...(o.notes_log || []), { text: arg, by: ROL, date: new Date().toISOString() }] }));
+          if (FALLA === "nota") setTimeout(() => { anotar("la base rechazó la nota"); setOrden(o => ({ ...o, notes_log: (o.notes_log || []).slice(0, -1) })); }, 500); } }} />}
     {/* ventana=nunca: la app sólo enseña un aviso (p. ej. «ya tiene folio») y no abre ventana */}
     {ventana && <VentanaDeAccion nombre={ventana} onClose={() => { anotar("ventana cerrada"); setVentana(null); }}
       onHecho={() => { anotar("ventana hecha"); setVentana(null); setOrden(o => ({ ...o, invoice_folio: "F-300", invoice_type: "factura", stage: "delivered" })); }} />}

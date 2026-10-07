@@ -403,6 +403,12 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **El botón trabado se ve trabado y lo que lo destraba es la acción principal** (v10.84.49): apagado en `bt(C.sf,C.t2)` con
   cursor `not-allowed`, su porqué a la vista en `C.wnInk` (no sólo en el title), y el relleno y el atajo van a la acción que
   lo destraba («Editar Maquila» cuando falta el precio).
+- **Después de actuar, el segundo clic no llega a nada** (v10.84.54): un botón que avanza, abre una ventana o cierra algo deja
+  medio segundo una capa invisible que se traga los clics (`escudoDeClics`). Sin ella, el segundo clic de un doble clic (o el
+  doble toque en tablet) caía en lo que quedaba debajo: en el tablero, sobre el botón de OTRA orden. El tablero tiene el
+  mismo riesgo en sus propios botones (para su critique).
+- **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
+  un campo, y lo que la base rechaza regresa al campo con su aviso.
 - **Actuar no cierra el detalle** (v10.84.53): una acción que abre su propia ventana (folio, cancelar, regresar, espera…) la
   abre ENCIMA del detalle (las ventanas van en zIndex 999-1000 y cierran con Esc por la pila; el detalle es 998), y al
   cerrarla se regresa a la orden, actualizada y con el foco donde estaba. Sólo cierra lo que lleva a otra pantalla (editar,

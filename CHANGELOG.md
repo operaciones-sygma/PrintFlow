@@ -12,6 +12,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.54 — El detalle de la orden, segunda revisión independiente (24/40): el doble clic y lo escrito — 7-oct-2026
+
+La segunda pasada de un revisor independiente (meta aprobada: 35 sin P1, o 3 pasadas) dio 24/40 con un P1.
+
+- **[P1] Un doble clic ya no actúa sobre otra orden.**
+  - Qué pasaba (P-0591, producción, «Empaque»): el primer clic avanzaba y cerraba el detalle. El segundo caía en el tablero
+    y abría P-0590, con su propio «Empaque» justo bajo el cursor; un tercer clic la movía sin preguntar. Pasa con el doble
+    toque en tablet.
+  - Ahora, después de actuar desde el detalle, una capa invisible se traga los clics 600 ms (`escudoDeClics`). El segundo
+    clic no llega ni al tablero ni a la ventana que se acaba de abrir. El teclado no se toca.
+- **Cerrar no tira lo escrito.** Con una nota, un nombre interno o un color a medias, Esc, el clic fuera, la × y «Cerrar»
+  preguntan («¿Cerrar sin guardar lo que escribiste?», con «Seguir escribiendo»).
+- **La nota que la base rechaza regresa al campo**, con «No se guardó la nota». Antes el campo ya se había vaciado. El aviso
+  de la app lo dice en palabras («no tienes permiso», «sin conexión»…), también para la ficha; antes enseñaba el error
+  crudo.
+- **Alarmas que dicen la verdad.**
+  - «En espera» va arriba junto a RETRASO; antes la espera sólo salía en el pie.
+  - «Reimprimir · vN obsoleta» y el botón «Reimprimir» sólo antes de entregar. Una orden entregada y pagada lo decía, en la
+    ficha también.
+  - «Sin precio» arriba, para quien ve precios.
+- **«Recordar a …» a la vista** en el pie cuando el rol no puede actuar, como en la ficha. Antes estaba escondido en «Más».
+- **«Borrar orden» no se ofrece cuando la app la va a rechazar** (con folio o con el inventario movido), en el detalle y en la
+  ficha. Si una acción sólo da un aviso y no abre ventana, el foco igual regresa al detalle.
+- **«Regresar»** cierra con Esc si la razón está vacía (el foco empieza ahí), y dice «etapa», no «stage».
+- **Menores:**
+  - un punto medio en lugar de la raya larga en la franja de espera;
+  - sin rótulo «Notas» vacío;
+  - «Empaque» no se repite cuando la máquina se llama igual que la etapa;
+  - «Asignado por: Karla» con su nombre;
+  - el ID interno sólo para admin;
+  - el teléfono se toca para llamar.
+- Los comentarios del detalle ya no citan calificaciones: el revisor independiente las vio al leer el código.
+- **Compartido:**
+  - la ficha cambia en tres cosas: «Reimprimir» sólo antes de entregar, sin «Borrar» con folio, y el aviso de la nota en
+    palabras;
+  - `ConfirmModal` acepta `cancelLabel`; sin él queda idéntico.
+  - `RevertOrderModal` sirve al tablero y al detalle.
+  - Los botones de flujo del tablero, idénticos (161 de 161).
+- **No toca** la base ni las RPC.
+- **Pruebas** (`detalle.mjs`, de 147 a 160; el banco suma un tablero de fondo que anota los clics que le llegan, la nota que la
+  base rechaza (`falla=nota`) y `caso=empaque`):
+  - Vuelta 1, contra v10.84.53: de los 13 casos nuevos fallaban 12.
+  - El que pasaba (det-146) medía mal: `innerText` aplica las mayúsculas del rótulo. Ahora lee el valor.
+  - det-112 cambió por decisión: «En espera» va arriba.
+  - Vuelta 2: 157 de 160. Un bug mío: la revisión de «hay algo escrito» buscaba `input[type="text"]`, y la nota y el nombre
+    interno no declaran `type`, así que el clic fuera seguía cerrando. det-28 y det-118 cambiaron por decisión (el ID interno
+    es sólo para admin; «Recordar» va en el pie). Luego, 160 de 160.
+  - Vuelta 3, por donde no se diseñó (cerrar sin guardar, Esc con el foco fuera del campo, un HEX a medias, doble clic en
+    «Recordar»): 164 de 164.
+  - Corrida doble contra v10.84.53: fallan los 17 nuevos y, de los de antes, sólo det-112 y det-118, que cambiaron por decisión.
+  - El tablero, idéntico (161 de 161). Todas las tandas: 433 de 433.
+
 ## v10.84.53 — Actuar no cierra el detalle de la orden — 7-oct-2026
 
 Cuarta y última parte de la quinta critique. El revisor encontró que abrir una acción destruía el detalle. La app lo cerraba
