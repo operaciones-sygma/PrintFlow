@@ -82,7 +82,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 446 pruebas, ~7 min; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 481 pruebas, ~7 min; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -146,13 +146,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.55 (7-oct). **El detalle de la orden queda cerrado**: tres revisiones independientes (23 → 24 → 27/40;
-  meta «35 sin P1 o 3 pasadas») con sus P1 arreglados en v10.84.49-55 (el detalle sabe y ofrece lo de la ficha, actuar no lo
-  cierra, el doble clic no llega al tablero, cambiar de etapa pregunta antes). Lo que queda, en
-  `.impeccable/critique/2026-10-07T14-58-20Z__src-app-jsx-detailmodal.md` y en la entrada v10.84.55 del CHANGELOG.
-  **Siguiente: el tablero** (el `Kanban` de Producción; después el de Germán, los «Folios» de Karla y la ficha `OCard`),
-  empezando por su banco. El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep
-  hecho: SYGMA emite sus propios CFDI (F-/RS-), Alpha ya no. Hasta el 7-oct este renglón arrastraba la historia desde
+- **LIVE:** v10.84.57 (7-oct). **El tablero** (el `Kanban` de Producción) pasó por su primera revisión independiente:
+  20/40 (las de julio, 27 y 25, eran propias). Van dos de cuatro partes: v10.84.56, mover órdenes con red («Empaque» y «A Listas»
+  esperan 6.5 s con «Deshacer» antes de escribir, «Activar» pregunta si detiene lo que corre, el número de la orden en el
+  tablero de Germán), y v10.84.57, se lee qué corre en cada máquina (el cliente completo, un solo reloj). Siguen: lo atrasado y
+  lo detenido, y los avisos de error y el arcoíris; luego la segunda revisión. Snapshot
+  `.impeccable/critique/2026-10-07T16-33-31Z__src-app-jsx-kanban-tablero-de-produccion.md`; banco `tests/banco/gen-tablero.mjs`
+  sobre `tests/banco/extraer.mjs` (junta solo las dependencias con `@babel/parser`). **El detalle de la orden quedó cerrado** en
+  v10.84.55 (tres revisiones independientes: 23 → 24 → 27/40); lo que queda, en la entrada v10.84.55 del CHANGELOG.
+  El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus
+  propios CFDI (F-/RS-), Alpha ya no. Hasta el 7-oct este renglón arrastraba la historia desde
   v10.84.36; ahora es sólo lo de hoy. Cada versión, con su porqué, en `CHANGELOG.md`; lo grande desde el 18-sep:
   - **«Asignar folio» pasó por `/impeccable critique`** (v10.84.34, 24/40) y por la prueba tratando de romperlo (44 casos,
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
