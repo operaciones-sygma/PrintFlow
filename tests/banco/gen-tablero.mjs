@@ -43,7 +43,9 @@ const hace = h => new Date(Date.now() - h * 3600000).toISOString();
 const BASE = { client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", product: "FORMATO 5 PUNTOS DE SEGURIDAD", product_type: "Formatos",
   quantity: 5000, created_at: hace(120), created_by: "secretaria", due_date: dia(3), paper_type: "BRISTOL", paper_grammage: 180,
   standard_size: "media_carta", ink_front: "4", ink_back: "4", agent: "Manuel", price: 5649, order_type: "interna", priority: "normal",
-  plate_status: "new", timeline: [{ stage: "draft" }, { stage: "design" }], notes_log: [], comments: [] };
+  plate_status: "new", timeline: [{ stage: "draft" }, { stage: "design" }], notes_log: [], comments: [],
+  // con foto, como casi todas las de producción: la miniatura le quita ~46 px al nombre en cada ficha
+  image_url: "img1" };
 let n = 0;
 const orden = (pn, x) => ({ ...BASE, id: "OP-" + pn, production_number: pn, ...x, _n: n++ });
 const enMaquina = (pn, maq, pos, x = {}) => orden(pn, { stage: "in_production", current_machine: maq, machine_queue_position: pos,
@@ -51,12 +53,12 @@ const enMaquina = (pn, maq, pos, x = {}) => orden(pn, { stage: "in_production", 
 const NORMAL = [
   enMaquina("P-0591", "off_pm74", 0, { priority: "urgente", needs_reprint: true, print_version: 1, client: "GOBIERNO DEL ESTADO DE GUANAJUATO" }),
   enMaquina("P-0593", "off_pm74", 1, { client: "RESTAURANTES HAKUNA", product_type: "Menús", quantity: 300 }),
-  enMaquina("P-0594", "off_pm74", 2, { client: "IMPRENTA LEON", product_type: "Volantes", quantity: 10000, due_date: dia(-1) }),
+  enMaquina("P-0594", "off_pm74", 2, { client: "ALEJANDRA RODRIGUEZ MANRIQUE IMPRESOS", product_type: "Volantes", quantity: 10000, due_date: dia(-1) }),   // (37 letras, en la cola)
   enMaquina("P-0595", "off_pm52", 0, { client: "LIC. ORLANDO CASAS", product_type: "Hojas membretadas", quantity: 1000 }),
   // la siguiente de la PM52, del mismo tamaño que la activa: al subir queda justo bajo el cursor (el doble clic de producción)
   enMaquina("P-0609", "off_pm52", 1, { client: "LIC. ORLANDO CASAS", product_type: "Hojas membretadas", quantity: 1000 }),
   enMaquina("P-0596", "dig_xerox252", 0, { client: "CERVECERIA MODELO", product_type: "Etiquetas", quantity: 250 }),
-  enMaquina("P-0597", "ac_polar115", 0, { client: "PREMIUM RESTAURANT BRANDS", product_type: "Manteletas", quantity: 20000 }),
+  enMaquina("P-0597", "ac_polar115", 0, { client: "CABLESERV MANTENIMIENTO E INSTALACIONES", product_type: "Manteletas", quantity: 20000 }),   // (39 letras, en una de Acabados: las más angostas)
   orden("P-0585", { stage: "packaging", current_machine: "vm_manual", machine_queue_position: 0, machine_log: [{ machine: "vm_manual", started: hace(5) }] }),
   orden("P-0586", { stage: "packaging", current_machine: "vm_manual", machine_queue_position: 1, client: "CABLESERV", product_type: "Tarjetas", quantity: 500 }),
   orden("P-0600", { stage: "ready", priority: "urgente", due_date: dia(0), client: "CASTORES", product_type: "Guías", quantity: 2000 }),

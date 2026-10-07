@@ -12,6 +12,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.57 — El tablero: se lee qué corre en cada máquina — 7-oct-2026
+
+Segunda parte de lo que dejó la primera revisión independiente del tablero (20/40). Su P1: «No se lee qué corre en cada
+máquina».
+
+- **Qué pasaba:** a 1366, las órdenes activas decían «CALZA…», «P…», «AL…», y en Empaque «FI…», «C…», «JO…» (en producción,
+  hoy). La ficha (`DragCard`) metía en un renglón de ~190 px la asa, el cliente, el folio y el reloj, y en la activa el reloj
+  iba dos veces: el del marco «ACTIVA» y el de la ficha.
+- **Ahora:**
+  - el cliente va solo en su línea, a 12 px, hasta tres líneas: con dos, un nombre de 35 letras todavía se cortaba a 1366;
+  - la asa ⠿ (la de «⠿ para mover»), el folio y el reloj van en la segunda línea;
+  - la activa ya no repite el reloj, porque el marco lo trae (`reloj={false}`); en Empaque, donde no hay marco, la ficha lo
+    conserva;
+  - la columna derecha (Empaque, Salidas, Maquila) mide `clamp(260px, 19vw, 330px)`: igual a 1366 y 330 px a 1920.
+- **No toca** la base, las RPC ni App. `DragCard` sólo se usa en el `Kanban` (la activa y Empaque); el tablero de Germán y las
+  fichas de «Pendientes» no lo usan.
+- **Pruebas** (`tablero.mjs`, de 27 a 35):
+  - Vuelta 1, contra v10.84.56: fallaban las 3 nuevas (nombres cortados a 1366 y a 1920, dos relojes en cada activa).
+  - Dos pruebas se corrigieron por error mío: en Listas el nombre va suelto junto al ícono, y en la columna derecha el título
+    va con su ícono.
+  - El banco ahora es más fiel. Sus órdenes traen foto, como casi todas las de producción, porque la miniatura le quita
+    ~46 px al nombre. Y tiene dos nombres reales de 37 y 39 letras, uno en Acabados (las columnas más angostas) y otro en la
+    cola. Con nombres cortos, el tope de dos líneas pasaba igual.
+  - Vuelta 3 (un nombre de 79 letras, uno sin espacios, Empaque conserva su reloj, la columna derecha a 1366 y 1920, la
+    tableta sin barra horizontal): todo pasa.
+  - Dos sabotajes (tope de dos líneas, columna fija en 260): los dos los caza su prueba.
+  - Corrida doble contra v10.84.56: fallan las 4 de lo nuevo (nombres a 1366 y 1920, un solo reloj, la columna derecha).
+    Otras dos fallaban por cómo medían y se corrigieron: la altura de línea «normal» no es un número, y contaba como reloj el
+    `span` que lo envolvía. Ahora pasan en las dos versiones, como guardas.
+  - Todas las tandas: 481 de 481.
+
 ## v10.84.56 — El tablero, primera revisión independiente (20/40): mover órdenes con red — 7-oct-2026
 
 Empieza el tablero. La primera pasada de un revisor independiente al Tablero de Producción (el `Kanban`) dio 20/40 con tres

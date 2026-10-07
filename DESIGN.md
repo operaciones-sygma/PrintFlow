@@ -410,6 +410,9 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
   un campo, y lo que la base rechaza regresa al campo con su aviso. «Seguir escribiendo» regresa el foco a ese campo
   (v10.84.55; caía al `<body>`).
+- **En una ficha, el nombre primero y completo** (v10.84.57): el cliente va solo en su línea (hasta tres, a 12 px) y lo que
+  lo acompaña (la asa, el folio, el reloj) en la segunda; un dato que el marco ya dice (el reloj de la activa) no se repite
+  adentro. Se mide a 1366 con foto en la ficha: la miniatura le quita ~46 px al nombre.
 - **En el tablero, lo de todos los días se deshace y lo que detiene se pregunta** (v10.84.56): «Empaque» y «A Listas» (antes
   ⟳, el ícono de recargar) ESPERAN `DESHACER_MS` (6.5 s, lo mismo que vive el «Deshacer» de asignar) con «Pasa a Empaque en
   N s · Deshacer» en el lugar de sus botones, y sólo entonces llaman a App por el camino de siempre: deshacer no escribe nada y

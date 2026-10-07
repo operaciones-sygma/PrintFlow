@@ -13354,14 +13354,19 @@ function CuentaAtras({hasta}){const [,t]=useState(0);useEffect(()=>{const i=setI
 function FilaPendiente({p,onDeshacer}){return <div role="status" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:11,fontWeight:600,color:C.t2,padding:"3px 0 2px"}}>
   <span>{p.frase} en <CuentaAtras hasta={p.hasta}/></span>
   <button autoFocus onClick={onDeshacer} style={{...bs(C.sf,C.tx),padding:"4px 10px",boxShadow:"0 0 0 0.5px "+C.bdSt}}><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button></div>}
-function DragCard({o,borderColor,reorderMachine,onAction,match}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
+// v10.84.57 — se lee qué corre (la primera revisión independiente del tablero, P1: a 1366 el cliente salía «CALZA…», «P…»,
+//   «FI…»: la fila metía asa, cliente, folio y reloj en ~190 px y el reloj iba dos veces en la activa). El cliente va solo en su
+//   línea (hasta tres, a 12 px: con dos, un nombre de 35 letras todavía se cortaba a 1366), y la asa, el folio y el reloj en la
+//   segunda. `reloj={false}` donde el marco ya lo trae (la activa de cada máquina).
+function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start",...hlOf(match,o)}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
     {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,flex:1,minWidth:0}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.client}</span></span>
+    <div style={{fontSize:12,fontWeight:700,lineHeight:1.25,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden",overflowWrap:"anywhere"}}>{o.client}</div>
+    <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",marginTop:3}}>
+      <DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>
       {/* v10.73.75 — clarify: el folio impreso es la llave papel↔pantalla de Gerardo y desaparecía JUSTO al entrar a máquina (DragCard = activa + Empaque). Mismo contrato de color que el chip del pool, más denso (density > consistency en el board). */}
       {o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}
-      <span style={{flexShrink:0}}>{(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}</span>
+      {reloj&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
     {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes, Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
@@ -13385,6 +13390,8 @@ function DragCard({o,borderColor,reorderMachine,onAction,match}){return <div dra
 //   admin) + un predicado `match`. La búsqueda RESALTA las coincidencias donde están. Además contesta mejor la
 //   pregunta real de Gerardo: "¿dónde está P-1234?" se responde viéndolo resaltado DENTRO de Prensa 3, con su
 //   contexto, no borrando las otras 10 máquinas.
+// v10.84.57: se lee qué corre en cada máquina (el cliente completo en la ficha, un solo reloj en la activa, la columna
+//   derecha más ancha en pantallas grandes).
 // v10.84.56: la primera revisión independiente del tablero (20/40): mover órdenes con red («Empaque» y «A Listas» esperan con
 //   «Deshacer», «Activar» pregunta si detiene lo que corre, el escudo de clics) y el número de la orden en el tablero de Germán.
 function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showToast,actionLoading,match=null,searchText="",onClearSearch}) {
@@ -13733,7 +13740,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         </div>
                         {/* v10.73.80 — el marco verde ya dice "activa"; el borde de categoría aquí adentro solo repetía
                             (card anidada con dos colores compitiendo). Neutro. La excepción roja de urgente sigue viva. */}
-                        <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction} match={match}/>
+                        <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction} match={match} reloj={false}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
                           {pend[activa.id]?<FilaPendiente p={pend[activa.id]} onDeshacer={()=>deshacerPend(activa.id,pend[activa.id].accion)}/>:<>
@@ -13786,7 +13793,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
       </div>
 
       {/* ── RIGHT COLUMN: Empaque + Salidas + Maquila (sticky) ── */}
-      <div style={{width:260,flexShrink:0,position:"sticky",top:16,alignSelf:"flex-start",display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{width:"clamp(260px, 19vw, 330px)",flexShrink:0,position:"sticky",top:16,alignSelf:"flex-start",display:"flex",flexDirection:"column",gap:12}}>
 
         {/* EMPAQUE */}
         <div onDragOver={e=>{e.preventDefault();setDO("vm_manual")}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop("vm_manual",e)}

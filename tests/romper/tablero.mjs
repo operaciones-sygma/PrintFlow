@@ -241,5 +241,80 @@ await caso("tab-27-la-cola-no-se-desborda", "vista=produccion&caso=lleno", async
   ok("tab-27-la-cola-no-se-desborda", r.length === 0, r.length ? "se salen de su tarjeta: " + r.slice(0, 5).join(", ") : "todo cabe");
 });
 
+// ── v10.84.57: se lee qué corre en cada máquina (P1 de la primera revisión: a 1366 decían «CALZA…», «P…», «AL…») ──────────
+// el cliente de cada ficha visible: ¿se ve completo? (un nombre de hasta 40 letras no puede salir con «…», ni a lo ancho ni a lo
+//   alto; uno más largo puede cortarse en la segunda línea)
+const nombresCortados = p => p.evaluate(() => {
+  const ords = window.__ordenes(), cortados = [];
+  for (const card of document.querySelectorAll("[draggable=true]")) {
+    if (!card.getClientRects().length) continue;
+    const pn = (card.innerText.match(/P-\d{4}/) || [])[0], o = ords.find(x => x.production_number === pn);
+    if (!o || !o.client || o.client.length > 40) continue;
+    // (por su texto PROPIO: en Listas el nombre va suelto junto al ícono de la asa, en un div que tiene hijos)
+    const el = [...card.querySelectorAll("*")].find(e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim() === o.client);
+    if (!el) { cortados.push(pn + " (sin su nombre)"); continue; }
+    for (let x = el; x && x !== card; x = x.parentElement) { const cs = getComputedStyle(x);
+      if ((x.scrollWidth > x.clientWidth + 1 || x.scrollHeight > x.clientHeight + 1) && (cs.overflow !== "visible" || cs.textOverflow === "ellipsis")) { cortados.push(pn + " «" + o.client.slice(0, 18) + "…»"); break; } }
+  }
+  return cortados;
+});
+await caso("tab-28-se-lee-que-corre-a-1366", "vista=produccion", async p => {
+  const c = await nombresCortados(p);
+  ok("tab-28-se-lee-que-corre-a-1366", c.length === 0, c.length ? "a 1366 salen cortados: " + c.join(", ") : "a 1366 todos los nombres se leen completos");
+});
+await caso("tab-29-se-lee-que-corre-a-1920", "vista=produccion", async p => {
+  const c = await nombresCortados(p);
+  ok("tab-29-se-lee-que-corre-a-1920", c.length === 0, c.length ? "a 1920 salen cortados: " + c.join(", ") : "a 1920 todos los nombres se leen completos");
+}, { width: 1920, height: 1080 });
+await caso("tab-30-un-solo-reloj-en-la-activa", "vista=produccion", async p => {
+  // el marco «Activa» ya trae el reloj: la ficha de adentro no lo repite (le quitaba el ancho al nombre)
+  const r = await p.evaluate(() => { const fuera = [];
+    for (const card of document.querySelectorAll("[draggable=true]")) { const marco = card.parentElement;
+      if (!card.getClientRects().length || ![...marco.children].some(h => /^activa/i.test((h.innerText || "").trim()))) continue;
+      const relojes = [...marco.querySelectorAll("span")].filter(s => /^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)).length;
+      fuera.push(((card.innerText.match(/P-\d{4}/) || [""])[0]) + ":" + relojes); }
+    return fuera; });
+  const malos = r.filter(x => !x.endsWith(":1"));
+  ok("tab-30-un-solo-reloj-en-la-activa", r.length > 0 && malos.length === 0, `relojes por orden activa: ${r.join(", ")}`);
+});
+
+// vuelta 3 de v10.84.57, por donde no se diseñó
+const fichaSeSale = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes(pn));
+  if (!c) return "no está"; const r = c.getBoundingClientRect(), m = c.parentElement.getBoundingClientRect();
+  return { anchoFicha: Math.round(r.width), anchoMarco: Math.round(m.width), seSale: c.scrollWidth > c.clientWidth + 1 || r.right > m.right + 1 }; }, pn);
+await caso("tab-31-nombre-larguisimo-en-la-maquina", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0591", { client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN PÚBLICA DEL ESTADO" })); await espera(p, 400);
+  const r = await fichaSeSale(p, "P-0591");
+  const lineas = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0591"));
+    const el = [...c.querySelectorAll("*")].find(e => /^GOBIERNO DEL ESTADO/.test([...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("")));
+    if (!el) return -1; const cs = getComputedStyle(el), lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;   // («normal» no es un número)
+    return Math.round(el.getBoundingClientRect().height / lh); });
+  ok("tab-31-nombre-larguisimo-en-la-maquina", !r.seSale && lineas >= 1 && lineas <= 3, `un nombre de 79 letras en la PM74: ${r.seSale ? "SE SALE de la ficha" : "no se sale"}; ocupa ${lineas} línea(s) (tope 3)`);
+});
+await caso("tab-32-nombre-sin-espacios", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0595", { client: "IMPRESIONESYEMPAQUESDELBAJIOSADECV2026" })); await espera(p, 400);
+  const r = await fichaSeSale(p, "P-0595");
+  ok("tab-32-nombre-sin-espacios", !r.seSale, `un nombre de 38 letras sin espacios: ${r.seSale ? "SE SALE de la ficha" : "se parte y no se sale"}`);
+});
+await caso("tab-33-empaque-conserva-su-reloj", "vista=produccion", async p => {
+  // en Empaque no hay marco que diga el tiempo: la ficha lo trae
+  const r = await p.evaluate(() => [...document.querySelectorAll("[draggable=true]")].filter(c => /P-0585|P-0586/.test(c.innerText)).map(c =>
+    (c.innerText.match(/P-\d{4}/) || [""])[0] + ":" + [...c.querySelectorAll("span")].filter(s => /^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)).length));   // (sólo el reloj: no el span que lo envolvía)
+  ok("tab-33-empaque-conserva-su-reloj", r.includes("P-0585:1"), `relojes en Empaque: ${r.join(", ")} (P-0585 tiene su bitácora abierta; P-0586 no)`);
+});
+const anchoDerecha = p => p.evaluate(() => { const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
+  const h = [...document.querySelectorAll("span,div")].find(e => propio(e) === "Empaque" && e.closest("div[style*='sticky']"));
+  const col = h ? h.closest("div[style*='sticky']") : null; return col ? Math.round(col.getBoundingClientRect().width) : -1; });
+await caso("tab-34-la-columna-derecha-a-1366-y-1920", "vista=produccion", async p => {
+  const a1366 = await anchoDerecha(p);
+  await p.setViewportSize({ width: 1920, height: 1080 }); await espera(p, 500);
+  const a1920 = await anchoDerecha(p);
+  ok("tab-34-la-columna-derecha-a-1366-y-1920", a1366 >= 255 && a1366 <= 270 && a1920 >= 300, `la columna de Empaque mide ${a1366} px a 1366 y ${a1920} px a 1920`);
+});
+await caso("tab-35-tableta-sin-barra-horizontal", "vista=produccion", async p => {
+  const d = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+  ok("tab-35-tableta-sin-barra-horizontal", d.sw <= d.cw + 1, `a 768 (tableta): ancho del contenido ${d.sw} contra ${d.cw}`);
+}, { width: 768, height: 1024 });
+
 await browser.close();
 for (const r of res) console.log(r);
