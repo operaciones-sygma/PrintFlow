@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.61 — La carga completa ya no se corta en 1,000, y esperar la entrega en Salidas no es estar estancada — 7-oct-2026
+
+Marcelo, 7-oct: P-0540 (COSQUIM) salía «10d estancada» en Salidas, con la entrega el 15-oct. «Es una alerta falsa creo».
+
+- **Qué pasaba de verdad (medido en producción, sin escribir).**
+  - Esta Supabase contesta como máximo **1,000 renglones por consulta, aunque se le pida `.limit(5000)`**, y lo hace en
+    silencio: `order_timeline` contestaba «0-999/9053» y `order_machine_log` «0-999/2245», también con el límite.
+  - Cuando alguien aprieta «Cargar Archivo Completo» (o el de Analytics, Auditoría, Devoluciones o Cancelaciones), cada recarga
+    traía la bitácora de las 951 órdenes en una sola consulta. Se cortaba en el 29 de mayo.
+  - Las órdenes recientes se quedaban sin bitácora, y `getStale` contaba desde su creación: P-0540 entró a Salidas el 6-oct y
+    salía «10d estancada». También perdían el reloj de máquina, y Analytics calculaba con datos cortados.
+  - El `.limit(5000)` de v10.72.13 tampoco protegía la lista de órdenes: van 951, con ~200 al mes, y al pasar de 1,000 se
+    habrían empezado a perder en silencio de Archivo, la búsqueda y el CSV.
+  - Se reprodujo en producción con `tests/recorrido/carga-completa.mjs`: después de cargar el archivo completo y recargar,
+    P-0540 pasó a «10d estancada».
+- **Arreglo:**
+  - `todasLasFilas()` pide por páginas de 1,000 hasta que una llegue vacía. Si alguien baja el tope del servidor, no se pierde
+    nada; si una página falla, devuelve el error y ninguna fila, porque unas filas a medias se verían como si fueran todas.
+  - La usan las órdenes, sus cinco tablas (bitácora, comentarios, merma, bitácora de máquina, notas), las OCs, las partes, el
+    plan matriz y la sugerencia de folio.
+  - **La recarga trae siempre sólo lo de las órdenes activas** y conserva lo que ya tenía de las terminadas, como ya hacía
+    antes de cargar el archivo. Con el archivo cargado traía todo, unos 11,000 renglones, cada vez que alguien movía algo.
+- **Lo que pidió Marcelo:** una orden en Salidas (o recibida de maquila) cuya entrega todavía no llega espera su fecha, no está
+  estancada. Desde el día de la entrega, si sigue ahí, vuelve a contar, y pasada la fecha además dice RETRASO. Es la misma idea
+  que ya existía para Listas con entrega lejana. Sin esta regla, P-0540 habría vuelto a salir estancada el 9-oct.
+- **No toca** la base, las RPC ni lo que se guarda: sólo cómo se lee.
+- **Pruebas:**
+  - `tests/romper/carga.mjs` (9, en el candado): recorta el `todasLasFilas` vivo y lo corre contra una base simulada con tope
+    (9,053 renglones en 11 peticiones, justo 1,000, vacía, tope de 500, una página que falla) y revisa que cada consulta que se
+    cortaba lo use. Contra v10.84.60 fallaba.
+  - `tests/recorrido/carga-completa.mjs`, con la app real: contra producción dio MAL (P-0540 «10d estancada»); con la compilada
+    nueva, BIEN. Con `DEPURAR=1` se ven las páginas: la bitácora llega completa, `0-999 … 9000-9052`.
+  - `tablero.mjs` +2: dos semanas en Salidas con la entrega en 8 días no sale estancada (fallaba); con la entrega hoy, sí.
+
 ## v10.84.60 — El tablero: soltar en Empaque con la misma red que el botón — 7-oct-2026
 
 La segunda revisión independiente del tablero dio **25/40** (la primera, 20) con dos P1. Éste es el primero: «el mismo paso tiene

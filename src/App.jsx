@@ -1455,13 +1455,26 @@ function actionDeniedToast(action, order, user, userLogin) {
 }
 
 // ═══ SUPABASE DATA LAYER ═══
+// v10.84.61 — TODAS las filas de una consulta, por páginas. Esta Supabase contesta como máximo 1,000 renglones por consulta, aunque
+//   se le pida .limit(5000), y lo hace EN SILENCIO (medido el 7-oct: order_timeline «0-999/9053», order_machine_log «0-999/2245»).
+//   Con el archivo completo cargado, cada recarga traía la bitácora de todas las órdenes: se cortaba en mayo, y las órdenes
+//   recientes se quedaban sin bitácora (P-0540 salía «10d estancada» un día después de llegar a Salidas) y sin reloj de máquina.
+//   `armar` devuelve la consulta con un orden estable (su fecha y luego id); se pide página por página con .range() hasta que una
+//   llegue vacía, avanzando lo que llegó (si alguien baja el tope del servidor, no se pierde nada). Si una página falla se
+//   devuelve el error y NINGUNA fila: unas filas a medias se verían como si fueran todas. Lo prueba tests/romper/carga.mjs.
+async function todasLasFilas(armar){const filas=[];
+  for(let desde=0,vuelta=0;vuelta<1000;vuelta++){const {data,error}=await armar().range(desde,desde+999);
+    if(error)return {data:null,error};if(!data||!data.length)break;filas.push(...data);desde+=data.length;}
+  return {data:filas,error:null};
+}
 const db = {
   async loadOrders(relatedOnly=false) {
     // Always load ALL order rows (fast, lightweight)
     // v10.72.13 — .limit(5000) EXPLÍCITO: sin él PostgREST trunca en 1000 filas EN SILENCIO y las órdenes
     // viejas desaparecen de tablero/CSV/búsqueda. Mismo guard que ya se aplicó a splits (reload ~L12437).
     // 5000 ordenado por created_at desc cubre años al volumen actual; las recientes (operables) siempre presentes.
-    const { data: orders } = await supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(5000);
+    // v10.84.61 — por páginas: el .limit(5000) de v10.72.13 no servía (el tope del servidor manda) y las órdenes van en 951
+    const { data: orders } = await todasLasFilas(() => supabase.from("orders").select("*").order("created_at", { ascending: false }).order("id"));
     if (!orders) return [];
     if (orders.length === 0) return [];
     // Only load related data (timeline, comments, etc) for target orders
@@ -1470,12 +1483,15 @@ const db = {
     const target=relatedOnly?orders.filter(o=>!finalStages.includes(o.stage)):orders;
     const ids = target.map(o => o.id);
     const idSet = new Set(ids);
+    // v10.84.61 — completas, por páginas (la bitácora pasa de 9,000 renglones); con todo el archivo, sin la lista de ids (eran
+    //   las 951 en la dirección: más de 20,000 caracteres)
+    const relacion = (tabla, col) => todasLasFilas(() => { let q = supabase.from(tabla).select("*"); if (relatedOnly) q = q.in("order_id", ids); return q.order(col).order("id"); });
     const [tl, cm, wl, ml, nl] = await Promise.all([
-      supabase.from("order_timeline").select("*").in("order_id", ids).order("created_at"),
-      supabase.from("order_comments").select("*").in("order_id", ids).order("created_at"),
-      supabase.from("order_waste").select("*").in("order_id", ids).order("created_at"),
-      supabase.from("order_machine_log").select("*").in("order_id", ids).order("started_at"),
-      supabase.from("order_notes").select("*").in("order_id", ids).order("created_at"),
+      relacion("order_timeline", "created_at"),
+      relacion("order_comments", "created_at"),
+      relacion("order_waste", "created_at"),
+      relacion("order_machine_log", "started_at"),
+      relacion("order_notes", "created_at"),
     ]);
     // v10.72.13 — pre-indexar cada tabla relacionada por order_id en un Map (una pasada), en vez de 5
     // .filter() lineales POR orden en el .map de abajo (O(n²) en CADA reload realtime → jank en el hilo
@@ -1709,7 +1725,7 @@ const db = {
   },
   // 🛒 v10.10.0 — Carga Órdenes de Compra (OC-XXXX)
   async loadPurchaseOrders() {
-    const {data, error}=await supabase.from("purchase_orders").select("*").order("created_at",{ascending:false});
+    const {data, error}=await todasLasFilas(()=>supabase.from("purchase_orders").select("*").order("created_at",{ascending:false}).order("id"));   // v10.84.61 — por páginas (639 hoy)
     if(error)throw new Error(error.message);
     return data||[];
   },
@@ -2248,9 +2264,9 @@ const db = {
       if(counterData?.last_number) maxNum = counterData.last_number;
     } catch(e) { /* sin contador, seguimos con MAX */ }
     // 2) Buscar MAX en órdenes existentes (resiliente si contador no se ha actualizado)
-    const {data, error} = await supabase.from("orders")
+    const {data, error} = await todasLasFilas(() => supabase.from("orders")
       .select("invoice_folio")
-      .like("invoice_folio", prefix+"%").limit(5000); // v10.72.13 — guard de truncación silenciosa (el contador de arriba es la fuente primaria)
+      .like("invoice_folio", prefix+"%").order("id")); // v10.84.61 — por páginas (el .limit(5000) de v10.72.13 no pasaba del tope de 1,000; el contador de arriba es la fuente primaria)
     if(!error && data) {
       const re = new RegExp("^"+prefix+"([0-9]+)$");
       data.forEach(r=>{
@@ -2540,6 +2556,9 @@ const getStale=o=>{if(o.stage.includes("delivered")||o.stage.includes("cancelled
   if(o.current_machine&&(!machineDown(o.current_machine)||o.machine_queue_position!==0))return null;
   if(snoozeActive(o))return null; // v10.73.18 — "En espera" NO es estancada (consistente con Torre/Salud/alerta)
   if((o.stage==="ready"||o.stage==="placas_listas")&&o.due_date&&bizDaysUntil(o.due_date)>5)return null; // v10.73.18 — pre-producción con entrega lejana: aún no entra a máquina, no es "sin avance"
+  // v10.84.61 — terminada y esperando su fecha de entrega: tampoco (Marcelo, 7-oct, P-0540: «10d estancada» en Salidas con entrega
+  //   el 15-oct). Desde el día de la entrega, si sigue ahí, vuelve a contar (y pasada la fecha, además, RETRASO).
+  if((o.stage==="salidas"||o.stage==="maq_received")&&o.due_date&&bizDaysUntil(o.due_date)>0)return null;
   const last=o.timeline?.length>0?o.timeline[o.timeline.length-1].date:o.created_at;const h=bizHoursAgo(last);if(h>=48)return{lv:"critical",lb:Math.floor(h/24)+"d estancada"};if(h>=24)return{lv:"warning",lb:h+"h sin avance"};return null};
 
 // v10.28.0 — Mapeo stages → responsable para "Salud Operativa"
@@ -17847,23 +17866,25 @@ export default function PrintFlow() {
     //   propósito: si mantenimiento falla, que no tumbe la carga de órdenes.
     db.loadMaintenance().then(setMaintenance).catch(()=>{});
     const [data, pos, splitsResp, matrixGroupsResp, matrixLinesResp] = await Promise.all([
-      db.loadOrders(!archiveLoadedRef.current),
+      // v10.84.61 — la recarga trae SIEMPRE sólo lo de las órdenes activas y conserva lo que ya se tenía de las terminadas (abajo).
+      //   Con el archivo completo cargado traía todo (~11,000 renglones, y cortado en 1,000) cada vez que alguien movía algo.
+      db.loadOrders(true),
       db.loadPurchaseOrders(),
       // v10.58.34: splits a nivel orden
       // v10.58.43 #29: límites EXPLÍCITOS — PostgREST trunca en 1000 filas EN SILENCIO;
       // al pasar el histórico de ese tamaño, splits/planes "desaparecían" de la UI.
       // 5000 ordenado por created_at desc cubre años al volumen actual; los más
       // recientes (los operables) siempre presentes.
-      supabase.from("order_invoice_splits")
+      todasLasFilas(()=>supabase.from("order_invoice_splits")
         .select("id,order_id,position,qty_portion,amount_portion,doc_type,invoice_folio,invoice_pre_assigned,payment_status,cancelled_at,cancellation_reason,cancelled_by,created_at")
-        .order("created_at",{ascending:false}).limit(5000),
+        .order("created_at",{ascending:false}).order("id")),   // v10.84.61 — por páginas: el .limit(5000) no pasaba del tope de 1,000
       // v10.58.40 Día 1: plan matriz por OC
-      supabase.from("oc_invoice_split_groups")
+      todasLasFilas(()=>supabase.from("oc_invoice_split_groups")
         .select("id,purchase_order_id,position,label,folio,doc_type,total_amount,invoice_pre_assigned,invoice_reason,payment_status,invoiced_at,invoiced_by,cancelled_at,cancellation_reason,cancelled_by,created_at")
-        .order("created_at",{ascending:false}).limit(5000),
-      supabase.from("oc_invoice_split_lines")
+        .order("created_at",{ascending:false}).order("id")),
+      todasLasFilas(()=>supabase.from("oc_invoice_split_lines")
         .select("id,oc_invoice_split_group_id,order_id,qty_portion,amount_portion,cancelled_at,cancellation_reason,cancelled_by,created_at")
-        .order("created_at",{ascending:false}).limit(5000)
+        .order("created_at",{ascending:false}).order("id"))
     ]);
     // v10.80.13 — NO SEGUIR CON [] CUANDO LA CONSULTA FALLO.
     // En supabase-js una consulta fallida NO rechaza la promesa: resuelve {data:null, error}. El
@@ -17940,11 +17961,11 @@ export default function PrintFlow() {
     // v10.73.26 (#1) — en relatedOnly (archivo no cargado) loadOrders devuelve related=[] para etapas finales;
     // preservar del estado previo notas/comentarios/timeline/etc. de esas órdenes para que una nota agregada a una
     // ENTREGADA no desaparezca al llegar el realtime reload. Spread de o primero → conserva el enriquecimiento de splits.
-    if(!archiveLoadedRef.current){
+    {   // v10.84.61 — también con el archivo completo cargado (antes: setOrders(withSplits), que reemplazaba todo)
       const _fin=new Set(["delivered","maq_delivered","cancelled","maq_cancelled","stocked"]);
       setOrders(prev=>{const pById={};for(const p of prev)if(p)pById[p.id]=p;
         return withSplits.map(o=>{if(_fin.has(o.stage)){const pr=pById[o.id];if(pr)return{...o,notes_log:pr.notes_log||[],comments:pr.comments||[],timeline:pr.timeline||[],waste_log:pr.waste_log||[],machine_log:pr.machine_log||[]};}return o;});});
-    } else setOrders(withSplits);
+    }
     setPurchaseOrders(posWithMatrix);
     setLoaded(true);
    } catch(e) {

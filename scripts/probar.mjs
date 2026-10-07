@@ -32,6 +32,8 @@ const TANDAS = [
   { nombre: "permisos", romper: "tests/romper/permisos.mjs" },
   // sin banco: cómo se firman las fotos (el código vivo de App.jsx contra un Storage simulado que cuenta peticiones)
   { nombre: "firmas", romper: "tests/romper/firmas.mjs" },
+  // sin banco: que las consultas grandes lleguen completas aunque el servidor conteste máximo 1,000 renglones (v10.84.61)
+  { nombre: "carga", romper: "tests/romper/carga.mjs" },
   // «Archivos»: la lista y los huérfanos que decide la base (sin banco), y los botones que borran (con banco)
   { nombre: "archivos", romper: "tests/romper/archivos.mjs" },
   { nombre: "archivos-pantalla", gen: "tests/banco/gen-archivos.mjs", romper: "tests/romper/archivos-pantalla.mjs", puerto: 5197 },

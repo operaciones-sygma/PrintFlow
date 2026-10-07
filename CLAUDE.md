@@ -57,6 +57,11 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 9. `UPDATE OF col` en un trigger mira las columnas **listadas**, no las que cambian.
 10. **Agregar una FK** a una tabla con otra FK al mismo destino rompe los embeds de PostgREST
     (PGRST201 → pantalla en blanco). Correr `cobranzaflow/scripts/probar-embeds.sh` en el mismo commit.
+11. 🔥 **PostgREST contesta como máximo 1,000 renglones por consulta, AUNQUE se le pida `.limit(5000)`**, y en silencio
+    (el «max rows» del proyecto manda; medido el 7-oct: `order_timeline` «0-999/9053»). Toda consulta que pueda pasar de 1,000
+    va por **`todasLasFilas(() => consulta.order(col).order("id"))`** (páginas con `.range()`, hasta una vacía; si una falla,
+    error y ninguna fila). Hasta v10.84.60 la bitácora se cortaba con el archivo completo cargado y las órdenes recientes salían
+    «estancadas» (P-0540); y las órdenes (951) iban a cortarse al pasar de 1,000. `tests/romper/carga.mjs` lo vigila.
 
 ### React / App.jsx
 11. **Orden de declaración** (TDZ): `viewOrders → searchFilter → filteredOrders → myTasks → staleTasks`.

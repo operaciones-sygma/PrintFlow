@@ -562,5 +562,21 @@ await caso("tab-66-arrastrar-de-listas-a-empaque", "vista=produccion&deshacer_ms
     `P-0603 de Listas a Empaque: ${/Pasa a Empaque/.test(t) ? "su ficha dice «Pasa a Empaque…»" : drops(l1, "P-0603") ? "ESCRIBIÓ AL INSTANTE" : "no dice nada"}; ${drops(l2, "P-0603") === 1 ? "luego pasa" : "pasó " + drops(l2, "P-0603") + " veces"}`);
 });
 
+// ── v10.84.61: en Salidas, esperar la fecha de entrega no es estar estancada (Marcelo, 7-oct, P-0540: «10d estancada» con
+//   entrega el 15-oct) ─────────────────────────────────────────────────────────────────────────────────────────────────────
+const fichaDeOrden = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.getAttribute("aria-label").startsWith("Orden " + pn)); return c ? c.innerText.replace(/\s+/g, " ") : "(no está)"; }, pn);
+const enSalidasDesde = (p, dias, entrega) => p.evaluate(([dias, entrega]) => { const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  window.__cambiar("P-0580", { stage: "salidas", timeline: [{ action: "📦 Empaque → 📤 Salidas", date: new Date(Date.now() - dias * 86400000).toISOString(), to: "salidas" }], due_date: d(entrega) }); }, [dias, entrega]);
+await caso("tab-73-salidas-esperando-su-fecha-no-esta-estancada", "vista=fichas&rol=karla", async p => {
+  await enSalidasDesde(p, 14, 8); await espera(p, 500);   // dos semanas en Salidas, entrega dentro de 8 días
+  const t = await fichaDeOrden(p, "P-0580");
+  ok("tab-73-salidas-esperando-su-fecha-no-esta-estancada", !/estancada|sin avance/.test(t) && /P-0580/.test(t), `P-0580 en Salidas desde hace 2 semanas, entrega en 8 días: ${/estancada|sin avance/.test(t) ? "SALE «" + (t.match(/\d+[dh] (estancada|sin avance)/) || [""])[0] + "»" : "no sale estancada"}`);
+});
+await caso("tab-74-salidas-con-la-entrega-encima-si", "vista=fichas&rol=karla", async p => {
+  await enSalidasDesde(p, 14, 0); await espera(p, 500);   // la entrega es HOY y sigue en Salidas
+  const t = await fichaDeOrden(p, "P-0580");
+  ok("tab-74-salidas-con-la-entrega-encima-si", /estancada/.test(t), `P-0580 en Salidas desde hace 2 semanas con la entrega HOY: ${/estancada/.test(t) ? "sale estancada" : "NO sale (se escondería lo que sí urge)"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
