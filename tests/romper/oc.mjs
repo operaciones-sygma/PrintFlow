@@ -854,6 +854,37 @@ await caso("oc-108-emisor-colgado", "emisor=colgado", async p => {
   ok("oc-108-emisor-colgado", reintentar === 1 && !/Consultando/.test(t), `si la consulta del folio nunca contesta, a los 10 s: ${reintentar ? "ofrece «Reintentar»" : /Consultando/.test(t) ? "SIGUE «Consultando…»" : "no ofrece salida"}`);
 });
 
+// ── El punto 40: en Simple, la nota del folio y la vista previa son UN recuadro (eran dos, más el del tercero) ──────────
+// la caja con borde más cercana al texto dado, y lo que dice
+const cajaDe = (p, rx) => p.evaluate(src => { const re = new RegExp(src);
+  // el elemento MÁS CHICO cuyo texto empieza así (React parte «5 facturas, una por producto» en varios nodos de texto)
+  const el = [...document.querySelectorAll('[role="dialog"] *')].filter(e => re.test(e.textContent.trim()))
+    .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+  if (!el) return null; let c = el; while (c && !(parseFloat(getComputedStyle(c).borderTopWidth) > 0)) c = c.parentElement;
+  return c ? c.textContent : null; }, rx.source);
+await caso("oc-109-simple-un-solo-recuadro", "", async p => {
+  const caja = await cajaDe(p, /^Factura por /);
+  const veces = ((await texto(p)).match(/el sistema/gi) || []).length;
+  ok("oc-109-simple-un-solo-recuadro", !!caja && /el sistema/.test(caja) && veces === 1, `el recuadro de «Factura por…» ${caja && /el sistema/.test(caja) ? "dice cómo va el folio" : "NO dice cómo va el folio"}; «el sistema» sale ${veces} vez/veces en Simple`);
+});
+await caso("oc-110-una-por-producto-un-solo-recuadro", "", async p => {
+  await p.getByRole("button", { name: /Una por producto/ }).click(); await espera(p);
+  const caja = await cajaDe(p, /^5 facturas, una por producto/);
+  ok("oc-110-una-por-producto-un-solo-recuadro", !!caja && /Los folios lo?s? asigna el sistema/.test(caja), `«una por producto»: ${caja ? "«" + caja.slice(0, 110) + "»" : "no se encontró el recuadro"}`);
+});
+await caso("oc-111-a-mano-sin-cambio", "emisor=off", async p => {
+  const caja = await cajaDe(p, /^Factura por /);
+  const t = await texto(p);
+  ok("oc-111-a-mano-sin-cambio", !!caja && /Folio D-5781/.test(caja) && !/el sistema/.test(t) && /El siguiente libre/.test(t), `a mano: el recuadro ${caja && /Folio D-5781/.test(caja) ? "dice el folio" : "NO dice el folio"}; ${/el sistema/.test(t) ? "dice «el sistema» (no debe)" : "sin «el sistema»"}`);
+});
+await caso("oc-112-reintentar-y-la-nota-va-adentro", "emisor=falla1", async p => {
+  const antes = await cajaDe(p, /^Factura por /);
+  await p.getByRole("button", { name: /Reintentar/ }).click(); await espera(p, 600);
+  const caja = await cajaDe(p, /^Factura por /);
+  const veces = ((await texto(p)).match(/el sistema/gi) || []).length;
+  ok("oc-112-reintentar-y-la-nota-va-adentro", antes === null && !!caja && /asigna el sistema/.test(caja) && veces === 1, `mientras no se sabe: vista previa ${antes === null ? "oculta" : "VISIBLE"}; tras «Reintentar»: ${caja && /asigna el sistema/.test(caja) ? "la nota va dentro" : "la nota NO va dentro"} (${veces} vez/veces)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -12,6 +12,27 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.45 — «Folio por OC» a 40/40: un solo recuadro en Simple — 6-oct-2026
+
+El punto que faltaba (P3 de la cuarta critique): en Simple, bajo los botones se apilaban tres recuadros. La nota del folio
+(«El folio lo asigna el sistema al confirmar · uno para toda la OC»), la vista previa («Factura por $X con IVA a CLIENTE») y el
+tercero. Marcelo: *«sí, junta eso por favor»*.
+
+- Con el emisor, cómo va el folio se dice **dentro de la vista previa**: «Factura por $111,627.38 con IVA a PORTLAND STUDIO ·
+  El folio lo asigna el sistema al confirmar» («Los folios los asigna…» en «una por producto»).
+  - A mano no cambia: el campo del folio arriba, y la vista previa con «Folio D-5781».
+  - Si no se sabe cómo va el folio («Consultando…» o «Reintentar»), el aviso sigue arriba y la vista previa no sale.
+- A 1366, Simple ya cabe completa sin bajar.
+- En Dividir no cambia: ahí la nota es la única vez que se dice.
+- `FolioAutoNote`, que es compartido, no se tocó: «Asignar folio», «Facturar por partes» y el folio anticipado siguen igual.
+- **No toca** la base, las RPC, ni lo que se manda al guardar.
+- **Pruebas**: 4 casos más en `tests/romper/oc.mjs` (112).
+  - Vuelta 1 contra v10.84.44: fallaban los 2 de «un solo recuadro»; el de «a mano sin cambio» (la guarda) pasaba.
+  - Vuelta 2: 111 de 111.
+  - Vuelta 3, el folio que falla y se reintenta (la nota aparece dentro, una sola vez): 112 de 112.
+  - Corrida doble: contra v10.84.44 fallan 3 de los 4 nuevos; los 108 de antes pasan en las dos.
+  - Quinta critique: 40/40.
+
 ## v10.84.44 — «Folio por OC» a 39/40: la cuarta pasada — 6-oct-2026
 
 Marcelo: *«¿podemos subir la calificación a 39/40 con /impeccable antes de movernos a otro?»*. Quedaban en 3 el estado, la

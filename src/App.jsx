@@ -11794,6 +11794,8 @@ function MoveOrderModal({order, purchaseOrders, orders, onMove, onCreateAndMove,
 //   rápido se saltaba la opción del traslado); «Mover a» sólo cuando hay a dónde y sin repetir la «×»; la pista de Dividir
 //   según cuántos documentos hay; «Todo en una factura» (la vuelta de «Una factura por producto»); Ctrl+Enter abre la pregunta;
 //   y en Simple, «Pasar a Dividir» donde se decide.
+// v10.84.45 (cuarta critique, 39/40): en Simple, cómo va el folio se dice DENTRO de la vista previa; la nota del folio y la
+//   vista previa eran dos recuadros seguidos (más el del tercero) para lo mismo.
 function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onConfirmSplit, onClose}){
   // v10.51.2 m5 — rechazar leading zeros (D-0123) para evitar ambigüedad con AlphaERP.
   const parseFolioNum = (f)=>{
@@ -12361,21 +12363,21 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
             </div>
           </div>
 
-          <div style={{marginBottom:12}}>
-            {avisoConsulta || (folioAuto ? <FolioAutoNote label={mode==="shared"?"uno para toda la OC":"uno por producto"}/>
-            : <>
+          {(avisoConsulta || !folioAuto) && <div style={{marginBottom:12}}>
+            {avisoConsulta || <>
               <label htmlFor="oc-folio" style={lbl}>{mode==="shared"?"Folio":"Folio de la primera"}</label>
               <input id="oc-folio" style={{...inp,fontFamily:"'Geist Mono',monospace",fontSize:14,letterSpacing:0.5,border:"1.5px solid "+((folioStart&&!folioValid)?C.dn+"60":C.bd)}} value={folioStart} onChange={e=>{folioTouched.current = true; marca(); setFolioStart(e.target.value)}} placeholder={seriesTexto(invoiceType)}/>
               {sug && <div style={{fontSize:11,color:C.t2,marginTop:4}}>El siguiente libre: <b style={{fontFamily:"'Geist Mono',monospace",color:C.tx}}>{sug}</b></div>}
               {folioStart && !folioValid && <div role="alert" style={{fontSize:11,color:C.dnInk,marginTop:4,fontWeight:600}}>El folio de {nombreTipo(invoiceType,1)} va como {seriesTexto(invoiceType)}, sin ceros al inicio{sug?` (por ejemplo, ${sug})`:""}.</div>}
               {folioBelowSuggestion && <div style={{fontSize:11,color:C.wnInk,marginTop:4,fontWeight:600}}><WarningIcon size={11} weight="fill" color={C.wn} style={{verticalAlign:"-2px",marginRight:3}}/>Es menor que el siguiente libre ({sug}). Úsalo sólo si estás seguro de que ningún otro documento lo tiene.</div>}
-            </>)}
-          </div>
+            </>}
+          </div>}
 
           {pendingCount > 0 && emisorSabido && folioValid && <div style={{background:colorTipo+"0A",border:"1px solid "+colorTipo+"30",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
             <div style={{fontSize:13,color:C.tx,fontWeight:600}}>{mode==="shared"
               ? <>{invoiceType==="factura"?"Factura":"Remisión"} por <span style={{fontFamily:"'Geist Mono',monospace"}}>${fmtMx(totalSimple)}</span> {ivaTexto} a {receptor}</>
               : <>{pendingCount} {nombreTipo(invoiceType, pendingCount)}, una por producto, por <span style={{fontFamily:"'Geist Mono',monospace"}}>${fmtMx(totalSimple)}</span> {ivaTexto} en total, a {receptor}</>}</div>
+            {folioAuto && <div style={{fontSize:11,color:C.t2,marginTop:3,display:"flex",alignItems:"center",gap:5}}><ListNumbersIcon size={12} weight="bold" color={C.fac} style={{flexShrink:0}}/>{mode==="shared"?"El folio lo asigna el sistema al confirmar.":"Los folios los asigna el sistema al confirmar."}</div>}
             {!folioAuto && preview && <div style={{fontSize:11,color:C.t2,marginTop:2}}>{preview.length===1?"Folio ":"Folios "}<span style={{fontFamily:"'Geist Mono',monospace",color:C.tx,fontWeight:700}}>{preview.length<=5?preview.join(", "):preview.slice(0,3).join(", ")+" … "+preview[preview.length-1]}</span></div>}
           </div>}
 

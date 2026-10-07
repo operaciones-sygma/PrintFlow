@@ -380,5 +380,7 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   lleva un tope (8 s) que lo trata como un error con su salida («Reintentar»).
 - **Ctrl+Enter abre la pregunta, nunca crea** (v10.84.44): el atajo del botón principal hace exactamente lo que hace el botón,
   con la misma pregunta antes de crear; el botón lo declara en `aria-keyshortcuts`.
+- **Un recuadro por idea** (v10.84.45): lo que se va a crear (qué, por cuánto, a quién y cómo va el folio) es UN resumen, no
+  una nota y una vista previa seguidas. Una nota que sólo repite lo que otro recuadro ya enmarca se mete en él.
 - **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.
 - **El botón apagado dice por qué**: en el pie, junto al botón, una línea en `C.wnInk` con lo que falta («Remisión 1 no tiene órdenes», «Falta confirmar cómo se asigna el folio»). El botón apagado va en `bt(C.sf, C.t2)`, que se lee; blanco sobre gris daba 1.4:1.
