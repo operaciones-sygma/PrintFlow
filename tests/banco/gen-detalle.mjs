@@ -1,10 +1,10 @@
 // Banco del DETALLE DE LA ORDEN: DetailModal EXTRAÍDO de un App.jsx, con su lógica real (etapas, permisos, quién puede qué,
-// los botones de flujo) y lo que lee o escribe la base SIMULADO: la imagen (SignedImg), los nombres internos
-// (ClientAliasManager), los pantones, el tiempo por etapa, el historial de cambios y Storage/la tabla al borrar el archivo.
+// los botones de flujo, los nombres internos) y lo que lee o escribe la base SIMULADO: la imagen (SignedImg), los pantones,
+// el tiempo por etapa, el historial de cambios, Storage y la tabla al borrar el archivo, y las RPC de los nombres internos.
 // Uso: node gen-detalle.mjs <App.jsx> <dirSalida>
 // Variantes por URL: etapa=… · cliente=… · caso=factura|partes|resto|espera|maquila|cancelada|borrador|salidas|remision|sinempaque|archivo (por defecto factura) ·
 //   rol=karla|admin|produccion|preprensa|german|secretaria|vendedor|visor (por defecto karla) · falla=storage|tabla (borrar el
-//   archivo: la base contesta con error) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
+//   archivo: la base contesta con error) · falla=alias (la base rechaza agregar un nombre interno) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -52,6 +52,9 @@ const anotar = t => { bitacora.push(t); window.dispatchEvent(new Event("bitacora
 // la base simulada: Storage y la tabla de órdenes contestan {error} como supabase-js (que NO lanza)
 const supabase = {
   storage: { from: b => ({ remove: async rutas => { anotar("storage:remove " + b + " " + rutas.join(",")); return FALLA === "storage" ? { data: null, error: { message: "Storage no contestó" } } : { data: rutas, error: null }; } }) },
+  // los nombres internos del cliente (ClientAliasManager real): falla=alias rechaza agregar uno
+  rpc: async (n, a) => { anotar("rpc:" + n); if (n === "get_client_aliases") return { data: [], error: null };
+    if (FALLA === "alias") return { data: null, error: { message: "permiso denegado" } }; return { data: [a.p_alias], error: null }; },
   from: t => ({ update: campos => ({ eq: async (c, v) => { anotar("tabla:update " + t + " " + JSON.stringify(campos)); return FALLA === "tabla" ? { error: { message: "permiso denegado" } } : { error: null }; } }) }),
 };
 const db = { orderFolioIsCancelled: async () => CASO === "foliocancelado" };
@@ -59,11 +62,10 @@ const propsArchivoFirmado = () => ({});
 const firmarOrderFile = async src => src;
 const IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#dfe6ee"/><text x="300" y="400" font-size="48" text-anchor="middle" fill="#4a6572">ARTE</text></svg>');
 function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img src={IMG} alt={alt} style={style} onClick={onClick} title={title} />; }
-function ClientAliasManager() { return <div style={{ background: C.sf, borderRadius: 10, padding: 10, margin: "6px 0" }}><div style={{ fontSize: 10, fontWeight: 600, color: C.t2 }}>NOMBRE INTERNO</div><input aria-label="Nombre interno" placeholder="+ nombre interno" style={{ fontSize: 11 }} /></div>; }
 function PantoneChips({ codes }) { return <span>{codes.join(", ")}</span>; }
 function StageFlowHistory() { return <button>Tiempo por etapa</button>; }
 function OrderChangeHistory() { return <button>Historial de cambios</button>; }`,
-  fnBlock("DetailModal"),
+  fnBlock("ClientAliasManager"), fnBlock("DetailModal"),
   ...["MasDelDetalle", "MenuMasDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const BASE = { id: "OP-MUH77BVYVQW", client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", client_agent: "ALEJANDRA DELGADO",
   client_email: "erigrafia@hotmail.com", client_phone: "4731296625", client_lada: "+52", client_rfc: "MAHS680416LEA",

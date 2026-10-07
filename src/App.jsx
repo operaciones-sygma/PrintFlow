@@ -3399,7 +3399,7 @@ function ClientAliasManager({clientId, role, userLogin}){
   if(aliases===null) return null;                     // cargando
   if(!canManage && aliases.length===0) return null;   // no-admin sin alias: nada que mostrar
   return <div style={{margin:"6px 0 10px",padding:"8px 10px",background:C.sf,borderRadius:10,border:"0.5px solid "+C.bd}}>
-    <div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:5,display:"inline-flex",alignItems:"center",gap:4}}><TagIcon size={10} weight="bold"/>Nombre interno</div>
+    <div style={{fontSize:9,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:.4,marginBottom:5,display:"inline-flex",alignItems:"center",gap:4}}><TagIcon size={10} weight="bold"/>Nombre interno</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
       {aliases.map(a=><span key={a} style={{display:"inline-flex",alignItems:"center",gap:4,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"25",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:600}}>{a}{canManage&&<button onClick={()=>remove(a)} disabled={busy} aria-label={"Quitar "+a} style={{background:"none",border:"none",cursor:busy?"wait":"pointer",color:C.ac,padding:0,display:"inline-flex",opacity:busy?.5:1}}><XIcon size={10} weight="bold"/></button>}</span>)}
       {canManage&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}>
@@ -3407,7 +3407,7 @@ function ClientAliasManager({clientId, role, userLogin}){
         {val.trim()&&<button onClick={add} disabled={busy} style={{background:C.ac,color:"#fff",border:"none",borderRadius:8,padding:"4px 9px",fontSize:10,fontWeight:700,cursor:busy?"wait":"pointer",fontFamily:"'Geist',sans-serif"}}>Agregar</button>}
       </span>}
     </div>
-    {err&&<div style={{fontSize:10,color:C.dn,marginTop:4}}>{err}</div>}
+    {err&&<div role="alert" style={{fontSize:10,color:C.dnInk,marginTop:4}}>{err}</div>}
   </div>;
 }
 
@@ -4372,8 +4372,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 4px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dnInk,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {o.plate_status&&antesDeCtp&&<div style={{marginTop:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} style={{color:tintaAA(o.plate_status==="existing"?C.live:C.ctp)}} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
       {(o.client_id||(!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)))&&<><Seccion>Cliente</Seccion>
-      {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
-      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}</>}
+      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
+      {/* v10.84.47 — el «Nombre interno» después del contacto: se edita poco y arriba pesaba más que los datos del cliente */}
+      {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}</>}
       <Seccion>Producto</Seccion>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}

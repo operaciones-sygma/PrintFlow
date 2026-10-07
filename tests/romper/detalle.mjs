@@ -334,6 +334,31 @@ await caso("det-52-sin-imagen", "caso=maquila&rol=karla", async p => {
   ok("det-52-sin-imagen", imgs === 0 && /LIC\. ORLANDO CASAS/.test(t), `sin imagen: ${imgs} imágenes; el encabezado ${/ORLANDO/.test(t) ? "dice el cliente" : "NO dice el cliente"}`);
 });
 
+// ── Segunda critique (37/40): el «Nombre interno» (ClientAliasManager, sólo admin y secretaría lo administran) ─────────────
+await caso("det-53-nombre-interno-contraste", "caso=factura&rol=admin", async p => {
+  const m = await peoresContrastes(p);
+  ok("det-53-nombre-interno-contraste", m.length === 0, m.length ? m.slice(0, 3).join(" · ") : "todo se lee (≥ 4.5:1)");
+});
+await caso("det-54-nombre-interno-despues-del-contacto", "caso=factura&rol=admin", async p => {
+  const r = await dlg(p).evaluate(d => {
+    const ni = [...d.querySelectorAll("*")].find(e => /^Nombre interno$/i.test(e.textContent.trim()) && e.children.length <= 1);
+    const rfc = [...d.querySelectorAll("dt")].find(e => /RFC/i.test(e.textContent));
+    return ni && rfc ? { ni: Math.round(ni.getBoundingClientRect().top), rfc: Math.round(rfc.getBoundingClientRect().top) } : null;
+  });
+  ok("det-54-nombre-interno-despues-del-contacto", !!r && r.ni > r.rfc, r ? `«Nombre interno» en y=${r.ni}; el RFC en y=${r.rfc}` : "no encontré el «Nombre interno» o el RFC");
+});
+await caso("det-55-nombre-interno-error-en-tinta", "caso=factura&rol=admin&falla=alias", async p => {
+  await p.getByPlaceholder("+ nombre interno").fill("SILVIA MTZ"); await p.keyboard.press("Enter"); await espera(p, 500);
+  const t = await textoDlg(p), m = await peoresContrastes(p);
+  ok("det-55-nombre-interno-error-en-tinta", /permiso denegado/.test(t) && m.length === 0, `si la base rechaza: ${/permiso denegado/.test(t) ? "lo dice" : "NO lo dice"}; contraste: ${m.slice(0, 2).join(" · ") || "bien"}`);
+});
+await caso("det-56-nombre-interno-se-guarda", "caso=factura&rol=admin", async p => {
+  await p.getByPlaceholder("+ nombre interno").fill("SILVIA MTZ"); await p.keyboard.press("Enter"); await espera(p, 500);
+  const t = await textoDlg(p);
+  ok("det-56-nombre-interno-se-guarda", /SILVIA MTZ/.test(t) && /rpc:add_client_alias/.test(await log(p)) && (await p.getByRole("dialog").count()) === 1,
+    `agregar un nombre interno con Enter: ${/SILVIA MTZ/.test(t) ? "sale como etiqueta" : "NO sale"} y el detalle ${(await p.getByRole("dialog").count()) ? "sigue abierto" : "SE CERRÓ"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

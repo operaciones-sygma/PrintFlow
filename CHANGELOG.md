@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.47 — El detalle de la orden, segunda pasada (37/40): el «Nombre interno» — 6-oct-2026
+
+La segunda critique (en producción) dio 37/40. El detector encontró lo único que no se leía: la etiqueta «NOMBRE INTERNO»
+(ClientAliasManager, que sólo admin y secretaría administran) en gris tenue sobre gris, 4.2:1. El banco no lo veía porque
+simulaba ese componente.
+
+- La etiqueta va en `C.t2`, y el error de la base al agregar un nombre interno va en `C.dnInk` con `role="alert"`. Antes iba
+  en rojo pleno: 3.9:1.
+- El recuadro baja después del contacto: se edita poco y arriba pesaba más que los datos del cliente.
+- **No toca** la base ni las RPC.
+- **Pruebas**: el banco usa ahora el `ClientAliasManager` real, con sus RPC simuladas (`falla=alias`), y suma 4 casos
+  (`detalle.mjs`, 66).
+  - Vuelta 1 contra v10.84.46: fallaban los 3 nuevos y 8 del barrido que antes pasaban. No eran regresiones: el simulado
+    escondía el gris tenue, que ya estaba en producción.
+  - Vuelta 2: 65 de 65.
+  - Vuelta 3, el nombre interno que sí se guarda: 66 de 66.
+  - Todas las tandas: 335 de 335.
+
 ## v10.84.46 — El detalle de la orden: la critique (23/40) y la prueba tratando de romperlo — 6-oct-2026
 
 `/impeccable critique` al detalle de la orden (DetailModal), visto en producción con la cuenta de pruebas (sólo lectura) como
