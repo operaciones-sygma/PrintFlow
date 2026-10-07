@@ -68,7 +68,8 @@ try {
   await p.getByText("Operación", { exact: true }).first().waitFor({ timeout: 30000 });
   await p.waitForTimeout(2500);
   const campo = p.getByPlaceholder(/Escribe aquí/);
-  if (await campo.count() && await p.getByText(/escribe SI ENTIENDO/i).count()) { await campo.first().fill("SI ENTIENDO"); await p.waitForTimeout(800); }
+  // (el «Despertador» sale cuando terminan de cargar los datos, a veces después de los 2.5 s: se le espera hasta 8 s)
+  if (await p.getByText(/escribe SI ENTIENDO/i).first().waitFor({ timeout: 8000 }).then(() => true, () => false)) { await campo.first().fill("SI ENTIENDO"); await p.waitForTimeout(800); }
   for (let i = 0; i < 2; i++) { await p.keyboard.press("Escape"); await p.waitForTimeout(200); }
   const antes = await encabezado(p);
   if (antes === null) { console.log("SALTA  " + PN + " no está en «Todas» (ya cambió de etapa)"); }

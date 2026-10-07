@@ -151,14 +151,17 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.61 (7-oct; READY `dpl_CP7N5GwuKnb3PxHMAreFdW3arznE`, vuelta atrás `dpl_ND7MMy7F7YdrdPp4ZYRZ6SzyfiY9`, el
-  código de v10.84.59; 523 pruebas). **El tablero** (el `Kanban` de Producción): la primera revisión independiente dio 20/40 (las
+- **LIVE:** v10.84.64 (7-oct; READY `dpl_4WrfUvRw2GmLqRjTYLgqnwCsSvB5`, vuelta atrás `dpl_EbWAjMGz26VzfKrmpWGJPh6xg6C4`, el
+  código de v10.84.62; 582 pruebas). **El tablero** (el `Kanban` de Producción): la primera revisión independiente dio 20/40 (las
   de julio, 27 y 25, eran propias) y sus cuatro partes se hicieron en v10.84.56-59 (mover con red y «Deshacer», se lee qué corre,
-  se ve lo atrasado, los avisos de error con la orden y en palabras). La **segunda, 25/40**, con dos P1: v10.84.60 arregló uno
-  (soltar en Empaque espera con «Deshacer», como el botón). v10.84.61 es lo que Marcelo vio en P-0540 («10d estancada» en Salidas
-  con la entrega el 15-oct): con el archivo completo cargado la bitácora se cortaba en 1,000 renglones (regla 11), y esperar la
-  fecha de entrega en Salidas ya no cuenta como estancada. Faltan el otro P1 («la planta de un vistazo» en la laptop) y la
-  tercera revisión. `tests/recorrido/tablero-errores.mjs` y `carga-completa.mjs` prueban con la app REAL. Snapshots
+  se ve lo atrasado, los avisos de error con la orden y en palabras). La **segunda, 25/40**, con dos P1, los dos hechos: v10.84.60
+  (soltar en Empaque espera con «Deshacer», como el botón) y v10.84.62 («Así va la planta» arriba, las libres miden lo suyo,
+  Listas plegada a 4). Y sus P2: v10.84.63 (las acciones de Empaque dentro de la ficha y con palabras; maquila y merma en «⋯»)
+  y v10.84.64 (el tablero sano en calma, todo con AA, también los avisos de toda la app; la fila sin partirse a 1920; 40 px
+  táctil). v10.84.61 es lo que Marcelo vio en P-0540 («10d estancada» en Salidas con la entrega el 15-oct): con el archivo
+  completo cargado la bitácora se cortaba en 1,000 renglones (regla 11), y esperar la fecha de entrega en Salidas ya no cuenta
+  como estancada. Falta la tercera y última revisión independiente. `tests/recorrido/tablero-errores.mjs` y
+  `carga-completa.mjs` prueban con la app REAL (esperan el «Despertador» del día hasta 8 s: sale tarde y tapa los clics). Snapshots
   `.impeccable/critique/2026-10-07T16-33-31Z__…` y `…T19-33-15Z__src-app-jsx-kanban-tablero-de-produccion.md`; banco `tests/banco/gen-tablero.mjs`
   sobre `tests/banco/extraer.mjs` (junta solo las dependencias con `@babel/parser`). **El detalle de la orden quedó cerrado** en
   v10.84.55 (tres revisiones independientes: 23 → 24 → 27/40); lo que queda, en la entrada v10.84.55 del CHANGELOG.

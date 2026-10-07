@@ -53,6 +53,11 @@ try {
   await p.getByRole("button", { name: "Entrar" }).click();
   await p.getByText("Operación", { exact: true }).first().waitFor({ timeout: 30000 });
   await p.waitForTimeout(2500);
+  // el «Despertador» del día: sale cuando hay órdenes bloqueadas, tapa todo y sólo se cierra escribiendo SI ENTIENDO (Esc no lo
+  //   cierra; su registro, log_wakeup_ack, se corta aquí). Sale cuando terminan de cargar los datos, a veces después de los 2.5 s:
+  //   se le espera hasta 8 s. Sin esto, el 7-oct en la tarde el clic en «Empaque» nunca llegaba (y a veces sí: dependía de cuándo).
+  const campo = p.getByPlaceholder(/Escribe aquí/);
+  if (await p.getByText(/escribe SI ENTIENDO/i).first().waitFor({ timeout: 8000 }).then(() => true, () => false)) { await campo.first().fill("SI ENTIENDO"); await p.waitForTimeout(800); }
   for (let i = 0; i < 2; i++) { await p.keyboard.press("Escape"); await p.waitForTimeout(200); }
   const boton = await p.evaluateHandle(() => [...document.querySelectorAll("button[title]")].find(x => x.getAttribute("title").replace(/\s*\(\d+\)\s*$/, "").trim() === "Tablero") || null);
   if (!boton.asElement()) throw new Error("no encontré la vista «Tablero»");
