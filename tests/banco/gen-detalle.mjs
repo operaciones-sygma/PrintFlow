@@ -18,6 +18,9 @@ const fnBlock = name => { const s = find(l => l.startsWith("function " + name + 
 // un `const X = …` de varios renglones que cierra con «};» o «));» en la columna 0
 const multi = (re, desc, fin = /^(\}|\)\)|\]);?\s*$/) => { const s = find(l => re.test(l), desc); if (/;\s*$/.test(L[s])) return L[s]; let e = s; while (!fin.test(L[++e])) { if (e > s + 400) throw new Error("sin cierre " + desc); } return L.slice(s, e + 1).join("\n"); };
 const opcional = (cond, f) => cond ? [f()] : [];
+// desde el renglón que empieza con `re` hasta el primero que cumple `fin` (inclusive), aunque el primero termine en «;»
+// (getStale empieza con un `if(...)return null;` y `multi` lo tomaba como de un solo renglón)
+const hasta = (re, fin, desc) => { const s = find(l => re.test(l), desc); let e = s; while (!fin.test(L[e])) { if (++e > s + 400) throw new Error("sin cierre " + desc); } return L.slice(s, e + 1).join("\n"); };
 const partes = [
   `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
@@ -51,6 +54,13 @@ const partes = [
   fnBlock("StageFlowHistory"), fnBlock("OrderChangeHistory"),
   ...["HexDelPantone"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))), fnBlock("PantoneChips"),
   fnBlock("PantoneInput"),   // el mismo campo del HEX en la forma de la orden (pantoneinput=1)
+  // las alertas de la ficha (v10.84.50): RETRASO, estancada, la máquina con su reloj y a quién le toca
+  line(/^const MACHINES=/, "MACHINES"), line(/^const DUE_MIN=/, "DUE_MIN"), line(/^const duePlausible=/, "duePlausible"), line(/^const isOverdue=/, "isOverdue"),
+  line(/^const WAIT_STAGES=/, "WAIT_STAGES"), line(/^let MAINT_DOWN=/, "MAINT_DOWN"), line(/^const machineDown=/, "machineDown"),
+  line(/^const bizHoursAgo=/, "bizHoursAgo"), line(/^function bizDaysUntil\(/, "bizDaysUntil"), hasta(/^const getStale=/, /return null\};\s*$/, "getStale"),
+  multi(/^const STAGE_RESPONSIBLE = \{/, "STAGE_RESPONSIBLE"), line(/^const VENDEDORES_CON_USUARIO = /, "VENDEDORES_CON_USUARIO"),
+  fnBlock("vendorDisplayName"), fnBlock("orderResponsible"), line(/^const fmtM=/, "fmtM"), fnBlock("LiveTimer"),
+  ...["alertasDeLaOrden", "banderasDeLaOrden"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const Q = new URLSearchParams(location.search);
 const CASO = Q.get("caso") || "factura", ROL = Q.get("rol") || "karla", FALLA = Q.get("falla") || "";
 const LOGIN = Q.get("login") || { karla: "karla", admin: "admin", produccion: "gerardo", preprensa: "noemi", german: "german", secretaria: "secretaria", vendedor: "manuel", visor: "dulce" }[ROL] || ROL;
@@ -116,10 +126,19 @@ const CASOS = {
     file_name: "arte final.pdf", image_url: null, image_url_2: null },
   // un Pantone que el catálogo no tiene (se le puede fijar el color) y uno que sí
   pantone: { ...BASE, production_number: "P-0599", stage: "ctp", pantone_front: ["PANTONE 7621 C"], pantone_back: ["PANTONE 185 C"], image_url_2: null },
+  // lo que la ficha avisa: retrasada, urgente, la copia impresa obsoleta, montada en una prensa (con su reloj)
+  alertas: { ...BASE, production_number: "P-0591", stage: "in_production", priority: "urgente", needs_reprint: true, print_version: 1,
+    current_machine: "off_pm74", machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: "2026-10-06T15:00:00Z" }], image_url_2: null },
+  // TODAS las alertas y banderas a la vez (para ver que el encabezado no se coma el diálogo)
+  todas: { ...BASE, production_number: "P-0592", client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN", stage: "in_production", priority: "urgente",
+    needs_reprint: true, print_version: 3, returned_at: "2026-10-02T12:00:00Z", return_reason: "Color fuera de tono", has_post_invoice_edits: true,
+    returned_from_order_id: "OP-X", return_covered_by_folio: "F-101", bill_to_client_id: "c9", bill_to_name: "PREMIUM RESTAURANT BRANDS", bill_to_rfc: "PRB0101011A1",
+    sin_empaque_sygma: true, current_machine: "off_pm74", machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: "2026-10-06T15:00:00Z" }] },
 };
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente
 const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage: Q.get("etapa"), order_type: Q.get("etapa").startsWith("maq_") ? "maquila" : (CASOS[CASO] || CASOS.factura).order_type } : {}),
-  ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}), ...(Q.get("sinentrega") ? { due_date: null } : {}) };
+  ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}), ...(Q.get("sinentrega") ? { due_date: null } : {}),
+  ...(Q.get("agente") ? { agent: Q.get("agente") } : {}) };   // agente=Genaro: la maquila de un vendedor con usuario
 function Banco() {
   const [abierto, setAbierto] = useState(Q.get("abrir") === "1");
   const [, refresca] = useState(0);

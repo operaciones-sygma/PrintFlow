@@ -2771,8 +2771,10 @@ const kbdSt={fontFamily:"'Geist',sans-serif",fontSize:10,fontWeight:700,lineHeig
 // (recede), danger=rojo, warn=ámbar, success, info, identity=slate. `color` permite un tinte puntual (ej. color
 // de etapa). `strong` sube el peso (excepción fuerte). Migrado el badge-row del OCard; el resto puede migrar
 // incremental (DetailModal, vistas de lista) reusando este mismo componente.
-const BADGE_TONES={context:{bg:C.sf,fg:C.t2,fw:600},identity:{bg:C.acL,fg:C.ac,fw:600},danger:{bg:C.dn+"15",fg:C.dn,fw:700},warn:{bg:C.amb+"15",fg:C.amb,fw:700},success:{bg:C.ok+"12",fg:C.ok,fw:700},info:{bg:C.ios+"12",fg:C.ios,fw:700}};
-function Badge({tone="context",color,icon,title,strong,children,style}){const t=BADGE_TONES[tone]||BADGE_TONES.context;return <span title={title} style={{display:"inline-flex",alignItems:"center",gap:children!=null?4:0,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:strong?800:(t.fw||600),lineHeight:1.45,whiteSpace:"nowrap",background:color?color+"15":t.bg,color:color||t.fg,...style}}>{icon}{children}</span>;}
+const BADGE_TONES={context:{bg:C.sf,fg:C.t2,fw:600},identity:{bg:C.acL,fg:C.ac,fw:600},danger:{bg:C.dn+"15",fg:C.dnInk,fw:700},warn:{bg:C.amb+"15",fg:C.wnInk,fw:700},success:{bg:C.ok+"12",fg:C.okInk,fw:700},info:{bg:C.ios+"12",fg:tintaAA(C.ios),fw:700}};
+// v10.84.50 — el texto de una pastilla va en su TINTA (DESIGN.md), no en el color pleno sobre su tinte (el rojo daba ~3.6:1 y
+//   el ámbar ~2:1); con `color`, la tinta se calcula (tintaAA). El fondo y el ícono, igual.
+function Badge({tone="context",color,icon,title,strong,children,style}){const t=BADGE_TONES[tone]||BADGE_TONES.context;return <span title={title} style={{display:"inline-flex",alignItems:"center",gap:children!=null?4:0,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:strong?800:(t.fw||600),lineHeight:1.45,whiteSpace:"nowrap",background:color?color+"15":t.bg,color:color?tintaAA(color):t.fg,...style}}>{icon}{children}</span>;}
 // v10.61.5 — input de búsqueda con icono Phosphor (lupa) a la izquierda en vez de
 // emoji en el placeholder. wrapStyle controla el layout del contenedor (flex/width).
 function SearchInput({style={},wrapStyle={},iconSize=13,...rest}){
@@ -2994,7 +2996,7 @@ function LiveTimer({started}) {
   useEffect(()=>{if(!started)return;const t=new Date(started);if(isNaN(t.getTime()))return;const c=()=>Math.round((Date.now()-t.getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
   if(!started) return null;
   const t=new Date(started);if(isNaN(t.getTime())) return null;
-  return <span style={{fontSize:10,color:C.ios,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:C.ios+"10",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>{fmtM(el)}</span>;
+  return <span style={{fontSize:10,color:tintaAA(C.ios),fontWeight:700,fontFamily:"'Geist Mono',monospace",background:C.ios+"10",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>{fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
   const [op,setOp]=useState(false);
@@ -4243,6 +4245,8 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 //   «Más», «sin IVA» junto al importe y el «Nombre interno» con el rótulo de la app.
 const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
 const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
+// v10.84.50: lo que sabe la ficha, arriba: sus alertas y banderas (alertasDeLaOrden/banderasDeLaOrden, la misma
+//   definición), la máquina con su reloj, a quién le toca y «Reimprimir» si la copia impresa quedó obsoleta.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
@@ -4368,6 +4372,14 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const antesDeCtp=["draft","design","proof_printing","proof_client","ctp"].includes(o.stage);
   const estadoPago=o.payment_status==="paid"?"pagada":o.payment_status==="partial"?"pago parcial":null;
   const primaria=st?.c||C.t3;
+  // v10.84.50 — lo que sabe la ficha: sus alertas y banderas (la misma definición; «En espera» no, porque el pie ya lo dice),
+  //   la máquina en la que está con su reloj, y a quién le toca
+  const avisos=[...alertasDeLaOrden(o).filter(b=>b&&b.key!=="snz"),...banderasDeLaOrden(o)];
+  const enMaquina=["in_production","packaging","ctp"].includes(o.stage)?(o.machine_log||[]).find(e=>!e.ended):null;
+  // (a quién le toca: orderResponsible, lo mismo que la ficha —la maquila de un vendedor con usuario le toca a él, no a Lupita—
+  //   y con su misma frase cuando le toca a los dos)
+  const resp=!isFinal&&!snoozeActive(o)?orderResponsible(o):null;
+  const leToca=resp?(resp.role==="both"?"Producción y Pre-prensa":resp.name):null;
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
     <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} onKeyDown={e=>{
@@ -4388,17 +4400,18 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
             <span style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>{o.production_number||o.client}</span>
             <Badge color={primaria} style={{color:tintaAA(primaria)}}><StageLbl stage={o.stage} size={10}/></Badge>
             {o.source==="web"&&<Badge color={C.cart} style={{color:tintaAA(C.cart)}} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
-            {o.priority!=="normal"&&PM[o.priority]&&<Badge color={PM[o.priority].c} style={{color:tintaAA(PM[o.priority].c)}}><PrioLbl priority={o.priority}/></Badge>}
-            {o.has_post_invoice_edits&&<Badge tone="warn" style={{color:C.wnInk}} title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={11} weight="fill"/>}>Editada después de facturar</Badge>}
+            {enMaquina&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:C.t2}}><FactoryIcon size={13} weight="bold"/>{MACHINES.find(x=>x.id===enMaquina.machine)?.name||enMaquina.machine} <LiveTimer started={enMaquina.started}/></span>}
           </div>
           {o.production_number&&o.client&&<div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:3,lineHeight:1.3}}>{o.client}</div>}
           {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
-          {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio)&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
+          {avisos.length>0&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginTop:7}}>{avisos}</div>}
+          {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio||leToca)&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
             {o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalendarDotsIcon size={13} weight="bold"/>Entrega <b style={{color:C.tx}}>{fD(o.due_date)}</b></span>}
             {verPrecio&&importe?<span><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span> <span style={{fontSize:11,color:C.t2}}>sin IVA</span></span>:null}
             {o.invoice_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaFolio,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_pre_assigned?<LightningIcon size={12} weight="fill" color={C.wnInk}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={13} weight="bold"/>:<ReceiptIcon size={13} weight="bold"/>}{o.invoice_folio}{verPrecio&&estadoPago?<span style={{fontFamily:"'Geist',sans-serif",fontWeight:600,color:C.okInk}}>· {estadoPago}</span>:null}</span>}
             {o.cart_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaAA(C.cart)}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</span>}
             {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
+            {leToca&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={13} weight="bold"/>Le toca a <b style={{color:C.tx}}>{leToca}</b></span>}
           </div>}
         </div>
         <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
@@ -4513,7 +4526,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
           {canEditAdmin&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(C.ac,5)),justifyContent:"center"}:tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(isMaq?C.maq:C.ac,5)),justifyContent:"center"}:tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
+          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>{o.needs_reprint?"Reimprimir":"Imprimir"}</button>}
         </div>
       </div>
     </div>
@@ -12717,6 +12730,34 @@ function EsperaGroupBatchBtn({count,onReactivate}){
   const base={display:"inline-flex",alignItems:"center",gap:4,fontSize:F.meta,fontWeight:600,padding:"3px 10px",borderRadius:8,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'Geist',sans-serif"};
   return <button onClick={click} onMouseDown={e=>e.stopPropagation()} title={"Reactiva las "+count+" órdenes de esta etapa"+(needsConfirm?" (pide confirmar)":"")} style={confirming?{...base,background:C.ac,color:"#fff",border:"1px solid "+C.ac}:{...base,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"33"}}>{confirming?<><CheckIcon size={12} weight="bold"/>Confirmar · {count}</>:<><BellRingingIcon size={12} weight="bold"/>Reactivar las {count}</>}</button>;
 }
+// v10.84.50 — las alertas de una orden, UNA definición para la ficha del tablero y el detalle (la quinta critique del detalle,
+//   con revisor independiente: «el detalle sabe menos que la ficha»). El código se movió TAL CUAL de OCard: la ficha pinta
+//   lo mismo que antes. alertasDeLaOrden: lo que exige atención (va primero); banderasDeLaOrden: lo fiscal o fuera de lo
+//   normal (reimprimir, devuelta, editada tras facturar, re-trabajo, facturar a un tercero).
+function alertasDeLaOrden(o,{inEsperaView}={}){
+  const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");const stale=getStale(o);
+  const bT1=[];
+  // T1 — alertas (rojo/ámbar, strong, primero: se escanean por el borde izquierdo)
+  if(snoozeActive(o)&&!inEsperaView) bT1.push(<Badge key="snz" tone="context" strong title={(o.snooze_reason||"En espera")+(o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):"")+(o.snooze_until?" · hasta "+fD(o.snooze_until):"")} icon={<BellSlashIcon size={10} weight="bold"/>}>En espera</Badge>); // v10.73.18
+  if(late) bT1.push(<Badge key="late" tone="danger" strong icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>);
+  if(stale) bT1.push(<Badge key="stale" tone={stale.lv==="critical"?"danger":"warn"} strong>{stale.lb}</Badge>);
+  if(o.priority!=="normal"&&PM[o.priority]) bT1.push(<Badge key="prio" color={PM[o.priority].c} strong><PrioLbl priority={o.priority}/></Badge>);
+  if(o.sin_empaque_sygma) bT1.push(<Badge key="nologo" tone="danger" strong title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)" icon={<PackageIcon size={11} weight="bold"/>}>Sin logo SYGMA</Badge>);
+  if(isMaq&&["maq_created","maq_sent","maq_in_progress"].includes(o.stage)){
+    const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0, noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
+    if(noPrice||noCost) bT1.push(<Badge key="maqfalta" tone="warn" strong title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>);
+  }
+  return bT1;
+}
+function banderasDeLaOrden(o){
+  return [
+    o.needs_reprint&&<Badge key="reprint" tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>,
+    o.returned_at&&<Badge key="devuelta" tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>,
+    o.has_post_invoice_edits&&<Badge key="editada" tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>,
+    o.returned_from_order_id&&<Badge key="retrabajo" tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>,
+    o.bill_to_client_id&&<Badge key="tercero" color={C.fac} title={"La factura/remisión, su cobranza, el estado de cuenta y el portal van a este tercero (RFC "+(o.bill_to_rfc||"—")+"): él paga. El cliente de la orden sigue sólo en producción."} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>,
+  ].filter(Boolean);
+}
 function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsperaView,exiting}) {
   const st=SM[o.stage];const isMaq=o.order_type==="maquila";const late=o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled");
   // v10.58.23: agentMatch permite al vendedor operar órdenes donde es el agent aunque otra persona la creó (caso Lupita captura por Genaro).
@@ -12736,17 +12777,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   // v10.73.7 — /impeccable distill: la fila de badges pasa de ~16 chips de IGUAL peso a 3 TIERS por importancia,
   // para que el ojo triague de un vistazo. T1 alertas (exigen acción/cuidado) → T2 identidad (qué ES la orden) →
   // T3 metadata (contexto secundario). T1+T2 siempre visibles; T3 colapsa tras un chip "+N" expandible.
-  const bT1=[], bT2=[], bT3=[];
-  // T1 — alertas (rojo/ámbar, strong, primero: se escanean por el borde izquierdo)
-  if(snoozeActive(o)&&!inEsperaView) bT1.push(<Badge key="snz" tone="context" strong title={(o.snooze_reason||"En espera")+(o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):"")+(o.snooze_until?" · hasta "+fD(o.snooze_until):"")} icon={<BellSlashIcon size={10} weight="bold"/>}>En espera</Badge>); // v10.73.18
-  if(late) bT1.push(<Badge key="late" tone="danger" strong icon={<WarningIcon size={10} weight="fill"/>}>RETRASO</Badge>);
-  if(stale) bT1.push(<Badge key="stale" tone={stale.lv==="critical"?"danger":"warn"} strong>{stale.lb}</Badge>);
-  if(o.priority!=="normal"&&PM[o.priority]) bT1.push(<Badge key="prio" color={PM[o.priority].c} strong><PrioLbl priority={o.priority}/></Badge>);
-  if(o.sin_empaque_sygma) bT1.push(<Badge key="nologo" tone="danger" strong title="No imprimir ni empacar con logos de SYGMA — trabajo para imprenta externa (white-label)" icon={<PackageIcon size={11} weight="bold"/>}>Sin logo SYGMA</Badge>);
-  if(isMaq&&["maq_created","maq_sent","maq_in_progress"].includes(o.stage)){
-    const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0, noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
-    if(noPrice||noCost) bT1.push(<Badge key="maqfalta" tone="warn" strong title="Sin esto la maquila NO se puede recibir — lo captura Lupita en ✏️ Editar Maquila" icon={<CurrencyDollarIcon size={10} weight="bold"/>}>Falta {noPrice&&noCost?"precio y costo":(noPrice?"precio cliente":"costo proveedor")}</Badge>);
-  }
+  // T1 — alertas: desde v10.84.50 vienen de alertasDeLaOrden, la misma definición que el detalle de la orden
+  const bT1=alertasDeLaOrden(o,{inEsperaView}), bT2=[], bT3=[];
   // T2 — identidad (la etapa es la señal primaria; #folio o, si no hay, el id como fallback)
   if(!inEsperaView) bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:F.body,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>); // en la vista "En espera" la etapa ya es el header del grupo
   if(o.production_number) bT2.push(<Badge key="pn" tone="identity">#{o.production_number}</Badge>);
@@ -12877,11 +12909,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
             de chips Badge con tonos semánticos, ordenados por urgencia (reimprimir/devuelta → info). Demotados bajo el
             folio/pago (la señal fiscal primaria), agrupados en 1 fila vs 5 apiladas. Mismos datos + títulos. */}
         {(o.needs_reprint||o.returned_at||o.has_post_invoice_edits||o.returned_from_order_id||o.bill_to_client_id)&&<div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:4}}>
-          {o.needs_reprint&&<Badge tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>}
-          {o.returned_at&&<Badge tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>}
-          {o.has_post_invoice_edits&&<Badge tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>}
-          {o.returned_from_order_id&&<Badge tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>}
-          {o.bill_to_client_id&&<Badge color={C.fac} title={"La factura/remisión, su cobranza, el estado de cuenta y el portal van a este tercero (RFC "+(o.bill_to_rfc||"—")+"): él paga. El cliente de la orden sigue sólo en producción."} icon={<UsersIcon size={10} weight="bold"/>}>Facturar a: {o.bill_to_name||"tercero"}{o.bill_to_rfc?" · "+o.bill_to_rfc:""}</Badge>}
+          {banderasDeLaOrden(o)}
         </div>}
         </div>}
         {!compact&&!inEsperaView&&["in_production","packaging","ctp"].includes(o.stage)&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<div style={{marginTop:3}}><span style={{fontSize:F.meta,color:C.ac,display:"inline-flex",alignItems:"center",gap:3,verticalAlign:"middle"}}><FactoryIcon size={11} weight="bold"/>{MACHINES.find(x=>x.id===a.machine)?.name||a.machine}</span> <LiveTimer started={a.started}/></div>:null})()}

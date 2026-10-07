@@ -659,6 +659,69 @@ await caso("det-102-forma-hex-la-base-rechaza", "pantoneinput=1&falla=pantone", 
   const v = await campoHexForma(p).count() ? await campoHexForma(p).inputValue() : "(el campo desapareció)";
   ok("det-102-forma-hex-la-base-rechaza", /No se pudo guardar/.test(t) && v === "ff0000", `en la forma, la base rechaza: ${/No se pudo guardar/.test(t) ? "lo dice" : "NO lo dice"}; el campo conserva «${v}»`);
 });
+// ── v10.84.50: que el detalle sepa lo que sabe la ficha (las alertas, la máquina, a quién le toca, reimprimir) ─────────────
+// el texto del encabezado del detalle, en un renglón (innerText separa con saltos los elementos de un inline-flex)
+const textoArriba = p => dlg(p).evaluate(d => d.firstElementChild.innerText.replace(/\s+/g, " "));
+await caso("det-103-alertas-arriba", "caso=alertas&rol=admin", async p => {
+  const t = await textoArriba(p);
+  const faltan = ["RETRASO", "Urgente", "Reimprimir · v1 obsoleta"].filter(x => !t.toLowerCase().includes(x.toLowerCase()));
+  ok("det-103-alertas-arriba", !faltan.length, faltan.length ? "le faltan arriba (la ficha sí las dice): " + faltan.join(", ") : "RETRASO, Urgente y Reimprimir arriba, como en la ficha");
+});
+await caso("det-104-maquila-falta-arriba", "caso=maquila&rol=secretaria", async p => {
+  const t = await textoArriba(p);
+  ok("det-104-maquila-falta-arriba", /Falta precio/i.test(t), /Falta precio/i.test(t) ? "arriba dice qué le falta a la maquila" : "arriba NO dice que falta el precio (la ficha sí)");
+});
+await caso("det-105-maquina-y-reloj", "caso=alertas&rol=produccion", async p => {
+  const t = await textoArriba(p);
+  const reloj = /\d+\s*(m|min|h|d)\b/.test(t.replace(/Entrega[^\n·]*/, ""));
+  ok("det-105-maquina-y-reloj", /Printmaster 74/.test(t) && reloj, `arriba: ${/Printmaster 74/.test(t) ? "la máquina" : "SIN la máquina"} y ${reloj ? "cuánto lleva" : "SIN el tiempo"}`);
+});
+await caso("det-106-le-toca-a", "caso=salidas&etapa=ctp&rol=admin", async p => {
+  const t = await textoArriba(p);
+  ok("det-106-le-toca-a", /Le toca a Germán/.test(t), /Le toca a/.test(t) ? "dice a quién le toca: " + (t.match(/Le toca a [^\n·]*/) || [""])[0] : "NO dice a quién le toca");
+});
+await caso("det-107-entregada-no-le-toca", "caso=factura&rol=admin", async p => {
+  const t = await textoArriba(p);
+  ok("det-107-entregada-no-le-toca", !/Le toca a/.test(t), /Le toca a/.test(t) ? "una orden ENTREGADA dice a quién le toca" : "entregada: no dice a quién le toca");
+});
+await caso("det-108-reimprimir", "caso=alertas&rol=admin", async p => {
+  const n = await dlg(p).getByRole("button", { name: /Reimprimir/ }).count();
+  ok("det-108-reimprimir", n === 1, n ? "el botón dice «Reimprimir»" : "con la copia impresa obsoleta, el botón sigue diciendo «Imprimir»");
+});
+await caso("det-109-alertas-se-leen", "caso=alertas&rol=admin", async p => {
+  const m = await peoresContrastes(p);
+  ok("det-109-alertas-se-leen", m.length === 0, m.length ? m.slice(0, 3).join(" · ") : "todo se lee (≥ 4.5:1)");
+});
+await caso("det-111-le-toca-al-vendedor-de-la-maquila", "caso=maquila&rol=karla&agente=Genaro", async p => {
+  // como la ficha (orderResponsible): la maquila de un vendedor con usuario le toca a él, no a Lupita
+  const t = await textoArriba(p);
+  ok("det-111-le-toca-al-vendedor-de-la-maquila", /Le toca a Genaro/.test(t), "la maquila de Genaro: " + ((t.match(/Le toca a [^\n·]*/) || ["no dice a quién le toca"])[0]));
+});
+// ── v10.84.50, vuelta 3: por donde no se diseñó ─────────────────────────────────────────────────────────────────────
+await caso("det-112-en-espera-sin-repetir", "caso=espera&rol=karla", async p => {
+  const t = await textoArriba(p);
+  ok("det-112-en-espera-sin-repetir", !/En espera/.test(t) && !/Le toca a/.test(t), `en espera: arriba ${/En espera/.test(t) ? "REPITE «En espera» (el pie ya lo dice)" : "no repite la espera"}; ${/Le toca a/.test(t) ? "dice a quién le toca (está detenida)" : "no dice a quién le toca"}`);
+});
+await caso("det-113-cancelada-sin-pendientes", "caso=cancelada&rol=admin", async p => {
+  const t = await textoArriba(p);
+  ok("det-113-cancelada-sin-pendientes", !/Le toca a|RETRASO/.test(t), /Le toca a|RETRASO/.test(t) ? "una orden CANCELADA dice: " + (t.match(/Le toca a [^·]*|RETRASO/) || [""])[0] : "cancelada: ni retraso ni a quién le toca");
+});
+await caso("det-114-todas-las-alertas-1366", "caso=todas&rol=admin", async p => {
+  const r = await dlg(p).evaluate(d => ({ enc: d.firstElementChild.getBoundingClientRect().height, total: d.getBoundingClientRect().height }));
+  const m = await peoresContrastes(p), t = await textoArriba(p);
+  const faltan = ["RETRASO", "Sin logo SYGMA", "Reimprimir · v3 obsoleta", "Devuelta", "Editada tras facturar", "Re-trabajo", "Facturar a"].filter(x => !t.includes(x));
+  ok("det-114-todas-las-alertas-1366", r.enc <= r.total * 0.5 && !m.length && !faltan.length,
+    `todas las alertas a 1366: encabezado ${Math.round(r.enc)} de ${Math.round(r.total)} px; ${faltan.length ? "faltan " + faltan.join(", ") : "están todas"}; contraste ${m.slice(0, 2).join(" · ") || "bien"}`);
+});
+await caso("det-115-reimprimir-se-quita-en-vivo", "caso=alertas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ needs_reprint: false })); await espera(p, 300);
+  const t = await textoArriba(p), n = await dlg(p).getByRole("button", { name: /Reimprimir/ }).count();
+  ok("det-115-reimprimir-se-quita-en-vivo", !/Reimprimir/.test(t) && n === 0, `ya reimpresa (con el detalle abierto): arriba ${/Reimprimir/.test(t) ? "SIGUE «Reimprimir»" : "ya no lo dice"}; el botón ${n ? "SIGUE «Reimprimir»" : "dice «Imprimir»"}`);
+});
+await caso("det-110-encabezado-no-se-come-el-cuerpo", "caso=alertas&rol=admin", async p => {
+  const r = await dlg(p).evaluate(d => ({ enc: d.firstElementChild.getBoundingClientRect().height, total: d.getBoundingClientRect().height }));
+  ok("det-110-encabezado-no-se-come-el-cuerpo", r.enc <= r.total * 0.42, `a 1366, el encabezado mide ${Math.round(r.enc)} de ${Math.round(r.total)} px`);
+});
 await caso("det-95-rotulo-nombre-interno", "caso=factura&rol=admin", async p => {
   // el elemento que TIENE el texto (no el contenedor de afuera, cuyo textContent también es «Nombre interno»: así pasaba sin deber)
   const px = await dlg(p).evaluate(d => { const e = [...d.querySelectorAll("*")].find(x => [...x.childNodes].some(n => n.nodeType === 3 && /Nombre interno/i.test(n.textContent))); return e ? parseFloat(getComputedStyle(e).fontSize) : 0; });

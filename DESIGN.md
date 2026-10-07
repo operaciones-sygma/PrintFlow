@@ -403,6 +403,11 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **El botón trabado se ve trabado y lo que lo destraba es la acción principal** (v10.84.49): apagado en `bt(C.sf,C.t2)` con
   cursor `not-allowed`, su porqué a la vista en `C.wnInk` (no sólo en el title), y el relleno y el atajo van a la acción que
   lo destraba («Editar Maquila» cuando falta el precio).
+- **Lo que una pantalla sabe de una orden, lo sabe la otra** (v10.84.50): las alertas y banderas de una orden salen de UNA
+  definición (`alertasDeLaOrden`, `banderasDeLaOrden`) que usan la ficha del tablero y el detalle; «a quién le toca», de
+  `orderResponsible`. Una regla escrita dos veces se separa: el detalle no decía RETRASO ni «Reimprimir» y la ficha sí.
+- **La pastilla (`Badge`) pinta el texto en su tinta** (v10.84.50): ya no sólo lo dice este documento, lo hace el componente
+  (`BADGE_TONES` con `dnInk`/`wnInk`/`okInk`, y `tintaAA(color)` cuando recibe `color`).
 - **Un error no es un vacío** (v10.84.49): una lista que no cargó dice «No se pudo cargar…» con «Reintentar»; nunca «Sin
   registros».
 - **Ctrl+Enter en el detalle de la orden** (v10.84.48): hace la acción del rol (la rellena) o, si no hay, «Imprimir». No con el

@@ -12,6 +12,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.50 — El detalle de la orden sabe lo que sabe la ficha — 6-oct-2026
+
+Segunda de las cuatro partes de la quinta critique. El revisor encontró que el detalle sabía menos que la ficha del tablero:
+- no decía RETRASO (P-0583), «Reimprimir · v1 obsoleta» (P-0554) ni «Falta precio y costo» (P-0598);
+- no decía en qué máquina estaba ni cuánto llevaba (P-0591), ni a quién le tocaba.
+
+- **Una sola definición de las alertas**, `alertasDeLaOrden` y `banderasDeLaOrden`, para la ficha y para el detalle.
+  - El código se movió TAL CUAL de `OCard`: comparado renglón por renglón contra v10.84.49, las 10 líneas de alertas, las
+    5 banderas y la expresión de RETRASO son idénticas. La ficha pinta lo mismo que antes.
+  - El detalle las enseña arriba, debajo del producto. La prioridad y «Editada tras facturar» (el detalle decía «Editada
+    después de facturar») ahora vienen de ahí, con la palabra de la ficha. «En espera» no se repite: el pie ya lo dice.
+- **La máquina con su reloj**, junto a la etapa, en CTP, máquina y empaque.
+- **«Le toca a …»** con `orderResponsible`, lo mismo que la ficha: la maquila de un vendedor con usuario le toca a él, no a
+  Lupita. Cuando le toca a los dos, dice «Producción y Pre-prensa». No sale en una orden entregada, cancelada ni en espera.
+- **«Reimprimir»** en el botón cuando la copia impresa quedó obsoleta; antes decía «Imprimir».
+- **Compartido, en toda la app**:
+  - `Badge` pinta el texto en su tinta, como pide DESIGN.md: «texto en su tinta». El rojo pleno sobre su tinte daba
+    ~3.6:1 y el ámbar ~2:1. Con `color`, la tinta se calcula (`tintaAA`); el fondo y el ícono no cambian. `Badge` se usa
+    31 veces: revisado en el detalle y en la ficha, los demás usos no uno por uno.
+  - El reloj de la máquina (`LiveTimer`, también de la ficha), en su tinta.
+- **No toca** la base ni las RPC.
+- **Pruebas** (`detalle.mjs`, de 112 a 125; el banco suma `caso=alertas`, `caso=todas` y `agente=`):
+  - Vuelta 1, contra v10.84.49: de los 8 casos nuevos fallaban 5; los 3 que pasaban son guardas.
+  - Vuelta 2:
+    - faltaba `fmtM` en el banco (el reloj), un error del banco y no de la app;
+    - la prueba de «le toca a» no normalizaba los saltos de `innerText`;
+    - al preparar la parte 3 vi que «le toca a» usaba otra regla que la ficha (`STAGE_RESPONSIBLE` en vez de
+      `orderResponsible`); se corrigió, con su prueba (det-111).
+  - Vuelta 3, por donde no se diseñó: en espera, cancelada, todas las alertas a la vez a 1366, y quitar «Reimprimir» con
+    el detalle abierto. 125 de 125.
+  - Corrida doble contra v10.84.49: fallan 7 de los 13 nuevos (los otros 6 son guardas) y ninguno de los 112 de antes.
+  - Todas las tandas: 394 de 394.
+
 ## v10.84.49 — El detalle de la orden, quinta critique (revisor independiente, 23/40): lo urgente — 6-oct-2026
 
 La quinta critique la calificó un agente que no vio las anteriores: **23/40**. Las cuatro pasadas previas (23, 37, 38 y 35) las
