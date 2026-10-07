@@ -388,7 +388,15 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   tinta escrita; los semáforos usan la suya (`C.okInk`, `C.wnInk`, `C.dnInk`, `C.emrInk`).
 - **Lo raro en «⋯ Más» también en los diálogos** (v10.84.46): como en la ficha, cada acción con su explicación de una línea
   y su propia confirmación. El menú se cierra con Esc por el `escStack` (un componente con `useEscClose`), nunca con un
-  listener propio, para que el primer Esc cierre el menú y no el diálogo.
+  listener propio, para que el primer Esc cierre el menú y no el diálogo. **Y Esc regresa el foco al botón que lo abrió**
+  (v10.84.48): la opción enfocada desaparece con el menú y el foco se iba al `<body>`, fuera del diálogo (sin Tab atrapado
+  ni atajos).
+- **La guía de qué sigue nunca se esconde con su renglón** (v10.84.48): cuando el rol no tiene botón, la línea «Arrastra esta
+  orden a…» ES lo que el detalle tiene que decir; un renglón que se oculta por no traer botón se lleva la guía con él (le pasó
+  a Germán en CTP). Y un rótulo de sección sólo sale si algo de la sección se ve para ese rol.
+- **Ctrl+Enter en el detalle de la orden** (v10.84.48): hace la acción del rol (la rellena) o, si no hay, «Imprimir». No con el
+  foco en un campo, ni con un menú abierto (si no, apretaría la opción enfocada), y si la orden cambia con el diálogo abierto
+  el atajo se mueve a la nueva acción principal (un solo botón lo declara).
 - **Un recuadro por idea** (v10.84.45): lo que se va a crear (qué, por cuánto, a quién y cómo va el folio) es UN resumen, no
   una nota y una vista previa seguidas. Una nota que sólo repite lo que otro recuadro ya enmarca se mete en él.
 - **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.

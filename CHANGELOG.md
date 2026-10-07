@@ -12,6 +12,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.48 — El detalle de la orden, cuarta pasada: los roles de piso y Ctrl+Enter — 6-oct-2026
+
+La cuarta critique se hizo en producción y miró más roles y etapas: Germán en CTP, producción en Máquina y Empaque, karla en
+Salidas y en espera, admin en Lista y entregada, y secretaría con una maquila. Dio 35/40; la calificación es mía, y la de quien
+hace los arreglos tiende a inflarse. Encontró una regresión mía de v10.84.46 y cuatro detalles.
+
+- **La guía de qué sigue vuelve a verse cuando el rol no tiene botón.** Por ejemplo, «Arrastra esta orden a CTP y Procesadora
+  en el Tablero» o «Arrastra esta orden a una máquina en el Tablero». v10.84.46 escondía el renglón del flujo si no traía
+  botón, y con él la guía; antes salía bajo «FLUJO».
+- **«CLIENTE» sólo sale con datos de contacto.** Producción, preprensa y Germán no ven el contacto y les quedaba el rótulo
+  vacío. El «Nombre interno» trae su propio rótulo.
+- **«El cliente no pide factura» pasa a «⋯ Más»** como «Poner en espera: no ha pedido factura», con la explicación que antes
+  vivía sólo en el title: «Sale de tu lista de Salidas hasta que el cliente pida factura o remisión». El pie de karla en
+  Salidas baja de tres renglones de botones a dos. En el tablero sigue igual.
+- **Ctrl+Enter hace la acción del rol**, la que va rellena, o «Imprimir» si no hay. Lo declara con `aria-keyshortcuts` y el
+  title. No se dispara escribiendo en un campo, ni con «Más» abierto (apretaría la opción enfocada), ni sobre una acción
+  apagada. Si la orden cambia con el detalle abierto, el atajo pasa a la nueva acción.
+- **Escape en «Más» regresa el foco al botón.** Se iba al `<body>`, y el diálogo perdía el Tab atrapado y Ctrl+Enter. Lo
+  encontró la vuelta 3.
+- El renglón de datos del encabezado (entrega, importe y folio) sólo sale si trae algo: sin ellos dejaba un hueco.
+- **No toca** la base, las RPC ni lo que se guarda: las acciones son las mismas (`snooze_invoice`, `deliver_with_invoice`…)
+  por el mismo camino. **El tablero queda igual**: `StageFlowButtons` sin variante da las mismas 161 combinaciones etapa × rol
+  que v10.84.47.
+- **Pruebas** (`detalle.mjs`, de 66 a 89):
+  - Vuelta 1, contra v10.84.47: de los 9 casos nuevos fallaban 8. El noveno, Ctrl+Enter escribiendo en un campo, es una
+    guarda.
+  - Vuelta 2: 74 de 75. La falla era de la prueba, que buscaba la guía del admin cuando a Germán le sale otra; se corrigió.
+  - Vuelta 3, por donde no se diseñó: con «Más» abierto, doble Ctrl+Enter, la orden que cambia con el detalle abierto, el
+    foco en «Cerrar», la acción apagada, la orden en espera, a 1366 y a 1920. Salieron 2 fallas de un bug real, el foco que
+    se salía al cerrar «Más» con Escape. Quedó arreglado, con su prueba (det-76).
+  - Vuelta 4, lo que podían romper los arreglos (clic fuera de «Más», un vendedor con la orden de otro, Enter normal en el
+    menú): 89 de 89.
+  - Corrida doble contra v10.84.47: fallan 18 de los 23 nuevos y ninguno de los 66 de antes. Los 5 que pasan son guardas:
+    escribiendo en un campo, con la acción apagada, el vendedor ajeno, el pie de admin y «Más» abierto. La corrida doble
+    destapó dos pruebas, det-57 y det-75, que pasaban también contra la versión vieja: medían `textContent`, que cuenta lo
+    escondido. Ahora miden `innerText`.
+  - Todas las tandas: 358 de 358.
+
 ## v10.84.47 — El detalle de la orden, segunda pasada (37/40): el «Nombre interno» — 6-oct-2026
 
 La segunda critique (en producción) dio 37/40. El detector encontró lo único que no se leía: la etiqueta «NOMBRE INTERNO»

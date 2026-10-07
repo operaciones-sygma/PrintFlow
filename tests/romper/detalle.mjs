@@ -72,6 +72,9 @@ const encabezado = p => p.evaluate(() => {
 });
 const abrirMas = async p => { const b = p.getByRole("button", { name: /Más acciones/ }); if (!(await b.count())) return false; await b.click(); await espera(p, 250); return true; };
 const itemsMas = p => p.getByRole("menuitem").evaluateAll(xs => xs.map(x => x.textContent.trim()));
+// ¿Se VE ese texto en el diálogo? Con innerText, que deja fuera lo escondido: textContent lo cuenta, y el pie entero «empezaba»
+// con la guía aunque estuviera oculta (det-57 y det-75 pasaban contra v10.84.47; lo destapó la corrida doble)
+const guiaVisible = (p, re) => dlg(p).evaluate((d, src) => new RegExp(src).test(d.innerText), re.source);
 
 // ── P1: borrar el archivo de producción mira lo que contesta la base ───────────────────────────────────────────────────
 const pedirBorrar = async p => {
@@ -357,6 +360,149 @@ await caso("det-56-nombre-interno-se-guarda", "caso=factura&rol=admin", async p 
   const t = await textoDlg(p);
   ok("det-56-nombre-interno-se-guarda", /SILVIA MTZ/.test(t) && /rpc:add_client_alias/.test(await log(p)) && (await p.getByRole("dialog").count()) === 1,
     `agregar un nombre interno con Enter: ${/SILVIA MTZ/.test(t) ? "sale como etiqueta" : "NO sale"} y el detalle ${(await p.getByRole("dialog").count()) ? "sigue abierto" : "SE CERRÓ"}`);
+});
+
+// ── Cuarta pasada (35/40, mirando los roles de piso) ─────────────────────────────────────────────────────────────────────
+await caso("det-57-guia-sin-botones", "caso=salidas&etapa=ctp&rol=german", async p => {
+  // (corregida en la vuelta 2: buscaba la guía del admin, «Arrastra a CTP en el Tablero Germán»; la de Germán es otra)
+  const vis = await guiaVisible(p, /Arrastra esta orden a CTP y Procesadora/);
+  ok("det-57-guia-sin-botones", vis, "Germán en CTP (sin botón): la guía de qué sigue " + (vis ? "se ve" : "NO se ve"));
+});
+await caso("det-58-sin-cliente-vacio", "caso=factura&rol=produccion", async p => {
+  const vacio = await dlg(p).evaluate(d => { const r = [...d.querySelectorAll("div")].find(x => x.textContent.trim() === "Cliente" && x.children.length <= 1);
+    if (!r) return false; const sig = r.nextElementSibling; return !sig || /^(Producto|Especificaciones)$/i.test(sig.textContent.trim()); });
+  ok("det-58-sin-cliente-vacio", !vacio, vacio ? "producción ve el rótulo «CLIENTE» sin nada debajo" : "sin rótulos vacíos");
+});
+await caso("det-59-no-pide-factura-en-mas", "caso=salidas&rol=karla", async p => {
+  const suelto = await p.getByRole("button", { name: /El cliente no pide factura/ }).count();
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  let despacha = false;
+  if (/no ha pedido factura/i.test(t)) { await p.getByRole("menuitem", { name: /no ha pedido factura/i }).click(); await espera(p, 300); despacha = /accion:snooze_invoice/.test(await log(p)); }
+  ok("det-59-no-pide-factura-en-mas", suelto === 0 && /no ha pedido factura/i.test(t) && /hasta que (el cliente )?(la )?pida/i.test(t) && despacha,
+    `suelto: ${suelto ? "SÍ" : "no"}; en «Más»: ${/no ha pedido factura/i.test(t) ? (/hasta que/i.test(t) ? "con su explicación" : "SIN explicación") : "NO está"}; ${despacha ? "la pone en espera" : "no hace nada"}`);
+});
+await caso("det-60-pie-dos-renglones", "caso=salidas&rol=karla", async p => {
+  // sólo los botones del pie (el último hijo del diálogo): los del cuerpo que quedan cerca del borde no cuentan
+  const filas = await dlg(p).evaluate(d => { const bs = [...d.lastElementChild.querySelectorAll("button")].filter(b => b.offsetParent);
+    return [...new Set(bs.map(b => Math.round(b.getBoundingClientRect().top / 8)))].length; });
+  ok("det-60-pie-dos-renglones", filas <= 2, `renglones de botones en el pie: ${filas}`);
+});
+await caso("det-61-ctrl-enter-accion-del-rol", "caso=salidas&rol=karla", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  ok("det-61-ctrl-enter-accion-del-rol", /accion:deliver_with_invoice/.test(await log(p)), "Ctrl+Enter " + (/accion:deliver_with_invoice/.test(await log(p)) ? "hace «Asignar Folio y Entregar»" : "NO hace nada"));
+});
+await caso("det-62-ctrl-enter-imprimir", "caso=factura&rol=karla", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  ok("det-62-ctrl-enter-imprimir", /imprimir/.test(await log(p)), "sin acción de flujo, Ctrl+Enter " + (/imprimir/.test(await log(p)) ? "imprime" : "NO hace nada"));
+});
+await caso("det-63-ctrl-enter-no-escribiendo", "caso=factura&rol=admin", async p => {
+  await p.getByPlaceholder("+ nombre interno").fill("SILVIA"); await p.getByPlaceholder("+ nombre interno").press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-63-ctrl-enter-no-escribiendo", !/accion:|imprimir/.test(l) && (await p.getByRole("dialog").count()) === 1, "Ctrl+Enter escribiendo un nombre interno " + (/accion:|imprimir/.test(l) ? "DISPARA la acción" : "no dispara nada"));
+});
+await caso("det-64-atajo-declarado", "caso=salidas&rol=karla", async p => {
+  const n = await dlg(p).locator('button[aria-keyshortcuts="Control+Enter"]').evaluateAll(xs => xs.filter(x => x.offsetParent).map(x => x.textContent.trim()));
+  ok("det-64-atajo-declarado", n.length === 1 && /Asignar Folio y Entregar/.test(n[0]), `botón con el atajo declarado: ${n.join(" | ") || "ninguno"}`);
+});
+await caso("det-65-encabezado-sin-hueco", "caso=salidas&rol=produccion&sinentrega=1", async p => {
+  const hueco = await dlg(p).evaluate(d => { const enc = d.firstElementChild; return [...enc.querySelectorAll("div")].some(x => x.childElementCount === 0 && !x.textContent.trim() && parseFloat(getComputedStyle(x).marginTop) > 0); });
+  ok("det-65-encabezado-sin-hueco", !hueco, hueco ? "el encabezado deja un renglón vacío (sin entrega ni importe a la vista)" : "sin renglones vacíos arriba");
+});
+
+// ── Cuarta pasada, vuelta 3: por donde NO se diseñó (el atajo y la guía en los casos raros) ──────────────────────────────
+const primeraAccion = l => (l.match(/accion:\S+|imprimir/) || ["nada"])[0];
+await caso("det-66-guia-y-atajo-sin-botones", "caso=salidas&etapa=ctp&rol=admin", async p => {
+  const vis = await guiaVisible(p, /Arrastra a CTP en el Tablero/);
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-66-guia-y-atajo-sin-botones", vis && /imprimir/.test(l) && !/accion:/.test(l), `admin en CTP sin máquina: la guía ${vis ? "se ve" : "NO se ve"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-67-ctrl-enter-con-mas-abierto", "caso=salidas&rol=karla", async p => {
+  const hay = await abrirMas(p);
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-67-ctrl-enter-con-mas-abierto", hay && !/accion:|imprimir/.test(l) && (await p.getByRole("dialog").count()) === 1,
+    `con «Más» abierto (el foco en su primera opción), Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-68-doble-ctrl-enter", "caso=salidas&rol=karla", async p => {
+  await p.keyboard.press("Control+Enter"); await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  const n = ((await log(p)).match(/accion:deliver_with_invoice/g) || []).length;
+  ok("det-68-doble-ctrl-enter", n === 1, `dos Ctrl+Enter seguidos: «Asignar Folio y Entregar» ${n} ${n === 1 ? "vez" : "veces"}`);
+});
+await caso("det-69-cambia-con-el-detalle-abierto", "caso=salidas&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-200", invoice_type: "factura" })); await espera(p, 400);
+  const n = await dlg(p).locator('button[aria-keyshortcuts="Control+Enter"]').evaluateAll(xs => xs.filter(x => x.offsetParent).map(x => x.textContent.trim()));
+  const hay = await abrirMas(p); const t = hay ? await p.getByRole("menu").innerText() : "";
+  if (hay) { await p.keyboard.press("Escape"); await espera(p, 250); }
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-69-cambia-con-el-detalle-abierto", n.length === 1 && /Marcar como Entregada/.test(n[0]) && !/no ha pedido factura/i.test(t) && /accion:deliver_only/.test(l) && !/deliver_with_invoice/.test(l),
+    `le ponen folio con el detalle abierto: el atajo en ${n.join(" | ") || "ningún botón"}; «Poner en espera» ${/no ha pedido factura/i.test(t) ? "SIGUE en «Más»" : "ya no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-70-ctrl-enter-con-foco-en-cerrar", "caso=salidas&rol=karla", async p => {
+  await p.getByRole("button", { name: "Cerrar", exact: true }).last().focus();   // el del pie (arriba está la ×)
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p), cerrado = (l.match(/cerrado/g) || []).length;
+  ok("det-70-ctrl-enter-con-foco-en-cerrar", /accion:deliver_with_invoice/.test(l) && cerrado === 1, `el foco en «Cerrar»: Ctrl+Enter hace ${primeraAccion(l)} (cerrado ${cerrado} vez/veces)`);
+});
+await caso("det-71-ctrl-enter-boton-apagado", "caso=maquila&rol=admin", async p => {
+  // «Recibimos el Trabajo» apagado (falta el precio al cliente): el atajo no lo brinca ni hace otra cosa
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-71-ctrl-enter-boton-apagado", !/accion:|imprimir/.test(l) && (await p.getByRole("dialog").count()) === 1, `con la acción apagada, Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+const filasDelPie = p => dlg(p).evaluate(d => { const bs = [...d.lastElementChild.querySelectorAll("button")].filter(b => b.offsetParent);
+  return [...new Set(bs.map(b => Math.round(b.getBoundingClientRect().top / 8)))].length; });
+await caso("det-72-pie-admin-1366", "caso=salidas&rol=admin", async p => {
+  const f = await filasDelPie(p);
+  ok("det-72-pie-admin-1366", f <= 2, `admin en Salidas a 1366: renglones de botones en el pie: ${f}`);
+});
+await caso("det-73-pie-karla-1920", "caso=salidas&rol=karla", async p => {
+  const f = await filasDelPie(p);
+  ok("det-73-pie-karla-1920", f <= 2, `karla en Salidas a 1920: renglones de botones en el pie: ${f}`);
+}, { width: 1920, height: 1080 });
+await caso("det-74-en-espera", "caso=espera&rol=karla", async p => {
+  const hay = await abrirMas(p); const t = hay ? await p.getByRole("menu").innerText() : "";
+  if (hay) { await p.keyboard.press("Escape"); await espera(p, 250); }
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-74-en-espera", !/no ha pedido factura/i.test(t) && /imprimir/.test(l) && !/accion:/.test(l),
+    `orden ya en espera: «Poner en espera» ${/no ha pedido factura/i.test(t) ? "SALE OTRA VEZ en «Más»" : "no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-76-escape-de-mas-regresa-el-foco", "caso=salidas&rol=karla", async p => {
+  // el bug que encontraron det-69 y det-74: Escape cerraba «Más» y el foco se iba al <body> (sin Tab atrapado ni Ctrl+Enter)
+  await abrirMas(p); await p.keyboard.press("Escape"); await espera(p, 250);
+  const r = await p.evaluate(() => { const a = document.activeElement; return { dentro: !!a?.closest('[role="dialog"]'), quien: a?.getAttribute("aria-label") || a?.tagName }; });
+  const abierto = (await p.getByRole("dialog").count()) === 1;
+  await p.keyboard.press("Tab"); await espera(p, 100);
+  const trasTab = await p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+  ok("det-76-escape-de-mas-regresa-el-foco", r.dentro && /Más acciones/.test(r.quien) && abierto && trasTab,
+    `Escape cierra «Más»: el foco queda en ${r.quien}${r.dentro ? "" : " (FUERA del diálogo)"}; el detalle ${abierto ? "sigue abierto" : "SE CERRÓ"}; Tab ${trasTab ? "sigue dentro" : "SE SALE al tablero"}`);
+});
+// ── vuelta 4: lo que podían romper los arreglos de la vuelta 3 ─────────────────────────────────────────────────────────
+await caso("det-77-mas-se-cierra-con-clic-fuera", "caso=salidas&rol=karla", async p => {
+  await abrirMas(p);
+  await dlg(p).getByText("Especificaciones", { exact: false }).first().click(); await espera(p, 250);
+  const menu = await p.getByRole("menu").count();
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-77-mas-se-cierra-con-clic-fuera", menu === 0 && /accion:deliver_with_invoice/.test(l), `clic fuera de «Más»: el menú ${menu ? "SIGUE abierto" : "se cierra"}; luego Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-78-vendedor-ajeno-sin-atajo", "caso=salidas&rol=vendedor&login=otro", async p => {
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p), n = await dlg(p).locator("[aria-keyshortcuts]").count();
+  ok("det-78-vendedor-ajeno-sin-atajo", !/accion:|imprimir/.test(l) && n === 0 && (await p.getByRole("dialog").count()) === 1,
+    `un vendedor con la orden de otro: Ctrl+Enter hace ${primeraAccion(l)}; botones con atajo: ${n}`);
+});
+await caso("det-79-enter-normal-en-mas", "caso=salidas&rol=karla", async p => {
+  await abrirMas(p); await p.keyboard.press("Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-79-enter-normal-en-mas", /accion:snooze_invoice/.test(l), `Enter (sin Ctrl) en la opción enfocada de «Más» hace: ${primeraAccion(l)}`);
+});
+await caso("det-75-guia-produccion-lista", "caso=salidas&etapa=ready&rol=produccion", async p => {
+  const vis = await guiaVisible(p, /Arrastra esta orden a una máquina/);
+  ok("det-75-guia-produccion-lista", vis, `producción con la orden lista para imprimir: la guía ${vis ? "se ve" : "NO se ve"}`);
 });
 
 await browser.close();

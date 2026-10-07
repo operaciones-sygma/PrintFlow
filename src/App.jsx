@@ -4230,6 +4230,10 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 //     conserva y se dice; antes se le quitaba igual y no se avisaba nada.
 //   · menores: «NC emitida en SAT» sólo si hubo folio; sin «FLUJO» vacío; sin emojis; lo de la placa sólo antes de CTP; el
 //     precio una vez; «Descargar»; los textos de estado en tinta.
+// v10.84.48 (cuarta critique, 35/40, mirando los roles de piso): la guía de qué sigue («Arrastra esta orden a una máquina…»)
+//   vuelve a verse aunque el rol no tenga botón (v10.84.46 la escondía con el renglón); «CLIENTE» sólo con datos de contacto
+//   (los roles de piso veían el rótulo vacío); «El cliente no pide factura» a «⋯ Más» con su explicación (el pie de karla en
+//   Salidas tenía tres renglones); Ctrl+Enter hace la acción del rol (nunca escribiendo en un campo); sin renglones vacíos arriba.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
@@ -4314,6 +4318,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
   // «⋯ Más»: lo raro y lo destructivo, con su explicación; cada acción abre su propia confirmación en App
   const mas=[
+    // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
+    canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera: no ha pedido factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
     canRegresar&&{k:"revert",icono:<ArrowUUpLeftIcon size={14} weight="bold"/>,color:C.wnInk,t:"Regresar a una etapa anterior",d:"Eliges a qué etapa vuelve."},
     canPreInvoice&&{k:"pre_invoice",icono:<LightningIcon size={14} weight="fill"/>,color:C.fac,t:"Asignar folio anticipado",d:"Antes de entregar: para quien paga por adelantado o pide anticipo."},
     canHistoricFolio&&{k:"apply_historic_folio",icono:<ReceiptIcon size={14} weight="bold"/>,color:C.fac,t:o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha",d:o.created_by==="import-historico"?"Registra el folio de una orden histórica.":"Registra un folio que Alpha ya emitió."},
@@ -4326,8 +4332,16 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
   // ¿El rol tiene una acción de flujo aquí? (los botones salen de StageFlowButtons; si no sale ninguno, «Imprimir» es la acción)
   const flujoRef=useRef(null);
-  const [hayFlujo,setHayFlujo]=useState(false);
-  useLayoutEffect(()=>{const h=!!flujoRef.current?.querySelector("button");if(h!==hayFlujo)setHayFlujo(h);});
+  const [flujo,setFlujo]=useState({boton:false,algo:false});   // boton: hay acción de flujo · algo: hay acción o guía
+  useLayoutEffect(()=>{const el=flujoRef.current;const v={boton:!!el?.querySelector("button"),algo:!!el&&el.textContent.trim().length>0};if(v.boton!==flujo.boton||v.algo!==flujo.algo)setFlujo(v);});
+  const hayFlujo=flujo.boton;
+  // Ctrl+Enter: la acción del rol (la rellena: la marca --principal de StageFlowButtons) o, si no hay, «Imprimir»
+  const imprimirRef=useRef(null);
+  const principal=()=>{const b=flujoRef.current&&[...flujoRef.current.querySelectorAll("button")].find(x=>x.style.getPropertyValue("--principal"));return b||(!hayFlujo?imprimirRef.current:null)};
+  // (si la orden cambia con el detalle abierto, la acción principal puede ser otra: el atajo se quita de la que ya no lo es)
+  useLayoutEffect(()=>{const b=principal();
+    flujoRef.current?.querySelectorAll("button[aria-keyshortcuts]").forEach(x=>{if(x!==b){x.removeAttribute("aria-keyshortcuts");if(x.title==="Ctrl+Enter")x.removeAttribute("title");}});
+    if(b&&b!==imprimirRef.current){b.setAttribute("aria-keyshortcuts","Control+Enter");if(!b.title)b.title="Ctrl+Enter";}});
 
   // lo que se ve arriba: miniaturas (la imagen se amplía al tocarla), y cuánto/para cuándo/folio para quien puede verlo
   const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);
@@ -4339,7 +4353,13 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const primaria=st?.c||C.t3;
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
-    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} onKeyDown={atraparTab}
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} onKeyDown={e=>{
+        if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){
+          if(e.target.closest&&e.target.closest("input,textarea,select"))return;   // nunca escribiendo
+          if(masAbierto){e.preventDefault();return}   // con «Más» abierto, Ctrl+Enter no aprieta la opción enfocada
+          const b=principal();if(b){e.preventDefault();b.click()}return;
+        }
+        atraparTab(e);}}
       style={{background:C.bg,borderRadius:20,maxWidth:600,width:"94%",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}} onClick={e=>e.stopPropagation()}>
       {/* el encabezado: de quién, qué, cuánto y para cuándo, sin bajar */}
       <div style={{display:"flex",gap:14,alignItems:"flex-start",padding:"20px 20px 14px 24px",borderBottom:"0.5px solid "+C.bd}}>
@@ -4356,13 +4376,13 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           </div>
           {o.production_number&&o.client&&<div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:3,lineHeight:1.3}}>{o.client}</div>}
           {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
+          {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio)&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
             {o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalendarDotsIcon size={13} weight="bold"/>Entrega <b style={{color:C.tx}}>{fD(o.due_date)}</b></span>}
             {verPrecio&&importe?<span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span>:null}
             {o.invoice_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaFolio,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_pre_assigned?<LightningIcon size={12} weight="fill" color={C.wnInk}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={13} weight="bold"/>:<ReceiptIcon size={13} weight="bold"/>}{o.invoice_folio}{verPrecio&&estadoPago?<span style={{fontFamily:"'Geist',sans-serif",fontWeight:600,color:C.okInk}}>· {estadoPago}</span>:null}</span>}
             {o.cart_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaAA(C.cart)}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</span>}
             {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
-          </div>
+          </div>}
         </div>
         <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
       </div>
@@ -4371,10 +4391,11 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <div style={{flex:1,minHeight:0,overflowY:"auto",padding:"4px 24px 18px"}}>
       {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 4px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dnInk,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
       {o.plate_status&&antesDeCtp&&<div style={{marginTop:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} style={{color:tintaAA(o.plate_status==="existing"?C.live:C.ctp)}} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
-      {(o.client_id||(!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)))&&<><Seccion>Cliente</Seccion>
-      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
-      {/* v10.84.47 — el «Nombre interno» después del contacto: se edita poco y arriba pesaba más que los datos del cliente */}
-      {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}</>}
+      {/* v10.84.48 — «CLIENTE» sólo con datos de contacto: los roles de piso no los ven y el rótulo quedaba vacío */}
+      {!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)&&<><Seccion>Cliente</Seccion><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
+      {/* v10.84.47 — el «Nombre interno» después del contacto: se edita poco y arriba pesaba más que los datos del cliente
+          (trae su propio rótulo) */}
+      {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
       <Seccion>Producto</Seccion>
       <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
@@ -4466,7 +4487,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       <div style={{padding:"12px 24px 16px",borderTop:"0.5px solid "+C.bd,background:C.bg}}>
         {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
         {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
-        <div ref={flujoRef} style={{display:hayFlujo?"flex":"none",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>{canActFlow&&!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={flowDispatch} variante="detalle"/>}</div>
+        <div ref={flujoRef} style={{display:flujo.algo?"flex":"none",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>{canActFlow&&!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={flowDispatch} variante="detalle"/>}</div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),justifyContent:"center",border:"0.5px solid "+C.bd,minWidth:96}}>Cerrar</button>
           {mas.length>0&&<MasDelDetalle abierto={masAbierto} setAbierto={setMasAbierto} items={mas} onElegir={k=>{setMasAbierto(false);dispatch(k)}}/>}
@@ -4475,7 +4496,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
           {canEditAdmin&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {canPrint&&<button onClick={printIt} style={hayFlujo?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
+          {canPrint&&<button ref={imprimirRef} onClick={printIt} aria-keyshortcuts={hayFlujo?undefined:"Control+Enter"} title={hayFlujo?undefined:"Ctrl+Enter"} style={hayFlujo?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
     </div>
@@ -4485,15 +4506,17 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 //   cierra el menú primero (useEscClose: el escStack cierra sólo lo de arriba; nunca un listener propio de Escape) y el
 //   clic fuera también. Cada acción abre su propia confirmación en App.
 function MasDelDetalle({abierto,setAbierto,items,onElegir}){
-  const ref=useRef(null);
+  const ref=useRef(null),boton=useRef(null);
+  // v10.84.48 — Escape regresa el foco a «Más»: si no, se iba al <body> (la opción enfocada desaparece con el menú) y el
+  //   diálogo perdía el Tab atrapado y Ctrl+Enter
   return <div ref={ref} style={{position:"relative"}}>
-    <button onClick={()=>setAbierto(v=>!v)} aria-haspopup="menu" aria-expanded={abierto} aria-label="Más acciones" title="Más acciones"
+    <button ref={boton} onClick={()=>setAbierto(v=>!v)} aria-haspopup="menu" aria-expanded={abierto} aria-label="Más acciones" title="Más acciones"
       style={{...bt(C.sf,abierto?C.ac:C.t2),border:"0.5px solid "+C.bd,padding:"10px 14px"}}><DotsThreeIcon size={16} weight="bold"/>Más</button>
-    {abierto&&<MenuMasDelDetalle cerrar={()=>setAbierto(false)} contenedor={ref} items={items} onElegir={onElegir}/>}
+    {abierto&&<MenuMasDelDetalle cerrar={()=>setAbierto(false)} alEscape={()=>{boton.current?.focus();setAbierto(false)}} contenedor={ref} items={items} onElegir={onElegir}/>}
   </div>;
 }
-function MenuMasDelDetalle({cerrar,contenedor,items,onElegir}){
-  useEscClose(cerrar);
+function MenuMasDelDetalle({cerrar,alEscape,contenedor,items,onElegir}){
+  useEscClose(alEscape||cerrar);
   const menuRef=useRef(null);
   useEffect(()=>{const b=menuRef.current?.querySelector('[role="menuitem"]');if(b)b.focus();
     const fuera=e=>{if(contenedor.current&&!contenedor.current.contains(e.target))cerrar()};
@@ -12588,7 +12611,7 @@ function StageFlowButtons({o,role,onAction,variante}){
   //   variante) todo queda exactamente como estaba: bt(color) y los mismos botones.
   const det=variante==="detalle";
   let primera=true;
-  const B=c=>!det?bt(c):primera?(primera=false,bt(tintaAA(c,5))):tenueAA(c);
+  const B=c=>!det?bt(c):primera?(primera=false,{...bt(tintaAA(c,5)),"--principal":"1"}):tenueAA(c);   // --principal: Ctrl+Enter la encuentra
   const T=c=>det?tintaAA(c):c;   // el color de un texto de estado («Ya validaste», «Prod · Pre-p»)
   return <>
       {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{!det&&(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={B(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{!det&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={B(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:T(o.validated_by_production?C.ok:C.wn)}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:T(o.validated_by_preprensa?C.ok:C.wn)}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
@@ -12636,7 +12659,7 @@ function StageFlowButtons({o,role,onAction,variante}){
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={B(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
       {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
-      {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
+      {!det&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}
   </>;
 }

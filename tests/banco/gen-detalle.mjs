@@ -2,7 +2,7 @@
 // los botones de flujo, los nombres internos) y lo que lee o escribe la base SIMULADO: la imagen (SignedImg), los pantones,
 // el tiempo por etapa, el historial de cambios, Storage y la tabla al borrar el archivo, y las RPC de los nombres internos.
 // Uso: node gen-detalle.mjs <App.jsx> <dirSalida>
-// Variantes por URL: etapa=… · cliente=… · caso=factura|partes|resto|espera|maquila|cancelada|borrador|salidas|remision|sinempaque|archivo (por defecto factura) ·
+// Variantes por URL: etapa=… · cliente=… · sinentrega=1 (sin fecha de entrega) ·caso=factura|partes|resto|espera|maquila|cancelada|borrador|salidas|remision|sinempaque|archivo (por defecto factura) ·
 //   rol=karla|admin|produccion|preprensa|german|secretaria|vendedor|visor (por defecto karla) · falla=storage|tabla (borrar el
 //   archivo: la base contesta con error) · falla=alias (la base rechaza agregar un nombre interno) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
 import fs from "node:fs";
@@ -100,10 +100,13 @@ const CASOS = {
 };
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente
 const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage: Q.get("etapa"), order_type: Q.get("etapa").startsWith("maq_") ? "maquila" : (CASOS[CASO] || CASOS.factura).order_type } : {}),
-  ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}) };
+  ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}), ...(Q.get("sinentrega") ? { due_date: null } : {}) };
 function Banco() {
   const [abierto, setAbierto] = useState(Q.get("abrir") === "1");
   const [, refresca] = useState(0);
+  // el dato que cambia con el detalle abierto (como lo haría el tiempo real): window.__cambiar({ invoice_folio: "F-200" })
+  const [orden, setOrden] = useState(ORDEN);
+  useEffect(() => { window.__cambiar = p => setOrden(o => ({ ...o, ...p })); }, []);
   useEffect(() => { const f = () => refresca(n => n + 1); window.addEventListener("bitacora", f); return () => window.removeEventListener("bitacora", f); }, []);
   // flujos=1: los botones de flujo de TODAS las etapas con todos los roles, como en el tablero (sin variante): para comparar
   //   versiones y comprobar que el tablero no cambió
@@ -113,7 +116,7 @@ function Banco() {
     <button id="abrir-detalle" onClick={() => setAbierto(true)}>abrir el detalle</button>
     <button id="fondo-1">botón del tablero 1</button> <button id="fondo-2">botón del tablero 2</button>
     <pre id="log">{bitacora.join("\\n")}</pre>
-    {abierto && <DetailModal order={ORDEN} role={ROL} userLogin={LOGIN}
+    {abierto && <DetailModal order={orden} role={ROL} userLogin={LOGIN}
       onClose={() => { anotar("cerrado"); setAbierto(false); }} onPrint={() => anotar("imprimir")}
       onAction={(id, accion, arg) => anotar("accion:" + accion + (arg ? " " + arg : ""))} />}
   </div>;
