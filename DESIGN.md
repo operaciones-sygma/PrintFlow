@@ -394,6 +394,17 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **La guía de qué sigue nunca se esconde con su renglón** (v10.84.48): cuando el rol no tiene botón, la línea «Arrastra esta
   orden a…» ES lo que el detalle tiene que decir; un renglón que se oculta por no traer botón se lleva la guía con él (le pasó
   a Germán en CTP). Y un rótulo de sección sólo sale si algo de la sección se ve para ese rol.
+- **Lo que va a un catálogo de todos se guarda terminado** (v10.84.49): un campo que escribe en algo compartido (el color de
+  un Pantone) guarda con Enter o al salir con el valor completo, nunca mientras se teclea; un selector guarda al soltarlo; y
+  el valor se pone en pantalla cuando la base lo guardó (si falla, lo escrito se queda para reintentar).
+- **Un componente se define fuera de otro** (v10.84.49): `const Row=(…)=>…` dentro de un componente es un componente NUEVO en
+  cada render, y React vuelve a montar todo lo de adentro (se pierde lo escrito y se repiten las consultas). Si hace falta
+  el nombre corto, `const Row=FilaDelDetalle` apunta a uno de afuera.
+- **El botón trabado se ve trabado y lo que lo destraba es la acción principal** (v10.84.49): apagado en `bt(C.sf,C.t2)` con
+  cursor `not-allowed`, su porqué a la vista en `C.wnInk` (no sólo en el title), y el relleno y el atajo van a la acción que
+  lo destraba («Editar Maquila» cuando falta el precio).
+- **Un error no es un vacío** (v10.84.49): una lista que no cargó dice «No se pudo cargar…» con «Reintentar»; nunca «Sin
+  registros».
 - **Ctrl+Enter en el detalle de la orden** (v10.84.48): hace la acción del rol (la rellena) o, si no hay, «Imprimir». No con el
   foco en un campo, ni con un menú abierto (si no, apretaría la opción enfocada), y si la orden cambia con el diálogo abierto
   el atajo se mueve a la nueva acción principal (un solo botón lo declara).

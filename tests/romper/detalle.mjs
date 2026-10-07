@@ -447,10 +447,11 @@ await caso("det-70-ctrl-enter-con-foco-en-cerrar", "caso=salidas&rol=karla", asy
   ok("det-70-ctrl-enter-con-foco-en-cerrar", /accion:deliver_with_invoice/.test(l) && cerrado === 1, `el foco en «Cerrar»: Ctrl+Enter hace ${primeraAccion(l)} (cerrado ${cerrado} vez/veces)`);
 });
 await caso("det-71-ctrl-enter-boton-apagado", "caso=maquila&rol=admin", async p => {
-  // «Recibimos el Trabajo» apagado (falta el precio al cliente): el atajo no lo brinca ni hace otra cosa
+  // «Recibimos el Trabajo» apagado (falta el precio al cliente): el atajo nunca lo aprieta. Desde v10.84.49 hace «Editar», que
+  // lo destraba (antes no hacía nada: la quinta critique pidió que la acción principal sea la que lo destraba)
   await p.keyboard.press("Control+Enter"); await espera(p, 300);
   const l = await log(p);
-  ok("det-71-ctrl-enter-boton-apagado", !/accion:|imprimir/.test(l) && (await p.getByRole("dialog").count()) === 1, `con la acción apagada, Ctrl+Enter hace: ${primeraAccion(l)}`);
+  ok("det-71-ctrl-enter-boton-apagado", !/accion:advance/.test(l) && /accion:edit\b/.test(l), `con la acción apagada, Ctrl+Enter hace: ${primeraAccion(l)}`);
 });
 const filasDelPie = p => dlg(p).evaluate(d => { const bs = [...d.lastElementChild.querySelectorAll("button")].filter(b => b.offsetParent);
   return [...new Set(bs.map(b => Math.round(b.getBoundingClientRect().top / 8)))].length; });
@@ -503,6 +504,165 @@ await caso("det-79-enter-normal-en-mas", "caso=salidas&rol=karla", async p => {
 await caso("det-75-guia-produccion-lista", "caso=salidas&etapa=ready&rol=produccion", async p => {
   const vis = await guiaVisible(p, /Arrastra esta orden a una máquina/);
   ok("det-75-guia-produccion-lista", vis, `producción con la orden lista para imprimir: la guía ${vis ? "se ve" : "NO se ve"}`);
+});
+
+// ── v10.84.49: la quinta critique (revisor independiente, 23/40), lo urgente ──────────────────────────────────────────────
+// El «#HEX» de un Pantone escribe en el catálogo de TODAS las órdenes: no se guarda a medio teclear, y lo que se guarda es lo
+// que la persona terminó de escribir.
+const campoHex = p => dlg(p).locator('input[type="text"][placeholder="#HEX"]').first();
+const teclear = async (p, txt) => { await campoHex(p).click(); for (const ch of txt) { await p.keyboard.type(ch); await espera(p, 80); } };
+const guardados = async p => ((await log(p)).match(/rpc:upsert_pantone [^\n]*/g) || []);
+await caso("det-80-hex-no-guarda-a-medias", "caso=pantone&rol=german", async p => {
+  await teclear(p, "ff0000"); await espera(p, 300);
+  const antes = await guardados(p);
+  await p.keyboard.press("Enter"); await espera(p, 300);
+  const g = await guardados(p);
+  ok("det-80-hex-no-guarda-a-medias", antes.length === 0 && g.length === 1 && /PANTONE 7621 C #ff0000$/.test(g[0]),
+    `teclear «ff0000» guardó antes de Enter: ${antes.join(" | ") || "nada"}; con Enter: ${g.slice(antes.length).join(" | ") || "nada"}`);
+});
+await caso("det-81-hex-invalido-lo-dice", "caso=pantone&rol=german", async p => {
+  await teclear(p, "12zz"); await p.keyboard.press("Enter"); await espera(p, 300);
+  const t = await textoDlg(p), g = await guardados(p);
+  ok("det-81-hex-invalido-lo-dice", g.length === 0 && /6 (dígitos|caracteres)/i.test(t), `«12zz» + Enter: ${g.length ? "GUARDÓ " + g.join(" | ") : "no guarda"}; ${/6 (dígitos|caracteres)/i.test(t) ? "dice cómo va" : "NO dice qué está mal"}`);
+});
+await caso("det-82-hex-con-nombre", "caso=pantone&rol=german", async p => {
+  const n = await campoHex(p).evaluate(el => el.getAttribute("aria-label") || (el.labels && el.labels[0] ? el.labels[0].textContent : "") || "");
+  ok("det-82-hex-con-nombre", /7621/.test(n), `el campo del HEX se llama: «${n || "(sin nombre)"}»`);
+});
+await caso("det-83-hex-pegado", "caso=pantone&rol=german", async p => {
+  await campoHex(p).fill("#7A2E8C"); await p.keyboard.press("Tab"); await espera(p, 300);
+  const g = await guardados(p);
+  ok("det-83-hex-pegado", g.length === 1 && /#7a2e8c$/.test(g[0]), `pegar «#7A2E8C» y salir del campo guardó: ${g.join(" | ") || "nada"}`);
+});
+await caso("det-84-hex-la-base-rechaza", "caso=pantone&rol=german&falla=pantone", async p => {
+  await teclear(p, "ff0000"); await p.keyboard.press("Enter"); await espera(p, 400);
+  const t = await textoDlg(p), m = await peoresContrastes(p);
+  const v = await campoHex(p).count() ? await campoHex(p).inputValue() : "(el campo desapareció)";
+  ok("det-84-hex-la-base-rechaza", /No se pudo guardar/.test(t) && /ff0000/i.test(v) && m.length === 0,
+    `la base rechaza: ${/No se pudo guardar/.test(t) ? "lo dice" : "NO lo dice"}; el campo conserva «${v}»; contraste: ${m.slice(0, 2).join(" · ") || "bien"}`);
+});
+await caso("det-85-selector-no-guarda-al-arrastrar", "caso=pantone&rol=german", async p => {
+  const c = dlg(p).locator('input[type="color"]').first();
+  const poner = v => c.evaluate((el, v) => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, v); el.dispatchEvent(new Event("input", { bubbles: true })); }, v);
+  for (const v of ["#110000", "#880000", "#ff0000"]) { await poner(v); await espera(p, 450); }
+  const antes = await guardados(p);
+  await c.evaluate(el => el.dispatchEvent(new Event("change", { bubbles: true }))); await espera(p, 300);
+  const g = await guardados(p);
+  ok("det-85-selector-no-guarda-al-arrastrar", antes.length === 0 && g.length === 1 && /#ff0000$/.test(g[0]),
+    `arrastrar en el selector (con pausas) guardó: ${antes.join(" | ") || "nada"}; al soltar: ${g.slice(antes.length).join(" | ") || "nada"}`);
+});
+// el botón que no se puede apretar se ve apagado, dice por qué, y la acción principal es la que lo destraba
+await caso("det-86-boton-apagado-se-ve-apagado", "caso=maquila&rol=admin", async p => {
+  const r = await dlg(p).evaluate(d => { const b = [...d.querySelectorAll("button")].find(x => /Recibimos el Trabajo/.test(x.textContent)); if (!b) return null;
+    const m = getComputedStyle(b).backgroundColor.match(/[\d.]+/g).map(Number); const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+    return { apagado: b.disabled, lum: 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]), cursor: getComputedStyle(b).cursor, atajo: b.getAttribute("aria-keyshortcuts") }; });
+  const t = await textoDlg(p);
+  ok("det-86-boton-apagado-se-ve-apagado", !!r && r.apagado && r.lum > 0.6 && r.cursor === "not-allowed" && !r.atajo && /Falta[^\n]*precio/i.test(t),
+    r ? `«Recibimos el Trabajo» apagado: fondo ${r.lum > 0.6 ? "claro" : "OSCURO, parece activo"}, cursor ${r.cursor}, atajo ${r.atajo || "ninguno"}; ${/Falta[^\n]*precio/i.test(t) ? "dice qué falta" : "NO dice qué falta"}` : "no encontré el botón");
+});
+await caso("det-87-editar-destraba-admin", "caso=maquila&rol=admin", async p => {
+  const n = await dlg(p).locator('button[aria-keyshortcuts="Control+Enter"]').evaluateAll(xs => xs.filter(x => x.offsetParent).map(x => x.textContent.trim()));
+  await p.keyboard.press("Control+Enter"); await espera(p, 300);
+  const l = await log(p);
+  ok("det-87-editar-destraba-admin", n.length === 1 && /Editar/.test(n[0]) && /accion:edit\b/.test(l), `falta el precio: el atajo en ${n.join(" | ") || "ningún botón"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+});
+await caso("det-88-editar-maquila-destraba-secretaria", "caso=maquila&rol=secretaria", async p => {
+  const n = await dlg(p).locator('button[aria-keyshortcuts="Control+Enter"]').evaluateAll(xs => xs.filter(x => x.offsetParent).map(x => x.textContent.trim()));
+  ok("det-88-editar-maquila-destraba-secretaria", n.length === 1 && /Editar Maquila/.test(n[0]), `secretaria, falta el precio: el atajo en ${n.join(" | ") || "ningún botón"}`);
+});
+// el historial que no carga NO es un historial vacío, y lo que enseña se lee
+await caso("det-89-historial-error-no-es-vacio", "caso=factura&rol=admin&falla=historial1", async p => {
+  await dlg(p).getByRole("button", { name: /Historial de cambios/ }).click(); await espera(p, 300);
+  const t1 = await textoDlg(p);
+  const hay = await dlg(p).getByRole("button", { name: /Reintentar/ }).count();
+  if (hay) { await dlg(p).getByRole("button", { name: /Reintentar/ }).click(); await espera(p, 300); }
+  const t2 = await textoDlg(p);
+  ok("det-89-historial-error-no-es-vacio", /No se pudo cargar/.test(t1) && !/Sin cambios registrados/.test(t1) && hay > 0 && /Precio/.test(t2),
+    `el historial no carga: ${/Sin cambios registrados/.test(t1) ? "dice «Sin cambios registrados» (MIENTE)" : /No se pudo cargar/.test(t1) ? "lo dice" : "no dice nada"}; «Reintentar» ${hay ? "sí" : "NO"}; luego ${/Precio/.test(t2) ? "carga" : "sigue sin cargar"}`);
+});
+await caso("det-90-historial-se-lee", "caso=factura&rol=admin", async p => {
+  await dlg(p).getByRole("button", { name: /Historial de cambios/ }).click(); await espera(p, 300);
+  const m = await peoresContrastes(p);
+  const riel = await dlg(p).evaluate(d => [...d.querySelectorAll("div")].some(x => parseFloat(getComputedStyle(x).borderLeftWidth) >= 2 && getComputedStyle(x).borderLeftStyle !== "none"));
+  ok("det-90-historial-se-lee", m.length === 0 && !riel, `historial abierto: contraste ${m.slice(0, 3).join(" · ") || "bien"}; riel a la izquierda: ${riel ? "SÍ" : "no"}`);
+});
+await caso("det-91-tiempo-por-etapa-se-lee", "caso=salidas&rol=karla", async p => {
+  await dlg(p).getByRole("button", { name: /Tiempo por etapa/ }).click(); await espera(p, 300);
+  const m = await peoresContrastes(p);
+  ok("det-91-tiempo-por-etapa-se-lee", m.length === 0, `«Tiempo por etapa» abierto: ${m.slice(0, 3).join(" · ") || "todo se lee"}`);
+});
+// «Más» es un menú: las flechas se mueven, y Tab lo cierra sin perder el foco
+await caso("det-92-flechas-en-mas", "caso=salidas&rol=admin", async p => {
+  await abrirMas(p);
+  const foco = () => p.evaluate(() => { const xs = [...document.querySelectorAll('[role="menuitem"]')]; return xs.indexOf(document.activeElement) + "/" + xs.length; });
+  const f0 = await foco(); await p.keyboard.press("ArrowDown"); const f1 = await foco();
+  await p.keyboard.press("End"); const f2 = await foco(); await p.keyboard.press("Home"); const f3 = await foco();
+  await p.keyboard.press("ArrowUp"); const f4 = await foco();
+  const n = Number(f0.split("/")[1]);
+  ok("det-92-flechas-en-mas", n >= 2 && f0.startsWith("0/") && f1.startsWith("1/") && f2.startsWith((n - 1) + "/") && f3.startsWith("0/") && f4.startsWith((n - 1) + "/"),
+    `foco: al abrir ${f0}, ↓ ${f1}, Fin ${f2}, Inicio ${f3}, ↑ ${f4}`);
+});
+await caso("det-93-tab-cierra-mas", "caso=salidas&rol=karla", async p => {
+  await abrirMas(p); await p.keyboard.press("Tab"); await espera(p, 250);
+  const menu = await p.getByRole("menu").count();
+  const r = await p.evaluate(() => { const a = document.activeElement; return { dentro: !!a?.closest('[role="dialog"]'), quien: a?.getAttribute("aria-label") || a?.textContent?.trim().slice(0, 20) || a?.tagName }; });
+  ok("det-93-tab-cierra-mas", menu === 0 && r.dentro, `Tab con «Más» abierto: el menú ${menu ? "SIGUE abierto" : "se cierra"}; el foco en ${r.quien}${r.dentro ? "" : " (FUERA del diálogo)"}`);
+});
+await caso("det-94-importe-sin-iva", "caso=factura&rol=admin", async p => {
+  const t = await dlg(p).evaluate(d => d.firstElementChild.innerText);
+  ok("det-94-importe-sin-iva", /\$5,649\.00\s*sin IVA/.test(t), `el importe arriba: ${(t.match(/\$[\d,]+\.\d\d[^\n·]*/) || ["(no está)"])[0].trim()}`);
+});
+await caso("det-96-hex-sobrevive-una-actualizacion", "caso=pantone&rol=german", async p => {
+  // la vuelta 2 lo encontró: Row y Seccion se definían DENTRO del detalle y cada render volvía a montar lo de adentro; con la
+  // orden que se actualiza mientras se escribe (el tiempo real), se perdía lo escrito en el «#HEX»
+  await teclear(p, "7a2e");
+  await p.evaluate(() => window.__cambiar({ notes: "la actualizó otra persona" })); await espera(p, 300);
+  const v = await campoHex(p).count() ? await campoHex(p).inputValue() : "(el campo desapareció)";
+  const foco = await p.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.tagName);
+  ok("det-96-hex-sobrevive-una-actualizacion", v === "7a2e" && /HEX/.test(foco), `escribiendo «7a2e», llega una actualización: el campo tiene «${v}» y el foco está en ${foco}`);
+});
+// ── v10.84.49, vuelta 3: por donde no se diseñó (el «#HEX») ─────────────────────────────────────────────────────────────
+await caso("det-97-hex-doble-enter", "caso=pantone&rol=german", async p => {
+  await teclear(p, "ff0000"); await p.keyboard.press("Enter"); await p.keyboard.press("Enter"); await espera(p, 400);
+  const g = await guardados(p);
+  ok("det-97-hex-doble-enter", g.length === 1, `doble Enter guardó ${g.length} vez/veces: ${g.join(" | ")}`);
+});
+await caso("det-98-hex-corto-con-enter", "caso=pantone&rol=german", async p => {
+  await teclear(p, "#FFF"); await p.keyboard.press("Enter"); await espera(p, 300);
+  const g = await guardados(p);
+  ok("det-98-hex-corto-con-enter", g.length === 1 && /#ffffff$/.test(g[0]), `«#FFF» + Enter (el atajo de 3 dígitos, a propósito): ${g.join(" | ") || "nada"}`);
+});
+await caso("det-99-hex-corto-al-salir", "caso=pantone&rol=german", async p => {
+  await teclear(p, "fff"); await p.keyboard.press("Tab"); await espera(p, 300);
+  const g = await guardados(p), t = await textoDlg(p);
+  ok("det-99-hex-corto-al-salir", g.length === 0 && /6 dígitos/.test(t), `«fff» y salir del campo: ${g.length ? "GUARDÓ " + g.join(" | ") : "no guarda"}; ${/6 dígitos/.test(t) ? "dice cómo va" : "NO dice nada"}`);
+});
+await caso("det-100-hex-esc-no-pierde", "caso=pantone&rol=german", async p => {
+  await teclear(p, "7a2e"); await p.keyboard.press("Escape"); await espera(p, 300);
+  const abierto = await p.getByRole("dialog").count(), g = await guardados(p);
+  const v = abierto && await campoHex(p).count() ? await campoHex(p).inputValue() : "(cerrado)";
+  ok("det-100-hex-esc-no-pierde", abierto === 1 && v === "7a2e" && g.length === 0, `escribiendo «7a2e», Esc: el detalle ${abierto ? "sigue" : "SE CERRÓ"}, el campo tiene «${v}», guardó ${g.length}`);
+});
+// el mismo campo en la FORMA de la orden (PantoneInput): el mismo bug, el mismo arreglo
+const campoHexForma = p => p.locator('input[type="text"][placeholder="#HEX"]').first();
+await caso("det-101-forma-hex-no-guarda-a-medias", "pantoneinput=1", async p => {
+  await campoHexForma(p).click(); for (const ch of "ff0000") { await p.keyboard.type(ch); await espera(p, 80); }
+  const antes = await guardados(p); await p.keyboard.press("Enter"); await espera(p, 300);
+  const g = await guardados(p);
+  ok("det-101-forma-hex-no-guarda-a-medias", antes.length === 0 && g.length === 1 && /PANTONE 7621 C #ff0000$/.test(g[0]),
+    `en la forma, teclear «ff0000» guardó antes de Enter: ${antes.join(" | ") || "nada"}; con Enter: ${g.slice(antes.length).join(" | ") || "nada"}`);
+});
+await caso("det-102-forma-hex-la-base-rechaza", "pantoneinput=1&falla=pantone", async p => {
+  await campoHexForma(p).click(); for (const ch of "ff0000") { await p.keyboard.type(ch); await espera(p, 80); }
+  await p.keyboard.press("Enter"); await espera(p, 400);
+  const t = await p.evaluate(() => document.body.innerText);
+  const v = await campoHexForma(p).count() ? await campoHexForma(p).inputValue() : "(el campo desapareció)";
+  ok("det-102-forma-hex-la-base-rechaza", /No se pudo guardar/.test(t) && v === "ff0000", `en la forma, la base rechaza: ${/No se pudo guardar/.test(t) ? "lo dice" : "NO lo dice"}; el campo conserva «${v}»`);
+});
+await caso("det-95-rotulo-nombre-interno", "caso=factura&rol=admin", async p => {
+  // el elemento que TIENE el texto (no el contenedor de afuera, cuyo textContent también es «Nombre interno»: así pasaba sin deber)
+  const px = await dlg(p).evaluate(d => { const e = [...d.querySelectorAll("*")].find(x => [...x.childNodes].some(n => n.nodeType === 3 && /Nombre interno/i.test(n.textContent))); return e ? parseFloat(getComputedStyle(e).fontSize) : 0; });
+  ok("det-95-rotulo-nombre-interno", px >= 10, `«Nombre interno» a ${px} px (los rótulos de la app: 10 px)`);
 });
 
 await browser.close();

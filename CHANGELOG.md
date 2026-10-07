@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.49 — El detalle de la orden, quinta critique (revisor independiente, 23/40): lo urgente — 6-oct-2026
+
+La quinta critique la calificó un agente que no vio las anteriores: **23/40**. Las cuatro pasadas previas (23, 37, 38 y 35) las
+califiqué yo después de arreglar lo que yo había encontrado, y estaban infladas. Marcelo eligió atacar todo, por partes, con el
+detalle como diálogo. Ésta es la primera parte: lo que se arregla sin decidir nada.
+
+- **El «#HEX» de un Pantone ya no guarda a medio teclear.**
+  - Qué pasaba: lo que se guarda va al catálogo de TODAS las órdenes (`upsert_pantone`). Con 3 caracteres válidos se
+    guardaba: al teclear «ff0000», en la tercera tecla guardaba #ffff00 y el campo desaparecía. Teclear a mano SIEMPRE
+    guardaba un color equivocado; sólo pegar funcionaba. El selector de color guardaba en cada pausa del arrastre.
+  - Ahora: `HexDelPantone`, uno solo para el detalle y para la forma de la orden.
+    - El HEX se guarda con Enter, o al salir del campo si tiene sus 6 dígitos; si no, dice «Son 6 dígitos, p. ej.
+      #7A2E8C».
+    - El atajo de 3 dígitos sólo vale con Enter.
+    - El selector guarda al soltarlo.
+    - El campo tiene nombre («HEX de PANTONE 7621 C»).
+    - Si la base lo rechaza, lo dice en su tinta y lo escrito se queda para reintentar (antes el color se ponía antes de
+      guardarlo, y al fallar el campo volvía vacío).
+- 🔥 **Lo escrito en el detalle ya no se pierde cuando la orden se actualiza.** `Row` y `Seccion` se definían DENTRO de
+  `DetailModal`, así que en cada render eran componentes nuevos y React volvía a montar todo lo de adentro. Se perdía lo
+  escrito en el «#HEX» y se volvían a pedir los colores a la base en cada actualización en tiempo real. Ahora viven afuera
+  (`FilaDelDetalle`, `SeccionDelDetalle`). Lo encontró la vuelta 2.
+- **El botón que no se puede apretar se ve apagado.** «Recibimos el Trabajo», con la maquila sin precio o sin costo, salía
+  gris oscuro sólido, con manita y con Ctrl+Enter: el relleno calculado de v10.84.46 lo hacía parecer activo. Ahora va
+  apagado, con «Falta el precio al cliente» a la vista, y «Editar» (o «Editar Maquila») es la acción principal y lleva el
+  Ctrl+Enter. En el tablero sigue igual.
+- **El historial que no carga lo dice**, con «Reintentar»; antes decía «Sin cambios registrados todavía». El antes y el
+  después van en su tinta (el rojo y el verde plenos a 10 px no se leían, 3.0:1), el antes tachado y sin el riel de 2 px.
+- **«Tiempo por etapa» se lee**: el nombre de la etapa y la duración en su tinta calculada (`tintaAA`); daban 3.5 y 3.8:1.
+- **«Más» es un menú de verdad**: las flechas, Inicio y Fin mueven el foco, y Tab lo cierra dejando el foco en «Más».
+- El importe de arriba dice **«sin IVA»**, y el «Nombre interno» lleva el rótulo de la app (10 px, no 9).
+- **Compartido, revisado en cada uso**:
+  - `StageFlowHistory` y `OrderChangeHistory` también salen en la ficha expandida del tablero, que gana los mismos
+    arreglos;
+  - `PantoneInput` es la forma de la orden;
+  - `StageFlowButtons` sin variante da las mismas 161 combinaciones etapa × rol que v10.84.48.
+- **No toca** la base ni las RPC: las mismas llamadas (`upsert_pantone`, `get_pantone_by_code`, `order_change_log`), sólo
+  cuándo se hacen.
+- **Pruebas** (`detalle.mjs`, de 89 a 112; el banco usa ahora los Pantones, el tiempo por etapa y el historial REALES, con su
+  base simulada, y pinta la forma con `pantoneinput=1`):
+  - Vuelta 1, contra v10.84.48: de los 16 casos nuevos fallaban 14. det-95, que pasaba, medía el contenedor de afuera (el
+    mismo error de det-57) y se corrigió.
+  - Vuelta 2: 102 de 105. Salieron el montaje de `Row` (bug real, con su prueba det-96) y el margen de color de «en curso»
+    (4.4:1). det-71 cambió por decisión: con la acción trabada, Ctrl+Enter hace «Editar».
+  - Vuelta 3, por donde no se diseñó (doble Enter, «#FFF» con Enter, «fff» al salir, Esc escribiendo, la forma de la orden):
+    los 6 casos se escribieron junto con dos ajustes (avisar al salir con algo incompleto; sólo lectura y no apagado mientras
+    guarda, para no soltar el foco). 112 de 112.
+  - Corrida doble contra v10.84.48: fallan 21 de los 23 nuevos (los otros 2 son guardas) y, de los 89 de antes, sólo det-71,
+    el que cambió a propósito.
+  - Todas las tandas: 381 de 381 (una corrida anterior tuvo 4 caídas de red: las fuentes de Google que piden los bancos; repetida con la red estable).
+
 ## v10.84.48 — El detalle de la orden, cuarta pasada: los roles de piso y Ctrl+Enter — 6-oct-2026
 
 La cuarta critique se hizo en producción y miró más roles y etapas: Germán en CTP, producción en Máquina y Empaque, karla en

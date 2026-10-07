@@ -3008,12 +3008,15 @@ function OrderChangeHistory({orderId}) {
   const [open,setOpen]=useState(false);
   const [rows,setRows]=useState(null);
   const [loading,setLoading]=useState(false);
+  // v10.84.49 — error ≠ vacío: si la base no contesta se dice, con «Reintentar» (antes decía «Sin cambios registrados»);
+  //   el antes y el después en su tinta (el rojo y el verde plenos a 10 px no se leían) y sin el riel de 2 px a la izquierda
+  const [fallo,setFallo]=useState(false);
   const load=async()=>{
     // v10.58.43 #34: refetch en cada apertura — antes cacheaba para siempre y las
     // ediciones posteriores no aparecían al re-expandir.
-    setLoading(true);
+    setLoading(true);setFallo(false);
     try{const data=await db.getOrderChangeLog(orderId);setRows(data);}
-    catch(e){console.error("[OrderChangeHistory]",e);setRows([]);}
+    catch(e){console.warn("[OrderChangeHistory]",e);setFallo(true);}
     finally{setLoading(false);}
   };
   const toggle=()=>{const n=!open;setOpen(n);if(n)load();};
@@ -3026,26 +3029,27 @@ function OrderChangeHistory({orderId}) {
     return String(v);
   };
   return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
-    <button onClick={toggle} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10}}>
+    <button onClick={toggle} aria-expanded={open} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11}}>
       <ClockIcon size={11} weight="bold"/>Historial de cambios {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}
     </button>
     {open&&<div style={{marginTop:6}}>
-      {loading?<div style={{fontSize:10,color:C.t3,padding:"6px 0"}}>Cargando…</div>:
-       (rows&&rows.length>0)?<div style={{borderLeft:"2px solid "+C.bd,paddingLeft:12,display:"flex",flexDirection:"column",gap:6}}>
-        {rows.map((r,i)=><div key={i} style={{fontSize:10}}>
+      {loading?<div style={{fontSize:11,color:C.t2,padding:"6px 0"}}>Cargando…</div>:
+       fallo?<div role="alert" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:11,fontWeight:600,color:C.dnInk,padding:"6px 0"}}>No se pudo cargar el historial.<button onClick={load} style={{...bs(C.sf,C.tx),boxShadow:"0 0 0 0.5px "+C.bd,padding:"3px 10px",fontSize:11}}>Reintentar</button></div>:
+       (rows&&rows.length>0)?<div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {rows.map((r,i)=><div key={i} style={{fontSize:11}}>
           <div style={{color:C.tx,fontWeight:600}}>{r.field_label||r.field}</div>
           <div style={{color:C.t2}}>
-            <span style={{color:C.dn}}>{fmtV(r.field,r.value_before)}</span>
+            <span style={{color:C.dnInk,textDecoration:"line-through"}}>{fmtV(r.field,r.value_before)}</span>
             {" → "}
-            <span style={{color:C.ok}}>{fmtV(r.field,r.value_after)}</span>
+            <span style={{color:C.okInk,fontWeight:600}}>{fmtV(r.field,r.value_after)}</span>
           </div>
-          <div style={{color:C.t3,fontSize:9}}>
-            <span style={{color:AUTHOR_COLOR[r.changed_by]||C.t3,fontWeight:600}}>{AUTHOR_NAME[r.changed_by]||r.changed_by}</span>
+          <div style={{color:C.t2,fontSize:10}}>
+            <span style={{color:tintaAA(AUTHOR_COLOR[r.changed_by]||C.t2,4.6),fontWeight:600}}>{AUTHOR_NAME[r.changed_by]||r.changed_by}</span>
             {" · "}{fDT(r.changed_at)}
-            {r.stage_at_change&&<span> · <StageLbl stage={r.stage_at_change} size={9}/></span>}
+            {r.stage_at_change&&<span> · <StageLbl stage={r.stage_at_change} size={10}/></span>}
           </div>
         </div>)}
-      </div>:<div style={{fontSize:10,color:C.t3,padding:"6px 0"}}>Sin cambios registrados todavía.</div>}
+      </div>:<div style={{fontSize:11,color:C.t2,padding:"6px 0"}}>Sin cambios registrados todavía.</div>}
     </div>}
   </div>;
 }
@@ -3103,7 +3107,7 @@ function StageFlowHistory({order:o}){
   if(!data.segs.length) return null;
   const fmtDur=h=>{ if(h==null)return "—"; if(h<1)return Math.max(1,Math.round(h*60))+"m"; if(h<9.95)return h.toFixed(1)+"h"; const H=Math.round(h); if(H<24)return H+"h"; const d=Math.floor(H/24),hr=H%24; return d+"d"+(hr?" "+hr+"h":""); };
   return <div onClick={e=>e.stopPropagation()} style={{marginTop:6}}>
-    <button onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:10,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dn,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
+    <button onClick={()=>setOpen(!open)} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd,padding:"4px 10px",fontSize:11,gap:4}}><FastForwardIcon size={11} weight="bold"/>Tiempo por etapa{data.regs>0?<span style={{color:C.dnInk,fontWeight:700}}> · {data.regs} regresi{data.regs===1?"ón":"ones"}</span>:null} {open?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</button>
     {open&&<div style={{marginTop:8}}>
       {data.segs.map((s,i)=>{ const st=SM[s.stage]; const c=s.isReg?C.dn:(st?.c||C.t3); const durC=s.hours>=48?C.dn:s.hours>=24?C.amb:C.t2;
         return <div key={i} style={{display:"flex",gap:10,alignItems:"stretch"}}>
@@ -3113,15 +3117,15 @@ function StageFlowHistory({order:o}){
           </div>
           <div style={{flex:1,minWidth:0,paddingBottom:i<data.segs.length-1?10:0}}>
             <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {s.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dn}/></span>}
-              <span style={{fontSize:12,fontWeight:700,color:c}}><StageLbl stage={s.stage}/></span>
-              {!s.endpoint&&<span style={{fontSize:11,fontWeight:700,color:durC,background:durC+"14",padding:"1px 7px",borderRadius:5}}>{s.current?"en curso · ":""}{fmtDur(s.hours)}{s.current&&snoozeActive(o)?" · en espera":""}</span>}
+              {s.isReg&&<span title="Regresión (retrocedió de etapa)" style={{display:"inline-flex"}}><ArrowUUpLeftIcon size={11} weight="bold" color={C.dnInk}/></span>}
+              <span style={{fontSize:12,fontWeight:700,color:tintaAA(c,4.6)}}><StageLbl stage={s.stage}/></span>
+              {!s.endpoint&&<span style={{fontSize:11,fontWeight:700,color:tintaAA(durC),background:durC+"14",padding:"1px 7px",borderRadius:5}}>{s.current?"en curso · ":""}{fmtDur(s.hours)}{s.current&&snoozeActive(o)?" · en espera":""}</span>}
             </div>
-            <div style={{fontSize:10,color:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(AUTHOR_NAME[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
+            <div style={{fontSize:10,color:C.t2,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fDT(s.at)}{s.by?" · "+(AUTHOR_NAME[s.by]||s.by):""}{s.current?" · aquí ahora":(s.endpoint?" · fin":"")}</div>
           </div>
         </div>;
       })}
-      <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Tiempo hábil (sin fines de semana ni pausas "En espera")</div>
+      <div style={{fontSize:10,color:C.t2,marginTop:4,fontStyle:"italic"}}>Tiempo hábil (sin fines de semana ni pausas "En espera")</div>
     </div>}
   </div>;
 }
@@ -3399,7 +3403,7 @@ function ClientAliasManager({clientId, role, userLogin}){
   if(aliases===null) return null;                     // cargando
   if(!canManage && aliases.length===0) return null;   // no-admin sin alias: nada que mostrar
   return <div style={{margin:"6px 0 10px",padding:"8px 10px",background:C.sf,borderRadius:10,border:"0.5px solid "+C.bd}}>
-    <div style={{fontSize:9,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:.4,marginBottom:5,display:"inline-flex",alignItems:"center",gap:4}}><TagIcon size={10} weight="bold"/>Nombre interno</div>
+    <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.4,marginBottom:5,display:"inline-flex",alignItems:"center",gap:4}}><TagIcon size={10} weight="bold"/>Nombre interno</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
       {aliases.map(a=><span key={a} style={{display:"inline-flex",alignItems:"center",gap:4,background:C.ac+"12",color:C.ac,border:"1px solid "+C.ac+"25",borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:600}}>{a}{canManage&&<button onClick={()=>remove(a)} disabled={busy} aria-label={"Quitar "+a} style={{background:"none",border:"none",cursor:busy?"wait":"pointer",color:C.ac,padding:0,display:"inline-flex",opacity:busy?.5:1}}><XIcon size={10} weight="bold"/></button>}</span>)}
       {canManage&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}>
@@ -4234,6 +4238,11 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 //   vuelve a verse aunque el rol no tenga botón (v10.84.46 la escondía con el renglón); «CLIENTE» sólo con datos de contacto
 //   (los roles de piso veían el rótulo vacío); «El cliente no pide factura» a «⋯ Más» con su explicación (el pie de karla en
 //   Salidas tenía tres renglones); Ctrl+Enter hace la acción del rol (nunca escribiendo en un campo); sin renglones vacíos arriba.
+// v10.84.49 (quinta critique, con revisor independiente: 23/40): el «#HEX» de Pantone ya no guarda a medio teclear
+//   (HexDelPantone), el botón trabado se ve trabado y «Editar» lo destraba, el historial que falla lo dice, las flechas en
+//   «Más», «sin IVA» junto al importe y el «Nombre interno» con el rótulo de la app.
+const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
+const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
@@ -4270,8 +4279,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     finally{setDeleting(false)}
   };
   // v10.72.42 — /impeccable: filas semánticas (<dl>/<dt>/<dd>) para que el lector de pantalla asocie label↔valor. margin:0 porque la app va sin preflight.
-  const Row=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
-  const Seccion=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
+  // v10.84.49 — Row y Seccion viven FUERA del componente: definidos aquí, cada render los volvía componentes nuevos y React
+  //   volvía a montar todo lo de adentro (se perdía lo escrito en el «#HEX» de un Pantone y se volvían a pedir sus colores a
+  //   la base en cada actualización). Lo encontró la vuelta 2 de la quinta critique.
+  const Row=FilaDelDetalle,Seccion=SeccionDelDetalle;
   const printIt=()=>{onPrint(o);onClose()};
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
@@ -4315,6 +4326,10 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const canRegresar=canActFlow&&!snoozeActive(o)&&getRevertOptions(o.stage,role).length>0;
   // v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central (el visor podia abrirlo).
   const canPrint=vOwns&&canExecuteAction("print",o,role,userLogin);
+  // v10.84.49 — la maquila sin precio al cliente o sin costo del proveedor no se puede recibir: «Editar» la destraba y es
+  //   la acción principal (rellena, con Ctrl+Enter)
+  const maqFalta=o.stage==="maq_in_progress"&&(!(Number(o.maq_price)>0)||!(Number(o.maq_cost)>0));
+  const editarPrincipal=maqFalta&&(canEditAdmin||(role!=="admin"&&_canEditOwner));
 
   // «⋯ Más»: lo raro y lo destructivo, con su explicación; cada acción abre su propia confirmación en App
   const mas=[
@@ -4333,15 +4348,17 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // ¿El rol tiene una acción de flujo aquí? (los botones salen de StageFlowButtons; si no sale ninguno, «Imprimir» es la acción)
   const flujoRef=useRef(null);
   const [flujo,setFlujo]=useState({boton:false,algo:false});   // boton: hay acción de flujo · algo: hay acción o guía
-  useLayoutEffect(()=>{const el=flujoRef.current;const v={boton:!!el?.querySelector("button"),algo:!!el&&el.textContent.trim().length>0};if(v.boton!==flujo.boton||v.algo!==flujo.algo)setFlujo(v);});
+  useLayoutEffect(()=>{const el=flujoRef.current;const v={boton:!!el?.querySelector("button:not(:disabled)"),algo:!!el&&el.textContent.trim().length>0};if(v.boton!==flujo.boton||v.algo!==flujo.algo)setFlujo(v);});
   const hayFlujo=flujo.boton;
-  // Ctrl+Enter: la acción del rol (la rellena: la marca --principal de StageFlowButtons) o, si no hay, «Imprimir»
-  const imprimirRef=useRef(null);
-  const principal=()=>{const b=flujoRef.current&&[...flujoRef.current.querySelectorAll("button")].find(x=>x.style.getPropertyValue("--principal"));return b||(!hayFlujo?imprimirRef.current:null)};
-  // (si la orden cambia con el detalle abierto, la acción principal puede ser otra: el atajo se quita de la que ya no lo es)
+  // Ctrl+Enter: la acción del rol (la rellena: la marca --principal de StageFlowButtons); si la del flujo está trabada porque
+  //   falta capturar algo, «Editar», que la destraba; si no hay, «Imprimir». Un botón apagado nunca es la principal.
+  const imprimirRef=useRef(null),editarRef=useRef(null);
+  const principal=()=>{const b=flujoRef.current&&[...flujoRef.current.querySelectorAll("button:not(:disabled)")].find(x=>x.style.getPropertyValue("--principal"));
+    return b||(editarPrincipal?editarRef.current:null)||(!hayFlujo?imprimirRef.current:null)};
+  // el atajo lo declara UN botón: si la orden cambia con el detalle abierto, se quita del que ya no es el principal
   useLayoutEffect(()=>{const b=principal();
-    flujoRef.current?.querySelectorAll("button[aria-keyshortcuts]").forEach(x=>{if(x!==b){x.removeAttribute("aria-keyshortcuts");if(x.title==="Ctrl+Enter")x.removeAttribute("title");}});
-    if(b&&b!==imprimirRef.current){b.setAttribute("aria-keyshortcuts","Control+Enter");if(!b.title)b.title="Ctrl+Enter";}});
+    dialogRef.current?.querySelectorAll("button[aria-keyshortcuts]").forEach(x=>{if(x!==b){x.removeAttribute("aria-keyshortcuts");if(x.title==="Ctrl+Enter")x.removeAttribute("title");}});
+    if(b){b.setAttribute("aria-keyshortcuts","Control+Enter");if(!b.title)b.title="Ctrl+Enter";}});
 
   // lo que se ve arriba: miniaturas (la imagen se amplía al tocarla), y cuánto/para cuándo/folio para quien puede verlo
   const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);
@@ -4378,7 +4395,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
           {(o.due_date||(verPrecio&&importe)||o.invoice_folio||o.cart_folio||o.web_folio)&&<div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
             {o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalendarDotsIcon size={13} weight="bold"/>Entrega <b style={{color:C.tx}}>{fD(o.due_date)}</b></span>}
-            {verPrecio&&importe?<span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span>:null}
+            {verPrecio&&importe?<span><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span> <span style={{fontSize:11,color:C.t2}}>sin IVA</span></span>:null}
             {o.invoice_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaFolio,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_pre_assigned?<LightningIcon size={12} weight="fill" color={C.wnInk}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={13} weight="bold"/>:<ReceiptIcon size={13} weight="bold"/>}{o.invoice_folio}{verPrecio&&estadoPago?<span style={{fontFamily:"'Geist',sans-serif",fontWeight:600,color:C.okInk}}>· {estadoPago}</span>:null}</span>}
             {o.cart_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaAA(C.cart)}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</span>}
             {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
@@ -4494,9 +4511,9 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           <div style={{flex:1}}/>
           {canEditSpecsDraft&&<button onClick={()=>dispatch("edit_specs")} style={tenueAA(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar specs</button>}
           {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
-          {canEditAdmin&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
-          {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {canPrint&&<button ref={imprimirRef} onClick={printIt} aria-keyshortcuts={hayFlujo?undefined:"Control+Enter"} title={hayFlujo?undefined:"Ctrl+Enter"} style={hayFlujo?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
+          {canEditAdmin&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(C.ac,5)),justifyContent:"center"}:tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
+          {role!=="admin"&&_canEditOwner&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(isMaq?C.maq:C.ac,5)),justifyContent:"center"}:tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
+          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
     </div>
@@ -4521,7 +4538,13 @@ function MenuMasDelDetalle({cerrar,alEscape,contenedor,items,onElegir}){
   useEffect(()=>{const b=menuRef.current?.querySelector('[role="menuitem"]');if(b)b.focus();
     const fuera=e=>{if(contenedor.current&&!contenedor.current.contains(e.target))cerrar()};
     document.addEventListener("mousedown",fuera);return ()=>document.removeEventListener("mousedown",fuera)},[]);
-  return <div ref={menuRef} role="menu" aria-label="Más acciones" style={{position:"absolute",left:0,bottom:"100%",marginBottom:6,zIndex:5,background:C.bg,border:"1px solid "+C.bd,borderRadius:12,boxShadow:C.sh3,padding:4,width:320,maxWidth:"80vw",display:"flex",flexDirection:"column",gap:1}}>
+  // v10.84.49 — un role="menu" se recorre con las flechas (e Inicio/Fin); Tab lo cierra y deja el foco en «Más» (el Tab
+  //   atrapado del diálogo no lo vuelve a mover: se detiene aquí)
+  const mover=e=>{const xs=[...(menuRef.current?.querySelectorAll('[role="menuitem"]')||[])];if(!xs.length)return;const i=xs.indexOf(document.activeElement);
+    const ir=k=>{e.preventDefault();xs[(k+xs.length)%xs.length].focus();};
+    if(e.key==="ArrowDown")ir(i+1);else if(e.key==="ArrowUp")ir(i<0?xs.length-1:i-1);else if(e.key==="Home")ir(0);else if(e.key==="End")ir(xs.length-1);
+    else if(e.key==="Tab"){e.preventDefault();e.stopPropagation();(alEscape||cerrar)();}};
+  return <div ref={menuRef} role="menu" aria-label="Más acciones" onKeyDown={mover} style={{position:"absolute",left:0,bottom:"100%",marginBottom:6,zIndex:5,background:C.bg,border:"1px solid "+C.bd,borderRadius:12,boxShadow:C.sh3,padding:4,width:320,maxWidth:"80vw",display:"flex",flexDirection:"column",gap:1}}>
     {items.flatMap(it=>[
       it.divide&&items.length>1?<div key={it.k+"-linea"} style={{height:1,background:C.bd,margin:"3px 6px"}}/>:null,
       <button key={it.k} role="menuitem" onClick={()=>onElegir(it.k)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}
@@ -10683,6 +10706,42 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
 // ─── PANTONE INPUT (v10.25.0) ─────────────────────
 // Typeahead async vs cobranza public.search_pantone con chips + preview de color.
 // Cache local hexCache para evitar refetch al re-renderizar chips ya seleccionados.
+// v10.84.49 — fijarle el color a un Pantone que el catálogo no tiene. Lo que se guarda va al catálogo de TODAS las órdenes
+//   (upsert_pantone), así que se guarda sólo lo que la persona terminó: el HEX con Enter o al salir del campo (6 dígitos), y
+//   el selector al soltarlo (su «change» nativo; mientras se arrastra sólo se ve). Antes se guardaba a medio teclear: con 3
+//   caracteres válidos («ff0» de «ff0000») guardaba #ffff00 y el campo desaparecía; y el selector guardaba en cada pausa del
+//   arrastre (quinta critique del detalle, revisor independiente). onGuardar(code, hex) devuelve true si la base lo guardó; si
+//   no, lo escrito se queda para reintentar.
+function HexDelPantone({code,onGuardar,grande}){
+  const [txt,setTxt]=useState("");
+  const [aviso,setAviso]=useState("");
+  const [guardando,setGuardando]=useState(false);
+  const enVuelo=useRef(false);
+  const colorRef=useRef(null);
+  const aHex=(raw,corto)=>{let v=(raw||"").trim().replace(/^#/,"");if(corto&&/^[0-9a-fA-F]{3}$/.test(v))v=v.split("").map(c=>c+c).join("");return /^[0-9a-fA-F]{6}$/.test(v)?"#"+v.toLowerCase():null;};
+  const guardar=async hex=>{if(enVuelo.current)return;enVuelo.current=true;setGuardando(true);setAviso("");
+    try{await onGuardar(code,hex);}finally{enVuelo.current=false;setGuardando(false);}};
+  // el selector guarda al soltarlo: el «change» nativo (el onChange de React es el «input» de cada paso del arrastre)
+  useEffect(()=>{const el=colorRef.current;if(!el)return;const alSoltar=()=>guardar(String(el.value||"").toLowerCase());
+    el.addEventListener("change",alSoltar);return ()=>el.removeEventListener("change",alSoltar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[code]);
+  const confirmar=corto=>{const hex=aHex(txt,corto);if(hex){guardar(hex);return;}if(txt.trim())setAviso("Son 6 dígitos, p. ej. #7A2E8C");};
+  const tam=grande?20:16;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+    <input ref={colorRef} type="color" defaultValue="#cccccc" disabled={guardando} aria-label={"Elegir el color de "+code} title="Elegir el color (se guarda al soltarlo)"
+      style={{width:tam,height:tam,borderRadius:tam/2,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
+    {/* mientras guarda, sólo lectura y no apagado: un campo apagado suelta el foco y el diálogo perdía el Tab y los atajos */}
+    <input type="text" placeholder="#HEX" maxLength={7} value={txt} readOnly={guardando} aria-label={"HEX de "+code} aria-invalid={aviso?true:undefined}
+      onChange={e=>{setTxt(e.target.value);if(aviso)setAviso("");}}
+      onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();confirmar(true);}}}
+      onBlur={()=>{if(txt.trim())confirmar(false);}}
+      title="Escribe o pega el HEX exacto de tu guía Pantone y Enter"
+      style={{width:grande?78:64,fontSize:grande?12:11,padding:"1px 4px",borderRadius:4,border:"1px solid "+(aviso?C.dnInk:C.bd),fontFamily:"'Geist Mono',monospace"}}/>
+    {guardando&&<span style={{fontSize:10,color:C.t2}}>Guardando…</span>}
+    {aviso&&<span role="alert" style={{fontSize:11,fontWeight:600,color:C.dnInk}}>{aviso}</span>}
+  </span>;
+}
 function PantoneInput({label, value, onChange}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -10739,29 +10798,16 @@ function PantoneInput({label, value, onChange}) {
   // v10.76.1 — fijarle color a un Pantone que NO está en el catálogo (el color lo captura el operador desde
   // SU guía/software Pantone licenciado). Se guarda vía upsert_pantone → queda con vista de color para
   // siempre y para todas las órdenes.
+  // v10.84.49 — el color se pone cuando la base lo guardó (antes era optimista: al fallar, el campo se volvía a montar vacío
+  //   y se perdía lo escrito); devuelve si se guardó. v10.76.2: supabase-js RESUELVE con {data,error} (no lanza).
   const setCustomColor = async (code, hex) => {
-    setHexCache(prev => ({ ...prev, [code]: hex }));  // optimista
     setSaveErr("");
-    // v10.76.2 (scan w8pvkd758) — supabase-js RESUELVE con {data,error} (NO lanza), así que el catch no
-    // atrapaba nada: un fallo del guardado dejaba el color "puesto" pero se perdía al recargar, sin aviso.
-    // Ahora se inspecciona el error, se REVIERTE el color optimista y se avisa para que el operador reintente.
     const { error } = await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null });
-    if (error) {
-      setHexCache(prev => { const n = { ...prev }; delete n[code]; return n; });
-      setSaveErr("No se pudo guardar el color de " + code + ". Reintenta.");
-    }
+    if (error) { setSaveErr("No se pudo guardar el color de " + code + ". Reintenta."); return false; }
+    setHexCache(prev => ({ ...prev, [code]: hex }));
+    return true;
   };
-  // v10.76.4 (scan final wypx8vbd1) — debounce del <input type=color> (onChange se dispara en cada paso del
-  // arrastre → ráfaga de upserts). El HEX pegado (tryHex) guarda directo.
-  const colorDebRef = useRef(null);
-  const setColorDebounced = (code, hex) => { if (colorDebRef.current) clearTimeout(colorDebRef.current); colorDebRef.current = setTimeout(() => setCustomColor(code, hex), 350); };
-  // v10.76.2 — pegar el HEX EXACTO (de Pantone Connect / guía digital). Acepta con o sin '#', y expande el
-  // atajo de 3 dígitos (#abc→#aabbcc). Solo guarda cuando es un hex válido.
-  const tryHex = (code, raw) => {
-    let v = (raw || "").trim().replace(/^#/, "");
-    if (/^[0-9a-fA-F]{3}$/.test(v)) v = v.split("").map(ch => ch + ch).join("");
-    if (/^[0-9a-fA-F]{6}$/.test(v)) setCustomColor(code, "#" + v.toLowerCase());
-  };
+  // (el selector y el HEX viven en HexDelPantone desde v10.84.49: se guarda sólo lo terminado)
   return (
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
       <label style={lbl}>{label}</label>
@@ -10771,18 +10817,15 @@ function PantoneInput({label, value, onChange}) {
           return <div key={code} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 4px",borderRadius:14,background:C.sf,border:"1px solid "+C.bd,fontSize:11,fontWeight:600,fontFamily:"'Geist',sans-serif"}}>
             {hex
               ? <div style={{width:18,height:18,borderRadius:9,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
-              : <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
-                  <input type="color" defaultValue="#cccccc" onChange={e=>setColorDebounced(code, e.target.value)} title="Elegir el color visualmente" style={{width:20,height:20,borderRadius:10,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
-                  <input type="text" placeholder="#HEX" maxLength={7} onChange={e=>tryHex(code, e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();tryHex(code, e.target.value);}}} title="Pega aquí el HEX exacto de tu guía Pantone (ej. #7A2E1D)" style={{width:60,fontSize:10,padding:"2px 4px",borderRadius:5,border:"1px solid "+C.bd,fontFamily:"monospace"}}/>
-                </span>
+              : <HexDelPantone code={code} onGuardar={setCustomColor} grande/>
             }
             <span>{code}</span>
             <button type="button" onClick={()=>removePantone(code)} style={{border:"none",background:"transparent",cursor:"pointer",color:C.t3,fontSize:14,padding:0,marginLeft:2,lineHeight:1}} title="Quitar">×</button>
           </div>;
         })}
       </div>}
-      {arr.some(c => !hexCache[c]) && <div style={{fontSize:10,color:C.t3,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>Los Pantones con recuadro punteado no están en el catálogo: elige el color o <strong>pega su HEX</strong> (de tu guía / Pantone Connect) para fijarlo. Se guarda para la próxima.</div>}
-      {saveErr && <div style={{fontSize:10,color:"#dc2626",marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>⚠ {saveErr}</div>}
+      {arr.some(c => !hexCache[c]) && <div style={{fontSize:10,color:C.t2,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>Los Pantones con recuadro punteado no están en el catálogo: elige el color o <strong>escribe o pega su HEX</strong> (de tu guía / Pantone Connect) y Enter para fijarlo. Se guarda en el catálogo, para todas las órdenes.</div>}
+      {saveErr && <div role="alert" style={{fontSize:11,fontWeight:600,color:C.dnInk,marginTop:-2,marginBottom:6,fontFamily:"'Geist',sans-serif"}}>{saveErr}</div>}
       <div style={{position:"relative"}}>
         <input style={inp} value={query} onChange={e=>{setQuery(e.target.value);setOpen(true)}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addCustom();}}} placeholder="Buscar o escribir un Pantone (ej. 186 C, 7648, Reflex Blue)..."/>
         {open && (results.length > 0 || query.trim().length > 0) && <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#fff",borderRadius:8,border:"1px solid "+C.bd,boxShadow:C.sh3,zIndex:10,maxHeight:240,overflowY:"auto"}}>
@@ -10829,16 +10872,15 @@ function PantoneChips({codes, role}) {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codes.join(",")]);
-  const colorDeb = useRef(null);
+  // v10.84.49 — se guarda sólo lo terminado (HexDelPantone) y el color se pone cuando la base lo guardó: antes era
+  //   optimista y, al fallar, el campo se volvía a montar vacío (se perdía lo escrito)
   const saveColorNow = async (code, hex) => {
-    setHexes(prev => ({...prev, [code]: hex})); setErr("");  // optimista
+    setErr("");
     const { error } = await supabase.rpc("upsert_pantone", { p_code: code, p_hex: hex, p_name: null });
-    if (error) { setHexes(prev => { const n={...prev}; delete n[code]; return n; }); setErr("No se pudo guardar el color de "+code); }
+    if (error) { setErr("No se pudo guardar el color de "+code+". Reintenta."); return false; }
+    setHexes(prev => ({...prev, [code]: hex}));
+    return true;
   };
-  // v10.76.4 (scan final wypx8vbd1) — el <input type=color> dispara onChange en cada paso del arrastre → una
-  // ráfaga de upserts. Se DEBOUNCE para guardar una sola vez al soltar. El HEX pegado guarda directo.
-  const saveColor = (code, hex) => { if (colorDeb.current) clearTimeout(colorDeb.current); colorDeb.current = setTimeout(() => saveColorNow(code, hex), 350); };
-  const tryHex = (code, raw) => { let v=(raw||"").trim().replace(/^#/,""); if(/^[0-9a-fA-F]{3}$/.test(v))v=v.split("").map(c=>c+c).join(""); if(/^[0-9a-fA-F]{6}$/.test(v))saveColorNow(code,"#"+v.toLowerCase()); };
   return <div style={{display:"inline-flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
     {codes.map(code => {
       const hex = hexes[code];
@@ -10846,16 +10888,13 @@ function PantoneChips({codes, role}) {
         {hex
           ? <div style={{width:14,height:14,borderRadius:7,background:hex,border:"1px solid rgba(0,0,0,0.1)"}} title={hex}/>
           : canEdit
-            ? <span style={{display:"inline-flex",alignItems:"center",gap:3}}>
-                <input type="color" defaultValue="#cccccc" onChange={e=>saveColor(code,e.target.value)} title="Fijar el color (desde tu guía Pantone)" style={{width:16,height:16,borderRadius:8,border:"1px dashed "+C.t3,padding:0,cursor:"pointer",background:"transparent",flexShrink:0}}/>
-                <input type="text" placeholder="#HEX" maxLength={7} onChange={e=>tryHex(code,e.target.value)} onKeyDown={e=>{if(e.key==="Enter")tryHex(code,e.target.value);}} title="Pega el HEX exacto (Pantone Connect)" style={{width:56,fontSize:10,padding:"1px 3px",borderRadius:4,border:"1px solid "+C.bd,fontFamily:"monospace"}}/>
-              </span>
+            ? <HexDelPantone code={code} onGuardar={saveColorNow}/>
             : <div style={{width:14,height:14,borderRadius:7,background:"#e5e5e5",border:"1px dashed "+C.t3}} title="Sin color en el catálogo"/>
         }
         <span>{code}</span>
       </div>;
     })}
-    {err && <span style={{fontSize:9,color:"#dc2626"}}>⚠ {err}</span>}
+    {err && <span role="alert" style={{fontSize:11,fontWeight:600,color:C.dnInk}}>{err}</span>}
   </div>;
 }
 
@@ -12648,6 +12687,9 @@ function StageFlowButtons({o,role,onAction,variante}){
         const noPrice=!Number(o.maq_price)||Number(o.maq_price)<=0;
         const noCost=!Number(o.maq_cost)||Number(o.maq_cost)<=0;
         const incomplete=noPrice||noCost;
+        // v10.84.49 — en el detalle, apagado de verdad y con su porqué a la vista (tintaAA lo pintaba gris oscuro sólido, con
+        //   manita y con Ctrl+Enter); la acción que lo destraba («Editar») la pone el pie del detalle. El tablero, igual.
+        if(det&&incomplete)return <><button disabled style={{...bt(C.sf,C.t2),border:"1px solid "+C.bd,cursor:"not-allowed"}}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button><span style={{fontSize:12,fontWeight:600,color:C.wnInk}}>Falta {noPrice&&noCost?"el precio al cliente y el costo del proveedor":noPrice?"el precio al cliente":"el costo del proveedor"}</span></>;
         return <>
           {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
           <button onClick={()=>onAction(o.id,"advance","maq_received")} style={B(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>

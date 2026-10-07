@@ -1,6 +1,9 @@
 // Banco del DETALLE DE LA ORDEN: DetailModal EXTRAÍDO de un App.jsx, con su lógica real (etapas, permisos, quién puede qué,
-// los botones de flujo, los nombres internos) y lo que lee o escribe la base SIMULADO: la imagen (SignedImg), los pantones,
-// el tiempo por etapa, el historial de cambios, Storage y la tabla al borrar el archivo, y las RPC de los nombres internos.
+// los botones de flujo, los nombres internos, y desde v10.84.49 los pantones, el tiempo por etapa y el historial de cambios) y
+// lo que lee o escribe la base SIMULADO: la imagen (SignedImg), Storage y la tabla al borrar el archivo, las RPC de los
+// nombres internos y de los pantones (get_pantone_by_code, upsert_pantone) y el historial (db.getOrderChangeLog).
+// Más variantes: caso=pantone (un Pantone sin color en el catálogo) · falla=pantone (la base rechaza fijar el color) ·
+//   falla=historial (el historial no carga) · falla=historial1 (no carga la primera vez; «Reintentar» sí).
 // Uso: node gen-detalle.mjs <App.jsx> <dirSalida>
 // Variantes por URL: etapa=… · cliente=… · sinentrega=1 (sin fecha de entrega) ·caso=factura|partes|resto|espera|maquila|cancelada|borrador|salidas|remision|sinempaque|archivo (por defecto factura) ·
 //   rol=karla|admin|produccion|preprensa|german|secretaria|vendedor|visor (por defecto karla) · falla=storage|tabla (borrar el
@@ -43,6 +46,11 @@ const partes = [
   multi(/^const ETAPA_NOMBRE = \{/, "ETAPA_NOMBRE"), multi(/^const etapaPreviaDeshacer = /, "etapaPreviaDeshacer"),
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),
+  // el tiempo por etapa, el historial de cambios y los pantones REALES (v10.84.49): la base que leen y escriben va simulada abajo
+  line(/^function bizMsBetween\(/, "bizMsBetween"), line(/^function bizHoursBetween\(/, "bizHoursBetween"), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
+  fnBlock("StageFlowHistory"), fnBlock("OrderChangeHistory"),
+  ...["HexDelPantone"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))), fnBlock("PantoneChips"),
+  fnBlock("PantoneInput"),   // el mismo campo del HEX en la forma de la orden (pantoneinput=1)
   `const Q = new URLSearchParams(location.search);
 const CASO = Q.get("caso") || "factura", ROL = Q.get("rol") || "karla", FALLA = Q.get("falla") || "";
 const LOGIN = Q.get("login") || { karla: "karla", admin: "admin", produccion: "gerardo", preprensa: "noemi", german: "german", secretaria: "secretaria", vendedor: "manuel", visor: "dulce" }[ROL] || ROL;
@@ -53,19 +61,28 @@ const anotar = t => { bitacora.push(t); window.dispatchEvent(new Event("bitacora
 const supabase = {
   storage: { from: b => ({ remove: async rutas => { anotar("storage:remove " + b + " " + rutas.join(",")); return FALLA === "storage" ? { data: null, error: { message: "Storage no contestó" } } : { data: rutas, error: null }; } }) },
   // los nombres internos del cliente (ClientAliasManager real): falla=alias rechaza agregar uno
-  rpc: async (n, a) => { anotar("rpc:" + n); if (n === "get_client_aliases") return { data: [], error: null };
+  rpc: async (n, a) => {
+    // los pantones: el catálogo conoce dos; upsert_pantone escribe en el catálogo de TODOS (falla=pantone lo rechaza)
+    if (n === "get_pantone_by_code") { const hex = { "SELECCION DE COLOR": "#3d3d3d", "PANTONE 185 C": "#e4002b" }[a.p_code]; return { data: hex ? [{ code: a.p_code, hex }] : [], error: null }; }
+    if (n === "upsert_pantone") { anotar("rpc:upsert_pantone " + a.p_code + " " + a.p_hex); return FALLA === "pantone" ? { data: null, error: { message: "permiso denegado" } } : { data: null, error: null }; }
+    anotar("rpc:" + n); if (n === "get_client_aliases") return { data: [], error: null };
     if (FALLA === "alias") return { data: null, error: { message: "permiso denegado" } }; return { data: [a.p_alias], error: null }; },
   from: t => ({ update: campos => ({ eq: async (c, v) => { anotar("tabla:update " + t + " " + JSON.stringify(campos)); return FALLA === "tabla" ? { error: { message: "permiso denegado" } } : { error: null }; } }) }),
 };
-const db = { orderFolioIsCancelled: async () => CASO === "foliocancelado" };
+// el historial de cambios: getOrderChangeLog LANZA si la base falla (falla=historial siempre; historial1, sólo la primera vez)
+let vecesHistorial = 0;
+const db = { orderFolioIsCancelled: async () => CASO === "foliocancelado",
+  getOrderChangeLog: async () => { vecesHistorial++; anotar("db:getOrderChangeLog");
+    if (FALLA === "historial" || (FALLA === "historial1" && vecesHistorial === 1)) throw new Error("getOrderChangeLog: 503 Service Unavailable");
+    return [{ field: "price", field_label: "Precio", value_before: 5200, value_after: 5649, stage_at_change: "salidas", changed_by: "karla", changed_at: "2026-09-30T18:00:00Z" },
+            { field: "due_date", field_label: "Fecha de entrega", value_before: "2026-09-27", value_after: "2026-09-29", stage_at_change: "draft", changed_by: "secretaria", changed_at: "2026-09-25T17:00:00Z" }]; } };
 const propsArchivoFirmado = () => ({});
 const firmarOrderFile = async src => src;
 const IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#dfe6ee"/><text x="300" y="400" font-size="48" text-anchor="middle" fill="#4a6572">ARTE</text></svg>');
-function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img src={IMG} alt={alt} style={style} onClick={onClick} title={title} />; }
-function PantoneChips({ codes }) { return <span>{codes.join(", ")}</span>; }
-function StageFlowHistory() { return <button>Tiempo por etapa</button>; }
-function OrderChangeHistory() { return <button>Historial de cambios</button>; }`,
-  fnBlock("ClientAliasManager"), fnBlock("DetailModal"),
+function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img src={IMG} alt={alt} style={style} onClick={onClick} title={title} />; }`,
+  fnBlock("ClientAliasManager"),
+  ...["FilaDelDetalle", "SeccionDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
+  fnBlock("DetailModal"),
   ...["MasDelDetalle", "MenuMasDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const BASE = { id: "OP-MUH77BVYVQW", client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", client_agent: "ALEJANDRA DELGADO",
   client_email: "erigrafia@hotmail.com", client_phone: "4731296625", client_lada: "+52", client_rfc: "MAHS680416LEA",
@@ -97,6 +114,8 @@ const CASOS = {
     snooze_stage: "salidas", snoozed_by: "karla", snooze_until: null },
   archivo: { ...BASE, production_number: "P-0612", stage: "design", file_url: "https://x.supabase.co/storage/v1/object/public/order-files/P-0612/arte%20final.pdf",
     file_name: "arte final.pdf", image_url: null, image_url_2: null },
+  // un Pantone que el catálogo no tiene (se le puede fijar el color) y uno que sí
+  pantone: { ...BASE, production_number: "P-0599", stage: "ctp", pantone_front: ["PANTONE 7621 C"], pantone_back: ["PANTONE 185 C"], image_url_2: null },
 };
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente
 const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage: Q.get("etapa"), order_type: Q.get("etapa").startsWith("maq_") ? "maquila" : (CASOS[CASO] || CASOS.factura).order_type } : {}),
@@ -108,6 +127,11 @@ function Banco() {
   const [orden, setOrden] = useState(ORDEN);
   useEffect(() => { window.__cambiar = p => setOrden(o => ({ ...o, ...p })); }, []);
   useEffect(() => { const f = () => refresca(n => n + 1); window.addEventListener("bitacora", f); return () => window.removeEventListener("bitacora", f); }, []);
+  // pantoneinput=1: el campo de Pantones de la FORMA de la orden (PantoneInput), con el mismo «#HEX» que el detalle
+  if (Q.get("pantoneinput") === "1") return <div style={{ padding: 20, background: C.canvas, minHeight: "100vh" }}>
+    <button id="abrir-detalle">(la forma de la orden)</button>
+    <PantoneInput label="Pantones frente" value={["PANTONE 7621 C", "PANTONE 185 C"]} onChange={v => anotar("onChange " + v.join(","))} />
+    <pre id="log">{bitacora.join("\\n")}</pre></div>;
   // flujos=1: los botones de flujo de TODAS las etapas con todos los roles, como en el tablero (sin variante): para comparar
   //   versiones y comprobar que el tablero no cambió
   if (Q.get("flujos") === "1") return <div>{ALL_S.flatMap(s => ["admin", "karla", "produccion", "preprensa", "german", "secretaria", "vendedor"].map(r =>
