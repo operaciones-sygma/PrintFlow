@@ -82,7 +82,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 269 pruebas, ~6 min; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 331 pruebas, ~6 min; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -152,7 +152,9 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
     `romper-folio.mjs`): el total a la vista, los pagos capturados ya no se pierden (Corona y Cuadra los borraban sin
     preguntar), botones legibles, y `getFolioEmitterEnabled` devuelve `null` en un error (antes «apagado», que abría el modo
     manual con la serie de Alpha). El folio por OC (`AssignOCFolioModal`) la siguió en v10.84.42-45 (40/40, 112 casos, `tests/romper/oc.mjs`).
-    Siguen en la lista: el detalle de la orden (DetailModal), el Kanban, las puertas de cancelar, OrderForm y el plan matriz.
+    El detalle de la orden (DetailModal) en v10.84.46 (23/40 al empezar; 62 casos, `tests/romper/detalle.mjs`, y
+    `StageFlowButtons` con su `variante="detalle"`: sin ella, el tablero da exactamente lo mismo).
+    Siguen en la lista: el Kanban, las puertas de cancelar, OrderForm y el plan matriz.
   - **Todo lo que se implementa se prueba como usuario tratando de romperlo** (Marcelo, 5-oct), con pruebas escritas que
     afirman lo que debería pasar. PrintFlow no tiene cuenta de pruebas: el **banco** extrae los modales de `App.jsx` con la
     base simulada (`claude-navegador/banco-printflow/`: `gen-banco.mjs`, `romper-partes.mjs`, `LEEME.md`). La primera

@@ -380,6 +380,15 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   lleva un tope (8 s) que lo trata como un error con su salida («Reintentar»).
 - **Ctrl+Enter abre la pregunta, nunca crea** (v10.84.44): el atajo del botón principal hace exactamente lo que hace el botón,
   con la misma pregunta antes de crear; el botón lo declara en `aria-keyshortcuts`.
+- **El pie fijo va FUERA del área que hace scroll** (v10.84.46): el diálogo es una columna (encabezado, cuerpo con
+  `overflowY:auto` y `minHeight:0`, pie). Un pie `position:sticky` dentro del cuerpo deja asomar los renglones por debajo
+  (el padding del panel queda bajo el pie): pasó en el detalle de la orden a 1366 y a 1920.
+- **La tinta de un color se calcula, no se inventa** (v10.84.46): `tintaAA(color)` oscurece el token hasta que el blanco
+  encima (o el color como texto) pase AA, y `tenueAA(color)` es su botón teñido. Para los colores de etapa, que no tienen
+  tinta escrita; los semáforos usan la suya (`C.okInk`, `C.wnInk`, `C.dnInk`, `C.emrInk`).
+- **Lo raro en «⋯ Más» también en los diálogos** (v10.84.46): como en la ficha, cada acción con su explicación de una línea
+  y su propia confirmación. El menú se cierra con Esc por el `escStack` (un componente con `useEscClose`), nunca con un
+  listener propio, para que el primer Esc cierre el menú y no el diálogo.
 - **Un recuadro por idea** (v10.84.45): lo que se va a crear (qué, por cuánto, a quién y cómo va el folio) es UN resumen, no
   una nota y una vista previa seguidas. Una nota que sólo repite lo que otro recuadro ya enmarca se mete en él.
 - **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
 // v10.81.7 — CTP contador: cierre de los P3 restantes del scan (wf wzsz8pawt). Se retiró código muerto
@@ -2754,6 +2754,13 @@ const compressBlobHard = (blob, maxDim=640, q=0.45) => new Promise((resolve) => 
 const lbl={display:"block",fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",letterSpacing:.3,marginBottom:6};
 const bt=(bg,c="#fff")=>({background:bg,color:c,border:"none",borderRadius:10,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:6});
 const bs=(bg,c="#fff")=>({...bt(bg,c),padding:"6px 14px",fontSize:11,borderRadius:10,minHeight:40}); // v10.72.18 — touch target ~40px de ALTO (solo minHeight: no cambia el ancho → no rompe las filas densas de íconos; además alinea con los bt de la misma fila)
+// v10.84.46 — la TINTA de un color: el mismo tono, oscurecido hasta que el blanco encima (o el color como texto sobre fondo
+//   claro) pase AA con holgura. Para los botones y etiquetas de color del detalle de la orden; los semáforos ya tienen la suya
+//   escrita (C.okInk, C.wnInk, C.dnInk, C.emrInk). Sin colores nuevos a mano: se calcula del token.
+const lumHex=h=>{const n=parseInt(h.slice(1,7),16),f=x=>{x/=255;return x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4)};return 0.2126*f(n>>16&255)+0.7152*f(n>>8&255)+0.0722*f(n&255)};
+const tintaAA=(h,meta=5.6)=>{if(!/^#[0-9a-f]{6}$/i.test(String(h||"")))return h;let r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);for(let i=0;i<40;i++){const x="#"+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");if(1.05/(lumHex(x)+0.05)>=meta)return x;r*=0.92;g*=0.92;b*=0.92}return C.tx};
+// el botón teñido: el color al 8% de fondo, su contorno y la letra en su tinta
+const tenueAA=c=>({...bt(c+"14",tintaAA(c)),border:"1px solid "+c+"55"});
 // v10.72.39 — /impeccable polish: handlers de hover compartidos (leve elevación) para los botones de acción del header. El transition global de box-shadow lo anima; en leave vuelve a sin sombra.
 const hoverLift={onMouseEnter:e=>{e.currentTarget.style.boxShadow="0 2px 8px -2px rgba(26,26,31,.22)"},onMouseLeave:e=>{e.currentTarget.style.boxShadow="none"}};
 // v10.72.40 — /impeccable craft (command palette): plataforma para el hint de teclado (⌘ en Mac, Ctrl en Windows) + estilo de keycap.
@@ -4211,6 +4218,18 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     </div>
   </div>;
 }
+// v10.84.46 (/impeccable critique 23/40) — el detalle de la orden:
+//   · el encabezado contesta de quién, qué, cuánto y para cuándo (cliente, producto y cantidad, entrega, importe, folio) con la
+//     imagen en MINIATURA que se amplía; antes la imagen (hasta 280 px) iba antes que el cliente y arriba sólo el id interno.
+//   · el pie FUERA del área que hace scroll: antes era sticky dentro del cuerpo y los renglones se asomaban por debajo.
+//   · una sola acción rellena (la del rol, en una tinta que pasa AA); lo raro y lo destructivo (Regresar, folio anticipado,
+//     cancelar con nota de crédito, deshacer cancelación, liberar folio, devolver saldo, folio de Alpha) en «⋯ Más», cada uno con
+//     su explicación y su propia confirmación, como en la ficha. Antes: tarjetas grandes de colores y un pie con seis rellenos.
+//   · Tab no se sale (atraparTab, como los demás diálogos desde v10.84.33).
+//   · borrar el archivo de producción mira lo que contesta la base (supabase-js no lanza): si Storage no lo borra, la orden lo
+//     conserva y se dice; antes se le quitaba igual y no se avisaba nada.
+//   · menores: «NC emitida en SAT» sólo si hubo folio; sin «FLUJO» vacío; sin emojis; lo de la placa sólo antes de CTP; el
+//     precio una vez; «Descargar»; los textos de estado en tinta.
 function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   useEscClose(onClose);
   // v10.72.42 — /impeccable: foco al abrir + restaurar al cerrar (a11y de modal; antes el foco quedaba huérfano).
@@ -4221,21 +4240,34 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const vOwns=role!=="vendedor"||!o.created_by||o.created_by===userLogin||isVendedorOwnerByAgent(role,userLogin,o);
   const [showDeletePrompt,setShowDeletePrompt]=useState(false);
   const [deleting,setDeleting]=useState(false);
+  const [archivoBorrado,setArchivoBorrado]=useState(false);
+  const [errBorrar,setErrBorrar]=useState("");
   // v10.81.0 — "Re-facturar orden": si el folio de la orden ya apunta a una factura CANCELADA (y nadie vivo lo lleva),
   // ofrecer liberarlo para volver a facturar. Se consulta al RPC al abrir el detalle (solo admin/karla con folio).
   const [folioCancelado,setFolioCancelado]=useState(false);
   const canRefacturar=(role==="admin"||role==="karla")&&!!o.invoice_folio&&!o.stage.includes("cancelled");
   useEffect(()=>{let alive=true;if(canRefacturar){db.orderFolioIsCancelled(o.id).then(v=>{if(alive)setFolioCancelado(v)}).catch(()=>{})}return ()=>{alive=false}},[o.id,canRefacturar]);
+  // v10.84.46 — supabase-js NO lanza: se mira lo que contesta cada paso (lo mismo que borrarArchivoDeOrden en «Archivos»,
+  //   v10.84.41, que vive dentro de StorageTab). Si Storage no lo borra, la orden lo conserva; si la orden no se actualiza, se
+  //   dice. Antes ninguna de las dos cosas se miraba y a la orden se le quitaba el archivo aunque siguiera en el servidor.
   const deleteFile=async()=>{
     // v10.54.10 — defensa en profundidad: aunque el prompt solo se muestra a
     // preprensa/german/admin, validar también aquí por si llegan por otro path.
     if(!canExecuteAction("delete_file",o,role,userLogin)){return}
-    setDeleting(true);
-    try{const path=o.file_url.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id)}catch{}
-    setDeleting(false);setShowDeletePrompt(false);
+    const nombre="«"+(o.file_name||"el archivo")+"»";
+    setDeleting(true);setErrBorrar("");
+    try{
+      const path=o.file_url.split("/order-files/")[1];
+      if(path){const {error}=await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);if(error){setErrBorrar("No se pudo borrar "+nombre+" del servidor ("+(error.message||"error")+"). La orden lo conserva.");return}}
+      const {error:upErr}=await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);
+      if(upErr){setErrBorrar("Se borró "+nombre+" del servidor, pero no se pudo quitar de la orden ("+(upErr.message||"error")+").");return}
+      setArchivoBorrado(true);setShowDeletePrompt(false);
+    }catch(e){setErrBorrar("No se pudo borrar "+nombre+": "+(e?.message||e))}
+    finally{setDeleting(false)}
   };
   // v10.72.42 — /impeccable: filas semánticas (<dl>/<dt>/<dd>) para que el lector de pantalla asocie label↔valor. margin:0 porque la app va sin preflight.
   const Row=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
+  const Seccion=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
   const printIt=()=>{onPrint(o);onClose()};
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
@@ -4265,39 +4297,90 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const _canEditOwner=(isMaq&&isSec(role)&&_ownEdit&&(!o.stage.includes("delivered")||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&!o.stage.includes("cancelled")&&canEditWebOrder(o,role))
     ||(!isMaq&&isSec(role)&&_ownEdit&&o.stage==="draft"&&!(o.validated_by_production&&o.validated_by_preprensa)&&canEditWebOrder(o,role))
     ||(!isMaq&&role==="vendedor"&&canVendedorEditPreProd(role,userLogin,o)&&o.stage!=="draft");
+  const canEditAdmin=role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines));
+  // v10.84.46 — lo que en el borrador ponían los botones de flujo («Editar Specs», «Revisar y Editar») va en el pie, una vez:
+  //   el admin ya tenía «Editar» (la misma acción que «Revisar y Editar»), y salían tres botones de editar.
+  const canEditSpecsDraft=o.stage==="draft"&&canActFlow&&(role==="preprensa"||role==="admin");
+  const canRevisarDraft=o.stage==="draft"&&canActFlow&&role==="produccion";
+  const canHistoricFolio=(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */;
+  // v10.82.0 — DEVOLVER EL SALDO APLICADO A LA ORDEN EQUIVOCADA. Se gatea por credit_applied_at (la columna, no el regex
+  //   sobre invoice_reason): los 21 consumos contra orden la tienen. Las canceladas NO lo ofrecen: el puente ya les devolvió el saldo.
+  const canDevolverSaldo=(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled");
+  // v10.84.11 — «Deshacer cancelación» (admin): P-0350 se canceló por error el 21-sep y sólo se pudo revertir por SQL.
+  const canDeshacerCancelacion=role==="admin"&&o.stage?.includes("cancelled")&&!!o.cancelled_at;
+  const canRegresar=canActFlow&&!snoozeActive(o)&&getRevertOptions(o.stage,role).length>0;
+  // v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central (el visor podia abrirlo).
+  const canPrint=vOwns&&canExecuteAction("print",o,role,userLogin);
+
+  // «⋯ Más»: lo raro y lo destructivo, con su explicación; cada acción abre su propia confirmación en App
+  const mas=[
+    canRegresar&&{k:"revert",icono:<ArrowUUpLeftIcon size={14} weight="bold"/>,color:C.wnInk,t:"Regresar a una etapa anterior",d:"Eliges a qué etapa vuelve."},
+    canPreInvoice&&{k:"pre_invoice",icono:<LightningIcon size={14} weight="fill"/>,color:C.fac,t:"Asignar folio anticipado",d:"Antes de entregar: para quien paga por adelantado o pide anticipo."},
+    canHistoricFolio&&{k:"apply_historic_folio",icono:<ReceiptIcon size={14} weight="bold"/>,color:C.fac,t:o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha",d:o.created_by==="import-historico"?"Registra el folio de una orden histórica.":"Registra un folio que Alpha ya emitió."},
+    canRefacturar&&folioCancelado&&{k:"refacturar",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.ac,t:"Liberar folio cancelado",d:"La factura "+o.invoice_folio+" ya está cancelada: la orden vuelve a ser facturable (para sustituir una vigente, «Re-facturar» en CobranzaFlow)."},
+    canDevolverSaldo&&{k:"deshacer_saldo",icono:<ArrowUUpLeftIcon size={14} weight="bold"/>,color:C.dnInk,t:"Devolver saldo",d:"Regresa el saldo a la bolsa del cliente y deja la orden pendiente de facturar."},
+    canDeshacerCancelacion&&{k:"deshacer_cancelacion",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.wnInk,t:"Deshacer cancelación",d:"Si se canceló por error: vuelve a "+vuelveAlDeshacer(o)+(o.invoice_folio?" con su folio "+o.invoice_folio:"")+". Si canceló una factura propia con cobros, lo ve Dirección."},
+    canCancelWithNC&&{k:"cancel_with_nc",icono:<XIcon size={14} weight="bold"/>,color:C.dnInk,t:"Cancelar con nota de crédito",d:"Tiene folio "+o.invoice_folio+": cancelarla genera una nota de crédito pendiente.",divide:true},
+  ].filter(Boolean);
+  const [masAbierto,setMasAbierto]=useState(false);
+
+  // ¿El rol tiene una acción de flujo aquí? (los botones salen de StageFlowButtons; si no sale ninguno, «Imprimir» es la acción)
+  const flujoRef=useRef(null);
+  const [hayFlujo,setHayFlujo]=useState(false);
+  useLayoutEffect(()=>{const h=!!flujoRef.current?.querySelector("button");if(h!==hayFlujo)setHayFlujo(h);});
+
+  // lo que se ve arriba: miniaturas (la imagen se amplía al tocarla), y cuánto/para cuándo/folio para quien puede verlo
+  const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);
+  const verPrecio=!hp&&vOwns;
+  const importe=isMaq?o.maq_price:o.price;
+  const tintaFolio=o.invoice_type==="factura"?C.fac:C.okInk;
+  const antesDeCtp=["draft","design","proof_printing","proof_client","ctp"].includes(o.stage);
+  const estadoPago=o.payment_status==="paid"?"pagada":o.payment_status==="partial"?"pago parcial":null;
+  const primaria=st?.c||C.t3;
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:998}} onClick={onClose}>
-    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:600,width:"94%",maxHeight:"85vh",overflowY:"auto",outline:"none"}} onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-        <div>
-          {o.cart_folio?<div style={{display:"flex",alignItems:"center",gap:6,fontSize:22,fontWeight:800,color:C.cart,letterSpacing:1,lineHeight:1.1}}><ShoppingCartIcon size={20} weight="bold"/>{o.cart_folio}</div>:null}
-          {o.web_folio?<div style={{fontSize:12,fontWeight:700,color:C.t2,letterSpacing:0.5,marginTop:2}}>{o.web_folio}</div>:null}
-          {o.invoice_folio?<div style={{fontSize:16,fontWeight:800,color:o.invoice_type==="factura"?C.fac:C.live,letterSpacing:0.5,marginTop:2}}>{o.invoice_pre_assigned?<LightningIcon size={13} weight="fill" color={C.amb} style={{verticalAlign:"-2px",marginRight:2}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={14} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={14} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{o.invoice_folio}</div>:null}
-          <div style={{fontSize:(o.cart_folio||o.web_folio)?10:9,color:C.t3,marginTop:(o.cart_folio||o.web_folio)?2:0}}>{o.id}</div>
-          <div style={{fontSize:20,fontWeight:800}}>{o.production_number||o.client}</div>
-          <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
-            <Badge color={st?.c||C.t3}><StageLbl stage={o.stage} size={10}/></Badge>
-            {o.source==="web"&&<Badge color={C.cart} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
-            {o.priority!=="normal"&&PM[o.priority]&&<Badge color={PM[o.priority].c}><PrioLbl priority={o.priority}/></Badge>}
-            {o.has_post_invoice_edits&&<Badge tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={11} weight="fill"/>}>Editada post-factura</Badge>}
+    <div ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Detalle de orden "+(o.production_number||o.id)} onKeyDown={atraparTab}
+      style={{background:C.bg,borderRadius:20,maxWidth:600,width:"94%",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}} onClick={e=>e.stopPropagation()}>
+      {/* el encabezado: de quién, qué, cuánto y para cuándo, sin bajar */}
+      <div style={{display:"flex",gap:14,alignItems:"flex-start",padding:"20px 20px 14px 24px",borderBottom:"0.5px solid "+C.bd}}>
+        {imgs.length>0&&<div style={{display:"flex",gap:6,flexShrink:0}}>{imgs.slice(0,2).map((src,i)=><SignedImg key={i} src={src} alt={"Imagen "+(i+1)+" — "+(o.product_type||o.product||o.production_number||"")} title="Ver en grande"
+          fallback={<div style={{width:72,height:72,borderRadius:10,background:C.sf}}/>} onClick={async()=>{const u=await firmarOrderFile(src);window.open(u||src,"_blank","noopener")}}
+          style={{width:72,height:72,objectFit:"cover",borderRadius:10,background:C.sf,cursor:"zoom-in",border:"0.5px solid "+C.bd}}/>)}</div>}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>{o.production_number||o.client}</span>
+            <Badge color={primaria} style={{color:tintaAA(primaria)}}><StageLbl stage={o.stage} size={10}/></Badge>
+            {o.source==="web"&&<Badge color={C.cart} style={{color:tintaAA(C.cart)}} icon={<GlobeIcon size={11} weight="bold"/>}>Web{o.web_order_ref?" · "+o.web_order_ref:""}</Badge>}
+            {o.priority!=="normal"&&PM[o.priority]&&<Badge color={PM[o.priority].c} style={{color:tintaAA(PM[o.priority].c)}}><PrioLbl priority={o.priority}/></Badge>}
+            {o.has_post_invoice_edits&&<Badge tone="warn" style={{color:C.wnInk}} title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={11} weight="fill"/>}>Editada después de facturar</Badge>}
+          </div>
+          {o.production_number&&o.client&&<div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:3,lineHeight:1.3}}>{o.client}</div>}
+          {(o.product_type||o.product||o.quantity)&&<div style={{fontSize:12,color:C.t2,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[o.product_type||o.product,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>}
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:7,fontSize:12,color:C.t2}}>
+            {o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CalendarDotsIcon size={13} weight="bold"/>Entrega <b style={{color:C.tx}}>{fD(o.due_date)}</b></span>}
+            {verPrecio&&importe?<span style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:C.tx,fontSize:13}}>{fmt(importe)}</span>:null}
+            {o.invoice_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaFolio,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_pre_assigned?<LightningIcon size={12} weight="fill" color={C.wnInk}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={13} weight="bold"/>:<ReceiptIcon size={13} weight="bold"/>}{o.invoice_folio}{verPrecio&&estadoPago?<span style={{fontFamily:"'Geist',sans-serif",fontWeight:600,color:C.okInk}}>· {estadoPago}</span>:null}</span>}
+            {o.cart_folio&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontWeight:700,color:tintaAA(C.cart)}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</span>}
+            {o.web_folio&&<span style={{fontWeight:600,color:C.t2}}>{o.web_folio}</span>}
           </div>
         </div>
-        <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t3,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40}}><XIcon size={20} weight="bold"/></button>
+        <button onClick={onClose} aria-label="Cerrar" title="Cerrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:8,display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:40,minHeight:40,flexShrink:0}}><XIcon size={20} weight="bold"/></button>
       </div>
-      {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dn,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
-      {(()=>{const imgs=[o.image_url,o.image_url_2,!o.image_url&&!o.image_url_2?o.image:null,!o.image_url&&!o.image_url_2&&!o.image&&o.file_url&&/\.(jpe?g|png|gif|webp)$/i.test(o.file_name||"")?o.file_url:null].filter(Boolean);if(imgs.length===0)return null;return <div style={{display:"grid",gridTemplateColumns:imgs.length>1?"1fr 1fr":"1fr",gap:8,marginBottom:12}}>{imgs.map((src,i)=><SignedImg key={i} src={src} alt={"Imagen "+(i+1)+" — "+(o.product_type||o.product||o.id)} fallback={<div style={{width:"100%",height:280,borderRadius:12,background:C.sf}}/>} onClick={async()=>{const u=await firmarOrderFile(src);window.open(u||src,"_blank","noopener")}} title="Click para ampliar" style={{width:"100%",maxHeight:280,objectFit:"contain",borderRadius:12,background:C.sf,cursor:"pointer"}}/>)}</div>})()}
-      {o.plate_status&&<div style={{marginBottom:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (auto-salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
-      <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}>Cliente</div>
-      <Row l="Nombre" v={o.client}/>
+
+      {/* el cuerpo: lo único que hace scroll */}
+      <div style={{flex:1,minHeight:0,overflowY:"auto",padding:"4px 24px 18px"}}>
+      {o.sin_empaque_sygma&&<div style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 4px",padding:"9px 12px",background:C.dn+"10",border:"1.5px solid "+C.dn+"45",borderRadius:10}}><PackageIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><div style={{fontSize:11.5,fontWeight:700,color:C.dnInk,lineHeight:1.35}}>Empaque SIN logo de SYGMA · trabajo white-label (imprenta externa). La orden impresa va sin logo.</div></div>}
+      {o.plate_status&&antesDeCtp&&<div style={{marginTop:10}}><Badge color={o.plate_status==="existing"?C.live:C.ctp} style={{color:tintaAA(o.plate_status==="existing"?C.live:C.ctp)}} strong icon={o.plate_status==="existing"?<ArrowsClockwiseIcon size={11} weight="bold"/>:<PlusIcon size={11} weight="bold"/>}>{o.plate_status==="existing"?"Placa ya existe (salta CTP)":"Nueva placa CTP requerida"}</Badge></div>}
+      {(o.client_id||(!hp&&vOwns&&(o.client_agent||o.client_email||o.client_phone||o.client_rfc)))&&<><Seccion>Cliente</Seccion>
       {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
-      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}
-      <div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Producto</div>
-      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString()+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" ⏱️ auto":""):null}/>
-      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Especificaciones</div><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
+      {!hp&&vOwns&&<><Row l="Contacto" v={o.client_agent}/><Row l="Email" v={o.client_email}/><Row l="Teléfono" v={o.client_phone?(o.client_lada||"+52")+" "+o.client_phone:null}/><Row l="RFC" v={o.client_rfc}/></>}</>}
+      <Seccion>Producto</Seccion>
+      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
-      {!hp&&vOwns&&!isMaq&&o.price&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Precio</div><Row l="Precio MXN" v={fmt(o.price)}/></>}
-      {!hp&&vOwns&&isMaq&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Maquila</div><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
-      {vOwns&&o.maquila_provider&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",display:"flex",alignItems:"center",gap:6,marginTop:12,marginBottom:4}}><TruckIcon size={12} weight="bold" color={C.maq}/>Proveedor Maquila</div><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><WhatsappLogoIcon size={11} weight="bold"/>Teléfono</span>} v={o.maquila_phone}/>}{o.maquila_email&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><EnvelopeIcon size={11} weight="bold"/>Email</span>} v={o.maquila_email}/>}</>}
+      <Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>
+      {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><Seccion>Especificaciones</Seccion><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
+      {!hp&&vOwns&&isMaq&&<><Seccion>Maquila</Seccion><Row l="Proveedor" v={o.maq_provider}/><Row l="Costo" v={o.maq_cost?fmt(o.maq_cost):null}/><Row l="Precio" v={o.maq_price?fmt(o.maq_price):null}/></>}
+      {vOwns&&o.maquila_provider&&<><Seccion icono={<TruckIcon size={12} weight="bold" color={C.maq}/>}>Proveedor Maquila</Seccion><Row l="Proveedor" v={o.maquila_provider}/>{o.maquila_phone&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><WhatsappLogoIcon size={11} weight="bold"/>Teléfono</span>} v={o.maquila_phone}/>}{o.maquila_email&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><EnvelopeIcon size={11} weight="bold"/>Email</span>} v={o.maquila_email}/>}</>}
 
       {/* 🆕 v10.9.0 — Sección INFO FISCAL */}
       {o.grouped_invoice_folio&&!o.invoice_folio&&!hp&&vOwns&&<Row l="Facturada agrupada en" v={<span style={{color:C.fac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}><LinkIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.grouped_invoice_folio}</span>}/>}
@@ -4311,27 +4394,27 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
         const tot=Number(isMaq?o.maq_price:o.price)||0;
         const fac=vivas.filter(x=>x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);
         const nCanc=todas.filter(x=>x.cancelled_at&&!/^Consumida:/.test(x.cancellation_reason||"")).length;
-        const pagoBadge=x=>x.payment_status==="paid"?<Badge color={C.ok} icon={<CheckCircleIcon size={11} weight="fill"/>}>Pagada</Badge>:x.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>Parcial</Badge>:null;
+        const pagoBadge=x=>x.payment_status==="paid"?<Badge color={C.ok} style={{color:C.okInk}} icon={<CheckCircleIcon size={11} weight="fill"/>}>Pagada</Badge>:x.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>Parcial</Badge>:null;
         return <>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold" color={C.ac}/>Info Fiscal · por partes</div>
-          {vivas.map(x=><Row key={x.id} l={"Parte #"+x.position} v={<span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-            {x.doc_type==="corona_saldo"?<span style={{color:C.emr,fontWeight:700}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
-             :x.doc_type==="por_facturar"?<span style={{color:C.wn,fontWeight:700}}>⏳ por facturar</span>
-             :<span style={{color:x.doc_type==="factura"?C.fac:C.live,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{x.doc_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{x.invoice_folio}</span>}
+          <Seccion icono={<FilesIcon size={12} weight="bold" color={C.ac}/>}>Info Fiscal · por partes</Seccion>
+          {vivas.map(x=><Row key={x.id} l={"Parte "+x.position} v={<span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            {x.doc_type==="corona_saldo"?<span style={{color:C.emrInk,fontWeight:700}}><DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>saldo Corona</span>
+             :x.doc_type==="por_facturar"?<span style={{color:C.wnInk,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><HourglassIcon size={11} weight="bold"/>por facturar</span>
+             :<span style={{color:x.doc_type==="factura"?C.fac:C.okInk,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{x.doc_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}{x.invoice_folio}</span>}
             <span style={{color:C.t2}}>{Number(x.qty_portion||0).toLocaleString("es-MX")} pzas · {fmt(x.amount_portion)}</span>
-            {x.invoice_pre_assigned&&<span style={{color:C.amb,fontSize:10,fontWeight:700}}>anticipado</span>}
+            {x.invoice_pre_assigned&&<span style={{color:C.wnInk,fontSize:10,fontWeight:700}}>anticipado</span>}
             {pagoBadge(x)}
           </span>}/>)}
           {huboResto&&<Row l="Avance" v={resto
-            ?<span>Facturado <b>{fmt(fac)}</b> de {fmt(tot)} · faltan <b style={{color:C.wn}}>{fmt(resto.amount_portion)}</b> ({Number(resto.qty_portion||0).toLocaleString("es-MX")} pzas). Se factura desde la ficha con <b>Facturar siguiente parte</b>.</span>
+            ?<span>Facturado <b>{fmt(fac)}</b> de {fmt(tot)} · faltan <b style={{color:C.wnInk}}>{fmt(resto.amount_portion)}</b> ({Number(resto.qty_portion||0).toLocaleString("es-MX")} pzas). Se factura desde la ficha con <b>Facturar siguiente parte</b>.</span>
             :<span><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Completa: {fmt(fac)} de {fmt(tot)} en {vivas.filter(x=>x.invoice_folio).length} folio{vivas.filter(x=>x.invoice_folio).length===1?"":"s"}</span>}/>}
           {nCanc>0&&<Row l="Canceladas" v={nCanc+" parte"+(nCanc===1?"":"s")+" (su dinero "+(huboResto?"regresó al resto":"salió del plan")+")"}/>}
         </>;
       })()}
       {(o.invoice_folio||o.cancellation_reason)&&!hp&&vOwns&&<>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><FilesIcon size={12} weight="bold" color={o.invoice_type==="factura"?C.fac:C.live}/>Info Fiscal</div>
+        <Seccion icono={<FilesIcon size={12} weight="bold" color={o.invoice_folio?tintaFolio:C.t2}/>}>{o.invoice_folio?"Info Fiscal":"Cancelación"}</Seccion>
         {o.invoice_folio&&<>
-          <Row l="Folio" v={<>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:3}}/>:null}{o.invoice_folio}{o.invoice_pre_assigned?" (anticipado)":""}</>}/>
+          <Row l="Folio" v={<>{o.invoice_pre_assigned?<LightningIcon size={11} weight="fill" color={C.wnInk} style={{verticalAlign:"-1px",marginRight:3}}/>:null}{o.invoice_folio}{o.invoice_pre_assigned?" (anticipado)":""}</>}/>
           <Row l="Tipo" v={o.invoice_type==="factura"?"Factura":(o.invoice_type==="remision"?"Remisión":null)}/>
           <Row l="Asignado por" v={o.invoiced_by}/>
           <Row l="Fecha asignación" v={o.invoiced_at?fDT(o.invoiced_at):null}/>
@@ -4340,30 +4423,32 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
               partes nuevas: P-0465 decia «Dividida en 1 facturas» con dos partes vivas. Se etiqueta como
               lo que es; el conteo de verdad lo da el bloque «Por partes» de arriba. */}
           {o.invoice_reason&&<Row l={(o.splits||[]).some(s=>!s.cancelled_at)?"Nota de origen":"Razón anticipo"} v={o.invoice_reason}/>}
-          {o.payment_status&&<Row l="Pago" v={o.payment_status==="paid"?<Badge color={C.ok} icon={<CheckCircleIcon size={11} weight="fill"/>}>{"Pagada ("+(o.payment_method||"—")+")"}</Badge>:o.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>{"Parcial · $"+Number(o.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" ("+(o.payment_method||"—")+")"}</Badge>:<Badge color={C.t2} icon={<HourglassIcon size={11} weight="bold"/>}>No pagada (en cobranza)</Badge>}/>}
+          {o.payment_status&&<Row l="Pago" v={o.payment_status==="paid"?<Badge color={C.ok} style={{color:C.okInk}} icon={<CheckCircleIcon size={11} weight="fill"/>}>{"Pagada ("+(o.payment_method||"—")+")"}</Badge>:o.payment_status==="partial"?<Badge color={C.fac} icon={<CircleHalfIcon size={11} weight="fill"/>}>{"Parcial · $"+Number(o.payment_amount||0).toLocaleString("es-MX",{minimumFractionDigits:2})+" ("+(o.payment_method||"—")+")"}</Badge>:<Badge color={C.t2} icon={<HourglassIcon size={11} weight="bold"/>}>No pagada (en cobranza)</Badge>}/>}
         </>}
         {o.cancellation_reason&&<>
           <Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><XIcon size={11} weight="bold"/>Cancelación</span>} v={o.cancellation_reason}/>
           <Row l="Cancelada por" v={o.cancelled_by}/>
           <Row l="Fecha cancelación" v={o.cancelled_at?fDT(o.cancelled_at):null}/>
-          <Row l="NC emitida en SAT" v={o.nc_emitted?<><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Sí</>:<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pendiente</>}/>
+          {/* v10.84.46 — la nota de crédito sólo existe si hubo factura: una cancelada SIN folio decía «Pendiente» */}
+          {o.invoice_folio&&<Row l="NC emitida en SAT" v={o.nc_emitted?<><CheckCircleIcon size={12} weight="fill" color={C.ok} style={{verticalAlign:"-2px",marginRight:3}}/>Sí</>:<><HourglassIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Pendiente</>}/>}
         </>}
       </>}
 
-      {o.file_url&&vOwns&&<div style={{marginTop:12}}><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={12} weight="bold"/>Archivo de Producción</div><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><FileTextIcon size={22} weight="bold" color={C.ios} style={{flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:10,color:C.ios,fontWeight:500}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Click para descargar</div></div></a></div>}
-      {showDeletePrompt&&<div style={{marginTop:8,background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:12,padding:14}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:4}}><FloppyDiskIcon size={13} weight="bold"/>¿Ya descargaste el archivo?</div>
-        <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Bórralo para liberar espacio en almacenamiento</p>
+      {o.file_url&&!archivoBorrado&&vOwns&&<div style={{marginTop:12}}><Seccion icono={<FolderOpenIcon size={12} weight="bold"/>} mt={0}>Archivo de Producción</Seccion><a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} onClick={()=>{if(canExecuteAction("delete_file",o,role,userLogin))setTimeout(()=>setShowDeletePrompt(true),500)}} style={{display:"flex",alignItems:"center",gap:8,background:C.sf,borderRadius:10,padding:"10px 14px",textDecoration:"none",border:"0.5px solid "+C.bd}}><FileTextIcon size={22} weight="bold" color={C.ac} style={{flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:C.tx}}>{o.file_name||"Archivo"}</div><div style={{fontSize:11,color:C.ac,fontWeight:600}}><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Descargar</div></div></a></div>}
+      {o.file_url&&!archivoBorrado&&showDeletePrompt&&<div style={{marginTop:8,background:C.wn+"0D",border:"1px solid "+C.wn+"40",borderRadius:12,padding:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,color:C.wnInk,marginBottom:4}}><FloppyDiskIcon size={13} weight="bold"/>¿Ya descargaste «{o.file_name||"el archivo"}»?</div>
+        <p style={{fontSize:11,color:C.t2,margin:"0 0 10px"}}>Bórralo del servidor para liberar espacio. La orden se queda sin archivo.</p>
         <div style={{display:"flex",gap:6}}>
-          <button onClick={()=>setShowDeletePrompt(false)} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>No, conservar</button>
-          <button onClick={deleteFile} disabled={deleting} style={bs(C.dn)}>{deleting?<><HourglassIcon size={13} weight="bold"/>Borrando...</>:<><TrashIcon size={13} weight="bold"/>Sí, borrar archivo</>}</button>
+          <button onClick={()=>{setShowDeletePrompt(false);setErrBorrar("")}} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Conservar</button>
+          <button onClick={deleteFile} disabled={deleting} style={bs(C.dnInk)}>{deleting?<><HourglassIcon size={13} weight="bold"/>Borrando…</>:<><TrashIcon size={13} weight="bold"/>Sí, borrar del servidor</>}</button>
         </div>
       </div>}
+      {errBorrar&&<div role="alert" style={{marginTop:8,display:"flex",gap:6,alignItems:"flex-start",fontSize:11,fontWeight:600,color:C.dnInk,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:1}}/><span>{errBorrar}</span></div>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12 (extensión): campo notes oculto para vendedor en órdenes ajenas (puede contener acuerdos verbales/descuentos/info comercial sensible) */}
-      {vOwns&&o.notes&&<><div style={{fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}>Notas</div><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5,maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{o.notes}</div></>}
+      {vOwns&&o.notes&&<><Seccion>Notas</Seccion><div style={{fontSize:12,color:C.tx,padding:"8px 0",lineHeight:1.5,maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{o.notes}</div></>}
       {/* 🔒 v10.12.0.4 Phase 3 — Finding #12: quick_notes ocultos para vendedor en órdenes ajenas (mismo gate vOwns que precios/contactos) */}
-      {vOwns&&(o.notes_log||[]).length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:12,marginBottom:4}}><ChatCircleIcon size={12} weight="bold" color={C.ios}/>Notas Rápidas ({o.notes_log.length})</div><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:AUTHOR_COLOR[n.by]||C.t3}}>{AUTHOR_NAME[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t3}}>{fDT(n.date)}</span></div>})}</div></>}
-      {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:6,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
+      {vOwns&&(o.notes_log||[]).length>0&&<><Seccion icono={<ChatCircleIcon size={12} weight="bold" color={C.ac}/>}>Notas Rápidas ({o.notes_log.length})</Seccion><div style={{maxHeight:120,overflowY:"auto"}}>{(o.notes_log||[]).map((n,i)=>{return <div key={i} style={{padding:"4px 0",borderBottom:i<o.notes_log.length-1?"0.5px solid "+C.bd:"none"}}><span style={{fontSize:10,fontWeight:600,color:tintaAA(AUTHOR_COLOR[n.by]||C.t2)}}>{AUTHOR_NAME[n.by]||n.by}</span> <span style={{fontSize:11}}>{n.text}</span> <span style={{fontSize:9,color:C.t2}}>{fDT(n.date)}</span></div>})}</div></>}
+      {o.stage==="draft"&&<div style={{marginTop:12,padding:"8px 0",display:"flex",gap:10,fontSize:11,color:C.t2,borderTop:"0.5px solid "+C.bd}}><span style={{color:o.validated_by_production?C.okInk:C.wnInk}}>{o.validated_by_production?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Producción</span><span style={{color:o.validated_by_preprensa?C.okInk:C.wnInk}}>{o.validated_by_preprensa?<CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>:<HourglassIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>}Pre-prensa</span></div>}
 
       {/* v10.73.19 (F2) — Historial de tiempos por etapa (cuánto en cada una, quién la movió, regresiones). */}
       {vOwns&&o.timeline?.length>0&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
@@ -4374,85 +4459,52 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
       {vOwns&&<div style={{marginTop:12,paddingTop:12,borderTop:"0.5px solid "+C.bd}}>
         <OrderChangeHistory orderId={o.id}/>
       </div>}
+      </div>
 
-      {/* v10.72.42 — las "Acciones de flujo" se movieron a la barra sticky de abajo (acción primaria del rol siempre visible sin scroll). */}
-
-      {/* 🆕 v10.9.0 — Botón prominente "Facturar anticipado" para Karla/Admin */}
-      {canPreInvoice&&<div style={{marginTop:14,padding:14,background:C.amb+"10",border:"1.5px solid "+C.amb+"40",borderRadius:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <LightningIcon size={24} weight="fill" color={C.amb} style={{flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.amb}}>Facturar Anticipadamente</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Asigna folio fiscal antes de entregar (para clientes que pagan adelantado o solicitan anticipo)</div>
-          </div>
-        </div>
-        <button onClick={()=>dispatch("pre_invoice")} style={{...bt(C.amb),width:"100%",justifyContent:"center",fontSize:14,padding:"12px"}}><LightningIcon size={15} weight="fill"/>Asignar Folio Anticipado</button>
-      </div>}
-
-      {/* 🆕 v10.9.0 — Botón "Cancelar con NC" prominente solo para Marcelo cuando hay folio */}
-      {canCancelWithNC&&<div style={{marginTop:14,padding:14,background:C.dn+"08",border:"1.5px solid "+C.dn+"30",borderRadius:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <XIcon size={24} weight="bold" color={C.dn} style={{flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.dn}}>Cancelar con Nota de Crédito</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Esta orden tiene folio {o.invoice_folio} asignado. Cancelarla genera una NC pendiente.</div>
-          </div>
-        </div>
-        <button onClick={()=>dispatch("cancel_with_nc")} style={{...bt(C.dn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><XIcon size={14} weight="bold"/>Cancelar Orden (con NC)</button>
-      </div>}
-
-      {/* 🆕 v10.81.0 — "Re-facturar orden": el folio de esta orden apunta a una factura CANCELADA. Liberarlo la regresa
-          a facturable (asignar folio nuevo o ligar uno existente). El RPC re-valida el candado fiscal (solo si ninguna
-          factura viva lleva ese folio). Reemplaza el arreglo a mano por SQL que se hizo con F-14↔P-0415. */}
-      {/* v10.84.11 — «Deshacer cancelación» (admin): P-0350 se canceló por error el 21-sep y sólo se pudo revertir por SQL.
-          El RPC sólo deshace lo que se puede deshacer sin adivinar (ver revert_order_cancellation); si no, dice por qué. */}
-      {role==="admin"&&o.stage?.includes("cancelled")&&o.cancelled_at&&<div style={{marginTop:14,padding:14,background:C.wn+"0D",border:"1.5px solid "+C.wn+"40",borderRadius:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <ArrowsClockwiseIcon size={24} weight="bold" color={C.wn} style={{flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.wn}}>Deshacer cancelación</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>Si se canceló por error. La orden vuelve a {vuelveAlDeshacer(o)}{o.invoice_folio?" con su folio "+o.invoice_folio:""}; si el puente había quitado su parte de una factura compartida, se la devuelve. Si la cancelación canceló una factura propia con cobros, no se deshace desde aquí (Dirección).</div>
-          </div>
-        </div>
-        <button onClick={()=>dispatch("deshacer_cancelacion")} style={{...bt(C.wn),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>
-      </div>}
-      {canRefacturar&&folioCancelado&&<div style={{marginTop:14,padding:14,background:C.live+"0D",border:"1.5px solid "+C.live+"40",borderRadius:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <ArrowsClockwiseIcon size={24} weight="bold" color={C.live} style={{flexShrink:0}}/>
-          <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.live}}>Liberar folio cancelado</div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>La factura <b>{o.invoice_folio}</b> ya está cancelada y esta orden quedó atada a ella. Libera el folio para que la orden vuelva a ser facturable — luego asígnale un folio nuevo o ligale uno existente. <span style={{color:C.t3}}>(Para sustituir una factura que aún está vigente, usa “Re-facturar” en CobranzaFlow.)</span></div>
-          </div>
-        </div>
-        <button onClick={()=>dispatch("refacturar")} style={{...bt(C.live),width:"100%",justifyContent:"center",fontSize:13,padding:"10px"}}><ArrowsClockwiseIcon size={14} weight="bold"/>Liberar folio</button>
-      </div>}
-
-      {/* v10.72.34/42 — barra de acciones STICKY al fondo. v10.72.42: las acciones de flujo del rol (avanzar/validar)
-          viven aquí arriba (fila propia, siempre visibles) en vez de enterradas a media altura. marginLeft/Right
-          negativos para abarcar todo el ancho bajo el padding; borde+sombra arriba para flotar sobre el scroll. */}
-      <div style={{position:"sticky",bottom:0,marginTop:16,marginLeft:-24,marginRight:-24,padding:"12px 24px 0",background:C.bg,borderTop:"0.5px solid "+C.bd,boxShadow:"0 -6px 14px -10px rgba(26,26,31,.18)",zIndex:2}}>
-        {canActFlow&&!snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}><span style={{fontSize:9.5,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:".05em",display:"inline-flex",alignItems:"center",gap:4,marginRight:2}}><FlowArrowIcon size={11} weight="bold"/>Flujo</span><StageFlowButtons o={o} role={role} onAction={flowDispatch}/></div>}
+      {/* el pie, FUERA del cuerpo: la acción del rol rellena, lo demás teñido y lo raro en «⋯ Más» */}
+      <div style={{padding:"12px 24px 16px",borderTop:"0.5px solid "+C.bd,background:C.bg}}>
         {/* v10.73.26 (#4) — orden En espera: banner + "Quitar espera" en el DetailModal (antes no había forma de reactivar desde el modal) */}
         {snoozeActive(o)&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:C.t3+"14",borderRadius:10,fontSize:11,color:C.t2}}><BellSlashIcon size={13} weight="bold" style={{flexShrink:0}}/><span style={{flex:1,minWidth:120}}>En espera: <b style={{color:C.tx}}>{o.snooze_reason}</b>{o.snoozed_by?" — "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}{o.snooze_until?" · hasta "+fD(o.snooze_until):""}</span>{canUnsnooze&&<button onClick={()=>dispatch("unsnooze")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40",flexShrink:0}}><BellRingingIcon size={12} weight="bold"/>Quitar espera</button>}</div>}
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cerrar</button>
-          {role==="admin"&&!o.stage.includes("cancelled")&&(o.invoice_folio||!o.stage.includes("delivered")||o.created_by==="import-historico"||(!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines))&&<button onClick={()=>dispatch("edit")} style={{...bt(C.ios),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
-          {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={{...bt(isMaq?C.maq:C.fac),flex:1,justifyContent:"center"}}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {/* v10.72.58 — folio histórico desde el detalle (las cards del Archivo son compactas, sin fila de botones) */}
-          {(role==="admin"||role==="karla")&&(o.created_by==="import-historico"||EMISOR_ON)&&(o.created_by==="import-historico"?o.stage.includes("delivered"):["salidas","maq_received","delivered","maq_delivered"].includes(o.stage))&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!liquidadaConSaldoAFavor(o)/* v10.80.13 */&&<button onClick={()=>dispatch("apply_historic_folio")} style={{...bt(C.fac),flex:1,justifyContent:"center"}}><ReceiptIcon size={14} weight="bold"/>{o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha"}</button>}
-          {/* v10.82.0 — DEVOLVER EL SALDO APLICADO A LA ORDEN EQUIVOCADA.
-              Va exactamente aqui, donde v10.80.13 SUPRIME "Folio de Alpha" para estas ordenes: ese
-              es el hueco donde alguien buscaba una salida y no encontraba nada. Se gatea por
-              credit_applied_at -la columna, no el regex sobre invoice_reason, que es texto
-              editable-: los 21 consumos contra orden la tienen, asi que cubre todo.
-              Las canceladas NO lo ofrecen: a esas el puente ya les devolvio el saldo solo. */}
-          {(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled")&&<button onClick={()=>dispatch("deshacer_saldo")} style={{...bt(C.dn),flex:1,justifyContent:"center"}} title="Regresa el saldo a la bolsa del cliente y deja la orden pendiente de facturar"><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
-          {/* v10.77.5 — este era el unico camino a setPrintModal SIN pasar por el gate central, asi
-              que el visor (solo lectura) podia abrirlo. Se le pone el mismo gate que a las tarjetas. */}
-          {vOwns&&canExecuteAction("print",o,role,userLogin)&&<button onClick={printIt} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
+        <div ref={flujoRef} style={{display:hayFlujo?"flex":"none",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>{canActFlow&&!snoozeActive(o)&&<StageFlowButtons o={o} role={role} onAction={flowDispatch} variante="detalle"/>}</div>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={onClose} style={{...bt(C.sf,C.t2),justifyContent:"center",border:"0.5px solid "+C.bd,minWidth:96}}>Cerrar</button>
+          {mas.length>0&&<MasDelDetalle abierto={masAbierto} setAbierto={setMasAbierto} items={mas} onElegir={k=>{setMasAbierto(false);dispatch(k)}}/>}
+          <div style={{flex:1}}/>
+          {canEditSpecsDraft&&<button onClick={()=>dispatch("edit_specs")} style={tenueAA(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar specs</button>}
+          {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
+          {canEditAdmin&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
+          {role!=="admin"&&_canEditOwner&&<button onClick={()=>dispatch("edit")} style={tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
+          {canPrint&&<button onClick={printIt} style={hayFlujo?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>Imprimir</button>}
         </div>
       </div>
     </div>
+  </div>;
+}
+// v10.84.46 — el «⋯ Más» del detalle: lo raro y lo destructivo con su explicación (como el de la ficha, v10.73.9). Esc
+//   cierra el menú primero (useEscClose: el escStack cierra sólo lo de arriba; nunca un listener propio de Escape) y el
+//   clic fuera también. Cada acción abre su propia confirmación en App.
+function MasDelDetalle({abierto,setAbierto,items,onElegir}){
+  const ref=useRef(null);
+  return <div ref={ref} style={{position:"relative"}}>
+    <button onClick={()=>setAbierto(v=>!v)} aria-haspopup="menu" aria-expanded={abierto} aria-label="Más acciones" title="Más acciones"
+      style={{...bt(C.sf,abierto?C.ac:C.t2),border:"0.5px solid "+C.bd,padding:"10px 14px"}}><DotsThreeIcon size={16} weight="bold"/>Más</button>
+    {abierto&&<MenuMasDelDetalle cerrar={()=>setAbierto(false)} contenedor={ref} items={items} onElegir={onElegir}/>}
+  </div>;
+}
+function MenuMasDelDetalle({cerrar,contenedor,items,onElegir}){
+  useEscClose(cerrar);
+  const menuRef=useRef(null);
+  useEffect(()=>{const b=menuRef.current?.querySelector('[role="menuitem"]');if(b)b.focus();
+    const fuera=e=>{if(contenedor.current&&!contenedor.current.contains(e.target))cerrar()};
+    document.addEventListener("mousedown",fuera);return ()=>document.removeEventListener("mousedown",fuera)},[]);
+  return <div ref={menuRef} role="menu" aria-label="Más acciones" style={{position:"absolute",left:0,bottom:"100%",marginBottom:6,zIndex:5,background:C.bg,border:"1px solid "+C.bd,borderRadius:12,boxShadow:C.sh3,padding:4,width:320,maxWidth:"80vw",display:"flex",flexDirection:"column",gap:1}}>
+    {items.flatMap(it=>[
+      it.divide&&items.length>1?<div key={it.k+"-linea"} style={{height:1,background:C.bd,margin:"3px 6px"}}/>:null,
+      <button key={it.k} role="menuitem" onClick={()=>onElegir(it.k)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}
+        style={{display:"flex",alignItems:"flex-start",gap:9,width:"100%",textAlign:"left",border:"none",background:"transparent",fontFamily:"inherit",padding:"8px 10px",borderRadius:8,cursor:"pointer"}}>
+        <span style={{color:it.color,marginTop:1,flexShrink:0,display:"inline-flex"}}>{it.icono}</span>
+        <span style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}><span style={{fontSize:12.5,fontWeight:700,color:it.color}}>{it.t}</span><span style={{fontSize:11,color:C.t2,lineHeight:1.4}}>{it.d}</span></span>
+      </button>])}
   </div>;
 }
 function ClientHistory({clientName,orders,onClose,role,userLogin}) {
@@ -12529,36 +12581,43 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
 // Antes el operador abría la orden en el modal, decidía avanzarla y tenía que CERRAR el modal + re-buscar
 // la card para pulsar el botón de etapa (un round-trip por orden, peor con wifi pobre). Solo dependen de
 // o/role/onAction + helpers de módulo (bt/isSec/getRevertOptions/recProof) → extracción limpia, misma lógica.
-function StageFlowButtons({o,role,onAction}){
+function StageFlowButtons({o,role,onAction,variante}){
+  // v10.84.46 — en el detalle de la orden (variante="detalle"): la primera acción que AVANZA va rellena en su tinta (pasa AA)
+  //   y las demás teñidas; editar y «Regresar» no salen aquí (el detalle los pone en su pie y en «⋯ Más»). En el tablero (sin
+  //   variante) todo queda exactamente como estaba: bt(color) y los mismos botones.
+  const det=variante==="detalle";
+  let primera=true;
+  const B=c=>!det?bt(c):primera?(primera=false,bt(tintaAA(c,5))):tenueAA(c);
+  const T=c=>det?tintaAA(c):c;   // el color de un texto de estado («Ya validaste», «Prod · Pre-p»)
   return <>
-      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={bt(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={bt(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:C.ok,fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:o.validated_by_production?C.ok:C.wn}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:o.validated_by_preprensa?C.ok:C.wn}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
-      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={bt(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={bt(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
-      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={bt("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
-      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={bt(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
-      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
-      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={bt(C.cart)}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
-      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
-      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:C.ctp,padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
-      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista p/ imprimir</button>}
+      {o.stage==="draft"&&(role==="produccion"||role==="preprensa"||role==="admin")&&<>{!det&&(role==="preprensa"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit_specs")} style={B(C.dsn)}><NotePencilIcon size={14} weight="bold"/>Editar Specs</button>}{!det&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"edit")} style={B(C.ios)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}{role==="produccion"&&!o.validated_by_production&&<button onClick={()=>onAction(o.id,"validate_prod")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Producción</button>}{role==="produccion"&&o.validated_by_production&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="preprensa"&&!o.validated_by_preprensa&&<button onClick={()=>onAction(o.id,"validate_pre")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Validar Pre-prensa</button>}{role==="preprensa"&&o.validated_by_preprensa&&<span style={{fontSize:10,color:T(C.ok),fontWeight:600,padding:"8px 0"}}><CheckCircleIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Ya validaste</span>}{role==="admin"&&<button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dsn)}><PaletteIcon size={14} weight="bold"/>Enviar a Diseño</button>}<div style={{display:"flex",gap:4,fontSize:10,color:C.t2,alignItems:"center",padding:"4px 0"}}><span style={{color:T(o.validated_by_production?C.ok:C.wn)}}>{o.validated_by_production?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Prod</span><span style={{color:T(o.validated_by_preprensa?C.ok:C.wn)}}>{o.validated_by_preprensa?<CheckCircleIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>:<HourglassIcon size={10} style={{verticalAlign:"-1px",marginRight:2}}/>}Pre-p</span></div></>}
+      {o.stage==="design"&&(role==="preprensa"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","proof_printing")} style={B(C.prf)}><PrinterIcon size={14} weight="bold"/>Prueba de Color{recProof(o)?" (Rec.)":""}</button><button onClick={()=>onAction(o.id,"advance","ctp")} style={B(C.ctp)}><DiscIcon size={14} weight="bold"/>Directo a CTP</button><button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ok)}><FastForwardIcon size={14} weight="bold"/>Sin CTP, Lista</button></>}
+      {o.stage==="proof_printing"&&(role==="german"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","proof_client")} style={B("#f59e0b")}><ExportIcon size={14} weight="bold"/>Enviar Prueba al Cliente</button>}
+      {o.stage==="proof_client"&&(role==="preprensa"||isSec(role)||role==="admin")&&<><button onClick={()=>onAction(o.id,"approve_proof")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Cliente Aprobó</button><button onClick={()=>onAction(o.id,"advance","design")} style={B(C.dn)}><XIcon size={14} weight="bold"/>Pide Cambios</button></>}
+      {o.stage==="ctp"&&role==="german"&&<div style={{fontSize:12,color:T(C.ctp),padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a <strong>CTP y Procesadora</strong> en el Tablero</div>}
+      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_proc"&&<button onClick={()=>onAction(o.id,"advance","placas_listas")} style={B(C.cart)}><ClipboardTextIcon size={14} weight="bold"/>Placas Listas</button>}
+      {o.stage==="ctp"&&role==="admin"&&!o.current_machine&&<div style={{fontSize:12,color:T(C.ctp),padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a CTP en el Tablero Germán</div>}
+      {o.stage==="ctp"&&role==="admin"&&o.current_machine==="pp_ctp"&&<div style={{fontSize:12,color:T(C.ctp),padding:"8px 0"}}>En CTP — mueve a Procesadora en el Tablero</div>}
+      {o.stage==="placas_listas"&&(role==="produccion"||role==="admin")&&<button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Recoger Placas → Lista p/ imprimir</button>}
       {/* v10.23.0 — Botón "Volver a Lista" movido al Kanban en v10.24.0 (solo bajo DragCard) */}
       {o.stage==="ready"&&<div style={{fontSize:12,color:C.ac,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra esta orden a una máquina en el <strong>Tablero</strong></div>}
-      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
+      {o.stage==="in_production"&&<><button onClick={()=>onAction(o.id,"advance","packaging")} style={B(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button><button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button></>}
       {/* v10.40.0 — Botón "Regresar" genérico (sustituye "Regresar a CTP" y "Devolver a Diseño")
           Aparece cuando el rol tiene al menos 1 opción de stage destino. Filtro está dentro de getRevertOptions. */}
-      {getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={bt(C.ctp)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar</button>}
-      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={bt(C.maqin)}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
-      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={bt(C.ios)}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={bt(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
-      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:C.maqin,padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
-      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={bt(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
+      {!det&&getRevertOptions(o.stage,role).length>0&&<button onClick={()=>onAction(o.id,"revert")} style={B(C.ctp)}><ArrowUUpLeftIcon size={14} weight="bold"/>Regresar</button>}
+      {o.stage==="maquila_out"&&<button onClick={()=>onAction(o.id,"advance","maquila_in")} style={B(C.maqin)}><DownloadSimpleIcon size={14} weight="bold"/>Recibido de Maquila</button>}
+      {o.stage==="maquila_in"&&role==="admin"&&<><button onClick={()=>onAction(o.id,"advance","ready")} style={B(C.ios)}><ArrowsClockwiseIcon size={14} weight="bold"/>Volver a Producción</button><button onClick={()=>onAction(o.id,"advance","packaging")} style={B(C.emp)}><PackageIcon size={14} weight="bold"/>Empaque</button></>}
+      {o.stage==="maquila_in"&&role!=="admin"&&<div style={{fontSize:12,color:T(C.maqin),padding:"8px 0"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Arrastra a máquina de acabados, Empaque o Maquila en el <strong>Tablero</strong></div>}
+      {o.stage==="packaging"&&(role==="produccion"||role==="admin")&&<><button onClick={()=>onAction(o.id,"advance","salidas")} style={B(C.sal)}><ExportIcon size={14} weight="bold"/>Enviar a Salidas</button><button onClick={()=>onAction(o.id,"send_maquila")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Enviar a Maquila</button>{o.stock_role==="production"&&!o.stock_loaded&&<button onClick={()=>onAction(o.id,"load_stock")} style={B(C.emr)} title="Orden legacy (pre-v10.46) — ingresa al inventario interno. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}</>}
       {/* v10.42.2 — Rescate: Karla puede cargar a stock una orden de Cuadra que se envió por accidente a Salidas */}
-      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={bt(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
+      {o.stage==="salidas"&&o.stock_role==="production"&&!o.stock_loaded&&(role==="karla"||role==="admin")&&<button onClick={()=>onAction(o.id,"load_stock")} style={B(C.emr)} title="Orden legacy (pre-v10.46) que iba a inventario. Para órdenes nuevas Cuadra, usa la 3ra opción en Asignar Folio."><PackageIcon size={14} weight="bold"/>Cargar a Stock <span style={{opacity:0.6,fontSize:9}}>(legacy)</span></button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={B(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={B(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes (1 orden → N facturas). Solo cuando no hay folio ni splits */}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
-      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={bt(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
-      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={bt(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={B(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales (no confundir con 'Dividir en N facturas' del modal OC)"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="salidas"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_created"&&<button onClick={()=>onAction(o.id,"advance","maq_sent")} style={B(C.maq)}><TruckIcon size={14} weight="bold"/>Marcar Enviada</button>}
+      {o.stage==="maq_sent"&&<button onClick={()=>onAction(o.id,"advance","maq_in_progress")} style={B(C.wn)}><GearIcon size={14} weight="bold"/>Proveedor Trabajando</button>}
       {o.stage==="maq_in_progress"&&(()=>{
         // v10.49.1 punto 3 — Mostrar badge naranja si faltan precio cliente o costo proveedor.
         // El advance() los valida y bloquea, pero el badge avisa antes para que se complete antes de click.
@@ -12567,14 +12626,14 @@ function StageFlowButtons({o,role,onAction}){
         const incomplete=noPrice||noCost;
         return <>
           {/* v10.58.53: badge interno removido — el global de la card (v10.58.50) ya lo muestra a todos */}
-          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={bt(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
+          <button onClick={()=>onAction(o.id,"advance","maq_received")} style={B(incomplete?C.bdSt:C.maqin)} disabled={incomplete} title={incomplete?"Captura precio cliente y costo proveedor antes de recibir":""}><DownloadSimpleIcon size={14} weight="bold"/>Recibimos el Trabajo</button>
         </>;
       })()}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={bt(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={bt(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&!o.has_matrix_lines&&!o.has_splits&&!o.grouped_invoice_folio/* v10.80.13: mismo predicado que "Facturar por partes" de al lado. Sin esto la orden con splits ya asignados veia "Asignar Folio y Entregar", que le pondria un folio NUEVO a algo ya facturado */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_with_invoice")} style={B(C.ok)}><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&o.return_covered_by_folio&&<button onClick={()=>onAction(o.id,"deliver_covered")} style={B(C.ok)} title={"Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrega sin folio nuevo (sin doble cobro)"}><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</button>}
       {/* v10.58.34 — Facturar por partes para maquila */}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={bt(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
-      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={bt(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&!o.invoice_folio&&!o.return_covered_by_folio&&Number(o.maq_price)>0&&Number(o.quantity)>0&&!o.has_splits&&!o.grouped_invoice_folio&&!o.has_matrix_lines&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"split_invoice")} style={B(C.fac)} title="Divide ESTA orden en varias facturas con cantidades parciales"><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
+      {o.stage==="maq_received"&&(role==="admin"||role==="karla")&&(o.invoice_folio||((o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio)&&!o.fiscal_desconocido))/* v10.80.19: FALTABA has_matrix_lines. La reparacion de v10.80.13 se hizo con 3 patas, asi que la orden facturada por PLAN MATRIZ reproducia exactamente el bloqueo que esa version vino a quitar: sin folio propio, sin boton de foliar (ya esta facturada) y sin boton de entregar. Atorada en salidas para siempre. *//* v10.80.15: con la carga fiscal en duda no se ofrece entregar por splits *//* v10.80.13: una orden facturada POR PARTES o en folio agrupado no tiene invoice_folio propio, y con el filtro anterior se quedaba SIN NINGUN boton de entrega: ya no se le puede foliar (esta facturada) y tampoco se le podia cerrar. Quedaba atorada en salidas para siempre. */&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"deliver_only")} style={B(C.ok)}><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</button>}
       {/* v10.72.50 — Karla: parquear "el cliente no ha pedido factura" / reactivar, desde cualquier OCard (incl. Mis Pendientes) */}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&<button onClick={()=>onAction(o.id,"snooze_invoice")} style={{...bs(C.sf,C.t2),border:"1px solid "+C.bd}} title="Sácala de tu cola activa hasta que el cliente pida factura o remisión"><BellSlashIcon size={13} weight="bold"/>El cliente no pide factura</button>}
       {(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&snoozeActive(o)&&o.snooze_kind==="awaiting_client_invoice"&&<button onClick={()=>onAction(o.id,"unsnooze_invoice")} style={{...bs(C.ac+"15",C.ac),border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>Ya pidió factura · Reactivar</button>}

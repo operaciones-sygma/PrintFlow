@@ -12,6 +12,64 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.46 — El detalle de la orden: la critique (23/40) y la prueba tratando de romperlo — 6-oct-2026
+
+`/impeccable critique` al detalle de la orden (DetailModal), visto en producción con la cuenta de pruebas (sólo lectura) como
+karla, admin y producción, en 8 órdenes reales y a 1366 y 1920. Dio 23/40 (la de junio dio 30): desde entonces se le agregaron
+bloques y la medición de hoy es más estricta. Marcelo eligió arreglar todo: los P1, los P2 y los menores, con los datos arriba
+y una miniatura, lo raro en «⋯ Más», y los botones de flujo cambiados sólo en el detalle.
+
+- **Borrar el archivo de producción mira lo que contesta la base.** supabase-js no lanza: si Storage no borraba el archivo, a
+  la orden se le quitaba igual y no se avisaba nada (el mismo error que v10.84.41 arregló en «Archivos»).
+  - Ahora, si Storage falla, la orden conserva su archivo y el detalle lo dice; si la orden no se actualiza, también.
+  - Si sale bien, el archivo deja de enseñarse.
+  - La pregunta nombra el archivo: «¿Ya descargaste «arte final.pdf»?», con «Conservar» y «Sí, borrar del servidor».
+- **Tab ya no se sale del detalle** (`atraparTab`, como los demás diálogos desde v10.84.33). Antes, 36 de 40 Tab llevaban el
+  foco al menú de atrás.
+- **El pie queda al ras.** Era sticky dentro del cuerpo y, al abrir, se asomaban renglones debajo de «Cerrar / Imprimir»
+  («Teléfono», «Papel»…). Ahora el diálogo es una columna: encabezado y pie fijos, y sólo el cuerpo hace scroll.
+- **El encabezado dice de quién, qué, cuánto y para cuándo**: el cliente, el producto y la cantidad, la entrega, el importe
+  (sólo para quien puede verlo, como antes) y el folio con su estado de pago. La imagen pasa a miniatura de 72 px que se
+  amplía al tocarla (antes, hasta 280 px antes del cliente). El id interno baja a un renglón del cuerpo («ID interno»).
+- **Una acción rellena: la del rol.**
+  - El pie llegaba a tener seis botones rellenos de colores distintos, ninguno pasaba AA (2.2:1 a 4.3:1) y había tres
+    «editar» en un borrador.
+  - Ahora la primera acción que avanza la orden va rellena, en la tinta de su color (calculada del token: `tintaAA`). Lo demás
+    va teñido (`tenueAA`), y si no hay acción de flujo, «Imprimir».
+  - Editar sale una vez en el pie («Editar specs» para preprensa, «Revisar y Editar» para producción, «Editar» para admin).
+- **Lo raro y lo destructivo, en «⋯ Más»** (como en la ficha, v10.73.9): regresar a una etapa anterior, folio anticipado,
+  folio de Alpha, liberar folio cancelado, devolver saldo, deshacer cancelación y cancelar con nota de crédito.
+  - Cada una lleva su explicación y abre su propia confirmación, igual que antes. Antes eran tarjetas grandes de colores o
+    botones llenos; «Cancelar Orden (con NC)» era una tarjeta roja enorme en cada orden facturada.
+  - Esc cierra primero el menú (por el `escStack`, sin un listener propio); el clic fuera también lo cierra.
+- **`StageFlowButtons` (compartido con el tablero)** recibe una `variante` opcional; sin ella todo queda igual. Comprobado:
+  las 161 combinaciones de etapa y rol (62 con botones) dan exactamente el mismo resultado con el código de antes y con el
+  nuevo. El tablero no cambió.
+- **Los menores:**
+  - «NC emitida en SAT» sólo si hubo folio (una cancelada sin folio decía «Pendiente»);
+  - sin el rótulo «FLUJO» vacío;
+  - sin emojis («⏱️ auto» es «· calculada»; «⏳ por facturar» lleva su ícono);
+  - lo de la placa CTP sólo antes de CTP (una orden entregada decía «Nueva placa CTP requerida»);
+  - el precio una vez (no «PRECIO» y «PRECIO MXN»);
+  - «Descargar» en vez de «Click para descargar»;
+  - los textos y etiquetas de estado en tinta.
+- **No toca** la base ni las RPC. El borrado del archivo usa las mismas dos llamadas de antes (el mismo bucket y los mismos
+  campos de la orden); ahora mira lo que contestan.
+- **La prueba tratando de romperlo**: banco nuevo `tests/banco/gen-detalle.mjs` (el detalle real con la base simulada; 10
+  casos copiados de órdenes reales y 8 roles) y `tests/romper/detalle.mjs`, 62 casos, en el candado.
+  - Vuelta 1 contra el detalle de antes: fallaban 31 de 37.
+    - Una de mis pruebas («pie al ras») medía con el cuerpo ya bajado y pasaba sin deber; se corrigió para medir también al
+      abrir, que es cuando se asoma.
+    - Las 6 que pasaban son guardas (el vendedor ajeno y producción no ven precio, el visor no imprime…).
+  - Vuelta 2: 37 de 37.
+  - Vuelta 3, por donde no se diseñó: 25 casos más, con 62 de 62.
+    - Un barrido de 14 etapas con el rol que las mueve (a lo más un relleno y todo AA).
+    - Doble clic en borrar, reintentar tras el error, «Conservar».
+    - El menú con teclado, con clic fuera y si cabe.
+    - Tablet, un nombre de cliente larguísimo, una orden en espera, maquila sin precio y sin imagen.
+  - Corrida doble: contra el detalle de antes fallan 50 de 62; los 12 que pasan son guardas.
+  - Todas las tandas: 331 de 331.
+
 ## v10.84.45 — «Folio por OC» a 40/40: un solo recuadro en Simple — 6-oct-2026
 
 El punto que faltaba (P3 de la cuarta critique): en Simple, bajo los botones se apilaban tres recuadros. La nota del folio
