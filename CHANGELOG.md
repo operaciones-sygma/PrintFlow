@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.58 — El tablero: se ve lo atrasado y lo detenido — 7-oct-2026
+
+Tercera parte de lo que dejó la primera revisión independiente del tablero (20/40). Su P1: «No se ve lo atrasado ni lo
+detenido».
+
+- **«N vencidas» dice cuáles y dónde está cada una.**
+  - Qué pasaba: era un letrero sin clic, y las vencidas estaban repartidas en una página de casi 3,000 px.
+  - Ahora se aprieta y abre la lista, con la más vencida primero: «P-0594 · ALEJANDRA… · Printmaster 74, 2º en la fila ·
+    entrega 06-oct».
+  - Tocar una lleva a su ficha y la resalta 3 s. Si está en una sección plegada (Digital), la abre.
+  - Tab entra a la lista desde el chip, y Esc la cierra y regresa el foco al chip.
+- **Las fichas del tablero avisan lo mismo que el detalle.**
+  - Usan las mismas alertas y banderas del detalle y de la ficha de «Pendientes» (`AlertasDeFicha`, con `alertasDeLaOrden` y
+    `banderasDeLaOrden`): RETRASO con palabra, estancada, Urgente, Reimprimir, Sin logo SYGMA, Devuelta.
+  - Va en Listas, en la activa, en la fila y en Empaque. Antes URGENTE era un punto en Listas, una palabra en la activa y nada
+    en la fila, y lo vencido sólo era la fecha en rojo, a 3.9:1. La fecha vencida ahora va en su tinta.
+- **Lo que cruzó la noche dice desde cuándo.** El reloj de la activa y el de Empaque dicen «desde ayer 05:48» o «desde el lun
+  18:05», en ámbar, si empezaron antes de hoy. Antes decían «43h 5m», igual que 12 minutos, y pasando de 24 h la app misma da
+  esos minutos por inválidos. Las horas corridas quedan en el title; lo de hoy sigue en horas.
+- **La búsqueda dice dónde**: «1 orden resaltada para “P-0594”: P-0594 en Printmaster 74, 2º en la fila», y con varias, las
+  tres primeras y «y N más».
+- **«Recibida de Maquila (parcial)» ya no se sale de su ficha en Listas.** Iba arriba junto al folio sin poder encogerse.
+  Ahora va con los avisos, en su tinta. Lo encontró la vuelta 3 y no era de este cambio.
+- **Compartido:** `LiveTimer` acepta `desde`; sin él queda idéntico (el detalle no lo usa). No toca la base, las RPC ni App.
+- **Pruebas** (`tablero.mjs`, de 35 a 49):
+  - Vuelta 1, contra v10.84.57: fallaban las 7 nuevas. Dos medían la página entera y se ajustaron a su elemento (la lista y
+    el aviso de la búsqueda): «P-0594… Printmaster 74… 2º» salía de las opciones del selector de su propia ficha.
+  - Vuelta 2: 42 de 42.
+  - Vuelta 3, por donde no se diseñó: Esc y el foco, una vencida en una sección plegada, la que corre dice «corriendo», el
+    reloj de hoy, el de hace 9 días, la búsqueda con varias, las alertas sin salirse de la ficha. Encontró la etiqueta de
+    maquila que se salía.
+  - Tres sabotajes (Esc, abrir la sección, «desde» siempre): los tres los caza su prueba. El primero destapó que el Tab no
+    entraba a la lista y se arregló.
+
 ## v10.84.57 — El tablero: se lee qué corre en cada máquina — 7-oct-2026
 
 Segunda parte de lo que dejó la primera revisión independiente del tablero (20/40). Su P1: «No se lee qué corre en cada

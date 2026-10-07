@@ -2990,12 +2990,19 @@ function ProgressBar({order}) {
   const {cur,tot,pct:p}=getProgress(order); const s=SM[order.stage];
   return <div style={{marginTop:6}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:9,color:C.t2}}>Progreso</span><span style={{fontSize:9,color:s?.c,fontWeight:600}}>{cur}/{tot}</span></div><div style={{background:C.sf,borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:"100%",height:"100%",background:s?.c||C.ac,borderRadius:4,transformOrigin:"left",transform:"scaleX("+(p/100)+")",transition:"transform .5s cubic-bezier(.22,1,.36,1)"}}/></div></div>;
 }
-function LiveTimer({started}) {
+function LiveTimer({started,desde}) {
   const [el,setEl]=useState(0);
   // v10.28.2 — guard NaN si started es inválido; evita render "⏱ NaNm"
   useEffect(()=>{if(!started)return;const t=new Date(started);if(isNaN(t.getTime()))return;const c=()=>Math.round((Date.now()-t.getTime())/60000);setEl(c());const iv=setInterval(()=>setEl(c()),30000);return ()=>clearInterval(iv)},[started]);
   if(!started) return null;
   const t=new Date(started);if(isNaN(t.getTime())) return null;
+  // v10.84.58 — `desde` (el tablero): lo que empezó antes de hoy dice DESDE CUÁNDO, en ámbar («desde ayer 18:05», «desde el lun
+  //   18:05»), en vez de horas corridas que cuentan las noches («43h 5m» en Empaque se veía igual que 12 minutos, y pasando de
+  //   24 h la app misma da esos minutos por inválidos). Las horas corridas quedan en el title.
+  if(desde){const hoy=new Date();hoy.setHours(0,0,0,0);
+    if(t<hoy){const ayer=new Date(hoy.getTime()-86400000),hm=String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0");
+      const dia=t>=ayer?"ayer":(hoy-t<6*86400000?"el "+["dom","lun","mar","mié","jue","vie","sáb"][t.getDay()]:"el "+fD(t));
+      return <span title={"Empezó "+dia+" a las "+hm+" · "+fmtM(el)+" corridos"} style={{fontSize:10,color:C.wnInk,fontWeight:700,background:C.wn+"1c",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>desde {dia} {hm}</span>}}
   return <span style={{fontSize:10,color:tintaAA(C.ios),fontWeight:700,fontFamily:"'Geist Mono',monospace",background:C.ios+"10",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>{fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
@@ -13358,7 +13365,21 @@ function FilaPendiente({p,onDeshacer}){return <div role="status" onClick={e=>e.s
 //   «FI…»: la fila metía asa, cliente, folio y reloj en ~190 px y el reloj iba dos veces en la activa). El cliente va solo en su
 //   línea (hasta tres, a 12 px: con dos, un nombre de 35 letras todavía se cortaba a 1366), y la asa, el folio y el reloj en la
 //   segunda. `reloj={false}` donde el marco ya lo trae (la activa de cada máquina).
-function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
+// v10.84.58 — lo que una ficha del tablero avisa: las MISMAS alertas y banderas que el detalle y la ficha de «Pendientes»
+//   (RETRASO con palabra, estancada, URGENTE, REIMPRIMIR, Sin logo SYGMA, Devuelta…). Antes URGENTE era un punto en Listas, una
+//   palabra en la activa y nada en la cola, y lo vencido sólo era la fecha en rojo (la primera revisión independiente, P1).
+function AlertasDeFicha({o}){const a=[...alertasDeLaOrden(o),...banderasDeLaOrden(o)];return a.length?<div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:4}}>{a}</div>:null}
+// v10.84.58 — «N vencidas» dice cuáles y dónde está cada una, y lleva a su ficha (era un letrero sin clic: las vencidas estaban
+//   repartidas en una página de casi 3,000 px). Esc la cierra.
+function ListaVencidas({ordenes,donde,onIr,onCerrar}){useEscClose(onCerrar);
+  return <div style={{flexBasis:"100%",order:99}}><ul aria-label="Órdenes vencidas" style={{listStyle:"none",margin:0,padding:6,display:"flex",flexDirection:"column",gap:2,borderRadius:12,background:C.card,border:"1px solid "+C.dn+"40",boxShadow:C.sh2,maxWidth:760}}>
+    {ordenes.map(o=><li key={o.id}><button onClick={()=>onIr(o)} style={{width:"100%",display:"flex",alignItems:"baseline",gap:10,textAlign:"left",border:"none",background:"transparent",padding:"7px 8px",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:12,color:C.tx}}>
+      <span style={{fontWeight:700,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{o.production_number}</span>
+      <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>{o.client}</span>
+      <span style={{color:C.t2,flexShrink:0}}>{donde(o)}</span>
+      <span style={{color:C.dnInk,fontWeight:700,flexShrink:0}}>entrega {fD(o.due_date)}</span></button></li>)}
+  </ul></div>}
+function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){return <div data-ficha={o.id} draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start",...hlOf(match,o)}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
     {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
     <div style={{fontSize:12,fontWeight:700,lineHeight:1.25,display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden",overflowWrap:"anywhere"}}>{o.client}</div>
@@ -13366,13 +13387,12 @@ function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){retu
       <DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>
       {/* v10.73.75 — clarify: el folio impreso es la llave papel↔pantalla de Gerardo y desaparecía JUSTO al entrar a máquina (DragCard = activa + Empaque). Mismo contrato de color que el chip del pool, más denso (density > consistency en el board). */}
       {o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}
-      {reloj&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+      {reloj&&(()=>{const a=(o.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started} desde/>:null})()}
     </div>
     <div style={{fontSize:9,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-    {/* v10.58.64 #3: REIMPRIMIR visible en el tablero — antes solo en Mis Pendientes, Gerardo podía correr pliego con la hoja vieja sin enterarse del cambio. */}
-    {o.needs_reprint&&<span style={{background:C.dn,color:"#fff",padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:800,marginTop:3,marginRight:4,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</span>}
-    {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"1px 5px",borderRadius:5,fontSize:10,fontWeight:700,marginTop:3,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>URGENTE</span>}
-    {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+    {/* v10.84.58 — REIMPRIMIR y URGENTE (antes escritos aquí a mano) y lo demás, de la misma definición que el detalle */}
+    <AlertasDeFicha o={o}/>
+    {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dnInk:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
   </div></div>;}
 // v10.73.67 — Tablero: la cola "EN ESPERA" de cada máquina ya NO se apila sin límite (hacía que una máquina muy
 //   cargada estirara TODO el renglón de máquinas y rompiera el drag-and-drop de Gerardo). Ahora la cola tiene tope
@@ -13390,6 +13410,8 @@ function DragCard({o,borderColor,reorderMachine,onAction,match,reloj=true}){retu
 //   admin) + un predicado `match`. La búsqueda RESALTA las coincidencias donde están. Además contesta mejor la
 //   pregunta real de Gerardo: "¿dónde está P-1234?" se responde viéndolo resaltado DENTRO de Prensa 3, con su
 //   contexto, no borrando las otras 10 máquinas.
+// v10.84.58: se ve lo atrasado y lo detenido («N vencidas» con su lista, las alertas de la orden en cada ficha, «desde ayer
+//   18:05» en lo que cruzó la noche, la búsqueda dice dónde).
 // v10.84.57: se lee qué corre en cada máquina (el cliente completo en la ficha, un solo reloj en la activa, la columna
 //   derecha más ancha en pantallas grandes).
 // v10.84.56: la primera revisión independiente del tablero (20/40): mover órdenes con red («Empaque» y «A Listas» esperan con
@@ -13415,12 +13437,24 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   `!snoozeActive` en el set COMPARTIDO (ready ya lo trae por construcción, inProd no → asimetría corregida). Los 3
   //   sets son mutuamente excluyentes por stage → sin doble conteo. NO se suma inSalidas (cancha de Karla).
   const vencidas=[...ready,...inProd,...inManual].filter(o=>isOverdue(o.due_date)&&!snoozeActive(o)).length;
+  // v10.84.58 — cuáles son y dónde está cada una (la primera revisión independiente: «3 vencidas» no decía cuáles); la más
+  //   vencida primero
+  const listaVencidas=[...ready,...inProd,...inManual].filter(o=>isOverdue(o.due_date)&&!snoozeActive(o)).sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)));
+  const dondeEsta=o=>o.stage==="packaging"?"Empaque":o.stage==="salidas"?"Salidas":(o.stage==="in_production"&&o.current_machine&&o.machine_queue_position!=null)
+    ?(MACHINES.find(x=>x.id===o.current_machine)?.name||o.current_machine)+(o.machine_queue_position===0?", corriendo":", "+o.machine_queue_position+"º en la fila"):"Órdenes Listas";
   const urgentesSinAsignar=ready.filter(o=>o.priority==="urgente").length;
   // v10.73.81 — coincidencias sobre lo que el board REALMENTE pinta (estos 4 sets), no sobre `orders` crudo:
   //   `ready` ya excluye las EN ESPERA, así que contarlas mentiría igual que el filtro que acabamos de quitar.
   const nMatch=match?[...ready,...inProd,...inManual,...inSalidas].filter(match).length:0;
   const inMaquilaOut=orders.filter(o=>o.stage==="maquila_out").length; // v10.73.77 — polish: Maquila era la única zona del sidebar SIN contador
-  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true}); // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
+  const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true});
+  // v10.84.58 — la lista de vencidas abierta, y la ficha a la que se fue (resaltada 3 s); la sección plegada que la tiene se abre
+  const [verVencidas,setVerVencidas]=useState(false);const [resaltar,setResaltar]=useState(null);const resaltarT=useRef(null);const chipVencidasRef=useRef(null);   // (Esc en la lista regresa el foco al chip)
+  const irA=o=>{setVerVencidas(false);const tipo=o.stage==="in_production"?MACHINES.find(x=>x.id===o.current_machine)?.type:null;
+    if(tipo&&collapsed[tipo])setCollapsed(c=>({...c,[tipo]:false}));
+    setResaltar(o.id);clearTimeout(resaltarT.current);resaltarT.current=setTimeout(()=>setResaltar(null),3000);
+    setTimeout(()=>{const el=document.querySelector('[data-ficha="'+o.id+'"]');if(el)el.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})},60)};
+  const matchVisto=resaltar?(x=>x.id===resaltar||(!!match&&match(x))):match;   // lo buscado y la ficha a la que se fue // v10.73.73 — Salidas MINIMIZADA por default también para admin (antes solo produccion); produccion+admin son los únicos roles que ven este tablero → true. Ver el comentario de la sección SALIDAS.
   // v10.73.81 (verificación adversarial) — Digital y Salidas arrancan PLEGADAS a propósito, así que una coincidencia
   //   ahí adentro contaba para el banner pero NO se pintaba: Gerardo leía "1 orden resaltada", barría el tablero y no
   //   había ningún outline. Es exactamente el fracaso que el comentario del banner presume de evitar, en su versión
@@ -13581,13 +13615,15 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
     {match&&<div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",padding:"8px 12px",borderRadius:10,background:nMatch?C.acL:C.sf,border:"1px solid "+(nMatch?C.ac+"40":C.bd)}}>
       <MagnifyingGlassIcon size={13} weight="bold" color={nMatch?C.ac:C.t3} style={{flexShrink:0}}/>
       <span style={{fontSize:F.body,color:C.tx,fontWeight:600,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-        {nMatch?<>{nMatch===1?"1 orden resaltada":nMatch+" órdenes resaltadas"} para “{searchText}”</>:<>Ninguna orden del tablero coincide con “{searchText}”</>}
+        {nMatch?<>{nMatch===1?"1 orden resaltada":nMatch+" órdenes resaltadas"} para “{searchText}”{(()=>{const v=[...ready,...inProd,...inManual,...inSalidas].filter(match);return ": "+v.slice(0,3).map(o=>(o.production_number||o.client)+" en "+dondeEsta(o)).join(" · ")+(v.length>3?" · y "+(v.length-3)+" más":"")})()}</>:<>Ninguna orden del tablero coincide con “{searchText}”</>}
       </span>
       <span style={{fontSize:F.meta,color:C.t2,flexShrink:0,marginLeft:"auto"}}>El tablero no está filtrado</span>
       {onClearSearch&&<button onClick={onClearSearch} style={{...bs(C.bg,C.t2),flexShrink:0,border:"1px solid "+C.bdSt}}><XIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Limpiar</button>}
     </div>}
     {(vencidas>0||urgentesSinAsignar>0||snoozedHidden>0)&&<div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-      {vencidas>0&&<span title="Órdenes con la entrega vencida que siguen por asignar, en máquina o en Empaque" style={{background:C.dn,color:C.bg,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><WarningIcon size={14} weight="fill"/>{vencidas} vencida{vencidas!==1?"s":""}</span>}
+      {vencidas>0&&<button ref={chipVencidasRef} aria-expanded={verVencidas} onClick={()=>setVerVencidas(v=>!v)} title="Cuáles son y dónde está cada una" style={{background:C.dn,color:C.bg,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"inherit"}}><WarningIcon size={14} weight="fill"/>{vencidas} vencida{vencidas!==1?"s":""}<CaretDownIcon size={12} weight="bold" style={{transform:verVencidas?"rotate(180deg)":"none"}}/></button>}
+      {/* la lista va justo después de su chip (el Tab entra a ella desde el chip) y se ve abajo de todos (order) */}
+      {verVencidas&&vencidas>0&&<ListaVencidas ordenes={listaVencidas} donde={dondeEsta} onIr={irA} onCerrar={()=>{setVerVencidas(false);requestAnimationFrame(()=>chipVencidasRef.current?.focus())}}/>}
       {urgentesSinAsignar>0&&<span title="Órdenes urgentes que siguen en Órdenes Listas, sin máquina asignada" style={{background:C.amb,color:C.tx,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:700}}><FireIcon size={14} weight="fill"/>{urgentesSinAsignar} urgente{urgentesSinAsignar!==1?"s":""} sin asignar</span>}
       {/* v10.73.31 — pausadas ocultas del tablero → lleva a la vista "En espera" (no "ojos que no ven"). v10.73.76: ya
           no compite con 6 chips iguales y se ve como BOTÓN (borde marcado + hover), que es lo que siempre fue. */}
@@ -13606,7 +13642,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
           está en vuelo (actionLoading===o.id, que se setea SÍNCRONO antes de los ~4 awaits de assignMachine). v82 quitó
           el toast síncrono que enmascaraba la no-optimicidad; sin esto la card quedaba inerte 1-2s y el drop se sentía
           fallido, además de que un re-drop chocaba con el lock y disparaba el toast rojo. */}
-        {ready.map(o=><div key={o.id} draggable={actionLoading!==o.id} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(match,o),...(actionLoading===o.id?{opacity:.55,pointerEvents:"none",cursor:"wait"}:{})}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+        {ready.map(o=><div key={o.id} data-ficha={o.id} draggable={actionLoading!==o.id} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(matchVisto,o),...(actionLoading===o.id?{opacity:.55,pointerEvents:"none",cursor:"wait"}:{})}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -13614,12 +13650,14 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
             {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
           </div>
           <div style={{display:"flex",gap:3,flexShrink:0}}>
-            {o.stage==="maquila_in"&&<span style={{background:C.maqin+"12",color:C.maqin,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>{SM.maquila_in?.lt}</span>}
-            {o.priority==="urgente"&&<span style={{background:C.dn+"15",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><CircleIcon size={9} weight="fill"/></span>}
+            
             {o.production_number&&<span style={{background:C.acL,color:C.ac,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>#{o.production_number}</span>}
           </div></div>
         </div>
-        {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
+        {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dnInk:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
+        {/* v10.84.58 — «Recibida de Maquila (parcial)» iba arriba junto al folio, sin poder encogerse, y se salía de la ficha */}
+        {o.stage==="maquila_in"&&<div style={{marginTop:4}}><span style={{background:C.maqin+"12",color:tintaAA(C.maqin),padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={10} weight="bold"/>{SM.maquila_in?.lt}</span></div>}
+        <AlertasDeFicha o={o}/>
         <div draggable={false} onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} style={{marginTop:8,position:"relative"}}>
           <select aria-label={"Enviar la orden de "+o.client+" a una máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:11,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:9,padding:"7px 26px 7px 10px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}>
             <option value="">Enviar a máquina…</option>
@@ -13736,11 +13774,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                       {activa&&<div key={activa.id} style={{border:"2px solid "+C.live,borderRadius:10,padding:8,marginBottom:8,background:C.live+"12",boxShadow:"0 2px 8px "+C.live+"22"}}>
                         <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
                           <span style={{fontSize:9,fontWeight:800,color:C.live,textTransform:"uppercase",display:"inline-flex",alignItems:"center",gap:3}}><FactoryIcon size={9} weight="bold"/>Activa</span>
-                          {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started}/>:null})()}
+                          {(()=>{const a=(activa.machine_log||[]).find(e=>!e.ended);return a?<LiveTimer started={a.started} desde/>:null})()}
                         </div>
                         {/* v10.73.80 — el marco verde ya dice "activa"; el borde de categoría aquí adentro solo repetía
                             (card anidada con dos colores compitiendo). Neutro. La excepción roja de urgente sigue viva. */}
-                        <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction} match={match} reloj={false}/>
+                        <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction} match={matchVisto} reloj={false}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
                           {pend[activa.id]?<FilaPendiente p={pend[activa.id]} onDeshacer={()=>deshacerPend(activa.id,pend[activa.id].accion)}/>:<>
@@ -13757,11 +13795,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                       {enEspera.length>0&&<div onDragOver={e=>{const el=e.currentTarget,r=el.getBoundingClientRect(),y=e.clientY,edge=34,up=y<r.top+edge&&el.scrollTop>0,dn=y>r.bottom-edge&&el.scrollTop+el.clientHeight<el.scrollHeight-1;if(up||dn){qAutoScrollClaim=Date.now();el.scrollTop+=up?-14:14}}} style={{borderTop:activa?"1px dashed "+C.bd:"none",paddingTop:activa?6:0,paddingLeft:5,paddingRight:5,maxHeight:400,overflowY:"auto",overflowX:"hidden"}}>
                         {/* v10.72.43 — legibilidad de la cola: 8→9px + t2 (antes el operador tenía que acercarse a leer las posiciones) */}
                         <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:3}}><HourglassIcon size={9} weight="bold"/>En espera ({enEspera.length})</div>
-                        {enEspera.map(o=><div key={o.id} draggable
+                        {enEspera.map(o=><div key={o.id} data-ficha={o.id} draggable
                             onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);e.dataTransfer.setData("reorderMachine",m.id)}}
                             onDragOver={e=>{e.preventDefault()}}
                             onDrop={e=>{const draggedId=e.dataTransfer.getData("orderId");const fromMachine=e.dataTransfer.getData("reorderMachine");if(draggedId&&fromMachine===m.id&&draggedId!==o.id){e.preventDefault();e.stopPropagation();setDO(null);onAction(draggedId,"reorder_in_machine",{newPosition:o.machine_queue_position})/* v10.73.84 (L14 drop-target-pegado) — setDO(null) aquí: el reorder hace stopPropagation, así que el drop NO burbujea al onDrop de la card donde vive setDO(null), y el resaltado de drop-target quedaba pegado tras reordenar */}}}
-                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,cursor:"grab",...hlOf(match,o)}}>
+                            style={{position:"relative",border:"1px solid "+C.bd,borderRadius:8,padding:6,marginBottom:4,background:C.sf,cursor:"grab",...hlOf(matchVisto,o)}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:4}}>
                             <span style={{display:"inline-flex",alignItems:"center",gap:4,minWidth:0}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9,fontWeight:700,color:C.t3,flexShrink:0}} title={"Turno "+o.machine_queue_position+" en la cola de esta máquina"}><DotsSixVerticalIcon size={11}/>{o.machine_queue_position}º</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</span>
                             <div style={{display:"flex",gap:3}}>
@@ -13779,7 +13817,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
-                            {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+                            {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dnInk:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
+                            <AlertasDeFicha o={o}/>
                           </div></div>
                           {/* v10.73.71 — mover una orden ENCOLADA a otra máquina sin arrastrar (paridad con las cards de "Órdenes Listas"). quickAssign no-op si eliges la misma máquina. */}
                           {(role==="admin"||role==="produccion")&&<div onClick={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()} draggable={false} style={{marginTop:5,position:"relative"}}><select aria-label={"Mover la orden de "+o.client+" a otra máquina"} value="" onChange={e=>{if(e.target.value)quickAssign(o,e.target.value)}} style={{width:"100%",fontSize:9,fontWeight:700,color:C.ac,background:C.acL,border:"1px solid "+C.ac+"33",borderRadius:7,padding:"5px 22px 5px 8px",cursor:"pointer",fontFamily:"'Geist',sans-serif",appearance:"none",WebkitAppearance:"none",MozAppearance:"none"}}><option value="">Mover a máquina…</option><optgroup label="Offset">{machineOpts("offset",o.current_machine)}</optgroup><optgroup label="Acabados">{machineOpts("acabados",o.current_machine)}</optgroup><optgroup label="Digital">{machineOpts("digital",o.current_machine)}</optgroup></select><CaretDownIcon size={11} weight="bold" color={C.ac} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/></div>}
@@ -13810,7 +13849,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
               {dO==="vm_manual"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Arrastra órdenes aquí"}
             </div>
             :inManual.map(o=><div key={o.id}>
-              <DragCard o={o} borderColor={C.emp} onAction={onAction} match={match}/>
+              <DragCard o={o} borderColor={C.emp} onAction={onAction} match={matchVisto}/>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
                 {/* v10.73.75 — clarify: los 3 botones de Empaque no tenían label (los de la cola sí). El del bote de basura NO borra la orden: registra MERMA — el ícono decía una cosa y la acción hacía otra. */}
                 <button onClick={()=>{escudoDeClics();onAction(o.id,"advance","salidas")}} style={bs(C.sal)} title="Enviar a Salidas" aria-label="Enviar a Salidas"><ExportIcon size={14} weight="bold"/></button>
@@ -13844,7 +13883,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
             {inSalidas.length===0?<div style={{textAlign:"center",padding:"10px 0",color:dO==="vm_salidas"?C.sal:C.ph,fontSize:dO==="vm_salidas"?11:10,fontWeight:dO==="vm_salidas"?600:400}}>
               {dO==="vm_salidas"?<><DownloadSimpleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Soltar aquí</>:"Sin órdenes en salida"}
             </div>
-            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:C.tCard,...hlOf(match,o)}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+            :inSalidas.map(o=><div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:10,padding:10,marginBottom:6,cursor:"pointer",border:"1.5px solid "+C.sal+"66",boxShadow:C.sh2,transition:C.tCard,...hlOf(matchVisto,o)}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
               <div style={{fontSize:11,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}</div>
               {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}

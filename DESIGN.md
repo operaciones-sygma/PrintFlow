@@ -410,6 +410,10 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
   un campo, y lo que la base rechaza regresa al campo con su aviso. «Seguir escribiendo» regresa el foco a ese campo
   (v10.84.55; caía al `<body>`).
+- **Un contador que alarma dice cuáles** (v10.84.58): «N vencidas» se aprieta y abre la lista con dónde está cada una y lleva
+  a su ficha; un número rojo que no se puede seguir es ruido. **Y un reloj que cruzó la noche dice desde cuándo** («desde ayer
+  05:48», en ámbar): las horas corridas cuentan las noches y se leen igual que unos minutos. **Las alertas de una orden son las
+  mismas en todas las fichas** (`AlertasDeFicha`: `alertasDeLaOrden` + `banderasDeLaOrden`), también en el tablero.
 - **En una ficha, el nombre primero y completo** (v10.84.57): el cliente va solo en su línea (hasta tres, a 12 px) y lo que
   lo acompaña (la asa, el folio, el reloj) en la segunda; un dato que el marco ya dice (el reloj de la activa) no se repite
   adentro. Se mide a 1366 con foto en la ficha: la miniatura le quita ~46 px al nombre.

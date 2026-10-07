@@ -316,5 +316,100 @@ await caso("tab-35-tableta-sin-barra-horizontal", "vista=produccion", async p =>
   ok("tab-35-tableta-sin-barra-horizontal", d.sw <= d.cw + 1, `a 768 (tableta): ancho del contenido ${d.sw} contra ${d.cw}`);
 }, { width: 768, height: 1024 });
 
+// ── v10.84.58: se ve lo atrasado y lo detenido (P1 de la primera revisión: «3 vencidas» sin decir cuáles, lo vencido sólo con
+//   la fecha en rojo, 43 h en Empaque igual que 12 min, la cola sin URGENTE ni REIMPRIMIR) ─────────────────────────────────
+// el texto visible de la ficha de una orden
+const textoFicha = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes(pn)); return c ? c.innerText.replace(/\s+/g, " ") : ""; }, pn);
+await caso("tab-36-vencidas-dice-cuales", "vista=produccion", async p => {
+  const chip = p.getByRole("button", { name: /vencidas?/ }).first();
+  const esBoton = await chip.count();
+  if (esBoton) { await chip.click(); await espera(p, 400); }
+  // (sólo la lista: en la página entera «P-0594 … Printmaster 74 … 2º» sale también de las opciones de su selector)
+  const t = await p.evaluate(() => (document.querySelector('[aria-label="Órdenes vencidas"]')?.innerText || "").replace(/\s+/g, " "));
+  ok("tab-36-vencidas-dice-cuales", esBoton > 0 && /P-0594[^|]*Printmaster 74[^|]*2º en la fila/.test(t) && /P-0601[^|]*Órdenes Listas/.test(t),
+    `«2 vencidas»: ${esBoton ? "se aprieta" : "NO es botón"}; ${/P-0594[^|]*Printmaster 74/.test(t) ? "dice que P-0594 está en la PM74, 2º en la fila" : "no dice dónde está P-0594"}; ${/P-0601[^|]*Órdenes Listas/.test(t) ? "y P-0601 en Listas" : "ni P-0601"}`);
+});
+await caso("tab-37-ir-a-la-vencida", "vista=produccion", async p => {
+  await p.evaluate(() => window.scrollTo(0, 0));
+  const chip = p.getByRole("button", { name: /vencidas?/ }).first();
+  if (await chip.count()) { await chip.click(); await espera(p, 400); }
+  const ir = p.getByRole("button", { name: /P-0594/ }).first();
+  if (await ir.count()) { await ir.click(); await espera(p, 900); }
+  const r = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0594")); if (!c) return null;
+    const b = c.getBoundingClientRect(); let resaltada = false; for (let x = c; x && x !== document.body; x = x.parentElement) { const o = getComputedStyle(x).outlineStyle; if (o && o !== "none") { resaltada = true; break; } }
+    return { aLaVista: b.top >= 0 && b.bottom <= innerHeight, resaltada }; });
+  ok("tab-37-ir-a-la-vencida", !!r && r.aLaVista && r.resaltada, `tocar P-0594 en la lista: ${!r ? "no hay a dónde ir" : (r.aLaVista ? "su ficha queda a la vista" : "su ficha NO queda a la vista") + (r.resaltada ? " y resaltada" : " sin resaltar")}`);
+});
+await caso("tab-38-retraso-con-palabra-en-la-cola", "vista=produccion", async p => {
+  const t = await textoFicha(p, "P-0594");
+  ok("tab-38-retraso-con-palabra-en-la-cola", /RETRASO/.test(t), `P-0594 vencida, 2ª en la cola de la PM74: ${/RETRASO/.test(t) ? "dice RETRASO" : "sólo la fecha en rojo"}`);
+});
+await caso("tab-39-alertas-en-la-cola", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0593", { priority: "urgente", needs_reprint: true, sin_empaque_sygma: true })); await espera(p, 400);
+  const t = await textoFicha(p, "P-0593");
+  ok("tab-39-alertas-en-la-cola", /Urgente/i.test(t) && /REIMPRIMIR|Reimprimir/.test(t) && /Sin logo SYGMA/.test(t), `P-0593 en la cola, urgente, por reimprimir y sin logo: «${t.slice(0, 120)}»`);
+});
+await caso("tab-40-urgente-con-palabra-en-listas", "vista=produccion", async p => {
+  const t = await textoFicha(p, "P-0600");
+  ok("tab-40-urgente-con-palabra-en-listas", /Urgente/i.test(t), `P-0600 urgente en Listas: ${/Urgente/i.test(t) ? "lo dice" : "sólo un punto rojo"}`);
+});
+await caso("tab-41-detenida-en-empaque-dice-desde-cuando", "vista=produccion", async p => {
+  // P-0585 lleva desde antier en Empaque: «47h 12m» no se lee; «desde el …» sí, y en otro tono
+  await p.evaluate(() => window.__cambiar("P-0585", { machine_log: [{ machine: "vm_manual", started: new Date(Date.now() - 47 * 3600000).toISOString() }] })); await espera(p, 600);
+  const t = await textoFicha(p, "P-0585");
+  ok("tab-41-detenida-en-empaque-dice-desde-cuando", /desde /.test(t) && !/\b\d{2,}h \d+m\b/.test(t), `P-0585 con 47 h en Empaque: «${(t.match(/desde [^·]*|\d+h \d+m/) || ["(sin reloj)"])[0].trim()}»`);
+});
+await caso("tab-42-la-busqueda-dice-donde", "vista=produccion&buscar=P-0594", async p => {
+  // (sólo el aviso de la búsqueda, el renglón de «El tablero no está filtrado»)
+  const t = await p.evaluate(() => { const el = [...document.querySelectorAll("span")].find(x => x.textContent.trim() === "El tablero no está filtrado"); return el ? el.parentElement.innerText.replace(/\s+/g, " ") : ""; });
+  ok("tab-42-la-busqueda-dice-donde", /P-0594[^.]*Printmaster 74[^.]*2º en la fila/.test(t), `buscar P-0594: ${/Printmaster 74/.test(t) ? "dice dónde" : "sólo «1 orden resaltada»"}`);
+});
+
+// vuelta 3 de v10.84.58, por donde no se diseñó
+await caso("tab-43-esc-cierra-la-lista-y-regresa-el-foco", "vista=produccion", async p => {
+  await p.getByRole("button", { name: /vencidas?/ }).first().click(); await espera(p, 400);
+  await p.keyboard.press("Tab"); await espera(p, 150);   // desde el chip, el Tab entra a la lista (la más vencida primero)
+  const enLista = await botonEnfocado(p);
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const lista = await p.locator('[aria-label="Órdenes vencidas"]').count(), foco = await botonEnfocado(p);
+  ok("tab-43-esc-cierra-la-lista-y-regresa-el-foco", /P-0601/.test(enLista) && lista === 0 && /vencidas?/.test(foco), `Tab desde el chip: ${/P-0601/.test(enLista) ? "entra a la lista" : "va a «" + enLista + "»"}; Esc ${lista ? "NO la cierra" : "la cierra"} y el foco queda en «${foco}»`);
+});
+await caso("tab-44-vencida-en-una-seccion-plegada", "vista=produccion", async p => {
+  // Digital empieza plegada: ir a una vencida que está ahí la abre y la deja a la vista
+  await p.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 3); window.__cambiar("P-0596", { due_date: d.toISOString().slice(0, 10) }); }); await espera(p, 400);
+  await p.getByRole("button", { name: /vencidas?/ }).first().click(); await espera(p, 400);
+  const ir = p.getByRole("button", { name: /P-0596/ }).first(); if (await ir.count()) { await ir.click(); await espera(p, 1000); }
+  const r = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0596")); if (!c || !c.getClientRects().length) return null; const b = c.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; });
+  ok("tab-44-vencida-en-una-seccion-plegada", r === true, `P-0596 vencida en la DocuColor (Digital plegada): ${r === null ? "su ficha sigue escondida" : r ? "se abre la sección y queda a la vista" : "se abre pero no queda a la vista"}`);
+});
+await caso("tab-45-la-que-corre-dice-corriendo", "vista=produccion", async p => {
+  await p.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); window.__cambiar("P-0591", { due_date: d.toISOString().slice(0, 10) }); }); await espera(p, 400);
+  await p.getByRole("button", { name: /vencidas?/ }).first().click(); await espera(p, 400);
+  const t = await p.evaluate(() => (document.querySelector('[aria-label="Órdenes vencidas"]')?.innerText || "").replace(/\s+/g, " "));
+  ok("tab-45-la-que-corre-dice-corriendo", /P-0591[^P]*Printmaster 74, corriendo/.test(t), `P-0591 vencida y corriendo en la PM74: «${(t.match(/P-0591[^P]*/) || ["(no está)"])[0].trim()}»`);
+});
+await caso("tab-46-reloj-de-hoy-sigue-en-horas", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0585", { machine_log: [{ machine: "vm_manual", started: new Date(Date.now() - 5 * 60000).toISOString() }] })); await espera(p, 600);
+  const t = await textoFicha(p, "P-0585");
+  ok("tab-46-reloj-de-hoy-sigue-en-horas", /\b\d+m\b/.test(t) && !/desde /.test(t), `P-0585 con 5 minutos en Empaque: «${(t.match(/desde [^·]*|\d+h \d+m|\b\d+m\b/) || ["(sin reloj)"])[0].trim()}»`);
+});
+await caso("tab-47-reloj-de-hace-mas-de-una-semana", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0585", { machine_log: [{ machine: "vm_manual", started: new Date(Date.now() - 9 * 86400000).toISOString() }] })); await espera(p, 600);
+  const t = await textoFicha(p, "P-0585");
+  ok("tab-47-reloj-de-hace-mas-de-una-semana", /desde el \d{1,2}/.test(t), `P-0585 con 9 días en Empaque: «${(t.match(/desde [^·]*/) || ["(sin «desde»)"])[0].trim().slice(0, 40)}»`);
+});
+await caso("tab-48-busqueda-con-varias", "vista=produccion&buscar=LIC.", async p => {
+  const t = await p.evaluate(() => { const el = [...document.querySelectorAll("span")].find(x => x.textContent.trim() === "El tablero no está filtrado"); return el ? el.parentElement.innerText.replace(/\s+/g, " ") : ""; });
+  ok("tab-48-busqueda-con-varias", /órdenes resaltadas/.test(t) && / en (Órdenes Listas|Printmaster|Empaque|Salidas)/.test(t) && /y \d+ más/.test(t), `buscar «LIC.»: «${t.slice(0, 160)}»`);
+});
+await caso("tab-49-las-alertas-no-se-salen", "vista=produccion&caso=lleno", async p => {
+  await p.evaluate(() => { for (const pn of ["P-0593", "P-0594", "P-0591"]) window.__cambiar(pn, { priority: "urgente", needs_reprint: true, sin_empaque_sygma: true, returned_at: "2026-10-02T12:00:00Z" }); }); await espera(p, 500);
+  const r = await p.evaluate(() => { const fuera = [];
+    for (const it of document.querySelectorAll("[draggable=true]")) { const ri = it.getBoundingClientRect(); if (!ri.width) continue;
+      for (const b of it.querySelectorAll("span")) { const rb = b.getBoundingClientRect(); if (rb.width && (rb.right > ri.right + 1)) { fuera.push((b.innerText || "").trim().slice(0, 20) + "@" + (it.innerText.match(/P-\d+/) || [""])[0]); break; } } }
+    return fuera; });
+  ok("tab-49-las-alertas-no-se-salen", r.length === 0, r.length ? "se salen de su ficha: " + r.slice(0, 5).join(", ") : "todas caben");
+});
+
 await browser.close();
 for (const r of res) console.log(r);
