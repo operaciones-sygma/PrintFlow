@@ -378,9 +378,9 @@ await caso("det-59-no-pide-factura-en-mas", "caso=salidas&rol=karla", async p =>
   const hay = await abrirMas(p);
   const t = hay ? await p.getByRole("menu").innerText() : "";
   let despacha = false;
-  if (/no ha pedido factura/i.test(t)) { await p.getByRole("menuitem", { name: /no ha pedido factura/i }).click(); await espera(p, 300); despacha = /accion:snooze_invoice/.test(await log(p)); }
-  ok("det-59-no-pide-factura-en-mas", suelto === 0 && /no ha pedido factura/i.test(t) && /hasta que (el cliente )?(la )?pida/i.test(t) && despacha,
-    `suelto: ${suelto ? "SÍ" : "no"}; en «Más»: ${/no ha pedido factura/i.test(t) ? (/hasta que/i.test(t) ? "con su explicación" : "SIN explicación") : "NO está"}; ${despacha ? "la pone en espera" : "no hace nada"}`);
+  if (/no pide factura/i.test(t)) { await p.getByRole("menuitem", { name: /no pide factura/i }).click(); await espera(p, 300); despacha = /accion:snooze_invoice/.test(await log(p)); }
+  ok("det-59-no-pide-factura-en-mas", suelto === 0 && /no pide factura/i.test(t) && /hasta que (el cliente )?(la )?pida/i.test(t) && despacha,
+    `suelto: ${suelto ? "SÍ" : "no"}; en «Más»: ${/no pide factura/i.test(t) ? (/hasta que/i.test(t) ? "con su explicación" : "SIN explicación") : "NO está"}; ${despacha ? "la pone en espera" : "no hace nada"}`);
 });
 await caso("det-60-pie-dos-renglones", "caso=salidas&rol=karla", async p => {
   // sólo los botones del pie (el último hijo del diálogo): los del cuerpo que quedan cerca del borde no cuentan
@@ -437,8 +437,8 @@ await caso("det-69-cambia-con-el-detalle-abierto", "caso=salidas&rol=karla", asy
   if (hay) { await p.keyboard.press("Escape"); await espera(p, 250); }
   await p.keyboard.press("Control+Enter"); await espera(p, 300);
   const l = await log(p);
-  ok("det-69-cambia-con-el-detalle-abierto", n.length === 1 && /Marcar como Entregada/.test(n[0]) && !/no ha pedido factura/i.test(t) && /accion:deliver_only/.test(l) && !/deliver_with_invoice/.test(l),
-    `le ponen folio con el detalle abierto: el atajo en ${n.join(" | ") || "ningún botón"}; «Poner en espera» ${/no ha pedido factura/i.test(t) ? "SIGUE en «Más»" : "ya no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+  ok("det-69-cambia-con-el-detalle-abierto", n.length === 1 && /Marcar como Entregada/.test(n[0]) && !/no pide factura/i.test(t) && /accion:deliver_only/.test(l) && !/deliver_with_invoice/.test(l),
+    `le ponen folio con el detalle abierto: el atajo en ${n.join(" | ") || "ningún botón"}; «Poner en espera» ${/no pide factura/i.test(t) ? "SIGUE en «Más»" : "ya no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
 });
 await caso("det-70-ctrl-enter-con-foco-en-cerrar", "caso=salidas&rol=karla", async p => {
   await p.getByRole("button", { name: "Cerrar", exact: true }).last().focus();   // el del pie (arriba está la ×)
@@ -468,8 +468,8 @@ await caso("det-74-en-espera", "caso=espera&rol=karla", async p => {
   if (hay) { await p.keyboard.press("Escape"); await espera(p, 250); }
   await p.keyboard.press("Control+Enter"); await espera(p, 300);
   const l = await log(p);
-  ok("det-74-en-espera", !/no ha pedido factura/i.test(t) && /imprimir/.test(l) && !/accion:/.test(l),
-    `orden ya en espera: «Poner en espera» ${/no ha pedido factura/i.test(t) ? "SALE OTRA VEZ en «Más»" : "no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+  ok("det-74-en-espera", !/no pide factura/i.test(t) && /imprimir/.test(l) && !/accion:/.test(l),
+    `orden ya en espera: «Poner en espera» ${/no pide factura/i.test(t) ? "SALE OTRA VEZ en «Más»" : "no sale"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
 });
 await caso("det-76-escape-de-mas-regresa-el-foco", "caso=salidas&rol=karla", async p => {
   // el bug que encontraron det-69 y det-74: Escape cerraba «Más» y el foco se iba al <body> (sin Tab atrapado ni Ctrl+Enter)
@@ -727,6 +727,84 @@ await caso("det-95-rotulo-nombre-interno", "caso=factura&rol=admin", async p => 
   const px = await dlg(p).evaluate(d => { const e = [...d.querySelectorAll("*")].find(x => [...x.childNodes].some(n => n.nodeType === 3 && /Nombre interno/i.test(n.textContent))); return e ? parseFloat(getComputedStyle(e).fontSize) : 0; });
   ok("det-95-rotulo-nombre-interno", px >= 10, `«Nombre interno» a ${px} px (los rótulos de la app: 10 px)`);
 });
+
+// ── v10.84.51: un solo juego de acciones (la quinta critique: la ficha y el detalle tenían acciones distintas) ────────────
+const textoMas = async p => (await abrirMas(p)) ? await p.getByRole("menu").innerText() : "";
+await caso("det-116-mas-tiene-lo-de-la-ficha", "caso=salidas&rol=admin", async p => {
+  const t = await textoMas(p);
+  const faltan = ["Poner en espera", "Duplicar", "Cancelar orden", "Borrar orden"].filter(x => !t.includes(x));
+  ok("det-116-mas-tiene-lo-de-la-ficha", !faltan.length, faltan.length ? "admin en Salidas: a «Más» le falta lo que la ficha sí ofrece: " + faltan.join(", ") : "«Más» ofrece lo mismo que la ficha");
+});
+await caso("det-117-mas-con-las-palabras-de-la-ficha", "caso=salidas&rol=karla", async p => {
+  const t = await textoMas(p);
+  ok("det-117-mas-con-las-palabras-de-la-ficha", /El cliente no pide factura/.test(t) && !/Poner en espera: no ha pedido/.test(t),
+    /El cliente no pide factura/.test(t) ? "«El cliente no pide factura», como en la ficha" : "dice otra cosa que la ficha: " + t.split("\n")[0]);
+});
+await caso("det-118-recordar-al-responsable", "caso=salidas&etapa=ctp&rol=karla", async p => {
+  const t = await textoMas(p);
+  let l = "";
+  if (/Recordar a Germán/.test(t)) { await p.getByRole("menuitem", { name: /Recordar a Germán/ }).click(); await espera(p, 300); l = await log(p); }
+  ok("det-118-recordar-al-responsable", /accion:nudge_responsible/.test(l), /Recordar a/.test(t) ? "«Recordar a Germán» " + (/nudge/.test(l) ? "le avisa" : "NO hace nada") : "Karla ve una orden de Germán y no puede recordarle (la ficha sí)");
+});
+await caso("det-119-registrar-merma", "caso=alertas&rol=produccion", async p => {
+  const t = await textoMas(p);
+  let l = "";
+  if (/Registrar merma/.test(t)) { await p.getByRole("menuitem", { name: /Registrar merma/ }).click(); await espera(p, 300); l = await log(p); }
+  ok("det-119-registrar-merma", /accion:waste/.test(l), /Registrar merma/.test(t) ? "«Registrar merma» " + (/waste/.test(l) ? "la pide" : "NO hace nada") : "producción en máquina no puede registrar merma desde el detalle (la ficha sí)");
+});
+await caso("det-120-avisar-falta-archivo", "caso=web&rol=preprensa", async p => {
+  const t = await textoMas(p);
+  ok("det-120-avisar-falta-archivo", /falta archivo/i.test(t), /falta archivo/i.test(t) ? "un pedido web sin archivo: «Avisar a Lupita: falta archivo»" : "pedido web sin archivo: no hay cómo avisar a Lupita (la ficha sí)");
+});
+await caso("det-121-agregar-nota", "caso=factura&rol=admin", async p => {
+  const campo = dlg(p).getByRole("textbox", { name: /nota/i }).first();
+  const hay = await campo.count();
+  if (hay) { await campo.fill("Llamar antes de entregar"); await campo.press("Enter"); await espera(p, 300); }
+  const l = await log(p), abierto = await p.getByRole("dialog").count();
+  ok("det-121-agregar-nota", hay > 0 && /accion:quick_note Llamar antes de entregar/.test(l) && abierto === 1,
+    hay ? `agregar una nota: ${/quick_note/.test(l) ? "la manda" : "NO la manda"}; el detalle ${abierto ? "sigue abierto" : "SE CERRÓ"}` : "no hay dónde agregar una nota (la ficha sí)");
+});
+await caso("det-122-reactivar-con-la-palabra-de-la-ficha", "caso=espera&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ snooze_kind: "awaiting_client_invoice" })); await espera(p, 300);
+  const n = await dlg(p).getByRole("button", { name: /Ya pidió factura · Reactivar/ }).count();
+  ok("det-122-reactivar-con-la-palabra-de-la-ficha", n === 1, n ? "esperaba la factura: «Ya pidió factura · Reactivar», como en la ficha" : "esperaba la factura y dice «Quitar espera» (la ficha: «Ya pidió factura · Reactivar»)");
+});
+await caso("det-123-vendedor-ajeno-sin-acciones", "caso=salidas&rol=vendedor&login=otro", async p => {
+  const t = await textoMas(p);
+  ok("det-123-vendedor-ajeno-sin-acciones", !/Cancelar|Borrar|Duplicar|Poner en espera/.test(t), t ? "un vendedor con la orden de otro ve en «Más»: " + t.split("\n").filter(x => /Cancelar|Borrar|Duplicar|espera/.test(x)).join(", ") : "un vendedor con la orden de otro: sin acciones");
+});
+await caso("det-124-mas-cabe-1366", "caso=salidas&rol=admin", async p => {
+  await abrirMas(p);
+  const r = await p.evaluate(() => { const m = document.querySelector('[role="menu"]'); if (!m) return null; const b = m.getBoundingClientRect(), d = document.querySelector('[role="dialog"]').getBoundingClientRect();
+    return { arriba: Math.round(b.top), abajo: Math.round(b.bottom), dTop: Math.round(d.top), alto: innerHeight }; });
+  ok("det-124-mas-cabe-1366", !!r && r.arriba >= r.dTop && r.abajo <= r.alto, r ? `«Más» de admin a 1366: de y=${r.arriba} a y=${r.abajo} (el diálogo empieza en ${r.dTop})` : "no abrió");
+});
+
+// ── v10.84.51, vuelta 3: por donde no se diseñó ─────────────────────────────────────────────────────────────────────
+const campoNota = p => dlg(p).getByRole("textbox", { name: /Agregar una nota/i }).first();
+await caso("det-125-nota-doble-enter", "caso=factura&rol=admin", async p => {
+  await campoNota(p).fill("Llamar antes de entregar"); await campoNota(p).press("Enter"); await campoNota(p).press("Enter"); await espera(p, 300);
+  const n = ((await log(p)).match(/accion:quick_note/g) || []).length;
+  ok("det-125-nota-doble-enter", n === 1, `doble Enter en la nota: se mandó ${n} vez/veces`);
+});
+await caso("det-126-nota-vacia", "caso=factura&rol=admin", async p => {
+  await campoNota(p).fill("    "); await campoNota(p).press("Enter"); await espera(p, 300);
+  const n = ((await log(p)).match(/accion:quick_note/g) || []).length;
+  const apagado = await dlg(p).getByRole("button", { name: "Agregar", exact: true }).isDisabled();
+  ok("det-126-nota-vacia", n === 0 && apagado, `una nota de puros espacios: ${n ? "SE MANDÓ" : "no se manda"}; «Agregar» ${apagado ? "apagado" : "PRENDIDO"}`);
+});
+await caso("det-127-esc-escribiendo-nota", "caso=factura&rol=admin", async p => {
+  await campoNota(p).fill("hola"); await campoNota(p).press("Escape"); await espera(p, 300);
+  const abierto = await p.getByRole("dialog").count(), v = abierto ? await campoNota(p).inputValue() : "(cerrado)";
+  ok("det-127-esc-escribiendo-nota", abierto === 1 && v === "hola", `escribiendo una nota, Esc: el detalle ${abierto ? "sigue" : "SE CERRÓ"} y la nota dice «${v}»`);
+});
+await caso("det-128-mas-con-todo-cabe-650", "caso=salidas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ purchase_order_id: "oc1" })); await espera(p, 300);
+  await abrirMas(p);
+  const r = await p.evaluate(() => { const m = document.querySelector('[role="menu"]'); if (!m) return null; const b = m.getBoundingClientRect(), d = document.querySelector('[role="dialog"]').getBoundingClientRect();
+    return { n: m.querySelectorAll('[role="menuitem"]').length, arriba: Math.round(b.top), abajo: Math.round(b.bottom), dTop: Math.round(d.top), alto: innerHeight }; });
+  ok("det-128-mas-con-todo-cabe-650", !!r && r.arriba >= r.dTop && r.abajo <= r.alto, r ? `«Más» de admin con ${r.n} opciones a 1366×650: de y=${r.arriba} a y=${r.abajo} (el diálogo empieza en ${r.dTop})` : "no abrió");
+}, { width: 1366, height: 650 });
 
 await browser.close();
 for (const r of res) console.log(r);

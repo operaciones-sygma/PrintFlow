@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.51 — El detalle de la orden ofrece lo mismo que la ficha — 7-oct-2026
+
+Tercera parte de la quinta critique. El revisor encontró «dos juegos de acciones»:
+- **sólo en la ficha:** poner en espera, cancelar, borrar, duplicar, cambiar OC, merma, nota rápida y recordar;
+- **sólo en el detalle:** folio anticipado, liberar folio, devolver saldo y deshacer cancelación;
+- y con palabras distintas para lo mismo.
+
+Esta versión hace que el detalle tenga todo; la siguiente suma a la ficha lo que sólo tenía el detalle.
+
+- **El «Más» del detalle suma lo que ofrecía sólo la ficha**, con sus mismas condiciones (`accionesDeLaFicha`):
+  - las acciones: poner en espera, recordar al responsable, avisar a Lupita que falta el archivo de un pedido web,
+    registrar merma, duplicar, cambiar OC, cancelar orden y borrar orden;
+  - las 15 condiciones se comprobaron TAL CUAL contra `OCard` al escribirlas;
+  - cada acción va con su línea de qué hace;
+  - lo que no se deshace fácil (regresar, cancelar, cancelar con nota de crédito, borrar) va al final, después de una
+    línea.
+- **Las palabras de la ficha**:
+  - «El cliente no pide factura» (decía «Poner en espera: no ha pedido factura»);
+  - «Regresar a etapa anterior»;
+  - y, si la espera era por la factura, «Ya pidió factura · Reactivar» en lugar de «Quitar espera» (la misma acción:
+    `unsnooze` y `unsnooze_invoice` llaman a `unsnoozeOrder`).
+- **Las notas rápidas se agregan desde el detalle** (`AgregarNota`, con Enter), sin cerrarlo.
+- **No toca** la base ni las RPC: cada acción la recibe `handleAction` como desde la ficha, y su candado central
+  (`canExecuteAction`) sigue decidiendo.
+- **Pruebas** (`detalle.mjs`, de 125 a 138):
+  - Vuelta 1, contra v10.84.50: de los 9 casos nuevos fallaban 7; los 2 que pasaban son guardas.
+  - det-59, det-69 y det-74 buscaban «no ha pedido factura»: ahora buscan la palabra de la ficha y comprueban lo mismo.
+  - Vuelta 2: 134 de 134, el tablero idéntico (161 de 161).
+  - Vuelta 3, por donde no se diseñó: la nota con doble Enter, vacía o con Esc, y el «Más» de admin con todas sus opciones
+    a 1366×650. 138 de 138.
+  - Corrida doble contra v10.84.50: fallan 10 de los 13 nuevos (los otros 3 son guardas) y, de los 125 de antes, sólo
+    det-59, la que cambió de palabra a propósito.
+  - Todas las tandas: 407 de 407.
+
 ## v10.84.50 — El detalle de la orden sabe lo que sabe la ficha — 6-oct-2026
 
 Segunda de las cuatro partes de la quinta critique. El revisor encontró que el detalle sabía menos que la ficha del tablero:

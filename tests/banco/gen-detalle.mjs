@@ -60,7 +60,7 @@ const partes = [
   line(/^const bizHoursAgo=/, "bizHoursAgo"), line(/^function bizDaysUntil\(/, "bizDaysUntil"), hasta(/^const getStale=/, /return null\};\s*$/, "getStale"),
   multi(/^const STAGE_RESPONSIBLE = \{/, "STAGE_RESPONSIBLE"), line(/^const VENDEDORES_CON_USUARIO = /, "VENDEDORES_CON_USUARIO"),
   fnBlock("vendorDisplayName"), fnBlock("orderResponsible"), line(/^const fmtM=/, "fmtM"), fnBlock("LiveTimer"),
-  ...["alertasDeLaOrden", "banderasDeLaOrden"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
+  ...["alertasDeLaOrden", "banderasDeLaOrden", "accionesDelDetalle", "accionesDeLaFicha", "AgregarNota"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const Q = new URLSearchParams(location.search);
 const CASO = Q.get("caso") || "factura", ROL = Q.get("rol") || "karla", FALLA = Q.get("falla") || "";
 const LOGIN = Q.get("login") || { karla: "karla", admin: "admin", produccion: "gerardo", preprensa: "noemi", german: "german", secretaria: "secretaria", vendedor: "manuel", visor: "dulce" }[ROL] || ROL;
@@ -129,6 +129,8 @@ const CASOS = {
   // lo que la ficha avisa: retrasada, urgente, la copia impresa obsoleta, montada en una prensa (con su reloj)
   alertas: { ...BASE, production_number: "P-0591", stage: "in_production", priority: "urgente", needs_reprint: true, print_version: 1,
     current_machine: "off_pm74", machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: "2026-10-06T15:00:00Z" }], image_url_2: null },
+  // un pedido web sin archivo, sin validar (preprensa avisa a Lupita que falta)
+  web: { ...BASE, production_number: "P-0613", stage: "draft", source: "web", web_order_ref: "W-1001", file_url: null, validated_by_preprensa: false, image_url_2: null },
   // TODAS las alertas y banderas a la vez (para ver que el encabezado no se coma el diálogo)
   todas: { ...BASE, production_number: "P-0592", client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN", stage: "in_production", priority: "urgente",
     needs_reprint: true, print_version: 3, returned_at: "2026-10-02T12:00:00Z", return_reason: "Color fuera de tono", has_post_invoice_edits: true,
