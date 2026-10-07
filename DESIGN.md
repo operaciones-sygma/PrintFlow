@@ -410,6 +410,14 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Cerrar con algo escrito pregunta** (v10.84.54): Esc, el clic fuera, la × y «Cerrar» preguntan si hay texto sin guardar en
   un campo, y lo que la base rechaza regresa al campo con su aviso. «Seguir escribiendo» regresa el foco a ese campo
   (v10.84.55; caía al `<body>`).
+- **En el tablero, lo de todos los días se deshace y lo que detiene se pregunta** (v10.84.56): «Empaque» y «A Listas» (antes
+  ⟳, el ícono de recargar) ESPERAN `DESHACER_MS` (6.5 s, lo mismo que vive el «Deshacer» de asignar) con «Pasa a Empaque en
+  N s · Deshacer» en el lugar de sus botones, y sólo entonces llaman a App por el camino de siempre: deshacer no escribe nada y
+  los manejadores de App (que cargan los arreglos contra minutos de máquina corruptos) no cambian. Si en la espera la orden
+  cambió de etapa o de máquina, no se hace y se dice; al salir del tablero, lo pendiente se hace. «Activar» detiene lo que
+  corre (cierra su reloj): eso se pregunta, con las dos órdenes y cuánto lleva; con la máquina libre no se pregunta. La
+  confirmación sigue al daño, no a la costumbre (lo preguntó el revisor del tablero). El detalle de la orden pregunta porque
+  ahí no hay dónde dejar el «Deshacer»: se cierra al actuar.
 - **Cambiar de etapa pregunta antes** (v10.84.55): en el detalle, un botón que mueve la orden de etapa (avanzar, «Cliente
   Aprobó», «Cargar a Stock») pregunta a cuál pasa, de cuál sale, qué máquina deja y a quién le avisa: lo que hace la función de
   App (`doAdv`, `approveProof`, `loadStock`), no lo que el botón parece. La pregunta abre con el escudo (el segundo clic de un

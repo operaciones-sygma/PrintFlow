@@ -4247,6 +4247,9 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 //   cerraba el detalle, y el segundo caía en el tablero, sobre el botón de otra orden (en tablet, el doble toque). Después de
 //   actuar desde el detalle, una capa invisible se traga los clics 600 ms: el segundo clic no llega ni al tablero ni a la
 //   ventana que se acaba de abrir. El teclado no se toca.
+// v10.84.56 — cuánto espera el tablero antes de escribir lo que se puede deshacer («Empaque», «A Listas»): lo mismo que vive
+//   el «Deshacer» de asignar una máquina (el aviso de 6.5 s). `let`: el banco del tablero lo acorta para probar.
+let DESHACER_MS=6500;
 const escudoDeClics=(ms=600)=>{if(typeof document==="undefined")return;const d=document.createElement("div");d.setAttribute("aria-hidden","true");d.dataset.escudo="1";d.style.cssText="position:fixed;inset:0;z-index:2147483000;background:transparent";const tragar=e=>{e.preventDefault();e.stopPropagation()};["click","dblclick","mousedown","mouseup","pointerdown","pointerup","touchstart","touchend","contextmenu"].forEach(t=>d.addEventListener(t,tragar,true));document.body.appendChild(d);setTimeout(()=>d.remove(),ms)};
 const FilaDelDetalle=({l,v})=>v&&v!=="—"?<dl style={{display:"flex",padding:"7px 0",borderBottom:"0.5px solid "+C.bd,margin:0}}><dt style={{width:130,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",flexShrink:0}}>{l}</dt><dd style={{flex:1,fontSize:13,color:C.tx,margin:0}}>{v}</dd></dl>:null;
 const SeccionDelDetalle=({icono,children,mt=12})=><div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.ac,textTransform:"uppercase",marginTop:mt,marginBottom:4}}>{icono}{children}</div>;
@@ -13345,6 +13348,12 @@ function OrderThumb({o,size=40}){
 const HL={outline:"2.5px solid "+C.ac,outlineOffset:2};
 const hlOf=(match,o)=>(match&&match(o)?HL:null);
 
+// v10.84.56 — lo que el tablero va a hacer y todavía se puede deshacer: qué pasa, en cuántos segundos, y «Deshacer» (con el
+//   foco, para el teclado). Fuera del Kanban para que no se vuelva a montar en cada render.
+function CuentaAtras({hasta}){const [,t]=useState(0);useEffect(()=>{const i=setInterval(()=>t(n=>n+1),250);return ()=>clearInterval(i)},[]);return <span style={{fontVariantNumeric:"tabular-nums"}}>{Math.max(0,Math.ceil((hasta-Date.now())/1000))} s</span>}
+function FilaPendiente({p,onDeshacer}){return <div role="status" onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:11,fontWeight:600,color:C.t2,padding:"3px 0 2px"}}>
+  <span>{p.frase} en <CuentaAtras hasta={p.hasta}/></span>
+  <button autoFocus onClick={onDeshacer} style={{...bs(C.sf,C.tx),padding:"4px 10px",boxShadow:"0 0 0 0.5px "+C.bdSt}}><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button></div>}
 function DragCard({o,borderColor,reorderMachine,onAction,match}){return <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",o.id);if(reorderMachine)e.dataTransfer.setData("reorderMachine",reorderMachine)}} onClick={()=>onAction(o.id,"detail")}
     style={{background:C.sf,borderRadius:10,padding:10,marginBottom:6,cursor:"grab",border:"1.5px solid "+(o.priority==="urgente"?C.dn:borderColor)+"66",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",display:"flex",gap:8,alignItems:"flex-start",...hlOf(match,o)}}><OrderThumb o={o} size={38}/><div style={{flex:1,minWidth:0}}>
     {/* v10.73.74 — harden: un cliente largo (60+ chars) empujaba al LiveTimer FUERA de la tarjeta (el span no tenía minWidth:0 ni ellipsis; el minWidth:0 estaba en el wrapper padre, no en el flex item). */}
@@ -13376,6 +13385,8 @@ function DragCard({o,borderColor,reorderMachine,onAction,match}){return <div dra
 //   admin) + un predicado `match`. La búsqueda RESALTA las coincidencias donde están. Además contesta mejor la
 //   pregunta real de Gerardo: "¿dónde está P-1234?" se responde viéndolo resaltado DENTRO de Prensa 3, con su
 //   contexto, no borrando las otras 10 máquinas.
+// v10.84.56: la primera revisión independiente del tablero (20/40): mover órdenes con red («Empaque» y «A Listas» esperan con
+//   «Deshacer», «Activar» pregunta si detiene lo que corre, el escudo de clics) y el número de la orden en el tablero de Germán.
 function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showToast,actionLoading,match=null,searchText="",onClearSearch}) {
   // v10.73.31 — ocultar las órdenes EN ESPERA del POOL de espera ("Listas"/maquila_in), que es donde se acumulan y
   // hacen ruido. Las que están EN una máquina (in_production) NO se ocultan: la máquina NO debe aparecer "Disponible"
@@ -13509,6 +13520,32 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   FINAL de la cola de origen (no a pos 0) y no cierra el log de la que se auto-promovió mientras tanto. Fix correcto
   //   = pasar target-pos explícito + cerrar el log de la promovida, lo que exige refactorizar assignMachine (compartido
   //   por los 3 boards, alto riesgo) para un P3 de escenario raro. No vale el riesgo/valor hoy.
+  // v10.84.56 — mover órdenes con red (la primera revisión independiente del tablero, 20/40, P1: «Empaque», ⟳ y «Activar»
+  //   actuaban al primer clic sin «Deshacer», y el doble clic en «Empaque» mandaba también a la orden que subía a su lugar).
+  //   «Empaque» y «A Listas» ESPERAN antes de escribir (DESHACER_MS) con «Deshacer» a la vista: deshacer no escribe nada, y al
+  //   terminar la espera se llama a App por el camino de siempre (doAdv y return_to_ready no cambian: cargan los arreglos
+  //   contra minutos de máquina corruptos). Si en la espera la orden cambió de etapa o de máquina (otra persona), no se hace y
+  //   se dice; al salir del tablero, lo pendiente se hace. «Activar» pregunta cuando detiene lo que corre.
+  //   onAction se lee de un ref: el que llega en el primer render trae el `orders` de App de ESE momento.
+  const [pend,setPend]=useState({});const pendRef=useRef({});const timersRef=useRef({});
+  const ordRef=useRef(orders);ordRef.current=orders;const onActionRef=useRef(onAction);onActionRef.current=onAction;
+  const [avisoPend,setAvisoPend]=useState("");const [pregActivar,setPregActivar]=useState(null);
+  const quitarPend=id=>{clearTimeout(timersRef.current[id]);delete timersRef.current[id];const n={...pendRef.current};delete n[id];pendRef.current=n;setPend(n)};
+  const hacerPend=id=>{const p=pendRef.current[id];if(!p)return;quitarPend(id);const o=ordRef.current.find(x=>x.id===id);
+    if(!o||o.stage!==p.stage||o.current_machine!==p.maquina){setAvisoPend((p.pn||"La orden")+" ya no estaba en "+p.nombreMaquina+": no se "+p.noSeHizo+".");return}
+    onActionRef.current(id,p.accion,p.arg)};
+  const programar=(o,accion,arg,frase,noSeHizo)=>{escudoDeClics();setAvisoPend("");const mq=MACHINES.find(x=>x.id===o.current_machine);
+    pendRef.current={...pendRef.current,[o.id]:{accion,arg,frase,noSeHizo,pn:o.production_number,stage:o.stage,maquina:o.current_machine,nombreMaquina:mq?"la "+mq.name:"su máquina",hasta:Date.now()+DESHACER_MS}};
+    setPend(pendRef.current);timersRef.current[o.id]=setTimeout(()=>hacerPend(o.id),DESHACER_MS)};
+  const deshacerPend=(id,accion)=>{quitarPend(id);requestAnimationFrame(()=>{const b=document.querySelector('[data-orden="'+id+'"][data-accion="'+accion+'"]');if(b)b.focus()})};
+  useEffect(()=>()=>{Object.keys(pendRef.current).forEach(hacerPend)},[]);   // al salir del tablero, lo pendiente se hace
+  // «Activar» detiene lo que corre en esa máquina (App cierra su reloj y la RPC la pasa al 1º de la fila): eso se pregunta,
+  //   con nombres y cuánto lleva; con la máquina libre no detiene nada y no se pregunta
+  const pedirActivar=(o,activa,mq)=>{escudoDeClics();setAvisoPend("");
+    if(!activa||activa.id===o.id){onAction(o.id,"reorder_in_machine",{newPosition:0});return}
+    const lg=(activa.machine_log||[]).find(e=>!e.ended),min=lg?Math.max(0,Math.round((Date.now()-new Date(lg.started).getTime())/60000)):null;
+    setPregActivar({o,b:document.activeElement,title:"¿Arrancar "+o.production_number+(o.client?" ("+o.client+")":"")+" en la "+mq.name+"?",   // (el número primero: al final de la línea Chrome lo partía en el guion)
+      message:"Detiene "+activa.production_number+(activa.client?" ("+activa.client+")":"")+(min!=null?", que lleva "+fmtM(min)+" corriendo":"")+": su reloj se cierra y queda 1ª en la fila."})};
   const assignNow=(o,mid,m,fromM)=>onDrop(o.id,mid,{label:"Deshacer",onClick:()=>{if(fromM)onDrop(o.id,fromM.id);else onAction(o.id,"return_to_ready",{silent:true,backStage:o.stage})}});
   const quickAssign=(o,mid)=>{const m=MACHINES.find(x=>x.id===mid);if(!m||o.current_machine===mid)return;if(activeMaint(mid))return; // v10.73.74 — guarda REAL (defensa por si un <option disabled> se colara)
     assignNow(o,mid,m,o.current_machine?MACHINES.find(x=>x.id===o.current_machine):null)};
@@ -13516,6 +13553,12 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
   return <div>
+    {avisoPend&&<div role="status" style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",borderRadius:10,background:C.wn+"14",border:"1px solid "+C.wn+"40",fontSize:F.body,fontWeight:600,color:C.wnInk}}><WarningIcon size={14} weight="fill" color={C.wn} style={{flexShrink:0}}/><span style={{flex:1}}>{avisoPend}</span><button onClick={()=>setAvisoPend("")} aria-label="Cerrar el aviso" style={{...bs(C.sf,C.t2),padding:"2px 8px"}}><XIcon size={11} weight="bold"/></button></div>}
+    {pregActivar&&<ConfirmModal title={pregActivar.title} message={pregActivar.message} confirmLabel="Sí, arrancar" confirmColor={tintaAA(C.live,5)}
+      onConfirm={()=>{const q=pregActivar;setPregActivar(null);escudoDeClics();const o=ordRef.current.find(x=>x.id===q.o.id);
+        if(!o||o.stage!=="in_production"||o.current_machine!==q.o.current_machine){setAvisoPend((q.o.production_number||"La orden")+" ya no estaba en esa fila: no se arrancó.");return}
+        onActionRef.current(q.o.id,"reorder_in_machine",{newPosition:0})}}
+      onClose={()=>{const b=pregActivar?.b;setPregActivar(null);requestAnimationFrame(()=>{if(b&&b.isConnected)b.focus()})}}/>}
     {/* v10.73.76 — /impeccable distill (P2 del critique). La barra era el "hero-metric row" genérico: 7 pastillas
         tintadas que REPETÍAN números ya visibles 40px abajo — "Listas" duplicaba el badge del panel "Órdenes Listas";
         Offset/Acabados/Digital duplicaban el badge "N en producción" de cada categoría (que se renderiza colapsada o
@@ -13693,8 +13736,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                         <DragCard o={activa} borderColor={C.bd} reorderMachine={m.id} onAction={onAction} match={match}/>
                         <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:2,paddingLeft:4}}>
                           {/* v10.73.78 — critique #2: el Tablero era la ÚNICA superficie mayor sin estado "ocupado" (busy/disabled aparece 171 veces en el archivo; Kanban no recibía actionLoading aunque el handler SÍ lo setea). Mismo vocabulario que el resto de la app: disabled + opacity .5 + cursor wait. */}
-                          <button disabled={actionLoading===activa.id} onClick={()=>onAction(activa.id,"advance","packaging")} style={{...bs(C.emp),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
-                          {(role==="admin"||role==="produccion")&&<button disabled={actionLoading===activa.id} onClick={()=>onAction(activa.id,"return_to_ready")} style={{...bs(C.ios),padding:"4px 8px",...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={13} weight="bold"/></button>}
+                          {pend[activa.id]?<FilaPendiente p={pend[activa.id]} onDeshacer={()=>deshacerPend(activa.id,pend[activa.id].accion)}/>:<>
+                          <button data-orden={activa.id} data-accion="advance" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"advance","packaging","Pasa a Empaque","pasó a Empaque")} style={{...bs(C.emp),...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}}><PackageIcon size={13} weight="bold"/>Empaque</button>
+                          {/* v10.84.56 — «A Listas» con palabra (era ⟳, el ícono de recargar) y en tono quieto: saca la orden de la máquina y avisa */}
+                          {(role==="admin"||role==="produccion")&&<button data-orden={activa.id} data-accion="return_to_ready" disabled={actionLoading===activa.id} onClick={()=>programar(activa,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")} style={{...bs(C.sf,C.t2),padding:"4px 9px",boxShadow:"0 0 0 0.5px "+C.bdSt,...(actionLoading===activa.id?{opacity:.5,cursor:"wait"}:{})}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}</>}
                         </div>
                       </div>}
                       {/* v10.26.0 — Cola en espera */}
@@ -13719,10 +13764,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                                   oculta: es la política que este archivo ya escribió para el select en v10.73.74
                                   (ocultarlo lo dejaría buscando el botón justo cuando lo busca). El select "Mover a
                                   máquina…" de abajo queda intacto: es la salida real. */}
-                              {(role==="admin"||role==="produccion")&&<button disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();onAction(o.id,"reorder_in_machine",{newPosition:0})}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:C.card,color:C.live,cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
-                              {(role==="admin"||role==="produccion")&&<button disabled={actionLoading===o.id} onClick={e=>{e.stopPropagation();onAction(o.id,"return_to_ready")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.ios,background:C.card,color:C.ios,cursor:actionLoading===o.id?"wait":"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",opacity:actionLoading===o.id?.5:1}} title="Sacar de la máquina y volver a Lista"><ArrowsClockwiseIcon size={11} weight="bold"/></button>}
+                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="reorder_in_machine" disabled={inMaint||actionLoading===o.id} onClick={e=>{e.stopPropagation();pedirActivar(o,activa,m)}} style={{fontSize:10,padding:"4px 9px",borderRadius:5,border:"1px solid "+C.live,background:C.card,color:C.live,cursor:inMaint?"not-allowed":actionLoading===o.id?"wait":"pointer",fontWeight:600,opacity:(inMaint||actionLoading===o.id)?.5:1}} title={inMaint?"La máquina está fuera de servicio. No arranques una corrida nueva aquí: mueve la orden a otra máquina.":"Subir a activa"}><PlayIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Activar</button>}
+                              {(role==="admin"||role==="produccion")&&!pend[o.id]&&<button data-orden={o.id} data-accion="return_to_ready" disabled={actionLoading===o.id} onClick={e=>{e.stopPropagation();programar(o,"return_to_ready",undefined,"Regresa a Listas","regresó a Listas")}} style={{fontSize:10,padding:"4px 8px",borderRadius:5,border:"1px solid "+C.bdSt,background:C.card,color:C.t2,cursor:actionLoading===o.id?"wait":"pointer",fontWeight:600,display:"inline-flex",alignItems:"center",opacity:actionLoading===o.id?.5:1}} title="Sacar de la máquina y regresarla a Órdenes Listas">A Listas</button>}
                             </div>
                           </div>
+                          {pend[o.id]&&<FilaPendiente p={pend[o.id]} onDeshacer={()=>deshacerPend(o.id,pend[o.id].accion)}/>}
                           <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
                             <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
                             <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
@@ -13760,9 +13806,9 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
               <DragCard o={o} borderColor={C.emp} onAction={onAction} match={match}/>
               <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4,marginTop:-2,marginBottom:4,paddingLeft:4}}>
                 {/* v10.73.75 — clarify: los 3 botones de Empaque no tenían label (los de la cola sí). El del bote de basura NO borra la orden: registra MERMA — el ícono decía una cosa y la acción hacía otra. */}
-                <button onClick={()=>onAction(o.id,"advance","salidas")} style={bs(C.sal)} title="Enviar a Salidas" aria-label="Enviar a Salidas"><ExportIcon size={14} weight="bold"/></button>
-                <button onClick={()=>onAction(o.id,"send_maquila")} style={{...bs(C.maq),padding:"4px 8px"}} title="Enviar a maquila" aria-label="Enviar a maquila"><TruckIcon size={14} weight="bold"/></button>
-                <button onClick={()=>onAction(o.id,"waste")} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}} title="Registrar merma (no borra la orden)" aria-label="Registrar merma"><TrashIcon size={14} weight="bold"/></button>
+                <button onClick={()=>{escudoDeClics();onAction(o.id,"advance","salidas")}} style={bs(C.sal)} title="Enviar a Salidas" aria-label="Enviar a Salidas"><ExportIcon size={14} weight="bold"/></button>
+                <button onClick={()=>{escudoDeClics();onAction(o.id,"send_maquila")}} style={{...bs(C.maq),padding:"4px 8px"}} title="Enviar a maquila" aria-label="Enviar a maquila"><TruckIcon size={14} weight="bold"/></button>
+                <button onClick={()=>{escudoDeClics();onAction(o.id,"waste")}} style={{...bs(C.sf,C.t2),padding:"4px 8px",boxShadow:"0 0 0 0.5px "+C.bd}} title="Registrar merma (no borra la orden)" aria-label="Registrar merma"><TrashIcon size={14} weight="bold"/></button>
               </div>
             </div>)}
           </div>
@@ -13861,7 +13907,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
         <div><div style={{fontSize:13,fontWeight:700,color:C.ctp}}>Órdenes para CTP</div><div style={{fontSize:10,color:C.t2}}>Arrastra a CTP o Procesadora</div></div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:8}}>{readyCtp.map(o=><div key={o.id} draggable onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.bg,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:C.ctp)+"66",transition:C.tCard,display:"flex",gap:10,alignItems:"flex-start"}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
+        <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}>{o.client}</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</div>
         <div style={{fontSize:10,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
         {o.paper_type&&<div style={{fontSize:9,color:C.t3,marginTop:1}}><FileTextIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}</div>}
         {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:3}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}
@@ -13897,7 +13943,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
               <div draggable onDragStart={e=>{e.dataTransfer.setData("orderId",activa.id);e.dataTransfer.setData("reorderMachine",m.id)}} onClick={()=>onAction(activa.id,"detail")}
                 style={{background:C.sf,borderRadius:8,padding:10,cursor:"grab",border:"1.5px solid "+(activa.priority==="urgente"?C.dn:C.ctp)+"66",display:"flex",gap:8,alignItems:"flex-start"}}><OrderThumb o={activa} size={38}/><div style={{flex:1,minWidth:0}}>
                 {activa.needs_reprint&&<div style={{fontSize:9,fontWeight:800,color:"#fff",background:C.dn,padding:"1px 6px",borderRadius:4,marginBottom:3,display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={9} weight="bold"/>REIMPRIMIR</div>}
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{activa.client}</span>
+                <span style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/><span style={{flex:1,minWidth:0}}>{activa.client}</span>{activa.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{activa.production_number}</span>}</span>
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>{activa.product_type}{activa.quantity?" · "+Number(activa.quantity).toLocaleString():""}</div>
                 {activa.due_date&&<div style={{fontSize:9,color:isOverdue(activa.due_date)?C.dn:C.t3,marginTop:2}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(activa.due_date)}</div>}
               </div></div>
@@ -13922,7 +13968,7 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
                   </div>
                 </div>
                 <div onClick={()=>onAction(o.id,"detail")} style={{cursor:"pointer",display:"flex",gap:6,alignItems:"flex-start"}}><OrderThumb o={o} size={32}/><div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11,fontWeight:600}}>{o.client}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600}}><span style={{flex:1,minWidth:0}}>{o.client}</span>{o.production_number&&<span style={{flexShrink:0,background:C.acL,color:C.ac,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}>#{o.production_number}</span>}</div>
                   <div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString():""}</div>
                   {o.due_date&&<div style={{fontSize:9,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:1}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{fD(o.due_date)}</div>}
                 </div></div>

@@ -35,6 +35,8 @@ const TANDAS = [
   // «Archivos»: la lista y los huérfanos que decide la base (sin banco), y los botones que borran (con banco)
   { nombre: "archivos", romper: "tests/romper/archivos.mjs" },
   { nombre: "archivos-pantalla", gen: "tests/banco/gen-archivos.mjs", romper: "tests/romper/archivos-pantalla.mjs", puerto: 5197 },
+  // el tablero: el Kanban de Producción, el de Germán y las fichas (v10.84.56); el banco extrae lo que necesita (extraer.mjs)
+  { nombre: "tablero", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/tablero.mjs", puerto: 5194 },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 

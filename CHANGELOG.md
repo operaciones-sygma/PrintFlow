@@ -12,6 +12,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.56 — El tablero, primera revisión independiente (20/40): mover órdenes con red — 7-oct-2026
+
+Empieza el tablero. La primera pasada de un revisor independiente al Tablero de Producción (el `Kanban`) dio 20/40 con tres
+P1: no se lee qué corre en cada máquina, mover órdenes no tiene red y no se ve lo atrasado. Ésta es la primera parte: la red.
+Las dos calificaciones de julio (27 y 25) eran propias.
+
+- **[P1] «Empaque» y «A Listas» esperan con «Deshacer».**
+  - Qué pasaba: «Empaque» (7 en el tablero), ⟳ (23) y «Activar» (16) actuaban al primer clic, sin preguntar ni deshacer. Y
+    un doble clic en «Empaque» mandaba dos órdenes: la primera salía, la siguiente de la fila subía a su lugar y el segundo
+    clic le caía a ella (lo midió el revisor en producción y lo reproduce el banco: P-0595 y P-0609).
+  - Ahora «Empaque» y «A Listas» esperan 6.5 s con «Pasa a Empaque en N s · Deshacer» en el lugar de sus botones (y el foco
+    en «Deshacer», para el teclado), y sólo entonces escriben, por el camino de siempre de App. Deshacer no escribe nada.
+  - Si en la espera la orden cambió de etapa o de máquina (otra persona, o se arrastró), no se hace y se dice («P-0591 ya no
+    estaba en la Printmaster 74: no se pasó a Empaque.»). Un cambio que no la mueve (una nota) no la cancela. Al salir del
+    tablero, lo pendiente se hace.
+  - ⟳ ahora dice «A Listas», en tono quieto. Era el ícono de recargar, y saca la orden de la máquina y avisa a tres personas.
+- **[P1] «Activar» pregunta cuando detiene lo que corre**: «¿Arrancar P-0593 (RESTAURANTES HAKUNA) en la Printmaster 74?
+  Detiene P-0591 (…), que lleva 2h 0m corriendo: su reloj se cierra y queda 1ª en la fila.» Con la máquina libre no detiene
+  nada y no pregunta. Si la orden se movió mientras pregunta, no la arranca y lo dice.
+- **El escudo de clics** también en «Empaque», «A Listas», «Activar», Salidas, maquila y merma.
+- **El tablero de Germán trae el número de la orden** en sus fichas (sólo decía el cliente: con dos órdenes del mismo cliente
+  no se distinguían). Lo encontró la tanda nueva antes que el revisor.
+- **No toca** la base, las RPC ni los manejadores de App (`doAdv`, `return_to_ready`, `reorder_in_machine`, `assignMachine`):
+  el tablero sólo decide CUÁNDO llamarlos. El detalle de la orden no cambia (sus 177 pruebas pasan).
+- **Pruebas: la tanda nueva del tablero** (`tests/romper/tablero.mjs`, 27, en el candado). Su banco `tests/banco/gen-tablero.mjs`
+  extrae el `Kanban`, el de Germán y las fichas con todo lo que usan por `tests/banco/extraer.mjs` (con `@babel/parser`, sin
+  lista a mano: 88 declaraciones).
+  - Base (lo que no se puede romper): de 10, 9 pasaban. La que fallaba era el número en el tablero de Germán.
+  - Vuelta 1, contra v10.84.55: de 9 casos de la red fallaban 6, y un 7º después de hacer que el banco suba la fila como la RPC
+    (sin eso, el doble clic caía en un hueco y la prueba pasaba sin deber).
+  - Vuelta 2 con el arreglo, y vuelta 3 por donde no se diseñó (arrastrarla o cancelarla mientras espera, el teclado, dos
+    pendientes en la misma máquina, «Activar» con la orden movida, un cambio inocente, la cola llena): 27 de 27 a la primera.
+  - Sabotajes: siete defectos metidos a propósito. Cinco los cazó su prueba de entrada. Dos sólo después de corregir las
+    pruebas: tab-23 hacía los clics en el orden que no provoca la falla, y las pruebas de foco leían el `innerText` del
+    elemento enfocado, que con el foco en el `<body>` trae «Empaque» y pasaba. Sin el escudo, la de doble clic pasa igual: la
+    espera ya quitó el peligro, y el escudo se queda de defensa.
+  - Corrida doble contra v10.84.55: fallan las 12 nuevas y ninguna de las de antes.
+- **Queda del tablero** (snapshot `.impeccable/critique/2026-10-07T16-33-31Z__src-app-jsx-kanban-tablero-de-produccion.md`):
+  qué corre en cada máquina (nombres cortados a 1366), lo atrasado y lo detenido, los avisos cuando la base rechaza, y el
+  arcoíris (201 textos de 9-11 px y 61 contrastes que no pasan, según el detector).
+
 ## v10.84.55 — El detalle de la orden, tercera revisión independiente (27/40): cambiar de etapa pregunta antes — 7-oct-2026
 
 La tercera y última pasada de un revisor independiente (meta aprobada: 35 sin P1, o 3 pasadas) dio 27/40 con un P1. Con ella el
