@@ -33,11 +33,14 @@ const log = async p => (await p.textContent("#log")) || "";
 const texto = p => p.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
 // la ficha arrastrable de una orden (en Listas, en una máquina o en Empaque)
 const ficha = (p, pn) => p.locator("[draggable=true]", { hasText: pn }).first();
+// el nombre de una máquina en su TARJETA (desde v10.84.62 también está en la franja «Así va la planta», arriba)
+const enSuTarjeta = (p, nombre) => p.locator('div:not([aria-label="Así va la planta"] *)', { hasText: new RegExp("^" + nombre + "$") }).first();
 
 // ── lo que corre en cada máquina, de un vistazo ──
-// dónde está en pantalla un texto que se ve tal cual (fuera de los <select>: sus opciones también dicen «Printmaster 74»)
+// dónde está en pantalla un texto que se ve tal cual (fuera de los <select>: sus opciones también dicen «Printmaster 74»; y fuera
+//   de la franja «Así va la planta» de v10.84.62, que va arriba y también dice «Printmaster 74» y «P-0591»)
 const caja = (p, re) => p.evaluate(src => { const re = new RegExp(src);
-  const el = [...document.querySelectorAll("body *")].find(e => !e.closest("select") && !e.children.length && re.test(e.textContent.trim()) && e.getClientRects().length);
+  const el = [...document.querySelectorAll("body *")].find(e => !e.closest("select") && !e.closest('[aria-label="Así va la planta"]') && !e.children.length && re.test(e.textContent.trim()) && e.getClientRects().length);
   if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y }; }, re.source);
 await caso("tab-01-lo-que-corre-en-cada-maquina", "vista=produccion", async p => {
   const [pm74, pm52, gto, a91, c93, a95] = await Promise.all([/^Printmaster 74$/, /^Printmaster 52$/, /^GTO 1 Color$/, /P-0591$/, /P-0593$/, /P-0595$/].map(re => caja(p, re)));
@@ -49,7 +52,7 @@ await caso("tab-01-lo-que-corre-en-cada-maquina", "vista=produccion", async p =>
 await caso("tab-02-arrastrar-a-una-maquina", "vista=produccion", async p => {
   // (se toma la ficha de arriba: su centro cae en el selector «Enviar a máquina…» y un clic ahí lo abre en vez de arrastrar)
   const f = ficha(p, "P-0600"), caja = await f.boundingBox();
-  await f.dragTo(p.getByText("GTO 1 Color", { exact: true }).first(), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500);
+  await f.dragTo(enSuTarjeta(p, "GTO 1 Color"), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500);
   const l = await log(p);
   ok("tab-02-arrastrar-a-una-maquina", /drop:P-0600 → off_gto/.test(l), `arrastrar P-0600 a la GTO: ${/drop:P-0600/.test(l) ? l.match(/drop:P-0600[^\n]*/)[0] : "no llegó a nada"}${caja ? "" : " (no encontré la ficha)"}`);
 });
@@ -186,7 +189,7 @@ await caso("tab-19-dos-maquinas-a-la-vez", "vista=produccion&deshacer_ms=1500", 
 // vuelta 3 de v10.84.56, por donde no se diseñó
 await caso("tab-20-arrastrarla-mientras-espera", "vista=produccion&deshacer_ms=1500", async p => {
   await (await botonDe(p, "P-0591", /Empaque/)).click(); await espera(p, 700);
-  await ficha(p, "P-0591").dragTo(p.getByText("GTO 1 Color", { exact: true }).first(), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 1800);
+  await ficha(p, "P-0591").dragTo(enSuTarjeta(p, "GTO 1 Color"), { sourcePosition: { x: 20, y: 12 } }); await espera(p, 1800);
   const l = await log(p), t = await texto(p);
   ok("tab-20-arrastrarla-mientras-espera", /drop:P-0591 → off_gto/.test(l) && avances(l, "P-0591") === 0 && /no se pasó a Empaque/.test(t),
     `«Empaque» y luego arrastrarla a la GTO: ${/drop:P-0591/.test(l) ? "se movió" : "NO se movió"}; ${avances(l, "P-0591") ? "Y ADEMÁS pasó a Empaque" : "no pasa a Empaque"}; ${/no se pasó a Empaque/.test(t) ? "lo dice" : "no lo dice"}`);
@@ -578,5 +581,185 @@ await caso("tab-74-salidas-con-la-entrega-encima-si", "vista=fichas&rol=karla", 
   ok("tab-74-salidas-con-la-entrega-encima-si", /estancada/.test(t), `P-0580 en Salidas desde hace 2 semanas con la entrega HOY: ${/estancada/.test(t) ? "sale estancada" : "NO sale (se escondería lo que sí urge)"}`);
 });
 
+// ── v10.84.62: la planta de un vistazo (P1 de la segunda revisión: a 1366 la primera pantalla enseñaba 3 de 16 máquinas, y con
+//   Listas llena ninguna; las libres ocupaban lo mismo que las cargadas) ────────────────────────────────────────────────────
+const FRANJA = '[aria-label="Así va la planta"]';
+// ¿se ve en la PRIMERA pantalla (sin bajar) el número de cada orden que está corriendo?
+const corriendoALaVista = (p, pns) => p.evaluate(pns => { window.scrollTo(0, 0); const h = innerHeight;
+  return pns.filter(pn => ![...document.querySelectorAll("body *")].some(e => { const t = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("");
+    if (!t.includes(pn)) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.top >= 0 && r.bottom <= h; })); }, pns);
+const CORRIENDO = ["P-0591", "P-0595", "P-0596", "P-0597"];   // PM74, PM52, la DocuColor (Digital empieza plegada) y la Polar 115
+// cuántas de las órdenes que están en «Órdenes Listas» (según el banco: ready o recibidas de maquila, sin pausa) tienen su ficha en
+//   pantalla (no depende de cómo se marque la sección: contra la versión anterior también mide)
+const enListas = p => p.evaluate(() => { const ids = new Set(window.__ordenes().filter(o => (o.stage === "ready" || o.stage === "maquila_in") && !o.snooze_reason).map(o => o.id));
+  return [...document.querySelectorAll("[draggable=true][data-ficha]")].filter(c => ids.has(c.getAttribute("data-ficha")) && c.getClientRects().length).length; });
+// ¿la ficha de una orden (fuera de la franja) está entera en la pantalla?
+const fichaALaVista = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes(pn) && !x.closest('[aria-label="Así va la planta"]'));
+  if (!c) return "no está"; const b = c.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight ? "a la vista" : "fuera de la vista"; }, pn);
+await caso("tab-67-la-planta-de-un-vistazo-a-1366", "vista=produccion", async p => {
+  const faltan = await corriendoALaVista(p, CORRIENDO);
+  ok("tab-67-la-planta-de-un-vistazo-a-1366", faltan.length === 0, faltan.length ? "sin bajar no se ve qué corre en: " + faltan.join(", ") : "sin bajar se ve qué corre en las 4 máquinas con trabajo");
+});
+await caso("tab-68-con-listas-llena-tambien", "vista=produccion&caso=lleno", async p => {
+  const faltan = await corriendoALaVista(p, CORRIENDO);
+  ok("tab-68-con-listas-llena-tambien", faltan.length === 0, faltan.length ? "con 18 en Listas, sin bajar no se ve qué corre en: " + faltan.join(", ") : "con 18 en Listas también se ve todo lo que corre");
+});
+await caso("tab-69-las-libres-no-ocupan-de-mas", "vista=produccion", async p => {
+  // la GTO está libre junto a la PM74 cargada: su tarjeta mide lo que trae, no lo que mide la de al lado
+  const h = await p.evaluate(() => { const el = [...document.querySelectorAll("span,div")].find(e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim() === "GTO 1 Color" && !e.closest('[aria-label="Así va la planta"]') && !e.closest("select"));
+    if (!el) return -1; let x = el; while (x.parentElement && getComputedStyle(x.parentElement).display !== "grid") x = x.parentElement; return Math.round(x.getBoundingClientRect().height); });
+  ok("tab-69-las-libres-no-ocupan-de-mas", h > 0 && h <= 170, `la GTO 1 Color (libre) mide ${h} px de alto`);
+});
+await caso("tab-70-listas-plegada", "vista=produccion&caso=lleno", async p => {
+  const antes = await enListas(p);
+  const ver = p.getByRole("button", { name: /Ver las \d+/ }).first(); const hay = await ver.count();
+  if (hay) { await ver.click(); await espera(p, 400); }
+  const despues = await enListas(p);
+  ok("tab-70-listas-plegada", antes > 0 && antes <= 5 && hay > 0 && despues >= 18, `18 órdenes en Listas: se ven ${antes} ${hay ? "con «Ver las…»" : "SIN plegar"}; al abrirla, ${despues}`);
+});
+await caso("tab-71-la-franja-lleva-a-la-maquina", "vista=produccion", async p => {
+  const r = p.locator(FRANJA).getByRole("button", { name: /Polar 115/ }).first(); const hay = await r.count();
+  if (hay) { await r.click(); await espera(p, 900); }
+  const vis = await fichaALaVista(p, "P-0597");
+  ok("tab-71-la-franja-lleva-a-la-maquina", hay > 0 && vis === "a la vista", `tocar «Polar 115» en la franja: ${hay ? "P-0597 " + vis : "NO hay franja"}`);
+});
+await caso("tab-72-soltar-en-una-libre-de-la-franja", "vista=produccion", async p => {
+  const libre = p.locator(FRANJA).getByText("GTO 1 Color", { exact: true }).first(); const hay = await libre.count();
+  if (hay) { await ficha(p, "P-0600").dragTo(libre, { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500); }
+  const l = await log(p);
+  ok("tab-72-soltar-en-una-libre-de-la-franja", hay > 0 && /drop:P-0600 → off_gto/.test(l), `soltar P-0600 en «GTO 1 Color» de la franja: ${hay ? (/drop:P-0600/.test(l) ? "la asigna" : "no la asigna") : "NO hay franja"}`);
+});
+// ── la franja, por donde no se diseñó ──
+await caso("tab-75-franja-fuera-de-servicio-no-asigna-y-lo-dice", "vista=produccion&caso=mantenimiento", async p => {
+  const fila = p.locator(FRANJA).getByRole("button", { name: /Printmaster 52/ }).first(); const hay = await fila.count();
+  const dice = hay ? (await fila.innerText()).replace(/\s+/g, " ") : "";
+  if (hay) { await ficha(p, "P-0600").dragTo(fila, { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500); }
+  const l = await log(p), asigna = /drop:P-0600/.test(l), avisa = /aviso\(error\): Printmaster 52 está fuera de servicio/.test(l);
+  ok("tab-75-franja-fuera-de-servicio-no-asigna-y-lo-dice", hay > 0 && /Fuera de servicio/.test(dice) && /P-0595 montada/.test(dice) && !asigna && avisa,
+    hay ? `la fila dice «${dice}»; soltar P-0600 ahí: ${asigna ? "LA ASIGNA" : avisa ? "no la asigna y lo dice" : "no la asigna y NO DICE NADA"}` : "NO hay fila de la Printmaster 52 en la franja");
+});
+await caso("tab-76-franja-abre-digital-plegada", "vista=produccion", async p => {
+  const r = p.locator(FRANJA).getByRole("button", { name: /DocuColor 252/ }).first(); const hay = await r.count();
+  if (hay) { await r.click(); await espera(p, 900); }
+  const vis = await fichaALaVista(p, "P-0596");
+  ok("tab-76-franja-abre-digital-plegada", hay > 0 && vis === "a la vista", `Digital empieza plegada; tocar «DocuColor 252» en la franja: ${hay ? "P-0596 " + vis : "NO hay franja"}`);
+});
+await caso("tab-77-franja-sigue-al-tiempo-real", "vista=produccion", async p => {
+  // desde otra estación: P-0591 se va a Empaque y P-0593 sube a correr en la Printmaster 74
+  await p.evaluate(() => { window.__cambiar("P-0591", { stage: "packaging", current_machine: "vm_manual", machine_queue_position: null });
+    window.__cambiar("P-0593", { machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: new Date().toISOString() }] });
+    window.__cambiar("P-0594", { machine_queue_position: 1 }); });
+  await espera(p, 400);
+  const fila = p.locator(FRANJA).getByRole("button", { name: /Printmaster 74/ }).first();
+  const dice = (await fila.count()) ? (await fila.innerText()).replace(/\s+/g, " ") : "(no hay fila)";
+  ok("tab-77-franja-sigue-al-tiempo-real", /P-0593/.test(dice) && !/P-0591/.test(dice) && /\+1 en la fila/.test(dice), `la fila de la Printmaster 74 dice «${dice}»`);
+});
+await caso("tab-78-soltar-en-una-ocupada-de-la-franja", "vista=produccion", async p => {
+  const fila = p.locator(FRANJA).getByRole("button", { name: /Printmaster 74/ }).first(); const hay = await fila.count();
+  if (hay) { await ficha(p, "P-0600").dragTo(fila, { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500); }
+  const l = await log(p);
+  ok("tab-78-soltar-en-una-ocupada-de-la-franja", hay > 0 && /drop:P-0600 → off_pm74/.test(l), `soltar P-0600 en «Printmaster 74» de la franja: ${hay ? (/drop:P-0600 → off_pm74/.test(l) ? "la manda a su fila" : "no la manda") : "NO hay franja"}`);
+});
+await caso("tab-79-franja-con-el-teclado", "vista=produccion", async p => {
+  const r = p.locator(FRANJA).getByRole("button", { name: /Polar 115/ }).first(); const hay = await r.count();
+  if (hay) { await r.focus(); await p.keyboard.press("Enter"); await espera(p, 900); }
+  const foco = await p.evaluate(() => document.activeElement?.getAttribute("data-maquina") || document.activeElement?.tagName);
+  ok("tab-79-franja-con-el-teclado", hay > 0 && foco === "ac_polar115", `Enter en «Polar 115» de la franja: el foco queda en ${foco}`);
+});
+await caso("tab-80-listas-con-pocas-no-se-pliega", "vista=produccion", async p => {
+  const n = await enListas(p), sobra = await p.getByRole("button", { name: /Ver las \d+|Ver menos/ }).count();
+  ok("tab-80-listas-con-pocas-no-se-pliega", n === 4 && !sobra, `4 en Listas: se ven ${n}${sobra ? ", con un botón para plegar que sobra" : ""}`);
+});
+await caso("tab-81-buscar-una-de-las-plegadas", "vista=produccion&caso=lleno&buscar=P-0813", async p => {
+  const r = await p.evaluate(() => [...document.querySelectorAll("[draggable=true]")].some(x => x.innerText.includes("P-0813") && x.getClientRects().length) ? "se ve" : "escondida");
+  ok("tab-81-buscar-una-de-las-plegadas", r === "se ve", `buscar P-0813 (la última de 18 en Listas): ${r}`);
+});
+await caso("tab-82-ir-a-una-vencida-plegada", "vista=produccion&caso=lleno", async p => {
+  await p.getByRole("button", { name: /vencida/ }).first().click(); await espera(p, 300);
+  const item = p.locator('[aria-label="Órdenes vencidas"]').getByRole("button", { name: /P-0802/ }).first(); const hay = await item.count();
+  if (hay) { await item.click(); await espera(p, 900); }
+  const vis = await fichaALaVista(p, "P-0802");
+  ok("tab-82-ir-a-una-vencida-plegada", hay > 0 && vis === "a la vista", hay ? `«ir a» P-0802 (la 5ª de Listas, vencida): ${vis}` : "P-0802 no está en la lista de vencidas");
+});
+await caso("tab-83-listas-abierta-se-recuerda", "vista=produccion&caso=lleno", async p => {
+  const ver = p.getByRole("button", { name: /Ver las \d+/ }).first();
+  if (await ver.count()) { await ver.click(); await espera(p, 300); }
+  await p.evaluate(() => window.__vista("fichas")); await espera(p, 300);
+  await p.evaluate(() => window.__vista("produccion")); await espera(p, 500);
+  const alVolver = await enListas(p);
+  const menos = p.getByRole("button", { name: /Ver menos/ }).first(); const hayMenos = await menos.count();
+  if (hayMenos) { await menos.click(); await espera(p, 300); }
+  const plegada = await enListas(p), foco = await p.evaluate(() => (document.activeElement?.innerText || "").replace(/\s+/g, " "));
+  ok("tab-83-listas-abierta-se-recuerda", alVolver >= 18 && hayMenos > 0 && plegada === 4 && /Ver las/.test(foco),
+    `abierta, al salir del tablero y volver se ven ${alVolver}; «Ver menos» ${hayMenos ? "la deja en " + plegada : "NO ESTÁ"}; el foco queda en «${foco.slice(0, 30)}»`);
+});
+// arrastrar una ficha hasta algo de la franja como lo hace una persona: hacia arriba, al borde (la página sube sola) y ahí se suelta.
+//   Chrome manda «dragover» cada ~50 ms aunque el puntero esté quieto, y con eso sube la página; Playwright sólo lo manda al mover
+//   el ratón: se imita con un pixel de ida y vuelta cada 50 ms, en el borde y sobre el destino (sin eso, tab-85 fallaba por la prueba)
+const alaFranja = async (p, pn, destino) => {
+  const quieto = async (x, y, n) => { for (let i = 0; i < n; i++) { await p.mouse.move(x + (i % 2), y); await espera(p, 50); } };
+  const src = ficha(p, pn); await src.scrollIntoViewIfNeeded(); const b = await src.boundingBox();
+  await p.mouse.move(b.x + 20, b.y + 12); await p.mouse.down();
+  await p.mouse.move(b.x + 40, b.y + 30, { steps: 4 }); await p.mouse.move(b.x + 40, 40, { steps: 12 }); await quieto(b.x + 40, 40, 30);
+  const d = await destino.boundingBox();
+  if (d) { await p.mouse.move(d.x + d.width / 2, d.y + d.height / 2, { steps: 8 }); await quieto(d.x + d.width / 2, d.y + d.height / 2, 4); }
+  await p.mouse.up(); await espera(p, 500); return !!d;
+};
+await caso("tab-85-de-una-maquina-a-la-franja-arrastrando", "vista=produccion", async p => {
+  // como lo haría Gerardo: la orden que corre en la PM52 (abajo de la pantalla) a una libre de la franja
+  const llego = await alaFranja(p, "P-0595", p.locator(FRANJA).getByText("GTO 1 Color", { exact: true }).first());
+  const l = await log(p);
+  ok("tab-85-de-una-maquina-a-la-franja-arrastrando", /drop:P-0595 → off_gto/.test(l), `arrastrar P-0595 desde la PM52 hasta «GTO 1 Color» de la franja: ${/drop:P-0595/.test(l) ? (l.match(/drop:P-0595[^\n]*/) || [""])[0] : "no llegó" + (llego ? "" : " (la franja no se veía)")}`);
+});
+// ── la franja y Listas, vuelta 2: por donde no se diseñó ──
+await caso("tab-86-listas-con-5-no-se-pliega-con-6-si", "vista=produccion", async p => {
+  // 4 en Listas: a P-0604 se le quita la pausa (5) y luego P-0580 regresa de Salidas (6)
+  await p.evaluate(() => window.__cambiar("P-0604", { snooze_reason: null, snooze_stage: null, snoozed_by: null, snooze_kind: null, snoozed_at: null })); await espera(p, 300);
+  const con5 = await enListas(p), boton5 = await p.getByRole("button", { name: /Ver las \d+/ }).count();
+  await p.evaluate(() => window.__cambiar("P-0580", { stage: "ready" })); await espera(p, 300);
+  const con6 = await enListas(p), boton6 = await p.getByRole("button", { name: /Ver las 6/ }).count();
+  ok("tab-86-listas-con-5-no-se-pliega-con-6-si", con5 === 5 && !boton5 && con6 === 4 && boton6 === 1,
+    `con 5 en Listas se ven ${con5}${boton5 ? " y sobra «Ver las…»" : ""}; con 6 se ven ${con6} ${boton6 ? "con «Ver las 6»" : "SIN «Ver las 6»"}`);
+});
+const filasDeLaFranja = p => p.evaluate(() => { const f = document.querySelector('[aria-label="Así va la planta"]'); if (!f) return null;
+  return { botones: [...f.querySelectorAll("button")].map(b => b.innerText.replace(/\s+/g, " ").trim()), dice: (f.innerText.replace(/\s+/g, " ").match(/\d+ trabajando[^A-Z]*/) || [""])[0].trim() }; });
+await caso("tab-87-una-libre-que-arranca-sale-de-libres", "vista=produccion", async p => {
+  await p.evaluate(() => window.__cambiar("P-0600", { stage: "in_production", current_machine: "off_gto", machine_queue_position: 0, machine_log: [{ machine: "off_gto", started: new Date().toISOString() }] })); await espera(p, 400);
+  const r = await filasDeLaFranja(p), fila = r ? r.botones.find(x => /^GTO 1 Color ./.test(x)) || "" : "", libre = r ? r.botones.includes("GTO 1 Color") : false;
+  ok("tab-87-una-libre-que-arranca-sale-de-libres", !!r && /P-0600/.test(fila) && !libre && /^5 trabajando · 11 libres$/.test(r.dice),
+    r ? `la GTO arranca P-0600 (desde otra estación): su fila «${fila}»; ${libre ? "SIGUE en Libres" : "ya no está en Libres"}; «${r.dice}»` : "NO hay franja");
+});
+await caso("tab-88-tablero-vacio-sin-franja", "vista=produccion&caso=vacio", async p => {
+  const hay = await p.locator(FRANJA).count(), t = await texto(p);
+  ok("tab-88-tablero-vacio-sin-franja", !hay && /Tablero vacío/.test(t), `sin órdenes: ${hay ? "SALE la franja (sólo con libres)" : "sin franja"}; ${/Tablero vacío/.test(t) ? "dice «Tablero vacío»" : "NO dice que está vacío"}`);
+});
+await caso("tab-89-soltar-en-su-propia-maquina-de-la-franja", "vista=produccion", async p => {
+  // P-0595 corre en la PM52 y se suelta en la fila de la PM52: no es un error ni un cambio (como soltarla en su propia tarjeta)
+  await alaFranja(p, "P-0595", p.locator(FRANJA).getByRole("button", { name: /Printmaster 52/ }).first());
+  const l = await log(p), e = await etapa(p, "P-0595");
+  ok("tab-89-soltar-en-su-propia-maquina-de-la-franja", !/drop:P-0595/.test(l) && !/aviso\(error\)/.test(l) && e === "in_production@off_pm52:0",
+    `soltar P-0595 en la fila de su propia máquina: ${/drop:P-0595/.test(l) ? "LA MUEVE" : "no la mueve"}; ${/aviso\(error\)/.test(l) ? "AVISA UN ERROR" : "sin aviso"}; queda ${e}`);
+});
+await caso("tab-90-fuera-de-servicio-y-libre-no-esta-en-libres", "vista=produccion&mant=off_gto", async p => {
+  const r = await filasDeLaFranja(p), fila = r ? r.botones.find(x => /^GTO 1 Color ./.test(x)) || "" : "", libre = r ? r.botones.includes("GTO 1 Color") : false;
+  const b = p.locator(FRANJA).getByRole("button", { name: /GTO 1 Color/ }).first();
+  if (await b.count()) { await ficha(p, "P-0600").dragTo(b, { sourcePosition: { x: 20, y: 12 } }); await espera(p, 500); }
+  const l = await log(p), asigna = /drop:P-0600/.test(l), avisa = /aviso\(error\): GTO 1 Color está fuera de servicio/.test(l);
+  ok("tab-90-fuera-de-servicio-y-libre-no-esta-en-libres", !!r && /Fuera de servicio/.test(fila) && !libre && !asigna && avisa,
+    r ? `la GTO en mantenimiento y sin trabajo: ${libre ? "SALE en Libres" : "fila «" + fila + "»"}; soltar P-0600 ahí: ${asigna ? "LA ASIGNA" : avisa ? "no la asigna y lo dice" : "no dice nada"}` : "NO hay franja");
+});
+// lo que la franja no puede cortar: el nombre de la máquina y el número de la orden (el cliente sí se recorta, con «…»)
+const cortesFranja = p => p.evaluate(() => { const r = [];
+  for (const b of document.querySelectorAll('[aria-label="Así va la planta"] button')) { const caja = b.getBoundingClientRect();
+    if (b.scrollWidth > b.clientWidth + 1) r.push("«" + b.innerText.replace(/\s+/g, " ").slice(0, 34) + "» se sale");
+    for (const s of b.querySelectorAll(":scope > span")) { const t = s.innerText.trim();
+      if (s !== b.firstElementChild && !/^P-\d{4}$/.test(t)) continue; const q = s.getBoundingClientRect();
+      if (s.scrollWidth > s.clientWidth + 1 || q.right > caja.right + 1) r.push(t + " cortado"); } }
+  return r; });
+for (const [an, al] of [[1366, 768], [1920, 1080], [768, 1024]])
+  await caso("tab-84-la-franja-no-corta-a-" + an, "vista=produccion&caso=mantenimiento", async p => {
+    const c = await cortesFranja(p), n = await p.locator(FRANJA + " button").count();
+    ok("tab-84-la-franja-no-corta-a-" + an, n > 0 && c.length === 0, n ? (c.length ? c.join(" · ") : n + " renglones y libres, sin cortar nombres ni números") : "NO hay franja");
+  }, { width: an, height: al });
 await browser.close();
 for (const r of res) console.log(r);

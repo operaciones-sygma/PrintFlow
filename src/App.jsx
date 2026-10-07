@@ -13503,9 +13503,17 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   const nMatch=match?[...ready,...inProd,...inManual,...inSalidas].filter(match).length:0;
   const inMaquilaOut=orders.filter(o=>o.stage==="maquila_out").length; // v10.73.77 — polish: Maquila era la única zona del sidebar SIN contador
   const [dO,setDO]=useState(null);const [collapsed,setCollapsed]=useState({digital:true,salidas:true});
+  // v10.84.62 — Listas plegada a 4 cuando trae más de 5 (la segunda revisión independiente, P1: con 6 en Listas la primera
+  //   máquina quedaba en y=770 a 1366). Las 4 de arriba son las urgentes y las de entrega más cercana (prioSort). Lo abierto se
+  //   recuerda en la pestaña; se abre sola si se va a una de las de abajo (la lista de vencidas) o si la búsqueda está ahí.
+  const LISTAS_PLEGADA=4;
+  const [listasAbierta,setListasAbierta]=useState(()=>{try{return sessionStorage.getItem("pf-listas-abierta")==="1"}catch{return false}});
+  const abrirListas=v=>{setListasAbierta(v);try{sessionStorage.setItem("pf-listas-abierta",v?"1":"0")}catch{}};
+  const conPlegado=ready.length>LISTAS_PLEGADA+1,plegarListas=conPlegado&&!listasAbierta;
+  const readyVisibles=plegarListas?ready.slice(0,LISTAS_PLEGADA):ready;
   // v10.84.58 — la lista de vencidas abierta, y la ficha a la que se fue (resaltada 3 s); la sección plegada que la tiene se abre
   const [verVencidas,setVerVencidas]=useState(false);const [resaltar,setResaltar]=useState(null);const resaltarT=useRef(null);const chipVencidasRef=useRef(null);   // (Esc en la lista regresa el foco al chip)
-  const irA=o=>{setVerVencidas(false);const tipo=o.stage==="in_production"?MACHINES.find(x=>x.id===o.current_machine)?.type:null;
+  const irA=o=>{setVerVencidas(false);if(ready.indexOf(o)>=LISTAS_PLEGADA)setListasAbierta(true);const tipo=o.stage==="in_production"?MACHINES.find(x=>x.id===o.current_machine)?.type:null;
     if(tipo&&collapsed[tipo])setCollapsed(c=>({...c,[tipo]:false}));
     setResaltar(o.id);clearTimeout(resaltarT.current);resaltarT.current=setTimeout(()=>setResaltar(null),3000);
     setTimeout(()=>{const el=document.querySelector('[data-ficha="'+o.id+'"]');if(el)el.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})},60)};
@@ -13537,6 +13545,8 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   useEffect(()=>{if(hasOffMatch)setCollapsed(p=>p.offset?{...p,offset:false}:p)},[hasOffMatch]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{if(hasAcaMatch)setCollapsed(p=>p.acabados?{...p,acabados:false}:p)},[hasAcaMatch]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{if(hasDigMatch)setCollapsed(p=>p.digital?{...p,digital:false}:p)},[hasDigMatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hasListasMatch=match?ready.slice(LISTAS_PLEGADA).some(match):false;   // v10.84.62 — lo buscado en una de las plegadas de Listas
+  useEffect(()=>{if(hasListasMatch)setListasAbierta(true)},[hasListasMatch]);
   // v10.73.79 — dropConfirm (state + Escape) eliminado con el modal de asignación. Ver la nota del rediseño abajo.
   // v10.68.0 — auto-scroll al arrastrar cerca del borde sup/inf: facilita soltar en maquinas lejanas (acabados) sin soltar la card. scrollTop directo para evitar el scroll-behavior smooth global.
   useEffect(()=>{let dir=0,raf=null;const step=()=>{if(dir){const el=document.scrollingElement||document.documentElement;el.scrollTop+=dir*14;raf=requestAnimationFrame(step)}else raf=null};const over=e=>{const y=e.clientY,h=window.innerHeight,edge=110;dir=y<edge?-1:y>h-edge?1:0;/* v10.73.68 — cede si la cola interna está auto-scrolleando (evita el doble-scroll) */if(dir&&qAutoScrollClaim&&Date.now()-qAutoScrollClaim<150)dir=0;if(dir&&!raf)raf=requestAnimationFrame(step);else if(!dir&&raf){cancelAnimationFrame(raf);raf=null}};const stop=()=>{dir=0;if(raf){cancelAnimationFrame(raf);raf=null}};document.addEventListener("dragover",over);document.addEventListener("drop",stop);document.addEventListener("dragend",stop);return ()=>{document.removeEventListener("dragover",over);document.removeEventListener("drop",stop);document.removeEventListener("dragend",stop);stop()}},[]);
@@ -13568,6 +13578,13 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   const catIcon={offset:GearIcon,digital:PrinterIcon,acabados:WrenchIcon};
   const catCount=type=>inProd.filter(o=>{const m=MACHINES.find(x=>x.id===o.current_machine);return m?.type===type}).length;
   const toggle=type=>setCollapsed(p=>({...p,[type]:!p[type]}));
+  // v10.84.62 — ir a una máquina desde la franja: abre su categoría si está plegada, la trae a la vista, la marca 2.5 s y le pasa
+  //   el foco (con el teclado, el Tab sigue desde ahí)
+  const [maqVista,setMaqVista]=useState(null);const maqVistaT=useRef(null);
+  const irAMaquina=m=>{if(collapsed[m.type])setCollapsed(c=>({...c,[m.type]:false}));
+    setMaqVista(m.id);clearTimeout(maqVistaT.current);maqVistaT.current=setTimeout(()=>setMaqVista(null),2500);
+    setTimeout(()=>{const el=document.querySelector('[data-maquina="'+m.id+'"]');if(!el)return;
+      el.scrollIntoView({block:"start",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});el.focus({preventScroll:true})},60)};
   // v10.68.0 — envio directo a maquina (sin arrastrar) desde la card de Listas
   const machinesByType=t=>MACHINES.filter(m=>m.type===t&&m.status==="active"&&m.id!=="vm_manual");
   // v10.73.74 — /impeccable harden (P1 del critique): el SELECT ignoraba el MANTENIMIENTO. machinesByType filtra el
@@ -13592,6 +13609,10 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
   //   en pleno hot path del drag). `orders` es estable durante el arrastre → el memo pega el 100% de los renders.
   const loadMap=useMemo(()=>{const m={};for(const o of orders){if(o.current_machine&&o.machine_queue_position!=null&&o.stage==="in_production"){const e=m[o.current_machine]||(m[o.current_machine]={n:0,activa:0,enEspera:0});e.n++;if(o.machine_queue_position===0)e.activa++;else e.enEspera++}}return m},[orders]);
   const machineLoad=mid=>loadMap[mid]||{n:0,activa:0,enEspera:0};
+  // v10.84.62 — la fila de cada máquina en una pasada (la franja «Así va la planta»): las mismas órdenes que pinta su tarjeta
+  //   (getMachineQueue + in_production), en el mismo orden
+  const porMaquina=useMemo(()=>{const r={};for(const o of orders){if(o.stage==="in_production"&&o.current_machine&&o.machine_queue_position!=null)(r[o.current_machine]||(r[o.current_machine]=[])).push(o)}
+    for(const k in r)r[k].sort((a,b)=>(a.machine_queue_position??999)-(b.machine_queue_position??999));return r},[orders]);
   // v10.73.81 — el <option> decía "N en cola" con N = activa + en espera: el NÚMERO era correcto (trabajos por
   //   delante del tuyo) pero el SUSTANTIVO mentía, porque una de esas N está corriendo, no encolada. Bajar N a
   //   solo-la-cola arreglaría la palabra rompiendo el número. Se dicen las dos piezas, con el vocabulario que la
@@ -13689,8 +13710,44 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
       {snoozedHidden>0&&<button onClick={()=>onAction(null,"goto_espera")} title="Órdenes en espera, ocultas del tablero. Clic para verlas y reactivarlas." onMouseEnter={e=>{e.currentTarget.style.background=C.acL;e.currentTarget.style.borderColor=C.ac+"55"}} onMouseLeave={e=>{e.currentTarget.style.background=C.bg;e.currentTarget.style.borderColor=C.bdSt}} style={{background:C.bg,border:"1px solid "+C.bdSt,borderRadius:10,padding:"7px 13px",display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",fontFamily:"'Geist',sans-serif",transition:"background .12s,border-color .12s"}}><BellSlashIcon size={14} weight="bold" color={C.t2}/><span style={{fontSize:12,color:C.t2,fontWeight:700}}>{snoozedHidden} en espera</span><CaretRightIcon size={11} weight="bold" color={C.t3}/></button>}
     </div>}
 
+    {/* v10.84.62 — ASÍ VA LA PLANTA (la segunda revisión independiente del tablero, P1: a 1366 la primera pantalla enseñaba 3
+        de las 16 máquinas; con Listas llena, ninguna; y las libres ocupaban lo mismo que las cargadas). Una línea por máquina con
+        trabajo o fuera de servicio, y las libres en un renglón. Cada una lleva a su máquina (irAMaquina) y acepta soltar como
+        su tarjeta, por el drop() de siempre: en una fuera de servicio no la asigna y lo dice (la tarjeta lo callaba). */}
+    {(()=>{const info=["offset","acabados","digital"].flatMap(t=>machinesByType(t)).map(m=>{const mo=porMaquina[m.id]||[];
+        return {m,mo,activa:mo.find(o=>o.machine_queue_position===0),fila:mo.filter(o=>o.machine_queue_position>0).length,mRec:activeMaint(m.id)}});
+      const ocupadas=info.filter(x=>x.mo.length||x.mRec),libres=info.filter(x=>!x.mo.length&&!x.mRec);
+      if(!ocupadas.length)return null;
+      const nFuera=ocupadas.filter(x=>x.mRec).length;
+      const soltar=(m,fuera)=>({onDragOver:e=>{e.preventDefault();if(!fuera)setDO(m.id)},onDragLeave:e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)},onDrop:e=>drop(m.id,e)});
+      return <section aria-label="Así va la planta" style={{marginBottom:16,padding:"10px 12px",borderRadius:12,border:"1px solid "+C.bd,background:C.sf+"80"}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <span style={{fontSize:F.label,fontWeight:800,color:C.tx}}>Así va la planta</span>
+          <span style={{fontSize:F.meta,color:C.t2}}>{(ocupadas.length-nFuera)+" trabajando"+(nFuera?" · "+nFuera+" fuera de servicio":"")+" · "+libres.length+(libres.length===1?" libre":" libres")}</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(460px,100%),1fr))",gap:6}}>
+          {ocupadas.map(({m,activa,fila,mRec})=>{const isD=dO===m.id;const lg=activa&&(activa.machine_log||[]).find(e=>!e.ended);
+            return <button key={m.id} type="button" onClick={()=>irAMaquina(m)} {...soltar(m,!!mRec)} title={"Ir a la "+m.name}
+              style={{display:"flex",alignItems:"center",gap:8,minWidth:0,minHeight:36,padding:"5px 10px",borderRadius:8,textAlign:"left",cursor:"pointer",fontFamily:"inherit",fontSize:F.body,color:C.tx,
+                background:isD?cc[m.type]+"1a":mRec?C.amb+"0c":C.bg,border:isD?"2px solid "+cc[m.type]:"1px solid "+(mRec?C.amb+"66":C.bd)}}>
+              <span style={{fontWeight:700,whiteSpace:"nowrap",flexShrink:0}}>{mRec&&<WrenchIcon size={12} weight="bold" color={tintaAA(C.wn,7)} style={{verticalAlign:"-2px",marginRight:3}}/>}{m.name}</span>
+              {mRec?<span style={{flex:1,minWidth:0,color:tintaAA(C.wn,7),fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Fuera de servicio{activa?" · "+activa.production_number+" montada":""}</span>
+              :activa?<><span style={{fontWeight:700,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap",flexShrink:0}}>{activa.production_number}</span>
+                <span style={{flex:1,minWidth:0,color:C.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{activa.client}</span>
+                {lg&&<span style={{flexShrink:0,display:"inline-flex"}}><LiveTimer started={lg.started} desde/></span>}</>
+              :<span style={{flex:1,minWidth:0,color:C.t2}}>Nada corriendo</span>}
+              {fila>0&&<span style={{flexShrink:0,whiteSpace:"nowrap",color:C.t2,fontSize:F.meta}}>+{fila} en la fila</span>}
+            </button>})}
+        </div>
+        {libres.length>0&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,marginTop:8}}>
+          <span style={{fontSize:F.meta,fontWeight:700,color:C.t2,marginRight:2}}>Libres</span>
+          {libres.map(({m})=>{const isD=dO===m.id;return <button key={m.id} type="button" onClick={()=>irAMaquina(m)} {...soltar(m,false)} title={"Libre: suelta aquí una orden para mandarla a la "+m.name}
+            style={{padding:"4px 10px",minHeight:30,borderRadius:7,cursor:"pointer",fontFamily:"inherit",fontSize:F.meta,fontWeight:600,whiteSpace:"nowrap",color:C.tx,background:isD?cc[m.type]+"1a":C.bg,border:isD?"2px solid "+cc[m.type]:"1px dashed "+C.bdSt}}>{m.name}</button>})}
+        </div>}
+      </section>})()}
+
     {/* Ready orders (includes maquila_in returning) — full width */}
-    {ready.length>0&&<div style={{marginBottom:20,background:C.ok+"06",border:"1.5px solid "+C.ok+"25",borderRadius:16,padding:16}}>
+    {ready.length>0&&<div role="region" aria-label="Órdenes Listas" style={{marginBottom:20,background:C.ok+"06",border:"1.5px solid "+C.ok+"25",borderRadius:16,padding:16}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{background:C.ok,color:"#fff",width:28,height:28,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{ready.length}</div>
@@ -13701,7 +13758,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
           está en vuelo (actionLoading===o.id, que se setea SÍNCRONO antes de los ~4 awaits de assignMachine). v82 quitó
           el toast síncrono que enmascaraba la no-optimicidad; sin esto la card quedaba inerte 1-2s y el drop se sentía
           fallido, además de que un re-drop chocaba con el lock y disparaba el toast rojo. */}
-        {ready.map(o=><div key={o.id} data-ficha={o.id} draggable={actionLoading!==o.id} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(matchVisto,o),...(actionLoading===o.id?{opacity:.55,pointerEvents:"none",cursor:"wait"}:{})}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+        {readyVisibles.map(o=><div key={o.id} data-ficha={o.id} draggable={actionLoading!==o.id} onDragStart={e=>e.dataTransfer.setData("orderId",o.id)} onClick={()=>onAction(o.id,"detail")} style={{background:C.card,borderRadius:12,padding:12,cursor:"grab",boxShadow:C.sh2,border:"1.5px solid "+(o.priority==="urgente"?C.dn:o.stage==="maquila_in"?C.maqin:C.ok)+"66",transition:C.tCard,...hlOf(matchVisto,o),...(actionLoading===o.id?{opacity:.55,pointerEvents:"none",cursor:"wait"}:{})}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}><OrderThumb o={o} size={48}/><div style={{flex:1,minWidth:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:4,fontSize:12,fontWeight:700}}><DotsSixVerticalIcon size={12} color={C.t3} style={{flexShrink:0}}/>{o.client}</div>
@@ -13727,7 +13784,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
           </select>
           <CaretDownIcon size={12} weight="bold" color={C.ac} style={{position:"absolute",right:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
         </div>
-      </div>)}</div>
+      </div>)}
+        {conPlegado&&<button key="ver-listas" type="button" aria-expanded={!plegarListas} onClick={()=>abrirListas(plegarListas)} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,minHeight:64,padding:12,borderRadius:12,border:"1.5px dashed "+C.ok+"66",background:"transparent",cursor:"pointer",fontFamily:"inherit",color:tintaAA(C.ok)}}>
+          {plegarListas?<><span style={{fontSize:F.title,fontWeight:800}}>+{ready.length-LISTAS_PLEGADA} más</span><span style={{fontSize:F.meta,fontWeight:600}}>Ver las {ready.length}</span></>
+          :<span style={{fontSize:F.body,fontWeight:700}}>Ver menos</span>}
+        </button>}</div>
     </div>}
 
     {/* Empty state */}
@@ -13768,7 +13829,7 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
               </div>
             </div>
             {!isCol&&<div style={{border:"1px solid "+C.bd,borderTop:"none",borderRadius:"0 0 12px 12px",padding:12,background:C.sf+"80"}}>
-              <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fit,minmax(min(240px,100%),1fr))",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:ms.length<=2?"repeat("+ms.length+",minmax(0,1fr))":"repeat(auto-fit,minmax(min(240px,100%),1fr))",gap:10,alignItems:"start"}}>
                 {ms.map(m=>{const mo=getMachineQueue(orders,m.id).filter(o=>o.stage==="in_production");const activa=mo.find(o=>o.machine_queue_position===0);const enEspera=mo.filter(o=>o.machine_queue_position>0);const isD=dO===m.id;const hasWork=mo.length>0;const mRec=activeMaint(m.id);const inMaint=!!mRec;
                   /* v10.73.81 (verificación adversarial) — el onDrop ya NO se auto-gatea con !inMaint. Suena al revés,
                      pero: los items de la cola SÍ cancelan su dragover (para poder reordenar), así que soltar sobre la
@@ -13776,11 +13837,11 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
                      misma versión — burbujeaba hasta aquí y MORÍA EN SILENCIO. El guard de mantenimiento ya vive dentro
                      de drop() (10818) CON su toast, que hasta hoy nunca corría. Dejando pasar el evento, grita en vez de
                      morir mudo. El body de la card sigue sin cancelar dragover cuando inMaint → ahí nunca dispara. */
-                  return <div key={m.id} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop(m.id,e)}
+                  return <div key={m.id} data-maquina={m.id} tabIndex={-1} onDragOver={e=>{if(!inMaint){e.preventDefault();setDO(m.id)}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDO(null)}} onDrop={e=>drop(m.id,e)}
                     /* v10.73.80 — /impeccable layout: la máquina va NEUTRA. El borde sigue contando el estado
                        (dashed=libre · solid=trabajando · 2px color=soltar aquí · ámbar=mantenimiento), pero el color
                        y la elevación se gastan SOLO en el drop-target: ahí el color quiere decir algo. */
-                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"1a":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+C.bd:"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:isD?"0 4px 14px "+cc[type]+"33":"none",opacity:inMaint&&!hasWork?0.7:1}}>
+                    style={{background:inMaint?C.amb+"08":isD?cc[type]+"1a":C.bg,borderRadius:14,padding:14,border:inMaint?"2px solid "+C.amb+"40":isD?"2px solid "+cc[type]:hasWork?"1.5px solid "+C.bd:"1.5px dashed "+C.bd,minHeight:100,transition:"all .15s",boxShadow:isD?"0 4px 14px "+cc[type]+"33":"none",opacity:inMaint&&!hasWork?0.7:1,scrollMarginTop:72,...(maqVista===m.id?{outline:"2px solid "+C.ac,outlineOffset:2}:{})}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid "+C.bd}}>
                       <div>
                         <div style={{fontSize:F.label,fontWeight:700,color:inMaint?C.wn:C.tx}}>{inMaint?<WrenchIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>:null}{m.name}</div>

@@ -12,6 +12,54 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.62 — El tablero: la planta de un vistazo — 7-oct-2026
+
+El segundo P1 de la segunda revisión independiente del tablero (25/40): a 1366 la primera pantalla enseñaba 3 de las 16
+máquinas; con 6 órdenes en Listas, la primera máquina quedaba en y=770 (fuera); y las máquinas libres medían lo mismo que la
+cargada de al lado (la GTO libre, 593 px de alto).
+
+- **«Así va la planta», arriba del tablero.**
+  - Una línea por máquina con trabajo o fuera de servicio: la orden que corre, el cliente (recortado con «…»), su reloj y
+    cuántas esperan en la fila («+2 en la fila»). A 1366 van en dos columnas y a 1920 en tres, para que el cliente quepa.
+  - Las libres van en un renglón. Una máquina fuera de servicio no sale entre las libres: sale con su llave, «Fuera de
+    servicio» y la orden montada si la hay.
+  - Cada una lleva a su máquina: abre su categoría si está plegada (Digital empieza plegada), la trae a la vista, la marca
+    2.5 s y le pasa el foco, así que con el teclado el Tab sigue desde ahí.
+  - Cada una acepta soltar como su tarjeta, por el mismo `drop()`. En su propia máquina no hace nada. En una fuera de
+    servicio no asigna y lo dice (la tarjeta lo callaba).
+  - Con el tablero vacío no sale.
+- **Las máquinas miden lo que traen** (`alignItems:"start"`): la GTO libre mide 113 px, no los 593 de la PM74.
+- **Listas se pliega a 4 cuando trae más de 5.**
+  - Se ven las primeras por urgencia y entrega (`prioSort`), con «+14 más · Ver las 18». «Ver menos» es el mismo botón, así
+    que el foco se queda ahí.
+  - Lo abierto se recuerda en la pestaña.
+  - Se abre sola si se busca una de las de abajo o si se va a ella desde «N vencidas».
+  - Con 18 en Listas, a 1366, las máquinas empiezan en y≈495 (antes, ninguna a la vista).
+- **No toca** la base, las RPC, los manejadores de App ni `drop()`: la franja lee las mismas órdenes que pinta cada tarjeta
+  (`porMaquina`, un solo recorrido) y suelta por el mismo camino. Listas sólo deja de pintar las de abajo mientras está
+  plegada.
+- **Pruebas** (`tablero.mjs`, 68 → 92):
+  - **Vuelta 1**, contra v10.84.61: de las 18 nuevas fallaban 15, por lo que esta versión arregla. Tres pasaban a propósito:
+    son guardas de lo que el pliegue no debe romper (con 4 no se pliega, la búsqueda y «ir a» encuentran la de abajo).
+  - Dos de esas pruebas medían mal: buscaban la región «Órdenes Listas» por un nombre que la versión anterior no tenía.
+    Ahora cuentan las fichas de las órdenes que están en Listas según el banco.
+  - Tres pruebas de antes tomaban el primer «Printmaster 74» o «GTO 1 Color» de la página, que ahora es el de la franja: tab-01
+    (el ayudante `caja`), tab-02 y tab-20 (soltar en la GTO). Se regresaron a la tarjeta de la máquina, que es lo que medían, y
+    siguen pasando contra v10.84.61.
+  - tab-85 (arrastrar desde una máquina de abajo hasta la franja) falló primero por el simulador: Playwright sólo manda
+    «dragover» al mover el ratón, y Chrome lo manda cada ~50 ms con el puntero quieto (y con eso sube la página). `alaFranja`
+    lo imita con un pixel de ida y vuelta.
+  - **Vuelta 2**, por donde no se diseñó: con 5 en Listas no se pliega y con 6 sí; una libre que arranca en otra estación sale
+    de las libres; el tablero vacío; soltar en su propia máquina; una fuera de servicio y sin trabajo. Pasaron las seis.
+  - **Sabotajes** (una vuelta que no encuentra nada se comprueba metiendo el defecto en una copia): su prueba cazó los 11. Las
+    libres con una fuera de servicio, plegar con 5, la franja con el tablero vacío, la franja sin tiempo real, soltar mudo en
+    una fuera de servicio, no abrir la categoría, no pasar el foco, no recordar lo abierto, «ir a» y la búsqueda que no abren
+    Listas, y las libres estiradas.
+  - El banco acepta `mant=<máquina>` para poner otra en mantenimiento.
+  - **En la app real** (compilada, con la base de producción y sin escribir), a 1366: «6 trabajando · 1 fuera de servicio · 9
+    libres» arriba y las máquinas desde y≈480; la franja enseña de paso una orden que corre «desde el lun 17:28». A 1920, los
+    clientes completos.
+
 ## v10.84.61 — La carga completa ya no se corta en 1,000, y esperar la entrega en Salidas no es estar estancada — 7-oct-2026
 
 Marcelo, 7-oct: P-0540 (COSQUIM) salía «10d estancada» en Salidas, con la entrega el 15-oct. «Es una alerta falsa creo».

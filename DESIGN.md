@@ -418,6 +418,14 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   a su ficha; un número rojo que no se puede seguir es ruido. **Y un reloj que cruzó la noche dice desde cuándo** («desde ayer
   05:48», en ámbar): las horas corridas cuentan las noches y se leen igual que unos minutos. **Las alertas de una orden son las
   mismas en todas las fichas** (`AlertasDeFicha`: `alertasDeLaOrden` + `banderasDeLaOrden`), también en el tablero.
+- **La planta se ve de un vistazo** (v10.84.62): lo que corre va arriba, en «Así va la planta», una línea por máquina con
+  trabajo o fuera de servicio (la orden, el cliente recortado con «…», el reloj, cuántas en la fila) y las libres en un
+  renglón. Cada una lleva a su máquina (abre su categoría si está plegada y le pasa el foco) y acepta soltar como su tarjeta,
+  por el mismo `drop()`. Una fuera de servicio no va entre las libres, y soltar en ella dice por qué no. **En una rejilla de
+  tarjetas, cada una mide lo que trae** (`alignItems:"start"`): una libre no se estira al alto de la cargada de al lado.
+  **Una lista que empuja lo importante fuera de la pantalla se pliega a sus primeras**: Listas enseña las 4 más urgentes,
+  con «+N más · Ver las N». «Ver menos» es el mismo botón, para que el foco no se pierda. Se abre sola cuando se busca o se
+  va a una de las de abajo, y lo abierto se recuerda en la pestaña.
 - **En una ficha, el nombre primero y completo** (v10.84.57): el cliente va solo en su línea (hasta tres, a 12 px) y lo que
   lo acompaña (la asa, el folio, el reloj) en la segunda; un dato que el marco ya dice (el reloj de la activa) no se repite
   adentro. Se mide a 1366 con foto en la ficha: la miniatura le quita ~46 px al nombre.

@@ -6,7 +6,7 @@
 // Uso: node gen-tablero.mjs <App.jsx> <dirSalida>
 // Variantes por URL:
 //   vista=produccion|german|fichas (por defecto produccion: el Kanban) · rol=produccion|admin|german|karla|… (por defecto
-//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · buscar=P-0591 (resalta, como el buscador)
+//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · mant=off_gto (otra en mantenimiento) · buscar=P-0591 (resalta)
 // window.__cambiar(id, {…}) cambia una orden con el tablero abierto (como el tiempo real) · window.__ordenes() las devuelve.
 import fs from "node:fs";
 import path from "node:path";
@@ -80,6 +80,8 @@ const LLENO = [...NORMAL, ...Array.from({ length: 9 }, (_, i) => enMaquina("P-07
 const ORDENES = CASO === "vacio" ? [] : CASO === "lleno" ? LLENO : NORMAL;
 // una máquina en mantenimiento: el registro como lo carga App y MAINT_DOWN como lo llena (useMemo de maintKey)
 const MANT = CASO === "mantenimiento" ? [{ id: "m1", machine_id: "off_pm52", started_at: hace(3), ended_at: null, notes: "Rodillo dañado", started_by: "produccion" }] : [];
+// mant=<máquina>: además, esa máquina en mantenimiento (p. ej. una libre: mant=off_gto; v10.84.62)
+if (Q.get("mant")) MANT.push({ id: "m2", machine_id: Q.get("mant"), started_at: hace(1), ended_at: null, notes: "Cambio de mantilla", started_by: "produccion" });
 MAINT_DOWN = new Set(MANT.filter(m => !m.ended_at).map(m => m.machine_id));
 // deshacer_ms=1500: cuánto espera el tablero antes de escribir lo que se puede deshacer (v10.84.56; para que las pruebas no
 //   esperen 6.5 s). Con un App.jsx anterior la variable no existe y no pasa nada.
