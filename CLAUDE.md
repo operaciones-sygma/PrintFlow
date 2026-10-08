@@ -159,8 +159,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.64 (7-oct; READY `dpl_4WrfUvRw2GmLqRjTYLgqnwCsSvB5`, vuelta atrás `dpl_EbWAjMGz26VzfKrmpWGJPh6xg6C4`, el
-  código de v10.84.62; 582 pruebas). **El tablero** (el `Kanban` de Producción): la primera revisión independiente dio 20/40 (las
+- **LIVE:** v10.84.65 (7-oct; READY `dpl_Ep1SvPMmjy8PZZREPu5zNwGTDi9D`; vuelta atrás: `git revert 6e35708`, porque el
+  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 585 pruebas). **El tablero queda
+  CERRADO**: tres revisiones independientes, 20 → 25 → **24/40** (snapshot `.impeccable/critique/2026-10-08T00-12-28Z__…`). El
+  P1 de la tercera, «el tablero dice vacío cuando no sabe», es v10.84.65 (regla 12: un error de lectura no es «vacío»); sus P2 y
+  P3 quedan en el snapshot. **Siguiente de la lista del 6-oct: las puertas de cancelar**, luego OrderForm y el plan matriz.
+  **El tablero** (el `Kanban` de Producción): la primera revisión independiente dio 20/40 (las
   de julio, 27 y 25, eran propias) y sus cuatro partes se hicieron en v10.84.56-59 (mover con red y «Deshacer», se lee qué corre,
   se ve lo atrasado, los avisos de error con la orden y en palabras). La **segunda, 25/40**, con dos P1, los dos hechos: v10.84.60
   (soltar en Empaque espera con «Deshacer», como el botón) y v10.84.62 («Así va la planta» arriba, las libres miden lo suyo,
@@ -168,9 +172,9 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
   y v10.84.64 (el tablero sano en calma, todo con AA, también los avisos de toda la app; la fila sin partirse a 1920; 40 px
   táctil). v10.84.61 es lo que Marcelo vio en P-0540 («10d estancada» en Salidas con la entrega el 15-oct): con el archivo
   completo cargado la bitácora se cortaba en 1,000 renglones (regla 11), y esperar la fecha de entrega en Salidas ya no cuenta
-  como estancada. Falta la tercera y última revisión independiente. `tests/recorrido/tablero-errores.mjs` y
-  `carga-completa.mjs` prueban con la app REAL (esperan el «Despertador» del día hasta 8 s: sale tarde y tapa los clics). Snapshots
-  `.impeccable/critique/2026-10-07T16-33-31Z__…` y `…T19-33-15Z__src-app-jsx-kanban-tablero-de-produccion.md`; banco `tests/banco/gen-tablero.mjs`
+  como estancada. `tests/recorrido/tablero-errores.mjs`, `carga-completa.mjs` y `lectura-falla.mjs` prueban con la app REAL
+  (esperan el «Despertador» del día hasta 8 s: sale tarde y tapa los clics). Snapshots de las tres revisiones:
+  `.impeccable/critique/2026-10-07T16-33-31Z__…`, `…T19-33-15Z__…` y `…2026-10-08T00-12-28Z__src-app-jsx-kanban-tablero-de-produccion.md`; banco `tests/banco/gen-tablero.mjs`
   sobre `tests/banco/extraer.mjs` (junta solo las dependencias con `@babel/parser`). **El detalle de la orden quedó cerrado** en
   v10.84.55 (tres revisiones independientes: 23 → 24 → 27/40); lo que queda, en la entrada v10.84.55 del CHANGELOG.
   El contador del CTP, por depurar con calma: `../cobranzaflow/docs/PENDIENTES.md`. Corte del 1-sep hecho: SYGMA emite sus
