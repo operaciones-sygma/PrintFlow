@@ -42,7 +42,12 @@ existe, *«lo frena y dice cuál es»*. Va con CobranzaFlow v3.7.999m (el vended
   el `App.jsx` anterior fallan 14 de 24; con el nuevo, 24 de 24. Todas las tandas: 698 de 698, sin regresiones. La base, con un
   ensayo con rollback en CobranzaFlow (37 casos; como Genaro de PrintFlow, entre otros).
 - **Lo que no se probó:** la forma de la orden y «Crear OC» de verdad (el banco simula la forma; lo que hacen al recibir el cliente es
-  lo de antes) y la base de verdad desde PrintFlow (no hay cuenta de pruebas que escriba aquí).
+  lo de antes) y crear un cliente de verdad desde PrintFlow (no hay cuenta de pruebas que escriba aquí).
+- **En producción** el 8-oct en la noche: READY `dpl_4DjFqtsmFmvYybBJmz4Dqva3eT6n` (vuelta atrás: `git revert b8172af`; el despliegue
+  anterior es `dpl_CaJF5WwXz193CeD6m5hRttPaYcWG`, y la pantalla de antes funciona con la base nueva). Revisado sin escribir: el código
+  servido trae la pregunta nueva, y `resolve_client_for_order` contesta como la cuenta de pruebas («Grupo Modelo» → CERVECERIA MODELO,
+  seguro; con «XXX» de RFC, nadie por RFC; con sólo el nombre, como la pantalla de antes). En la subida salieron inestables tab-12 y
+  tab-20 del tablero, que este cambio no toca: solas pasaron 10 de 10; revisadas y vigiladas.
 
 ## docs (8-oct) — Corrección: el cobro en efectivo sí tenía el candado de la base
 

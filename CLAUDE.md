@@ -167,9 +167,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.68 (8-oct, 11:10; READY `dpl_E2rFvWFq2iuMRufsC4q3kwugeg6A`; vuelta atrás: `git revert fa21a9f`, porque el
-  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 675 pruebas, con la segunda
-  oportunidad y sus candados desde `742d0da`). v10.84.68: **la factura por adelantado del mismo importe se ofrece de una vez** (Karla,
+- **LIVE:** v10.84.69 (8-oct, noche; READY `dpl_4DjFqtsmFmvYybBJmz4Dqva3eT6n`; vuelta atrás: `git revert b8172af`, porque el rollback de
+  un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; la pantalla de antes funciona con la base nueva; 698
+  pruebas). v10.84.69: **«¿ya existe este cliente?»** al capturar la orden o la OC (con CobranzaFlow v3.7.999m y su migración): lo que
+  casi seguro ya existe se elige y no se crea, con su porqué; una sola lógica para las dos puertas (`resolverClienteNuevo`); Escape ya
+  no cierra la forma de la OC de atrás; «Crear cliente nuevo» enseña el RFC capturado. 🔑 **Crear un cliente desde PrintFlow pasa por
+  `resolverClienteNuevo`** y la base lo vuelve a frenar (`create_client_from_printflow`): una puerta nueva que cree clientes, por ahí.
+  Revisado en producción sin escribir (el código servido y la búsqueda como la cuenta de pruebas).
+  v10.84.68 (`dpl_E2rFvWFq2iuMRufsC4q3kwugeg6A`, `git revert fa21a9f`; 675 pruebas, con la segunda
+  oportunidad y sus candados desde `742d0da`): **la factura por adelantado del mismo importe se ofrece de una vez** (Karla,
   F-135 de Castores: ya no se pregunta primero por la de otro importe) y **con efectivo se dice qué hacer** (la base ya lo frenaba:
   `assign_invoice_cash` folia llamando a `assign_invoice`, que tiene el candado, ensayado el 8-oct; pero con un aviso que se borraba y
   sin ofrecer ligar). Revisado en
