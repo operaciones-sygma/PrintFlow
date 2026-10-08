@@ -167,9 +167,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.67 (8-oct, mañana; READY `dpl_EUYNdKRXxpwHKwC2PLDkrcig9iKp`; vuelta atrás: `git revert 60807ad`, porque el
-  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; el de v10.84.66 era
-  `dpl_4coJrHtp16E3kiuMNHctLKLeJgPZ`; 645 pruebas). v10.84.67: **Karla pasa a Salidas lo que ya está listo** y Gerardo no ha pasado
+- **LIVE:** v10.84.68 (8-oct, 11:10; READY `dpl_E2rFvWFq2iuMRufsC4q3kwugeg6A`; vuelta atrás: `git revert fa21a9f`, porque el
+  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 675 pruebas, con la segunda
+  oportunidad y sus candados desde `742d0da`). v10.84.68: **la factura por adelantado del mismo importe se ofrece de una vez** (Karla,
+  F-135 de Castores: ya no se pregunta primero por la de otro importe) y **con efectivo no se duplica** (`assign_invoice_cash` no tiene
+  en la base el candado de «ya se facturó por adelantado»: el front frena; el candado en la base espera el OK de Marcelo). Revisado en
+  producción sin escribir con `tests/recorrido/ligar-anticipo.mjs` (9 de 9).
+  v10.84.67 (`dpl_EUYNdKRXxpwHKwC2PLDkrcig9iKp`, `git revert 60807ad`): **Karla pasa a Salidas lo que ya está listo** y Gerardo no ha pasado
   («Folios» → «En la planta», la OC que no se puede foliar entera dice cuáles faltan, «Más» del detalle; sólo desde Empaque o máquina,
   con aviso a Gerardo; sin cambios en la base). Revisado en producción sin escribir con `tests/recorrido/karla-planta.mjs` (21 de 21).
   v10.84.66: ligar una
