@@ -26,6 +26,9 @@ const partes = [
   ...opcional(L.some(l => l.startsWith("const FOCOS_DIALOGO=")), () => line(/^const FOCOS_DIALOGO=/, "FOCOS_DIALOGO")),
   ...opcional(L.some(l => l.startsWith("function atraparTab(")), () => fnBlock("atraparTab")),
   constBlock("OTRO_CATS"), fnBlock("toBackendRef"), fnBlock("refComplete"),
+  // (v10.84.70) lo nuevo del selector de pagos y de «Asignar folio» (opcional: el App.jsx de antes no lo tiene, y el banco corre con los dos)
+  ...(L.some(l => l.startsWith("const METODO_PALABRA=")) ? [line(/^const METODO_PALABRA=/, "METODO_PALABRA"), line(/^const montoLimpio=/, "montoLimpio"), line(/^const faltaDelPago=/, "faltaDelPago")] : []),
+  ...(L.some(l => l.startsWith("function useAnchoMinimo(")) ? [fnBlock("useAnchoMinimo")] : []),
   `const Q = new URLSearchParams(location.search);
 const EMISOR = Q.get("emisor") || "on", CLIENTE = Q.get("cliente") || "normal", PRE = Q.get("pre") === "1";
 const TRASLADO = Q.get("traslado") || "listo", FALLA = Q.get("falla") === "1";

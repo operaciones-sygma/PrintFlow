@@ -494,3 +494,26 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   una nota y una vista previa seguidas. Una nota que sólo repite lo que otro recuadro ya enmarca se mete en él.
 - **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.
 - **El botón apagado dice por qué**: en el pie, junto al botón, una línea en `C.wnInk` con lo que falta («Remisión 1 no tiene órdenes», «Falta confirmar cómo se asigna el folio»). El botón apagado va en `bt(C.sf, C.t2)`, que se lee; blanco sobre gris daba 1.4:1.
+  Y **un estado no se dice con opacidad**: «Asignar folio» tenía «Continuar» al 40% (1.7:1 a la vista, 4.7 en el código) y sin
+  explicación hasta v10.84.70 («Elige si es factura o remisión.», «Al pago 1 le falta el método.»).
+- **Lo que la base sabe se dice al abrir, no después de confirmar** (v10.84.70): «Asignar folio» leía las facturas hechas por
+  adelantado hasta después de «Confirmar»; la vista previa prometía una factura nueva y la del mismo importe se ofrecía con la
+  ventana ya cerrada. Si lo que sabe la base cambia la acción, cambia el **botón principal** («Ligar F-135 y entregar»), y lo que la
+  base no deja hacer no se ofrece: se dice qué hacer en su lugar («No es de este trabajo»). Y lo que se lee al abrir lleva su tope
+  (8 s) y su «Reintentar», como el emisor.
+- **El error de lo que se crea, dentro de la ventana** (v10.84.70): App devuelve `{ error }` y la ventana lo dice al pie con
+  `role="alert"`, en palabras (`motivoDeLaBase`: lo de siempre como «sin conexión» o «no tienes permiso»; la regla escrita para
+  personas, tal cual) y con lo capturado. Un aviso abajo que se borra en 7 s, con el mensaje crudo, no le sirve a quien tiene que
+  reintentar.
+- **Un paso que cambia su botón principal lleva su `key`** (v10.84.70): sin ella React reusa el nodo («Continuar» se volvía
+  «Confirmar» con el foco puesto) y Enter, Enter emitía sin leer la vista previa. Al entrar a la vista previa el foco va a ella
+  (`role="group"` con nombre), al regresar con «Atrás» al diálogo, y el paso nuevo abre con `escudoDeClics`.
+- **El selector de pagos (`MultiPaymentPicker`, cuatro ventanas)** (v10.84.70): «Pagada» trae el total y otro pago lo que falta; el
+  monto es **texto con dos decimales** (`montoLimpio`): un `type=number` cambiaba con la rueda y las flechas (66004 → 66003.99) y
+  aceptaba 66004.004 o -500; los métodos van en un renglón y se recorren con las flechas (un `radiogroup` con un solo
+  `tabIndex=0`); «No pagada» guarda lo capturado y lo regresa; el color dice sólo el estado del pago (No pagada en neutro, Parcial
+  en ámbar, Pagada en verde) y **nada se pinta de ámbar antes de un error** («· incompleto» y el ⚠ de la referencia regañaban
+  antes de teclear); quitar un pago es una «×» discreta («Quitar el pago 2»). Sin total (precio 0) no se piden pagos.
+- **Un diálogo con dos partes va lado a lado desde 1100 px** (v10.84.70): en «Asignar folio», el documento a la izquierda y el
+  pago a la derecha (`useAnchoMinimo(1100)`); a 1366 el monto quedaba bajo el pliegue y a 1920 el diálogo hacía scroll con 460 px
+  de ancho. La vista previa no se estira: su resumen mide como mucho 560 px.

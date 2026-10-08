@@ -12,6 +12,67 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.70 — «Asignar folio y entregar», después de la critique independiente (23/40) — 8-oct-2026
+
+**Qué pasaba.** Marcelo eligió «Asignar folio y entregar» para una pasada de `/impeccable critique` (la ventana con la que Karla folia
+~84 entregas al mes). Un revisor independiente (agente aparte, sin ver critiques anteriores) le dio **23/40** con tres P1 y dos P2, y
+los dos primeros P1 se comprobaron por separado:
+- **Enter, Enter emitía sin leer la vista previa.** «Continuar» y «Confirmar» eran el mismo botón para React: el foco se quedaba en él.
+- **Lo capturado se perdía sin preguntar** desde «Volver» (cerraba directo) y «No pagada» (borraba los pagos).
+- **Lo que sabe la base llegaba tarde y fuera del diálogo.** Las facturas hechas por adelantado se leían hasta después de «Confirmar»:
+  la vista previa prometía una factura nueva y la del mismo importe se ofrecía con la ventana ya cerrada (con «No, cancelar» se perdía lo
+  capturado). Un error de la base salía crudo, abajo, en un aviso de 7 s.
+- **Capturar un pago era manual y frágil** (P2): el monto vacío, bajo el pliegue a 1366, `type=number` (la rueda y las flechas lo
+  movían: 66004 → 66003.99; aceptaba 66004.004 y -500), los cinco métodos en dos columnas por pago, y a 1920 el diálogo hacía scroll.
+- **El color confundía** (P2): el tipo de documento con los colores del pago (verde = Remisión y Pagada; violeta = Factura y Parcial),
+  «No pagada» en ámbar, «Continuar» apagado al 40% (1.7:1) sin decir por qué, «Eliminar» en negrita roja y en Arial.
+
+**Qué se cambió** (todo en `src/App.jsx`; Marcelo eligió atacar P1 y P2, y que la ventana lo dijera al abrir):
+- **Las facturas hechas por adelantado, al abrir** (App pasa `list_linkable_invoices_for_order`; tope de 8 s y «Reintentar»):
+  - con una del **mismo importe**, la ventana lo dice y su acción es **«Ligar F-135 y entregar»** (sin pagos: su cobro va en CobranzaFlow),
+    con su vista previa («No se emite un folio nuevo»). Emitir otra no se ofrece: la base la rechaza siempre; «No es de este trabajo»
+    dice qué hacer (ligarla a su orden en CobranzaFlow) y deja ver el camino normal;
+  - con una de **otro importe** (un anticipo), lo dice con «Facturar por partes» (abre esa ventana), y la vista previa repite que se
+    queda sin ligar. App ya no pregunta después de confirmar (era el `preguntarPorAnticipos` de este camino; el de «Folio anticipado» se queda);
+  - si **no se pudo leer**: sin efectivo se sigue (la base frena el mismo importe); con efectivo, no se cobra a ciegas, y se dice.
+- **Los errores, dentro del diálogo**: App devuelve `{ error }` (`motivoDeLaBase`: lo de siempre en palabras; la regla escrita para
+  personas, tal cual) y la ventana lo dice al pie con `role="alert"` y con lo capturado. Si la base dice que se emitió una por
+  adelantado mientras se capturaba, se vuelve a leer y se ofrece ligar. Ligar también devuelve su error (`ligarAdelantada`).
+- **Enter, Enter**: cada paso con su `key`, el foco a la vista previa (y al diálogo al volver con «Atrás»), `escudoDeClics` al pasar
+  de paso, y **Ctrl+Enter** abre la vista previa (nunca emite).
+- **Nada capturado se pierde sin preguntar**: «Volver» es **«Cancelar»** por la misma pregunta que Esc («Seguir capturando»), y
+  «No pagada» **guarda** los pagos y los regresa al volver a «Pagada» o «Parcial».
+- **El selector de pagos** (`MultiPaymentPicker`, también en Folio anticipado, Folio por OC y Vender de stock): «Pagada» trae el total
+  y otro pago lo que falta; el monto es texto con dos decimales (`montoLimpio`); los métodos en un renglón que se recorre con las
+  flechas; «× Quitar el pago N» discreta; nada en ámbar antes de un error; sin precio no se piden pagos.
+- **El color y el botón apagado**: el tipo de documento en neutro (la elegida en slate) y encogido a un renglón ya elegido; un color
+  para la acción en todos los tipos; «Continuar» apagado se lee y una línea dice qué falta («Elige si es factura o remisión.»,
+  «Al pago 1 le falta el método.»). La vista previa, neutra, con los métodos en palabras y el vale de caja cuando hay efectivo.
+- **Dos columnas desde 1100 px** (`useAnchoMinimo`): el documento a la izquierda y el pago a la derecha; la vista previa no se estira.
+- **Menores**: «hace 1 día» (no «día(s)»), «Descontar $56,900.00 de lo facturado por adelantado», el saldo negativo con su signo
+  («−$26,900.00»), el cliente lento a los 8 s, la pregunta de cerrar con `aria-describedby`, el aviso (`Toast`) con `role`, el anillo de
+  foco de toda la app en `#4a6572` (era al 50%, ~2.2:1), y el aviso del folio asignado con «Copiar F-…» (dura 6.5 s).
+
+**Qué NO se tocó.** La base (el candado de `assign_invoice` sigue siendo la red); «Folio anticipado» (salvo el selector de pagos
+compartido); `link_invoice_to_order`; el camino del folio que ya existe en cobranza (modo manual).
+
+**Cómo se probó.**
+- **Vuelta 1, antes del arreglo**: 34 casos nuevos en `tests/romper/folio.mjs` contra el código de hoy: **31 fallaban** (los 3 que
+  pasaban: el doble clic en «Continuar», que se salvaba por suerte, confirmar a propósito con el teclado y cerrar sin nada capturado).
+  Dos pruebas salieron ciegas y se corrigieron antes de arreglar: la rueda no mueve el número en el navegador sin pantalla (ahora
+  también las flechas y el tipo de campo) y el contraste ignoraba la opacidad (ahora la exige).
+- **Vuelta 2, por donde no se diseñó** (15 casos: doble clic en «Ligar» y «Confirmar», ligar con la base caída, «No es de este
+  trabajo» y de regreso, la lectura que pasa el tope, «Reintentar», el foco con «Atrás», Ctrl+Enter apagado y para ligar, pegar
+  «66,004.00», las flechas en los extremos, Corona y Cuadra en dos columnas, el parcial guardado, Esc al ligar, 1920).
+- **11 sabotajes** (cada defecto metido en una copia y corrida sólo su prueba): los 11 atrapados. Uno no lo estaba (sin el escudo,
+  «Ligar…» no ligaba de un doble clic porque el pie se movía: suerte); la prueba ahora revisa el escudo mismo.
+- **Tres pruebas viejas cambiaron su supuesto, a propósito**: inv-13 (un color para la acción, no el verde de remisión), inv-19 (8 s,
+  no 5) e inv-23 (comillas «»). El banco simula el cliente lento a 10 s y las facturas por adelantado (`anticipo=…`, `adelantada=1`).
+- **El recorrido con la app real** (`tests/recorrido/ligar-anticipo.mjs`, reescrito al flujo nuevo): 11 de 11.
+- **Folio por OC** (`oc.mjs`, comparte el selector de pagos): 112 de 112.
+- **Sin probar en pantalla**: «Vender de stock» (`BulkSellModal`, Cuadra) también usa el selector de pagos y no tiene banco; se revisó
+  por código (la misma interfaz `status/refs/onChange`; cambia la presentación, el monto lleno y «No pagada» que guarda).
+
 ## v10.84.69 — «¿Ya existe este cliente?»: lo que casi seguro ya existe se elige, no se crea — 8-oct-2026
 
 **Qué pasaba.** Marcelo (8-oct): *«sólo cuidar que no cree clientes duplicados con los ya existentes»*; y si el cliente casi seguro ya

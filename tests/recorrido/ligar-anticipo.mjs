@@ -2,14 +2,14 @@
 // escribir nada. El caso de Karla (8-oct): P-0585 de TRANSPORTES CASTORES ($7,440 + IVA = $8,630.40) y dos facturas sin orden del
 // mismo cliente: F-135 por $8,630.40 (justo el importe) y F-140 por $2,157.60. Al «Asignar Folio y Entregar», la app preguntaba
 // primero por F-140 («No es del importe de esta orden, así que no se liga sola») y Karla entendió que F-135 tampoco se ligaba.
-// Aquí una orden de prueba (P-9585, sólo en este navegador) con F-9135 (mismo importe) y F-9140 (otro); la lista de candidatas y la
-// respuesta de assign_invoice se contestan como la base (el candado «emitida por adelantado» de assign_invoice, leído el 8-oct).
-// Lo que DEBE pasar, para Karla:
-//  A. Factura sin pago: no se pregunta por F-9140; se llega a «Este trabajo ya se facturó por adelantado… Sí, ligar F-9135».
-//  B. Factura pagada en EFECTIVO: se frena antes de cobrar, se dice que F-9135 ya es la factura de este trabajo y qué hacer, y
-//     assign_invoice_cash no se llama. (La base también la rechazaría —folia llamando a assign_invoice, que tiene el candado—, pero
-//     su rechazo llegaba como un aviso que se borra y sin ofrecer ligar.)
-//  C. Sin factura del mismo importe (sólo F-9140): sí se pregunta por ella, como antes (el caso del anticipo de P-0544, v10.84.31).
+// Aquí una orden de prueba (P-9585, sólo en este navegador) con F-9135 (mismo importe) y F-9140 (otro); la lista de candidatas, el
+// candado «emitida por adelantado» (assign_invoice y assign_invoice_cash, que folia por ella) y ligar se contestan como la base.
+// v10.84.70 (critique independiente del 8-oct): la ventana lee las candidatas AL ABRIR. Lo que DEBE pasar, para Karla:
+//  A. Con F-9135 del mismo importe: lo dice al abrir, la acción es «Ligar F-9135 y entregar» (sin pagos), y liga sin otro folio.
+//  B. «No es de este trabajo» + efectivo: la base lo rechaza y el diálogo lo dice ADENTRO y vuelve a ofrecer ligar.
+//  C. Sólo F-9140 (otro importe): lo dice al abrir con «Facturar por partes»; la completa se emite sin otra pregunta.
+//  E. Efectivo y la lectura caída: no se cobra y se dice. F. Efectivo sin una del mismo importe: sigue su camino.
+//  G. «Facturar por partes» desde el aviso abre esa ventana.
 // Uso:  npm run build && node tests/recorrido/ligar-anticipo.mjs            (sirve dist/ en 127.0.0.1:4279)
 //       node tests/recorrido/ligar-anticipo.mjs https://produccion.sygma.mx (la app publicada)
 //       SOLO=AB corre sólo esos escenarios. Sale con 1 si algo sale MAL.
@@ -74,11 +74,15 @@ async function entrar(candidatas) {
       return route.continue();
     }
     escritas.push({ m, a: rpc ? "rpc/" + rpc : tabla || ruta, cuerpo });
-    // el candado de la base (assign_invoice, v3.7.465): con una factura sin orden del MISMO importe, no acuña folio y lo dice
+    // el candado de la base (assign_invoice, v3.7.465; assign_invoice_cash folia por ella, ensayado el 8-oct): con una factura sin orden
+    // del MISMO importe, no acuña folio y lo dice
     const mismo = Array.isArray(candidatas) ? candidatas.find(c => c.monto_cuadra) : null;
-    if (rpc === "assign_invoice" && cuerpo?.p_order_id === ID && mismo)
+    if ((rpc === "assign_invoice" || rpc === "assign_invoice_cash") && cuerpo?.p_order_id === ID && mismo)
       return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ code: "22023", details: null, hint: null,
         message: `Este cliente ya tiene ${mismo.doc_number} emitida por adelantado y sin orden, por $${mismo.amount}, que es justo el importe de esta orden. Ligala a esta orden en vez de emitir un folio nuevo, o se le cobraria dos veces el mismo trabajo.` }) });
+    // (v10.84.70) ligar NO se escribe: se contesta como la base cuando liga (la factura queda pendiente y la orden entregada)
+    if (rpc === "link_invoice_to_order" && cuerpo?.p_order_id === ID)
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ invoice_status: "pendiente", amount: mismo?.amount ?? null, payment_status: "unpaid", pre_assigned: false }) });
     return route.fulfill({ status: 418, contentType: "application/json", body: JSON.stringify({ code: "42501", message: "solo lectura" }) });
   } catch { /* el contexto ya se cerró */ } });
   const p = await ctx.newPage(); p.setDefaultTimeout(15000);
@@ -99,75 +103,92 @@ const ir = async (p, vista) => { for (let intento = 0; intento < 3; intento++) {
 const despertador = async p => { if (await p.getByText(/escribe SI ENTIENDO/i).first().waitFor({ timeout: 8000 }).then(() => true, () => false)) { await p.getByPlaceholder(/Escribe aquí/).first().fill("SI ENTIENDO"); await p.waitForTimeout(800); } };
 const dialogos = p => p.evaluate(() => [...document.querySelectorAll('[role="dialog"]')].map(d => d.innerText.replace(/\s+/g, " ").trim()));
 const aviso = p => p.evaluate(() => { const t = [...document.querySelectorAll("div")].find(d => { const cs = getComputedStyle(d); return cs.position === "fixed" && cs.bottom === "24px" && (d.innerText || "").trim(); }); return t ? t.innerText.replace(/\s+/g, " ").trim() : ""; });
-// a «Folios», la orden de prueba, «Asignar Folio y Entregar», Factura, el pago, «Continuar» y «Confirmar»; regresa lo que se vio después
-async function asignar(p, { efectivo = false } = {}) {
+// (v10.84.70) a «Folios», la orden de prueba y «Asignar Folio y Entregar»: regresa el diálogo ya abierto (las candidatas se leen al abrir)
+async function abrir(p) {
   await despertador(p); await ir(p, "Folios"); await p.waitForTimeout(600);
   await p.getByPlaceholder("Buscar orden...").fill("P-9585"); await p.waitForTimeout(700);
   await p.getByRole("button", { name: /Asignar Folio y Entregar/ }).first().click();
-  const dlg = p.getByRole("dialog", { name: /Asignar folio/i }); await dlg.waitFor(); await p.waitForTimeout(500);
-  await dlg.getByRole("button", { name: /^Factura/ }).first().click(); await p.waitForTimeout(300);
+  const dlg = p.getByRole("dialog", { name: /Asignar folio/i }); await dlg.waitFor(); await p.waitForTimeout(900);
+  return dlg;
+}
+// Factura y el pago («No pagada», o efectivo por el total, que ya viene lleno) y «Continuar»
+async function capturar(p, dlg, { efectivo = false } = {}) {
+  await dlg.getByRole("button", { name: /^Factura(\s|$)/ }).first().click(); await p.waitForTimeout(300);   // no «Facturar por partes»
   if (efectivo) {
     await dlg.getByRole("button", { name: "Pagada", exact: true }).click(); await p.waitForTimeout(200);
     await dlg.getByRole("radio", { name: "Efectivo" }).first().click(); await p.waitForTimeout(200);
-    await dlg.getByLabel("Monto del pago 1").fill("8630.40"); await p.waitForTimeout(200);
   } else { await dlg.getByRole("button", { name: "No pagada", exact: true }).click(); await p.waitForTimeout(200); }
-  await dlg.getByRole("button", { name: /^Continuar/ }).click(); await p.waitForTimeout(400);
-  await dlg.getByRole("button", { name: /Confirmar/ }).click();
-  let vistos = [];
-  for (let k = 0; k < 24; k++) { await p.waitForTimeout(250); const d = await dialogos(p); if (d.some(x => /adelantado/i.test(x))) { vistos = d; break; } vistos = d; }
-  return vistos;
 }
+const texto = async dlg => (await dlg.innerText()).replace(/\s+/g, " ");
+const esperaEscritura = async (p, escritas, re) => { for (let k = 0; k < 24 && !escritas.some(e => re.test(e.a)); k++) await p.waitForTimeout(250); return escritas.filter(e => re.test(e.a)).length; };
 const corre = l => !process.env.SOLO || process.env.SOLO.includes(l);
 try {
+  // A. con una del MISMO importe (y otra de otro): al abrir lo dice, la acción es ligarla, y al confirmar liga sin emitir folio
   if (corre("A")) { const { ctx, p, escritas } = await entrar([cand("F-9135", 8630.40, true, 6), cand("F-9140", 2157.60, false, 2)]);
     try {
-      const d = await asignar(p);
-      const otroPrimero = d.some(x => /F-9140/.test(x) && /no se liga sola/i.test(x));
-      const ofrece = d.some(x => /ya se facturó por adelantado/i.test(x) && /F-9135/.test(x)) && (await p.getByRole("button", { name: /Sí, ligar F-9135/ }).count()) === 1;
-      ok("A1 con una del mismo importe no pregunta primero por la de otro importe", !otroPrimero, otroPrimero ? "pregunta por F-9140 («no se liga sola») antes de ofrecer ligar F-9135" : "no pregunta por F-9140");
-      ok("A2 llega a «Sí, ligar F-9135»", ofrece, ofrece ? "ofrece ligar F-9135" : "lo que se ve: «" + d.join(" ‖ ").slice(0, 260) + "»");
-      ok("A3 no se ligó ni se escribió nada todavía", !escritas.some(e => /link_invoice_to_order|assign_invoice_cash/.test(e.a)), escritas.map(e => e.m + " " + e.a).join(", ") || "nada");
+      const dlg = await abrir(p); const t = await texto(dlg);
       await p.screenshot({ path: path.join(OUT, "A-ligar.png") });
+      const liga = dlg.getByRole("button", { name: /^Ligar F-9135 y entregar/ });
+      ok("A1 al abrir dice que F-9135 ya es la factura de este trabajo, sin preguntar por F-9140", /F-9135 ya es la factura de este trabajo/.test(t) && !/no se liga sola/i.test(t), "«" + t.slice(0, 220) + "»");
+      ok("A2 la acción principal es «Ligar F-9135 y entregar» y no se piden pagos", (await liga.count()) === 1 && (await dlg.getByRole("button", { name: "Pagada", exact: true }).count()) === 0);
+      await liga.click(); await p.waitForTimeout(700);
+      const prev = /Vas a ligar F-9135/.test(await texto(dlg));
+      await dlg.getByRole("button", { name: /^Confirmar/ }).click();
+      const ligadas = await esperaEscritura(p, escritas, /link_invoice_to_order/);
+      ok("A3 con su vista previa, liga F-9135 una vez y no intenta emitir otro folio", prev && ligadas === 1 && !escritas.some(e => /rpc\/assign_invoice/.test(e.a)), escritas.map(e => e.a).join(", ") || "nada");
     } catch (e) { ok("A (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // B. la misma, pero «No es de este trabajo» y efectivo: la base lo rechaza y el diálogo lo dice adentro y vuelve a ofrecer ligar
   if (corre("B")) { const { ctx, p, escritas } = await entrar([cand("F-9135", 8630.40, true, 6), cand("F-9140", 2157.60, false, 2)]);
     try {
-      const d = await asignar(p, { efectivo: true });
-      // si la app preguntó por la de otro importe, se le contesta «de todos modos» (como haría Karla) para ver adónde lleva
-      if (d.some(x => /no se liga sola/i.test(x))) { await p.getByRole("button", { name: /Asignar el folio de todos modos/ }).click().catch(() => {}); await p.waitForTimeout(2500); }
-      await p.waitForTimeout(800);
-      const a = await aviso(p), d2 = await dialogos(p), todo = a + " ‖ " + d2.join(" ‖ ");
-      const efectivoLlamado = escritas.some(e => e.a === "rpc/assign_invoice_cash");
-      ok("B1 con efectivo no se emite otro folio (assign_invoice_cash no se llama)", !efectivoLlamado, efectivoLlamado ? "SE LLAMÓ assign_invoice_cash: la base lo rechaza, pero con un aviso que se borra y sin ofrecer ligar" : "no se llamó");
-      // (un aviso que se queda, no un toast que se borra antes de leerlo: detiene un cobro)
-      const aviso2 = d2.find(x => /ya se facturó por adelantado/i.test(x) && /F-9135/.test(x) && /efectivo/i.test(x)) || "";
-      const botones = await p.evaluate(() => { const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /ya se facturó por adelantado/i.test(x.innerText)); return d ? [...d.querySelectorAll("button")].map(b => b.innerText.trim()) : []; });
-      ok("B2 se queda en pantalla y dice que F-9135 ya es la factura de este trabajo y qué hacer", !!aviso2 && /Quita el pago en efectivo/.test(aviso2), "«" + (aviso2 || todo).slice(0, 280) + "»");
-      ok("B3 el aviso tiene un solo botón, «Entendido», y al cerrarlo sigue la ventana de asignar (para quitar el efectivo)", botones.length === 1 && botones[0] === "Entendido" && await (async () => {
-        await p.getByRole("button", { name: "Entendido" }).click().catch(() => {}); await p.waitForTimeout(400);
-        return (await p.getByRole("dialog", { name: /Asignar folio/i }).count()) === 1 && !(await dialogos(p)).some(x => /ya se facturó por adelantado/i.test(x)); })(), "botones: " + JSON.stringify(botones));
+      const dlg = await abrir(p);
+      await dlg.getByRole("button", { name: "No es de este trabajo" }).click(); await p.waitForTimeout(400);
+      const advierte = /no deja emitir otra factura por este mismo importe/.test(await texto(dlg));
+      await capturar(p, dlg, { efectivo: true });
+      await dlg.getByRole("button", { name: /^Continuar/ }).click(); await p.waitForTimeout(700);
+      await dlg.getByRole("button", { name: /^Confirmar/ }).click();
+      await esperaEscritura(p, escritas, /assign_invoice_cash/); await p.waitForTimeout(1200);
+      const t = await texto(dlg);
       await p.screenshot({ path: path.join(OUT, "B-efectivo.png") });
+      ok("B1 «No es de este trabajo» avisa que la base no deja emitir otra por el mismo importe", advierte);
+      ok("B2 con efectivo, el rechazo de la base sale DENTRO del diálogo y vuelve a ofrecer «Ligar F-9135 y entregar»", /no dejó emitir otro folio/.test(t) && (await dlg.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).count()) === 1, "«" + t.slice(0, 260) + "»");
+      ok("B3 no salió ningún otro diálogo encima (la pregunta de antes cerraba la ventana)", (await dialogos(p)).length === 1);
     } catch (e) { ok("B (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
-  // (vuelta 2) con efectivo y la lectura de las candidatas caída: no se cobra a ciegas
+  // E. con efectivo y la lectura de las candidatas caída: no se cobra a ciegas, y se dice
   if (corre("E")) { const { ctx, p, escritas } = await entrar("falla");
     try {
-      const d = await asignar(p, { efectivo: true }); await p.waitForTimeout(1500);
-      const d2 = await dialogos(p), efectivoLlamado = escritas.some(e => e.a === "rpc/assign_invoice_cash");
-      ok("E1 con efectivo y sin poder revisar, no cobra y lo dice", !efectivoLlamado && d2.some(x => /No se pudo revisar/.test(x)), (efectivoLlamado ? "SE LLAMÓ assign_invoice_cash · " : "") + "«" + d2.join(" ‖ ").slice(0, 200) + "»");
+      const dlg = await abrir(p); const avisa = /No se pudo revisar si ya hay una factura por adelantado/.test(await texto(dlg));
+      await capturar(p, dlg, { efectivo: true }); await p.waitForTimeout(300);
+      const apagado = await dlg.getByRole("button", { name: /^Continuar/ }).isDisabled();
+      ok("E1 con efectivo y sin poder revisar: lo dice al abrir, no deja continuar y no cobra", avisa && apagado && !escritas.some(e => e.a === "rpc/assign_invoice_cash"), `avisa=${avisa} · apagado=${apagado}`);
     } catch (e) { ok("E (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
-  // (vuelta 2) con efectivo y sin una del mismo importe: el cobro en efectivo sigue como siempre (assign_invoice_cash)
+  // F. con efectivo y sin una del mismo importe: el cobro en efectivo sigue su camino (assign_invoice_cash)
   if (corre("F")) { const { ctx, p, escritas } = await entrar([cand("F-9140", 2157.60, false, 2)]);
     try {
-      const d = await asignar(p, { efectivo: true });
-      if (d.some(x => /no se liga sola/i.test(x))) { await p.getByRole("button", { name: /Asignar el folio de todos modos/ }).click().catch(() => {}); }
-      for (let k = 0; k < 20 && !escritas.some(e => e.a === "rpc/assign_invoice_cash"); k++) await p.waitForTimeout(250);
-      ok("F1 sin una del mismo importe, el efectivo sigue su camino (assign_invoice_cash)", escritas.some(e => e.a === "rpc/assign_invoice_cash"), escritas.map(e => e.a).join(", ") || "no llamó nada");
+      const dlg = await abrir(p); await capturar(p, dlg, { efectivo: true });
+      await dlg.getByRole("button", { name: /^Continuar/ }).click(); await p.waitForTimeout(700);
+      await dlg.getByRole("button", { name: /^Confirmar/ }).click();
+      ok("F1 sin una del mismo importe, el efectivo sigue su camino (assign_invoice_cash)", (await esperaEscritura(p, escritas, /assign_invoice_cash/)) === 1, escritas.map(e => e.a).join(", ") || "no llamó nada");
     } catch (e) { ok("F (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
-  if (corre("C")) { const { ctx, p } = await entrar([cand("F-9140", 2157.60, false, 2)]);
+  // C. sólo una de OTRO importe: se dice al abrir, con «Facturar por partes»; la completa se emite sin otra pregunta
+  if (corre("C")) { const { ctx, p, escritas } = await entrar([cand("F-9140", 2157.60, false, 2)]);
     try {
-      const d = await asignar(p);
-      ok("C1 sin una del mismo importe, sí pregunta por la de otro importe (el anticipo de P-0544)", d.some(x => /F-9140/.test(x) && /no se liga sola/i.test(x)), "«" + d.join(" ‖ ").slice(0, 200) + "»");
+      const dlg = await abrir(p); const t0 = await texto(dlg);
       await p.screenshot({ path: path.join(OUT, "C-otro-importe.png") });
+      ok("C1 al abrir dice que F-9140 ($2,157.60) es de otro importe y ofrece «Facturar por partes»", /F-9140/.test(t0) && /\$2,157\.60/.test(t0) && (await dlg.getByRole("button", { name: /Facturar por partes/ }).count()) === 1, "«" + t0.slice(0, 220) + "»");
+      await capturar(p, dlg); await dlg.getByRole("button", { name: /^Continuar/ }).click(); await p.waitForTimeout(700);
+      const prev = /F-9140.*sin ligar/.test(await texto(dlg));
+      await dlg.getByRole("button", { name: /^Confirmar/ }).click();
+      await esperaEscritura(p, escritas, /rpc\/assign_invoice$/); await p.waitForTimeout(600);
+      ok("C2 la vista previa dice que F-9140 se queda sin ligar, y al confirmar no sale otra pregunta (se intenta emitir una vez)", prev && !(await dialogos(p)).some(x => /no se liga sola/i.test(x)) && escritas.filter(e => e.a === "rpc/assign_invoice").length === 1);
     } catch (e) { ok("C (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // G. «Facturar por partes» desde el aviso lleva a esa ventana, con la orden
+  if (corre("G")) { const { ctx, p } = await entrar([cand("F-9140", 2157.60, false, 2)]);
+    try {
+      const dlg = await abrir(p);
+      await dlg.getByRole("button", { name: /Facturar por partes/ }).click(); await p.waitForTimeout(1500);
+      const ds = await dialogos(p);
+      ok("G1 «Facturar por partes» cierra «Asignar folio» y abre la de partes", !(await p.getByRole("dialog", { name: /Asignar folio/i }).count()) && ds.some(x => /partes/i.test(x)), "«" + ds.join(" ‖ ").slice(0, 200) + "»");
+    } catch (e) { ok("G (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
 } finally {
   await nav.close();
   if (servidor) await new Promise(r => servidor.httpServer.close(r));
