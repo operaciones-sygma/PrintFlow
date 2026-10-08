@@ -493,7 +493,7 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Un recuadro por idea** (v10.84.45): lo que se va a crear (qué, por cuánto, a quién y cómo va el folio) es UN resumen, no
   una nota y una vista previa seguidas. Una nota que sólo repite lo que otro recuadro ya enmarca se mete en él.
 - **Una palabra por cosa** (v10.84.44): en «Folio por OC», «producto» (lo que la OC agrega), nunca «orden» para lo mismo.
-- **El botón apagado dice por qué**: en el pie, junto al botón, una línea en `C.wnInk` con lo que falta («Remisión 1 no tiene órdenes», «Falta confirmar cómo se asigna el folio»). El botón apagado va en `bt(C.sf, C.t2)`, que se lee; blanco sobre gris daba 1.4:1.
+- **El botón apagado dice por qué**: en el pie, junto al botón, una línea con lo que falta («Remisión 1 no tiene órdenes», «Falta confirmar cómo se asigna el folio»): en `C.wnInk` si algo está mal, en `C.t2` si sólo falta hacerlo (v10.84.70, abajo). El botón apagado va en `bt(C.sf, C.t2)`, que se lee; blanco sobre gris daba 1.4:1.
   Y **un estado no se dice con opacidad**: «Asignar folio» tenía «Continuar» al 40% (1.7:1 a la vista, 4.7 en el código) y sin
   explicación hasta v10.84.70 («Elige si es factura o remisión.», «Al pago 1 le falta el método.»).
 - **Lo que la base sabe se dice al abrir, no después de confirmar** (v10.84.70): «Asignar folio» leía las facturas hechas por
@@ -517,3 +517,22 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Un diálogo con dos partes va lado a lado desde 1100 px** (v10.84.70): en «Asignar folio», el documento a la izquierda y el
   pago a la derecha (`useAnchoMinimo(1100)`); a 1366 el monto quedaba bajo el pliegue y a 1920 el diálogo hacía scroll con 460 px
   de ancho. La vista previa no se estira: su resumen mide como mucho 560 px.
+- **Lo capturado que la acción no usa se dice, y hay que reconocerlo** (v10.84.70, segunda revisión): al pasar a «Ligar F-… y
+  entregar», el selector de pagos se escondía y el efectivo capturado se perdía sin aviso (ligar no cobra ni crea el vale). Si el
+  camino cambia y deja algo capturado fuera, se dice cuánto y de quién («Capturaste $66,004.00 en efectivo (entregó Sr. Ramírez)»),
+  qué hacer con eso, y la acción pide reconocerlo («Lo registro en CobranzaFlow»); la vista previa lo repite y la orden lo anota.
+- **Lo que la base va a rechazar no se deja confirmar** (v10.84.70, segunda revisión): con «No es de este trabajo», otra factura del
+  mismo importe se apaga con su porqué; antes se llegaba hasta «Confirmar» para que la base dijera que no.
+- **Decidir necesita con qué comparar** (v10.84.70, segunda revisión): una coincidencia (mismo cliente y mismo importe) se presenta como
+  pregunta («F-9135 es del mismo importe: ¿es la factura de este trabajo?»), con lo que hay que comparar lado a lado (la orden: número,
+  producto, piezas e importe; la factura: cuándo se emitió y su motivo). La salida contraria es un botón, no un enlace de 15 px.
+- **Instrucción en gris, problema en ámbar** (v10.84.70, segunda revisión): lo que falta HACER («Elige si es factura o remisión»,
+  «Al pago 1 le falta el monto») va en `C.t2` con su ícono de información; el ámbar (`C.wnInk` con su ⚠) queda para lo que está MAL
+  (no se pudo leer, no cuadra, la base lo rechazaría). Lo que se está consultando ya lo dice su lugar: el pie no lo repite.
+- **El botón final dice lo que hace** (v10.84.70, segunda revisión): «Emitir y entregar», «Asignar F-100 y entregar», «Ligar F-9135 y
+  entregar», «Aplicar saldo y entregar», «Cargar a stock»; «Confirmar» para todo no decía qué se iba a hacer.
+- **El foco no cae al `<body>`** (v10.84.70, segunda revisión): al cerrar una pregunta regresa a donde estaba; si el botón apretado
+  desaparece (pasar a ligar, «No es de este trabajo»), va a lo nuevo; un rechazo de la base se lleva el foco a su aviso. Y los campos
+  enseñan el anillo de foco: `inp` trae `outline:none`, que gana a la regla global; donde importa, `{...inp, outline: undefined}`.
+- **Agregar una fila lleva a ella** (v10.84.70, segunda revisión): «Agregar otro pago» deja a la vista el pago nuevo y el foco en su
+  método (se quedaba en el botón, abajo).

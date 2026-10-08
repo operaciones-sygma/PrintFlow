@@ -36,6 +36,9 @@ const dlgPre = p => p.getByRole("dialog", { name: /Folio anticipado/i });
 // (v10.84.70) la palabra completa: «Facturar por partes» también empieza con «Factura»
 const tipo = (p, t) => p.getByRole("button", { name: new RegExp("^" + t + "(\\s|$)") }).first();
 const continuar = p => p.getByRole("button", { name: "Continuar" });
+// (v10.84.70, segunda revisión) el botón final de la vista previa dice lo que hace («Emitir y entregar», «Ligar F-… y entregar»…);
+//   antes era «Confirmar» para todo. Las pruebas de antes lo buscan por aquí.
+const final = p => dlgInv(p).getByRole("button", { name: /^(Confirmar|Emitir y entregar|Asignar \S+ y entregar|Ligar \S+ y entregar|Aplicar saldo y entregar|Cargar a stock)/ }).last();
 async function pagada(p, monto = "66004", metodo = "Transferencia") {
   await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 150);
   await p.getByRole("radio", { name: metodo }).first().click();
@@ -142,13 +145,13 @@ await caso("inv-15 sin precio", "precio0=1", async p => {
 });
 await caso("inv-16 doble clic en Confirmar", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p);
-  await p.getByRole("button", { name: "Confirmar", exact: true }).dblclick(); await espera(p, 700);
+  await final(p).dblclick(); await espera(p, 700);
   ok("inv-16 doble clic en Confirmar manda UNA vez", (await cuenta(p, "inv:confirm")) === 1, "veces=" + await cuenta(p, "inv:confirm"));
 });
 await caso("inv-17 la base rechaza", "falla=1", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p); await continuar(p).click(); await espera(p);
-  await p.getByRole("button", { name: "Confirmar", exact: true }).click(); await espera(p, 600);
-  ok("inv-17 si la base rechaza, el modal sigue con lo capturado para reintentar", (await cuenta(p, "toast:error")) === 1 && await dlgInv(p).isVisible() && !(await p.getByRole("button", { name: "Confirmar", exact: true }).isDisabled()));
+  await final(p).click(); await espera(p, 600);
+  ok("inv-17 si la base rechaza, el modal sigue con lo capturado para reintentar", (await cuenta(p, "toast:error")) === 1 && await dlgInv(p).isVisible() && !(await final(p).isDisabled()));
 });
 await caso("inv-18 tercero a medias bloquea", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click();
@@ -184,7 +187,7 @@ await caso("inv-23 parcial que cubre todo", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p);
   await p.getByRole("button", { name: "Parcial", exact: true }).click(); await p.getByRole("radio", { name: "Transferencia" }).first().click();
   await p.getByLabel("Monto del pago 1").fill("70000"); await espera(p);
-  ok("inv-23 «Parcial» que cubre o pasa el total: lo dice y no deja", await ve(p, /usa [«"]Pagada[»"] en lugar de [«"]Parcial[»"]/) && await continuar(p).isDisabled());
+  ok("inv-23 «Parcial» que cubre o pasa el total: lo dice y no deja", await ve(p, /Lo capturado (pasa del|cubre el) total/) && await continuar(p).isDisabled());
 });
 await caso("inv-24 «Otro» sin motivo", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p, "66004", "Otro");
@@ -209,7 +212,7 @@ await caso("inv-27 Cuadra de punta a punta", "cliente=cuadra", async p => {
   await p.locator("#cuadra-sku-select").selectOption("sku1"); await espera(p);
   await continuar(p).click(); await espera(p);
   const prev = await ve(p, /Etiqueta Cuadra/) && await ve(p, /Stock después/);
-  await p.getByRole("button", { name: "Confirmar", exact: true }).click(); await espera(p, 400);
+  await final(p).click(); await espera(p, 400);
   const lg = (await log(p)).split("\n").find(l => l.startsWith("inv:confirm")) || "";
   ok("inv-27 Cuadra: sin producto no deja; con producto, vista previa y manda stock_load con su SKU", sinSku && prev && /"stock_load"/.test(lg) && /"sku1"/.test(lg), lg.slice(0, 120));
 });
@@ -220,7 +223,7 @@ await caso("inv-28 Esc dentro de un campo", "", async p => {
 });
 await caso("inv-29 Esc y clic fuera mientras guarda", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p);
-  await p.getByRole("button", { name: "Confirmar", exact: true }).click(); await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await espera(p, 500);
+  await final(p).click(); await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await espera(p, 500);
   ok("inv-29 mientras guarda, ni Esc ni el clic fuera cierran ni preguntan", (await cuenta(p, "inv:cerrado")) === 0 && (await p.getByRole("dialog", { name: /Cerrar sin asignar/ }).count()) === 0);
 });
 await caso("inv-30 remisión en la vista previa", "", async p => {
@@ -328,7 +331,7 @@ await caso("inv-33 Enter, Enter desde «Continuar»", "", async p => {
   await continuar(p).focus(); await p.keyboard.press("Enter"); await espera(p, 120);
   const foco = await p.evaluate(() => (document.activeElement?.innerText || "").trim());
   await p.keyboard.press("Enter"); await espera(p, 700);
-  ok("inv-33 Enter, Enter: el primero abre la vista previa y el segundo NO emite (el foco no cae en «Confirmar»)", (await cuenta(p, "inv:confirm")) === 0 && !/^Confirmar/.test(foco), "foco tras el 1er Enter: «" + foco + "» · emitió " + await cuenta(p, "inv:confirm"));
+  ok("inv-33 Enter, Enter: el primero abre la vista previa y el segundo NO emite (el foco no cae en «Confirmar»)", (await cuenta(p, "inv:confirm")) === 0 && !/^(Confirmar|Emitir y entregar)/.test(foco), "foco tras el 1er Enter: «" + foco + "» · emitió " + await cuenta(p, "inv:confirm"));
 });
 await caso("inv-34 doble clic en «Continuar»", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
@@ -345,7 +348,7 @@ await caso("inv-35 Ctrl+Enter", "", async p => {
 await caso("inv-36 confirmar a propósito con el teclado", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
   await continuar(p).click(); await espera(p, 700);
-  await p.getByRole("button", { name: /^Confirmar/ }).focus(); await p.keyboard.press("Enter"); await espera(p, 600);
+  await final(p).focus(); await p.keyboard.press("Enter"); await espera(p, 600);
   ok("inv-36 con el foco puesto en «Confirmar», Enter sí emite (una vez)", (await cuenta(p, "inv:confirm")) === 1);
 });
 // [P1] lo capturado no se pierde sin preguntar
@@ -376,13 +379,13 @@ await caso("inv-40 anticipo del mismo importe, al abrir", "anticipo=mismo", asyn
   await inv(p); await espera(p, 400);
   await p.screenshot({ path: OUT + "/inv-40-mismo-importe.png" });
   const liga = p.getByRole("button", { name: /^Ligar F-9135 y entregar/ });
-  ok("inv-40 al abrir dice que F-9135 ($66,004.00) ya es la factura de este trabajo, y el botón principal es «Ligar F-9135 y entregar»", await ve(p, /F-9135/) && await ve(p, /\$66,004\.00/) && (await liga.count()) === 1 && await liga.isEnabled());
+  ok("inv-40 al abrir pregunta si F-9135 ($66,004.00) es la factura de este trabajo, y el botón principal es «Ligar F-9135 y entregar»", await ve(p, /F-9135/) && await ve(p, /\$66,004\.00/) && (await liga.count()) === 1 && await liga.isEnabled());
 });
 await caso("inv-41 ligar de punta a punta", "anticipo=mismo", async p => {
   await inv(p); await espera(p, 400);
   await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).click(); await espera(p, 600);
   const prev = await ve(p, /Vas a ligar F-9135/) && await ve(p, /no se emite (un )?folio nuevo/i);
-  await p.getByRole("button", { name: /^Confirmar/ }).click(); await espera(p, 600);
+  await final(p).click(); await espera(p, 600);
   ok("inv-41 «Ligar…» lleva a una vista previa que lo dice y al confirmar liga F-9135 sin emitir otro folio", prev && (await cuenta(p, "inv:ligar F-9135")) === 1 && (await cuenta(p, "inv:confirm")) === 0);
 });
 await caso("inv-42 al ligar no se piden pagos", "anticipo=mismo", async p => {
@@ -400,7 +403,7 @@ await caso("inv-44 de otro importe, la factura completa sigue", "anticipo=otro",
   await inv(p); await espera(p, 400); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
   await continuar(p).click(); await espera(p, 700);
   const prev = await ve(p, /F-9140/) && await ve(p, /sin ligar/);
-  await p.getByRole("button", { name: /^Confirmar/ }).click(); await espera(p, 600);
+  await final(p).click(); await espera(p, 600);
   ok("inv-44 con una de otro importe se puede emitir la completa; la vista previa dice que F-9140 se queda sin ligar y no se pregunta otra vez", prev && (await cuenta(p, "inv:confirm")) === 1);
 });
 await caso("inv-45 no se pudieron leer", "anticipo=falla", async p => {
@@ -415,14 +418,14 @@ await caso("inv-45 no se pudieron leer", "anticipo=falla", async p => {
 });
 await caso("inv-46 el error de la base, dentro", "falla=1", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p); await continuar(p).click(); await espera(p, 700);
-  await p.getByRole("button", { name: /^Confirmar/ }).click(); await espera(p, 700);
+  await final(p).click(); await espera(p, 700);
   const alerta = dlgInv(p).getByRole("alert");
   const txt = (await alerta.count()) ? (await alerta.first().innerText()) : "";
   ok("inv-46 si la base rechaza, el diálogo lo dice adentro (role=alert), en palabras, y lo capturado sigue", /sin conexión/.test(txt) && await dlgInv(p).isVisible(), "alerta: «" + txt.slice(0, 90) + "»");
 });
 await caso("inv-47 se emitió por adelantado mientras capturaba", "adelantada=1", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await continuar(p).click(); await espera(p, 700);
-  await p.getByRole("button", { name: /^Confirmar/ }).click(); await espera(p, 900);
+  await final(p).click(); await espera(p, 900);
   ok("inv-47 si la base dice que ya hay una por adelantado, el diálogo lo dice y ofrece «Ligar F-9135 y entregar»", await dlgInv(p).isVisible() && await ve(p, /F-9135/) && (await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).count()) === 1);
 });
 // [P2] capturar un pago
@@ -561,7 +564,7 @@ await caso("inv-67 doble clic en «Ligar» y en «Confirmar»", "anticipo=mismo"
   await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).click();
   const escudo = await hayEscudo(p); await espera(p, 700);
   const enVista = await ve(p, /Vas a ligar F-9135/) && (await cuenta(p, "inv:ligar")) === 0;
-  await p.getByRole("button", { name: /^Confirmar/ }).dblclick(); await espera(p, 800);
+  await final(p).dblclick(); await espera(p, 800);
   ok("inv-67 tras «Ligar…» queda el escudo (el segundo clic no llega a «Confirmar») y doble clic en «Confirmar» liga UNA vez", escudo && enVista && (await cuenta(p, "inv:ligar")) === 1, "escudo=" + escudo + " · ligó " + await cuenta(p, "inv:ligar"));
 });
 await caso("inv-82 el escudo después de «Continuar»", "", async p => {
@@ -572,20 +575,20 @@ await caso("inv-82 el escudo después de «Continuar»", "", async p => {
 await caso("inv-68 ligar cuando la base falla", "anticipo=mismo&falla=1", async p => {
   await inv(p); await espera(p, 400);
   await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).click(); await espera(p, 700);
-  await p.getByRole("button", { name: /^Confirmar/ }).click(); await espera(p, 700);
+  await final(p).click(); await espera(p, 700);
   const alerta = dlgInv(p).getByRole("alert"); const txt = (await alerta.count()) ? await alerta.first().innerText() : "";
-  ok("inv-68 si ligar falla, el diálogo lo dice adentro y se puede reintentar (sigue «Confirmar»)", /No se ligó F-9135/.test(txt) && await p.getByRole("button", { name: /^Confirmar/ }).isEnabled(), "«" + txt.slice(0, 80) + "»");
+  ok("inv-68 si ligar falla, el diálogo lo dice adentro y se puede reintentar (sigue «Confirmar»)", /No se ligó F-9135/.test(txt) && await final(p).isEnabled(), "«" + txt.slice(0, 80) + "»");
 });
 await caso("inv-69 «No es de este trabajo» y de regreso", "anticipo=mismo", async p => {
   await inv(p); await espera(p, 400);
   await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 300);
-  const avisa = await ve(p, /no deja emitir otra factura por este mismo importe/);
+  const avisa = await ve(p, /no deja emitir otra factura por \$66,004\.00/);
   await tipo(p, "Factura").click(); await espera(p); await pagada(p);
-  await p.getByRole("button", { name: /^Ligar F-9135$/ }).click(); await espera(p, 300);
+  await p.getByRole("button", { name: /^Ligar F-9135 a esta orden$/ }).click(); await espera(p, 300);
   const regreso = (await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).count()) === 1;
   await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 300);
   const sigue = (await p.getByLabel("Monto del pago 1").inputValue()).replace(/,/g, "").startsWith("66004");
-  ok("inv-69 «No es de este trabajo» avisa que la base no deja otra por el mismo importe; «Ligar F-9135» regresa, y lo capturado no se pierde", avisa && regreso && sigue, `avisa=${avisa} · regresa=${regreso} · pago sigue=${sigue}`);
+  ok("inv-69 «No es de este trabajo» avisa que la base no deja otra por el mismo importe; «Ligar F-9135 a esta orden» regresa, y lo capturado no se pierde", avisa && regreso && sigue, `avisa=${avisa} · regresa=${regreso} · pago sigue=${sigue}`);
 });
 await caso("inv-70 la lectura tarda más que el tope", "anticipo=lenta", async p => {
   await p.click("#abrir-inv"); await dlgInv(p).waitFor(); await espera(p, 900);
@@ -670,6 +673,91 @@ await caso("inv-81 a 1920 la vista previa no se estira", "", async p => {
   const c = await p.getByRole("group", { name: /Lo que vas a emitir/ }).boundingBox();
   ok("inv-81 a 1920 el resumen de la vista previa mide como mucho 560 px de ancho (se lee de una mirada)", !!c && c.width <= 562, "ancho=" + (c && Math.round(c.width)));
 }, { width: 1920, height: 1080 });
+
+// ───────────── v10.84.70, segunda revisión independiente (28/40): escritas ANTES de su arreglo
+await caso("inv-83 el efectivo capturado y la factura por adelantado", "adelantada=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p);
+  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 200);
+  await p.getByRole("radio", { name: "Efectivo" }).first().click(); await p.getByLabel(/Quién entregó el efectivo del pago 1/).fill("Sr. Ramírez"); await espera(p, 150);
+  await continuar(p).click(); await espera(p, 700); await final(p).click(); await espera(p, 900);
+  const dice = await ve(p, /Capturaste \$66,004\.00 en efectivo/) && await ve(p, /no se cobra aquí/);
+  const liga = p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).first();
+  const frena = await liga.isDisabled();
+  await p.getByLabel("Lo registro en CobranzaFlow").check(); await espera(p, 200);
+  await liga.click(); await espera(p, 700);
+  const enVista = await ve(p, /no se cobra aquí/);
+  await final(p).click(); await espera(p, 700);
+  const lg = (await log(p)).split("\n").find(l => l.startsWith("inv:ligar")) || "";
+  ok("inv-83 con efectivo y la del mismo importe: dice lo capturado, no deja ligar sin reconocerlo, la vista previa lo repite y App recibe lo que no se cobró", dice && frena && enVista && /sinCobrar/.test(lg) && /Ram/.test(lg), `dice=${dice} · frena=${frena} · vista=${enVista} · «${lg.slice(0, 120)}»`);
+});
+await caso("inv-84 «No es de este trabajo» y el mismo tipo", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 400);
+  await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 300);
+  await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  ok("inv-84 con la factura del mismo importe sin ligar, emitir otra factura no se deja (la base la rechaza) y se dice por qué", await continuar(p).isDisabled() && await ve(p, /la base no deja emitir otra factura por \$66,004\.00/));
+});
+await caso("inv-85 el foco tras la pregunta de cambiar el tipo", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p);
+  await tipo(p, "Remisión").click(); await espera(p, 300);
+  await p.getByRole("button", { name: "No, cancelar" }).click(); await espera(p, 400);
+  ok("inv-85 al cerrar «¿Cambiar el tipo?», el foco regresa al diálogo (no al fondo)", (await enDialogo(p)) === "invoice-modal-title", "foco en " + await enDialogo(p));
+});
+await caso("inv-86 el foco tras un error", "falla=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await continuar(p).click(); await espera(p, 700);
+  await final(p).click(); await espera(p, 800);
+  const rol = await p.evaluate(() => document.activeElement?.getAttribute("role"));
+  ok("inv-86 si la base rechaza, el foco va al aviso del error, dentro del diálogo", rol === "alert" && (await enDialogo(p)) === "invoice-modal-title", "rol=" + rol);
+});
+await caso("inv-87 «Facturar por partes» con algo capturado", "anticipo=otro", async p => {
+  await inv(p); await espera(p, 400); await tipo(p, "Factura").click(); await espera(p); await pagada(p);
+  await p.getByRole("button", { name: /Facturar por partes/ }).click(); await espera(p, 300);
+  ok("inv-87 con un pago capturado, «Facturar por partes» pregunta antes de tirarlo", (await cuenta(p, "inv:partes")) === 0 && (await p.getByRole("dialog", { name: /Facturar por partes/ }).count()) === 1);
+});
+await caso("inv-88 decidir si se liga, con qué compararla", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 400);
+  const pregunta = await ve(p, /F-9135 es del mismo importe: ¿es la factura de este trabajo\?/);
+  const compara = await ve(p, /Esta orden/) && await ve(p, /P-0600/);
+  const b = await p.getByRole("button", { name: "No es de este trabajo" }).boundingBox();
+  ok("inv-88 el aviso pregunta si es de este trabajo, pone la orden junto a F-9135, y «No es de este trabajo» es un botón (≥ 32 px)", pregunta && compara && !!b && b.height >= 32, `pregunta=${pregunta} · compara=${compara} · alto=${b && Math.round(b.height)}`);
+});
+await caso("inv-89 «Parcial» que cubre el total", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p);
+  await p.getByRole("button", { name: "Parcial", exact: true }).click(); await p.getByRole("radio", { name: "Transferencia" }).first().click();
+  await p.getByLabel("Monto del pago 1").fill("66004"); await espera(p, 200);
+  ok("inv-89 «Parcial» por el total no dice «Cubierto» y la razón manda a «Pagada»", !(await ve(p, /✓?\s*Cubierto/)) && await ve(p, /elige «Pagada»/));
+});
+await caso("inv-90 el botón final dice lo que hace", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await continuar(p).click(); await espera(p, 700);
+  ok("inv-90 el botón final dice «Emitir y entregar» (no «Confirmar»)", (await p.getByRole("button", { name: /^Emitir y entregar/ }).count()) === 1 && (await p.getByRole("button", { name: /^Confirmar$/ }).count()) === 0);
+});
+await caso("inv-91 la instrucción no es un aviso", "", async p => {
+  await inv(p); await espera(p, 300);
+  const c = await colores(p.getByText(/Elige si es factura o remisión/).first());
+  ok("inv-91 «Elige si es factura o remisión.» va en gris (instrucción), no en ámbar de aviso", !["rgb(180, 83, 9)", "rgb(229, 138, 18)", "rgb(255, 149, 0)"].includes(c.fg), c.fg);
+});
+await caso("inv-92 sin precio, «No pagada» sola", "precio0=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 300);
+  ok("inv-92 sin precio, «No pagada» queda elegida sola y se puede continuar", (await pagoNo(p).getAttribute("aria-pressed")) === "true" && !(await continuar(p).isDisabled()));
+});
+await caso("inv-93 Cuadra queda «En stock»", "cliente=cuadra", async p => {
+  await inv(p); await p.getByRole("button", { name: /^Sin factura · Stock/ }).click(); await espera(p, 400); await continuar(p).click(); await espera(p, 700);
+  ok("inv-93 la vista previa de Cuadra dice que queda «En stock» (no «Entregada»)", await ve(p, /En stock/) && !(await ve(p, /quedará Entregada/)));
+});
+await caso("inv-94 los tipos mientras carga el cliente", "lenta=1", async p => {
+  await p.click("#abrir-inv"); await dlgInv(p).waitFor(); await espera(p, 600);
+  const c = await colores(tipo(p, "Factura"));
+  ok("inv-94 mientras carga el cliente, los tipos apagados no van con opacidad (se leen)", c.opacidad >= 0.99, "opacidad=" + c.opacidad);
+});
+await caso("inv-95 agregar un pago lleva a él", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p, "40000");
+  await p.getByRole("button", { name: /Agregar otro pago/ }).click(); await espera(p, 300);
+  const enfocado = await p.evaluate(() => { const a = document.activeElement; return a?.getAttribute("role") === "radio" && /Método de pago 2/.test(a.closest('[role="radiogroup"]')?.getAttribute("aria-label") || ""); });
+  ok("inv-95 «Agregar otro pago» deja el foco en el método del pago 2", enfocado);
+}, { width: 1366, height: 657 });
+await caso("inv-96 Corona negativo en la vista previa", "cliente=corona", async p => {
+  await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p, 300); await continuar(p).click(); await espera(p, 700);
+  ok("inv-96 la vista previa de «Aplicar saldo» repite que el saldo queda negativo", await ve(p, /queda(rá)? negativo/));
+});
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

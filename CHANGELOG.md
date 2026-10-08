@@ -73,6 +73,52 @@ compartido); `link_invoice_to_order`; el camino del folio que ya existe en cobra
 - **Sin probar en pantalla**: «Vender de stock» (`BulkSellModal`, Cuadra) también usa el selector de pagos y no tiene banco; se revisó
   por código (la misma interfaz `status/refs/onChange`; cambia la presentación, el monto lleno y «No pagada» que guarda).
 
+**Segunda revisión independiente (28/40).** Otro agente, sin ver la primera, sobre lo de arriba. Encontró un P1 y cuatro P2:
+- 🔥 **[P1] El efectivo capturado se perdía sin aviso al pasar a ligar.** Si la base rechazaba el folio nuevo porque mientras se
+  capturaba se emitió una por adelantado del mismo importe, o si después de «No es de este trabajo» se regresaba con «Ligar F-…», el
+  selector de pagos se escondía. Ligar no cobra ni crea el vale de caja: el efectivo de Karla se quedaba sin registro y nadie lo decía.
+- **[P2] «No es de este trabajo» dejaba llegar hasta «Confirmar»** una factura del mismo importe que la base iba a rechazar.
+- **[P2] El foco caía al fondo** (`<body>`, fuera del diálogo) al cerrar una pregunta, con «No es de este trabajo» y tras un rechazo de la
+  base; y los campos no enseñaban el anillo de foco (`inp` trae `outline:none`, que gana a la regla global).
+- **[P2] «Facturar por partes» tiraba lo capturado sin preguntar.**
+- **[P2] Ligar se decidía sin con qué comparar**, con un título que lo daba por hecho («F-9135 ya es la factura de este trabajo») y
+  «No es de este trabajo» en un enlace de 15 px.
+
+**Qué se cambió en la segunda vuelta:**
+- **Lo capturado que ligar no cobra se dice y se reconoce**: «Capturaste $66,004.00 en efectivo (entregó Sr. Ramírez). Al ligar F-9135
+  no se cobra aquí: no se crea el vale de caja ni se registra el pago», con qué hacer (registrarlo en CobranzaFlow sobre F-9135, o
+  dárselo a Tesorería), y «Ligar F-9135 y entregar» no se deja sin marcar «Lo registro en CobranzaFlow» (si lo capturado cambia, se
+  vuelve a pedir). La vista previa lo repite; App recibe lo capturado (`sinCobrar`), lo anota en la orden («⚠️ … NO se registró aquí») y
+  lo dice en el aviso. El rechazo de la base con efectivo dice «No se cobró ni se creó el vale».
+- **La misma factura no se deja emitir** después de «No es de este trabajo» («Mientras F-9135 siga sin ligar, no se puede emitir otra
+  factura por el mismo importe»); el aviso dice el importe, y «Ligar F-9135 a esta orden» es un botón.
+- **El aviso de ligar pregunta y compara**: «F-9135 es del mismo importe: ¿es la factura de este trabajo?», con la orden al lado
+  (número, producto, piezas e importe) y la factura (cuándo se emitió y su motivo); «No es de este trabajo» es un botón de 36 px.
+- **El foco**: al cerrar una pregunta regresa a donde estaba; al pasar a ligar o regresar, va al aviso o al primer tipo; un rechazo de la
+  base se lleva el foco a su aviso; los campos del pago y el folio enseñan el anillo; «Agregar otro pago» lleva al pago nuevo.
+- **«Facturar por partes» pregunta** si hay algo capturado, y dice qué se pierde; también «Cancelar», Esc y cambiar el tipo lo dicen
+  («1 pago por $66,004.00, el folio F-100»), no «los datos».
+- **Menores**: el botón final con su verbo («Emitir y entregar», «Asignar F-100 y entregar», «Ligar F-9135 y entregar», «Aplicar saldo y
+  entregar», «Cargar a stock»; era «Confirmar» para todo); lo que falta hacer, en gris, y el ámbar sólo para lo que está mal (el
+  «Revisando…» ya no se repite al pie); Cuadra dice «En stock» (decía «Entregada»); Corona repite el saldo negativo en la vista previa;
+  sin precio, «No pagada» se elige sola y la vista previa dice que CobranzaFlow no la ve hasta que tenga precio; los tipos apagados sin
+  opacidad y sin partir el folio («RS-» / «1250»); la letra de la vista previa, de 11 px para arriba; el pago se captura aunque se esté
+  consultando quién pone el folio; las flechas de los métodos parten del enfocado; «le falta escribir el motivo»; «Parcial» por el total
+  ya no dice «✓ Cubierto» junto al aviso en rojo y ofrece «Cambiar a «Pagada»»; «Ctrl+Enter» se ve en «Continuar» en la laptop y el
+  monitor; el comentario del selector de pagos ya no trae la calificación.
+
+**Cómo se probó la segunda vuelta:**
+- **14 casos nuevos** (inv-83 a inv-96), escritos antes del arreglo: contra el código de la primera vuelta **fallaban los 14**. Uno
+  cambió su supuesto antes de arreglar: inv-83 esperaba «$66,004.00 efectivo» y el texto quedó «$66,004.00 en efectivo».
+- Después del arreglo: **folio 108 de 108** y **Folio por OC 112 de 112** (comparte el selector de pagos).
+- **15 sabotajes nuevos** (S12 a S26, uno por arreglo; S26 quita lo capturado que viaja a App): los 15 atrapados; con los 11 de la
+  primera vuelta, **26 de 26**.
+- **Pruebas viejas que cambiaron a propósito**: las que apretaban «Confirmar» buscan ahora el botón final por su verbo (`final(p)`:
+  inv-16, 17, 27, 29, 33, 36, 41, 44, 46, 47, 67 y 68); inv-23 (el aviso nuevo, «Lo capturado pasa del total»), inv-69 (el aviso con el
+  importe y «Ligar F-9135 a esta orden») e inv-40 (sólo su descripción).
+- **El recorrido con la app real**: B reescrito (ahora la misma factura se bloquea), H nuevo (el P1: el rechazo con efectivo, lo que no
+  se cobra, reconocerlo y la nota en la orden) y G2 nuevo (ir a partes con algo capturado): **15 de 15**.
+
 ## v10.84.69 — «¿Ya existe este cliente?»: lo que casi seguro ya existe se elige, no se crea — 8-oct-2026
 
 **Qué pasaba.** Marcelo (8-oct): *«sólo cuidar que no cree clientes duplicados con los ya existentes»*; y si el cliente casi seguro ya
