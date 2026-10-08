@@ -45,6 +45,8 @@ const TANDAS = [
   { nombre: "planta", gen: "tests/banco/gen-planta.mjs", romper: "tests/romper/planta.mjs", puerto: 5193 },
   // sin banco: la segunda oportunidad y sus candados (scripts/reintento.mjs e inestables.mjs, iguales en las cuatro apps; 8-oct)
   { nombre: "reintento", romper: "scripts/probar-reintento.mjs" },
+  // sin banco: qué factura por adelantado se pregunta antes de asignar folio (v10.84.68: Karla, F-135 de Castores; las funciones vivas)
+  { nombre: "anticipos", romper: "tests/romper/anticipos.mjs" },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

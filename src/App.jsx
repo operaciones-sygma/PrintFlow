@@ -4725,7 +4725,7 @@ function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,cancelLab
   const doConfirm=async()=>{if(saving)return;setSaving(true);try{await onConfirm()}finally{setSaving(false)}};
   // v10.84.32 — el foco entra al diálogo en la acción segura: antes se quedaba en el botón que lo abrió, detrás del velo.
   // Y el título es el nombre accesible del diálogo.
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>{cancelLabel||"No, cancelar"}</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>{cancelLabel||"No, cancelar"}</button>{/* v10.84.68 — sin onConfirm es un AVISO que detiene algo (p. ej. el efectivo sobre una factura por adelantado): sólo su botón de cerrar */}{onConfirm&&<button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button>}</div></div></div>;
 }
 // ─── v10.84.67 — KARLA PASA A SALIDAS LO QUE YA ESTÁ LISTO (Marcelo, 8-oct) ─────────────────────────────────────────────────
 // Karla: «a veces ya debo entregar o facturar una orden y no me deja, porque Gerardo no la pasa a Salidas». Medido (60 días): 296
@@ -4914,6 +4914,19 @@ function FaltanParaFoliar({pendientes,onJalar}){
     {otras.length>0&&<div style={{fontSize:11.5,color:C.t2,marginTop:8}}>{otras.map(o=>nombreDeOrden(o)+" ("+dondeVa(o).lugar.replace(/^En /,"en ")+")").join(", ")} todavía no {otras.length===1?"está lista":"están listas"} para pasarse: hasta que {otras.length===1?"llegue":"lleguen"} a Salidas, la OC no se puede foliar entera. Si el cliente pide la factura ya, usa «Pre-asignar folio».</div>}
   </div>;
 }
+// v10.84.68 — ANTES DE ASIGNAR FOLIO, ¿POR QUÉ FACTURA POR ADELANTADO SE PREGUNTA? (Karla, 8-oct: «quiero ligar la orden de Castores,
+//   pero no se liga a la 135, es por el mismo importe»). P-0585 ($7,440 + IVA = $8,630.40) tenía F-135 justo por ese importe y F-140
+//   por $2,157.60: la app preguntaba primero por F-140 («No es del importe de esta orden, así que no se liga sola») y ese «no se liga»
+//   se leyó como que F-135 tampoco; sólo si se apretaba «Asignar el folio de todos modos» la base ofrecía ligar F-135. Con una del MISMO
+//   importe y tipo no se pregunta por las otras: assign_invoice la detecta y la app ofrece «Sí, ligar» de una vez. `cands`: lo de
+//   list_linkable_invoices_for_order (con `monto_cuadra`). Lo prueban tests/romper/anticipos.mjs y tests/recorrido/ligar-anticipo.mjs.
+function anticiposQuePreguntar(cands,invoiceType){
+  if(invoiceType!=="factura"&&invoiceType!=="remision")return [];
+  const delTipo=(cands||[]).filter(c=>c&&c.doc_type===invoiceType);
+  return delTipo.some(c=>c.monto_cuadra)?[]:delTipo;
+}
+// la factura sin orden del MISMO importe y tipo (la que assign_invoice no deja duplicar con un folio nuevo); null si no hay
+const facturaDelMismoImporte=(cands,invoiceType)=>(cands||[]).find(c=>c&&c.monto_cuadra&&c.doc_type===invoiceType)||null;
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
 // v10.73.18 — Modal "Poner en espera": razón (chips predefinidos + texto libre) + fecha opcional.
@@ -20266,13 +20279,14 @@ export default function PrintFlow() {
   // CobranzaFlow v3.7.956b). Antes de asignar se pregunta. Las candidatas las da la base (list_linkable_invoices_for_order:
   // las facturas sin orden del cliente, de cualquier importe, con monto_cuadra); las del mismo importe las sigue atendiendo
   // el candado de la base, con su «Sí, ligar». Si la lectura falla, no se pregunta: el candado de la base sigue igual.
-  const anticiposDeOtroImporte=useCallback(async(orderId, invoiceType)=>{
-    if(invoiceType!=="factura"&&invoiceType!=="remision") return [];
+  // v10.84.68 — las candidatas tal cual (con `monto_cuadra`), o null si no se pudieron leer; por cuáles se pregunta lo decide
+  //   anticiposQuePreguntar (con una del MISMO importe, por ninguna: la base ofrece «Sí, ligar»; Karla, F-135 de Castores, 8-oct).
+  const candidatasParaLigar=useCallback(async(orderId)=>{
     try{
       const {data,error}=await supabase.rpc("list_linkable_invoices_for_order",{p_order_id:orderId});
       if(error) throw error;   // supabase-js no lanza solo
-      return (data||[]).filter(c=>!c.monto_cuadra&&c.doc_type===invoiceType);
-    }catch(e){ console.warn("[anticipos] no se pudieron leer:",e); return []; }
+      return data||[];
+    }catch(e){ console.warn("[anticipos] no se pudieron leer:",e); return null; }
   },[]);
   // Resuelve true (asignar el folio de todos modos) o false (no se asigna). `enSalidas`: ahí ya se puede facturar por partes;
   // antes de Salidas, todavía no («Facturar por partes» sólo abre en salidas/maq_received).
@@ -21363,7 +21377,19 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // porque admin/karla/secretaria tienen username == rol, pero si algún día se cambia el
           // username, falla con 42501 silencioso.
           // 🔗 v10.84.31 — un anticipo de otro importe (ver preguntarPorAnticipos): se pregunta antes de acuñar el folio.
-          {const otros=await anticiposDeOtroImporte(invoiceModal.id, invoiceType);
+          // v10.84.68 — con una del MISMO importe no se pregunta por las otras: la base la detecta y aquí abajo se ofrece «Sí, ligar».
+          //   Y con EFECTIVO, assign_invoice_cash no tiene en la base el candado de «ya se facturó por adelantado» (assign_invoice sí):
+          //   emitiría un folio nuevo y se cobraría dos veces. Se frena aquí, y también si no se pudo revisar (nada se cobra a ciegas).
+          {const cands=await candidatasParaLigar(invoiceModal.id);
+           if((invoiceType==="factura"||invoiceType==="remision")&&Array.isArray(paymentRefs)&&paymentRefs.some(r=>r.method==="efectivo")){
+             const mismo=cands?facturaDelMismoImporte(cands,invoiceType):null;
+             // un aviso que se queda (no un toast que se borra): detiene un cobro y dice qué hacer
+             if(!cands){setConfirmModal({zIndex:1100,title:"No se pudo revisar si ya se facturó por adelantado",message:"No se cobró nada ni se asignó folio. Vuelve a intentar en un momento.",cancelLabel:"Entendido"});return}
+             if(mismo){setConfirmModal({zIndex:1100,title:"Este trabajo ya se facturó por adelantado",
+               message:mismo.doc_number+" ya es su factura: se emitió por adelantado por $"+Number(mismo.amount).toLocaleString("es-MX",{minimumFractionDigits:2})+", justo el importe de esta orden. Con el pago en efectivo se le sacaría un folio nuevo y se le cobraría dos veces.\n\nQuita el pago en efectivo y vuelve a asignar: te ofrecerá ligar "+mismo.doc_number+". El efectivo se registra con vale en CobranzaFlow.",
+               cancelLabel:"Entendido"});return}
+           }
+           const otros=anticiposQuePreguntar(cands||[],invoiceType);
            if(otros.length&&!(await preguntarPorAnticipos(otros, true))) return;}
           const appliedBillTo=await applyBillTo(invoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio (el puente lo lee)
           // 💵 v10.73.65 Nivel 3 F1 — Efectivo→vale: si hay alguna porción en efectivo, va por la RPC atómica assign_invoice_cash
@@ -21690,7 +21716,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
           // 🔗 v10.84.31 — el caso de P-0544 (2-oct): folio anticipado por el trabajo completo con su 50% ya facturado.
-          {const otros=await anticiposDeOtroImporte(preInvoiceModal.id, invoiceType);
+          // v10.84.68 — con una del MISMO importe no se pregunta por las otras (la base la detecta y ofrece «Sí, ligar»)
+          {const otros=anticiposQuePreguntar((await candidatasParaLigar(preInvoiceModal.id))||[],invoiceType);
            if(otros.length&&!(await preguntarPorAnticipos(otros, false))) return;}
           const appliedBillTo=await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
           // #2 scan final: usar el RETORNO del RPC (en emisor el folio nace del counter, ignora la entrada).

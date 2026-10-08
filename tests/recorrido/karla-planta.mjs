@@ -55,7 +55,8 @@ async function entrar(estado = {}) {
   const ctx = await nav.newContext({ viewport: { width: 1366, height: 768 }, acceptDownloads: false });
   await ctx.addInitScript(() => { window.print = () => {}; window.open = () => null; });
   const escritas = []; let ordenes = null;
-  await ctx.route("**/*", async route => {
+  // (todo el manejador en try: si el escenario cierra su contexto con una lectura en camino, route.fetch truena y tumbaba la corrida)
+  await ctx.route("**/*", async route => { try {
     const req = route.request(), url = req.url(), m = req.method();
     if (!/\.supabase\.co\//.test(url)) return route.continue();
     const ruta = url.replace(/^https:\/\/[^/]+/, "").replace(/\?.*$/, ""), q = new URL(url).searchParams;
@@ -102,7 +103,7 @@ async function entrar(estado = {}) {
     }
     if (m === "POST" && (tabla === "order_timeline" || tabla === "notifications") && /PRUEBA-KP/.test(JSON.stringify(cuerpo || ""))) return route.fulfill({ status: 201, body: "" });
     return route.fulfill({ status: 418, contentType: "application/json", body: JSON.stringify({ code: "42501", message: "solo lectura" }) });
-  });
+  } catch { /* el contexto ya se cerró */ } });
   const p = await ctx.newPage(); p.setDefaultTimeout(15000);
   await p.goto(base, { timeout: 60000 });
   await p.getByText("Sistema de Producción").first().waitFor({ timeout: 20000 });

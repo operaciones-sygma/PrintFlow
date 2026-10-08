@@ -445,6 +445,11 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   otra persona se ve, y lo que ya está listo se puede pasar** («En la planta» de Karla), con la pregunta que dice qué le pasa a
   la máquina y a quién se avisa. **Al terminar, el foco no se pierde**: lo que lo tenía se fue a Salidas, así que va al siguiente
   «Pasar…» de la lista, o a «Asignar folio» si la OC quedó completa.
+- **Una pregunta no dice «no» de lo que otra va a ofrecer** (v10.84.68): antes de asignar folio, la app preguntaba por la factura
+  por adelantado de OTRO importe («no se liga sola») y callaba la del mismo importe, que la base iba a ofrecer después; Karla leyó
+  que F-135 no se ligaba. Si hay lo que sí se puede hacer, eso va primero, y lo demás no se pregunta. **Un aviso que detiene dinero
+  se queda en pantalla** (`ConfirmModal` sin `onConfirm`: un solo botón, «Entendido»), no en un aviso abajo que se borra antes de
+  leerlo, y dice qué hacer para seguir.
 - **El tablero sano está en calma** (v10.84.64): lo de rutina va **teñido** (fondo al 8%, contorno y letra en su tinta:
   «Empaque» de cada máquina, «A Salidas»); el relleno de color queda para las alarmas («N vencidas», «urgente»). Un estado
   no se dice con opacidad (la máquina fuera de servicio al 70% dejaba su nombre a 1.8:1): se dice con su llave, su borde y su

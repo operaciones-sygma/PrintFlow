@@ -12,6 +12,45 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.68 — La factura por adelantado del mismo importe se ofrece de una vez, y el efectivo no la duplica — 8-oct-2026
+
+**Qué pasaba.** Karla (8-oct): *«quiero ligar la orden de Castores, pero no se liga a la 135, es por el mismo importe»*.
+- **La orden y las facturas:** P-0585 (TRANSPORTES CASTORES DE BAJA, $7,440 + IVA = $8,630.40) tenía dos facturas sin orden del
+  mismo cliente: F-135 por $8,630.40 (justo su importe) y F-140 por $2,157.60.
+- **Lo que preguntaba la app:** al «Asignar Folio y Entregar», preguntaba primero por las facturas de **otro** importe (v10.84.31):
+  *«Ya tiene F-140… No es del importe de esta orden, así que no se liga sola»*. Ese «no se liga» se leyó como que F-135 tampoco.
+- **Lo que hacía la base:** el candado de `assign_invoice` sí reconocía F-135 y ofrecía «Sí, ligar F-135», pero sólo después de
+  apretar «Asignar el folio de todos modos». Verificado en la base: emisor prendido, el cliente sin fusionar, la orden sin saldo a
+  favor, y F-135, la única del mismo importe.
+- **Lo que se le dijo a Karla mientras tanto:** que siguiera con «de todos modos» y luego «Sí, ligar F-135»; no se emite folio nuevo.
+- **El hueco de al lado:** con un pago en **efectivo**, la app no va por `assign_invoice` sino por `assign_invoice_cash`, y esa
+  función **no tiene en la base** el candado de «ya se facturó por adelantado». Habría emitido un folio nuevo además de F-135:
+  doble cobro.
+
+- **Con una factura del MISMO importe y tipo, ya no se pregunta por las de otro importe:** la app llega directo a «Este trabajo ya
+  se facturó por adelantado… Sí, ligar F-135». Lo decide `anticiposQuePreguntar` (módulo), en «Asignar folio y entregar» y en el
+  folio anticipado.
+- **Con efectivo y una factura del mismo importe, se frena:** un aviso que se queda dice que F-135 ya es la factura de este trabajo
+  y qué hacer: quitar el efectivo y volver a asignar para ligarla; el efectivo se registra con vale en CobranzaFlow.
+  - Si las candidatas no se pudieron leer, también se frena: no se cobra a ciegas.
+  - Sin una del mismo importe, el efectivo sigue su camino de siempre.
+- **`ConfirmModal` sin `onConfirm`** es un aviso de un solo botón (el de cerrar). Las once llamadas de hoy pasan `onConfirm` y no
+  cambian.
+
+**Qué NO se tocó.** La base, incluido `assign_invoice_cash`: su candado se propone aparte, para el OK de Marcelo. Tampoco cambiaron
+`assign_invoice`, `link_invoice_to_order`, el «Sí, ligar» de siempre ni lo que pasa sin facturas por adelantado.
+
+**Cómo se probó.**
+- **Con la app real**, `tests/recorrido/ligar-anticipo.mjs`: una orden de prueba sólo en el navegador, las candidatas y el candado
+  de `assign_invoice` contestados como la base, nada escrito.
+  - **Contra producción** (v10.84.67) fallaban A1, A2, B1 y B2: preguntaba por F-9140 antes que nada, y con efectivo llamaba a
+    `assign_invoice_cash`.
+  - **Con el arreglo:** 9 de 9.
+  - **La segunda vuelta** encontró que el freno del efectivo, como aviso que se borra, no se alcanzaba a leer: ahora es una ventana
+    que se queda. Agregó los casos E (con efectivo y la lectura caída) y F (sin una del mismo importe, el efectivo sigue).
+- **Tanda nueva `tests/romper/anticipos.mjs` (9)**, con las funciones vivas: remisión contra factura, varias candidatas, sin tipo,
+  basura en la lista.
+
 ## probar (8-oct-2026) — La segunda oportunidad de las pruebas, con sus candados (sólo pruebas)
 
 **Qué pasaba.** El candado corre las 645 pruebas antes de cada subida, y una sola que fallara la frenaba, aunque fuera mala suerte del
