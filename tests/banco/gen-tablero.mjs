@@ -6,7 +6,7 @@
 // Uso: node gen-tablero.mjs <App.jsx> <dirSalida>
 // Variantes por URL:
 //   vista=produccion|german|fichas (por defecto produccion: el Kanban) · rol=produccion|admin|german|karla|… (por defecto
-//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · mant=off_gto (otra en mantenimiento) · buscar=P-0591 (resalta) · aviso=success|error|warning|info (el aviso de App)
+//   el de la vista) · caso=normal|vacio|lleno|mantenimiento (por defecto normal) · mant=off_gto (otra en mantenimiento) · buscar=P-0591 (resalta) · aviso=success|error|warning|info (el aviso de App) · lectura=cargando|fallo (sin una lectura buena)
 // window.__cambiar(id, {…}) cambia una orden con el tablero abierto (como el tiempo real) · window.__ordenes() las devuelve.
 import fs from "node:fs";
 import path from "node:path";
@@ -38,7 +38,9 @@ const Q = new URLSearchParams(location.search);
 const VISTA = Q.get("vista") || "produccion", CASO = Q.get("caso") || "normal", FALLA = Q.get("falla") || "";   // falla=merma|maquila: la base no la acepta (la ventana sigue abierta, como en App)
 const ROL = Q.get("rol") || ({ produccion: "produccion", german: "german", fichas: "produccion" }[VISTA] || "produccion");
 // fechas relativas a hoy, para que «vencida» y «hoy» no cambien con el día en que se corre
-const dia = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+// (la fecha LOCAL: con toISOString era la de UTC, y desde las 18:00 en León «ayer» ya era «hoy»: las vencidas dejaban de
+//   estarlo y seis pruebas fallaban según la hora; 7-oct, v10.84.65)
+const dia = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
 const hace = h => new Date(Date.now() - h * 3600000).toISOString();
 const BASE = { client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", product: "FORMATO 5 PUNTOS DE SEGURIDAD", product_type: "Formatos",
   quantity: 5000, created_at: hace(120), created_by: "secretaria", due_date: dia(3), paper_type: "BRISTOL", paper_grammage: 180,
@@ -116,7 +118,7 @@ function Banco() {
   const buscar = Q.get("buscar") || "";
   const match = buscar ? (o => (o.production_number || "").includes(buscar) || (o.client || "").toLowerCase().includes(buscar.toLowerCase())) : null;
   return <div style={{ padding: "14px 16px", fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
-    {vista === "produccion" && <><Kanban orders={ordenes} match={match} searchText={buscar} onClearSearch={() => anotar("quitar búsqueda")} onDrop={onDrop} onAction={onAction}
+    {vista === "produccion" && <><Kanban leido={!["cargando", "fallo"].includes(Q.get("lectura"))} falloLectura={Q.get("lectura") === "fallo" ? Date.now() : null} orders={ordenes} match={match} searchText={buscar} onClearSearch={() => anotar("quitar búsqueda")} onDrop={onDrop} onAction={onAction}
       role={ROL} maintenance={MANT} onMaintenance={(t, m) => anotar("mantenimiento:" + t + " " + (m?.id || m))} showToast={showToast} actionLoading={null} />
       <MaquilaTracker orders={ordenes} onAction={onAction} role={ROL} userLogin={ROL} /></>}
     {vista === "german" && <PreprensaBoard orders={ordenes} onDrop={onDrop} onAction={onAction} onPlateRequired={o => anotar("placas:" + o.production_number)} maintenance={MANT} role={ROL} />}

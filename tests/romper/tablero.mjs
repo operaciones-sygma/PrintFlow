@@ -379,14 +379,14 @@ await caso("tab-43-esc-cierra-la-lista-y-regresa-el-foco", "vista=produccion", a
 });
 await caso("tab-44-vencida-en-una-seccion-plegada", "vista=produccion", async p => {
   // Digital empieza plegada: ir a una vencida que está ahí la abre y la deja a la vista
-  await p.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 3); window.__cambiar("P-0596", { due_date: d.toISOString().slice(0, 10) }); }); await espera(p, 400);
+  await p.evaluate(() => { const x = new Date(); x.setDate(x.getDate() - 3); window.__cambiar("P-0596", { due_date: x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0") }); }); await espera(p, 400);
   await p.getByRole("button", { name: /vencidas?/ }).first().click(); await espera(p, 400);
   const ir = p.getByRole("button", { name: /P-0596/ }).first(); if (await ir.count()) { await ir.click(); await espera(p, 1000); }
   const r = await p.evaluate(() => { const c = [...document.querySelectorAll("[draggable=true]")].find(x => x.innerText.includes("P-0596")); if (!c || !c.getClientRects().length) return null; const b = c.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; });
   ok("tab-44-vencida-en-una-seccion-plegada", r === true, `P-0596 vencida en la DocuColor (Digital plegada): ${r === null ? "su ficha sigue escondida" : r ? "se abre la sección y queda a la vista" : "se abre pero no queda a la vista"}`);
 });
 await caso("tab-45-la-que-corre-dice-corriendo", "vista=produccion", async p => {
-  await p.evaluate(() => { const d = new Date(); d.setDate(d.getDate() - 1); window.__cambiar("P-0591", { due_date: d.toISOString().slice(0, 10) }); }); await espera(p, 400);
+  await p.evaluate(() => { const x = new Date(); x.setDate(x.getDate() - 1); window.__cambiar("P-0591", { due_date: x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0") }); }); await espera(p, 400);
   await p.getByRole("button", { name: /vencidas?/ }).first().click(); await espera(p, 400);
   const t = await p.evaluate(() => (document.querySelector('[aria-label="Órdenes vencidas"]')?.innerText || "").replace(/\s+/g, " "));
   ok("tab-45-la-que-corre-dice-corriendo", /P-0591[^P]*Printmaster 74, corriendo/.test(t), `P-0591 vencida y corriendo en la PM74: «${(t.match(/P-0591[^P]*/) || ["(no está)"])[0].trim()}»`);
@@ -571,7 +571,7 @@ await caso("tab-66-arrastrar-de-listas-a-empaque", "vista=produccion&deshacer_ms
 // ── v10.84.61: en Salidas, esperar la fecha de entrega no es estar estancada (Marcelo, 7-oct, P-0540: «10d estancada» con
 //   entrega el 15-oct) ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const fichaDeOrden = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.getAttribute("aria-label").startsWith("Orden " + pn)); return c ? c.innerText.replace(/\s+/g, " ") : "(no está)"; }, pn);
-const enSalidasDesde = (p, dias, entrega) => p.evaluate(([dias, entrega]) => { const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+const enSalidasDesde = (p, dias, entrega) => p.evaluate(([dias, entrega]) => { const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };   // (la fecha local, no la de UTC)
   window.__cambiar("P-0580", { stage: "salidas", timeline: [{ action: "📦 Empaque → 📤 Salidas", date: new Date(Date.now() - dias * 86400000).toISOString(), to: "salidas" }], due_date: d(entrega) }); }, [dias, entrega]);
 await caso("tab-73-salidas-esperando-su-fecha-no-esta-estancada", "vista=fichas&rol=karla", async p => {
   await enSalidasDesde(p, 14, 8); await espera(p, 500);   // dos semanas en Salidas, entrega dentro de 8 días
@@ -964,5 +964,20 @@ for (const [an, al] of [[1920, 1080], [1600, 900], [1366, 768]])
       return { n, malos }; });
     ok("tab-115-los-botones-de-la-fila-enteros-a-" + an, r.n >= 6 && r.malos.length === 0, r.malos.length ? "recortados o fuera de su orden: " + r.malos.join(", ") : r.n + " botones en las fichas de las máquinas, enteros");
   }, { width: an, height: al });
+// ── v10.84.65: el tablero no dice «vacío» cuando no sabe (P1 de la tercera revisión: «Tablero vacío · 0 trabajando · 15 libres» de 1
+//   a 2 s al entrar, y siempre que la lectura fallaba) ────────────────────────────────────────────────────────────────────────
+const loQueDice = p => p.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
+await caso("tab-116-leyendo-no-dice-vacio", "vista=produccion&lectura=cargando", async p => {
+  const t = await loQueDice(p), malo = ["Tablero vacío", "Así va la planta", "Disponible", "libres", "trabajando"].filter(x => t.includes(x));
+  ok("tab-116-leyendo-no-dice-vacio", /Leyendo el tablero/.test(t) && malo.length === 0, `mientras lee: ${/Leyendo el tablero/.test(t) ? "dice «Leyendo el tablero…»" : "NO dice que está leyendo"}${malo.length ? "; y dice " + malo.map(x => "«" + x + "»").join(", ") : ""}`);
+});
+await caso("tab-117-sin-lectura-buena-lo-dice", "vista=produccion&lectura=fallo", async p => {
+  const t = await loQueDice(p), malo = ["Tablero vacío", "Así va la planta", "Disponible", "libres", "trabajando"].filter(x => t.includes(x));
+  ok("tab-117-sin-lectura-buena-lo-dice", /No se pudo leer el tablero/.test(t) && malo.length === 0, `la primera lectura falló: ${/No se pudo leer el tablero/.test(t) ? "lo dice" : "NO lo dice"}${malo.length ? "; y dice " + malo.map(x => "«" + x + "»").join(", ") : ""}`);
+});
+await caso("tab-118-vacio-de-verdad-si-lo-dice", "vista=produccion&caso=vacio", async p => {
+  const t = await loQueDice(p);
+  ok("tab-118-vacio-de-verdad-si-lo-dice", /Tablero vacío/.test(t) && !/Leyendo el tablero/.test(t), `sin órdenes, con la lectura buena: ${/Tablero vacío/.test(t) ? "dice «Tablero vacío»" : "NO lo dice"}`);
+});
 await browser.close();
 for (const r of res) console.log(r);

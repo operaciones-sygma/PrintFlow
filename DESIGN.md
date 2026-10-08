@@ -433,6 +433,12 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   no flotando (lo recortaría el scroll). Su «clic afuera» se escucha con el **clic en captura**: sin captura, la ficha que
   detiene sus clics lo esconde y quedaban dos abiertos; con `mousedown`, cerrarlo encoge la ficha, lo de abajo se mueve antes
   de soltar el botón, y el clic ya no llega al «⋯» que se quería abrir.
+- **Un error no es un «vacío»** (v10.84.65): sin una lectura buena, ninguna pantalla dice «vacío», «libres», «0» ni «nada
+  pendiente». Mientras se hace la primera lectura se dice que se está leyendo («Leyendo de la base…», «Leyendo el tablero…»).
+  Si una lectura falla, lo que se ve se queda (es lo último que se leyó bien) y un aviso arriba dice **de qué hora es** y da
+  «Reintentar»; el punto de conexión deja de decir «En tiempo real». Antes, `loadOrders` devolvía `[]` ante un error y la
+  recarga dejaba el tablero vacío y verde; el archivo completo que fallaba dejaba toda la app en 0. El cliente de Supabase ya
+  reintenta solo un 503 tres veces (a 1, 2 y 4 s): el aviso sale a los ~7 s, no al primer tropiezo.
 - **El tablero sano está en calma** (v10.84.64): lo de rutina va **teñido** (fondo al 8%, contorno y letra en su tinta:
   «Empaque» de cada máquina, «A Salidas»); el relleno de color queda para las alarmas («N vencidas», «urgente»). Un estado
   no se dice con opacidad (la máquina fuera de servicio al 70% dejaba su nombre a 1.8:1): se dice con su llave, su borde y su

@@ -1474,9 +1474,11 @@ const db = {
     // viejas desaparecen de tablero/CSV/búsqueda. Mismo guard que ya se aplicó a splits (reload ~L12437).
     // 5000 ordenado por created_at desc cubre años al volumen actual; las recientes (operables) siempre presentes.
     // v10.84.61 — por páginas: el .limit(5000) de v10.72.13 no servía (el tope del servidor manda) y las órdenes van en 951
-    const { data: orders } = await todasLasFilas(() => supabase.from("orders").select("*").order("created_at", { ascending: false }).order("id"));
-    if (!orders) return [];
-    if (orders.length === 0) return [];
+    const { data: orders, error: errOrdenes } = await todasLasFilas(() => supabase.from("orders").select("*").order("created_at", { ascending: false }).order("id"));
+    // v10.84.65 — un error NO es «no hay órdenes» (la tercera revisión independiente del tablero, P1: con la lectura caída, el
+    //   tablero decía «Tablero vacío · 0 trabajando» en verde). Se avisa y quien llamó conserva lo último que se leyó bien.
+    if (errOrdenes) throw new Error("No se pudieron leer las órdenes: " + (errOrdenes.message || errOrdenes));
+    if (!orders || orders.length === 0) return [];
     // Only load related data (timeline, comments, etc) for target orders
     // When relatedOnly=true, skip delivered/cancelled to speed up initial load
     const finalStages=["delivered","maq_delivered","cancelled","maq_cancelled","stocked"];
@@ -1493,6 +1495,9 @@ const db = {
       relacion("order_machine_log", "started_at"),
       relacion("order_notes", "created_at"),
     ]);
+    // v10.84.65 — tampoco a medias: sin su bitácora, las órdenes recientes salen «estancadas» (P-0540) y sin reloj
+    const malo = [tl, cm, wl, ml, nl].find(r => r.error);
+    if (malo) throw new Error("No se pudieron leer los datos de las órdenes: " + (malo.error.message || malo.error));
     // v10.72.13 — pre-indexar cada tabla relacionada por order_id en un Map (una pasada), en vez de 5
     // .filter() lineales POR orden en el .map de abajo (O(n²) en CADA reload realtime → jank en el hilo
     // principal). Las queries ya vienen ordenadas, así que el Map preserva ese orden.
@@ -13504,7 +13509,7 @@ function MasDeEmpaque({caja,alCerrar,alEscape,onElegir}){
 //   derecha más ancha en pantallas grandes).
 // v10.84.56: la primera revisión independiente del tablero (20/40): mover órdenes con red («Empaque» y «A Listas» esperan con
 //   «Deshacer», «Activar» pregunta si detiene lo que corre, el escudo de clics) y el número de la orden en el tablero de Germán.
-function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showToast,actionLoading,match=null,searchText="",onClearSearch}) {
+function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showToast,actionLoading,match=null,searchText="",onClearSearch,leido=true,falloLectura=null}) {
   // v10.73.31 — ocultar las órdenes EN ESPERA del POOL de espera ("Listas"/maquila_in), que es donde se acumulan y
   // hacen ruido. Las que están EN una máquina (in_production) NO se ocultan: la máquina NO debe aparecer "Disponible"
   // enmascarando un trabajo montado + su timer. Se rastrean en la vista "En espera"; reaparecen en su etapa al reactivar.
@@ -13709,6 +13714,13 @@ function Kanban({orders,onDrop,onAction,role,maintenance=[],onMaintenance,showTo
 
   // v10.73.72 — DragCard se movió a nivel MÓDULO (arriba, junto a OrderThumb) para no re-montarse en cada render de Kanban (scan wf8k8mdnb P3). Se le pasa onAction como prop.
 
+  // v10.84.65 — sin una lectura buena el tablero no dice nada de las máquinas: ni «vacío», ni «libres», ni «0 trabajando» (la
+  //   tercera revisión independiente, P1: decía «Tablero vacío» de 1 a 2 s al entrar, y siempre que la lectura fallaba). Va después
+  //   de todos los hooks, a propósito.
+  if(!leido)return <div aria-busy={!falloLectura} style={{padding:"48px 20px",textAlign:"center",color:C.t2}}>
+    {falloLectura?<EmptyState icon={WarningIcon} title="No se pudo leer el tablero" hint="Sin una lectura buena no sabemos qué corre en cada máquina. Arriba está «Reintentar»."/>
+    :<div style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:F.body,fontWeight:600}}><FactoryIcon size={16} weight="bold"/>Leyendo el tablero…</div>}
+  </div>;
   return <div>
     {avisoPend&&<div role="status" style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",borderRadius:10,background:C.wn+"14",border:"1px solid "+C.wn+"40",fontSize:F.body,fontWeight:600,color:C.wnInk}}><WarningIcon size={14} weight="fill" color={C.wn} style={{flexShrink:0}}/><span style={{flex:1}}>{avisoPend}</span><button onClick={()=>setAvisoPend("")} aria-label="Cerrar el aviso" style={{...bs(C.sf,C.t2),padding:"2px 8px"}}><XIcon size={11} weight="bold"/></button></div>}
     {pregActivar&&<ConfirmModal title={pregActivar.title} message={pregActivar.message} confirmLabel="Sí, arrancar" confirmColor={tintaAA(C.live,5)}
@@ -17776,6 +17788,8 @@ export default function PrintFlow() {
   const [user,setUser]=useState(null);const [userName,setUserName]=useState("");const [userLogin,setUserLogin]=useState(null);const [authChecked,setAuthChecked]=useState(false);const [orders,setOrders]=useState([]);const [view,setView]=useState("pipeline");const [sbCollapsed,setSbCollapsed]=useState(()=>{try{return localStorage.getItem("pf-sidebar-collapsed")==="1"}catch{return false}});
   const [purchaseOrders,setPurchaseOrders]=useState([]); // 🛒 v10.10.0
   const [editO,setEditO]=useState(null);const [search,setSearch]=useState("");const [loaded,setLoaded]=useState(false);
+  // v10.84.65 — ok: cuándo se leyó bien por última vez (null = nunca); fallo: cuándo falló la última lectura (null = no falló)
+  const [lectura,setLectura]=useState({ok:null,fallo:null});
   // v10.41.0 — Filtros chip en "Mis Pendientes". Set de keys activos (multi-select OR).
   const [taskFilters,setTaskFilters]=useState(new Set());
   // Admin: filtrar "Mis Pendientes" como si fuera otro rol (ver lo del calendario de Karla, etc.)
@@ -18061,13 +18075,16 @@ export default function PrintFlow() {
         return withSplits.map(o=>{if(_fin.has(o.stage)){const pr=pById[o.id];if(pr)return{...o,notes_log:pr.notes_log||[],comments:pr.comments||[],timeline:pr.timeline||[],waste_log:pr.waste_log||[],machine_log:pr.machine_log||[]};}return o;});});
     }
     setPurchaseOrders(posWithMatrix);
+    setLectura({ok:Date.now(),fallo:null});
     setLoaded(true);
    } catch(e) {
      // v10.72.13 — un blip de red rechazaba el Promise.all → setLoaded(true) nunca corría → SPINNER
      // INFINITO sin mensaje. Ahora desbloqueamos la UI y avisamos; el realtime reintenta al reconectar.
      console.error("[reload] Error:",e);
      setLoaded(true);
-     showToast?.("⚠️ Sin conexión — no se pudieron cargar las órdenes. Revisa tu red.","error");
+     // v10.84.65 — lo que se ve se queda (es lo último bueno) y lo dice el aviso de arriba, con su hora y «Reintentar» (era un
+     //   aviso que se iba en 7 s y, con el polling de 20 s, se repetía)
+     setLectura(l=>({...l,fallo:Date.now()}));
    }
   }, []);
 
@@ -18103,7 +18120,10 @@ export default function PrintFlow() {
     if(archiveLoadedRef.current)return;
     archiveLoadedRef.current=true;
     setArchiveLoaded(true);
-    const all=await db.loadOrders(false);
+    let all;
+    try{all=await db.loadOrders(false);}
+    catch(e){console.error("[archivo]",e);archiveLoadedRef.current=false;setArchiveLoaded(false);   // v10.84.65 — antes: [] y la pantalla vacía
+      showToast?.("No se pudo cargar el archivo completo ("+errorEnPalabras(e)+"). Lo que ves no cambió; vuelve a intentarlo.","error");return;}
     // v10.64.1 fix — preservar el enriquecimiento de splits (has_splits/splits/splits_alive_count)
     // que reload() ya computó; antes setOrders(all) crudo lo borraba de TODAS las órdenes y reabría
     // transitoriamente "Facturar por partes" en órdenes ya divididas.
@@ -20707,7 +20727,7 @@ export default function PrintFlow() {
   // onAuthStateChange en esta pestaña), así que sin esto el uid viejo contaminaría las columnas _uid del siguiente
   // login que entre por el fallback legacy (misma caída de red que rompió el signOut).
   const clearSbAuthStorage=()=>{try{Object.keys(localStorage).filter(k=>k.startsWith("sb-")&&k.includes("-auth-token")).forEach(k=>localStorage.removeItem(k))}catch{}AUTH_UID=null;};
-  const logout=()=>{try{supabase.auth.signOut({scope:"local"}).then(({error})=>{if(error)clearSbAuthStorage()}).catch(()=>clearSbAuthStorage())}catch{clearSbAuthStorage()}try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setWakeupItems(null)};
+  const logout=()=>{try{supabase.auth.signOut({scope:"local"}).then(({error})=>{if(error)clearSbAuthStorage()}).catch(()=>clearSbAuthStorage())}catch{clearSbAuthStorage()}try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setLectura({ok:null,fallo:null});setWakeupItems(null)};   // (v10.84.65 — lectura: tras volver a entrar, «Leyendo…» y no «vacío»)
   // v10.72.40 — grupos del command palette: navegación (por sección del Sidebar) + acciones, gateadas por rol igual que el header.
   const cmdGroups=(()=>{
     const stripCount=l=>l.replace(/\s*\(\d+\)\s*$/,"");
@@ -20756,7 +20776,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           {/* v10.72.13 — el punto de salud de realtime ahora SIEMPRE visible. Antes vivía dentro del guard
               !sbCollapsed → con el sidebar colapsado (lo normal del operador heads-down) desaparecía y se
               quedaba viendo datos viejos sin saber que el socket se cayó. Colapsado = badge sobre el logo. */}
-          <div role="img" aria-label={connected===null?"Conectando":connected?"En tiempo real":"Reconectando"} title={connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."} style={{width:7,height:7,borderRadius:"50%",background:connected===null?C.amb:connected?C.ok:C.dn,flexShrink:0,...(sbCollapsed?{position:"absolute",top:13,left:38,boxShadow:"0 0 0 1.5px "+C.card}:{marginLeft:"auto"})}}/>
+          <div role="img" aria-label={lectura.fallo?"No se pudo leer de la base":connected===null?"Conectando":connected?"En tiempo real":"Reconectando"} title={lectura.fallo?"No se pudo leer de la base":connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."} style={{width:7,height:7,borderRadius:"50%",background:lectura.fallo?C.amb:connected===null?C.amb:connected?C.ok:C.dn,flexShrink:0,...(sbCollapsed?{position:"absolute",top:13,left:38,boxShadow:"0 0 0 1.5px "+C.card}:{marginLeft:"auto"})}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
           {NAV_SECTIONS.map(([g,label],si)=>{const items=navs.filter(n=>n.g===g);if(!items.length)return null;return <div key={g} style={{display:"flex",flexDirection:"column",gap:2}}>{sbCollapsed?(si>0&&<div style={{height:1,background:C.bd,margin:"7px 10px 5px"}}/>):<div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 11px",margin:si===0?"2px 0 4px":"14px 0 4px"}}>{label}</div>}{items.map(n=>{const Ic=NAV_ICON[n.id]||SquaresFourIcon;const active=view===n.id;return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbCollapsed?"10px 0":"9px 11px",justifyContent:sbCollapsed?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbCollapsed&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbCollapsed&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}</div>;})}
@@ -20799,6 +20819,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       </div>
 
       <div style={{boxSizing:"border-box",width:"100%",maxWidth:view==="board"?((user==="produccion"||user==="admin")?"none":1300):(VIEW_MAXW[view]??1300),margin:"0 auto",padding:"14px 16px"}}>
+        {/* v10.84.65 — CUANDO NO SE PUDO LEER DE LA BASE: lo que se ve es lo último que se leyó bien, y se dice de qué hora. Sin una
+            lectura buena ninguna cifra es cierta, y el tablero no dice «vacío» (Kanban, `leido`). */}
+        {lectura.fallo&&<div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12,padding:"10px 14px",borderRadius:10,background:C.wn+"18",border:"1px solid "+C.wn+"66",fontSize:F.body,color:C.wnInk}}>
+          <WarningIcon size={16} weight="fill" color={C.wn} style={{flexShrink:0}}/>
+          <span style={{flex:1,minWidth:0}}><b>No se pudo leer de la base.</b> {lectura.ok?"Lo que ves es de las "+new Date(lectura.ok).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit",hour12:false})+" y puede estar atrasado.":"Todavía no se ha leído nada: lo que ves no son los datos."}</span>
+          <button onClick={()=>reloadRef.current()} style={{...bs(C.bg,C.wnInk),border:"1px solid "+C.wn+"66",flexShrink:0}}>Reintentar</button>
+        </div>}
+        {/* mientras se hace la primera lectura, las cifras (y «Pendientes (0)») todavía no son las de la base; el tablero de producción
+            lo dice él mismo («Leyendo el tablero…») */}
+        {!lectura.ok&&!lectura.fallo&&!(view==="board"&&(user==="produccion"||user==="admin"))&&<div role="status" style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 14px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:F.body,color:C.t2}}>
+          <ClockIcon size={14} weight="bold" style={{flexShrink:0}}/>Leyendo de la base…</div>}
         {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{/* v10.72.44 — hint de orientación: producción aterriza aquí (vista general) pero su trabajo se mueve en el Tablero. Las otras vistas ya tenían hint; esta no. */}{user==="produccion"&&<FirstTimeHint role={user} hintKey="pipeline-prod" text="Vista general del flujo. Tu trabajo se mueve en el Tablero: arrastra las órdenes Listas a las máquinas." color={C.ac}/>}{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{(()=>{const pk=myTasks.filter(o=>snoozeActive(o)).length;const act=filteredMyTasks.filter(o=>!snoozeActive(o)).length;return act+" pendiente"+(act!==1?"s":"")+(pk>0?" · "+pk+" en espera":"")})()}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color={C.ios}/>}
@@ -20838,7 +20869,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá cuántas placas chicas y grandes lleva la orden (puedes poner de ambas). Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/>{/* v10.73.81 — `viewOrders`, NO `filteredOrders`: el buscador ya no filtra el tablero, lo RESALTA (ver Kanban).
              Tiene que ser viewOrders y no `orders` crudo, o se rompe el toggle Mis Órdenes/Todas del admin. */}
-          <Kanban orders={viewOrders} match={search?searchFilter:null} searchText={search} onClearSearch={()=>setSearch("")} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})} showToast={showToast} actionLoading={actionLoading}/>{/* v10.73.81 (verificación adversarial) — MaquilaTracker cuelga de la MISMA pantalla
+          <Kanban leido={!!lectura.ok} falloLectura={lectura.fallo} orders={viewOrders} match={search?searchFilter:null} searchText={search} onClearSearch={()=>setSearch("")} onDrop={assignMachine} onAction={handleAction} role={user} maintenance={maintenance} onMaintenance={(type,machine,record)=>setMaintModal({type,machine,record})} showToast={showToast} actionLoading={actionLoading}/>{/* v10.73.81 (verificación adversarial) — MaquilaTracker cuelga de la MISMA pantalla
              que el banner "El tablero no está filtrado", y abre con `if(all.length===0)return null`: bajo búsqueda
              DESAPARECÍA entero, mientras el badge del sidebar (que ahora cuenta sobre viewOrders) decía "5 en maquila ·
              el detalle está en el tracker, abajo". Esa contradicción la introduje yo al mover solo el Kanban: era la

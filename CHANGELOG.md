@@ -12,6 +12,53 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.65 — Un error no es un «vacío»: el tablero (y la app) cuando no pudo leer de la base — 7-oct-2026
+
+La **tercera y última revisión independiente del tablero dio 24/40** (las anteriores, 20 y 25) con un P1: «el tablero dice vacío
+cuando no sabe». Con tres pasadas, el tablero queda **cerrado** (la meta: 35 sin P1, o 3 pasadas); su P1 es esta versión, y lo
+demás que dejó (P2: el teclado y la tableta a medias, la calma y los colores, la misma orden con tres caras y sin folio en Salidas
+y En Maquila; P3: la franja no dice qué va tarde) queda anotado en su snapshot,
+`.impeccable/critique/2026-10-08T00-12-28Z__src-app-jsx-kanban-tablero-de-produccion.md`.
+
+- **Qué pasaba, medido con la app real** (producción, sin escribir; la falla, simulada sólo en el navegador):
+  - Al entrar, mientras se hacía la primera lectura, el tablero decía «Tablero vacío», «libres» y «trabajando», y el Dashboard
+    «0 órdenes · 0 activas», «Pendientes (0)» y «Sin órdenes».
+  - Si una lectura de órdenes fallaba, `loadOrders` devolvía `[]`: las 14 fichas pasaban a 0, «Tablero vacío», sin ningún
+    aviso y con el punto de conexión diciendo «En tiempo real». A Gerardo le decía que las prensas estaban libres.
+  - Si fallaba «Cargar Archivo Completo», **toda la app quedaba en 0** («Pendientes» de 16 a 0, el tablero de 14 a 0), sin
+    aviso, y el botón ya no regresaba.
+  - Si fallaba sólo la bitácora, las órdenes salían sin ella (y así es como salen «estancadas» por error, como P-0540).
+- **Qué cambió:**
+  - `db.loadOrders` **lanza** si falla la lectura de las órdenes o de cualquiera de sus tablas.
+  - La recarga conserva lo último que se leyó bien y lo dice: arriba de cualquier vista, «**No se pudo leer de la base.** Lo que
+    ves es de las 18:20 y puede estar atrasado. · Reintentar». El punto de conexión dice «No se pudo leer de la base», en
+    ámbar. El aviso que se iba en 7 s (y se repetía cada 20 s) ya no sale.
+  - Mientras se hace la primera lectura, «Leyendo de la base…» arriba de las vistas, y el tablero dice «Leyendo el tablero…»;
+    si esa primera lectura falla, «No se pudo leer el tablero». «Tablero vacío» sólo después de una lectura buena.
+  - El archivo completo que falla deja todo como estaba, lo dice, y se puede volver a pedir.
+  - Al salir y volver a entrar en la misma pestaña, la lectura se cuenta otra vez desde cero («Leyendo…», no «vacío»).
+  - El cliente de Supabase ya reintenta solo un 503 tres veces (1, 2 y 4 s): el aviso llega a los ~7 s, no al primer tropiezo.
+- **No toca** la base ni las RPC. Sí toca lo compartido de App: cómo se leen las órdenes (todas las vistas) y el punto de
+  conexión; lo que se ve con una lectura buena es igual que antes.
+- **Pruebas:**
+  - **`tests/recorrido/lectura-falla.mjs`** (nueva, con la app real; 12 comprobaciones en cuatro escenarios: la primera lectura
+    lenta y luego caída, la primera lectura caída, la bitácora caída y el archivo completo caído). **Vuelta 1, contra producción
+    (v10.84.64): fallaban las 12.** Con el arreglo, pasan.
+  - Dos veces falló la prueba y no la app: la bienvenida del rol tapaba el menú al entrar (se cierra con Esc, como en las otras),
+    y el «Despertador» aparece cuando cargan los datos, a cualquier hora (la navegación lo cierra y reintenta).
+  - **El escenario del archivo, como estaba, no probaba nada:** contra la versión vieja pasaba, porque el cliente reintenta el
+    503 ~7 s y la prueba quitaba la falla antes: el archivo terminaba cargándose bien. Ahora la falla dura más que los
+    reintentos, y contra producción enseña el borrado.
+  - `tablero.mjs` +3 (130): el tablero sin una lectura buena (`lectura=cargando|fallo` en el banco) no dice «vacío» ni «libres»,
+    y vacío de verdad sí lo dice. Contra v10.84.64 fallaban las dos primeras.
+  - **Las pruebas del banco fallaban según la hora:** el banco calculaba «hoy» con `toISOString()`, que es la fecha de UTC, y
+    desde las 18:00 en León «ayer» ya era «hoy»: seis pruebas de vencidas y de Salidas fallaban de noche (tab-36, 37, 38, 45,
+    74 y 82). Ahora usa la fecha local, también en las tres pruebas que armaban fechas así; no queda ninguna en `tests/` ni
+    `scripts/`.
+  - **Sabotajes, contra la app real** (cada uno compilado aparte; `src/App.jsx` restaurado y comprobado por su huella):
+    los 5 cazados: `loadOrders` que vuelve a devolver `[]` (A, B y D), la bitácora que se ignora (C), la recarga sin aviso
+    (A y B), el archivo que vuelve a borrar (D: «Pendientes» 15 → 0) y el tablero sin su compuerta de lectura (A y B).
+
 ## v10.84.64 — El tablero sano en calma, y bien a 1920 y en tableta — 7-oct-2026
 
 Dos P2 de la segunda revisión independiente del tablero. «El tablero sano no está en calma»: color pleno en botones de rutina,

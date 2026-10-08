@@ -62,6 +62,14 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     va por **`todasLasFilas(() => consulta.order(col).order("id"))`** (páginas con `.range()`, hasta una vacía; si una falla,
     error y ninguna fila). Hasta v10.84.60 la bitácora se cortaba con el archivo completo cargado y las órdenes recientes salían
     «estancadas» (P-0540); y las órdenes (951) iban a cortarse al pasar de 1,000. `tests/romper/carga.mjs` lo vigila.
+12. 🔥 **Un error de lectura no es «vacío»** (v10.84.65). `db.loadOrders` **lanza** si falla la lectura de las órdenes o de
+    cualquiera de sus tablas (antes devolvía `[]`, y la recarga dejaba el tablero vacío y verde; el archivo completo que fallaba
+    dejaba toda la app en 0). `reloadCore` conserva lo último bueno y marca `lectura.fallo`: arriba de cualquier vista sale «No se
+    pudo leer de la base. Lo que ves es de las HH:MM · Reintentar» y el punto de conexión deja de decir «En tiempo real». El
+    `Kanban` no dice «vacío» sin `leido` (una lectura buena). El cliente de Supabase ya reintenta solo un GET con 503/520 tres
+    veces (1, 2 y 4 s): el aviso llega a los ~7 s. Toda lectura nueva que alimente una pantalla sigue esta regla.
+    `tests/recorrido/lectura-falla.mjs` lo vigila con la app real (la primera lectura lenta o caída, la bitácora caída y el
+    archivo completo caído).
 
 ### React / App.jsx
 11. **Orden de declaración** (TDZ): `viewOrders → searchFilter → filteredOrders → myTasks → staleTasks`.
