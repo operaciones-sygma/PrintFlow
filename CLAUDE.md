@@ -159,8 +159,10 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.65 (7-oct; READY `dpl_Ep1SvPMmjy8PZZREPu5zNwGTDi9D`; vuelta atrás: `git revert 6e35708`, porque el
-  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 585 pruebas). **El tablero queda
+- **LIVE:** v10.84.66 (7-oct, noche; READY `dpl_4coJrHtp16E3kiuMNHctLKLeJgPZ`; vuelta atrás: `git revert c212a30`, porque el
+  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 600 pruebas). v10.84.66: ligar una
+  factura por adelantado ya no se atora por el centavo de su CFDI (HAKUNA, P-0571: precio unitario de 6 decimales × cantidad; la regla,
+  en `../cobranzaflow/docs/SPEC-facturar-por-partes.md` §6). **El tablero queda
   CERRADO**: tres revisiones independientes, 20 → 25 → **24/40** (snapshot `.impeccable/critique/2026-10-08T00-12-28Z__…`). El
   P1 de la tercera, «el tablero dice vacío cuando no sabe», es v10.84.65 (regla 12: un error de lectura no es «vacío»); sus P2 y
   P3 quedan en el snapshot. **Siguiente de la lista del 6-oct: las puertas de cancelar**, luego OrderForm y el plan matriz.
