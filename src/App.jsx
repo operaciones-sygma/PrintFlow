@@ -3474,25 +3474,77 @@ function ClientInput({value,onChange,onSelect,clients}) {
   return <div style={{position:"relative"}}><input style={inp} value={value} onChange={e=>{onChange(e.target.value);setShow(true)}} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={()=>setTimeout(()=>setShow(false),200)}/>{show&&(matches.length>0||searching)&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} onMouseDown={()=>{onSelect(c);setShow(false)}} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none"}} onMouseEnter={e=>e.currentTarget.style.background=C.sf} onMouseLeave={e=>e.currentTarget.style.background=C.bg}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:10,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div>{Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:10,color:C.ac,marginTop:1,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}</div>)}</div>}</div>;
 }
 
+// 🔑 v10.84.69 — «¿YA EXISTE ESTE CLIENTE?», UNA SOLA LÓGICA PARA LAS DOS PUERTAS (la forma de la orden y «Crear OC»; eran dos copias).
+// Marcelo, 8-oct: «sólo cuidar que no cree clientes duplicados con los ya existentes», y si casi seguro ya existe, «lo frena y dice cuál
+// es». De los 89 clientes que PrintFlow había dado de alta, 36 terminaron fusionados por duplicados, y 28 de ésos no se parecían por el
+// nombre («ANA GARFIAS» era PREMIUM RESTAURANT BRANDS). La base (resolve_client_for_order, CobranzaFlow v3.7.999m) busca también por RFC,
+// alias, nombres ya fusionados, agentes de compra y contactos; marca lo que casi seguro es el mismo (`fuerte`, con su `motivo`) y lo que
+// existe dado de baja (`dados_de_baja`). La pregunta no ofrece crear ésos, y create_client_from_printflow los vuelve a frenar.
+// El RFC se manda sólo si se capturó (la base de antes no lo conocía). Devuelve { tipo: existente|elegido|nuevo|cancelado|falta_rfc, id }.
+async function resolverClienteNuevo({nombre,rfc="",email="",telefono="",rfcObligatorio=false,preguntar=window.__showClientConfirmModal}){
+  const args={p_name:nombre};if(rfc)args.p_rfc=rfc;
+  const {data:r,error}=await supabase.rpc("resolve_client_for_order",args);
+  if(error)throw error;
+  if(r?.exact_match)return {tipo:"existente",id:r.exact_match,nombre:r.exact_name};
+  const parecidos=r?.similar_matches||[],deBaja=r?.dados_de_baja||[];
+  const contacto=email||telefono||"";
+  if(parecidos.length||deBaja.length){
+    const elegido=await preguntar?.({typed:nombre,matches:parecidos,dadosDeBaja:deBaja,rfc,contact:contacto});
+    if(!elegido||elegido==="cancel")return {tipo:"cancelado"};
+    if(elegido!=="new")return {tipo:"elegido",id:elegido};
+    if(rfcObligatorio&&!rfc)return {tipo:"falta_rfc"};
+  }else{
+    if(rfcObligatorio&&!rfc)return {tipo:"falta_rfc"};
+    const sigue=await preguntar?.({typed:nombre,matches:[],rfc,contact:contacto});
+    if(sigue!=="new")return {tipo:"cancelado"};
+  }
+  const {data:id,error:e2}=await supabase.rpc("create_client_from_printflow",{p_name:nombre,p_rfc:rfc||null,p_email:email||null,p_whatsapp:telefono||null,p_dias_credito:0});
+  if(e2)throw e2;
+  return {tipo:"nuevo",id};
+}
+// v10.84.69 — lo que dice la base cuando frena un cliente («Ya existe «X» (…)…», ERRCODE 22023) va tal cual: dice cuál y qué hacer (salía
+// detrás de «Error resolviendo cliente:»). Sin conexión, en español y diciendo que no se guardó (decía «upstream connect error»).
+function mensajeDeCliente(e,que="la orden"){
+  const m=e?.message||"";
+  if(e?.code==="22023"&&m)return m;
+  if(/upstream|failed to fetch|fetch failed|network|load failed/i.test(m))return `No se pudo revisar el cliente (sin conexión con la base): ${que} no se guardó. Intenta de nuevo.`;
+  return "Error resolviendo cliente: "+(m||"desconocido");
+}
+
 // 🆕 v10.13.0 — Modal de confirmación de cliente similar (typeahead)
 // v10.72.2 — un solo modal in-app para dos casos: (a) hay clientes similares ("¿quisiste decir?"),
 // (b) sin similares -> confirmar NUEVA razón social mostrando nombre/RFC/contacto + aviso de duplicado.
 // Reemplaza el window.confirm nativo en el momento de más riesgo (crear cliente en el ERP compartido).
-function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
+// 🔑 v10.84.69 — (c) lo que casi seguro YA EXISTE (`fuerte`) o existe dado de baja: dice cuál y por qué, primero, y no ofrece crearlo
+// (si de verdad es otro, lo da de alta CxC en CobranzaFlow). Y lo que faltaba: Escape cierra SÓLO la pregunta (cerraba la forma de la
+// OC de atrás, con lo capturado), el foco entra a la pregunta y Tab no se sale, un doble clic responde una vez, y el montaje le pasa el
+// RFC y el contacto (desde v10.72.2 la pregunta decía «sin RFC» aunque se hubiera capturado).
+function ClientConfirmModal({open,typed,matches,rfc,contact,dadosDeBaja,onResolve}) {
+  const panelRef=useRef(null), respondido=useRef(false);
+  const responder=r=>{if(respondido.current)return;respondido.current=true;onResolve(r)};
+  useEscClose(()=>{if(open)responder("cancel")});
+  useEffect(()=>{if(open)panelRef.current?.focus()},[open]);
   if(!open)return null;
-  const hasMatches=Array.isArray(matches)&&matches.length>0;
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>onResolve("cancel")}>
-    <div role="dialog" aria-modal="true" aria-label={hasMatches?"Confirmar cliente similar":"Confirmar cliente nuevo"} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
+  const lista=Array.isArray(matches)?[...matches].sort((a,b)=>Number(!!b.fuerte)-Number(!!a.fuerte)):[];
+  const baja=Array.isArray(dadosDeBaja)?dadosDeBaja:[];
+  const hayFuerte=lista.some(c=>c.fuerte), hasMatches=lista.length>0||baja.length>0;
+  const bloqueado=hayFuerte||baja.length>0;
+  const titulo=hayFuerte?"Ya existe: elígelo":lista.length?"¿Quisiste decir alguno de estos clientes?":"Ya existe, pero está dado de baja";
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>responder("cancel")}>
+    <div ref={panelRef} tabIndex={-1} onKeyDown={atraparTab} role="dialog" aria-modal="true" aria-label={hasMatches?titulo:"Confirmar cliente nuevo"} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3,outline:"none",maxHeight:"90vh",overflowY:"auto",overflowWrap:"anywhere"}} onClick={e=>e.stopPropagation()}>
       {hasMatches?<>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:8}}>¿Quisiste decir alguno de estos clientes?</div>
-        <div style={{fontSize:12,color:C.t2,marginBottom:16}}>Escribiste: <strong>"{typed}"</strong></div>
-        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-          {matches.map(c=><button key={c.id} onClick={()=>onResolve(c.id)} style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif"}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,marginBottom:8,color:C.tx}}>{bloqueado&&<WarningIcon size={18} weight="fill" color={C.amb} style={{flexShrink:0}}/>}{titulo}</div>
+        <div style={{fontSize:12,color:C.t2,marginBottom:hayFuerte?8:16}}>Escribiste: <strong>"{typed}"</strong></div>
+        {hayFuerte&&<div style={{fontSize:12,color:C.t2,lineHeight:1.5,marginBottom:14}}>Casi seguro es el mismo cliente escrito de otra forma: elígelo para ligarle la orden. Si de verdad es otro, pídele a CxC (Karla) que lo dé de alta en CobranzaFlow.</div>}
+        {lista.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:baja.length?12:16}}>
+          {lista.map(c=><button key={c.id} onClick={()=>responder(c.id)} style={{background:C.sf,border:"1px solid "+(c.fuerte?C.amb+"80":C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif",color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
             <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
+            {c.motivo&&<div style={{fontSize:11,color:c.fuerte?"#9a3412":C.t2,fontWeight:c.fuerte?600:400,marginTop:2}}>{c.motivo}</div>}
             <div style={{fontSize:11,color:C.t2,marginTop:2}}>{[c.rfc,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")||"—"}</div>
             {Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:10,color:C.ac,marginTop:2,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}
           </button>)}
-        </div>
+        </div>}
+        {baja.map(c=><div key={c.id} style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"10px 12px",fontSize:12,color:"#9a3412",lineHeight:1.45,marginBottom:8}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span><strong>{c.name}</strong> ya existe ({c.motivo}), pero está dado de baja: pídele a CxC (Karla) que lo revise en CobranzaFlow en vez de crearlo otra vez.</span></div>)}
       </>:<>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx,marginBottom:6}}><UserPlusIcon size={18} weight="bold"/>Crear cliente nuevo</div>
         <div style={{fontSize:12.5,color:C.t2,lineHeight:1.5,marginBottom:14}}><strong style={{color:C.tx}}>"{typed}"</strong> no está registrado. Se creará como una <strong style={{color:C.ac}}>NUEVA razón social</strong> en CobranzaFlow.</div>
@@ -3503,9 +3555,9 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,onResolve}) {
         </div>
         <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span>Verifica que no sea un <strong>duplicado</strong> escrito de otra forma (acentos, abreviaturas, S.A. de C.V.). Si ya existe, cancela y búscalo por su nombre registrado.</span></div>
       </>}
-      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button onClick={()=>onResolve("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
-        <button onClick={()=>onResolve("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>{hasMatches?`Crear "${typed}" como nuevo`:"Sí, crear cliente nuevo"}</button>
+      <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
+        <button onClick={()=>responder("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
+        {!bloqueado&&<button onClick={()=>responder("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>{hasMatches?`Crear "${typed}" como nuevo`:"Sí, crear cliente nuevo"}</button>}
       </div>
     </div>
   </div>;
@@ -11652,36 +11704,17 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       // 🆕 v10.13.0 — Resolver client_id contra cobranza.clients antes de guardar (solo en creación)
       if(!editOrder?.id&&!clean.client_id&&clean.client?.trim()){
         try{
-          const {data:resolution,error:resErr}=await supabase.rpc("resolve_client_for_order",{p_name:clean.client.trim()});
-          if(resErr)throw resErr;
-          if(resolution?.exact_match){
-            clean.client_id=resolution.exact_match;
-            showToast?.(`Vinculado automáticamente: ${resolution.exact_name}`,"success");
-          }else if(resolution?.similar_matches?.length>0){
-            const confirmed=await window.__showClientConfirmModal?.({typed:clean.client.trim(),matches:resolution.similar_matches});
-            if(confirmed==="cancel"){setSaving(false);return}
-            if(confirmed==="new"){
-              const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
-              if(createErr)throw createErr;
-              clean.client_id=newId;
-              showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
-            }else{
-              clean.client_id=confirmed;
-            }
-          }else{
-            // v10.72.2 — confirmación CONSCIENTE de razón social nueva via modal in-app (antes
-            // window.confirm nativo): muestra nombre/RFC/contacto + aviso de duplicado (evita el "OK"
-            // reflejo a duplicados como UVEG en el momento de más riesgo del flujo).
-            const confirmed=await window.__showClientConfirmModal?.({typed:clean.client.trim(),matches:[],rfc:clean.client_rfc?.trim(),contact:clean.client_email?.trim()||clean.client_phone?.trim()});
-            if(confirmed!=="new"){setSaving(false);return}
-            const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:clean.client.trim(),p_rfc:clean.client_rfc?.trim()||null,p_email:clean.client_email?.trim()||null,p_whatsapp:clean.client_phone?.trim()||null,p_dias_credito:0});
-            if(createErr)throw createErr;
-            clean.client_id=newId;
-            showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
-          }
+          // v10.84.69 — «¿ya existe?» con la lógica de las dos puertas (resolverClienteNuevo): lo que casi seguro ya existe se elige, no
+          // se crea. v10.72.2 — la razón social nueva se confirma CONSCIENTE (nombre/RFC/contacto + aviso de duplicado; antes un
+          // window.confirm nativo daba el «OK» reflejo a duplicados como UVEG).
+          const r=await resolverClienteNuevo({nombre:clean.client.trim(),rfc:clean.client_rfc?.trim()||"",email:clean.client_email?.trim()||"",telefono:clean.client_phone?.trim()||""});
+          if(r.tipo==="cancelado"){setSaving(false);return}
+          clean.client_id=r.id;
+          if(r.tipo==="existente")showToast?.(`Vinculado automáticamente: ${r.nombre}`,"success");
+          else if(r.tipo==="nuevo")showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
         }catch(e){
           console.error("client resolution error:",e);
-          showToast?.("Error resolviendo cliente: "+(e?.message||"desconocido"),"error");
+          showToast?.(mensajeDeCliente(e,"la orden"),"error");
           setSaving(false);return;
         }
       }
@@ -17762,33 +17795,14 @@ function CreateOCModal({onCreate, onClose, showToast}){
       // OrderForm (resolve_client_for_order → confirmar similares → confirmar nueva + RFC oblig).
       if(!resolvedClientId && nm){
         try{
-          const {data:resolution,error:resErr}=await supabase.rpc("resolve_client_for_order",{p_name:nm});
-          if(resErr)throw resErr;
-          if(resolution?.exact_match){
-            resolvedClientId=resolution.exact_match;
-          }else if(resolution?.similar_matches?.length>0){
-            const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:resolution.similar_matches});
-            if(confirmed==="cancel"){setSaving(false);return}
-            if(confirmed==="new"){
-              if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
-              const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
-              if(createErr)throw createErr;
-              resolvedClientId=newId;
-            }else{
-              resolvedClientId=confirmed;
-            }
-          }else{
-            if(!f.client_rfc.trim()){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
-            // v10.72.2 — confirmación via modal in-app (antes window.confirm nativo).
-            const confirmed=await window.__showClientConfirmModal?.({typed:nm,matches:[],rfc:f.client_rfc.trim(),contact:f.client_email.trim()||f.client_phone.trim()});
-            if(confirmed!=="new"){setSaving(false);return}
-            const {data:newId,error:createErr}=await supabase.rpc("create_client_from_printflow",{p_name:nm,p_rfc:f.client_rfc.trim()||null,p_email:f.client_email.trim()||null,p_whatsapp:f.client_phone.trim()||null,p_dias_credito:0});
-            if(createErr)throw createErr;
-            resolvedClientId=newId;
-          }
+          // v10.84.69 — la misma lógica que la forma de la orden (resolverClienteNuevo), con el RFC obligatorio para una razón social nueva.
+          const r=await resolverClienteNuevo({nombre:nm,rfc:f.client_rfc.trim(),email:f.client_email.trim(),telefono:f.client_phone.trim(),rfcObligatorio:true});
+          if(r.tipo==="cancelado"){setSaving(false);return}
+          if(r.tipo==="falta_rfc"){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
+          resolvedClientId=r.id;
         }catch(e){
           console.error("[CreateOCModal] client resolution error:",e);
-          showToast?.("⚠️ Error resolviendo cliente: "+(e?.message||"desconocido"),"error");
+          showToast?.("⚠️ "+mensajeDeCliente(e,"la OC"),"error");
           setSaving(false);return;
         }
       }
@@ -21944,7 +21958,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
       {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={ackWakeup}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
-      {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} onResolve={clientConfirmModal.onResolve}/>}
+      {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} rfc={clientConfirmModal.rfc} contact={clientConfirmModal.contact} dadosDeBaja={clientConfirmModal.dadosDeBaja} onResolve={clientConfirmModal.onResolve}/>}
       {/* 🔒 v10.75.11 — bajar el precio de una orden ya facturada y cobrada */}
       {priceDropModal&&<PriceDropModal open info={priceDropModal.info} onResolve={priceDropModal.onResolve}/>}
       {/* v10.73.82 — key por identidad de toast: fuerza remount → timer fresco + animación de entrada re-disparada. */}

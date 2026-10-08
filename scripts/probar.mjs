@@ -47,6 +47,9 @@ const TANDAS = [
   { nombre: "reintento", romper: "scripts/probar-reintento.mjs" },
   // sin banco: qué factura por adelantado se pregunta antes de asignar folio (v10.84.68: Karla, F-135 de Castores; las funciones vivas)
   { nombre: "anticipos", romper: "tests/romper/anticipos.mjs" },
+  // «¿ya existe este cliente?» al capturar una orden o una OC: lo que casi seguro ya existe lo frena y dice cuál es (v10.84.69, con
+  // CobranzaFlow v3.7.999m); el banco extrae la pregunta, su montaje y la lógica de las dos puertas, con la base simulada
+  { nombre: "cliente", gen: "tests/banco/gen-cliente.mjs", romper: "tests/romper/cliente.mjs", puerto: 5192 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

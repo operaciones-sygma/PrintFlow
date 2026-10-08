@@ -12,6 +12,38 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.69 — «¿Ya existe este cliente?»: lo que casi seguro ya existe se elige, no se crea — 8-oct-2026
+
+**Qué pasaba.** Marcelo (8-oct): *«sólo cuidar que no cree clientes duplicados con los ya existentes»*; y si el cliente casi seguro ya
+existe, *«lo frena y dice cuál es»*. Va con CobranzaFlow v3.7.999m (el vendedor da de alta a sus clientes allá, con la misma regla).
+- **Lo medido.** De los 89 clientes que PrintFlow dio de alta, **36 terminaron fusionados por duplicados**, y sólo 8 de ésos se parecían
+  por el nombre: los otros 28 se capturaron con el nombre de una persona o como les dicen en la casa («ANA GARFIAS» era PREMIUM
+  RESTAURANT BRANDS, «GRUPO MODELO» era CERVECERIA MODELO, «HOTEL METRIA» era OPERADORA METRIA). La búsqueda de antes
+  (`resolve_client_for_order`) sólo miraba si el nombre contenía lo escrito, y «Crear como nuevo» siempre estaba a la mano.
+- **La base** (migración `v3_7_999m_vendedor_alta_y_nota` de CobranzaFlow, copia en `../cobranzaflow/docs/migrations/`):
+  `resolve_client_for_order` busca con `cobranza.clientes_parecidos` (nombre, razón social, RFC, alias, nombres ya fusionados, agentes de
+  compra y contactos, sin acentos ni formas legales) y dice de cada uno por qué (`motivo`) y si casi seguro es el mismo (`fuerte`); acepta
+  el RFC (`p_rfc`) y avisa del que existe dado de baja (`dados_de_baja`). `create_client_from_printflow` frena lo que casi seguro ya existe
+  diciendo cuál, y los días de crédito ya no se ponen desde aquí (sólo CxC o Dirección). El nombre idéntico se sigue ligando solo.
+- **La pantalla.** Una sola lógica para las dos puertas, la forma de la orden y «Crear OC» (`resolverClienteNuevo`; eran dos copias).
+  La pregunta: con algo seguro, **«Ya existe: elígelo»**, lo seguro primero con su porqué y **sin «Crear como nuevo»** (si de verdad es
+  otro, lo da de alta CxC en CobranzaFlow); con un dado de baja, lo dice y a quién pedírselo; con lo que sólo se parece, la de siempre
+  («¿Quisiste decir…?»), con su porqué. Lo que la base contesta al frenarlo sale tal cual (iba detrás de «Error resolviendo cliente:»), y
+  sin conexión dice que la orden (o la OC) no se guardó (decía «upstream connect error»).
+- 🔥 **Dos fallas que ya estaban, encontradas al probar:** Escape con la pregunta abierta **cerraba la forma de la OC de atrás**, con lo
+  capturado, y la pregunta se quedaba sola (ahora cierra sólo la pregunta; el foco entra a ella, Tab no se sale y un doble clic responde
+  una vez). Y desde v10.72.2 la pregunta de «Crear cliente nuevo» **decía «sin RFC» y «sin contacto» aunque se hubieran capturado**: el
+  montaje en App no le pasaba esos dos datos.
+- **Cómo se probó.** Banco nuevo `tests/banco/gen-cliente.mjs` (extrae la pregunta, su montaje en App, `resolverClienteNuevo` y
+  `mensajeDeCliente`, con la base simulada y una forma registrada en escStack como la de verdad) y la tanda `tests/romper/cliente.mjs`
+  (24 casos), escrita antes del código. Vuelta 1, contra el código de hoy: fallaban 13 de 19 (3 eran de la prueba, que leía mal su
+  registro). Vuelta 2: 19 de 19. Vuelta 3, por donde no se diseñó (Enter con la pregunta abierta, muchos parecidos en la laptop, el
+  celular, Escape con el foco en una opción): 23 de 23, con un arreglo del banco (su propia página se salía a 390). Corrida doble: con
+  el `App.jsx` anterior fallan 14 de 24; con el nuevo, 24 de 24. Todas las tandas: 698 de 698, sin regresiones. La base, con un
+  ensayo con rollback en CobranzaFlow (37 casos; como Genaro de PrintFlow, entre otros).
+- **Lo que no se probó:** la forma de la orden y «Crear OC» de verdad (el banco simula la forma; lo que hacen al recibir el cliente es
+  lo de antes) y la base de verdad desde PrintFlow (no hay cuenta de pruebas que escriba aquí).
+
 ## docs (8-oct) — Corrección: el cobro en efectivo sí tenía el candado de la base
 
 - **Qué pasaba.** v10.84.68 afirmó (aquí, en `CLAUDE.md`, en `tests/LEEME.md`, en la prueba y en un comentario de `App.jsx`) que
