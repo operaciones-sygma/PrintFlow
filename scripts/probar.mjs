@@ -19,6 +19,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
+import { leer, aRepetir, combinar, hacerSinSegunda, candados } from "./reintento.mjs";
+import { rutaDelEstado, cargar, anotar, textoDePendientes } from "./inestables.mjs";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TANDAS = [
@@ -41,7 +43,17 @@ const TANDAS = [
   { nombre: "tablero", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/tablero.mjs", puerto: 5194 },
   // «En la planta» de Karla y el aviso de la OC que no se puede foliar entera: pasar a Salidas lo que ya está listo (v10.84.67)
   { nombre: "planta", gen: "tests/banco/gen-planta.mjs", romper: "tests/romper/planta.mjs", puerto: 5193 },
+  // sin banco: la segunda oportunidad y sus candados (scripts/reintento.mjs e inestables.mjs, iguales en las cuatro apps; 8-oct)
+  { nombre: "reintento", romper: "scripts/probar-reintento.mjs" },
 ];
+// 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
+// CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
+// frena; lo que pasa a la segunda sale INESTABLE (cuenta como que pasa, queda anotado en scripts/inestables.mjs y se revisa: la próxima
+// subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
+// acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
+// las demás (cortas), completas.
+const TANDAS_DE_DINERO = ["folio", "oc", "partes"];
+const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
 const args = process.argv.slice(2);
@@ -53,10 +65,18 @@ if (!elegidas.length) { console.error("probar: ninguna tanda con ese nombre (" +
 
 const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { cwd: RAIZ, encoding: "utf8" }).trim();
 const BASE = path.resolve(RAIZ, gitDir, "probar-base.json");
+// Una subida no pasa con una inestable sin revisar (no tiene caso correr todo para frenar al final)
+const INESTABLES = rutaDelEstado(RAIZ);
+{
+  const pendientes = textoDePendientes(cargar(INESTABLES));
+  if (pendientes && conBase) { console.log(pendientes + "\n\nprobar: no se sube con una inestable sin revisar (no corrí nada)."); process.exit(1); }
+  if (pendientes) console.log(pendientes + "\n(la próxima subida no pasa hasta revisarlas)\n");
+}
 
-function correrNode(script, argv) {
+// `env`: lo que la tanda recibe además (SOLO para repetir sólo unos casos; PROBAR_INTENTO 1 o 2)
+function correrNode(script, argv, env = {}) {
   return new Promise(resolve => {
-    const hijo = spawn(process.execPath, [script, ...argv], { cwd: RAIZ });
+    const hijo = spawn(process.execPath, [script, ...argv], { cwd: RAIZ, env: { ...process.env, ...env } });
     let salida = "";
     hijo.stdout.on("data", d => { salida += d; });
     hijo.stderr.on("data", d => { salida += d; });
@@ -80,9 +100,11 @@ async function calentar(puerto) {
   } finally { await nav.close(); }
 }
 
-async function tanda(t) {
+// `solo`: la expresión de los casos a repetir (la segunda oportunidad); las tandas que no la entienden corren completas
+async function tanda(t, { solo = null, intento = 1 } = {}) {
+  const env = { PROBAR_INTENTO: String(intento), ...(solo ? { SOLO: solo } : {}) };
   if (!t.gen) {   // tanda sin banco (sin vite ni navegador): se corre tal cual
-    const r = await correrNode(path.join(RAIZ, t.romper), []);
+    const r = await correrNode(path.join(RAIZ, t.romper), [], env);
     return { t, salida: r.salida, codigo: r.codigo };
   }
   const dir = path.join(RAIZ, ".banco-" + t.nombre);
@@ -102,7 +124,7 @@ async function tanda(t) {
       optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-dev-runtime", "@phosphor-icons/react"] } });
     await server.listen();
     await calentar(t.puerto);
-    const r = await correrNode(path.join(RAIZ, t.romper), [capturas, String(t.puerto)]);
+    const r = await correrNode(path.join(RAIZ, t.romper), [capturas, String(t.puerto)], env);
     return { t, salida: r.salida, codigo: r.codigo };
   } catch (e) {
     return { t, error: "no se pudo servir el banco: " + (e?.message || e) };
@@ -114,25 +136,54 @@ async function tanda(t) {
 
 const inicio = performance.now();
 console.log("probar: " + elegidas.map(t => t.nombre).join(" + ") + " (en paralelo)…");
-const corridas = await Promise.all(elegidas.map(tanda));
+const corridas = await Promise.all(elegidas.map(t => tanda(t)));
+
+// La segunda oportunidad: cada tanda repite, una vez y a la vez que las otras, sólo lo que le falló (las de dinero, nada).
+// PROBAR_FINGIR_FALLA=id1,id2 hace que esas pruebas cuenten como FALLA en el primer intento (con PROBAR_FINGIR_SIEMPRE=1, también en el
+// segundo): así se prueba el mecanismo de punta a punta sin romper nada.
+const FINGIDAS = (process.env.PROBAR_FINGIR_FALLA || "").split(",").filter(Boolean);
+const leerCorrida = (salida, intento) => {
+  const l = leer(salida);
+  for (const id of FINGIDAS) if (l.porPrueba[id] === "PASA" && (intento === 1 || process.env.PROBAR_FINGIR_SIEMPRE)) { l.porPrueba[id] = "FALLA"; (l.detalle[id] ||= []).push(id + "  · (falla fingida: PROBAR_FINGIR_FALLA)"); }
+  return l;
+};
+// SOLO de los casos a repetir: por el principio de su id («tab-105», «det-41»), que es el de su `caso` aunque el renglón diga más
+const prefijo = id => (/^[a-z]+-\d+[a-z]?/i.exec(id) || [id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")])[0];
+const inicioSegunda = performance.now();
+const repetidas = [];
+await Promise.all(corridas.map(async c => {
+  if (c.error) return;
+  c.leida = leerCorrida(c.salida, 1);
+  const ids = aRepetir(c.leida, sinSegundaDe(c.t.nombre));
+  if (!ids.length) return;
+  repetidas.push(c.t.nombre + ": " + ids.join(", "));
+  const r = await tanda(c.t, { solo: "^(?:" + [...new Set(ids.map(prefijo))].join("|") + ")(?![0-9])", intento: 2 });
+  if (!r.error) c.segunda = leerCorrida(r.salida, 2);
+}));
+const segSegunda = Math.round((performance.now() - inicioSegunda) / 1000);
 
 let base = {};
 try { base = JSON.parse(fs.readFileSync(BASE, "utf8")); } catch { /* sin base todavía: todo cuenta como nuevo */ }
 const ahora = {};
-const filas = { "REGRESIÓN": [], pendiente: [], arreglada: [], nueva: [] };
+const filas = { "REGRESIÓN": [], pendiente: [], INESTABLE: [], arreglada: [], nueva: [] };
 let pasan = 0, fallan = 0, errores = 0;
+// Primero se junta cada tanda con su repetición; los candados ven TODAS las inestables de la corrida a la vez (más de 3 de golpe frenan).
+const juntas = [];
 for (const c of corridas) {
   if (c.error) { errores++; console.log("\n✗ tanda «" + c.t.nombre + "»: " + c.error); continue; }
-  const porPrueba = {};
-  const detalle = {};
-  for (const linea of c.salida.split(/\r?\n/)) {
-    const m = /^(PASA|FALLA)\s+(\S+)/.exec(linea);
-    if (!m) continue;
-    const [, estado, id] = m;
-    if (estado === "FALLA") { porPrueba[id] = "FALLA"; (detalle[id] = detalle[id] || []).push(linea.replace(/^FALLA\s+/, "")); }
-    else if (!porPrueba[id]) porPrueba[id] = "PASA";
+  if (!Object.keys(c.leida.porPrueba).length) { errores++; console.log("\n✗ tanda «" + c.t.nombre + "» no reportó pruebas:\n" + c.salida.slice(-1500)); continue; }
+  juntas.push({ c, ...combinar(c.leida, c.segunda || null, sinSegundaDe(c.t.nombre)) });
+}
+const deEstaCorrida = juntas.flatMap(j => j.inestables.map(id => ({ clave: j.c.t.nombre + "/" + id, linea: (j.c.leida.detalle[id] || [id]).join(" | ") })));
+const k = candados({ inestables: deEstaCorrida, historial: cargar(INESTABLES).entradas });
+for (const { c, porPrueba, detalle, inestables } of juntas) {
+  for (const id of inestables) {
+    const clave = c.t.nombre + "/" + id;
+    if (k.frenan.has(clave)) {   // pasó a la segunda, pero un candado no lo acepta: cuenta como que falla
+      porPrueba[id] = "FALLA";
+      detalle[id] = [...(c.leida.detalle[id] || [id]), k.repetidas.some(r => r.clave === clave) ? "(pasó a la segunda, pero ya había salido inestable hace poco: no es suerte)" : "(pasó a la segunda, pero salieron más de 3 a la vez: no es suerte)"];
+    } else filas.INESTABLE.push(c.t.nombre + "/" + (c.leida.detalle[id] || [id]).join(" | "));
   }
-  if (!Object.keys(porPrueba).length) { errores++; console.log("\n✗ tanda «" + c.t.nombre + "» no reportó pruebas:\n" + c.salida.slice(-1500)); continue; }
   ahora[c.t.nombre] = porPrueba;
   const antes = base[c.t.nombre] || {};
   for (const [id, estado] of Object.entries(porPrueba)) {
@@ -142,15 +193,25 @@ for (const c of corridas) {
   }
 }
 
+if (deEstaCorrida.length) {
+  // todas quedan pendientes de revisar (también las que frenaron: algo pasó y hay que saber qué)
+  try { anotar(INESTABLES, deEstaCorrida.map(x => ({ ...x, deGolpe: k.deGolpe, repetida: k.repetidas.some(r => r.clave === x.clave) }))); }
+  catch (e) { console.log("(no se pudo anotar en la bitácora de inestables: " + (e?.message || e) + ")"); }
+}
+
 const seg = Math.round((performance.now() - inicio) / 1000);
 console.log("");
+if (repetidas.length) console.log(`segunda oportunidad (${segSegunda} s) — se repitió sólo lo que falló:\n  ${repetidas.join("\n  ")}\n`);
+if (k.motivos.length) console.log(`CANDADOS DE LA SEGUNDA OPORTUNIDAD — no se acepta lo que pasó a la segunda:\n  ${k.motivos.join("\n  ")}\n`);
 for (const [clase, lista] of Object.entries(filas)) {
   if (!lista.length || clase === "nueva") continue;
-  console.log(clase.toUpperCase() + " (" + lista.length + "):");
+  console.log(clase === "INESTABLE"
+    ? `INESTABLE (${lista.length}) — falló y a la segunda pasó: se sube, queda anotada y se revisa en este mismo trabajo (la prueba, o un choque por tiempos de la app); la próxima subida no pasa hasta marcarla (node scripts/inestables.mjs):`
+    : clase.toUpperCase() + " (" + lista.length + "):");
   for (const l of lista) console.log("  " + l);
 }
 if (filas.nueva.length) console.log("nuevas que pasan: " + filas.nueva.length);
-console.log(`\nprobar: ${pasan + fallan} pruebas, ${pasan} pasan, ${fallan} fallan` + (filas["REGRESIÓN"].length ? `, ${filas["REGRESIÓN"].length} REGRESIONES` : "") + (errores ? `, ${errores} tanda(s) sin correr` : "") + ` · ${seg} s`);
+console.log(`\nprobar: ${pasan + fallan} pruebas, ${pasan} pasan, ${fallan} fallan` + (filas.INESTABLE.length ? ` (${filas.INESTABLE.length} pasaron a la segunda)` : "") + (filas["REGRESIÓN"].length ? `, ${filas["REGRESIÓN"].length} REGRESIONES` : "") + (errores ? `, ${errores} tanda(s) sin correr` : "") + ` · ${seg} s`);
 
 if (fallan || errores) process.exit(1);
 if (conBase) {

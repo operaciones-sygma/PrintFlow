@@ -12,6 +12,33 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## probar (8-oct-2026) — La segunda oportunidad de las pruebas, con sus candados (sólo pruebas)
+
+**Qué pasaba.** El candado corre las 645 pruebas antes de cada subida, y una sola que fallara la frenaba, aunque fuera mala suerte del
+equipo cargado. CobranzaFlow repite lo que falla desde el 7-oct. Marcelo, al ver sus candados: *«sí es una mejora, aplica la misma
+metodología para todos los proyectos»*.
+
+- **`scripts/probar.mjs` repite UNA vez lo que falló, y sólo eso.** En las tandas que aceptan `SOLO`, sólo sus casos (por el principio
+  del id: «tab-105»); las demás, completas (son cortas).
+  - Lo que vuelve a fallar frena, con el detalle de las dos veces.
+  - Lo que pasa a la segunda sale **INESTABLE**: cuenta como que pasa, queda anotado y se revisa.
+- **Candados** (`scripts/reintento.mjs`):
+  - más de 3 a la vez frenan;
+  - sin segunda oportunidad —ni se repiten— las tandas de dinero (`folio`, `oc`, `partes`) y toda prueba de doble acción;
+  - la misma otra vez en 14 días frena;
+  - **no se sube con una inestable sin revisar**: el candado lo revisa antes de todo (`node scripts/inestables.mjs --subida`) y
+    `probar --base` también. Se marca con `node scripts/inestables.mjs revisada <id> "qué era"`.
+- `scripts/reintento.mjs`, `inestables.mjs` y `probar-reintento.mjs` son **iguales en CobranzaFlow, PrintFlow, el Cotizador y Almacén**:
+  la tanda nueva `reintento` (21) compara su huella.
+- **El candado de git** ahora también corre si cambia algo de `scripts/`; antes, sólo `scripts/probar*`.
+- **Probado con fallas fingidas** (`PROBAR_FINGIR_FALLA`), de punta a punta:
+  - una de `planta` pasa a la segunda: se repitió SÓLO ese caso, en 8 s, y salió INESTABLE;
+  - la de doble clic (`pla-13`) no se repitió y frenó;
+  - `inv-01` (folio) no se repitió y frenó;
+  - 4 a la vez frenaron;
+  - subir con una pendiente frenó sin correr nada;
+  - `ctp` (sin `SOLO`) se repitió completa: lo que se arregla a la segunda sale INESTABLE, y lo que falla dos veces frena.
+
 ## v10.84.67 — Karla pasa a Salidas lo que ya está listo, y ve dónde va cada orden — 8-oct-2026
 
 **Qué pasaba.** Karla: «a veces ya debo marcar como entregada o facturar una orden y no me deja, porque Gerardo (u otras personas) no

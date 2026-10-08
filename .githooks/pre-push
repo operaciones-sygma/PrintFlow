@@ -14,11 +14,13 @@ while read local_ref local_sha remote_ref remote_sha; do
 done
 
 case "$cambios" in
-  *src/*|*tests/*|*scripts/probar*|*index.html*|*package.json*|*package-lock.json*|*vite.config*) ;;
+  *src/*|*tests/*|*scripts/*|*index.html*|*package.json*|*package-lock.json*|*vite.config*) ;;
   *) echo "candado: sólo documentos; no hace falta correr las pruebas"; exit 0 ;;
 esac
 
 echo "candado: build y pruebas antes de subir…"
+# la segunda oportunidad (8-oct-2026): con una prueba inestable sin revisar no se sube, y se dice antes de correr nada
+node scripts/inestables.mjs --subida || exit 1
 npm run build --silent >/dev/null 2>&1 || { echo "candado: el build falló (corre: npm run build). No se sube."; exit 1; }
 node scripts/probar.mjs --base || { echo "candado: hay pruebas que fallan (arriba dice cuáles). No se sube."; exit 1; }
 echo "candado: todo en verde, se sube."

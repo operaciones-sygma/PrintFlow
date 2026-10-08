@@ -103,6 +103,11 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
     **Nunca `--no-verify`.** Cada bug que se encuentra deja su prueba en `tests/romper/` (Marcelo, 5-oct-2026).
+    🔑 **La segunda oportunidad** (8-oct, la misma de CobranzaFlow, el Cotizador y Almacén; Marcelo: «sí es una mejora, aplica la
+    misma metodología para todos los proyectos»): lo que falla se repite UNA vez (sólo sus casos, con `SOLO`); lo que vuelve a fallar
+    frena; lo que pasa a la segunda sale **INESTABLE**: se sube, queda anotado y se revisa, y **no se sube otra vez con una sin
+    revisar** (`node scripts/inestables.mjs`; se marca con `revisada <id> "qué era"`). Más de 3 a la vez frenan; sin segunda
+    oportunidad las tandas de dinero (`folio`, `oc`, `partes`) y lo de doble acción; la misma otra vez en 14 días frena.
     🔎 **Y `npm run recorrido`** (v10.84.36) después de un cambio grande y después de subir: abre TODA la app como cada rol con
     la cuenta de pruebas `visor` y las escrituras cortadas en el navegador (~4 min, cero agentes; `tests/LEEME.md`).
 22. **Un cambio de base se ensaya contra producción con rollback** (`DO $$ … RAISE EXCEPTION 'ENSAYO'
