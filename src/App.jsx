@@ -7220,7 +7220,20 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   const elegir = c => {
     setLigada(c); setDocType(c.doc_type);
     const sub = c.doc_type==="factura" ? Math.round(Number(c.amount)/1.16*100)/100 : Math.round(Number(c.amount)*100)/100;
-    onAmount(sub);
+    // v10.84.66 — EL CENTAVO DEL CFDI (RESTAURANTES HAKUNA, 7-oct). Una factura hecha por adelantado se timbra con precio unitario de 6
+    // decimales × cantidad: F-130 dice $15,748.58 por 20,000 piezas que en la orden valen $15,748.57. «Total ÷ 1.16» le daba a la parte
+    // ese centavo de más, y la última ya no cabía en lo que quedaba («no más de $11,811.42»): Karla terminó con folios nuevos y el trabajo
+    // cobrándose dos veces. Si el CFDI dice sus piezas y su total está a 2 centavos o menos de lo que la orden da por ellas (o de todo lo
+    // que queda, si son todas), la parte lleva lo de la orden: es lo que la base acepta al ligar (facturar_siguiente_parte, ±$0.02 con
+    // IVA). Un anticipo de otro importe (sin piezas, o lejos de eso) sigue llevando lo de su factura.
+    const qc = Number(c.qty_cfdi||0);
+    let dinero = sub;
+    if (qc > 1 && qc <= restoQty) {
+      const porPiezas = qc === restoQty ? restoSinIva : Math.round(restoSinIva * qc / restoQty * 100) / 100;
+      const conIvaDe = n => c.doc_type==="factura" ? Math.round(n * 1.16 * 100) / 100 : Math.round(n * 100) / 100;
+      if (Math.abs(Math.round(Number(c.amount) * 100) - Math.round(conIvaDe(porPiezas) * 100)) <= 2) dinero = porPiezas;
+    }
+    onAmount(dinero);
     // v10.84.19 (scan 5 de CobranzaFlow, P3) — LAS PIEZAS LAS DICE EL CFDI, no la proporcion del
     // dinero. Con un precio unitario distinto al de la orden, onAmount proponia 26,100 piezas para
     // una factura cuyo comprobante declara 24,000, y la parte quedaba diciendo otra cosa que el CFDI.
@@ -7578,6 +7591,25 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // bien y no hay pista de qué corregir. Ahora el semáforo dice la verdad.
   // v10.84.4 (scan 2): en centavos enteros, igual que cuadra() y que el RPC (a 1 centavo exacto el flotante mentia)
   const amountOk = Math.abs(Math.round(sumAmountSinIva * 100) - Math.round(totalSinIva * 100)) <= 1;
+  // v10.84.66 — EL CENTAVO DEL CFDI EN EL PLAN (RESTAURANTES HAKUNA, 7-oct). Una factura hecha por adelantado se timbra con precio
+  // unitario de 6 decimales × cantidad y puede quedar un centavo arriba o abajo de lo que la orden da por esas piezas (F-130: $15,748.58
+  // contra $15,748.57; F-131: $11,811.44 contra $11,811.43). Con TODAS las partes ligadas (fijas: «Cuadrar» no las mueve) el plan sumaba
+  // $27,560.02, decía «el dinero no cuadra por $0.02» sin salida, y Karla terminó con folios nuevos: el trabajo se cobró dos veces. La
+  // base ya acepta que una parte ligada difiera de su factura hasta 2 centavos con IVA (assign_invoice_splits), así que si lo único que
+  // no cuadra es ese redondeo —a lo más un centavo por factura ligada, y ninguna parte libre que lo absorba— se registran con lo de la
+  // orden (un centavo por ligada, de la mayor a la menor) y el plan lo dice; las facturas no cambian. Con partes libres, «Cuadrar».
+  const ligadasIdx = splits.map((_, i) => i).filter(i => folioAuto && esLigar(splits[i]) && (splits[i].doc_type === "factura" || splits[i].doc_type === "remision"));
+  const hayLibres = splits.some(sp => !(folioAuto && esLigar(sp)) && sp.doc_type !== "corona_saldo");
+  const residuoCts = Math.round(sumAmountSinIva * 100) - Math.round(totalSinIva * 100);
+  const ajusteCfdi = (() => {
+    if (amountOk || hayLibres || !ligadasIdx.length || Math.abs(residuoCts) > ligadasIdx.length) return null;
+    const subDe = i => amountToBackend(Number(splits[i].amountConIva||0), splits[i].doc_type);
+    const porMonto = [...ligadasIdx].sort((a, b) => subDe(b) - subDe(a));
+    const aj = {}; let falta = Math.abs(residuoCts); const paso = residuoCts > 0 ? -1 : 1;
+    for (const i of porMonto) { if (!falta) break; aj[i] = paso; falta--; }
+    return aj;
+  })();
+  const dineroOk = amountOk || !!ajusteCfdi;
 
   // Saldo Corona requerido (solo splits de tipo corona_saldo)
   const coronaTotalSinIva = splits
@@ -7630,7 +7662,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   const restoAlFinal = nRestos === 0 || splits[splits.length - 1]?.doc_type === "por_facturar";
   const restoOk = nRestos <= 1 && nRestos < splits.length && restoAlFinal;
 
-  const canSubmit = !saving && qtyOk && amountOk && foliosFmtOk && foliosVacios === 0 && foliosUnicos
+  const canSubmit = !saving && qtyOk && dineroOk && foliosFmtOk && foliosVacios === 0 && foliosUnicos
                     && foliosPrefixOk && reasonOk && qtysOk && amountsOk && splitsMin
                     && coronaOk && coronaTypesValid && restoOk;
   // v10.84.33 — el plan ya tiene algo capturado: el clic fuera no lo tira y Esc pregunta antes (arriba, en useEscClose).
@@ -7775,8 +7807,8 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
                                      fijo: !!(folioAuto && esLigar(sp)) || sp.doc_type === "corona_saldo" }));
     return cuadrarPartes(base, totalQty, totalSinIva, modo);
   };
-  const cuadrePiezas = (!qtyOk || !amountOk) ? calcularCuadre("piezas") : null;
-  const cuadreImportes = (!qtyOk || !amountOk) ? calcularCuadre("importes") : null;
+  const cuadrePiezas = (!qtyOk || !dineroOk) ? calcularCuadre("piezas") : null;
+  const cuadreImportes = (!qtyOk || !dineroOk) ? calcularCuadre("importes") : null;
   const cuadresIguales = !!(cuadrePiezas?.ls && cuadreImportes?.ls && cuadrePiezas.firma === cuadreImportes.firma);
   const aplicarCuadre = (c) => {
     if (!c) return;
@@ -7806,8 +7838,10 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
     setSaving(true);
     try {
       // Convertir el array al formato del backend (amount SIN IVA, folio null si corona_saldo)
-      const payload = splits.map(s => {
-        const amountSinIva = amountToBackend(Number(s.amountConIva), s.doc_type);
+      const payload = splits.map((s, i) => {
+        // v10.84.66 — el centavo del CFDI: las ligadas se registran con lo de la orden (ajusteCfdi; la base lo tolera al ligar)
+        const base = amountToBackend(Number(s.amountConIva), s.doc_type);
+        const amountSinIva = ajusteCfdi?.[i] ? Math.round(base * 100 + ajusteCfdi[i]) / 100 : base;
         return {
           qty: Number(s.qty),
           amount: amountSinIva,
@@ -7839,7 +7873,7 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
   // nada, sale la pista neutra. Lo demás (dos «Después», el folio que falta) se dice aunque no haya cantidades.
   const faltas = [
     !qtyOk && { k: "reparto", t: sumQty < totalQty ? `faltan ${fmtN(totalQty - sumQty)} piezas por repartir` : `sobran ${fmtN(sumQty - totalQty)} piezas` },
-    !amountOk && { k: "reparto", t: `el dinero no cuadra por $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}` },
+    !dineroOk && { k: "reparto", t: `el dinero no cuadra por $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}` },
     !qtysOk && { k: "reparto", t: "hay una parte sin piezas" },
     !amountsOk && { k: "reparto", t: "hay una parte sin importe" },
     // todas «Después» va primero: es el error de fondo (con dos partes también son «dos restos», pero eso no es lo que falla)
@@ -8024,19 +8058,22 @@ function SplitInvoiceModal({order,onConfirm,onClose,user,userLogin}) {
             {sumQty < totalQty ? `Faltan ${(totalQty-sumQty).toLocaleString("es-MX")}` : `Sobran ${(sumQty-totalQty).toLocaleString("es-MX")}`}
           </div>}
         </div>
-        <div style={{background:amountOk?C.live+"10":C.amb+"10",borderRadius:8,padding:10,border:"0.5px solid "+(amountOk?C.ok:C.wn)+"40"}}>
+        <div style={{background:dineroOk?C.live+"10":C.amb+"10",borderRadius:8,padding:10,border:"0.5px solid "+(dineroOk?C.ok:C.wn)+"40"}}>
           <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Monto subtotal (sin IVA)</div>
-          <div style={{fontSize:14,fontWeight:700,color:amountOk?C.okInk:C.wnInk}}>
-            {amountOk ? <CheckIcon size={12} weight="bold" color={C.ok} style={{verticalAlign:"-1px",marginRight:3}}/> : <WarningIcon size={12} weight="fill" color={C.wn} style={{verticalAlign:"-1px",marginRight:3}}/>}${fmtMx(sumAmountSinIva)} / ${fmtMx(totalSinIva)}
+          <div style={{fontSize:14,fontWeight:700,color:dineroOk?C.okInk:C.wnInk}}>
+            {dineroOk ? <CheckIcon size={12} weight="bold" color={C.ok} style={{verticalAlign:"-1px",marginRight:3}}/> : <WarningIcon size={12} weight="fill" color={C.wn} style={{verticalAlign:"-1px",marginRight:3}}/>}${fmtMx(sumAmountSinIva)} / ${fmtMx(totalSinIva)}
           </div>
-          {!amountOk && <div style={{fontSize:10,color:C.wnInk,marginTop:2}}>
-            Diferencia ${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}
+          {!amountOk && <div style={{fontSize:10,color:ajusteCfdi?C.t2:C.wnInk,marginTop:2,lineHeight:1.4}}>
+            {/* v10.84.66 — el centavo del CFDI: lo dice en vez de «Diferencia» (ver ajusteCfdi) */}
+            {ajusteCfdi
+              ? `Las ligadas suman $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))} ${residuoCts > 0 ? "más" : "menos"} que la orden: es el redondeo de su CFDI (precio unitario × cantidad). Se registran con lo de la orden; las facturas no cambian.`
+              : `Diferencia $${fmtMx(Math.abs(sumAmountSinIva - totalSinIva))}`}
           </div>}
         </div>
       </div>
 
       {/* v10.84.3 — CUADRAR: aparece solo cuando el semaforo no esta en verde */}
-      {(!qtyOk || !amountOk) && (cuadrePiezas || cuadreImportes) && (
+      {(!qtyOk || !dineroOk) && (cuadrePiezas || cuadreImportes) && (
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
           <span style={{fontSize:10,color:C.t2}}>No cuadra. Que lo arregle el sistema:</span>
           {cuadresIguales ? (

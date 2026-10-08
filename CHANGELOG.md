@@ -12,6 +12,30 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.66 — Ligar una factura por adelantado ya no se atora por el centavo de su CFDI — 7-oct-2026
+
+**Qué pasó (RESTAURANTES HAKUNA, P-0571).** Karla facturó por adelantado F-130 y F-131 (desde CobranzaFlow, el 1-oct: el cliente quería
+dos facturas de una orden que seguía en máquina) con el dinero exacto de la orden: $15,748.57 y $11,811.43 sin IVA. Pero el CFDI calcula
+precio unitario (6 decimales) × cantidad: 20,000 × 0.787429 = **$15,748.58** y 15,000 × 0.787429 = **$11,811.44** (con 20,000 piezas el
+subtotal sólo se mueve de 2 en 2 centavos: $15,748.57 no se podía timbrar). El 6-oct, al facturar por partes, ligarlas no cerró: en el plan
+las dos ligadas sumaban $27,560.02, el semáforo decía «el dinero no cuadra por $0.02» y «Cuadrar» no mueve las partes ligadas; y en
+«Facturar siguiente parte», «total ÷ 1.16» le daba a la parte ese centavo de más y la última ya no cabía en lo que quedaba. Salieron folios
+nuevos (F-144/F-145) y el trabajo quedó cobrándose dos veces. Se arregló en la base esa noche con el OK de Marcelo (CobranzaFlow, «datos
+7-oct»). La base ya aceptaba la diferencia (hasta 2 centavos con IVA por parte ligada); la pantalla no.
+
+- **Facturar siguiente parte**: al ligar una factura cuyo CFDI dice sus piezas, la parte lleva lo que la **orden** da por esas piezas (o
+  todo lo que queda, si son todas), siempre que el total de la factura esté a 2 centavos o menos de eso. Un anticipo de otro importe (sin
+  piezas en su CFDI, o con un precio distinto) sigue llevando lo de su factura.
+- **Facturar por partes**: si todas las partes están ligadas (ninguna libre que absorba) y lo único que no cuadra es el redondeo —a lo más
+  un centavo por factura ligada—, el semáforo lo explica («es el redondeo de su CFDI… las facturas no cambian»), deja crear y manda lo de la
+  orden (un centavo por ligada, de la mayor a la menor). Con una parte libre se sigue cuadrando con «Cuadrar»; con facturas nuevas no se
+  ajusta nada solo.
+- **Probado** (`tests/romper/partes.mjs`, variante `?hakuna=` del banco con los números reales): contra la versión anterior fallaban
+  `sig-30` (la parte tomaba $15,748.58), `sig-32` (2 centavos sobre el resto: no dejaba) y `spl-30` («no cuadra por $0.02»); las demás
+  son guardas. Segunda vuelta: el redondeo hacia abajo, tres ligadas con 3 centavos (deja) y con 4 (no), una ligada con una libre (se
+  cuadra a mano), una factura con piezas pero otro precio, doble clic en «Ligar» y la nota a 1366. 600 de 600 (eran 585).
+- Pendiente (copia, de antes): con todas las partes ligadas el botón dice «Crear 2 folios» aunque no se crea ninguno.
+
 ## v10.84.65 — Un error no es un «vacío»: el tablero (y la app) cuando no pudo leer de la base — 7-oct-2026
 
 La **tercera y última revisión independiente del tablero dio 24/40** (las anteriores, 20 y 25) con un P1: «el tablero dice vacío

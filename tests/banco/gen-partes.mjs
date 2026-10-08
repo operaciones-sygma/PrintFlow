@@ -3,6 +3,10 @@
 // Uso: node gen-banco.mjs <App.jsx> <dirSalida>
 // Variantes por URL (?a=1&b=2): emisor=off · historica=1 · corona=1 · saldo=1 · unapieza=1 · candidatas=0 ·
 //   falla=1 (la base responde con error) · folioexiste=0 (el split crea sin preguntar por folios en cobranza)
+//   hakuna=1|resto|restoviejo (v10.84.66): P-0571 de RESTAURANTES HAKUNA, 35,000 piezas por $27,560, con las facturas por
+//   adelantado F-130 ($18,268.35, 20,000 pzas) y F-131 ($13,701.27, 15,000 pzas), cada una UN centavo arriba de la orden porque
+//   el CFDI calcula precio unitario (6 decimales) × cantidad. «1»: todo por facturar; «resto»: F-130 ya ligada con el dinero de
+//   la orden (quedan $11,811.43); «restoviejo»: F-130 ligada con el de su CFDI, como antes (quedan $11,811.42).
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -25,9 +29,15 @@ const partes = [
 const EMISOR = Q.get("emisor") !== "off", HIST = Q.get("historica") === "1", CORONA = Q.get("corona") === "1";
 const SALDO = Q.get("saldo") === "1", UNAPIEZA = Q.get("unapieza") === "1", SINCAND = Q.get("candidatas") === "0";
 const FALLA = Q.get("falla") === "1", FOLIOEXISTE = Q.get("folioexiste") !== "0";
+const HAKUNA = Q.get("hakuna") || "";
 const db = {
   getFolioEmitterEnabled: async () => EMISOR,
-  listLinkableInvoicesForSplit: async () => SINCAND ? [] : [
+  listLinkableInvoicesForSplit: async () => SINCAND ? [] : HAKUNA ? [
+    ...(HAKUNA === "1" ? [{ doc_number: "F-130", doc_type: "factura", amount: 18268.35, issued_date: "2026-10-01", cfdi_status: "stamped", cabe: true, qty_cfdi: 20000 },
+      // y una con piezas pero LEJOS de lo que la orden da por ellas (no es redondeo: un precio distinto)
+      { doc_number: "F-133", doc_type: "factura", amount: 9999.99, issued_date: "2026-10-02", cfdi_status: "stamped", cabe: true, qty_cfdi: 20000 }] : []),
+    { doc_number: "F-131", doc_type: "factura", amount: 13701.27, issued_date: "2026-10-01", cfdi_status: "stamped", cabe: true, qty_cfdi: 15000 },
+  ] : [
     { doc_number: "F-90", doc_type: "factura", amount: 6887.5, issued_date: "2026-09-23", cfdi_status: "stamped", cabe: true, qty_cfdi: 0 },
     { doc_number: "F-77", doc_type: "factura", amount: 39602.4, issued_date: "2026-09-20", cfdi_status: "stamped", cabe: true, qty_cfdi: 0 },
     { doc_number: "F-131", doc_type: "factura", amount: 99000, issued_date: "2026-09-29", cfdi_status: "stamped", cabe: false },
@@ -43,6 +53,11 @@ const ORDER = { id: "o1", production_number: "P-0531", client: "PORTLAND STUDIO"
   order_type: "normal", created_by: HIST ? "import-historico" : "secretaria", client_id: "c1", stage: "salidas",
   splits: [{ id: "s1", position: 1, doc_type: "factura", invoice_folio: "F-44", qty_portion: 2000, amount_portion: 22760, cancelled_at: null }, RESTO] };
 const ORDER_ULTIMA = { ...ORDER, splits: [{ id: "s9", position: 1, doc_type: "factura", invoice_folio: "F-120", qty_portion: 5000, amount_portion: 56900, cancelled_at: null }] };
+const RESTO_H = HAKUNA === "1" ? { id: "h2", position: 1, doc_type: "por_facturar", invoice_folio: null, qty_portion: 35000, amount_portion: 27560, cancelled_at: null }
+  : { id: "h2", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 15000, amount_portion: HAKUNA === "restoviejo" ? 11811.42 : 11811.43, cancelled_at: null };
+const ORDER_H = { id: "o2", production_number: "P-0571", client: "RESTAURANTES HAKUNA", product: "Cuponera", quantity: 35000, price: 27560,
+  order_type: "normal", created_by: "secretaria", client_id: "c2", stage: "salidas", splits: [RESTO_H] };
+const O = HAKUNA ? ORDER_H : ORDER, R = HAKUNA ? RESTO_H : RESTO;
 const falla = () => { if (FALLA) throw new Error("La base rechazó la operación (prueba)"); };
 function Banco() {
   const [m, setM] = useState(null);
@@ -55,8 +70,8 @@ function Banco() {
     <button id="abrir-cancel" onClick={() => setM("cancel")}>cancel</button>
     <button id="abrir-cancel-ultima" onClick={() => setM("cancelUltima")}>cancelUltima</button>
     <pre id="log">{log.join("\\n")}</pre>
-    {m === "sig" && <FacturarSiguienteParteModal order={ORDER} resto={RESTO} onClose={() => { L("sig:cerrado"); setM(null); }} onConfirm={async p => { L("sig:confirm " + JSON.stringify(p)); await new Promise(r => setTimeout(r, 150)); falla(); }} />}
-    {m === "split" && <SplitInvoiceModal order={{ ...ORDER, splits: [] }} user="karla" userLogin="karla" onClose={() => { L("split:cerrado"); setM(null); }}
+    {m === "sig" && <FacturarSiguienteParteModal order={O} resto={R} onClose={() => { L("sig:cerrado"); setM(null); }} onConfirm={async p => { L("sig:confirm " + JSON.stringify(p)); await new Promise(r => setTimeout(r, 150)); falla(); }} />}
+    {m === "split" && <SplitInvoiceModal order={{ ...O, splits: [] }} user="karla" userLogin="karla" onClose={() => { L("split:cerrado"); setM(null); }}
       onConfirm={async (payload, opts) => { L("split:intento " + JSON.stringify({ payload, opts })); await new Promise(r => setTimeout(r, 150)); if (FALLA) { L("toast:error"); return; }
         if (FOLIOEXISTE) setConf({ zIndex: 1100, title: "Folio ya existe en cobranza", message: "Uno o más de estos folios ya están registrados en cobranza.", confirmLabel: "Sí, ligar los que ya existen", confirmColor: C.fac, onConfirm: async () => { setConf(null); L("split:ligar"); } });
         else L("split:creado"); }} />}

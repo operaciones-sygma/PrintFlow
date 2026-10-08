@@ -301,6 +301,148 @@ await caso("can-05 Mayús+Tab no se sale", "", async p => {
   ok("can-05 el teclado no se sale del diálogo", (await enDialogo(p)) === "dlg-cancelar-parte-titulo", "foco en " + await enDialogo(p));
 });
 
+// ───────────── v10.84.66 — EL CENTAVO DEL CFDI AL LIGAR (RESTAURANTES HAKUNA, 7-oct). F-130 y F-131 se hicieron por adelantado con el
+// dinero de la orden ($15,748.57 y $11,811.43 sin IVA), pero el CFDI calcula precio unitario (6 decimales) × cantidad: 20,000 ×
+// 0.787429 = $15,748.58 y 15,000 × 0.787429 = $11,811.44. Ligar no cerraba: la siguiente parte tomaba «total ÷ 1.16» (un centavo de
+// más) y la última ya no cabía; en el plan las dos sumaban $27,560.02 y las partes ligadas no se mueven. Karla terminó con folios
+// nuevos (F-144/F-145) y el trabajo cobrándose dos veces. La base ya toleraba 2 centavos por parte ligada; la pantalla no.
+const sigConfirm = async p => { const lg = (await log(p)).split("\n").find(l => l.startsWith("sig:confirm")) || ""; try { return JSON.parse(lg.replace(/^sig:confirm /, "")); } catch { return null; } };
+const splitIntento = async p => { const lg = (await log(p)).split("\n").find(l => l.startsWith("split:intento")) || ""; try { return JSON.parse(lg.replace(/^split:intento /, "")); } catch { return null; } };
+const ligarCon = async (p, folio) => { await p.getByRole("button", { name: /ya tiene factura: ligarla/ }).click(); await espera(p, 300); await p.getByRole("button", { name: new RegExp(folio) }).click(); await espera(p); };
+// Con una factura elegida para ligar, el botón principal dice «Ligar» (no «Facturar»).
+const accionBtn = p => p.getByRole("button", { name: /^(Facturar|Ligar)$/ });
+const confirmarLigar = async (p, folio) => { await accionBtn(p).click(); await espera(p, 300); await p.getByRole("button", { name: new RegExp("^Ligar " + folio) }).click(); await espera(p, 450); };
+
+await caso("sig-30 ligar F-130 con el dinero de la orden", "hakuna=1", async p => {
+  await sig(p); await ligarCon(p, "F-130");
+  const sub = await p.locator("#sp-subtotal").inputValue(); const pz = await p.locator("#sp-piezas").inputValue();
+  await confirmarLigar(p, "F-130");
+  const c = await sigConfirm(p);
+  ok("sig-30 ligar F-130 (su CFDI dice $15,748.58 por el redondeo): la parte lleva $15,748.57, lo de la orden por sus 20,000 piezas",
+    sub === "15748.57" && pz === "20000" && c?.amount === 15748.57 && c?.qty === 20000 && c?.folio === "F-130" && c?.allowLink === true, `subtotal ${sub} · piezas ${pz} · manda ${JSON.stringify(c)}`);
+});
+await caso("sig-31 la última ligada cierra el resto", "hakuna=resto", async p => {
+  await sig(p); await ligarCon(p, "F-131");
+  const sub = await p.locator("#sp-subtotal").inputValue();
+  const habil = await accionBtn(p).isEnabled();
+  if (habil) await confirmarLigar(p, "F-131");
+  const c = await sigConfirm(p);
+  ok("sig-31 ligar F-131 (su CFDI dice $11,811.44) cuando quedan $11,811.43: cierra el resto con todo lo que queda",
+    sub === "11811.43" && habil && c?.amount === 11811.43 && c?.qty === 15000 && c?.folio === "F-131", `subtotal ${sub} · Facturar ${habil ? "habilitado" : "apagado"} · manda ${JSON.stringify(c)}`);
+});
+await caso("sig-32 el resto que dejó la forma vieja", "hakuna=restoviejo", async p => {
+  await sig(p); await ligarCon(p, "F-131");
+  const sub = await p.locator("#sp-subtotal").inputValue();
+  const habil = await accionBtn(p).isEnabled();
+  if (habil) await confirmarLigar(p, "F-131");
+  const c = await sigConfirm(p);
+  ok("sig-32 con $11,811.42 por facturar (F-130 ligada a la manera vieja), F-131 también cierra: son 2 centavos de redondeo",
+    sub === "11811.42" && habil && c?.amount === 11811.42 && c?.qty === 15000, `subtotal ${sub} · Facturar ${habil ? "habilitado" : "apagado"} · manda ${JSON.stringify(c)}`);
+});
+await caso("sig-33 un anticipo de otro importe no se toca", "", async p => {
+  await sig(p); await ligarCon(p, "F-90");
+  const sub = await p.locator("#sp-subtotal").inputValue();
+  ok("sig-33 ligar F-90 (un anticipo, sin piezas en su CFDI): la parte lleva lo de su factura, como siempre", Number(sub) === 5937.5, `subtotal ${sub}`);
+});
+const dosLigadas = async (p, a, b) => {
+  const l = p.getByRole("button", { name: "Ya tiene factura: ligarla" });
+  await l.first().click(); await l.first().click(); await espera(p);
+  await p.getByLabel("Folio de la parte 1").fill("F-130"); await p.getByLabel("Folio de la parte 2").fill("F-131");
+  await dosPartes(p, "20000", "15000");
+  if (a) { await p.getByLabel("Subtotal sin IVA de la parte 1").fill(a); await p.getByLabel("Subtotal sin IVA de la parte 2").fill(b); await espera(p, 200); }
+};
+await caso("spl-30 el plan con las dos ligadas y el centavo de cada CFDI", "hakuna=1", async p => {
+  await split(p); await dosLigadas(p, "15748.58", "11811.44");
+  const habil = await crearBtn(p).isEnabled().catch(() => false);
+  const dice = await ve(p, /redondeo/i);
+  if (habil) { await crearBtn(p).click(); await espera(p, 400); }
+  const it = await splitIntento(p);
+  const montos = (it?.payload || []).map(x => x.amount).join(" + ");
+  ok("spl-30 F-130 y F-131 ligadas con lo de su CFDI ($27,560.02): dice que es el redondeo, deja crear y manda lo de la orden ($27,560.00)",
+    habil && dice && montos === "15748.57 + 11811.43" && it?.opts?.allowLink === true && (it?.payload || []).map(x => x.folio).join(",") === "F-130,F-131",
+    `Crear ${habil ? "habilitado" : "apagado"} · dice el redondeo ${dice} · manda ${montos} · faltas «${(await faltas(p)).slice(0, 160)}»`);
+});
+await caso("spl-31 tres centavos ya no son redondeo", "hakuna=1", async p => {
+  await split(p); await dosLigadas(p, "15748.59", "11811.44");
+  ok("spl-31 las ligadas $0.03 arriba de la orden: no deja crear (más de un centavo por factura no es redondeo)", !(await crearBtn(p).isEnabled().catch(() => false)), await faltas(p));
+});
+await caso("spl-32 sin ligar no se ajusta solo", "hakuna=1", async p => {
+  await split(p); await dosPartes(p, "20000", "15000");
+  await p.getByLabel("Subtotal sin IVA de la parte 1").fill("15748.58"); await p.getByLabel("Subtotal sin IVA de la parte 2").fill("11811.44"); await espera(p, 200);
+  ok("spl-32 dos facturas NUEVAS $0.02 arriba: no deja crear (ahí no hay CFDI que respetar; se cuadra a mano)", !(await crearBtn(p).isEnabled().catch(() => false)), await faltas(p));
+});
+await caso("spl-33 ligadas con lo de la orden, como siempre", "hakuna=1", async p => {
+  await split(p); await dosLigadas(p, "", "");
+  const habil = await crearBtn(p).isEnabled().catch(() => false);
+  if (habil) { await crearBtn(p).click(); await espera(p, 400); }
+  const it = await splitIntento(p);
+  ok("spl-33 ligadas por piezas (el dinero sale de la orden): crea y manda $15,748.57 + $11,811.43", habil && (it?.payload || []).map(x => x.amount).join(" + ") === "15748.57 + 11811.43",
+    `Crear ${habil ? "habilitado" : "apagado"} · manda ${JSON.stringify(it?.payload)}`);
+});
+
+// ── segunda vuelta (por donde no se diseñó) ──
+await caso("spl-34 el redondeo hacia abajo", "hakuna=1", async p => {
+  await split(p); await dosLigadas(p, "15748.56", "11811.42");
+  const habil = await crearBtn(p).isEnabled().catch(() => false);
+  const dice = await ve(p, /menos que la orden/);
+  if (habil) { await crearBtn(p).click(); await espera(p, 400); }
+  const montos = ((await splitIntento(p))?.payload || []).map(x => x.amount).join(" + ");
+  ok("spl-34 las ligadas $0.02 ABAJO de la orden: dice «menos», deja crear y manda lo de la orden", habil && dice && montos === "15748.57 + 11811.43", `Crear ${habil} · «menos» ${dice} · manda ${montos}`);
+});
+const tresLigadas = async (p, a, b, c) => {
+  await p.getByLabel("Número de partes").fill("3"); await espera(p, 250);
+  const l = p.getByRole("button", { name: "Ya tiene factura: ligarla" });
+  await l.first().click(); await l.first().click(); await l.first().click(); await espera(p);
+  for (const [i, f] of [[1, "F-130"], [2, "F-131"], [3, "F-132"]]) await p.getByLabel("Folio de la parte " + i).fill(f);
+  for (const [i, q] of [[1, "10000"], [2, "10000"], [3, "15000"]]) await p.getByLabel("Cantidad de la parte " + i).fill(q);
+  await espera(p, 150);
+  for (const [i, v] of [[1, a], [2, b], [3, c]]) await p.getByLabel("Subtotal sin IVA de la parte " + i).fill(v);
+  await espera(p, 200);
+};
+await caso("spl-35 tres ligadas, tres centavos", "hakuna=1", async p => {
+  await split(p); await tresLigadas(p, "7874.30", "7874.30", "11811.43");
+  const habil = await crearBtn(p).isEnabled().catch(() => false);
+  if (habil) { await crearBtn(p).click(); await espera(p, 400); }
+  const pay = (await splitIntento(p))?.payload || [];
+  const suma = Math.round(pay.reduce((t, x) => t + x.amount, 0) * 100) / 100;
+  const movidas = pay.filter((x, i) => Math.round(x.amount * 100) !== Math.round(Number(["7874.30", "7874.30", "11811.43"][i]) * 100)).length;
+  ok("spl-35 tres ligadas $0.03 arriba (un centavo cada una): deja crear, suma lo de la orden y cada una se movió a lo más un centavo",
+    habil && suma === 27560 && movidas <= 3 && pay.every((x, i) => Math.abs(Math.round(x.amount * 100) - Math.round(Number(["7874.30", "7874.30", "11811.43"][i]) * 100)) <= 1),
+    `Crear ${habil} · manda ${pay.map(x => x.amount).join(" + ")} = ${suma}`);
+});
+await caso("spl-36 tres ligadas, cuatro centavos", "hakuna=1", async p => {
+  await split(p); await tresLigadas(p, "7874.31", "7874.30", "11811.43");
+  ok("spl-36 tres ligadas $0.04 arriba: más de un centavo por factura no es redondeo, no deja crear", !(await crearBtn(p).isEnabled().catch(() => false)), await faltas(p));
+});
+await caso("spl-37 una ligada y una libre", "hakuna=1", async p => {
+  await split(p);
+  await p.getByRole("button", { name: "Ya tiene factura: ligarla" }).first().click(); await espera(p);
+  await p.getByLabel("Folio de la parte 1").fill("F-130");
+  await dosPartes(p, "20000", "15000");
+  await p.getByLabel("Subtotal sin IVA de la parte 1").fill("15748.58"); await p.getByLabel("Subtotal sin IVA de la parte 2").fill("11811.44"); await espera(p, 200);
+  const habil = await crearBtn(p).isEnabled().catch(() => false);
+  const cuadrar = await ve(p, /Que lo arregle el sistema/);
+  ok("spl-37 con una parte libre no se ajusta solo: la libre se cuadra («Cuadrar» a la vista)", !habil && cuadrar, `Crear ${habil} · Cuadrar ${cuadrar}`);
+});
+await caso("sig-34 piezas en el CFDI pero otro precio", "hakuna=1", async p => {
+  await sig(p); await ligarCon(p, "F-133");
+  const sub = await p.locator("#sp-subtotal").inputValue();
+  ok("sig-34 F-133 (20,000 piezas por $9,999.99: otro precio, no redondeo) lleva lo de su factura ($8,620.68), no lo de la orden", Number(sub) === 8620.68, `subtotal ${sub}`);
+});
+await caso("sig-35 doble clic al confirmar el ligado", "hakuna=1", async p => {
+  await sig(p); await ligarCon(p, "F-130");
+  await accionBtn(p).click(); await espera(p, 300);
+  await p.getByRole("button", { name: /^Ligar F-130/ }).dblclick().catch(() => {}); await espera(p, 600);
+  ok("sig-35 doble clic en «Ligar F-130»: se manda una vez", (await cuenta(p, "sig:confirm")) === 1, `confirmaciones ${await cuenta(p, "sig:confirm")}`);
+});
+await caso("spl-38 la nota del redondeo cabe a 1366", "hakuna=1", async p => {
+  await split(p); await dosLigadas(p, "15748.58", "11811.44");
+  const nota = p.getByText(/redondeo de su CFDI/).first();
+  const r = await nota.evaluate(el => { const q = el.getBoundingClientRect(); return { izq: Math.round(q.left), der: Math.round(q.right), vista: innerWidth, alto: Math.round(q.height) }; }).catch(() => null);
+  await p.screenshot({ path: OUT + "/spl-38-nota-redondeo.png" }).catch(() => {});
+  ok("spl-38 a 1366 la nota del redondeo se lee completa, dentro de la pantalla", !!r && r.izq >= 0 && r.der <= r.vista && r.alto < 120, JSON.stringify(r));
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));
