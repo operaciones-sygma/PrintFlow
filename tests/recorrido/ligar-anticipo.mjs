@@ -6,8 +6,9 @@
 // respuesta de assign_invoice se contestan como la base (el candado «emitida por adelantado» de assign_invoice, leído el 8-oct).
 // Lo que DEBE pasar, para Karla:
 //  A. Factura sin pago: no se pregunta por F-9140; se llega a «Este trabajo ya se facturó por adelantado… Sí, ligar F-9135».
-//  B. Factura pagada en EFECTIVO: no se emite otro folio (assign_invoice_cash no tiene ese candado en la base): se frena, se dice que
-//     F-9135 ya es la factura de este trabajo y qué hacer, y assign_invoice_cash no se llama.
+//  B. Factura pagada en EFECTIVO: se frena antes de cobrar, se dice que F-9135 ya es la factura de este trabajo y qué hacer, y
+//     assign_invoice_cash no se llama. (La base también la rechazaría —folia llamando a assign_invoice, que tiene el candado—, pero
+//     su rechazo llegaba como un aviso que se borra y sin ofrecer ligar.)
 //  C. Sin factura del mismo importe (sólo F-9140): sí se pregunta por ella, como antes (el caso del anticipo de P-0544, v10.84.31).
 // Uso:  npm run build && node tests/recorrido/ligar-anticipo.mjs            (sirve dist/ en 127.0.0.1:4279)
 //       node tests/recorrido/ligar-anticipo.mjs https://produccion.sygma.mx (la app publicada)
@@ -136,7 +137,7 @@ try {
       await p.waitForTimeout(800);
       const a = await aviso(p), d2 = await dialogos(p), todo = a + " ‖ " + d2.join(" ‖ ");
       const efectivoLlamado = escritas.some(e => e.a === "rpc/assign_invoice_cash");
-      ok("B1 con efectivo no se emite otro folio (assign_invoice_cash no se llama)", !efectivoLlamado, efectivoLlamado ? "SE LLAMÓ assign_invoice_cash: con la base de verdad, folio nuevo y doble cobro" : "no se llamó");
+      ok("B1 con efectivo no se emite otro folio (assign_invoice_cash no se llama)", !efectivoLlamado, efectivoLlamado ? "SE LLAMÓ assign_invoice_cash: la base lo rechaza, pero con un aviso que se borra y sin ofrecer ligar" : "no se llamó");
       // (un aviso que se queda, no un toast que se borra antes de leerlo: detiene un cobro)
       const aviso2 = d2.find(x => /ya se facturó por adelantado/i.test(x) && /F-9135/.test(x) && /efectivo/i.test(x)) || "";
       const botones = await p.evaluate(() => { const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /ya se facturó por adelantado/i.test(x.innerText)); return d ? [...d.querySelectorAll("button")].map(b => b.innerText.trim()) : []; });

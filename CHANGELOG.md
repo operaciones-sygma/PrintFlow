@@ -12,6 +12,22 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## docs (8-oct) — Corrección: el cobro en efectivo sí tenía el candado de la base
+
+- **Qué pasaba.** v10.84.68 afirmó (aquí, en `CLAUDE.md`, en `tests/LEEME.md`, en la prueba y en un comentario de `App.jsx`) que
+  `assign_invoice_cash` no tenía el candado de «ya se facturó por adelantado» y que con efectivo se habría emitido un folio nuevo:
+  doble cobro. Con eso se le propuso a Marcelo agregar el candado en la base.
+- **Lo que se encontró al ir a agregarlo:** `assign_invoice_cash` folia llamando a `assign_invoice` en su primer paso, en la misma
+  transacción, antes de crear el vale. El candado de `assign_invoice` (v3.7.465) corre ahí. Ensayado contra producción como Karla, por
+  `authenticated` y con rollback: una orden en Salidas con el total de F-140 y un pago en efectivo → *«Este cliente ya tiene F-140
+  emitida por adelantado y sin orden, por $2157.60… Ligala a esta orden»*, sin folio, sin vale y sin mover una secuencia.
+- **Lo que sí faltaba, y lo arregló v10.84.68:** el rechazo llegaba como un aviso rojo que se borra y sin ofrecer ligar; ahora la app
+  frena antes con un aviso que se queda y dice qué hacer. Eso no cambia.
+- **Qué se cambió.** Sólo texto: el comentario de `App.jsx`, la prueba `tests/recorrido/ligar-anticipo.mjs` (sus comentarios y el
+  mensaje de B1; lo que comprueba es lo mismo), `tests/LEEME.md`, `CLAUDE.md` y la entrada de v10.84.68 (con la corrección marcada).
+  La base no se tocó: un candado propio en `assign_invoice_cash` repetiría el que ya corre.
+- **La lección:** buscar una palabra en el texto de una función no dice qué candados corren; hay que seguir las llamadas, y ensayar.
+
 ## v10.84.68 — La factura por adelantado del mismo importe se ofrece de una vez, y el efectivo no la duplica — 8-oct-2026
 
 **Qué pasaba.** Karla (8-oct): *«quiero ligar la orden de Castores, pero no se liga a la 135, es por el mismo importe»*.
@@ -23,9 +39,11 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
   apretar «Asignar el folio de todos modos». Verificado en la base: emisor prendido, el cliente sin fusionar, la orden sin saldo a
   favor, y F-135, la única del mismo importe.
 - **Lo que se le dijo a Karla mientras tanto:** que siguiera con «de todos modos» y luego «Sí, ligar F-135»; no se emite folio nuevo.
-- **El hueco de al lado:** con un pago en **efectivo**, la app no va por `assign_invoice` sino por `assign_invoice_cash`, y esa
-  función **no tiene en la base** el candado de «ya se facturó por adelantado». Habría emitido un folio nuevo además de F-135:
-  doble cobro.
+- **El hueco de al lado:** con un pago en **efectivo**, la app no va por `assign_invoice` sino por `assign_invoice_cash`, y su rechazo
+  llegaba como un aviso rojo que se borra, sin ofrecer ligar F-135.
+  ⚠ **Corregido el 8-oct (tarde):** aquí decía que `assign_invoice_cash` no tenía en la base el candado y que habría emitido un folio
+  nuevo además de F-135 (doble cobro). **No era cierto:** `assign_invoice_cash` folia llamando a `assign_invoice`, que sí lo tiene, en
+  la misma transacción. Se buscó `sin_orden` en el texto de la función y no se siguió la llamada. Ver la entrada «docs (8-oct)».
 
 - **Con una factura del MISMO importe y tipo, ya no se pregunta por las de otro importe:** la app llega directo a «Este trabajo ya
   se facturó por adelantado… Sí, ligar F-135». Lo decide `anticiposQuePreguntar` (módulo), en «Asignar folio y entregar» y en el
@@ -37,7 +55,7 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 - **`ConfirmModal` sin `onConfirm`** es un aviso de un solo botón (el de cerrar). Las once llamadas de hoy pasan `onConfirm` y no
   cambian.
 
-**Qué NO se tocó.** La base, incluido `assign_invoice_cash`: su candado se propone aparte, para el OK de Marcelo. Tampoco cambiaron
+**Qué NO se tocó.** La base, incluido `assign_invoice_cash` (no le hacía falta un candado propio: ver la corrección de arriba). Tampoco cambiaron
 `assign_invoice`, `link_invoice_to_order`, el «Sí, ligar» de siempre ni lo que pasa sin facturas por adelantado.
 
 **Cómo se probó.**

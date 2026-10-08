@@ -21378,8 +21378,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           // username, falla con 42501 silencioso.
           // 🔗 v10.84.31 — un anticipo de otro importe (ver preguntarPorAnticipos): se pregunta antes de acuñar el folio.
           // v10.84.68 — con una del MISMO importe no se pregunta por las otras: la base la detecta y aquí abajo se ofrece «Sí, ligar».
-          //   Y con EFECTIVO, assign_invoice_cash no tiene en la base el candado de «ya se facturó por adelantado» (assign_invoice sí):
-          //   emitiría un folio nuevo y se cobraría dos veces. Se frena aquí, y también si no se pudo revisar (nada se cobra a ciegas).
+          //   Y con EFECTIVO: la base también lo frena (assign_invoice_cash folia llamando a assign_invoice, que tiene el candado;
+          //   ensayado el 8-oct), pero su rechazo llegaba aquí como un aviso rojo que se borra y sin ofrecer ligar. Se frena antes,
+          //   con un aviso que se queda y dice qué hacer, y también si no se pudo revisar (nada se cobra a ciegas).
           {const cands=await candidatasParaLigar(invoiceModal.id);
            if((invoiceType==="factura"||invoiceType==="remision")&&Array.isArray(paymentRefs)&&paymentRefs.some(r=>r.method==="efectivo")){
              const mismo=cands?facturaDelMismoImporte(cands,invoiceType):null;

@@ -170,8 +170,9 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 - **LIVE:** v10.84.68 (8-oct, 11:10; READY `dpl_E2rFvWFq2iuMRufsC4q3kwugeg6A`; vuelta atrás: `git revert fa21a9f`, porque el
   rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 675 pruebas, con la segunda
   oportunidad y sus candados desde `742d0da`). v10.84.68: **la factura por adelantado del mismo importe se ofrece de una vez** (Karla,
-  F-135 de Castores: ya no se pregunta primero por la de otro importe) y **con efectivo no se duplica** (`assign_invoice_cash` no tiene
-  en la base el candado de «ya se facturó por adelantado»: el front frena; el candado en la base espera el OK de Marcelo). Revisado en
+  F-135 de Castores: ya no se pregunta primero por la de otro importe) y **con efectivo se dice qué hacer** (la base ya lo frenaba:
+  `assign_invoice_cash` folia llamando a `assign_invoice`, que tiene el candado, ensayado el 8-oct; pero con un aviso que se borraba y
+  sin ofrecer ligar). Revisado en
   producción sin escribir con `tests/recorrido/ligar-anticipo.mjs` (9 de 9).
   v10.84.67 (`dpl_EUYNdKRXxpwHKwC2PLDkrcig9iKp`, `git revert 60807ad`): **Karla pasa a Salidas lo que ya está listo** y Gerardo no ha pasado
   («Folios» → «En la planta», la OC que no se puede foliar entera dice cuáles faltan, «Más» del detalle; sólo desde Empaque o máquina,

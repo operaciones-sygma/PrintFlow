@@ -152,8 +152,9 @@ Desde v10.84.68. Con la app REAL (compilada en `127.0.0.1:4279`, o la publicada)
 (P-9585, Castores, $7,440) existe sólo en ese navegador; `list_linkable_invoices_for_order` y el candado de `assign_invoice` («emitida por
 adelantado») se contestan como la base. Escenarios (`SOLO=AB…`):
 - **A**: con F-9135 del mismo importe y F-9140 de otro, «Asignar Folio y Entregar» no pregunta por F-9140 y llega a «Sí, ligar F-9135»;
-- **B**: pagada en efectivo, no se llama a `assign_invoice_cash` (en la base no tiene ese candado) y un aviso que se queda, de un solo
-  botón, dice que F-9135 ya es su factura y qué hacer;
+- **B**: pagada en efectivo, no se llama a `assign_invoice_cash` (la base también la rechazaría, porque folia llamando a
+  `assign_invoice`, pero con un aviso que se borra) y un aviso que se queda, de un solo botón, dice que F-9135 ya es su factura y qué
+  hacer;
 - **C**: sólo con la de otro importe, sí se pregunta por ella;
 - **E**: con efectivo y la lectura de las candidatas caída, no se cobra y se dice;
 - **F**: con efectivo y sin una del mismo importe, el efectivo sigue su camino.
