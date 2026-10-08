@@ -439,6 +439,12 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   «Reintentar»; el punto de conexión deja de decir «En tiempo real». Antes, `loadOrders` devolvía `[]` ante un error y la
   recarga dejaba el tablero vacío y verde; el archivo completo que fallaba dejaba toda la app en 0. El cliente de Supabase ya
   reintenta solo un 503 tres veces (a 1, 2 y 4 s): el aviso sale a los ~7 s, no al primer tropiezo.
+- **Un botón que no se puede usar no desaparece sin decir por qué** (v10.84.67): en la OC, «Asignar folio» sólo existe con todas
+  sus órdenes en Salidas, y se esfumaba sin explicación (Karla esperaba sin saber a cuál). Donde iría, ahora se dice cuáles faltan
+  y dónde está cada una, con la salida que sí existe (pasar las que ya están listas, o «Pre-asignar folio»). **Lo que espera a
+  otra persona se ve, y lo que ya está listo se puede pasar** («En la planta» de Karla), con la pregunta que dice qué le pasa a
+  la máquina y a quién se avisa. **Al terminar, el foco no se pierde**: lo que lo tenía se fue a Salidas, así que va al siguiente
+  «Pasar…» de la lista, o a «Asignar folio» si la OC quedó completa.
 - **El tablero sano está en calma** (v10.84.64): lo de rutina va **teñido** (fondo al 8%, contorno y letra en su tinta:
   «Empaque» de cada máquina, «A Salidas»); el relleno de color queda para las alarmas («N vencidas», «urgente»). Un estado
   no se dice con opacidad (la máquina fuera de servicio al 70% dejaba su nombre a 1.8:1): se dice con su llave, su borde y su

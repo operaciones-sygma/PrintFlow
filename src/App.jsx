@@ -1367,6 +1367,7 @@ const ACTION_ROLES = {
   // este rol a propósito: mismo permiso, misma consecuencia fiscal.
   deliver_only:         { allowed:["admin","karla"], ownerBound:[] },
   pre_invoice:          { allowed:["admin","karla"], ownerBound:[] },
+  jalar_a_salidas:      { allowed:["admin","karla"], ownerBound:[] }, // v10.84.67 — pasar a Salidas lo que ya está listo (Empaque o máquina) cuando Gerardo no lo ha pasado
   cancel_order:         { allowed:["admin","secretaria","vendedor"], ownerBound:["vendedor"] },
   cancel_with_nc:       { allowed:["admin"], ownerBound:[] },
   deshacer_cancelacion: { allowed:["admin"], ownerBound:[] }, // v10.84.11 — deshacer una cancelación hecha por error (alcance acotado en el RPC)
@@ -3026,7 +3027,8 @@ function LiveTimer({started,desde}) {
   if(desde){const hoy=new Date();hoy.setHours(0,0,0,0);
     if(t<hoy){const ayer=new Date(hoy.getTime()-86400000),hm=String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0");
       const dia=t>=ayer?"ayer":(hoy-t<6*86400000?"el "+["dom","lun","mar","mié","jue","vie","sáb"][t.getDay()]:"el "+fD(t));
-      return <span title={"Empezó "+dia+" a las "+hm+" · "+fmtM(el)+" corridos"} style={{fontSize:10,color:C.wnInk,fontWeight:700,background:C.wn+"1c",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>desde {dia} {hm}</span>}}
+      // v10.84.67 — tintaAA(…,5.6): C.wnInk sobre su propio fondo ámbar daba 4.4 (bajo AA a 10 px; lo midió la tanda «planta»)
+      return <span title={"Empezó "+dia+" a las "+hm+" · "+fmtM(el)+" corridos"} style={{fontSize:10,color:tintaAA(C.wnInk,5.6),fontWeight:700,background:C.wn+"1c",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>desde {dia} {hm}</span>}}
   return <span style={{fontSize:10,color:tintaAA(C.ios),fontWeight:700,fontFamily:"'Geist Mono',monospace",background:C.ios+"10",padding:"2px 6px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:3}}><ClockIcon size={10} weight="bold"/>{fmtM(el)}</span>;
 }
 function Timeline({tl=[]}) {
@@ -4356,7 +4358,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   //   —con Esc, «Cancelar» o al terminar— se regresa a la orden, que se actualiza sola (App la busca viva en `orders`), con
   //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
   //   validar, recordar, quitar la espera) sí cierra, como antes.
-  const ENCIMA=["deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
+  const ENCIMA=["jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
   const volverA=useRef(null),revisarRef=useRef(null);
   const despachar=(id,action,arg)=>{
     escudoDeClics();   // v10.84.54 — el segundo clic de un doble clic no llega a nada
@@ -4453,6 +4455,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   // v10.84.51 — también lo que ofrecía sólo la ficha (accionesDeLaFicha, sus mismas condiciones) y con sus mismas palabras
   const fic=accionesDeLaFicha(o,role,userLogin);
   const mas=[
+    // v10.84.67 — Karla: pasar a Salidas lo que ya está listo y Gerardo no ha pasado (App pregunta con lo que pasa)
+    role==="karla"&&sePuedeJalar(o)&&{k:"jalar_a_salidas",icono:<ExportIcon size={14} weight="bold"/>,color:tintaAA(C.sal,5),t:"Ya está lista: pasar a Salidas",d:(()=>{const d=dondeVa(o);return "Si Gerardo no la ha pasado. Sigue "+d.lugar.replace(/^En /,"en ")+(d.detalle?" ("+d.detalle+")":"")+"; a él le llega aviso."})()},
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
     canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
     fic.ponerEnEspera&&{k:"snooze",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera",d:"Eliges por qué y hasta cuándo; sale de las listas activas."},
@@ -4722,6 +4726,193 @@ function ConfirmModal({title,message,detalle,confirmLabel,confirmColor,cancelLab
   // v10.84.32 — el foco entra al diálogo en la acción segura: antes se quedaba en el botón que lo abrió, detrás del velo.
   // Y el título es el nombre accesible del diálogo.
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex}}><div role="dialog" aria-modal="true" aria-labelledby="dlg-confirm-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:28,maxWidth:detalle?460:380,width:"90%",textAlign:"center"}}><div style={{marginBottom:8,display:"flex",justifyContent:"center"}}><WarningIcon size={36} weight="fill" color={C.wn}/></div><h3 id="dlg-confirm-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>{title}</h3>{detalle&&<div style={{textAlign:"left",background:C.sf,borderRadius:10,padding:"6px 12px",margin:message?"4px 0 12px":"4px 0 20px",maxHeight:"40vh",overflowY:"auto"}}>{detalle.filas.map((f,i)=><div key={i} style={{display:"flex",gap:12,alignItems:"baseline",padding:"6px 0",borderTop:i?"1px solid "+C.bd:"none"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx}}>{f.titulo}</div>{f.sub&&<div style={{fontSize:11,color:C.t2,marginTop:1}}>{f.sub}</div>}</div><div style={{fontSize:12.5,fontWeight:600,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{f.monto}</div></div>)}{detalle.total&&<div style={{display:"flex",gap:12,alignItems:"baseline",padding:"8px 0 4px",borderTop:"1.5px solid "+C.bd}}><div style={{flex:1,fontSize:12.5,fontWeight:700,color:C.tx}}>{detalle.total.titulo}</div><div style={{fontSize:13,fontWeight:700,color:C.tx,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{detalle.total.monto}</div></div>}</div>}{(message||!detalle)&&<p style={{fontSize:13,color:C.t2,margin:"0 0 20px",whiteSpace:"pre-line"}}>{message}</p>}<div style={{display:"flex",gap:8}}><button autoFocus onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,opacity:saving?0.5:1}}>{cancelLabel||"No, cancelar"}</button><button onClick={doConfirm} disabled={saving} style={{...bt(confirmColor||C.ok),flex:1,justifyContent:"center",opacity:saving?0.6:1}}>{saving?"Procesando…":confirmLabel}</button></div></div></div>;
+}
+// ─── v10.84.67 — KARLA PASA A SALIDAS LO QUE YA ESTÁ LISTO (Marcelo, 8-oct) ─────────────────────────────────────────────────
+// Karla: «a veces ya debo entregar o facturar una orden y no me deja, porque Gerardo no la pasa a Salidas». Medido (60 días): 296
+//   de 299 pases a Salidas los hace Gerardo, y el 28% va en ráfagas de 5 o más en 10 minutos (poniéndose al día). En 18 de 34 OC
+//   de varias órdenes la última llegó más de 4 h después que la primera, y foliar la OC entera exige que TODAS estén en Salidas
+//   (assign_folio_to_oc): la OC esperaba a la rezagada, y en la OC «Asignar folio» desaparecía sin decir por qué. Facturar por
+//   adelantado ya se podía en cualquier etapa; ENTREGAR, sólo desde Salidas (la base lo exige). Faltaba que Karla pudiera pasar a
+//   Salidas lo que ya está listo, viendo dónde va cada orden. Sólo desde Empaque o una máquina: de Listas, CTP o diseño falta más
+//   que un clic de Gerardo, y la maquila sigue con Lupita. Por el mismo camino que el «A Salidas» de Gerardo (doAdv): sale de la
+//   fila de su máquina, se cierra su tiempo, empieza la siguiente, y a Gerardo le llega aviso de que la pasó Karla. La base no
+//   cambia. Lo prueban tests/romper/planta.mjs (el banco) y tests/recorrido/karla-planta.mjs (la app real).
+const ETAPAS_JALABLES=["in_production","packaging"];
+const sePuedeJalar=o=>!!o&&ETAPAS_JALABLES.includes(o.stage)&&!o.cancelled_at;
+// lo que ya no está «en la planta»: Salidas y la maquila recibida (están en «Por foliar»), lo entregado, lo cancelado, lo web
+const FUERA_DE_LA_PLANTA=["salidas","maq_received","delivered","maq_delivered","cancelled","maq_cancelled","web_pending","web_rejected","stocked"];
+const enLaPlanta=o=>!!o&&!!o.stage&&!FUERA_DE_LA_PLANTA.includes(o.stage)&&!o.cancelled_at;
+const ETAPAS_MAQUILA=["maquila_out","maquila_in","maq_created","maq_sent","maq_in_progress"];
+const LUGAR_DE_ETAPA={draft:"Por validar",design:"En diseño",proof_printing:"Imprimiendo la prueba de color",proof_client:"Esperando que el cliente apruebe la prueba",ctp:"En CTP",placas_listas:"Placas listas",ready:"Lista para máquina",maquila_out:"En maquila (fuera)",maquila_in:"Regresó de maquila",maq_created:"Maquila por enviar",maq_sent:"Enviada al maquilador",maq_in_progress:"Con el maquilador"};
+// dónde va una orden, en palabras de Karla: «En GTO 1 Color» con «corriendo» o «3ª en la fila», «En Empaque», «En CTP»
+function dondeVa(o){
+  if(!o)return {lugar:"",detalle:""};
+  if(o.stage==="packaging")return {lugar:"En Empaque",detalle:""};
+  if(o.stage==="in_production"&&o.current_machine&&o.current_machine!=="vm_manual"){
+    const maquina=MACHINES.find(m=>m.id===o.current_machine)?.name||o.current_machine,pos=o.machine_queue_position;
+    return {lugar:"En "+maquina,maquina,corriendo:pos===0,fila:pos!=null&&pos>0?pos+1:null,detalle:pos===0?"corriendo":pos!=null&&pos>0?(pos+1)+"ª en la fila":""};
+  }
+  if(o.stage==="in_production")return {lugar:"En máquina",detalle:""};
+  return {lugar:LUGAR_DE_ETAPA[o.stage]||SM[o.stage]?.lt||o.stage,detalle:""};
+}
+const tsDe=x=>{const t=x?new Date(x).getTime():NaN;return isNaN(t)?Infinity:t};
+// desde cuándo está donde está: el arranque en su máquina o en Empaque; si no, cuándo llegó a la etapa (la bitácora)
+function desdeCuando(o){
+  if(!o)return null;
+  const ult=xs=>xs.filter(Boolean).sort((a,b)=>tsDe(a)-tsDe(b)).pop()||null;
+  const abierto=ult((o.machine_log||[]).filter(e=>e&&!e.ended&&e.machine===o.current_machine).map(e=>e.started));
+  if(abierto&&(o.stage==="packaging"||o.machine_queue_position===0))return abierto;
+  return ult((o.timeline||[]).filter(t=>t&&t.to===o.stage).map(t=>t.date));
+}
+// la que empieza en la máquina si sale la que corre (moveOrderInQueue sube la fila un lugar). `salen`: las que se van en el mismo
+//   paso (dos de una OC en la misma máquina: la segunda no «empieza», también sale)
+function siguienteDeLaFila(o,todas,salen){
+  if(!o||o.stage!=="in_production"||!o.current_machine||o.current_machine==="vm_manual"||o.machine_queue_position!==0)return null;
+  return (todas||[]).filter(x=>x.id!==o.id&&!(salen&&salen.has(x.id))&&x.current_machine===o.current_machine&&x.machine_queue_position!=null&&!x.cancelled_at)
+    .sort((a,b)=>a.machine_queue_position-b.machine_queue_position)[0]||null;
+}
+// qué le pasa a la máquina al pasarla a Salidas (lo que hace doAdv), en una frase
+function quePasaAlJalar(o,todas,salen){
+  const d=dondeVa(o);
+  if(o.stage==="packaging")return "Sale de Empaque.";
+  if(d.corriendo){const sig=siguienteDeLaFila(o,todas,salen);return "Se cierra su tiempo en "+d.maquina+(sig?" y empieza la siguiente de la fila, "+nombreDeOrden(sig)+".":"; la máquina queda libre.")}
+  if(d.fila)return "Va "+d.fila+"ª en la fila de "+d.maquina+": según el tablero todavía no se imprime. Sale de la fila.";
+  return "Sale de "+(d.maquina||"la máquina")+".";
+}
+const enEsperaTexto=o=>snoozeActive(o)?" Está en espera ("+(o.snooze_reason||"sin motivo")+"): se le quita.":"";
+// la pregunta antes de pasar: qué orden, dónde está, qué le pasa a la máquina y a quién se le avisa
+function textoJalar(lista,todas){
+  const salen=new Set(lista.map(o=>o.id));
+  if(lista.length===1){const o=lista[0],d=dondeVa(o);
+    return {title:"¿Pasar "+nombreDeOrden(o)+" a Salidas?",
+      message:[[o.client,o.product_type||o.product].filter(Boolean).join(" · "),
+        "En el tablero sigue "+d.lugar.replace(/^En /,"en ")+(d.detalle?" ("+d.detalle+")":"")+".",
+        quePasaAlJalar(o,todas,salen)+enEsperaTexto(o)+" Gerardo recibe aviso de que la pasaste tú."].filter(Boolean).join("\n"),
+      confirmLabel:"Sí, ya está lista",cancelLabel:"No"};
+  }
+  const oc=lista[0].purchase_order_id&&lista.every(o=>o.purchase_order_id===lista[0].purchase_order_id)?lista[0].purchase_order_id:null;
+  return {title:"¿Pasar "+lista.length+" órdenes"+(oc?" de "+oc:"")+" a Salidas?",
+    detalle:{filas:lista.map(o=>{const d=dondeVa(o);return {titulo:nombreDeOrden(o)+((o.product_type||o.product)?" · "+(o.product_type||o.product):""),sub:d.lugar+(d.detalle?" ("+d.detalle+")":"")+". "+quePasaAlJalar(o,todas,salen)+enEsperaTexto(o),monto:""}})},
+    message:"Sólo si ya están listas para entregar. Gerardo recibe aviso de que las pasaste tú.",
+    confirmLabel:"Sí, ya están listas",cancelLabel:"No"};
+}
+// lo que App le pasa a ConfirmModal (el banco igual): el texto, la foto de lo que describe (para saber si se vence con la pregunta
+//   abierta) y el foco: con «No» o Esc, de regreso al botón que preguntó; ya pasadas, al «Pasar…» que seguía en la lista (o, en la
+//   OC que quedó completa, a su «Asignar folio»), para no dejarlo en la nada (lo que preguntó ya no existe: se fue a Salidas)
+function preguntaJalar(lista,todas,alConfirmar){
+  const doc=typeof document!=="undefined"?document:null,b=doc?doc.activeElement:null;
+  const suya=b&&b.closest?b.closest("[data-orden],[data-oc]"):null;
+  const despues=suya?[...doc.querySelectorAll("[data-orden] button,[data-oc] button")].filter(x=>/Pasar/.test(x.textContent||"")&&!suya.contains(x)&&(suya.compareDocumentPosition(x)&4)):[];
+  const vivo=x=>x&&x.isConnected&&typeof x.focus==="function";
+  return {...textoJalar(lista,todas),confirmColor:tintaAA(C.sal,5),
+    jalar:lista.map(o=>({id:o.id,pn:nombreDeOrden(o),stage:o.stage,maq:o.current_machine||null})),
+    onConfirm:async()=>{await alConfirmar();requestAnimationFrame(()=>{if(!doc)return;
+      const deLaPregunta=x=>!!(x&&x.closest&&x.closest('[aria-labelledby="dlg-confirm-titulo"]'));
+      const a=doc.activeElement;if(a&&a!==doc.body&&a.isConnected&&!deLaPregunta(a))return;   // el foco ya está en algún lado
+      if([...doc.querySelectorAll('[role="dialog"]')].some(d=>!deLaPregunta(d)))return;   // otra ventana abierta (el detalle): ella cuida su foco
+      const s=vivo(b)?b:despues.find(vivo)||doc.querySelector('[data-accion="asignar-folio-oc"]')||doc.querySelector('section[aria-label="En la planta"]');
+      if(s){if(s.tagName==="SECTION")s.setAttribute("tabindex","-1");s.focus()}})},
+    onCancel:()=>requestAnimationFrame(()=>{if(vivo(b))b.focus()})};
+}
+// si una orden de la pregunta cambió de lugar con ella abierta (otra persona la movió), qué decir; si no, null
+function cambioMientrasPregunta(foto,ordenes){
+  for(const f of foto||[]){const o=(ordenes||[]).find(x=>x.id===f.id);
+    if(!o)return "Mientras preguntaba, "+f.pn+" dejó de estar en la lista: no se movió nada.";
+    if(o.stage!==f.stage||(o.current_machine||null)!==f.maq)return "Mientras preguntaba, "+f.pn+" pasó a «"+dondeVa(o).lugar.replace(/^En /,"")+"» desde otra sesión: no se movió nada.";
+  }
+  return null;
+}
+// un renglón de «En la planta»: el folio (abre la orden), cliente y producto, dónde va y desde cuándo, y «Pasar a Salidas» si se puede
+function FilaPlanta({o,conBoton,onJalar,onDetalle,ocupada}){
+  const d=dondeVa(o),desde=desdeCuando(o),pn=nombreDeOrden(o),c=SM[o.stage]?.c||C.t3,espera=snoozeActive(o);
+  return <div role="listitem" data-orden={o.id} style={{display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",padding:"8px 12px",borderTop:"1px solid "+C.bd,minWidth:0}}>
+    <button onClick={()=>onDetalle&&onDetalle(o.id)} title={"Abrir "+pn} style={{background:"none",border:"none",padding:"0 2px",minHeight:40,cursor:"pointer",fontFamily:"'Geist Mono',monospace",fontSize:12.5,fontWeight:700,color:tintaAA(C.ac,5),flexShrink:0}}>{pn}</button>
+    <div style={{flex:"1 1 220px",minWidth:0}}>
+      <div style={{fontSize:F.label,fontWeight:700,color:C.tx,overflowWrap:"anywhere"}}>{o.client||"Sin cliente"}</div>
+      <div style={{fontSize:F.body,color:C.t2,overflowWrap:"anywhere"}}>{[o.product_type||o.product,Number(o.quantity)>0?Number(o.quantity).toLocaleString("es-MX")+" pzas":null].filter(Boolean).join(" · ")}</div>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",minWidth:0}}>
+      <span style={{fontSize:11,fontWeight:700,color:tintaAA(c,5.2),background:c+"14",border:"1px solid "+c+"33",padding:"3px 8px",borderRadius:999,overflowWrap:"anywhere"}}>{d.lugar}{d.detalle?" · "+d.detalle:""}</span>
+      {espera&&<span title={o.snooze_reason||""} style={{fontSize:10.5,fontWeight:700,color:tintaAA(C.wnInk,5.6),background:C.wn+"1c",padding:"2px 7px",borderRadius:6}}>En espera</span>}
+      {desde&&<LiveTimer started={desde} desde/>}
+    </div>
+    {conBoton&&<button onClick={()=>{escudoDeClics();if(onJalar)onJalar([o.id])}} disabled={ocupada===o.id} style={{...bs(C.sal+"14",tintaAA(C.sal,7)),border:"1px solid "+C.sal+"55",whiteSpace:"nowrap",flexShrink:0,marginLeft:"auto",opacity:ocupada===o.id?0.6:1}}><ExportIcon size={14} weight="bold"/>{ocupada===o.id?"Pasando…":"Pasar a Salidas"}</button>}
+  </div>;
+}
+// «En la planta» (la pestaña de Karla en «Folios»): lo que todavía no llega a Salidas, dónde va y desde cuándo. Primero las OC que
+//   esperan a alguna orden para poderse foliar; luego lo que ya está en Empaque o en una máquina (lo que ella puede pasar); lo de
+//   más atrás y la maquila, plegados (se abren solos al buscar). `orders`: lo que se enseña (App ya lo filtró con el buscador);
+//   `todas`: para contar cuántas de cada OC ya están en Salidas aunque el buscador no las enseñe.
+function EnLaPlanta({orders,todas,buscando,onJalar,onDetalle,ocupada}){
+  const base=todas||orders||[];
+  const lista=(orders||[]).filter(enLaPlanta);
+  const viva=o=>!o.cancelled_at&&!String(o.stage||"").includes("cancelled")&&!String(o.stage||"").includes("delivered");
+  const rango=o=>o.stage==="packaging"?0:o.stage==="in_production"?(o.machine_queue_position===0?1:2):3;
+  const porLugar=(a,b)=>rango(a)-rango(b)||(rango(a)===2?(a.machine_queue_position??99)-(b.machine_queue_position??99):0)||tsDe(desdeCuando(a))-tsDe(desdeCuando(b));
+  // las OC a medias: tienen órdenes ya en Salidas (o recibidas de maquila) y otras todavía en la planta
+  const ocs=[...new Set(lista.map(o=>o.purchase_order_id).filter(Boolean))].map(id=>{
+    const delOC=base.filter(o=>o.purchase_order_id===id&&viva(o));
+    return {id,cliente:(delOC.find(o=>o.client)||{}).client||"",total:delOC.length,listas:delOC.filter(o=>["salidas","maq_received"].includes(o.stage)).length,faltan:lista.filter(o=>o.purchase_order_id===id).sort(porLugar)};
+  }).filter(g=>g.listas>0).sort((a,b)=>(a.total-a.listas)-(b.total-b.listas)||String(a.id).localeCompare(String(b.id)));
+  const enOC=new Set(ocs.flatMap(g=>g.faltan.map(o=>o.id)));
+  const resto=lista.filter(o=>!enOC.has(o.id));
+  const jalables=resto.filter(sePuedeJalar).sort(porLugar);
+  const ATRAS=["ready","placas_listas","ctp","proof_client","proof_printing","design","draft"];
+  const atras=resto.filter(o=>!sePuedeJalar(o)&&!ETAPAS_MAQUILA.includes(o.stage)).sort((a,b)=>{const ia=ATRAS.indexOf(a.stage),ib=ATRAS.indexOf(b.stage);return (ia<0?99:ia)-(ib<0?99:ib)||prioSort(a,b)});
+  const maquila=resto.filter(o=>ETAPAS_MAQUILA.includes(o.stage)).sort(prioSort);
+  if(!lista.length)return <div role="status" style={{textAlign:"center",padding:"36px 20px"}}>
+    <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{buscando?"Ninguna orden en la planta con «"+buscando+"»":"Nada en la planta"}</div>
+    <div style={{fontSize:12,color:C.t2,marginTop:4}}>{buscando?"Puede estar en «Por foliar» o ya entregada.":"Todo lo que va a salir ya está en «Por foliar»."}</div>
+  </div>;
+  const fila=(o,conBoton)=><FilaPlanta key={o.id} o={o} conBoton={conBoton} onJalar={onJalar} onDetalle={onDetalle} ocupada={ocupada}/>;
+  const caja={background:C.card,border:"1px solid "+C.bd,borderRadius:14,boxShadow:C.sh1,overflow:"hidden"};
+  const titulo={fontSize:14,fontWeight:800,letterSpacing:"-0.005em",color:C.tx,margin:"18px 0 8px",display:"flex",alignItems:"baseline",gap:6,flexWrap:"wrap"};
+  const plegable={marginTop:14,background:C.card,border:"1px solid "+C.bd,borderRadius:14,overflow:"hidden"};
+  const resumen={cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none",padding:"0 12px",minHeight:44,flexWrap:"wrap"};
+  return <section aria-label="En la planta">
+    <p style={{fontSize:12,color:C.t2,margin:"0 0 4px",maxWidth:720}}>Lo que todavía no llega a Salidas y dónde va. Si una ya está lista y Gerardo no la ha pasado, pásala tú: a él le llega aviso.</p>
+    {ocs.length>0&&<>
+      <h3 style={titulo}>OC que esperan a alguna orden <span style={{fontSize:12,fontWeight:600,color:C.t2}}>({ocs.length}) · para foliar la OC entera, todas tienen que estar en Salidas</span></h3>
+      <div style={{display:"grid",gap:10}}>{ocs.map(g=>{const jal=g.faltan.filter(sePuedeJalar);
+        return <div key={g.id} data-oc={g.id} role="group" aria-label={g.id+": "+g.listas+" de "+g.total+" en Salidas"} style={caja}>
+          <div style={{display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",padding:"10px 12px",background:C.sf}}>
+            <div style={{flex:"1 1 260px",minWidth:0}}>
+              <div style={{fontSize:F.label,fontWeight:800,color:C.tx,overflowWrap:"anywhere"}}><span style={{fontFamily:"'Geist Mono',monospace"}}>{g.id}</span>{g.cliente?" · "+g.cliente:""}</div>
+              <div style={{fontSize:F.body,color:C.t2}}>{g.listas} de {g.total} en Salidas</div>
+            </div>
+            {jal.length>=2&&<button onClick={()=>{escudoDeClics();if(onJalar)onJalar(jal.map(o=>o.id))}} style={{...bs(C.sal+"14",tintaAA(C.sal,7)),border:"1px solid "+C.sal+"55",whiteSpace:"nowrap",flexShrink:0,marginLeft:"auto"}}><ExportIcon size={14} weight="bold"/>Pasar las {jal.length} a Salidas</button>}
+          </div>
+          <div role="list">{g.faltan.map(o=>fila(o,sePuedeJalar(o)))}</div>
+        </div>})}</div>
+    </>}
+    {jalables.length>0&&<>
+      <h3 style={titulo}>En Empaque o en máquina <span style={{fontSize:12,fontWeight:600,color:C.t2}}>({jalables.length})</span></h3>
+      <div data-grupo="jalables" role="list" style={caja}>{jalables.map(o=>fila(o,true))}</div>
+    </>}
+    {atras.length>0&&<details data-grupo="atras" open={!!buscando} style={plegable}>
+      <summary style={resumen}><CaretDownIcon size={12} weight="bold" color={C.t2} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/>Todavía no llegan a máquina ({atras.length}) <span style={{fontSize:11,fontWeight:500,color:C.t2}}>· de aquí no se pasan: falta más que un clic</span></summary>
+      <div role="list">{atras.map(o=>fila(o,false))}</div>
+    </details>}
+    {maquila.length>0&&<details data-grupo="maquila" open={!!buscando} style={plegable}>
+      <summary style={resumen}><CaretDownIcon size={12} weight="bold" color={C.t2} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/>En maquila ({maquila.length}) <span style={{fontSize:11,fontWeight:500,color:C.t2}}>· la recibe Lupita</span></summary>
+      <div role="list">{maquila.map(o=>fila(o,false))}</div>
+    </details>}
+  </section>;
+}
+// En la OC: «Asignar folio» sale sólo con TODAS sus órdenes en Salidas (assign_folio_to_oc lo exige: foliar las da por entregadas).
+//   Antes el botón desaparecía sin decir por qué; ahora se dice cuáles faltan y dónde están, con el mismo «pasar a Salidas» para las
+//   que ya se pueden pasar, y qué hacer si el cliente pide la factura antes.
+function FaltanParaFoliar({pendientes,onJalar}){
+  const todas=pendientes||[];
+  const faltan=todas.filter(o=>!["salidas","maq_received"].includes(o.stage));
+  if(!faltan.length)return null;
+  const jal=faltan.filter(sePuedeJalar),otras=faltan.filter(o=>!sePuedeJalar(o));
+  return <div role="note" aria-label="Lo que falta para asignar folio a la OC" style={{background:C.wn+"0d",border:"1px solid "+C.wn+"40",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+    <div style={{fontSize:13,fontWeight:700,color:C.tx}}>Para asignar folio, {todas.length===1?"la orden tiene":"sus "+todas.length+" órdenes tienen"} que estar en Salidas. {faltan.length===1?"Falta 1:":"Faltan "+faltan.length+":"}</div>
+    <div role="list" style={{marginTop:6,display:"grid",gap:3}}>{faltan.map(o=>{const d=dondeVa(o);return <div role="listitem" key={o.id} style={{fontSize:12,color:C.tx,overflowWrap:"anywhere"}}><b style={{fontFamily:"'Geist Mono',monospace"}}>{nombreDeOrden(o)}</b>{(o.product_type||o.product)?" · "+(o.product_type||o.product):""} · {d.lugar}{d.detalle?" ("+d.detalle+")":""}</div>})}</div>
+    {jal.length>0&&<button onClick={()=>{escudoDeClics();if(onJalar)onJalar(jal.map(o=>o.id))}} style={{...bs(C.sal+"14",tintaAA(C.sal,7)),border:"1px solid "+C.sal+"55",marginTop:10}}><ExportIcon size={14} weight="bold"/>{jal.length===1?"Ya está lista: pasar "+nombreDeOrden(jal[0])+" a Salidas":"Ya están listas: pasar las "+jal.length+" a Salidas"}</button>}
+    {otras.length>0&&<div style={{fontSize:11.5,color:C.t2,marginTop:8}}>{otras.map(o=>nombreDeOrden(o)+" ("+dondeVa(o).lugar.replace(/^En /,"en ")+")").join(", ")} todavía no {otras.length===1?"está lista":"están listas"} para pasarse: hasta que {otras.length===1?"llegue":"lleguen"} a Salidas, la OC no se puede foliar entera. Si el cliente pide la factura ya, usa «Pre-asignar folio».</div>}
+  </div>;
 }
 // v10.72.56 — capturar el folio fiscal REAL (Alpha) en órdenes históricas atrasadas (created_by='import-historico').
 // Llama al RPC assign_historic_folio (acepta delivered solo para histórico, NO autogenera, dedup vía bridge).
@@ -17194,7 +17385,7 @@ function OcFolioCanceladoPanel({oc, role, userLogin, showToast, onReload}) {
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC}){
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC, onJalar}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
@@ -17374,12 +17565,14 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {/* v10.39.0 — botón nuevo: agregar orden de producción existente del mismo cliente a esta OC */}
           {/* v10.43.8 — Karla incluida vía canMoveExisting (puede mover existentes pero no crear nuevas) */}
           {canMoveExistingHere && <button onClick={canMoveExisting?()=>onAddExisting(selectedOC):undefined} disabled={!canMoveExisting} title={isLocked?"OC bloqueada por folios pre-asignados — no se pueden agregar productos":(selectedOC.status==="cancelled"||selectedOC.status==="completed"?"OC "+selectedOC.status:"Mover una orden de producción del mismo cliente que ya existe en el sistema a esta OC")} style={{...bt(canMoveExisting?C.sal:C.bdSt),fontSize:12,padding:"8px 14px",cursor:canMoveExisting?"pointer":"not-allowed"}}><PackageIcon size={14} weight="bold"/>Agregar Producto Existente</button>}
-          {canAssignFolio && allPendingReady && <button onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt(C.fac),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados."><ReceiptIcon size={14} weight="bold"/>Asignar folio</button>}
+          {canAssignFolio && allPendingReady && <button data-accion="asignar-folio-oc" onClick={()=>onAssignFolio(selectedOC,ocOrders)} style={{...bt(C.fac),fontSize:12,padding:"8px 14px"}} title="Asigna folio fiscal a los productos listos para entrega y los marca como entregados."><ReceiptIcon size={14} weight="bold"/>Asignar folio</button>}
           {canAssignFolio && <button onClick={()=>onPreAssignFolio(selectedOC,ocOrders)} style={{...bt(C.wn),fontSize:12,padding:"8px 14px"}} title="Reserva folios fiscales anticipadamente. La OC queda bloqueada para nuevos productos y movimientos. Útil para pagos adelantados o reserva de folios fiscales."><LockIcon size={14} weight="bold"/>Pre-asignar folio</button>}
           {/* v10.58.36 — Plan matriz: N facturas con porciones por orden (caso KFC) */}
           {canAssignFolio && allPendingReady && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...bt(C.fac),fontSize:12,padding:"8px 14px",background:C.fac,backgroundImage:"linear-gradient(135deg, "+C.fac+", "+C.emp+")"}} title="Plan matriz: crea N facturas con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, etc.). Cobertura parcial permitida."><SquaresFourIcon size={14} weight="bold"/>Plan matriz</button>}
         </div>
       </div>
+      {/* v10.84.67 — «Asignar folio» no sale si falta alguna en Salidas: se dice cuáles y dónde, y las que están en Empaque o máquina se pueden pasar */}
+      {canAssignFolio && !allPendingReady && <FaltanParaFoliar pendientes={pendingOrders} onJalar={onJalar}/>}
       {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}><GlobeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
       {/* v10.58.40 Día 1: vista del plan matriz si existe */}
       {selectedOC && selectedOC.matrix_plan && <OCMatrixPlanView matrixPlan={selectedOC.matrix_plan} ocOrders={ocOrders} role={role} onCancelLine={(line, group, order)=>onCancelMatrixLine && onCancelMatrixLine(line, group, order, selectedOC)} onCancelGroup={(group)=>onCancelMatrixGroup && onCancelMatrixGroup(group, selectedOC)} busy={false}/>}
@@ -17835,6 +18028,9 @@ export default function PrintFlow() {
   // v10.43.18 — navegación cross-view desde Auditoría
   const [pendingOCNavId,setPendingOCNavId]=useState(null);
   const [confirmModal,setConfirmModal]=useState(null);const [printModal,setPrintModal]=useState(null);const [clientHistory,setClientHistory]=useState(null);
+  // v10.84.67 — la vista «Folios» de Karla: «Por foliar» (Salidas) o «En la planta» (lo que todavía no llega); se recuerda en la pestaña del navegador
+  const [folioTab,setFolioTabEstado]=useState(()=>{try{return sessionStorage.getItem("pf-folios-tab")==="planta"?"planta":"foliar"}catch{return "foliar"}});
+  const setFolioTab=useCallback(t=>{setFolioTabEstado(t);try{sessionStorage.setItem("pf-folios-tab",t)}catch{}},[]);
   const [flowDiagram,setFlowDiagram]=useState(null);const [showWelcome,setShowWelcome]=useState(false);const [detailModalId,setDetailModalId]=useState(null);
   // ☀️ v10.58.51 — Despertador: bloqueos del usuario en ventana de bienvenida, 1 vez al día.
   const [wakeupItems,setWakeupItems]=useState(null); // null = aún no evaluado
@@ -19260,7 +19456,9 @@ export default function PrintFlow() {
     }catch(e){console.error("[update] Error al guardar:",e);if(!e?._toasted)showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
   },[user,userLogin,orders,showToast,reload]);
 
-  const doAdv=useCallback(async(id,ns)=>{
+  // v10.84.67 — opts.jalada: la pasó Karla a Salidas (la bitácora lo dice y a Gerardo le llega aviso); opts.silencioso: quien llama
+  //   dice el resultado (jalarASalidas, varias seguidas). Regresa {ok} para que sepa cómo le fue; los demás lo ignoran.
+  const doAdv=useCallback(async(id,ns,opts={})=>{
     // v10.49.2 fix#3 — Guard maquila también en doAdv (cubre DnD, no solo botón).
     // El guard en advance() (v10.49.1) no cubre el drag-and-drop que va directo a doAdv.
     const oGuard=orders.find(x=>x.id===id);
@@ -19320,11 +19518,11 @@ export default function PrintFlow() {
       setOrders(p=>p.map(x=>x.id===queueResult.new_active_id?{...x,machine_queue_position:0,...(machineDown(queueResult.old_machine)?{}:{machine_log:[...(x.machine_log||[]),{machine:queueResult.old_machine,started:new Date().toISOString()}]})}:x));
     }
     // Timeline and notifications (o captured above before setOrders)
-    await db.addTimeline(id,(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||""),user,SM[ns]?.c,ns);
+    await db.addTimeline(id,(SM[o?.stage]?.l||"")+" → "+(SM[ns]?.l||"")+(opts.jalada?" · la pasó "+(AUTHOR_NAME[user]||user)+": ya estaba lista":""),user,SM[ns]?.c,ns);
     // v10.58.43 #23: notifs en try propio — el avance YA está commiteado; si una notif
     // falla por red, NO mostrar "No se pudo avanzar" (inducía reintentos/confusión).
     try{
-    if(ns==="salidas"){await db.notifySecs(id,"salidas","📤 Orden de "+(o?.client||"")+" lista para entrega — "+(o?.product_type||""),null,user,o?.created_by);await db.addNotification("karla",id,"salidas","📄 Lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
+    if(ns==="salidas"){await db.notifySecs(id,"salidas","📤 Orden de "+(o?.client||"")+" lista para entrega — "+(o?.product_type||""),null,user,o?.created_by);if(user!=="karla")await db.addNotification("karla",id,"salidas","📄 Lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user);if(opts.jalada){const antes=dondeVa(o);await db.notify("produccion",id,"salidas","📤 "+(AUTHOR_NAME[user]||user)+" pasó "+nombreDeOrden(o)+" a Salidas (estaba "+antes.lugar.replace(/^En /,"en ")+(antes.detalle?", "+antes.detalle:"")+"): ya estaba lista — "+(o?.client||"")+" · "+(o?.product_type||""),null,user)}}
     if(ns==="delivered"){const delMsg="✅ "+(o?.client||"")+" — "+(o?.product_type||"")+" entregada al cliente";await db.notify("produccion",id,"delivered",delMsg,null,user);const _sr=["secretaria","produccion","preprensa","german","admin"];if(user!=="secretaria")await db.addNotification("secretaria",id,"delivered",delMsg,null,user);if(o?.created_by&&!_sr.includes(o.created_by)&&o.created_by!==user)await db.addNotification(o.created_by,id,"delivered",delMsg,null,user)}
     if(ns==="maq_delivered")await db.notifySecs(id,"delivered","✅ Maquila "+(o?.client||"")+" — "+(o?.product_type||"")+" entregada al cliente",null,user,o?.created_by);
     if(ns==="proof_printing")await db.notify("german",id,"new_order","🖨️ Prueba de color lista para imprimir — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);
@@ -19338,12 +19536,14 @@ export default function PrintFlow() {
     if(ns==="maq_in_progress"&&user!=="admin")await db.addNotification("admin",id,"new_order","⚙️ Maquila en proceso — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user)}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
-    showToast(nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
+    if(!opts.silencioso)showToast(nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
+    return {ok:true};
     }catch(e){console.error("[doAdv] Error al avanzar:",e);
       // v10.84.59 — la orden se regresa a donde estaba en el momento (se veía movida mientras salía el aviso, hasta la recarga)
       if(o)setOrders(p=>p.map(x=>x.id===id?o:x));
-      showToast(e?._stale?"⚠️ "+nombreDeOrden(o)+" cambió de etapa en otra sesión: no se movió.":"❌ "+nombreDeOrden(o)+" no pasó a «"+(SM[ns]?.lt||ns)+"»: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload()}finally{setActionLoading(null)}
+      if(!opts.silencioso)showToast(e?._stale?"⚠️ "+nombreDeOrden(o)+" cambió de etapa en otra sesión: no se movió.":"❌ "+nombreDeOrden(o)+" no pasó a «"+(SM[ns]?.lt||ns)+"»: "+errorEnPalabras(e)+". El tablero se vuelve a leer de la base.","error");reload();return {ok:false,error:e}}finally{setActionLoading(null)}
   },[user,orders,showToast,reload]);
+  const doAdvRef=useRef(doAdv);doAdvRef.current=doAdv;   // v10.84.67 — jalarASalidas pasa varias seguidas: cada una con el doAdv de lo último que llegó
 
   const advance=useCallback((id,ns)=>{
     // 🔒 v10.12.0.3 Phase 2 — Hardstop: roles operativos solo en sus stages; vendedor solo en órdenes propias. (No tocamos doAdv para no afectar revert/drag)
@@ -19372,6 +19572,44 @@ export default function PrintFlow() {
       setConfirmModal({title:"¿Pasar "+(oc?.production_number||"la orden")+" a «"+(SM[ns]?.lt||ns)+"»?",message:(who?who+" — ":"")+why,confirmLabel:"Sí, pasar",confirmColor:ns.includes("delivered")?C.ok:C.sal,onConfirm:()=>{doAdv(id,ns);setConfirmModal(null)}})
     }else doAdv(id,ns)
   },[orders,user,userLogin,showToast,doAdv]);
+  // v10.84.67 — Karla pasa a Salidas lo que ya está listo: una orden («En la planta», el detalle) o las que le faltan a una OC.
+  //   Pregunta antes con lo que pasa (preguntaJalar); al confirmar vuelve a mirar cada orden con lo último que llegó (si otra
+  //   persona la movió mientras preguntaba, ésa no se mueve y se dice) y las pasa una por una por el camino de Gerardo (doAdv, que
+  //   le avisa a él y lo anota en la bitácora). Si una falla, las que siguen no se intentan.
+  const jalandoRef=useRef(false);
+  const jalarASalidas=useCallback((ids)=>{
+    const lista=(ids||[]).map(id=>ordersRef.current.find(o=>o.id===id)).filter(Boolean);
+    if(!lista.length)return;
+    if(lista.some(o=>!canExecuteAction("jalar_a_salidas",o,user,userLogin))){showToast(actionDeniedToast("jalar_a_salidas",lista[0],user,userLogin),"error");return}
+    const no=lista.filter(o=>!sePuedeJalar(o));
+    if(no.length){showToast("⚠️ "+no.map(o=>nombreDeOrden(o)+" ("+dondeVa(o).lugar.replace(/^En /,"en ")+")").join(", ")+(no.length===1?" no se puede pasar a Salidas desde ahí.":" no se pueden pasar a Salidas desde ahí."),"warning");return}
+    setConfirmModal(preguntaJalar(lista,ordersRef.current,async()=>{
+      jalandoRef.current=true;
+      const hechas=[],cambiaron=[];let fallo=null;
+      try{
+        for(let i=0;i<lista.length;i++){const f=lista[i];
+          const o=ordersRef.current.find(x=>x.id===f.id);
+          if(!o||o.stage!==f.stage||(o.current_machine||null)!==(f.current_machine||null)){cambiaron.push(f);continue}
+          const r=await doAdvRef.current(o.id,"salidas",{jalada:true,silencioso:true});
+          if(r&&r.ok)hechas.push(o);else{fallo={o,error:r&&r.error,resto:lista.slice(i+1)};break}
+        }
+      }finally{jalandoRef.current=false;setConfirmModal(null)}
+      const nombres=xs=>xs.map(nombreDeOrden).join(xs.length===2?" y ":", ");
+      const partes=[];
+      if(hechas.length){
+        const oc=hechas[0].purchase_order_id;
+        const delOC=oc&&hechas.every(o=>o.purchase_order_id===oc)?ordersRef.current.filter(o=>o.purchase_order_id===oc&&!o.invoice_folio&&!o.return_covered_by_folio&&!String(o.stage||"").includes("cancelled")&&!String(o.stage||"").includes("delivered")):[];
+        const ocLista=delOC.length>1&&delOC.every(o=>["salidas","maq_received"].includes(o.stage));
+        partes.push(nombres(hechas)+(hechas.length===1?" ya está en Salidas":" ya están en Salidas")+(ocLista?": ya puedes asignar folio a "+oc+".":": "+(hechas.length===1?"la encuentras":"las encuentras")+" en «Por foliar»."));
+      }
+      if(fallo)partes.push((fallo.error?._stale?"⚠️ "+nombreDeOrden(fallo.o)+" cambió de etapa en otra sesión: no se movió.":"❌ "+nombreDeOrden(fallo.o)+" no pasó a Salidas: "+errorEnPalabras(fallo.error)+".")+(fallo.resto.length?" "+nombres(fallo.resto)+(fallo.resto.length===1?" no se intentó.":" no se intentaron."):""));
+      if(cambiaron.length)partes.push(nombres(cambiaron)+(cambiaron.length===1?" cambió":" cambiaron")+" mientras preguntaba: no se movió.");
+      showToast(partes.join(" "),fallo?"error":cambiaron.length?"warning":"success");
+    }));
+  },[user,userLogin,showToast]);
+  // la pregunta se vence si una de sus órdenes cambia de lugar con ella abierta (el tiempo real: otra persona la movió): se cierra y
+  //   se dice, como la del detalle (v10.84.55). Mientras se están pasando no: cambian por esto mismo.
+  useEffect(()=>{if(!confirmModal?.jalar||jalandoRef.current)return;const c=cambioMientrasPregunta(confirmModal.jalar,orders);if(c){setConfirmModal(null);showToast(c,"warning")}},[orders]);
 
   // v10.38.0 — Regresa orden a CTP desde ready/placas_listas, invalida plates existentes,
   // captura razón, notifica a Germán y deja entry en timeline. Solicitado por Gerardo.
@@ -20097,6 +20335,7 @@ export default function PrintFlow() {
   },[user,userLogin,orders]);
 
   const handleAction=useCallback((id,action,payload)=>{
+    if(action==="jalar_a_salidas"){jalarASalidas([id]);return} // v10.84.67 — desde el detalle de la orden (Karla)
     if(action==="goto_espera"){setSearch("");setView("espera");return} // v10.73.31 — chip "N en espera" del tablero → vista dedicada. v10.73.84 (L10 chip-espera): limpiar la búsqueda al navegar; el chip contaba SIN buscador pero aterrizaba en una vista que SÍ filtra por búsqueda → desincronización. Se preserva la búsqueda DENTRO de la vista En espera (feature deliberada).
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
@@ -20617,7 +20856,7 @@ export default function PrintFlow() {
   //   prop fresco del Kanban, Gerardo lo aprieta, y el closure viejo le decía "está fuera de servicio"). `maintenance`
   //   se refresca SIN tocar `orders` (su realtime es el único del canal que no llama doReload), así que ninguna otra
   //   dep lo arrastraba. Costo ~cero: cambia rarísimo y el Kanban ya re-renderiza en cada cambio por el prop.
-  },[orders,advance,approveProof,addComment,duplicate,deleteOrder,doAdv,showToast,user,userName,userLogin,reload,webApprove,maintenance]);
+  },[orders,advance,approveProof,addComment,duplicate,deleteOrder,doAdv,showToast,user,userName,userLogin,reload,webApprove,maintenance,jalarASalidas]);
 
   // Filtered orders for view — "mine" shows only orders created by current user, "all" shows everything
   // Only applies to vendedor/secretaría/admin; other roles always see all orders
@@ -20924,7 +21163,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               lector. Aquí está: los cierres sin costo, con input inline. setMaintenanceCost solo toca `cost`. */}
           {user==="admin"&&(()=>{const pend=maintenance.filter(m=>m.ended_at&&m.cost==null).sort((a,b)=>new Date(b.ended_at)-new Date(a.ended_at));if(!pend.length)return null;return <div style={{marginTop:20}}><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"0 0 2px",color:C.wn,display:"flex",alignItems:"center",gap:6}}><WrenchIcon size={15} weight="bold"/>Costos de mantenimiento pendientes ({pend.length})</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Reparaciones cerradas sin costo. Captúralo cuando llegue la factura del técnico; el reporte semanal lo excluye hasta entonces.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:8}}>{pend.map(rec=><MaintCostRow key={rec.id} rec={rec} onSave={async(id,cost)=>{try{await db.setMaintenanceCost(id,cost);const m=await db.loadMaintenance();setMaintenance(m);showToast("✅ Costo capturado","success")}catch(e){console.error("[setMaintenanceCost] Error:",e);showToast("❌ "+(e?.message||"No se pudo guardar el costo"),"error")}}}/>)}</div></div>})()}
           {user==="admin"&&<><h3 style={{fontSize:15,fontWeight:800,letterSpacing:"-0.005em",margin:"20px 0 4px",color:C.ctp,display:"flex",alignItems:"center",gap:6}}><DiscIcon size={15} weight="bold"/>Tablero Germán</h3><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>CTP y Procesadora</p><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></>}</div>}
-        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));/* v10.84.0 — las ordenes facturadas por partes en el tiempo ya estan ENTREGADAS y no viven en salidas: sin esta lista, el resto por facturar no lo veria nadie. Se ordenan de la mas vieja a la mas nueva: la que mas tiempo lleva esperando va primero. */const partes=filteredOrders.filter(o=>restoPorFacturar(o)&&!o.stage.includes("cancelled")).sort((a,b)=>String(restoPorFacturar(a).created_at||"").localeCompare(String(restoPorFacturar(b).created_at||"")));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,fiscalOk(o)?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{fiscalOk(o)?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!fiscalOk(o)&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0&&partes.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>:<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}{partes.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.amb+"22",color:C.wn,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.amb+"55"}}>{partes.length}</span><FilesIcon size={14} weight="bold" color={C.wn} style={{flexShrink:0}}/>Por facturar en partes <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· ya entregadas; se factura el resto cuando el cliente pida la siguiente</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{partes.map(o=>{const r=restoPorFacturar(o);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const desde=r.created_at?Math.floor((Date.now()-new Date(r.created_at).getTime())/86400000):null;return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+C.amb+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}<div style={{fontSize:12,color:C.tx,marginTop:6}}>Facturado <b>{fmt(fac)}</b> de {fmt(tot)}</div><div style={{fontSize:13,fontWeight:700,color:C.wn,marginTop:2}}>Faltan {fmt(Number(r.amount_portion))} <span style={{fontSize:10,fontWeight:500,color:C.t2}}>sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas{desde!=null?" · desde hace "+desde+" día"+(desde===1?"":"s"):""}</span></div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"facturar_siguiente_parte")}} style={{...bt(C.fac),marginTop:10,width:"100%",justifyContent:"center"}}><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>})}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="board"&&user==="karla"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><FileTextIcon size={18} weight="bold"/>Pendientes de Folio</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Asigna folio fiscal y marca como entregadas</p>{/* v10.84.67 — «En la planta»: lo que todavía no llega a Salidas, y pasar ella lo que ya está listo */}{(()=>{const nFoliar=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).length,nPlanta=filteredOrders.filter(enLaPlanta).length;return <div role="tablist" aria-label="Qué ver" style={{display:"flex",gap:4,margin:"0 0 14px",borderBottom:"1px solid "+C.bd,flexWrap:"wrap"}}>{[{id:"foliar",l:"Por foliar",n:nFoliar},{id:"planta",l:"En la planta",n:nPlanta}].map(t=>{const sel=folioTab===t.id;return <button key={t.id} role="tab" aria-selected={sel} onClick={()=>setFolioTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:7,minHeight:44,padding:"0 16px",background:"transparent",border:"none",borderBottom:"2.5px solid "+(sel?C.ac:"transparent"),marginBottom:-1,color:sel?tintaAA(C.ac,5):C.t2,fontSize:13,fontWeight:sel?800:600,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>{t.l}<span style={{fontSize:11,fontWeight:700,minWidth:22,padding:"1px 7px",borderRadius:999,background:sel?C.ac+"18":C.sf,color:sel?tintaAA(C.ac,5):C.t2}}>{t.n}</span></button>})}</div>})()}{folioTab==="planta"?<EnLaPlanta orders={filteredOrders} todas={viewOrders} buscando={search} onJalar={jalarASalidas} onDetalle={id=>handleAction(id,"detail")} ocupada={actionLoading}/>:<>{search&&(()=>{const enPl=filteredOrders.filter(enLaPlanta);if(!enPl.length)return null;const d=enPl.length===1?dondeVa(enPl[0]):null;return <div role="status" style={{display:"flex",alignItems:"center",gap:"6px 12px",flexWrap:"wrap",background:C.ac+"0d",border:"1px solid "+C.ac+"33",borderRadius:12,padding:"8px 12px",marginBottom:12,fontSize:12.5,color:C.tx}}><span style={{flex:"1 1 260px"}}>{enPl.length===1?<><b>{nombreDeOrden(enPl[0])}</b> todavía no llega a Salidas: {d.lugar}{d.detalle?" ("+d.detalle+")":""}.</>:<>{enPl.length} de lo que buscas todavía no llegan a Salidas.</>}</span><button onClick={()=>setFolioTab("planta")} style={{...bs(C.ac+"14",tintaAA(C.ac,7)),border:"1px solid "+C.ac+"44"}}>Ver en «En la planta»</button></div>})()}{(()=>{const sal=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&!snoozeActive(o)).sort(prioSort)/* v10.73.82 (L11) — simétrico con `wait`, que SÍ incluye maq_received. Antes, una orden recibida de maquila sin pausar caía en el hueco entre los dos filtros y no existía en la pantalla "Pendientes de Folio", pese a que GUIDES y myTasks de Karla ya la reclaman. La acción de la card ya soporta maq_received (deliver_with_invoice/split_invoice lo validan). */;const wait=filteredOrders.filter(o=>["salidas","maq_received"].includes(o.stage)&&snoozeActive(o)).sort((a,b)=>(a.client||"").localeCompare(b.client||""));/* v10.84.0 — las ordenes facturadas por partes en el tiempo ya estan ENTREGADAS y no viven en salidas: sin esta lista, el resto por facturar no lo veria nadie. Se ordenan de la mas vieja a la mas nueva: la que mas tiempo lleva esperando va primero. */const partes=filteredOrders.filter(o=>restoPorFacturar(o)&&!o.stage.includes("cancelled")).sort((a,b)=>String(restoPorFacturar(a).created_at||"").localeCompare(String(restoPorFacturar(b).created_at||"")));const card=(o,waiting)=><div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+(waiting?C.t3:C.sal)+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}{o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}</div>}{(()=>{const amt=o.order_type==="maquila"?o.maq_price:o.price;/* v10.73.82 (verificación L11) — el monto de una orden maquila vive en maq_price, no en price (igual que deliver_with_invoice/split_invoice); sin esto las maq_received que L11 trajo a este grid salían sin importe. */return amt?<div style={{fontSize:13,fontWeight:700,color:C.ok,marginTop:4}}>{fmt(amt)}</div>:null})()}{waiting?<><div style={{fontSize:10,color:C.t2,marginTop:6,fontStyle:"italic"}}>{o.snooze_reason||"Esperando factura del cliente"}{o.snoozed_by&&o.snoozed_by!==(userLogin||user)?" · "+(AUTHOR_NAME[o.snoozed_by]||o.snoozed_by):""}</div><button onClick={e=>{e.stopPropagation();unsnoozeOrder(o)}} style={{...bs(C.ac+"15",C.ac),marginTop:8,width:"100%",justifyContent:"center",border:"1px solid "+C.ac+"40"}}><BellRingingIcon size={13} weight="bold"/>{o.snooze_kind==="awaiting_client_invoice"?"Ya pidió factura · Reactivar":"Quitar espera"}</button></>:<><button onClick={e=>{e.stopPropagation();handleAction(o.id,fiscalOk(o)?"deliver_only":(o.return_covered_by_folio?"deliver_covered":"deliver_with_invoice"))}} style={{...bt(C.ok),marginTop:10,width:"100%",justifyContent:"center"}}>{fiscalOk(o)?<><CheckCircleIcon size={14} weight="bold"/>Marcar como Entregada</>:(o.return_covered_by_folio?<><CheckCircleIcon size={14} weight="bold"/>Entregar (cubierta {o.return_covered_by_folio})</>:<><FileTextIcon size={14} weight="bold"/>Asignar Folio y Entregar</>)}</button>{!fiscalOk(o)&&!o.return_covered_by_folio&&<button onClick={e=>{e.stopPropagation();snoozeAwaitingInvoice(o)}} style={{...bs(C.sf,C.t2),marginTop:6,width:"100%",justifyContent:"center",border:"1px solid "+C.bd,fontSize:10.5}}><BellSlashIcon size={12} weight="bold"/>El cliente no ha pedido factura</button>}</>}</div>;return <>{sal.length===0&&wait.length===0&&partes.length===0?(search&&filteredOrders.some(enLaPlanta)?null:<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><ExportIcon size={46} color={C.t3}/></div><div style={{fontSize:15,fontWeight:700,color:C.tx,marginTop:8}}>Sin órdenes en salida</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>Las órdenes aparecerán aquí cuando Producción las envíe</div></div>):<>{sal.length>0?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>{sal.map(o=>card(o,false))}</div>:<div style={{textAlign:"center",padding:"24px",color:C.t2,fontSize:13}}>Sin pendientes activos de folio · lo que queda está en espera, abajo</div>}{wait.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{wait.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{wait.map(o=>card(o,true))}</div></details>}{partes.length>0&&<details open style={{marginTop:18,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.amb+"22",color:C.wn,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.amb+"55"}}>{partes.length}</span><FilesIcon size={14} weight="bold" color={C.wn} style={{flexShrink:0}}/>Por facturar en partes <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· ya entregadas; se factura el resto cuando el cliente pida la siguiente</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginTop:12}}>{partes.map(o=>{const r=restoPorFacturar(o);const tot=Number(o.order_type==="maquila"?o.maq_price:o.price)||0;const fac=(o.splits||[]).filter(x=>!x.cancelled_at&&x.doc_type!=="por_facturar").reduce((a,x)=>a+Number(x.amount_portion||0),0);const desde=r.created_at?Math.floor((Date.now()-new Date(r.created_at).getTime())/86400000):null;return <div key={o.id} onClick={()=>handleAction(o.id,"detail")} style={{background:C.bg,borderRadius:14,padding:16,cursor:"pointer",border:"1.5px solid "+C.amb+"66",boxShadow:C.sh2}}><div style={{fontSize:14,fontWeight:700}}>{o.client}{o.client_company?" · "+o.client_company:""}</div><div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>{o.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600,marginTop:2}}>{o.production_number}</div>}<div style={{fontSize:12,color:C.tx,marginTop:6}}>Facturado <b>{fmt(fac)}</b> de {fmt(tot)}</div><div style={{fontSize:13,fontWeight:700,color:C.wn,marginTop:2}}>Faltan {fmt(Number(r.amount_portion))} <span style={{fontSize:10,fontWeight:500,color:C.t2}}>sin IVA · {Number(r.qty_portion).toLocaleString("es-MX")} pzas{desde!=null?" · desde hace "+desde+" día"+(desde===1?"":"s"):""}</span></div><button onClick={e=>{e.stopPropagation();handleAction(o.id,"facturar_siguiente_parte")}} style={{...bt(C.fac),marginTop:10,width:"100%",justifyContent:"center"}}><FileTextIcon size={14} weight="bold"/>Facturar siguiente parte</button></div>})}</div></details>}</>}</>;})()}<MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></>}</div>}
         {/* v10.73.28 — Vista dedicada "En espera": las órdenes pausadas del rol (admin=todas), agrupadas por etapa, con la razón visible (banner de OCard) y botón "Volver a producción". */}
         {view==="espera"&&<div>
           <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><BellSlashIcon size={18} weight="bold"/>En espera{esperaCount?" ("+esperaCount+")":""}</h2>
@@ -20971,7 +21210,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {view==="cancelaciones"&&(user==="admin"||user==="secretaria"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para gestionar cancelaciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden a cancelar y ver el historial</p></div>:<CancelacionesView orders={orders} role={user} onCancelOrders={doCancelOrders} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView onJalar={jalarASalidas} purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FolderIcon size={18} weight="bold"/>Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FlaskIcon size={18} weight="bold"/>Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
       </div>

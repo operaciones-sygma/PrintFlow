@@ -1083,6 +1083,27 @@ await caso("det-167-la-pregunta-a-1920", "caso=alertas&rol=produccion", async p 
   ok("det-167-la-pregunta-a-1920", !!caja && !!cancelar && caja.y + caja.height <= 1080 && Math.abs(caja.y - cancelar.y) < 2, `a 1920: «Sí, pasar» ${caja ? "en y=" + Math.round(caja.y) : "NO SE VE"}, junto a «No, cancelar»`);
 }, { width: 1920, height: 1080 });
 
+// ── v10.84.67: Karla pasa a Salidas lo que ya está listo y Gerardo no ha pasado (en «Más», con dónde está) ──
+await caso("det-160-karla-pasa-a-salidas-desde-empaque", "caso=empaque&rol=karla", async p => {
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  let despacha = false, encima = false;
+  if (/pasar a Salidas/i.test(t)) { await p.getByRole("menuitem", { name: /pasar a Salidas/i }).click(); await espera(p, 300); const l = await log(p); despacha = /accion:jalar_a_salidas/.test(l); encima = !/cerrado/.test(l) && (await cuantosDialogos(p)) === 2; }
+  ok("det-160-karla-pasa-a-salidas-desde-empaque", /pasar a Salidas/i.test(t) && /Empaque/.test(t) && /aviso/.test(t) && despacha && encima,
+    `en «Más»: ${/pasar a Salidas/i.test(t) ? "está" + (/Empaque/.test(t) ? ", dice dónde sigue" : ", SIN decir dónde sigue") + (/aviso/.test(t) ? " y que Gerardo recibe aviso" : " y NO dice del aviso") : "NO está"}; ${despacha ? "la pide a App" : "no hace nada"}${despacha ? (encima ? ", con la pregunta encima del detalle" : ", y el detalle SE CIERRA") : ""}`);
+});
+await caso("det-161-karla-pasa-a-salidas-desde-la-maquina", "caso=alertas&rol=karla", async p => {
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  ok("det-161-karla-pasa-a-salidas-desde-la-maquina", /pasar a Salidas/i.test(t) && /Printmaster 74/.test(t) && /corriendo/.test(t),
+    /pasar a Salidas/i.test(t) ? (/Printmaster 74/.test(t) ? "dice en qué máquina sigue" + (/corriendo/.test(t) ? " y que corre" : " pero NO que corre") : "NO dice la máquina: «" + t.replace(/\s+/g, " ").slice(0, 160) + "»") : "NO está en «Más»");
+});
+for (const [q, quien] of [["caso=salidas&rol=karla", "Karla con la orden ya en Salidas"], ["caso=empaque&rol=produccion", "Gerardo (tiene su «A Salidas»)"], ["caso=empaque&rol=admin", "Dirección (tiene «Enviar a Salidas»)"], ["caso=borrador&rol=karla", "Karla con la orden por validar"]])
+  await caso("det-162-pasar-a-salidas-no-para-" + q.replace(/[^a-z]+/g, "-"), q, async p => {
+    const hay = await abrirMas(p);
+    const t = hay ? await p.getByRole("menu").innerText() : "";
+    ok("det-162-pasar-a-salidas-no-para-" + q.replace(/[^a-z]+/g, "-"), !/Ya está lista: pasar a Salidas/.test(t), (/Ya está lista: pasar a Salidas/.test(t) ? "LO OFRECE a " : "no se le ofrece a ") + quien);
+  });
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

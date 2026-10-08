@@ -39,6 +39,8 @@ const TANDAS = [
   { nombre: "archivos-pantalla", gen: "tests/banco/gen-archivos.mjs", romper: "tests/romper/archivos-pantalla.mjs", puerto: 5197 },
   // el tablero: el Kanban de Producción, el de Germán y las fichas (v10.84.56); el banco extrae lo que necesita (extraer.mjs)
   { nombre: "tablero", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/tablero.mjs", puerto: 5194 },
+  // «En la planta» de Karla y el aviso de la OC que no se puede foliar entera: pasar a Salidas lo que ya está listo (v10.84.67)
+  { nombre: "planta", gen: "tests/banco/gen-planta.mjs", romper: "tests/romper/planta.mjs", puerto: 5193 },
 ];
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 

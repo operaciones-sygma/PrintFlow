@@ -92,6 +92,9 @@ const IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://
 function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img src={IMG} alt={alt} style={style} onClick={onClick} title={title} />; }`,
   fnBlock("ClientAliasManager"),
   ...["escudoDeClics", "FilaDelDetalle", "SeccionDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
+  // v10.84.67 — «Ya está lista: pasar a Salidas» en «Más» (Karla) usa lo de «En la planta»
+  ...["ETAPAS_JALABLES", "sePuedeJalar", "LUGAR_DE_ETAPA"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
+  ...opcional(L.some(l => l.startsWith("function dondeVa(")), () => fnBlock("dondeVa")),
   fnBlock("DetailModal"),
   ...["MasDelDetalle", "MenuMasDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),
   `const BASE = { id: "OP-MUH77BVYVQW", client: "SILVIA MARGARITA MARTINEZ HERNANDEZ", client_id: "c1", client_agent: "ALEJANDRA DELGADO",
@@ -148,7 +151,8 @@ const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage:
 //   (zIndex 999), Esc por la pila (useEscClose), el foco en su panel; «Hecho» la termina (a la orden le ponen folio y se
 //   entrega). ventana=sinrol: sin role="dialog", como seis de las ventanas de la app.
 const ENCIMA_BANCO = new Set(["deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
-  "deshacer_saldo", "deshacer_cancelacion", "cancel_with_nc", "cancel_order", "revert", "snooze", "waste", "send_maquila", "delete"]);
+  "deshacer_saldo", "deshacer_cancelacion", "cancel_with_nc", "cancel_order", "revert", "snooze", "waste", "send_maquila", "delete",
+  "jalar_a_salidas"]);   // v10.84.67 — la pregunta de «pasar a Salidas» (App) sale encima del detalle
 function VentanaDeAccion({ nombre, onClose, onHecho }) {
   useEscClose(onClose);
   const ref = useRef(null);

@@ -12,6 +12,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.67 — Karla pasa a Salidas lo que ya está listo, y ve dónde va cada orden — 8-oct-2026
+
+**Qué pasaba.** Karla: «a veces ya debo marcar como entregada o facturar una orden y no me deja, porque Gerardo (u otras personas) no
+la pasa por la carga de trabajo». Medido en 60 días: 296 de 299 pases a Salidas los hace Gerardo, y el 28% va en ráfagas de 5 o más en
+10 minutos (poniéndose al día; el lunes y las 9 a. m. son los picos). Donde más pega es en las OC de varias órdenes: foliar la OC entera
+exige que todas estén en Salidas (`assign_folio_to_oc`), y en 18 de 34 OC la última llegó más de 4 h después que la primera (en 13, más
+de un día). Karla esperaba a la rezagada, y en la OC el botón «Asignar folio» desaparecía sin decir por qué. Además, 11 veces facturó
+por adelantado una orden que seguía en máquina, y esas tardaron 2.7 días más (mediana) en llegar a Salidas. Facturar por adelantado ya
+se podía en cualquier etapa; **entregar**, sólo desde Salidas (la base lo exige en `deliver_only`, `assign_invoice`,
+`assign_invoice_splits` y `assign_folio_to_oc`). Faltaba que ella pudiera pasar a Salidas lo que ya está listo.
+
+- **«Folios» tiene dos pestañas**: «Por foliar» (lo de siempre) y **«En la planta»**. Ahí sale cada orden que todavía no llega a
+  Salidas, dónde va (Empaque, la máquina y si corre o en qué lugar de la fila, CTP, diseño, maquila) y desde cuándo. Primero van las
+  **OC que esperan a alguna orden** («1 de 3 en Salidas»), luego lo que está en Empaque o en una máquina; lo de más atrás y la maquila,
+  plegados. La pestaña se recuerda en el navegador.
+- **«Pasar a Salidas»** está en lo que va en Empaque o en una máquina, y «Pasar las N a Salidas» en la OC.
+  - **Pregunta antes, con lo que pasa**: de qué máquina sale, que se cierra su tiempo y cuál empieza, si estaba en espera, y que
+    **a Gerardo le llega aviso de que la pasó Karla**. La bitácora también lo dice («… → Salidas · la pasó Karla: ya estaba lista»).
+  - **Va por el mismo camino que el «A Salidas» de Gerardo** (`doAdv`, con `opts`): sale de la fila de su máquina
+    (`move_order_in_queue`) y cambia de etapa con el candado de la etapa. Si otra persona la movió, no se mueve y se dice.
+  - **Con la pregunta abierta**, si otra persona mueve la orden, la pregunta se cierra sola y lo dice.
+  - **Si la base rechaza una**, las que siguen no se intentan y se nombran.
+- Desde Listas, CTP, diseño o maquila **no** se puede pasar: se ve, sin botón. Ahí falta más que un clic de Gerardo, y la maquila la
+  recibe Lupita.
+- **En la OC**, donde no sale «Asignar folio», se dice cuáles faltan y dónde está cada una (`FaltanParaFoliar`). Lleva el botón para
+  pasar las que ya se pueden y, si urge la factura, la referencia a «Pre-asignar folio».
+- **Buscar** un P-folio en «Por foliar» que sigue en la planta lo dice («P-9902 todavía no llega a Salidas: En GTO 1 Color
+  (corriendo)») y da un botón a «En la planta». Antes salía «Sin órdenes en salida».
+- **En el detalle de la orden**, en «Más» (sólo Karla), está «Ya está lista: pasar a Salidas», con la pregunta encima del detalle.
+- Al terminar con el teclado, el foco va al siguiente «Pasar…» o, en la OC completa, a «Asignar folio». Antes se quedaba en la nada.
+- El reloj «desde ayer 16:20» (también el del tablero) ahora se lee: su tinta daba 4.4:1 sobre su fondo ámbar; ahora es
+  `tintaAA(C.wnInk, 5.6)`.
+
+**Qué NO se tocó.**
+- **La base:** ninguna función, permiso ni tabla. Karla ya podía escribir la etapa y `move_order_in_queue` ya la admitía; se ensayó con
+  su identidad (rol karla, escribe, saca de la fila y cambia a Salidas) y se deshizo.
+- **Facturar y entregar:** las mismas RPC, que siguen exigiendo Salidas.
+- **CobranzaFlow:** el puente no mira la etapa.
+- **Lo demás:** el inventario de Cuadra, la maquila y el tablero de Gerardo (mismo `doAdv`; para él sólo cambia el aviso nuevo y el
+  tono del reloj).
+
+**Cómo se probó.**
+- **Tanda nueva `tests/romper/planta.mjs` (39), sobre su banco `gen-planta.mjs`:**
+  - contra el código anterior fallaban todas (no existía);
+  - la primera versión pasó 32 de 34: el reloj bajo AA era real, y una prueba suponía el orden en que se pasan;
+  - la segunda vuelta, por donde no se diseñó (sin máquina ni cliente, todo con el teclado, el doble clic en «Pasar las 2», el
+    celular), encontró que al terminar con el teclado el foco se perdía (desde la lista y desde la OC), y el aviso que decía «Las
+    demás» habiendo sólo una;
+  - 8 sabotajes: 7 los detecta. El que no (quitar el escudo del doble clic en la OC) no rompe nada: la pregunta ya tapa el segundo
+    clic.
+- **`tests/romper/detalle.mjs`:** +6 (det-160 a 162).
+- **Con la app real, `tests/recorrido/karla-planta.mjs` (21):** usa una OC de prueba que sólo existe en el navegador, con toda
+  escritura cortada. Lo que escribe es exactamente lo del «A Salidas» de Gerardo. Contra producción (v10.84.66) fallaba lo esperado
+  (sin pestañas, y la OC callaba).
+- **Lo demás:** `npm run probar` dio 645 de 645; `tablero-errores` y el recorrido de 4 roles salieron bien.
+
 ## v10.84.66 — Ligar una factura por adelantado ya no se atora por el centavo de su CFDI — 7-oct-2026
 
 **Qué pasó (RESTAURANTES HAKUNA, P-0571).** Karla facturó por adelantado F-130 y F-131 (desde CobranzaFlow, el 1-oct: el cliente quería

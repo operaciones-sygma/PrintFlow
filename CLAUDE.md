@@ -33,6 +33,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   etiqueta).
 - **Marcelo** es dueño y único desarrollador; **Karla** factura; **Lupita** captura; **Gerardo/Noemí/
   Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
+  Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
+  máquina** («Folios» → «En la planta», la OC y el detalle; `jalar_a_salidas` en `ACTION_ROLES`, por `doAdv` con aviso a Gerardo).
+  Desde Listas, CTP, diseño o maquila, no (decisión por defecto del 8-oct; Marcelo puede cambiarla).
 
 ---
 
