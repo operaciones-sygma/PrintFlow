@@ -162,8 +162,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.66 (7-oct, noche; READY `dpl_4coJrHtp16E3kiuMNHctLKLeJgPZ`; vuelta atrás: `git revert c212a30`, porque el
-  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; 600 pruebas). v10.84.66: ligar una
+- **LIVE:** v10.84.67 (8-oct, mañana; READY `dpl_EUYNdKRXxpwHKwC2PLDkrcig9iKp`; vuelta atrás: `git revert 60807ad`, porque el
+  rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; el de v10.84.66 era
+  `dpl_4coJrHtp16E3kiuMNHctLKLeJgPZ`; 645 pruebas). v10.84.67: **Karla pasa a Salidas lo que ya está listo** y Gerardo no ha pasado
+  («Folios» → «En la planta», la OC que no se puede foliar entera dice cuáles faltan, «Más» del detalle; sólo desde Empaque o máquina,
+  con aviso a Gerardo; sin cambios en la base). Revisado en producción sin escribir con `tests/recorrido/karla-planta.mjs` (21 de 21).
+  v10.84.66: ligar una
   factura por adelantado ya no se atora por el centavo de su CFDI (HAKUNA, P-0571: precio unitario de 6 decimales × cantidad; la regla,
   en `../cobranzaflow/docs/SPEC-facturar-por-partes.md` §6). **El tablero queda
   CERRADO**: tres revisiones independientes, 20 → 25 → **24/40** (snapshot `.impeccable/critique/2026-10-08T00-12-28Z__…`). El
