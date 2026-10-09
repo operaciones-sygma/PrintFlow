@@ -204,6 +204,20 @@ node tests/recorrido/ventanas-encima.mjs https://produccion.sygma.mx   # la app 
 
 Usa órdenes reales (P-0589 en Salidas, P-0599 en CTP): si cambiaron de etapa el caso se salta; otras con `PF_VENTANAS`.
 
+### La sesión contra el Auth de verdad (`tests/recorrido/sesion.mjs`)
+
+Desde v10.84.71. La tanda `sesion` simula Auth; este recorrido comprueba, con la app REAL (compilada en `127.0.0.1:4278`, o la
+publicada) y la cuenta de pruebas, que lo que esa tanda supone es lo que contestan Auth y la base. Sin escribir: las escrituras se
+cortan y la salida (`/auth/v1/logout`) se anota y no llega a Auth; las fallas se simulan sólo en ese navegador. **A**: entrar y
+recargar abre las dos veces y al recargar se le pregunta a Auth (`GET /auth/v1/user`); **B**: con `get_user_session` sin red, «No se
+pudo comprobar tu sesión» con «Reintentar», ninguna salida, y sin el corte abre sin contraseña; **C**: la renovación rechazada lleva a
+entrar con «Tu sesión se cerró…»; **D**: «Salir» es `scope=local`. ~10 s.
+
+```
+npm run build && node tests/recorrido/sesion.mjs
+node tests/recorrido/sesion.mjs https://produccion.sygma.mx
+```
+
 ## Minas del banco (no de la app)
 
 - La primera carga hace que vite prepare sus dependencias: `probar.mjs` las declara (`optimizeDeps.include`) y calienta el
