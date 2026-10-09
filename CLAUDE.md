@@ -167,7 +167,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.69 (8-oct, noche; READY `dpl_4DjFqtsmFmvYybBJmz4Dqva3eT6n`; vuelta atrás: `git revert b8172af`, porque el rollback de
+- **LIVE:** v10.84.70 (8-oct, noche; READY `dpl_BwWmZyWgvTSUywcdkgyiNZXjydtM`; vuelta atrás: Instant Rollback a
+  `dpl_HN6Y1bNsMqV631JPZUZYsXhWgHwN`, que tiene el código de v10.84.69, o `git revert c188ddf 7b66fd1 9153986`; 767 pruebas).
+  v10.84.70: **«Asignar folio y entregar», tres revisiones independientes (23 → 28 → 30/40), CERRADA por las 3 pasadas**: las facturas
+  hechas por adelantado se leen al abrir (con la del mismo importe la acción es ligarla, comparando la orden con la factura), los
+  errores de la base vuelven al diálogo, Enter-Enter ya no emite sin leer, el selector de pagos (cuatro ventanas) con el monto lleno y a
+  prueba de dedazos, el efectivo que ligar no cobra se dice y se reconoce, y el escudo contra el doble clic en lo que cambia el acomodo.
+  Lo que queda (v10.84.71, y una decisión de base de Marcelo: ligar con efectivo y crear el vale), en la entrada del CHANGELOG. Revisado
+  en producción sin escribir: el código servido y `tests/recorrido/ligar-anticipo.mjs` contra produccion.sygma.mx, 15 de 15.
+  v10.84.69 (8-oct, noche; READY `dpl_4DjFqtsmFmvYybBJmz4Dqva3eT6n`; vuelta atrás: `git revert b8172af`, porque el rollback de
   un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; la pantalla de antes funciona con la base nueva; 698
   pruebas). v10.84.69: **«¿ya existe este cliente?»** al capturar la orden o la OC (con CobranzaFlow v3.7.999m y su migración): lo que
   casi seguro ya existe se elige y no se crea, con su porqué; una sola lógica para las dos puertas (`resolverClienteNuevo`); Escape ya

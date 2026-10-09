@@ -149,6 +149,11 @@ estados) y los errores de la base dentro y con salida. Con ésta se cumple la me
     de Corona en esmeralda (es lo facturado por adelantado, no dinero del cliente); el folio a mano de la otra serie o muy arriba del
     sugerido; el tope de 8 s dice «falló la red» aunque sólo tardara.
 
+**En producción** el 8-oct en la noche: READY `dpl_BwWmZyWgvTSUywcdkgyiNZXjydtM` (vuelta atrás: Instant Rollback a
+`dpl_HN6Y1bNsMqV631JPZUZYsXhWgHwN`, que tiene el código de v10.84.69, o `git revert c188ddf 7b66fd1 9153986`; la base no cambió). El
+candado: **767 de 767** en las 15 tandas. Revisado sin escribir: el código servido (`index-ZlgPzUis.js`) trae lo nuevo, y el recorrido
+contra produccion.sygma.mx dio **15 de 15**.
+
 ## v10.84.69 — «¿Ya existe este cliente?»: lo que casi seguro ya existe se elige, no se crea — 8-oct-2026
 
 **Qué pasaba.** Marcelo (8-oct): *«sólo cuidar que no cree clientes duplicados con los ya existentes»*; y si el cliente casi seguro ya
