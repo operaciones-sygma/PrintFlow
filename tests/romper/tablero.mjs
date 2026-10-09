@@ -270,11 +270,14 @@ await caso("tab-29-se-lee-que-corre-a-1920", "vista=produccion", async p => {
   ok("tab-29-se-lee-que-corre-a-1920", c.length === 0, c.length ? "a 1920 salen cortados: " + c.join(", ") : "a 1920 todos los nombres se leen completos");
 }, { width: 1920, height: 1080 });
 await caso("tab-30-un-solo-reloj-en-la-activa", "vista=produccion", async p => {
+  // v10.84.71 — el reloj se cuenta en sus DOS formas: «2h 5m» (Geist Mono) y, si empezó antes de hoy, «desde ayer 23:53» (v10.84.58,
+  //   con su title «Empezó …»). El banco arranca las bitácoras «hace 2 h» y «hace 5 h»: de 00:00 a ~05:00 eso es AYER y la prueba
+  //   contaba 0 relojes (falló de madrugada en la PC de casa, también con el código de antes). Igual en tab-33.
   // el marco «Activa» ya trae el reloj: la ficha de adentro no lo repite (le quitaba el ancho al nombre)
   const r = await p.evaluate(() => { const fuera = [];
     for (const card of document.querySelectorAll("[draggable=true]")) { const marco = card.parentElement;
       if (!card.getClientRects().length || ![...marco.children].some(h => /^activa/i.test((h.innerText || "").trim()))) continue;
-      const relojes = [...marco.querySelectorAll("span")].filter(s => /^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)).length;
+      const relojes = [...marco.querySelectorAll("span")].filter(s => (/^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)) || /^Empezó /.test(s.getAttribute("title") || "")).length;
       fuera.push(((card.innerText.match(/P-\d{4}/) || [""])[0]) + ":" + relojes); }
     return fuera; });
   const malos = r.filter(x => !x.endsWith(":1"));
@@ -302,7 +305,7 @@ await caso("tab-32-nombre-sin-espacios", "vista=produccion", async p => {
 await caso("tab-33-empaque-conserva-su-reloj", "vista=produccion", async p => {
   // en Empaque no hay marco que diga el tiempo: la ficha lo trae
   const r = await p.evaluate(() => [...document.querySelectorAll("[draggable=true]")].filter(c => /P-0585|P-0586/.test(c.innerText)).map(c =>
-    (c.innerText.match(/P-\d{4}/) || [""])[0] + ":" + [...c.querySelectorAll("span")].filter(s => /^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)).length));   // (sólo el reloj: no el span que lo envolvía)
+    (c.innerText.match(/P-\d{4}/) || [""])[0] + ":" + [...c.querySelectorAll("span")].filter(s => (/^\d+h \d+m$|^\d+m$/.test(s.textContent.trim()) && /Geist Mono/.test(getComputedStyle(s).fontFamily)) || /^Empezó /.test(s.getAttribute("title") || "")).length));   // (sólo el reloj: no el span que lo envolvía)
   ok("tab-33-empaque-conserva-su-reloj", r.includes("P-0585:1"), `relojes en Empaque: ${r.join(", ")} (P-0585 tiene su bitácora abierta; P-0586 no)`);
 });
 const anchoDerecha = p => p.evaluate(() => { const propio = e => [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("").trim();
