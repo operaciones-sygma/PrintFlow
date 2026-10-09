@@ -354,6 +354,10 @@ const VIEW_MAXW={form:820,tasks:"none",orders:"none",oc:"none",chemicals:"none",
 import { createClient } from "@supabase/supabase-js";
 
 // ═══ SUPABASE CONNECTION ═══
+// v10.84.71 — ¿había una sesión guardada al cargar la página? Se mira ANTES de crear el cliente: al arrancar, la librería intenta
+//   renovar la sesión vencida y, si Auth la rechaza (la cerraron en otro lado), la borra antes de que la app pregunte; sin esto, la
+//   pantalla de entrar salía sin decir por qué (ses-23).
+const HABIA_SESION_AL_CARGAR=(()=>{try{return Object.keys(localStorage).some(k=>/^sb-.*-auth-token$/.test(k))}catch{return false}})();
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -364,6 +368,19 @@ const supabase = createClient(
 // legacy — el switch de lectura a _uid llega con F2/F3. Ver printflow-auth-rls-map.
 let AUTH_UID=null;
 try{ supabase.auth.onAuthStateChange((_e,s)=>{ AUTH_UID=s?.user?.id||null; }); }catch(e){ console.warn("[auth] state listener:",e); }
+// 🔥 v10.84.71 — LO QUE LA PANTALLA DE ENTRAR DICE, y por qué se llegó a ella (la sesión: ver «restaurarSesion» en App). Antes todo
+// era «Usuario o contraseña incorrectos», también con la red caída o con una cuenta de otra app; y la sesión que se cerraba sola no
+// decía nada. Un corte de red (o el servidor que no contesta) NO es una sesión cerrada ni una contraseña equivocada.
+const AVISO_SESION_CERRADA="Tu sesión se cerró: saliste en otra ventana, o se cerró desde otro equipo o desde otra app. Vuelve a entrar para seguir.";
+const AVISO_SIN_PERFIL="Esta cuenta ya no está activa en PrintFlow (la desactivaron o ya no existe). Si es un error, pídele a Marcelo que la revise.";
+const AVISO_SIN_ACCESO="Esa cuenta no tiene acceso a PrintFlow (es de otra app de SYGMA).";
+const AVISO_ABRIR_SIN_RED="No se pudo comprobar tu sesión: falló la conexión o el servidor no contestó. Tu sesión sigue guardada en este equipo: «Reintentar» la abre sin escribir la contraseña.";
+const AVISO_ENTRAR_SIN_RED="No se pudo conectar para entrar: falló la conexión o el servidor no contestó. Revisa el internet y vuelve a intentar.";
+const AVISO_CUENTA_SIN_RED="No se pudo comprobar tu cuenta: falló la conexión o el servidor no contestó. Vuelve a intentar.";
+const ROLES_PF=["admin","karla","secretaria","vendedor","produccion","preprensa","german","visor"];   // v10.77.6 (lista blanca; ver db.login)
+const esFallaDeRed=e=>!!e&&(e.name==="AuthRetryableFetchError"||e.status===0||e.status>=500||/fetch|network|conexi/i.test(String(e.message||"")));
+// Auth dice que la sesión ya no existe (la cerraron en otro lado): AuthSessionMissingError («session_not_found»), o el token rechazado
+const sesionCerradaPorAuth=e=>!!e&&(e.name==="AuthSessionMissingError"||e.status===401||e.status===403);
 
 /* v10.77.7 — FIRMA DE order-files. Es el ULTIMO paso antes de poder cerrar el bucket, que hoy es
    publico: 468 archivos de 111 clientes se bajan sin credencial ninguna. CobranzaFlow ya firma
@@ -1591,25 +1608,39 @@ const db = {
     // El empleado teclea su username → email sintético username@padillahnos.local. Tras signIn se re-verifica 'active'
     // en public.users vía get_user_session (bloquea desactivados aunque su cuenta auth siga viva) y se toman rol +
     // display_name FRESCOS de la BD (un cambio de rol aplica al entrar, no queda el app_metadata stale del JWT).
+    // v10.84.71 — un rechazo devuelve {error} con el PORQUÉ (antes null en todo, y la pantalla decía «Usuario o contraseña
+    //   incorrectos» también con la red caída o con una cuenta de otra app: tanda sesion, ses-12, 13 y 15).
     let authData;
     try{
       const r=await supabase.auth.signInWithPassword({email:username+"@padillahnos.local",password});
-      if(r.error||!r.data?.user) return null; // credenciales incorrectas / cuenta inexistente
+      if(r.error||!r.data?.user){
+        if(esFallaDeRed(r.error)) return {error:AVISO_ENTRAR_SIN_RED};
+        if(r.error?.status===429) return {error:"Demasiados intentos seguidos. Espera un minuto y vuelve a intentar."};
+        return {error:"Usuario o contraseña incorrectos"}; // credenciales incorrectas / cuenta inexistente
+      }
       authData=r.data;
-    }catch(e){ console.warn("[login] auth:",e?.message); return null; }
+    }catch(e){ console.warn("[login] auth:",e?.message); return {error:AVISO_ENTRAR_SIN_RED}; }
     const {data:sess,error:sErr}=await supabase.rpc("get_user_session",{p_username:authData.user.app_metadata?.username||username});
     const dbUser=Array.isArray(sess)&&sess.length>0?sess[0]:null;
-    if(sErr||!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return null; } // desactivado o error → sesión no queda viva
+    // desactivado o error → la sesión no queda viva (sólo la de aquí); un error de la base no dice que la cuenta no exista
+    if(sErr){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_CUENTA_SIN_RED}; }
+    if(!dbUser){ try{await supabase.auth.signOut({scope:"local"})}catch(e){} return {error:AVISO_SIN_PERFIL}; }
     /* v10.77.6 — ALLOWLIST DE ROLES. public.users es la tabla de usuarios de LAS DOS apps: quien
        tiene cuenta para SygmaAlmacen (rol 'almacen') podia entrar a PrintFlow con la misma
        contrasena y ver precios y margenes de todas las ordenes, que no es asunto suyo. Aqui no
        habia ningun filtro: bastaba existir y estar activo. Es lista BLANCA a proposito — un rol
        nuevo de otra app no entra solo. Espeja public.pf_puede_escribir() en la BD (v3.7.355);
        'visor' SI entra porque su rol existe justamente para ver PrintFlow. */
-    if(!["admin","karla","secretaria","vendedor","produccion","preprensa","german","visor"].includes(dbUser.role)){
+    if(!ROLES_PF.includes(dbUser.role)){
       try{await supabase.auth.signOut({scope:"local"})}catch(e){}
-      return null;
+      return {error:AVISO_SIN_ACCESO};
     }
+    // 🔥 v10.84.71 — ¿la sesión sigue viva? Si se cerró MIENTRAS se entraba (Auth ya no la renovó, u otra pestaña u otra app la
+    //   cerró en ese segundo), el aviso de Auth (SIGNED_OUT) llegó cuando todavía no había usuario y nadie lo vio: la app abría
+    //   como anónima (ses-07: 10 consultas así). Lo mismo arregló CobranzaFlow en v3.7.999o. getSession lee lo guardado en este
+    //   navegador; un corte de red al renovar NO es una sesión cerrada: se sigue.
+    const {data:{session:viva},error:vErr}=await supabase.auth.getSession();
+    if(!viva&&!esFallaDeRed(vErr)) return {error:AVISO_SESION_CERRADA};
     return {username:dbUser.username,role:dbUser.role,display_name:dbUser.display_name};
   },
   async loadNotifications(role) {
@@ -2911,19 +2942,22 @@ function FirstTimeHint({hintKey,text,color=C.ac,role}) {
 }
 
 // ─── LOGIN ─────────────────────────────────────────
-function Login({onLogin}) {
+// v10.84.71 — `aviso`: por qué se está en esta pantalla (la sesión se cerró, la cuenta ya no está activa o es de otra app, o no se
+//   pudo comprobar la sesión guardada, con «Reintentar»); lo pone App. Se va al volver a intentar (`onIntentar`).
+function Login({onLogin,aviso,onReintentar,onIntentar}) {
   const [username,setUsername] = useState("");
   const [password,setPassword] = useState("");
   const [error,setError] = useState("");
   const [loading,setLoading] = useState(false);
   const submit = async () => {
     if (!username || !password) return setError("Escribe usuario y contraseña");
+    onIntentar?.();
     setLoading(true); setError("");
     try {
-      const user = await db.login(username.toLowerCase().trim(), password);
-      if (user) { onLogin(user.role, user.display_name, user.username); }
-      else { setError("Usuario o contraseña incorrectos"); }
-    } catch { setError("Error de conexión"); }
+      const r = await db.login(username.toLowerCase().trim(), password);
+      if (r && !r.error) { onLogin(r.role, r.display_name, r.username); }
+      else { setError(r?.error || "Usuario o contraseña incorrectos"); }
+    } catch { setError(AVISO_ENTRAR_SIN_RED); }
     setLoading(false);
   };
   return (
@@ -2933,6 +2967,10 @@ function Login({onLogin}) {
         <img src={LOGO} alt="PrintFlow" style={{width:120,height:120,marginBottom:12,borderRadius:20,display:"block",margin:"0 auto 12px"}}/>
         <h1 style={{fontSize:34,fontWeight:800,letterSpacing:"-0.02em",color:C.tx,margin:"0 0 8px"}}>PrintFlow</h1>
         <p style={{fontSize:11,color:C.t2,textTransform:"uppercase",margin:"0 0 32px"}}>Sistema de Producción</p>
+        {aviso&&<div data-aviso-sesion={aviso.tipo} role="status" style={{textAlign:"left",background:C.wn+"14",borderLeft:"3px solid "+C.wn,borderRadius:10,padding:"10px 12px",margin:"-12px 0 20px",fontSize:13,lineHeight:1.45,color:C.tx}}>
+          {aviso.texto}
+          {aviso.tipo==="sin-red"&&onReintentar&&<div style={{marginTop:8}}><button onClick={onReintentar} disabled={!!aviso.comprobando} style={{...bs(C.sf,C.tx),border:"0.5px solid "+C.bdSt,fontSize:13,padding:"8px 14px",cursor:aviso.comprobando?"wait":"pointer"}}>{aviso.comprobando?"Comprobando…":"Reintentar"}</button></div>}
+        </div>}
         <div style={{textAlign:"left",marginBottom:12}}>
           <label style={lbl}>Usuario</label>
           <input style={inp} value={username} onChange={e=>setUsername(e.target.value)} placeholder="Ej: gerardo, noemi, admin" onKeyDown={e=>e.key==="Enter"&&submit()}/>
@@ -2941,7 +2979,7 @@ function Login({onLogin}) {
           <label style={lbl}>Contraseña</label>
           <input style={inp} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Contraseña" onKeyDown={e=>e.key==="Enter"&&submit()}/>
         </div>
-        {error && <div style={{color:C.dn,fontSize:12,fontWeight:600,marginBottom:12}}>{error}</div>}
+        {error && <div role="alert" style={{color:C.dnInk,fontSize:12,fontWeight:600,marginBottom:12,lineHeight:1.45}}>{error}</div>}
         <button onClick={submit} disabled={loading} style={{...bt(loading?C.bdSt:C.ac),width:"100%",justifyContent:"center",padding:"14px",fontSize:15,borderRadius:14,cursor:loading?"not-allowed":"pointer"}}>{loading?<><HourglassIcon size={15} weight="bold"/>Verificando...</>:"Entrar"}</button>
       </div>
     </div>
@@ -18708,53 +18746,94 @@ export default function PrintFlow() {
   // v10.17.0 — Restaurar sesión al montar la app (persistencia en localStorage).
   // Si hay sesión guardada, re-verifica contra DB que el usuario sigue activo y restaura el state.
   // Si no hay sesión o es inválida, limpia localStorage y deja que aparezca el Login.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        // v10.73.48 — AUTH F2-full: AUTH-ONLY. Se restaura SOLO desde la sesión de Supabase Auth; se retiró el fallback
-        // a pf-session legacy → una sesión pre-F1 (sin JWT) YA NO entra: cae a la pantalla de login y re-autentica una
-        // vez (misma contraseña). Esto elimina toda sesión sin JWT, requisito para rechazar anon en verify_actor_role
-        // sin dejar a nadie en estado "logueado pero nada funciona". Se sigue re-verificando 'active' contra la BD.
-        let sessionUsername=null;
-        try{
-          const {data:{session:authSess}}=await supabase.auth.getSession();
-          if(authSess?.user) sessionUsername=authSess.user.app_metadata?.username||String(authSess.user.email||"").split("@")[0]||null;
-        }catch(e){ console.warn("[auth restore] getSession:",e?.message); }
-        if (!sessionUsername) { try{localStorage.removeItem("pf-session")}catch(e){} if (!cancelled) setAuthChecked(true); return; }
-        const session = {username:sessionUsername};
+  // v10.73.48 — AUTH F2-full: AUTH-ONLY. Se restaura SOLO desde la sesión de Supabase Auth; se retiró el fallback
+  // a pf-session legacy → una sesión pre-F1 (sin JWT) YA NO entra: cae a la pantalla de login y re-autentica una
+  // vez (misma contraseña). Esto elimina toda sesión sin JWT, requisito para rechazar anon en verify_actor_role
+  // sin dejar a nadie en estado "logueado pero nada funciona". Se sigue re-verificando 'active' contra la BD.
+  // 🔥 v10.84.71 — LA SESIÓN, como CobranzaFlow v3.7.999f y v3.7.999o (PrintFlow no lo tenía; tanda tests/romper/sesion.mjs, 16 de 21
+  //   fallaban contra v10.84.70):
+  //   · el arranque ya NO hace signOut() a secas. En supabase-js es GLOBAL y las cuentas son por área: una estación que abría con la
+  //     red caída (get_user_session fallaba) cerraba esa cuenta en TODAS las estaciones, y en Almacén (comparte las cuentas). Ahora una
+  //     falla al comprobar no saca a nadie: lo dice y ofrece «Reintentar», con la sesión guardada; la cuenta desactivada, o con un rol
+  //     de otra app (la lista blanca del login, que aquí faltaba), sale SÓLO de aquí y la pantalla de entrar dice por qué;
+  //   · la sesión guardada se le confirma a Auth (getUser): una que cerraron en otro lado abría la app viva a medias;
+  //   · y antes de abrir, getSession otra vez: si se cerró MIENTRAS se comprobaba (ses-08), la app abría como anónima.
+  //   Un corte de red al renovar NO es una sesión cerrada (AuthRetryableFetchError): no se tira la sesión.
+  const [avisoEntrada,setAvisoEntrada]=useState(null);   // {tipo:"cerrada"|"sin-perfil"|"sin-acceso"|"sin-red", texto, comprobando}
+  const userRef=useRef(null); userRef.current=user;      // para el aviso de Auth (SIGNED_OUT), que llega fuera de React
+  const saliendoRef=useRef(false);                        // «Salir» de la persona: su SIGNED_OUT no es «la sesión se cerró sola»
+  const restaurandoRef=useRef(null);
+  const restaurarSesion=useCallback(()=>{
+    if(restaurandoRef.current) return restaurandoRef.current;   // un doble clic en «Reintentar» es UNA comprobación
+    const p=(async()=>{
+      const sinRed=()=>{ setAvisoEntrada({tipo:"sin-red",texto:AVISO_ABRIR_SIN_RED}); setAuthChecked(true); };
+      const fuera=async(tipo,texto)=>{
+        try{localStorage.removeItem("pf-session")}catch(e){}
+        try{ await supabase.auth.signOut({scope:"local"}); }catch(e){}   // SÓLO la de aquí
+        setAvisoEntrada({tipo,texto}); setAuthChecked(true);
+      };
+      try{
+        setAvisoEntrada(a=>a&&a.tipo==="sin-red"?{...a,comprobando:true}:a);
+        let authSess=null,sesErr=null;
+        try{ const r=await supabase.auth.getSession(); authSess=r.data?.session||null; sesErr=r.error||null; }
+        catch(e){ sesErr=e; console.warn("[auth restore] getSession:",e?.message); }
+        if(!authSess?.user){
+          if(esFallaDeRed(sesErr)) return sinRed();   // estaba guardada y la red no dejó renovarla: se queda guardada
+          try{localStorage.removeItem("pf-session")}catch(e){}
+          // había una y Auth ya no la quiso renovar (ahora, o la librería al arrancar: HABIA_SESION_AL_CARGAR): se dice; sin sesión
+          // guardada, la pantalla de entrar a secas
+          setAvisoEntrada(sesErr||HABIA_SESION_AL_CARGAR?{tipo:"cerrada",texto:AVISO_SESION_CERRADA}:null); setAuthChecked(true); return;
+        }
+        const sessionUsername=authSess.user.app_metadata?.username||String(authSess.user.email||"").split("@")[0]||null;
         // v10.58.0 — Re-verificación via RPC server-side (acceso directo a public.users
         // revocado para anon). La RPC solo retorna identidad básica si el user sigue activo.
-        const { data: dbUserRows, error } = await supabase.rpc("get_user_session", { p_username: session.username });
-        if (cancelled) return;
-        const dbUser = Array.isArray(dbUserRows) && dbUserRows.length > 0 ? dbUserRows[0] : null;
-        if (error || !dbUser) {
-          // Usuario no existe o está desactivado → invalidar sesión (legacy Y auth)
-          localStorage.removeItem("pf-session");
-          try{ await supabase.auth.signOut(); }catch(e){}
-          setAuthChecked(true);
-          return;
-        }
+        const [{error:authErr},resp]=await Promise.all([
+          supabase.auth.getUser().catch(e=>({error:e})),
+          supabase.rpc("get_user_session",{p_username:sessionUsername}),
+        ]);
+        if(sesionCerradaPorAuth(authErr)) return fuera("cerrada",AVISO_SESION_CERRADA);
+        if(resp.error) return sinRed();   // la base no contestó: eso no dice que la cuenta no exista
+        const dbUser=Array.isArray(resp.data)&&resp.data.length>0?resp.data[0]:null;
+        if(!dbUser) return fuera("sin-perfil",AVISO_SIN_PERFIL);
+        if(!ROLES_PF.includes(dbUser.role)) return fuera("sin-acceso",AVISO_SIN_ACCESO);
+        const {data:{session:viva},error:vErr}=await supabase.auth.getSession();
+        if(!viva&&!esFallaDeRed(vErr)) return fuera("cerrada",AVISO_SESION_CERRADA);
         // Sesión válida → usar SIEMPRE los datos de la DB (no los de localStorage)
+        userRef.current=dbUser.role;
+        setAvisoEntrada(null);
         setUser(dbUser.role);
         setUserName(dbUser.display_name);
         setUserLogin(dbUser.username);
         setOrderFilter(dbUser.role === "vendedor" ? "mine" : "all");
         // Re-guardar para mantener el role/displayName sincronizados
-        localStorage.setItem("pf-session", JSON.stringify({
-          username: dbUser.username,
-          role: dbUser.role,
-          displayName: dbUser.display_name
-        }));
+        try{ localStorage.setItem("pf-session",JSON.stringify({username:dbUser.username,role:dbUser.role,displayName:dbUser.display_name})); }catch(e){}
         setAuthChecked(true);
-      } catch (err) {
-        console.error("[auth restore] Error:", err);
-        try { localStorage.removeItem("pf-session"); } catch {}
-        if (!cancelled) setAuthChecked(true);
+      }catch(err){
+        console.error("[auth restore] Error:",err);
+        sinRed();
       }
-    })();
-    return () => { cancelled = true; };
-  }, []); // solo al montar
+    })().finally(()=>{ restaurandoRef.current=null; });
+    restaurandoRef.current=p;
+    return p;
+  },[]);
+  useEffect(()=>{ restaurarSesion(); },[restaurarSesion]);   // solo al montar
+
+  // 🔥 v10.84.71 — LA SESIÓN QUE SE CIERRA SIN «SALIR»: en otra pestaña, desde otra app u otro equipo con un logout global, o Auth que
+  //   ya no la renueva. supabase-js avisa con SIGNED_OUT y hasta hoy nadie lo escuchaba: la pestaña seguía abierta y todo lo que pedía
+  //   a la base salía como anónimo. Ahora se limpia como «Salir» y la pantalla de entrar dice por qué. Fuera del callback de Auth
+  //   (supabase-js pide no hacer más llamadas dentro), en el siguiente turno.
+  const limpiarSesion=useCallback(()=>{   // lo que «Salir» deja limpio, sin cerrar la sesión (ver logout)
+    userRef.current=null;
+    try{localStorage.removeItem("pf-session")}catch{}
+    setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setLectura({ok:null,fallo:null});setWakeupItems(null);   // (v10.84.65 — lectura: tras volver a entrar, «Leyendo…» y no «vacío»)
+  },[]);
+  useEffect(()=>{
+    const {data}=supabase.auth.onAuthStateChange(evento=>{
+      if(evento!=="SIGNED_OUT"||saliendoRef.current||!userRef.current) return;
+      setTimeout(()=>{ if(saliendoRef.current||!userRef.current) return; limpiarSesion(); setAvisoEntrada({tipo:"cerrada",texto:AVISO_SESION_CERRADA}); },0);
+    });
+    return ()=>data?.subscription?.unsubscribe();
+  },[limpiarSesion]);
 
   const notifKey=user==="vendedor"?userLogin:user;
 
@@ -21279,7 +21358,7 @@ export default function PrintFlow() {
   );
 
   if(!user) return (
-    <Login onLogin={(role, name, login)=>{setUser(role);setUserName(name);setUserLogin(login);setOrderFilter(role==="vendedor"?"mine":"all");setView("pipeline");try{localStorage.setItem("pf-session",JSON.stringify({username:login,role,displayName:name}))}catch{}ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
+    <Login aviso={avisoEntrada} onReintentar={restaurarSesion} onIntentar={()=>setAvisoEntrada(null)} onLogin={(role, name, login)=>{userRef.current=role;setAvisoEntrada(null);setUser(role);setUserName(name);setUserLogin(login);setOrderFilter(role==="vendedor"?"mine":"all");setView("pipeline");try{localStorage.setItem("pf-session",JSON.stringify({username:login,role,displayName:name}))}catch{}ld("pf-welcome-"+role,false).then(seen=>{if(!seen){setShowWelcome(true);sv("pf-welcome-"+role,true)}})}}/>
   );
 
   const rL={produccion:"Producción",preprensa:"Pre-prensa",german:"Germán",secretaria:"Lupita",vendedor:"Vendedor",karla:"Karla",admin:"Admin",visor:"Consulta"};
@@ -21335,7 +21414,9 @@ export default function PrintFlow() {
   // onAuthStateChange en esta pestaña), así que sin esto el uid viejo contaminaría las columnas _uid del siguiente
   // login que entre por el fallback legacy (misma caída de red que rompió el signOut).
   const clearSbAuthStorage=()=>{try{Object.keys(localStorage).filter(k=>k.startsWith("sb-")&&k.includes("-auth-token")).forEach(k=>localStorage.removeItem(k))}catch{}AUTH_UID=null;};
-  const logout=()=>{try{supabase.auth.signOut({scope:"local"}).then(({error})=>{if(error)clearSbAuthStorage()}).catch(()=>clearSbAuthStorage())}catch{clearSbAuthStorage()}try{localStorage.removeItem("pf-session")}catch{}setUser(null);setUserLogin(null);setOrderFilter(null);setTaskFilters(new Set());setAdminRoleFilter("");setLoaded(false);setOrders([]);setLectura({ok:null,fallo:null});setWakeupItems(null)};   // (v10.84.65 — lectura: tras volver a entrar, «Leyendo…» y no «vacío»)
+  // v10.84.71 — `saliendoRef`: el SIGNED_OUT de este «Salir» es de la persona, no «la sesión se cerró sola» (la pantalla de entrar no
+  //   lo dice); la limpieza es la misma que la de la sesión que se cierra sola (`limpiarSesion`).
+  const logout=()=>{saliendoRef.current=true;const listo=()=>{setTimeout(()=>{saliendoRef.current=false},0)};try{supabase.auth.signOut({scope:"local"}).then(({error})=>{if(error)clearSbAuthStorage()}).catch(()=>clearSbAuthStorage()).finally(listo)}catch{clearSbAuthStorage();listo()}setAvisoEntrada(null);limpiarSesion()};
   // v10.72.40 — grupos del command palette: navegación (por sección del Sidebar) + acciones, gateadas por rol igual que el header.
   const cmdGroups=(()=>{
     const stripCount=l=>l.replace(/\s*\(\d+\)\s*$/,"");

@@ -30,7 +30,11 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 - **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
   Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
   `verify_actor_role(p_actor, roles[])` (JWT-first: la identidad la da `auth.uid()`, `p_actor` es
-  etiqueta).
+  etiqueta). 🔥 **Toda salida es `signOut({scope:"local"})`**: un `signOut()` a secas es GLOBAL y cierra esa cuenta en todas las
+  estaciones (las cuentas son por área) y en Almacén, que usa las mismas (`grep -n "signOut("` antes de subir). Desde v10.84.71 la
+  sesión se porta como la de CobranzaFlow (v3.7.999f/o): la que se cierra sola (`SIGNED_OUT`) lleva a entrar diciendo por qué; al
+  abrir, la sesión guardada se le confirma a Auth y la entrada la vuelve a mirar antes de abrir (si se cerró a media entrada, la app
+  abría como anónima); una falla al comprobar (red, 503) **no saca a nadie**: «Reintentar». Tanda `tests/romper/sesion.mjs`.
 - **Marcelo** es dueño y único desarrollador; **Karla** factura; **Lupita** captura; **Gerardo/Noemí/
   Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una

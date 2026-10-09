@@ -12,6 +12,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.71 — La sesión: nadie sale de todas las estaciones por un corte de red, y la que se cierra sola lleva a entrar diciendo por qué — 9-oct-2026
+
+**Qué pasaba.** Era el pendiente de revisar si PrintFlow tenía el hueco que CobranzaFlow arregló en v3.7.999o (un `SIGNED_OUT` que
+llega a media entrada se ignoraba y la app abría como anónima). Lo tenía, y más ancho, porque tampoco tenía lo de v3.7.999f:
+- 🔥 **El arranque cerraba la sesión de forma GLOBAL.** Al abrir con la sesión guardada, si `get_user_session` fallaba (un corte de red,
+  la base con 503) o la cuenta ya no estaba activa, hacía `signOut()` a secas, que en supabase-js es global. Las cuentas de PrintFlow
+  son por área y Almacén usa las mismas: una estación que abría con la red caída cerraba esa cuenta en TODAS las estaciones y en
+  Almacén. Y trataba el corte de red como «usuario desactivado». (Era el renglón de PrintFlow en `cobranzaflow/docs/PENDIENTES.md`,
+  «las salidas GLOBALES», desde el 7-oct.)
+- **Nadie escuchaba `SIGNED_OUT`** (el listener sólo guardaba el uid). Si la sesión se cerraba sin «Salir» (otra pestaña, otra app u
+  otro equipo con un logout global, Auth que ya no la renueva), la app seguía abierta con el rol y todo lo que pedía a la base salía como
+  anónimo.
+- **A media entrada** (el caso de v3.7.999o): si la sesión se cerraba mientras se entraba o mientras se recuperaba al abrir, la app abría
+  igual y hacía **10 consultas como anónima**.
+- **Al abrir no se le preguntaba a Auth**: una sesión que ya cerraron en otro lado abría la app viva a medias (PostgREST sólo revisa la
+  firma del JWT, las lecturas pasaban).
+- **Un rol de otra app entraba al abrir**: la lista blanca de roles (v10.77.6) estaba en el login, no en la sesión guardada.
+- **«Usuario o contraseña incorrectos» para todo**: también con la red caída o con una cuenta de otra app o desactivada.
+
+**Qué se cambió** (todo en `src/App.jsx`; la base NO cambió):
+- **El arranque** (`restaurarSesion`, que también es «Reintentar»): pregunta a la vez a Auth (`getUser`) y a la base
+  (`get_user_session`).
+  - Una falla al comprobar (red, 503) **no saca a nadie**: la pantalla de entrar dice «No se pudo comprobar tu sesión» con
+    **«Reintentar»**, que la abre sin contraseña. La sesión sigue guardada.
+  - La sesión cerrada en otro lado, la cuenta desactivada y el rol de otra app (la misma lista blanca del login) salen **sólo de aquí**
+    (`scope: "local"`) y la pantalla de entrar dice por qué.
+  - Antes de abrir, `getSession` otra vez: si se cerró mientras tanto, no abre.
+  - Si al cargar la página la librería ya había borrado la sesión rechazada, también se dice (`HABIA_SESION_AL_CARGAR`; la vuelta 2 lo
+    encontró, ses-23).
+- **La sesión que se cierra sola** (`SIGNED_OUT` que no es de «Salir»): se limpia como «Salir» (`limpiarSesion`, la misma limpieza) y la
+  pantalla de entrar dice «Tu sesión se cerró: saliste en otra ventana, o se cerró desde otro equipo o desde otra app». «Salir» marca
+  `saliendoRef` para no decirlo de su propia salida.
+- **La entrada** (`db.login`): confirma la sesión con `getSession` justo antes de abrir, y devuelve el porqué de cada rechazo: la red, la
+  cuenta que no se pudo comprobar, la desactivada, la de otra app, «demasiados intentos». El error va en `C.dnInk` (el rojo claro no
+  daba AA con textos largos).
+- Un corte de red al renovar **no** es una sesión cerrada (`AuthRetryableFetchError`): no se tira ni se avisa nada.
+- **Qué NO se toca:** la base, las RPC, «Salir» (ya era local), el login con la contraseña buena, el `AUTH_UID`, y lo que hace la app ya
+  abierta. No se portó el `fetchConSesion` de CobranzaFlow (el 401 del motor confirmado con Auth): aquí el motor sólo se usa para emitir
+  traslados.
+
+**Cómo se probó.** Tanda nueva **`tests/romper/sesion.mjs`** (entra al candado). Compila la app real contra una Supabase de mentira y
+simula Auth y la base en el navegador, contestando como auth-js 2.106; nada sale a producción. Tres vueltas:
+- **Vuelta 1** (21 casos, escritos antes del arreglo): contra v10.84.70 **fallaban 16**. Tres falsas alarmas eran de la prueba (tomaba el
+  «Failed to fetch» de la red caída a propósito como error de la app) y se corrigieron. Después del arreglo, dos más fueron de la
+  prueba (daba por terminado «Reintentar» mientras decía «Comprobando…»); se corrigieron para esperar la señal. Quedó 21 de 21.
+- **Vuelta 2** (12 casos por donde no se diseñó: la cuenta desactivada al entrar, la sesión vencida que Auth ya no renueva, el aviso que
+  se va al intentar, la red caída y entrar con la contraseña, la paleta Ctrl+K abierta, la base con 503, «Reintentar» cuando ya la
+  cerraron, dos pestañas, «Salir» con la red caída, otra cuenta después del aviso, el aviso de la red a 1366 y 1920): **falló 1, de la
+  app** (ses-23, arriba). Quedó 33 de 33.
+- **Vuelta 3** (3 casos: que el aviso no salga la primera vez ni al recargar después de «Salir», y en tableta): **36 de 36**, sin fallas.
+- Lo que la sesión de CobranzaFlow aprendió y la tanda trae: la cuenta sin perfil sale sólo de aquí, la prueba espera la señal de que
+  ya entró (nunca un tiempo fijo), y la sesión se cierra a propósito justo cuando se lee `get_user_session`.
+- **Sin probar aquí:** la app publicada contra el Auth de verdad (la revisión en producción, abajo, es sin escribir).
+
+**El pendiente de «Asignar folio»** que la entrada v10.84.70 llama «v10.84.71» pasa a **v10.84.72** (esta versión tomó el número).
+
 ## v10.84.70 — «Asignar folio y entregar», tres revisiones independientes (23 → 28 → 30/40) — 8-oct-2026
 
 **Qué pasaba.** Marcelo eligió «Asignar folio y entregar» para una pasada de `/impeccable critique` (la ventana con la que Karla folia
