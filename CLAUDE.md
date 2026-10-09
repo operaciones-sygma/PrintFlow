@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 509 pruebas, ~7 min; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 803 pruebas, ~5 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,14 +171,21 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.70 (8-oct, noche; READY `dpl_BwWmZyWgvTSUywcdkgyiNZXjydtM`; vuelta atrás: `git revert c188ddf 7b66fd1 9153986`,
-  porque el rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; el código de v10.84.69 está en
-  `dpl_HN6Y1bNsMqV631JPZUZYsXhWgHwN`; la base no cambió; 767 pruebas).
-  v10.84.70: **«Asignar folio y entregar», tres revisiones independientes (23 → 28 → 30/40), CERRADA por las 3 pasadas**: las facturas
+- **LIVE:** v10.84.71 (9-oct, madrugada, desde la PC de casa; READY `dpl_DdYjM6UaGc3xQnyPw3KT6gM8NqkR`, commit `d224ae3`; vuelta atrás:
+  `git revert 6d919c5`, porque el rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; el código
+  de v10.84.70 está en `dpl_9RPTiW319tgajwUxxKS8DvQfBexA`; la base no cambió; 803 pruebas).
+  v10.84.71: **la sesión, como la de CobranzaFlow (v3.7.999f/o)**: el arranque ya no cierra la sesión de forma GLOBAL (con la red caída
+  tumbaba esa cuenta en todas las estaciones y en Almacén); una falla al comprobar no saca a nadie («Reintentar»); la sesión que se
+  cierra sola lleva a entrar diciendo por qué; la que se cierra a media entrada ya no deja la app abierta como anónima; al abrir se le
+  pregunta a Auth y se aplica la lista blanca de roles; y la pantalla de entrar distingue la red, la cuenta desactivada y la de otra
+  app de la contraseña mala. Tanda `tests/romper/sesion.mjs` (36; contra v10.84.70 fallaban 16 de 21) y `tests/recorrido/sesion.mjs`
+  contra produccion.sygma.mx, 4 de 4.
+  v10.84.70 (8-oct, noche; READY `dpl_BwWmZyWgvTSUywcdkgyiNZXjydtM`; vuelta atrás: `git revert c188ddf 7b66fd1 9153986`; 767 pruebas):
+  **«Asignar folio y entregar», tres revisiones independientes (23 → 28 → 30/40), CERRADA por las 3 pasadas**: las facturas
   hechas por adelantado se leen al abrir (con la del mismo importe la acción es ligarla, comparando la orden con la factura), los
   errores de la base vuelven al diálogo, Enter-Enter ya no emite sin leer, el selector de pagos (cuatro ventanas) con el monto lleno y a
   prueba de dedazos, el efectivo que ligar no cobra se dice y se reconoce, y el escudo contra el doble clic en lo que cambia el acomodo.
-  Lo que queda (v10.84.71, y una decisión de base de Marcelo: ligar con efectivo y crear el vale), en la entrada del CHANGELOG. Revisado
+  Lo que queda (ahora v10.84.72, y una decisión de base de Marcelo: ligar con efectivo y crear el vale), en la entrada del CHANGELOG. Revisado
   en producción sin escribir: el código servido y `tests/recorrido/ligar-anticipo.mjs` contra produccion.sygma.mx, 15 de 15.
   v10.84.69 (8-oct, noche; READY `dpl_4DjFqtsmFmvYybBJmz4Dqva3eT6n`; vuelta atrás: `git revert b8172af`, porque el rollback de
   un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; la pantalla de antes funciona con la base nueva; 698

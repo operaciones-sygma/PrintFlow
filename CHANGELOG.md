@@ -64,7 +64,23 @@ simula Auth y la base en el navegador, contestando como auth-js 2.106; nada sale
 - **Vuelta 3** (3 casos: que el aviso no salga la primera vez ni al recargar después de «Salir», y en tableta): **36 de 36**, sin fallas.
 - Lo que la sesión de CobranzaFlow aprendió y la tanda trae: la cuenta sin perfil sale sólo de aquí, la prueba espera la señal de que
   ya entró (nunca un tiempo fijo), y la sesión se cierra a propósito justo cuando se lee `get_user_session`.
-- **Sin probar aquí:** la app publicada contra el Auth de verdad (la revisión en producción, abajo, es sin escribir).
+- **Contra el Auth de verdad**, antes de subir: `tests/recorrido/sesion.mjs` con la app compilada y la cuenta de pruebas (escrituras y
+  salida cortadas en el navegador), **4 de 4**. La sesión buena se recupera al recargar preguntándole a Auth; sin red no sale nadie y
+  «Reintentar» abre; la renovación rechazada lleva al aviso; «Salir» es local.
+- **Corrida doble** (las 15 tandas de antes contra el código de v10.84.70, en una copia aparte): **765 de 767**. Las dos que fallaban
+  (tablero, tab-30 y tab-33, los relojes) eran de la PRUEBA y salieron por la hora: a la 01:53, «hace 2 h» y «hace 5 h» del banco son
+  ayer, la app lo dice «desde ayer 23:53» (v10.84.58) y la prueba sólo contaba «2h 5m». Ahora cuenta las dos formas (`bebe57c`; la
+  tanda, 130 de 130 a la 01:54). Después, el candado: **803 de 803** (las 16 tandas), sin regresiones.
+- 🔥 **El primer push lo frenó el candado** con «el build falló». No era el código: en la PC de casa, `npm run build` (Vite 6) truena
+  si se corre desde `C:\Users\padil\…`, la unión a `C:\Users\Marcelo\…` (el root va por la unión y el index.html por la ruta real). Se
+  subió desde `C:\Users\Marcelo\Projects\PrintFlow`. Vercel no se entera.
+
+**En producción** el 9-oct a las 02:06: READY `dpl_DdYjM6UaGc3xQnyPw3KT6gM8NqkR` (commit `d224ae3`). Vuelta atrás: `git revert 6d919c5`,
+porque el rollback de un clic de Vercel sólo va al despliegue anterior y el commit de docs ya lo ocupa; el código de v10.84.70 está en
+`dpl_9RPTiW319tgajwUxxKS8DvQfBexA`; la base no cambió. Revisado sin escribir: producción sirve `index-C5aFWJX7.js`, el mismo que se
+compiló y probó aquí, y `tests/recorrido/sesion.mjs` contra produccion.sygma.mx dio **4 de 4**. El recorrido de toda la app como cada
+rol (`npm run recorrido`, contra producción): 8 roles, 94 pasos, **nada truena**. Admin entra «lenta» (~8-9 s, 68 peticiones), igual
+que con el código de v10.84.70 en las mismas condiciones (7.8 y 8.5 s, las mismas 68): ya existía, no es de esta versión.
 
 **El pendiente de «Asignar folio»** que la entrada v10.84.70 llama «v10.84.71» pasa a **v10.84.72** (esta versión tomó el número).
 
