@@ -29,6 +29,8 @@ const partes = [
   // (v10.84.70) lo nuevo del selector de pagos y de «Asignar folio» (opcional: el App.jsx de antes no lo tiene, y el banco corre con los dos)
   ...(L.some(l => l.startsWith("const METODO_PALABRA=")) ? [line(/^const METODO_PALABRA=/, "METODO_PALABRA"), line(/^const montoLimpio=/, "montoLimpio"), line(/^const faltaDelPago=/, "faltaDelPago")] : []),
   ...(L.some(l => l.startsWith("function useAnchoMinimo(")) ? [fnBlock("useAnchoMinimo")] : []),
+  // (v10.84.70, tercera revisión) el selector de pagos pone el escudo contra el doble clic al cambiar el acomodo
+  ...(L.some(l => l.startsWith("const escudoDeClics=")) ? [line(/^const escudoDeClics=/, "escudoDeClics")] : []),
   `const Q = new URLSearchParams(location.search);
 const EMISOR = Q.get("emisor") || "on", CLIENTE = Q.get("cliente") || "normal", PRE = Q.get("pre") === "1";
 const TRASLADO = Q.get("traslado") || "listo", FALLA = Q.get("falla") === "1";

@@ -7143,7 +7143,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
 
   // v10.72.28: bank_ref_omitted_intentional viaja por el array al RPC (multi-pay lo propaga por pago a cobranza.payments)
   const nuevo = monto => ({method: null, amount: monto > 0 ? (Math.round(monto * 100) / 100).toFixed(2) : "", bank_reference: "", bank_ref_omitted_intentional: false});
+  // v10.84.70 (tercera revisión, P1) — lo que cambia el acomodo pone el escudo medio segundo: el segundo clic de un doble clic caía en
+  //   lo que la ventana acababa de poner bajo el cursor (doble clic en «Agregar otro pago» elegía «Tarjeta» en el pago nuevo, que ya
+  //   trae el monto: un cobro que nadie hizo, listo para emitir). El escudo sólo detiene el mouse; el teclado sigue igual. 400 ms en lo
+//   que se hace seguido (estado, método, tipo: atrapa el segundo clic de un doble clic y deja pasar el siguiente clic a propósito);
+//   500 ms en lo que nunca va seguido (agregar o quitar un pago, «No es de este trabajo», «Ligar … a esta orden», ir a partes).
   const elegirEstado = st => {
+    escudoDeClics(400);
     if (st === "unpaid") {
       if (list.some(r => r.method || Number(r.amount) > 0 || (r.bank_reference || "").trim())) guardados.current = list;
       onChange("unpaid", []);
@@ -7153,12 +7159,13 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
     if (guardados.current && guardados.current.length) { const g = guardados.current; guardados.current = null; onChange(st, g); return; }
     onChange(st, [nuevo(st === "paid" ? totalDisplay : 0)]);
   };
-  const addRef = () => { enfocarNuevo.current = true; onChange(status, [...list, nuevo(sumRemaining)]); };
+  const addRef = () => { escudoDeClics(500); enfocarNuevo.current = true; onChange(status, [...list, nuevo(sumRemaining)]); };
   const updateRef = (idx, patch) => {
     const next = list.map((r, i) => i === idx ? {...r, ...patch} : r);
     onChange(status, next);
   };
   const removeRef = (idx) => {
+    escudoDeClics(500);
     onChange(status, list.filter((_, i) => i !== idx));
   };
   const elegirMetodo = (idx, r, id) => {
@@ -7248,7 +7255,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
                   const MIcon = m.Icon, sel = r.method === m.id, enfocable = sel || (!r.method && mi === 0);
                   return (
                   <button key={m.id} type="button" role="radio" aria-checked={sel} tabIndex={enfocable ? 0 : -1} data-metodo={m.id} title={METODO_PALABRA[m.id]}
-                    onClick={() => elegirMetodo(idx, r, m.id)}
+                    onClick={() => { escudoDeClics(400); elegirMetodo(idx, r, m.id); }}
                     style={{minHeight: 40, padding: "4px 2px", borderRadius: 8, border: "1.5px solid " + (sel ? C.ac : C.bd), background: sel ? C.ac + "14" : C.bg, fontSize: 10.5, fontWeight: sel ? 700 : 600, cursor: "pointer", color: sel ? C.tx : C.t2, fontFamily: "'Geist',sans-serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, lineHeight: 1.15, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}}>
                     <MIcon size={13} weight="bold" color={sel ? C.ac : undefined}/>{METODO_PALABRA[m.id]}
                   </button>
@@ -7367,7 +7374,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
               <span><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{sumOverPaid
                 ? <>Lo capturado pasa del total por ${fmtMx(sum - totalDisplay)}: corrige los montos.</>
                 : <>Lo capturado cubre el total: si ya pagó todo, elige «Pagada».</>}</span>
-              {!sumOverPaid && <button type="button" onClick={() => onChange("paid", list)} style={{...bt(C.bg, C.tx), border: "0.5px solid " + C.bd, fontSize: 11.5, padding: "5px 12px", whiteSpace: "nowrap"}}>Cambiar a «Pagada»</button>}
+              {!sumOverPaid && <button type="button" onClick={() => { escudoDeClics(400); onChange("paid", list); }} style={{...bt(C.bg, C.tx), border: "0.5px solid " + C.bd, fontSize: 11.5, padding: "5px 12px", whiteSpace: "nowrap"}}>Cambiar a «Pagada»</button>}
             </div>
           )}
         </div>
@@ -9878,6 +9885,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const aplicarTipo=t=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus((t==="factura"||t==="remision")&&sinPrecio?"unpaid":null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);setBillTo(null);setErr("")};
   const cambiarTipo=t=>{
     if(t===type)return; // mismo tipo, no-op
+    escudoDeClics(400);   // v10.84.70 (tercera revisión, P1) — las tarjetas se encogen y el pago aparece: el segundo clic caía en él
     const hasWork=paymentRefs.length>0||pagoElegido||!!folio||!!bankReference||!!billTo;
     if(!hasWork){aplicarTipo(t);return}
     // v10.84.70 (segunda revisión) — dice QUÉ se borra («1 pago por $66,004.00»), no «los datos»
@@ -9920,6 +9928,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // v10.84.70 (segunda revisión) — «Facturar por partes» con algo capturado pregunta, como Esc y «Cancelar» (lo tiraba sin preguntar)
   const irAPartes=()=>{
     if(!onFacturarPorPartes)return;
+    escudoDeClics(500);
     if(capturado){const r=resumenCapturado();preguntar({title:"¿Ir a «Facturar por partes»?",message:(r?"Se pierde lo que capturaste aquí: "+r+". ":"")+"En «Facturar por partes» cada parte lleva su folio y su pago.",
       confirmLabel:"Ir a Facturar por partes",confirmColor:C.ac,cancelLabel:"Seguir capturando",onConfirm:()=>{setPregunta(null);onFacturarPorPartes()}});return}
     onFacturarPorPartes();
@@ -9942,7 +9951,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     if(!el)return;
     requestAnimationFrame(()=>{ if(!focoPerdido())return; (el.isConnected&&!el.disabled&&panelRef.current?.contains(el)?el:panelRef.current)?.focus(); });
   },[pregunta]);
-  const tiposRef=useRef(null), ligaRef=useRef(null), errRef=useRef(null);
+  const tiposRef=useRef(null), ligaRef=useRef(null), errRef=useRef(null), pulsoEnFondo=useRef(false);
   const yaLigaba=useRef(ligando);
   useEffect(()=>{
     if(yaLigaba.current===ligando)return;
@@ -10046,11 +10055,11 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             <div style={{color:C.t2,marginTop:4,paddingLeft:19}}>{hayEfectivoCapturado?"Registra el efectivo en CobranzaFlow, sobre "+facturaPorLigar.doc_number+" (con su vale de caja), o entrégaselo a Tesorería con una nota.":"Registra el pago en CobranzaFlow, sobre "+facturaPorLigar.doc_number+"."}</div>
             <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,paddingLeft:19,fontWeight:600,cursor:"pointer"}}><input type="checkbox" checked={sinCobrarVisto===firmaCapturada} onChange={e=>setSinCobrarVisto(e.target.checked?firmaCapturada:"")} style={{width:16,height:16,margin:0,accentColor:C.ac,flexShrink:0}}/>Lo registro en CobranzaFlow (o se lo paso a Tesorería)</label>
           </div>}
-          <button onClick={()=>setEmitirOtro(true)} style={{...botonClaro,marginTop:10}}>No es de este trabajo</button>
+          <button onClick={()=>{escudoDeClics(500);setEmitirOtro(true)}} style={{...botonClaro,marginTop:10}}>No es de este trabajo</button>
         </div>
       : <div role="status" style={{background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.tx,lineHeight:1.5}}>
           <div><b>{facturaPorLigar.doc_number}</b> ({fmtD(facturaPorLigar.amount)}) sigue sin ligar. Mientras siga así, la base no deja emitir otra {docPalabra(facturaPorLigar)} por {fmtD(facturaPorLigar.amount)} a este cliente. Si {facturaPorLigar.doc_number} es de otro trabajo, hay que ligarla a su orden en CobranzaFlow (CxC o Dirección) y después regresar aquí.</div>
-          {onLigar&&<button onClick={()=>setEmitirOtro(false)} style={{...botonClaro,marginTop:8}}><LinkIcon size={13} weight="bold"/>Ligar {facturaPorLigar.doc_number} a esta orden</button>}
+          {onLigar&&<button onClick={()=>{escudoDeClics(500);setEmitirOtro(false)}} style={{...botonClaro,marginTop:8}}><LinkIcon size={13} weight="bold"/>Ligar {facturaPorLigar.doc_number} a esta orden</button>}
         </div>)}
     {!facturaPorLigar&&otrasSinLigar.length>0&&<div role="status" style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.tx,lineHeight:1.5}}>
       <div style={{fontWeight:700,marginBottom:4}}>El cliente tiene {otrasSinLigar.length===1?"una factura hecha por adelantado":otrasSinLigar.length+" facturas hechas por adelantado"} y sin orden</div>
@@ -10060,8 +10069,12 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     </div>}
   </>;
   const errBox=err&&<div ref={errRef} tabIndex={-1} role="alert" style={{display:"flex",gap:6,alignItems:"flex-start",background:C.dn+"10",borderRadius:8,padding:10,marginBottom:10,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dnInk,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:1}}/><span>{err}</span></div>;
+  // v10.84.70 (tercera revisión, P1) — el fondo cierra sólo si el clic EMPEZÓ en el fondo (arrastrar desde la ventana y soltar fuera
+  //   la cerraba); con algo capturado pregunta, como Esc (antes no hacía nada y no decía por qué); trabajando, nada.
   return <>
-  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={(busy||capturado)?undefined:onClose}>
+  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}
+    onMouseDown={e=>{pulsoEnFondo.current=e.target===e.currentTarget}}
+    onClick={e=>{ if(e.target!==e.currentTarget||!pulsoEnFondo.current)return; pulsoEnFondo.current=false; if(busyRef.current)return; if(capturado){pedirCerrar();return} onClose(); }}>
     <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" onKeyDown={e=>{atraparTab(e);atajoDelDialogo(e)}} style={{background:C.bg,borderRadius:20,maxWidth:anchoDialogo,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}} onClick={e=>e.stopPropagation()}>
       {/* v10.84.34 — el pie (errores y botones) queda FIJO y sólo el cuerpo hace scroll: con dos pagos, «Continuar» quedaba debajo del pliegue en la laptop */}
       <div style={{overflowY:"auto",padding:"24px 24px 12px"}}>

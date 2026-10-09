@@ -536,3 +536,9 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   enseñan el anillo de foco: `inp` trae `outline:none`, que gana a la regla global; donde importa, `{...inp, outline: undefined}`.
 - **Agregar una fila lleva a ella** (v10.84.70, segunda revisión): «Agregar otro pago» deja a la vista el pago nuevo y el foco en su
   método (se quedaba en el botón, abajo).
+- **Lo que cambia el acomodo pone el escudo** (v10.84.70, tercera revisión): una ventana centrada que cambia de alto mueve lo que está
+  bajo el cursor, y el segundo clic de un doble clic cae en lo nuevo (en «Asignar folio», doble clic en «Agregar otro pago» elegía
+  «Tarjeta» en un pago que ya traía el monto). `escudoDeClics` en todo lo que cambia el acomodo: **400 ms** en lo que se hace seguido
+  (tipo, estado, método: atrapa el doble clic y deja pasar el siguiente clic a propósito) y **500 ms** en lo que nunca va seguido
+  (agregar o quitar una fila, cambiar de camino). Y **el fondo cierra sólo si el clic empezó en el fondo** (`onMouseDown` en el fondo);
+  con algo capturado, el clic fuera pregunta como Esc. Lo pendiente, mejor que el escudo: anclar la ventana arriba y de un solo ancho.

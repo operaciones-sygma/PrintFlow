@@ -595,10 +595,11 @@ await caso("inv-70 la lectura tarda más que el tope", "anticipo=lenta", async p
   const revisando = await ve(p, /Revisando si ya se facturó por adelantado/);
   await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
   const apagado = await continuar(p).isDisabled();
-  await p.waitForTimeout(8000);
-  const tope = await ve(p, /No se pudo revisar si (ya )?hay una factura por adelantado/) && !(await continuar(p).isDisabled());
-  await p.waitForTimeout(2000);
-  const tarde = await ve(p, /F-9140/);
+  // (tercera revisión: espera a lo que mide, no segundos fijos. Medía en la ventana entre los 8 s del tope y los 9.5 s de la
+  //  respuesta tardía, y el escudo contra el doble clic retrasó sus clics ~0.4 s: medía tarde, ya con F-9140 en pantalla)
+  const tope = await p.getByText(/No se pudo revisar si (ya )?hay una factura por adelantado/).first().waitFor({ timeout: 9000 }).then(() => true, () => false)
+    && !(await continuar(p).isDisabled());
+  const tarde = await p.getByText(/F-9140/).first().waitFor({ timeout: 4000 }).then(() => true, () => false);
   ok("inv-70 mientras revisa, «Continuar» espera y lo dice; a los 8 s lo da por no leído (sin efectivo sigue); si llega tarde, lo muestra", revisando && apagado && tope && tarde, `revisando=${revisando} · apagado=${apagado} · tope=${tope} · tarde=${tarde}`);
 });
 await caso("inv-71 «Reintentar» la lectura", "anticipo=falla1", async p => {
@@ -757,6 +758,44 @@ await caso("inv-95 agregar un pago lleva a él", "", async p => {
 await caso("inv-96 Corona negativo en la vista previa", "cliente=corona", async p => {
   await inv(p); await p.getByRole("button", { name: /^Aplicar saldo/ }).click(); await espera(p, 300); await continuar(p).click(); await espera(p, 700);
   ok("inv-96 la vista previa de «Aplicar saldo» repite que el saldo queda negativo", await ve(p, /queda(rá)? negativo/));
+});
+
+// ───────────── v10.84.70, tercera revisión independiente (30/40), el P1: el segundo clic de un doble clic caía en lo que la ventana
+// acababa de poner bajo el cursor (está centrada y cambia de alto). Escritas ANTES del arreglo.
+const metodoElegido = (p, n) => p.getByRole("radiogroup", { name: new RegExp("Método de pago " + n + "$") }).getByRole("radio", { checked: true }).count();
+await caso("inv-97 doble clic en «Agregar otro pago»", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p);
+  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 200);
+  await p.getByRole("radio", { name: "Cheque" }).first().click(); await p.getByLabel("Monto del pago 1").fill("30000"); await espera(p, 200);
+  await p.getByRole("button", { name: /Agregar otro pago/ }).dblclick(); await espera(p, 600);
+  const elegido = await metodoElegido(p, 2);
+  ok("inv-97 doble clic en «Agregar otro pago»: el pago 2 no queda con un método elegido solo (y no se puede continuar)", elegido === 0 && await continuar(p).isDisabled(), "métodos elegidos en el pago 2: " + elegido);
+});
+await caso("inv-98 doble clic en «Pagada»", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p);
+  await p.getByRole("button", { name: "Pagada", exact: true }).dblclick(); await espera(p, 600);
+  const elegido = await metodoElegido(p, 1);
+  ok("inv-98 doble clic en «Pagada»: el pago 1 (que ya trae el total) no queda con un método elegido solo", elegido === 0, "métodos elegidos: " + elegido);
+});
+await caso("inv-99 doble clic en «No es de este trabajo»", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 400);
+  await p.getByRole("button", { name: "No es de este trabajo" }).dblclick(); await espera(p, 600);
+  const elegidos = await p.getByRole("button", { pressed: true }).count();
+  ok("inv-99 doble clic en «No es de este trabajo»: no queda elegido ningún tipo de comprobante", elegidos === 0, "elegidos: " + elegidos);
+});
+await caso("inv-100 doble clic en «Ligar F-9135 a esta orden»", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 400);
+  await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 600);
+  await p.getByRole("button", { name: /^Ligar F-9135 a esta orden$/ }).dblclick(); await espera(p, 600);
+  ok("inv-100 doble clic en «Ligar F-9135 a esta orden»: la ventana no se cierra", await dlgInv(p).isVisible() && (await cuenta(p, "inv:cerrado")) === 0);
+});
+await caso("inv-101 el fondo cierra sólo si el clic empezó en él", "", async p => {
+  await inv(p); await espera(p, 300);
+  const t = await p.getByRole("heading", { name: /Asignar folio/i }).boundingBox();
+  await p.mouse.move(t.x + 10, t.y + t.height / 2); await p.mouse.down(); await p.mouse.move(8, 8, { steps: 4 }); await p.mouse.up(); await espera(p, 300);
+  const sigue = await dlgInv(p).isVisible() && (await cuenta(p, "inv:cerrado")) === 0;
+  await p.mouse.click(8, 8); await espera(p, 300);
+  ok("inv-101 arrastrar desde la ventana y soltar en el fondo no la cierra; un clic en el fondo sí (sin nada capturado)", sigue && (await cuenta(p, "inv:cerrado")) === 1, "sigue tras arrastrar=" + sigue);
 });
 
 await browser.close();

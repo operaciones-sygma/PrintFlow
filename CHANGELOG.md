@@ -12,7 +12,7 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
-## v10.84.70 — «Asignar folio y entregar», después de la critique independiente (23/40) — 8-oct-2026
+## v10.84.70 — «Asignar folio y entregar», tres revisiones independientes (23 → 28 → 30/40) — 8-oct-2026
 
 **Qué pasaba.** Marcelo eligió «Asignar folio y entregar» para una pasada de `/impeccable critique` (la ventana con la que Karla folia
 ~84 entregas al mes). Un revisor independiente (agente aparte, sin ver critiques anteriores) le dio **23/40** con tres P1 y dos P2, y
@@ -118,6 +118,36 @@ compartido); `link_invoice_to_order`; el camino del folio que ya existe en cobra
   importe y «Ligar F-9135 a esta orden») e inv-40 (sólo su descripción).
 - **El recorrido con la app real**: B reescrito (ahora la misma factura se bloquea), H nuevo (el P1: el rechazo con efectivo, lo que no
   se cobra, reconocerlo y la nota en la orden) y G2 nuevo (ir a partes con algo capturado): **15 de 15**.
+
+**Tercera revisión independiente (30/40, «Bueno»).** Otro agente nuevo, sin ver las anteriores (421k tokens, ~120 capturas a 1366×768,
+1366×657 y 1920×1080, mouse y teclado). Fortalezas: la vista previa antes de emitir, el pago a prueba de dedazos (0 textos bajo AA en 8
+estados) y los errores de la base dentro y con salida. Con ésta se cumple la meta de **tres pasadas** (23 → 28 → 30).
+- 🔥 **[P1] El segundo clic de un doble clic caía en lo que la ventana acababa de poner bajo el cursor** (está centrada y cambia de alto,
+  y de ancho al ligar): doble clic en «Agregar otro pago» a 1366×768 elegía «Tarjeta» en el pago nuevo, que desde esta versión ya trae
+  el monto: un cobro que nadie hizo, listo para emitir (en producción el pago nuevo venía vacío y no dejaba seguir). Doble clic en «No
+  es de este trabajo» elegía «Remisión», y en «Ligar F-9135 a esta orden» la ventana se angostaba y el segundo clic, en el fondo, la
+  cerraba. **Arreglo:** `escudoDeClics` en todo lo que cambia el acomodo, 400 ms en lo que se hace seguido (tipo, estado de pago,
+  método, «Cambiar a «Pagada»»: atrapa el segundo clic y deja pasar el siguiente clic a propósito) y 500 ms en lo que nunca va seguido
+  (agregar o quitar un pago, «No es de este trabajo», «Ligar … a esta orden», ir a partes); y el fondo **cierra sólo si el clic empezó
+  en el fondo** (arrastrar desde la ventana y soltar fuera la cerraba); con algo capturado, el clic fuera pregunta como Esc (antes no
+  hacía nada y no decía por qué). El escudo sólo detiene el mouse: el teclado sigue igual.
+- **Cómo se probó:** 5 casos nuevos (inv-97 a inv-101) escritos antes del arreglo: contra el código anterior **fallaban 4** (el doble
+  clic en «Pagada» se salvaba por la geometría del banco; se queda como guardia). Después: **folio 113 de 113**, 4 sabotajes nuevos
+  atrapados (S27 a S30; **30 de 30** con los anteriores). Una prueba vieja cambió, a propósito: inv-70 medía en la ventana fija entre
+  los 8 s del tope y los 9.5 s de la respuesta tardía, y el escudo retrasó sus clics unos 0.4 s; ahora espera lo que mide.
+- **Lo que queda para v10.84.71** (de la tercera revisión, en el snapshot `.impeccable/critique/2026-10-09T01-32-06Z__…`):
+  - [P2] la vista previa de ligar puede enseñar arriba el total de otro camino (tras ir y volver: «Total $56,900.00 · remisión» sobre
+    «Factura por $66,004.00»): en modo ligar, el encabezado debe describir lo que se liga;
+  - [P2] el saldo a favor lejos del monto: la nota va junto al pago, con las cifras («cóbrale $61,004.00 y aplica los $5,000.00 en
+    CobranzaFlow») y un botón que lo deja así; repetida en la vista previa;
+  - [P2] sin precio la ventana se contradice («va como No pagada» y «elige Pagada con Efectivo», que están apagados);
+  - [P2, **decisión de Marcelo**: cambio en la base] ligar con el efectivo capturado no crea el vale: la casilla «Lo registro en
+    CobranzaFlow» es una promesa. Lo propuesto: una función gemela de `assign_invoice_cash` que ligue y cree el vale en un paso,
+    ensayada antes;
+  - menores: anclar la ventana arriba y un solo ancho (hoy 960 ↔ 520); «✓ Cubierto» con un método sin elegir; el foco tras «Quitar el
+    pago N» (cae al fondo) y tras «Atrás»; la referencia y quién entregó en la vista previa; «¿Es efectivo?» más corto; el «Saldo actual»
+    de Corona en esmeralda (es lo facturado por adelantado, no dinero del cliente); el folio a mano de la otra serie o muy arriba del
+    sugerido; el tope de 8 s dice «falló la red» aunque sólo tardara.
 
 ## v10.84.69 — «¿Ya existe este cliente?»: lo que casi seguro ya existe se elige, no se crea — 8-oct-2026
 
