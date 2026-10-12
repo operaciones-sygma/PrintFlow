@@ -40,6 +40,10 @@ Con el arreglo, 245 de 246: `can-82` vio que «Volver» ya no se movía de lado 
 más que el alto reservado); se acortó. **181 de 181** en `cancelar`, `partes` 65 de 65. Sabotajes (control con 28 casos en verde): el foco
 que desplaza el cuerpo y el botón que no lee el desenlace, **2 de 2 atrapados**.
 
+**En producción** (12-oct, 06:04): READY `dpl_3oPAzD7tBdsGuCULYCZdWGiRztYK` (commit `f8dc11b`), candado 1017 de 1017 al primer intento.
+Vuelta atrás: promover `dpl_AomL8ZDsFoVpH6QNA5gxYW8QNu5U` (el código de v10.84.74) o `git revert f8dc11b`. Revisado sin escribir:
+`ventanas-encima` contra produccion.sygma.mx, 3 de 3 a 1366 (lo de 683×384 lo prueba el banco con las ventanas reales, `can-80`).
+
 **Quedan para la siguiente vuelta** (P2 y P3 de la tercera, en su snapshot): la lectura de «¿timbrada?» por folio (decisión de Marcelo, base),
 los «siguientes pasos» como botones que lleven (Ajustar inventario, Cancelaciones, la lista de partes), la jerga para quien suple, el
 renglón del saldo a favor en clientes que no son de Corona, «.....» como motivo, y que Karla se entere de las partes y del plan matriz.
