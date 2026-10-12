@@ -12,6 +12,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.78 — La forma de la orden: lo capturado no se pierde ni cambia sin aviso, se usa con teclado y se lee — 12-oct-2026
+
+**Qué pasaba** (los P2 de la critique independiente del 12-oct, 22/40, y lo que el detector midió en la página real; decisión de
+Marcelo: salir con algo capturado, preguntar):
+- **Lo capturado se perdía o cambiaba sin aviso.** «Cancelar», el menú lateral, el atajo N y «Editar» desde un detalle abierto encima
+  tiraban la captura sin preguntar (cerrar la pestaña o F5, también). «Replicar de orden anterior» pisaba lo ya escrito (cantidad 250 →
+  1000, el precio) con sólo «Datos replicados» (y su aviso de «SKU omitido» nunca salía: se calculaba tarde). En «Tipo», la lista
+  prometía «se guardará como "…"» y Enter lo borraba. Los números se transformaban en silencio: cantidad «1.5» → 15, «-5» → 5, «1e3» →
+  13; precio «-500» → 500 o con 3 decimales; ancho negativo; el gramaje con letras se guardaba vacío. Una entrega en el pasado no se
+  avisaba.
+- **Con teclado era a ciegas.** Ningún campo mostraba el foco; 20 de 58 paradas de Tab quedaban bajo el pie fijo; el cliente no se
+  elegía con flechas ni Enter, y escrito completo con Tab salía «Cliente nuevo» y pedía el RFC de uno que existe; «Replicar» y «Nuevo
+  agente de compras» sin contrato de ventana (el foco atrás, Tab se salía, el clic fuera tiraba lo escrito); 20 de 22 campos sin nombre;
+  las opciones no decían cuál estaba elegida.
+- **Se leía mal.** 52 textos grises a 4.2:1 sobre el gris de la forma, 38 a 9-10 px, «Normal» 2.83:1, «Asignado automáticamente» 2.7:1,
+  el botón principal lavado (1.4:1) después de un intento y el de maquila 2.8:1; «Sin empaque» en el rojo de error y con `role=alert`;
+  «Cliente nuevo» saltaba con dos letras; «Email *» y «WhatsApp *» parecían obligatorios los dos; emoji y jerga («white-label», «pool
+  compartido», «soft-delete»); «1 órdenes históricas»; «Error resolviendo cliente: permission denied…»; el aviso de abajo tapaba
+  «Crear Orden»; el menú marcaba «Nueva» al editar; Pre-prensa veía tres nombres para lo mismo y su tarjeta prometía borrar el archivo
+  viejo (desde v10.84.77 se queda).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- Salir con algo capturado pregunta («¿Salir sin guardar la orden?», «Seguir capturando» enfocado): «Cancelar», el menú, el atajo N y
+  «Editar» pasan por `salirDeLaForma` (la forma abierta se registra en `FORMA_ABIERTA`); cerrar la pestaña lo advierte. «Algo
+  capturado» se mide contra la foto de al abrir con `mismoValor` (ir a Maquila y regresar no cuenta). Ctrl+Enter con la pregunta abierta
+  no guarda por debajo.
+- Replicar sólo llena lo vacío, dice qué dejó como estaba y trae «Deshacer» (la imagen que llega tarde no pisa el «Deshacer»). Enter en
+  «Tipo» acepta lo escrito.
+- Los números se ven como se escribieron, con su porqué debajo, y no dejan guardar si no son válidos (cantidad entera mayor que 0, con
+  comas; dinero sin signo y con hasta 2 decimales, «$1,500.50» sí; ancho y alto mayores que 0; gramaje entero). Entrega pasada: aviso.
+- Teclado: anillo de foco; el contenedor reserva el alto del pie (`scroll-padding-bottom`, medido); `ClientInput` es un combobox
+  (flechas, Enter, Esc; con `alSalirElegir`, el nombre idéntico se elige al salir); «Replicar» con nombre, el foco en la búsqueda, Tab
+  atrapado y cada orden un botón; «Nuevo agente de compras» igual (Esc cierra también desde un campo; el clic fuera ya no); cada campo con
+  su nombre (`FC` con `para`), y las opciones con `aria-pressed`.
+- Se lee: tintas `wnTx`/`okTx` (texto sobre el gris; `wnInk`/`okInk` daban 4.47:1 ahí); nada de 9 px y lo que no es etiqueta a 11 px; el
+  botón principal no se lava y maquila usa el mismo acento; «Sin empaque» sin rojo ni alerta; «Cliente nuevo» al dejar el campo, con
+  «Email o WhatsApp *» y RFC * para el nuevo; sin emoji ni jerga; «1 orden anterior»; `mensajeDeCliente` dice el porqué en palabras; el
+  aviso de abajo sube sobre el pie (`Toast` con `abajo`); el menú no marca «Nueva» al editar; «Specs y archivo» en las tarjetas y la forma.
+- **Compartido, con sus usos:** `ClientInput` (también «Facturar a», «Mover orden», «Unir clientes» y «Crear OC»: sólo se agregó teclado y
+  elegir sin perder el foco), `FC` (`para` opcional; «(recomendado)» en tinta), `Toast` (`abajo` opcional, 24 como antes) y
+  `mensajeDeCliente` (también la OC; la tanda `cliente` lo cubre).
+
+**Cómo se probó**: tanda `orden` (90). Vuelta 1, escrita antes del cambio: de 37 casos fallaban 35 contra v10.84.77. Vuelta 2 (por donde
+no se diseñó: la pregunta y Ctrl+Enter, 683×384, «Deshacer» antes de que termine la imagen, una cantidad mal escrita y Replicar, todo
+encendido, el pie más alto, ir y regresar de Maquila, cantidad 0, Esc en la lista): 11 casos; encontró el texto gris sobre los tintes de
+«Distribución», «Sin empaque» y «¿Pedido recurrente?» (4.26-4.35:1), arreglado; dos más los vi al escribirla (Ctrl+Enter con la pregunta
+de salir y el mensaje de la cantidad 0), arreglados y con su caso. Sabotajes con un control sin defecto: 20 de 20 atrapados. Con el cambio:
+`orden` 90 de 90. **Sin probar en banco:** los otros cuatro usos de `ClientInput` (se revisan en producción sin escribir) y el atajo N
+(App; su código lo revisa ord-147).
+
+**Para Marcelo:** nada que decidir. Sigue v10.84.79, el reacomodo (lo esencial en la primera pantalla de la laptop).
+
 ## v10.84.77 — La forma de la orden: guardar no pierde ni duplica, la × no borra, y la orden facturada no deja tocar lo que no guarda — 12-oct-2026
 
 **Qué pasaba** (la critique de OrderForm del 12-oct: revisor independiente sobre la app compilada con la cuenta de pruebas y las escrituras

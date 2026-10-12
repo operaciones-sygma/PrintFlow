@@ -63,6 +63,8 @@ const supabase = { rpc: async (fn, args) => {
   return { data: null, error: { message: "rpc no simulada: " + fn } };
 } };`,
   fnBlock("ClientConfirmModal"),
+  // v10.84.78 — mensajeDeCliente dice el porqué con errorEnPalabras (si App ya lo tiene)
+  ...(L.some(l => l.startsWith("const errorEnPalabras=")) ? [line(/^const errorEnPalabras=/, "errorEnPalabras")] : []),
   hay("mensajeDeCliente") ? (L.find(l => l.startsWith("const mensajeDeCliente=")) || fnBlock("mensajeDeCliente"))
     : `// (el código anterior: cada puerta armaba su propio aviso)
 const mensajeDeCliente = e => "Error resolviendo cliente: " + (e?.message || "desconocido");`,

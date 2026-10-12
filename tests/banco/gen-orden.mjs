@@ -11,10 +11,10 @@
 //   modo=nueva|editar|specs|candado|maquila|oc (editar: P-0650 de Genaro; specs: «Editar Specs»; candado: P-0645 con folio pre-asignado
 //     F-140; maquila: P-0647; oc: «Agregar Producto a OC-0900»)
 //   folio=ok|falla|falla1|lento (next_production_number; falla1: sólo la primera vez) · guardar=ok|falla|lento|timeline|aviso (saveOrder falla, o la orden SÍ se guarda y
-//     falla la bitácora o el aviso) · cliente=nada|fuerte|parecido|exacto|falla (resolve_client_for_order) · crear=ok|falla
+//     falla la bitácora o el aviso) · cliente=nada|fuerte|parecido|exacto|falla|permiso (resolve_client_for_order) · crear=ok|falla
 //     (create_client_from_printflow) · editar=ok|falla|lento (el UPDATE de la orden) · precio=normal|cobrada|timbrada|falla|lento (lo que
 //     contesta pf_price_drop_check del folio de la orden: F-122 de P-0643, o F-200 de toda la OC-0950 de P-0644) ·
-//     agente=ok|falla (add_client_agent) · img=ok|falla (Storage) · lento=N (los segundos de lo «lento»; 4 por omisión)
+//     agente=ok|falla (add_client_agent) · img=ok|falla|lento (Storage) · lento=N (los segundos de lo «lento»; 4 por omisión)
 // window.__cambiar({…}) cambia EN LA BASE la orden que se edita y la trae a App (como el tiempo real; la forma no se re-inicia, como en
 // App); window.__estado() da {vista, editO, ordenes, base}; window.__ir(vista) es un clic en el menú lateral (el navClick de App);
 // window.__editar(id, {…}) abre «Editar» de esa orden como la tenga la base (con `{_specsOnly:true}`, «Editar Specs»).
@@ -204,7 +204,9 @@ const supabase = {
       const n = Math.max(...BASE.map(o => parseInt(String(o.production_number || "").replace(/^P-/, ""), 10) || 0)) + 1;
       return { data: "P-" + String(n).padStart(4, "0"), error: null };
     }
-    if (fn === "resolve_client_for_order") { await dormir(150); if (CLIENTE === "falla") return { data: null, error: sinConexion }; return { data: RESUELVE[CLIENTE] || RESUELVE.nada, error: null }; }
+    if (fn === "resolve_client_for_order") { await dormir(150); if (CLIENTE === "falla") return { data: null, error: sinConexion };
+      if (CLIENTE === "permiso") return { data: null, error: { code: "42501", message: "permission denied for function resolve_client_for_order" } };
+      return { data: RESUELVE[CLIENTE] || RESUELVE.nada, error: null }; }
     if (fn === "create_client_from_printflow") { await dormir(150); if (CREAR === "falla") return { data: null, error: sinConexion }; return { data: "c-nuevo", error: null }; }
     if (fn === "upsert_client_from_order") return { data: "c-nuevo", error: null };
     if (fn === "search_pantone") return { data: [{ code: "186 C", hex: "#C8102E", name: "186 C" }, { code: "286 C", hex: "#0033A0", name: "286 C" }], error: null };
@@ -214,7 +216,7 @@ const supabase = {
   },
   from: consulta,
   storage: { from: () => ({
-    upload: async p => { anotar("storage upload " + p); await dormir(150); return IMG === "falla" ? { data: null, error: sinConexion } : { data: { path: p }, error: null }; },
+    upload: async p => { anotar("storage upload " + p); await dormir(IMG === "lento" ? LENTO_S * 1000 : 150); return IMG === "falla" ? { data: null, error: sinConexion } : { data: { path: p }, error: null }; },
     remove: async ps => { anotar("storage remove " + ps.join(",")); return { data: null, error: null }; },
     getPublicUrl: p => ({ data: { publicUrl: "https://x.supabase.co/storage/v1/object/public/order-files/" + p } }),
     download: async p => { anotar("storage download " + p); return { data: new Blob(["x"], { type: "image/jpeg" }), error: null }; },

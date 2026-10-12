@@ -587,3 +587,13 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   enfocado y el foco de regreso al botón.
 - **La × quita, no borra** (v10.84.77): quitar una imagen o un archivo de algo que se está editando sólo quita la referencia, con
   «Deshacer» mientras siga abierta; del servidor sólo se limpia lo subido en esa misma captura (nadie más lo usa).
+- **Salir con algo capturado pregunta** (v10.84.78, Marcelo: «pregunta antes»): una forma larga se registra (`FORMA_ABIERTA`) y todo lo
+  que la cambia o se va de ella (el menú, los atajos, «Editar» desde un detalle encima) pasa por `salirDeLaForma`: con algo sin guardar,
+  «¿Salir sin guardar…?» con «Seguir capturando» enfocado; cerrar la pestaña lo advierte. «Algo capturado» se mide contra la foto de al
+  abrir, con `mismoValor` (ir y regresar de una opción no cuenta).
+- **Los números se ven como se escribieron** (v10.84.78): lo tecleado se queda en el campo y, si no es válido, dice por qué debajo y no
+  deja guardar; nunca se «limpia» en silencio (1.5 no es 15, -500 no es 500). Dinero sin signo y con hasta 2 decimales («$1,500.50» sí).
+- **Texto sobre la superficie gris** (v10.84.78): `wnTx`/`okTx` (las tintas de ámbar y verde un tono más oscuras): `wnInk`/`okInk` pasan AA
+  sobre `C.bg`, no sobre `C.sf` (4.47:1). Sobre un tinte de selección, el texto va en `C.tx`.
+- **Un buscador es un combobox** (v10.84.78, `ClientInput`): flechas, Enter y Esc, `aria-activedescendant`; elegir con el ratón no le
+  quita el foco al campo.
