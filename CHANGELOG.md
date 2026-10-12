@@ -93,6 +93,13 @@ noche de `/impeccable`, `noches/impeccable-printflow.md`, paso 1: las cuatro ven
 - **Sin probar:** la cancelación múltiple (`CancelacionesView`), y cancelar de verdad contra la base (el recorrido no escribe): lo que App
   hace al confirmar va simulado en el banco como lo hace App.
 
+**En producción** (12-oct, 04:23): READY `dpl_5uPUiEAGp2oA6zNHFbPZkKUxx4or` (commits `ebca474` + `877b20c`), candado 990 de 990 al
+segundo intento. Vuelta atrás: promover `dpl_5PkzTT5y9ZRAvsoZQbuiTaTRenns` (el código de v10.84.72) o `git revert 877b20c ebca474`.
+Revisado sin escribir: `tests/recorrido/ventanas-encima.mjs` contra produccion.sygma.mx con P-0622 y P-0619, 3 de 3: la ventana REAL de
+«Cancelar orden» abre encima del detalle diciendo «Está en la fila de Printmaster 52: sale de la fila», Esc la cierra y el foco regresa
+a «Más acciones». Visto de paso (no es de esta versión): con P-0599, que ya está entregada con folio, «Regresar a etapa anterior» abre
+la ventana de regresar desde Entregada y al cerrarla con Esc el foco cae al `<body>`; queda para cuando toque esa ventana.
+
 **Para Marcelo** (decisiones que no tomé):
 - **¿Cancelar debe borrar el archivo de producción?** Hoy se borra al instante (lo pediste en v10.73.50) y la ventana ya lo dice; pero
   «Deshacer cancelación» regresa la orden sin su archivo. El archivado de 30 días ya borra el de las canceladas: si cancelar lo dejara

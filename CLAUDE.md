@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 835 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 990 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,7 +171,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.72 (12-oct, madrugada, primera noche de `/impeccable` en la PC de casa; READY `dpl_3nUz9Q9Hh9ywsVttkHwjgsXSYi8Y`, commit
+- **LIVE:** v10.84.73 (12-oct, madrugada, segunda noche de `/impeccable`, paso 1; READY `dpl_5uPUiEAGp2oA6zNHFbPZkKUxx4or`, commits
+  `ebca474` + `877b20c`; vuelta atrás: promover `dpl_5PkzTT5y9ZRAvsoZQbuiTaTRenns` (el código de v10.84.72) o `git revert 877b20c ebca474`;
+  la base no cambió; 990 pruebas). v10.84.73: **las puertas de cancelar** (la orden, la orden con folio, la parte, la línea o factura del
+  plan matriz), revisión independiente **18/40** con 3 P1: un solo marco (`VentanaDeCancelar`: diálogo, Esc y el fondo preguntan, el
+  rechazo adentro, 5 letras), la del folio lee al abrir lo que la base sabe y dice UN caso con cifras (timbrada no deja; sin «nota de
+  crédito» en el nombre: PrintFlow no emite ninguna), la de la orden dice lo que hace además (facturas que caen, inventario, fila,
+  archivo, avisos, saldo) y va sobre la orden viva, la del plan matriz dice en cuánto queda la factura. 🔑 **Una ventana nueva que
+  cancele algo va en `VentanaDeCancelar`.** Tanda `tests/romper/cancelar.mjs` (155). Revisado en producción sin escribir:
+  `tests/recorrido/ventanas-encima.mjs` con P-0619/P-0622, 3 de 3. Decisiones de Marcelo en el CHANGELOG («Para Marcelo»).
+  v10.84.72 (12-oct, madrugada, primera noche de `/impeccable` en la PC de casa; READY `dpl_3nUz9Q9Hh9ywsVttkHwjgsXSYi8Y`, commit
   `8501145`; vuelta atrás: `git revert 8501145`, porque el commit de docs ocupa el rollback de un clic; el código de v10.84.71 está en
   `dpl_AtcLJFbJe8EpTMjfUaaPWCSdvQdq`; la base no cambió; 835 pruebas). v10.84.72: **«Asignar folio», lo que dejó su tercera revisión**: la
   ventana anclada arriba y de un solo ancho, el encabezado de ligar, el saldo a favor junto al pago con «Cobrar sólo $…», sin precio
