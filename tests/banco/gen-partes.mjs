@@ -46,6 +46,12 @@ const db = {
   getNextFolioSuggestion: async t => t === "factura" ? "D-6001" : "R-900",
 };`,
   fnBlock("ConfirmModal"), fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"),
+  // v10.84.73: la ventana de la parte va en el marco común de las puertas de cancelar (con su escudo y el error en palabras); en las
+  //   versiones de antes no existe y se omite (la corrida contra HEAD sigue armando el banco)
+  ...(L.some(l => l.startsWith("function VentanaDeCancelar(")) ? [
+    line(/^const escudoDeClics=/, "escudoDeClics"), line(/^const errorEnPalabras=/, "errorEnPalabras"), line(/^const motivoDeLaBase=/, "motivoDeLaBase"),
+    L.slice(find(l => l.startsWith("// ─── v10.84.73 — LAS PUERTAS DE CANCELAR"), "el marco de cancelar"), find(l => l.startsWith("function CancelOrderModal("), "CancelOrderModal")).join("\n"),
+  ] : []),
   L.slice(find(l => l.startsWith("function FacturarSiguienteParteModal("), "FSP"), find(l => l.startsWith("// ─── MATRIX CANCEL CONFIRM MODAL"), "MCC")).join("\n"),
   `const RESTO = UNAPIEZA ? { id: "s2", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 1, amount_portion: 11.38, cancelled_at: null }
   : { id: "s2", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 3000, amount_portion: 34140, cancelled_at: null };

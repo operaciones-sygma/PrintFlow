@@ -12,6 +12,92 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.73 — Las puertas de cancelar: un solo marco, y cada una dice lo que hace — 12-oct-2026
+
+**Qué pasaba** (revisión independiente nueva, **18/40**, `.impeccable/critique/2026-10-12T09-00-23Z__src-app-jsx-cancelar.md`; segunda
+noche de `/impeccable`, `noches/impeccable-printflow.md`, paso 1: las cuatro ventanas que cancelan, como UN objetivo):
+- **[P1] La orden con folio no decía qué le pasaba a ESE folio.** No enseñaba la orden ni el importe; se llamaba «Cancelar con Nota de
+  Crédito» y su cuerpo decía que no se emitía ninguna; lo de CobranzaFlow iba en un `confirm()` del navegador de 741 caracteres con
+  cuatro escenarios («si el folio es sólo de esta orden…, si lo comparten…, si está timbrado…») para que la persona adivinara el suyo, y
+  ahí «Cancelar» quería decir NO cancelar. Con el CFDI timbrado, la base lo rechazaba después de los dos pasos, en un aviso de 7 s.
+- **[P1] La de la orden hacía más de lo que decía.** Borraba el archivo de producción sin decirlo mientras prometía que Dirección podía
+  deshacerlo; en manos de Dirección se abría en órdenes YA facturadas (por partes, agrupadas, del plan matriz) y el puente tumbaba esas
+  facturas y sus cobros sin que la ventana lo dijera (la base lo dice en su candado: «cancelarla cancela su factura y sus cobros»); el
+  inventario cargado se frenaba hasta DESPUÉS de escribir el motivo; no decía que sale de la fila de su máquina ni a quién se avisa. Y
+  el éxito salía en un aviso ROJO con ✕ («❌ Orden cancelada»), que se lee como que falló.
+- **[P1] Lo que carga dinero no pasaba AA**: el aviso de Corona y «Esto no emite…» en ámbar a 2.16:1, el folio de una remisión a
+  2.09:1, los títulos rojos a 4.26:1, el botón blanco sobre rojo a 4.34:1, el contador verde a 3.00:1.
+- **[P2] Tres de cuatro no seguían el contrato de los diálogos**: sin `role="dialog"` ni nombre, el foco en lo que las abrió y el Tab
+  saliéndose (9, 8 y 8 de 10 paradas); Esc con el motivo escrito lo tiraba en las cuatro; el clic fuera (y arrastrar del campo y soltar
+  fuera) lo tiraba en dos; Esc a media «Cancelando…» cerraba la ventana aunque la cancelación seguía; el rechazo de la base salía en el
+  aviso de abajo con el foco en el `<body>`, y la de la orden además cerraba y el motivo se perdía; la del plan matriz con su propio
+  listener de Escape en `window`. El motivo pedía 1 letra en una y 5 en las otras, con cuatro rótulos distintos.
+- **[P2] La del plan matriz no decía lo que sabía**: «Esta acción es irreversible. Se reversa el ledger Corona si aplica» y «Si era la
+  última línea viva…» con las líneas a la mano; no decía qué órdenes caían ni en cuánto quedaba la factura.
+- **[P2] La de la parte cambiaba en silencio**: con «Se da por perdido» elegido, si en otra sesión se cancelaba la otra parte, la opción
+  pasaba a «la orden se cancela completa» y el botón a «Cancelar la parte y la orden» sin decir nada.
+- Y uno que encontré al leer `cancelOrder`: después de cancelar, una falla al anotar la bitácora o al avisar decía «No se pudo
+  cancelar» con la orden YA cancelada (lo mismo en la del folio, que además dejaba la ventana abierta para reintentar).
+
+**Qué se cambió** (todo en `src/App.jsx`; **la base NO cambió**: sólo se leen RPC que ya existían):
+- **Un solo marco para las cuatro** (`VentanaDeCancelar`, sacado de la de la parte, que era la buena): diálogo con nombre, el foco en
+  «Volver», Tab atrapado, Esc y el fondo (sólo si el clic EMPEZÓ en el fondo) preguntan «¿Cerrar sin cancelar?» si hay algo escrito,
+  también con el foco en el campo; trabajando no se cierra, y si la base no contesta en 10 s lo dice y qué hacer; el rechazo adentro,
+  con el foco y lo escrito intactos; pie fijo (a 683×384 los botones se ven), anclada arriba; el mismo campo «¿Por qué se cancela?» de
+  5 letras y un renglón que dice qué falta. Títulos en tinta con el ícono rojo; el botón que cancela en `C.dnInk` y diciendo QUÉ
+  cancela; los avisos en `C.wnInk`/`C.dnInk`.
+- **La orden con folio** (`CancelInvoicedModal`): al abrir le pregunta a la base lo que ya sabe del folio (`pf_price_drop_check`:
+  importe, lo cobrado, si es de toda la OC, si está timbrado; `ordenes_saldo_consumido`: si se pagó con saldo a favor), con «Revisando…»,
+  tope de 8 s y «Reintentar», y dice UN caso con cifras: sin pagar ni timbrar → «queda cancelada con saldo 0»; timbrada → no deja
+  (primero se cancela el CFDI en CobranzaFlow) y no hay botón; de toda la OC → «no se cancela; se le resta lo de esta orden»; cobrada →
+  cuánto y que lo cobrado se resuelve en CobranzaFlow (discrepancia). Título «Cancelar P-0688 con su folio F-131», botón «Cancelar la
+  orden y la factura F-131» (o «…la remisión RS-1290», «…y restarla de F-140»). Fuera el `confirm()` y el `alert()`. El «⋯ Más», el
+  historial y el aviso a Lupita y Karla dicen lo que pasó en CobranzaFlow (antes «NC pendiente»: PrintFlow no emite ninguna).
+- **La orden** (`CancelOrderModal`): un hecho por renglón: las facturas que caen (con Dirección y una orden facturada: «Cancelar la
+  orden y sus facturas», y que ya no se deshace), el inventario AL ABRIR con el botón apagado, «Corre en GTO 1 Color: sale de la
+  máquina y empieza P-0716», el archivo que se borra, a quién se avisa, el saldo a favor («Revisando…», tope, «Reintentar», su renglón
+  con el alto reservado) y la promesa de deshacer sólo cuando se puede. Va montada sobre la orden viva: el folio o la cancelación que
+  llegan de otra sesión se dicen y no deja. `cancelOrder` devuelve el error a la ventana, cancela en la base ANTES de lo optimista
+  (la tarjeta ya no parpadea «cancelada» si la base rechaza), y lo de después va cada cosa por su lado («se canceló, pero no se pudo…»).
+  El éxito en verde con la orden. Y `handleAction` frena también la orden de una OC con folio compartido (la base ya la frenaba).
+- **El plan matriz** (`MatrixCancelConfirmModal`): con lo que hace la base (`cancel_oc_split_line_internal`): la línea dice en cuánto
+  queda la factura («F-140 baja de $139,200.00 a $69,600.00 con IVA y se queda con P-0721»); la última línea y la factura entera, que
+  se cancela en CobranzaFlow con saldo 0 y los cobros quedan como discrepancia; la factura entera lista sus órdenes con su importe y el
+  total con y sin IVA; y que la orden NO se cancela: si se queda sin factura, regresa a Salidas. Sin «ledger», «invoice» ni «líneas vivas».
+- **La parte** (`CancelarParteModal`): si cambia con la ventana abierta, «Cambió mientras la tenías abierta…» y se vuelve a elegir.
+- **Qué NO se toca:** la base, las RPC, la cancelación múltiple (`CancelacionesView`, otra puerta: no estaba en la revisión), y que
+  cancelar borre el archivo de producción (lo pidió Marcelo en v10.73.50; ahora se dice; ver «Para Marcelo»).
+
+**Cómo se probó** (tanda nueva `cancelar`, banco `tests/banco/gen-cancelar.mjs`):
+- **Vuelta 1** (contrato de los diálogos en las seis variantes + lo que pidió el revisor, escritas ANTES del arreglo): contra v10.84.72
+  **fallaban 98 de 134**. Con el arreglo, 131; las 3 que faltaban: el error esperado de la parte se anotaba como error de consola, y la
+  parte sin nada elegido decía sólo «Elige…» sin decir que también falta el motivo. Una prueba se corrigió: «texto grande» usaba 18 y
+  14 px en negrita (más laxo que WCAG, 24 y 18.66) y dejaba pasar el título rojo.
+- **Vuelta 2** (por donde no se diseñó, 21 casos: Esc con el foco en el campo, un motivo de espacios, la base que no contesta, la orden
+  que se cancela en otra sesión con cualquiera de las dos ventanas abiertas, un doble clic en lo que abre la ventana): se escribieron
+  junto con su arreglo, y la corrida doble dice que contra v10.84.72 fallan 16 de los 21. Encontró tres cosas del primer arreglo: la
+  base muda dejaba «Cancelando…» para siempre (ahora a los 10 s lo dice y qué hacer), las dos ventanas de la orden iban sobre una foto
+  (no veían el folio o la cancelación que llegaban de otra sesión) y el segundo clic de un doble clic en lo que la abre caía en el fondo
+  recién puesto y la cerraba (ahora el fondo no cierra en el primer medio segundo). Y el banco de `partes` (copia la ventana de la
+  parte a mano) se cayó con el marco nuevo: trae el marco si existe, para que la corrida contra versiones viejas siga armándolo.
+- **Sabotajes** (cada defecto metido en una copia, corrida sólo su prueba, con un CONTROL sin defecto que pasó 13 de 13): **14 de 15
+  atrapados**. El que no: quitar el ref y el escudo del doble clic (S4), porque el botón se apaga solo con el primer clic (React lo pinta
+  antes del segundo); quitando también eso (S4b), cae. En la primera corrida tampoco caía S3 (Esc a media cancelación): con el motivo
+  escrito la ventana PREGUNTABA en vez de cerrar y la prueba sólo miraba que no cerrara; «Cerrar sin cancelar» a media cancelación
+  también es un defecto, y la prueba ahora lo mira (cae en las seis).
+- **Corrida doble** de la tanda final (155) contra v10.84.72: fallan 113; contra v10.84.73: 0. `partes`: 65 de 65. Y TODAS las tandas
+  en el candado al subir.
+- **Sin probar:** la cancelación múltiple (`CancelacionesView`), y cancelar de verdad contra la base (el recorrido no escribe): lo que App
+  hace al confirmar va simulado en el banco como lo hace App.
+
+**Para Marcelo** (decisiones que no tomé):
+- **¿Cancelar debe borrar el archivo de producción?** Hoy se borra al instante (lo pediste en v10.73.50) y la ventana ya lo dice; pero
+  «Deshacer cancelación» regresa la orden sin su archivo. El archivado de 30 días ya borra el de las canceladas: si cancelar lo dejara
+  ahí, deshacer la regresaría completa.
+- **Dirección con una orden ya facturada:** la ventana enumera las facturas que caen y deja seguir. ¿O la mandamos a su puerta («Cancelar
+  la parte», el plan matriz)?
+- **¿Karla debe recibir las cancelaciones de partes y del plan matriz?** Hoy sólo le llegan las de la orden con folio.
+
 ## v10.84.72 — «Asignar folio»: lo que dejó la tercera revisión (la ventana quieta, el saldo a favor con cifras, lo que llega tarde) — 12-oct-2026
 
 **Qué pasaba** (la tercera revisión independiente, 30/40, `.impeccable/critique/2026-10-09T01-32-06Z__…asignarfolio.md`; primera noche de
