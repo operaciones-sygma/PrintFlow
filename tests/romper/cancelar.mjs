@@ -301,7 +301,8 @@ await caso("can-33 la fila de la máquina", "", async p => {
 });
 await caso("can-34 el archivo de producción", "", async p => {
   await abrirOrden(p, "archivo"); const t = await enLaVentana(p);
-  ok("can-34 dice que se borra su archivo de producción (etiqueta-final.pdf)", /etiqueta-final\.pdf/.test(t) && /borra/i.test(t), "«" + t.slice(0, 220) + "»");
+  // (v10.84.76) el archivo de impresión ya NO se borra al cancelar (Marcelo, 12-oct): la ventana ya no lo anuncia
+  ok("can-34 con archivo de impresión, la ventana no dice que se borra (se queda de historial)", !/borra/i.test(t), "«" + t.slice(0, 220) + "»");
 });
 await caso("can-35 no promete deshacer", "saldo=corona", async p => {
   await abrirOrden(p, "corona"); await espera(p, 400); const t = await enLaVentana(p);
@@ -400,11 +401,13 @@ await caso("can-62 el saldo que no se pudo leer, en la del folio", "saldo=falla"
 // [P2] lo que hace además de cancelar, también en la del folio; y deshacer no promete el archivo
 await caso("can-63 la del folio dice archivo, máquina y avisos", "", async p => {
   await p.click("#abrir-corriendo"); await espera(p, 800); const t = await enLaVentana(p);
-  ok("can-63 la ventana del folio dice que se borra el archivo, que sale de la máquina y a quién se avisa", /arte-final\.pdf/.test(t) && /Printmaster 52/.test(t) && /Karla/.test(t), "«" + t.slice(0, 320) + "»");
+  // (v10.84.76) el archivo ya no se borra: dice que sale de la máquina y a quién se avisa, y no anuncia un borrado
+  ok("can-63 la ventana del folio dice que sale de la máquina y a quién se avisa (y ya no que se borra el archivo)", !/borra/i.test(t) && /Printmaster 52/.test(t) && /Karla/.test(t), "«" + t.slice(0, 320) + "»");
 });
 await caso("can-64 deshacer sin el archivo", "", async p => {
   await abrirOrden(p, "archivo"); await espera(p, 300); const t = await enLaVentana(p);
-  ok("can-64 con archivo, la promesa de deshacer dice que el archivo no regresa", /deshac/i.test(t) && /sin su archivo|archivo no regresa|el archivo ya no/i.test(t), "«" + t.slice(0, 260) + "»");
+  // (v10.84.76) el archivo se queda: deshacer la regresa completa, y la promesa ya no lleva el «sin su archivo»
+  ok("can-64 con archivo, deshacer la regresa completa (la promesa no dice «sin su archivo»)", /deshac/i.test(t) && !/sin su archivo/i.test(t), "«" + t.slice(0, 260) + "»");
 });
 // [P2] la puerta equivocada lleva a la buena, con el motivo escrito
 await caso("can-65 de la orden a «Cancelar con su folio»", "rol=admin", async p => {
@@ -512,6 +515,41 @@ await caso("can-86 el folio que se libera", "", async p => {
   const t = await enLaVentana(p), bs = await botonesQueCancelan(p);
   ok("can-86 si se libera el folio con la ventana abierta, lo dice y no quedan los renglones de la lectura vieja", /se liber/i.test(t) && !/no está pagada/i.test(t) && bs.length === 0, JSON.stringify(bs) + " · «" + t.slice(0, 200) + "»");
 });
+
+// ───────────── v10.84.76 (decisiones de Marcelo, 12-oct): el aviso a Karla y el archivo de impresión que ya no se borra
+// la parte que vuelve a quedar por facturar le avisa a Karla (es quien la factura); «se da por perdido» no le pide nada
+await caso("can-87 la parte que vuelve a facturarse avisa a Karla", "", async p => {
+  await abrir(p, PUERTAS.find(x => x.k === "parte")); await p.getByText("Vuelve a quedar por facturar").click(); await espera(p, 200);
+  const t = await enLaVentana(p);
+  await p.locator("textarea").first().fill("Se refactura con otro RFC"); await espera(p, 200);
+  await botonFinal(p).click(); await espera(p, 900);
+  const l = (await log(p)).split("\n").find(x => x.startsWith("aviso karla")) || "";
+  ok("can-87 si la parte vuelve a quedar por facturar, la ventana dice que se le avisa a Karla y el aviso lleva la parte y el importe",
+    /Karla/.test(t) && /F-128/.test(l) && /30,000\.00/.test(l), "ventana Karla " + /Karla/.test(t) + " · aviso «" + l.slice(0, 160) + "»");
+});
+await caso("can-88 la parte que se da por perdida no avisa", "", async p => {
+  await abrir(p, PUERTAS.find(x => x.k === "parte")); await p.getByText("Se da por perdido").click(); await espera(p, 200);
+  await p.locator("textarea").first().fill("Se refactura con otro RFC"); await espera(p, 200);
+  await botonFinal(p).click(); await espera(p, 900);
+  ok("can-88 si la parte se da por perdida no se le avisa a Karla (no le toca hacer nada)", (await cuenta(p, "aviso karla")) === 0 && (await cuenta(p, "cancelar-parte")) === 1);
+});
+// el archivo de impresión ya no se borra al cancelar: la ventana no lo promete, y deshacer regresa la orden completa
+await caso("can-89 cancelar no borra el archivo de impresión", "rol=admin", async p => {
+  await p.click("#abrir-corriendo"); await espera(p, 800); const t1 = await enLaVentana(p);
+  ok("can-89 la ventana del folio, con archivo de impresión, ya no dice que se borra", !/se borra su archivo/i.test(t1) && !/sin su archivo/i.test(t1), "«" + t1.slice(0, 220) + "»");
+});
+{ // can-90: en el código, ninguna cancelación ni el archivado de 30 días borran el archivo de impresión (Marcelo, 12-oct)
+  const nombre = "can-90 el código ya no borra el archivo de impresión al cancelar ni a los 30 días";
+  if (!process.env.SOLO || new RegExp(process.env.SOLO).test(nombre)) {
+    const src = fs.readFileSync(new URL("../../src/App.jsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    const sinComentarios = src.split("\n").map(l => l.replace(/^\s*\/\/.*$/, "").replace(/\s\/\/ .*$/, "")).join("\n");
+    const llamadas = (sinComentarios.match(/deleteOrderProductionFile\(/g) || []).length;
+    const i = src.indexOf("// Auto-archivado diario (v10.72.70)"), j = i >= 0 ? src.indexOf("cleanup();", i) : -1;   // la línea exacta: el nombre también sale en comentarios
+    const archivado = i >= 0 && j > i ? src.slice(i, j).split("\n").map(l => l.replace(/^\s*\/\/.*$/, "")).join("\n") : "";
+    const borraEnArchivado = /\.remove\(/.test(archivado) || /file_url:\s*null/.test(archivado);
+    ok(nombre, llamadas === 0 && !!archivado && !borraEnArchivado, "llamadas a deleteOrderProductionFile " + llamadas + " · el archivado borra " + borraEnArchivado);
+  }
+}
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

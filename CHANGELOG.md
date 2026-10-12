@@ -12,6 +12,34 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.76 — El archivo de impresión ya no se borra, y a Karla se le avisa lo que vuelve a quedar por facturar — 12-oct-2026
+
+**Decisiones de Marcelo** (12-oct, sobre las preguntas que dejó la noche de las puertas de cancelar; medido antes en la base):
+- **El archivo de impresión se queda** («así queda un historial»). Desde v10.73.50 se borraba al cancelar una orden (y el archivado diario
+  lo borraba 30 días después de entregar o cancelar, desde v10.72.70): «Deshacer cancelación» regresaba la orden SIN su archivo, y casi
+  todas las cancelaciones son correcciones (de las 6 de los últimos 90 días: órdenes repetidas, una venta mal capturada y una prueba). El
+  espacio no lo pedía: todo el bucket pesaba 118 MB y los archivos de impresión, 19 MB (hoy sólo 3 órdenes tienen uno).
+- **A Karla se le avisa** cuando una parte vuelve a quedar por facturar (es quien la factura): ese resto sólo se veía en la ficha de la
+  orden, que entregada casi no se ve. «Se da por perdido» no le pide nada: sin aviso.
+- No se hace (por ahora): la lectura de «¿timbrado?» por folio en la base (3 cancelaciones de partes en 90 días, todas sin timbrar; el plan
+  matriz sin uso en 90 días; ninguna orden facturada cancelada de golpe en 180) y mandar la orden facturada a «su puerta» (con la factura
+  agrupada o de toda la OC, esa ventana es la única).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- Fuera `deleteOrderProductionFile` y sus tres llamadas (la cancelación normal, la del folio y la múltiple); el archivado diario ya no borra
+  el archivo de impresión (sigue comprimiendo las imágenes). Borrarlo sigue siendo a propósito: el «Borrar archivo» del detalle o borrar
+  la orden. Las ventanas de cancelar ya no anuncian el borrado, y «deshacer» ya no dice «sin su archivo».
+- La de la parte: «Vuelve a quedar por facturar» dice «le avisamos a Karla para que la facture»; al confirmar, App le manda un aviso
+  (tipo `por_facturar`, con la parte, el importe y el motivo, y dónde: «Facturar siguiente parte»). Si el aviso falla, lo dice para que se
+  le avise a mano.
+
+**Cómo se probó** (tanda `cancelar`, can-87 a can-90, escritas ANTES del cambio): contra v10.84.75 fallaban 3 de 4 (la cuarta vigila que
+«se da por perdido» NO avise, y pasa antes y después). can-90 lee el código: ninguna llamada a borrar el archivo y el archivado sin borrar
+(con v10.84.75, «el archivado borra»). Tres pruebas viejas afirmaban el borrado y se actualizaron a la decisión (can-34, can-63, can-64).
+Con el cambio: `cancelar` 185 de 185 y `partes` 65 de 65 (una corrección de la prueba: can-90 buscaba el archivado por su nombre, que ahora
+también sale en un comentario). **Sin probar:** el aviso real (lo manda App; el banco lo imita) y el archivado contra la base (corre
+una vez al día en una sesión de Dirección).
+
 ## v10.84.75 — Las puertas de cancelar, lo que dejó la tercera revisión (la que cierra): abren desde arriba y el botón dice lo mismo — 12-oct-2026
 
 **Qué pasaba** (tercera revisión independiente, **28/40** «Bueno», `.impeccable/critique/2026-10-12T11-43-51Z__src-app-jsx-cancelar.md`; la

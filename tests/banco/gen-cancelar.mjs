@@ -125,6 +125,8 @@ function Banco() {
   const alCancelarParte = async ({ reason, alCancelar }) => { anotar("cancelar-parte " + m.k + " " + m.parte + " " + JSON.stringify({ reason, alCancelar })); await espera();
     if (FALLA) throw new Error("No se canceló la parte: sin conexión.");
     const o = vivas.current[m.k], p = o.splits.find(x => x.id === m.parte), vivasP = o.splits.filter(x => !x.cancelled_at);
+    // v10.84.76 — como App: si vuelve a quedar por facturar, el aviso a Karla (con la parte y el importe)
+    if (alCancelar === "reabrir") anotar("aviso karla " + p.invoice_folio + " de " + o.production_number + ": $" + fmtMx(p.amount_portion) + " sin IVA vuelven a quedar por facturar · " + reason);
     aviso(vivasP.length === 1 && alCancelar === "perder" ? "Parte " + p.invoice_folio + " cancelada · era la única que quedaba: " + o.production_number + " se canceló"
       : alCancelar === "reabrir" ? "Parte " + p.invoice_folio + " cancelada · sus $" + fmtMx(p.amount_portion) + " vuelven a quedar por facturar"
       : "Parte " + p.invoice_folio + " cancelada · se dio por perdida: " + o.production_number + " queda facturada de menos");

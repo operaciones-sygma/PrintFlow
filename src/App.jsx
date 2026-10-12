@@ -6830,7 +6830,6 @@ function filaAlCancelar(o,orders){
   const sig=siguienteDeLaFila(o,orders||[]);
   return sig?"Corre en "+maquina+": sale de la máquina y empieza "+(sig.production_number||sig.client)+".":"Corre en "+maquina+": sale de la máquina, que se queda sin orden.";
 }
-const archivoDe=o=>o?.file_url&&String(o.file_url).includes("/order-files/")?(o.file_name||decodeURIComponent(String(o.file_url).split("?")[0].split("/").pop()||"")):null;
 
 // v10.84.73 — LA ORDEN DICE LO QUE HACE ADEMÁS DE CANCELAR (P1 de la revisión independiente): borraba el archivo de producción sin
 //   decirlo (mientras prometía que Dirección podía deshacerlo), en manos de Dirección se abría en órdenes YA facturadas (por partes,
@@ -6898,7 +6897,6 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
   const yaCancelada=!!o.cancelled_at||/cancelled/.test(o.stage||"");
   const conFolio=!!o.invoice_folio;
   const fila=filaAlCancelar(o,orders);
-  const archivo=archivoDe(o);
   const pzas=Number(o.quantity||0).toLocaleString("es-MX")+" piezas";
   const inventario=o.stock_loaded?(o.stock_role==="production"?"ingresó "+pzas+" al":o.stock_role==="sale"?"sacó "+pzas+" del":"movió "+pzas+" en el"):null;
   const avisados=[role!=="produccion"&&"Producción",role!=="admin"&&"Dirección"].filter(Boolean);
@@ -6910,7 +6908,7 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
   const listo=motivoOk&&sabeSaldo&&sabeOc&&!bloqueada;
   const falta=yaCancelada?"Ya está cancelada.":conFolio?(role==="admin"&&onIrAConFolio?"Con folio se cancela con «Cancelar con su folio».":"Con folio, sólo Dirección puede cancelarla."):ocTimbrada?"Primero se cancela el CFDI en CobranzaFlow.":inventario?"Primero se ajusta el inventario.":!sabeSaldo?"Revisando el saldo del cliente…":!sabeOc?"Revisando la factura de la OC…":!motivoOk?"Escribe por qué (mínimo 5 caracteres).":null;
   const facturada=partes.length>0||conPlan||!!agrupada||!!folioDeLaOC;
-  const deshacer=(role==="admin"?"Si fue un error, puedes deshacerla":"Si fue un error, Dirección puede deshacerla")+" desde la ficha de la orden"+(archivo?" (sin su archivo).":".");
+  const deshacer=(role==="admin"?"Si fue un error, puedes deshacerla":"Si fue un error, Dirección puede deshacerla")+" desde la ficha de la orden.";   // v10.84.76: con su archivo
   // v10.84.75 — UN desenlace para el botón y el cuerpo (la tercera revisión: con la factura de toda su OC, el cuerpo decía «se le resta»
   //   y el botón «Cancelar la orden y sus facturas»)
   const otrasFacturas=partes.length>0||!!agrupada||conPlan;
@@ -6950,7 +6948,6 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
           :<>{saldo.estado==="tarde"?"CobranzaFlow no contestó":"No se pudo comprobar"} si se pagó con el saldo a favor; si fue así, ese saldo regresa a su bolsa y ya no se podrá deshacer.{reintentar(()=>setVueltaSaldo(v=>v+1),"revisar el saldo")}</>}
       </HechoDeCancelar>
       {fila&&<HechoDeCancelar icono={FactoryIcon}>{fila}</HechoDeCancelar>}
-      {archivo&&<HechoDeCancelar icono={TrashIcon}>Se borra su archivo de producción ({archivo}); sus imágenes se quedan.</HechoDeCancelar>}
       {avisados.length>0&&<HechoDeCancelar>Les avisamos a {avisados.join(" y ")}, con el motivo.</HechoDeCancelar>}
       </>}
     </ul>
@@ -7997,7 +7994,7 @@ function CancelarParteModal({order,parte,onConfirm,onClose}) {
     {cambio&&<div role="status" style={{display:"flex",gap:6,alignItems:"flex-start",border:"1px solid "+C.wn+"60",borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:C.wnInk,fontWeight:600,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/><span>{cambio}</span></div>}
     <div id="cp-destino" style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:6}}>Al cancelarse, ese importe:</div>
     <div role="radiogroup" aria-labelledby="cp-destino" style={{display:"grid",gap:8}}>
-      {opcion("reabrir","Vuelve a quedar por facturar",`La orden vuelve a pedir factura por ${pesosMx(monto)} sin IVA.`,false,true)}
+      {opcion("reabrir","Vuelve a quedar por facturar",`La orden vuelve a pedir factura por ${pesosMx(monto)} sin IVA; le avisamos a Karla para que la facture.`,false,true)}
       {opcion("perder","Se da por perdido",esLaUltima?`Es la única parte que queda: ${order?.production_number||"la orden"} se cancela completa.`:`La orden queda facturada por ${pesosMx(monto)} menos: ese importe ya no se cobra.`,esLaUltima)}
     </div>
     <CampoMotivo id="cp-razon" valor={reason} onChange={setReason} trabajando={trabajando} ejemplo="Se refactura con otro RFC"/>
@@ -11156,7 +11153,6 @@ function CancelInvoicedModal({order,orders,actor,motivoInicial,onConfirm,onClose
   const saldoFavor=rev.estado==="listo"?rev.saldo:null;
   const yaCancelada=!!o.cancelled_at||/cancelled/.test(o.stage||"");   // v10.84.73 — montada sobre la orden viva
   const fila=filaAlCancelar(o,orders);
-  const archivo=archivoDe(o);
   const bloqueada=!!(timbrada||yaCancelada||!folio);
   const motivoOk=reason.trim().length>=MOTIVO_MIN;
   const listo=motivoOk&&rev.estado!=="revisando"&&!bloqueada;
@@ -11186,7 +11182,6 @@ function CancelInvoicedModal({order,orders,actor,motivoInicial,onConfirm,onClose
       {rev.estado==="listo"&&rev.saldoFallo&&<HechoDeCancelar tono="aviso">No se pudo comprobar si se pagó con el saldo a favor; si fue así, ese saldo regresa a su bolsa.{reintentar(()=>setVuelta(v=>v+1),"revisar el saldo")}</HechoDeCancelar>}
       {!timbrada&&fila&&<HechoDeCancelar icono={FactoryIcon}>{fila}</HechoDeCancelar>}
       {!timbrada&&<>
-      {archivo&&<HechoDeCancelar icono={TrashIcon}>Se borra su archivo de producción ({archivo}); sus imágenes se quedan.</HechoDeCancelar>}
       <HechoDeCancelar>Les avisamos a Lupita y a Karla, con el motivo.</HechoDeCancelar>
       {d?.aplica&&!compartida&&<HechoDeCancelar tono="grave">No se deshace desde PrintFlow.</HechoDeCancelar>}
       </>}
@@ -11993,24 +11988,11 @@ function PantoneChips({codes, role}) {
 // v10.73.23 — Duplica un archivo de imagen en Storage y devuelve la NUEVA URL pública (o null si falla). Se usa al
 // Replicar/Duplicar para que las órdenes NO compartan el mismo archivo (quitar/cambiar la imagen en una no rompe la
 // otra). Descarga el público + re-sube a un path nuevo en order-files.
-// v10.73.50 — al CANCELAR una orden, borra su ARCHIVO DE PRODUCCIÓN pesado (file_url: PSD/AI/PDF print-ready)
-// de storage y limpia las columnas file_url/file_name (para que la orden cancelada no quede con un link roto).
-// CONSERVA las imágenes de referencia (image_url/image_url_2) por la política de retención v10.72.70 (identificar
-// la orden después). Fire-and-forget: NO rompe la cancelación si falla el borrado. Idempotente (skip si no hay
-// file_url). El storage.remove corre como authenticated (candado de empleados v10.73.49). Pedido de Marcelo.
-async function deleteOrderProductionFile(order){
-  try{
-    if(!order?.file_url) return;
-    const path=order.file_url.split("/order-files/")[1];
-    if(!path) return; // v10.73.51 — no es del bucket order-files (legacy/externo): no borrar ni soltar la referencia
-    // v10.73.51 — revisar el {error} del remove ANTES de nular: supabase-js resuelve con {data,error} (no lanza),
-    // así que un fallo silencioso (RLS/red/5xx) nularía file_url dejando el objeto huérfano PARA SIEMPRE (la red de
-    // 30 días lo salta con if(!o.file_url)). Si el remove falla, CONSERVAR file_url para que el auto-archivado reintente.
-    const {error:rmErr}=await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
-    if(rmErr){ console.warn("[deleteOrderProductionFile] remove falló, conservo file_url para reintento:",order?.id,rmErr); return; }
-    await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",order.id);
-  }catch(e){ console.warn("[deleteOrderProductionFile]",order?.id,e); }
-}
+// v10.73.50 — al CANCELAR una orden se borraba su ARCHIVO DE PRODUCCIÓN (file_url: el PDF/AI/PSD para imprimir), pedido de Marcelo.
+// v10.84.76 — YA NO (Marcelo, 12-oct: «así queda un historial»): la orden cancelada conserva su archivo de impresión, y «Deshacer
+//   cancelación» la regresa completa (antes regresaba sin él). El espacio no lo pedía: todo el bucket pesaba 118 MB y los archivos
+//   de impresión, 19 MB. Tampoco lo borra el archivado de 30 días (ver «Auto-archivado diario»). Borrarlo sigue siendo una acción a
+//   propósito: el «Borrar archivo» del detalle, o borrar la orden.
 async function copyStorageImage(srcUrl,keyPrefix){
   // v10.73.24 — timeout en cada llamada de red: garantiza que la función SIEMPRE resuelve (≤~20s) → el gate
   // imgUploading de Replicar siempre se libera y el Promise.all de Duplicar nunca cuelga (cae al fallback de ref).
@@ -19333,20 +19315,9 @@ export default function PrintFlow() {
       const old = [...(delQ.data||[]), ...(cancQ.data||[])];
       if (old.length === 0) return;
 
-      // (A) Borrar SOLO el ARCHIVO DE PRODUCCIÓN (file_url: PSD/AI/PDF print-ready, pesado). Las imágenes ya NO se
-      //     borran (v10.72.70) → aquí no se tocan image_url/image_url_2.
-      for (const o of old) {
-        if (!o.file_url) continue;
-        try {
-          const path = o.file_url.split("/order-files/")[1];
-          if (!path) continue; // v10.73.51 — legacy/externo: no borrar ni soltar la referencia
-          // v10.73.51 — revisar el {error} del remove antes de nular: si falla en silencio (RLS/red/5xx), conservar
-          // file_url para reintentar mañana en vez de dejar el objeto huérfano para siempre (if(!o.file_url) lo saltaría).
-          const { error: rmErr } = await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);
-          if (rmErr) { console.warn("[storage-cleanup] remove falló, conservo file_url para reintentar:", o.id, rmErr); continue; }
-          await supabase.from("orders").update({ file_url: null, file_name: null }).eq("id", o.id);
-        } catch {}
-      }
+      // (A) v10.84.76 — YA NO se borra el ARCHIVO DE IMPRESIÓN (file_url) de lo entregado o cancelado hace 30 días (Marcelo,
+      //     12-oct: «así queda un historial», y sirve para repetir un trabajo). Antes aquí se borraba (v10.72.70/v10.73.51). El
+      //     espacio no lo pedía: el bucket entero pesaba 118 MB, los archivos de impresión 19 MB.
 
       // (B) Comprimir las IMÁGENES a baja resolución una sola vez (images_archived_at marca hecho → no recomprime a
       //     diario, lo cual las degradaría). Tope por corrida para no saturar el navegador del admin; el backlog se
@@ -20813,7 +20784,7 @@ export default function PrintFlow() {
         const maq=MACHINES.find(x=>x.id===o.current_machine)?.name||o.current_machine||"su máquina";
         await intentar("sacarla de la fila de "+maq+" (sácala a mano desde el Tablero)",async()=>{queueResult=await db.moveOrderInQueue(id,null,null,user||"sistema")});
       }
-      deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (conserva imágenes); v10.84.73: la ventana lo dice
+      // v10.84.76 — el archivo de impresión se queda (antes deleteOrderProductionFile, v10.73.50)
       await intentar("cerrar su tiempo de máquina",()=>db.closeMachineLog(id));
       await intentar("anotarla en su historial",()=>db.addTimeline(id,"❌ Cancelada: "+reason,user,"#ff3b30"));
       await intentar("dejar el comentario",()=>db.addComment(id,"❌ Cancelada: "+reason,user));
@@ -21058,7 +21029,7 @@ export default function PrintFlow() {
       try{
         // RPC autoritativo: rutea por vínculo con cobranza (folio/grupo/splits/matriz/compartido) y admin-gatea los vinculados.
         await db.cancelOrderSafe(id, r, userLogin||user);
-        deleteOrderProductionFile(o); // v10.73.50 — borra el archivo de producción al cancelar (masiva)
+        // v10.84.76 — el archivo de impresión se queda (antes se borraba aquí, v10.73.50)
         ok++;
       }catch(e){ fail.push(((o&&o.production_number)||id)+": "+(e?.message||"error")); failIds.push(id); }
     }
@@ -22313,12 +22284,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           onConfirm={async({reason,alCancelar})=>{
             const r = await db.cancelInvoiceSplit(liveP.id, reason, userLogin||user, alCancelar);
             setCancelParteModal(null);
+            // v10.84.76 (Marcelo, 12-oct) — si vuelve a quedar por facturar, a Karla le toca facturarla: se le avisa (el resto sólo se
+            //   veía en la ficha de la orden, que ya entregada casi no se ve). «Se da por perdido» no le pide nada: sin aviso.
+            let avisoKarla = alCancelar==="reabrir" && !r?.order_cancelled;
+            if(avisoKarla){
+              const msg = `${liveP.invoice_folio} de ${liveO.production_number} se canceló: $${Number(liveP.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})} sin IVA vuelven a quedar por facturar. En la orden, «Facturar siguiente parte».`;
+              try{ await db.addNotification("karla", liveO.id, "por_facturar", msg, reason, userLogin||user); }
+              catch(e){ console.error("[cancelar parte] aviso a Karla:",e); avisoKarla=false; showToast(`Parte ${liveP.invoice_folio} cancelada, pero no se pudo avisar a Karla: avísale tú que vuelve a quedar por facturar.`,"warning"); reload(); return; }
+            }
             // v10.84.28 — si era la última parte, la RPC cancela la orden (order_cancelled): el aviso lo dice en vez de
             // afirmar que la orden «queda facturada de menos», que da a entender que sigue viva
             showToast(r?.order_cancelled
               ? `Parte ${liveP.invoice_folio} cancelada · era la única que quedaba: ${liveO.production_number} se canceló`
               : alCancelar==="reabrir"
-              ? `Parte ${liveP.invoice_folio} cancelada · sus $${Number(liveP.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})} vuelven a quedar por facturar`
+              ? `Parte ${liveP.invoice_folio} cancelada · sus $${Number(liveP.amount_portion).toLocaleString("es-MX",{minimumFractionDigits:2})} vuelven a quedar por facturar${avisoKarla?" · le avisamos a Karla":""}`
               : `Parte ${liveP.invoice_folio} cancelada · se dio por perdida: ${liveO.production_number} queda facturada de menos`, "success");
             reload();
           }}/>;
@@ -22540,7 +22519,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           reload();
           return {error:"No se canceló "+quien+": "+motivoDeLaBase(e)+"."};
         }
-        deleteOrderProductionFile(co); // v10.73.50 — borra el archivo de producción al cancelar
+        // v10.84.76 — el archivo de impresión se queda (antes se borraba aquí, v10.73.50)
         const newStage=co.order_type==="maquila"?"maq_cancelled":"cancelled";
         const enCobranza=caso?.compartida?"a "+folio+" (de toda la OC) se le restó esta orden":folio+" quedó cancelada con saldo 0 (si tenía cobros, quedaron como discrepancia)";
         const tlMsg="❌ Cancelada con su folio "+folio+" · en CobranzaFlow "+enCobranza+" · Razón: "+reason;
