@@ -575,3 +575,15 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **En una ventana con cuerpo que se desplaza, el foco entra sin desplazar** (v10.84.75): `autoFocus` en un campo de abajo lo trae a la
   vista y esconde el título y lo que está en juego (a 683×384 la ventana de cancelar abría pasada «Ya está facturada…»). Se enfoca con
   `focus({preventScroll:true})` y el cuerpo abre arriba. Y lo que no debe moverse bajo el cursor (la salida segura) va en un lugar fijo.
+- **Una forma que guarda dice el rechazo en su pie** (v10.84.77, la forma de la orden): junto al botón que se vuelve a apretar, con
+  `role="alert"` y el foco, en palabras y UNA vez («No se creó la orden: sin conexión. Lo que capturaste sigue aquí; vuelve a
+  intentar.»). Nunca se limpia sin la respuesta buena en la mano, y lo que pasa DESPUÉS de guardar (la bitácora, los avisos) no deshace lo
+  guardado: se da por hecho y se dice lo que faltó. App manda el mensaje ya en palabras (`_enLaForma`); un aviso rojo de 7 s tapaba el botón.
+- **Lo que no se guarda no se deja tocar** (v10.84.77): si App va a descartar un campo (la razón social de una orden facturada, el
+  precio que cambia el vendedor), la forma lo cierra con candado y su porqué en una línea («se corrigen en CobranzaFlow», «lo cambia
+  Lupita o Dirección»), sobre el dato VIVO. Y si algo se descarta de todos modos, el aviso lo nombra («Orden actualizada» mentía).
+- **Cambiar lo que ya está facturado pregunta con las cifras** (v10.84.77): antes → después de lo que se cambió y lo que le pasa a su
+  factura, leído de la base («Revisando…», tope de 8 s; sin poder leer, la regla sin cifras). En `ConfirmModal`, con «Volver a la forma»
+  enfocado y el foco de regreso al botón.
+- **La × quita, no borra** (v10.84.77): quitar una imagen o un archivo de algo que se está editando sólo quita la referencia, con
+  «Deshacer» mientras siga abierta; del servidor sólo se limpia lo subido en esa misma captura (nadie más lo usa).

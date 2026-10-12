@@ -12,6 +12,63 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.77 — La forma de la orden: guardar no pierde ni duplica, la × no borra, y la orden facturada no deja tocar lo que no guarda — 12-oct-2026
+
+**Qué pasaba** (la critique de OrderForm del 12-oct: revisor independiente sobre la app compilada con la cuenta de pruebas y las escrituras
+cortadas, **22/40**, con 3 P1; el detector de impeccable en 8 estados de la página real; snapshot
+`.impeccable/critique/2026-10-12T16-15-36Z__src-app-jsx-orderform-formulario-orden-nueva.md`):
+- **Guardar cuando la base falla perdía o duplicaba la orden.** Si la base no daba el número (`next_production_number`), `create` hacía un
+  `return` callado y la forma lo tomaba por éxito: se VACIABA (cliente, tipo, descripción, cantidad, vendedor, precio). Si la orden sí se
+  guardaba y fallaba después la bitácora o un aviso, salía «No se pudo crear: addTimeline: upstream…» con la forma llena, y el segundo
+  clic creaba OTRA orden con otro número. Y si fallaba el INSERT, dos avisos rojos; el segundo, en inglés crudo, tapaba el primero (y el
+  botón).
+- **La × de una imagen y «Quitar» del archivo borraban del servidor al clic**, antes de guardar: «Cancelar» no los regresaba y la orden
+  quedaba apuntando a un archivo borrado. Tras un «Replicar» que no pudo copiar la imagen, la × de la orden NUEVA borraba la de la orden
+  de origen. «Quitar» borraba el archivo de impresión, que desde v10.84.76 se queda como historial.
+- **Editar una orden facturada dejaba tocar lo que no se guarda**: la razón social y el RFC abiertos y, al guardar, `update` los tiraba en
+  silencio y decía «Orden actualizada»; al vendedor le pasaba con el precio, el cliente y el vendedor. Cambiar precio o cantidad de una
+  facturada no decía nada de su factura (salvo cobrada). «Editar Orden» no decía cuál. Y el candado del precio de una orden facturada por
+  partes decía «Folio fiscal pre-asignado ()».
+- Lo que dijo el banco nuevo (sin la critique): «Registrar» del agente de compras decía «registrado» con la base rechazándolo (no miraba
+  `error`), y «Guardar» sin cambiar nada decía «Orden actualizada».
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- `create`: TODO camino que no creó la orden lanza, con el mensaje en palabras para la forma (`_enLaForma`). La forma se limpia sólo con
+  el número en la mano. Lo de después de guardar (bitácora, avisos) ya no deshace la orden: se da por creada y, si un aviso no salió,
+  «no se pudo avisar a Producción…: avísales tú». El aviso trae «Ver P-…» y, si se dio de alta el cliente, «quedó dado de alta en
+  CobranzaFlow» (antes lo pisaba el de la orden).
+- La forma: el rechazo se dice en su pie, junto al botón, con `role="alert"` y el foco, una sola vez («No se creó la orden: sin conexión.
+  Lo que capturaste sigue aquí; vuelve a intentar.»). Una vez a la vez (`enviandoRef`): las preguntas esperan y ni Ctrl+Enter ni un clic
+  las repiten; «Guardando…» sólo cuando de verdad guarda.
+- La × y «Quitar» QUITAN de la orden, con «Deshacer» mientras la forma siga abierta. Del servidor sólo se limpia lo subido en esa misma
+  captura (`imgUploadsRef`, y `subidasRef` en `FileUpload`), que nadie más usa.
+- La orden facturada (por su folio, agrupada, por partes, en el plan de su OC o en una OC con el folio de toda la OC) y el vendedor:
+  candados con su porqué («se corrigen en CobranzaFlow», «lo cambia Lupita o Dirección»), sobre la orden VIVA (si la facturan mientras se
+  edita, se cierran). La cantidad de la que ya cargó al inventario, también. El título: «Editar P-0643 · F-122», «Specs de P-0624».
+- Cambiar precio o cantidad de una facturada pregunta ANTES, con las cifras (antes → después) y lo que le pasa a su factura, leído con
+  `pf_price_drop_check` («Revisando la factura…», tope de 8 s): se recalcula en CobranzaFlow (de $X a $Y con IVA, o la de toda la OC),
+  timbrada no cambia (queda anotada la diferencia), la cantidad no cambia la factura (por partes, el resto absorbe las piezas); sin poder
+  leerla, la regla sin cifras. Si ya se cobró de más, sigue la pregunta de App (PriceDropModal). «Volver a la forma» y Esc regresan con
+  el foco al botón.
+- `update`: lo que descarta (por DevTools o una versión vieja abierta) lo nombra en el aviso; los candados que avisaban en rojo
+  (inventario, la orden que cambió de etapa, la que entró a producción) dicen su porqué en la forma; «Sin cambios: P-0650 queda igual»
+  sin escribir (se compara TODO campo con `mismoValor`: `diffOrderFields` no mira la descripción ni las imágenes); el aviso trae «Ver P-…».
+- `errorEnPalabras`: «upstream connect error» es «sin conexión» (decía «la base no lo aceptó»; lo usan todos los avisos en palabras).
+- El agente de compras mira el error de la base; el candado del precio en su tinta y con el caso de verdad (sin «(Fase 2)»); los
+  faltantes en tinta (AA).
+
+**Cómo se probó**: tanda nueva `orden` (banco `tests/banco/gen-orden.mjs`: la forma extraída y `create`/`update` COPIADOS de App.jsx con la
+base simulada; `tests/romper/orden.mjs`). Vuelta 1, escrita antes del cambio: de 25 casos fallaban 22 contra v10.84.76 (la lista de
+arriba). Vuelta 2 (por donde no se diseñó: doble clic en la pregunta, Esc, la factura que tarda o no contesta, la que facturan con la forma
+abierta, maquila facturada, lo subido y quitado en la misma captura, el vendedor al crear, Karla con folio anticipado, por partes, 1920):
+17 casos más; tres fallas encontradas al escribirlos (los candados sobre la orden de al abrir, la lectura sin tope y el foco que caía al
+<body> tras «Volver»), arregladas. Sabotajes: 13 de 14 atrapados (el número que vacía la forma, la bitácora que deshace la orden, la × y «Quitar» que borran, sin la pregunta, la razón social abierta, el candado sobre la orden de al abrir, la lectura sin tope, el foco que no regresa, el agente que no mira el error, sin «Sin cambios», el rechazo como aviso rojo y el título que no dice cuál). El que no se ve: quitar el seguro de «una vez a la vez» (S13); sin él, la segunda pregunta reemplaza a la primera y la orden se guarda una sola vez: el seguro evita una promesa colgada, no un bug que se vea. Con el cambio: `orden` 42 de 42. El build y la revisión de alcance, en verde.
+**Sin probar:** la escritura real (el banco simula la base; App se copia tal cual), la cuenta de un vendedor dueño de órdenes, la
+pregunta de cobrado de más (PriceDropModal, sin cambios) y un lector de pantalla.
+
+**Para Marcelo:** nada que decidir en esta versión. Siguen v10.84.78 (los P2: preguntar antes de tirar la captura, Replicar sin pisar,
+Enter en «Tipo», números validados, foco y teclado, texto con AA) y v10.84.79 (el reacomodo).
+
 ## v10.84.76 — El archivo de impresión ya no se borra, y a Karla se le avisa lo que vuelve a quedar por facturar — 12-oct-2026
 
 **Decisiones de Marcelo** (12-oct, sobre las preguntas que dejó la noche de las puertas de cancelar; medido antes en la base):

@@ -1292,6 +1292,16 @@ function diffOrderFields(before,after){
   return out;
 }
 
+// v10.84.77 — ¿cambió de verdad este campo? El criterio de diffOrderFields para TODO campo de la forma: vacío = vacío (null, "",
+//   false, arreglo vacío), números por valor ("1500" = 1500), arreglos por contenido. Lo usa `update` para decir «Sin cambios» y para
+//   nombrar lo que descarta (diffOrderFields sólo mira los campos que avisan: no la descripción ni las imágenes).
+function mismoValor(a,b){
+  const vacio=v=>v==null||v===""||v===false||(Array.isArray(v)&&v.length===0);
+  if(vacio(a)&&vacio(b))return true;
+  const norm=v=>Array.isArray(v)?JSON.stringify(v):typeof v==="number"?String(v):(typeof v==="string"&&v.trim()!==""&&!isNaN(Number(v)))?String(Number(v)):typeof v==="boolean"?String(v):v;
+  return norm(a)===norm(b);
+}
+
 // Formatea valores para mostrar en mensaje de notif (Telegram)
 function fmtEditValue(field,v){
   // v10.25.0 — array fields (pantones)
@@ -4375,7 +4385,9 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
 let DESHACER_MS=6500;
 // v10.84.59 — el porqué de un error EN PALABRAS para un aviso (la primera revisión independiente del tablero: los avisos decían
 //   «closeMachineLog update: …» o «addWaste: …» y no decían qué orden). El mensaje crudo sigue en la consola.
-const errorEnPalabras=e=>{const m=String(e?.message||e||"");return /42501|permis|denied|solo lectura|not allowed|row-level/i.test(m)?"no tienes permiso":/fetch|network|conex|timeout|Load failed|ERR_/i.test(m)?"sin conexión":"la base no lo aceptó"};
+// v10.84.77 — «upstream connect error or disconnect/reset before headers» (lo que contesta Supabase cuando no llega a la base) es
+//   «sin conexión», no «la base no lo aceptó» (la forma de la orden lo decía así con la red caída).
+const errorEnPalabras=e=>{const m=String(e?.message||e||"");return /42501|permis|denied|solo lectura|not allowed|row-level/i.test(m)?"no tienes permiso":/fetch|network|conex|timeout|Load failed|ERR_|upstream|disconnect/i.test(m)?"sin conexión":"la base no lo aceptó"};
 const nombreDeOrden=o=>o?(o.production_number||o.client||"La orden"):"La orden";
 // v10.84.70 — el porqué de un rechazo de la base: lo de siempre (permiso, conexión) en palabras; un mensaje escrito para personas (los
 //   RAISE de las reglas, en español), tal cual; lo técnico (columnas, constraints), como «la base no lo aceptó» (el crudo, a la consola)
@@ -11686,6 +11698,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
   const [upErr,setUpErr]=useState("");          // v10.72.16 — error inline (antes alert() bloqueante)
   const xhrRef=useRef(null);
   const uploadingRef=useRef(false); // v10.72.19 — guard anti-race entre subidas solapadas (más fiable que el state)
+  const subidasRef=useRef(new Set()); // v10.84.77 — lo subido en ESTA captura: lo único que «Quitar» limpia del servidor
   const maxSize=50*1024*1024; // 50MB
   // v10.72.16 — progreso HONESTO por bytes + cancelar. supabase-js sube por fetch (no expone ni progreso de
   // subida ni abort), así que la vía principal es un XHR directo al endpoint REST de Storage. NO se comprime:
@@ -11745,15 +11758,20 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
       }
     }
     // éxito (XHR o fallback)
-    try{ const{data}=supabase.storage.from("order-files").getPublicUrl(path); onUploaded(data.publicUrl,file.name); }
+    try{ const{data}=supabase.storage.from("order-files").getPublicUrl(path); subidasRef.current.add(path); onUploaded(data.publicUrl,file.name); }
     catch{ setUpErr("El archivo subió pero no se pudo obtener el enlace. Reintenta."); }
     cleanup();
   };
   const cancelUpload=()=>{ try{ xhrRef.current?.abort(); }catch{} };
+  // v10.84.77 — «Quitar» QUITA el archivo de la orden; del servidor sólo se limpia el que se subió en esta misma captura (nadie más lo
+  //   usa). Antes borraba al clic el archivo de impresión guardado aunque luego se cancelara la edición (y desde v10.84.76 ese archivo
+  //   se queda como historial). onRemoved(true): sí se borró, no hay qué deshacer.
   const remove=async()=>{
     if(!fileUrl)return;
-    try{const path=fileUrl.split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}
-    onRemoved();
+    const pth=fileUrl.split("/order-files/")[1],pd=pth?decodeURIComponent(pth):null;
+    const deEsta=!!pd&&subidasRef.current.has(pd);
+    if(deEsta){subidasRef.current.delete(pd);try{await supabase.storage.from("order-files").remove([pd])}catch{}}
+    onRemoved(deEsta);
   };
   const fSize=fileName?fileName.length>25?fileName.slice(0,22)+"..."+fileName.split(".").pop():fileName:"";
   return <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
@@ -11768,7 +11786,7 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
             que espera el helper. */}
         <a href={fileUrl} target="_blank" rel="noopener" download={fileName} {...propsArchivoFirmado({file_url:fileUrl,file_name:fileName})} style={{fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500,display:"inline-flex",alignItems:"center",gap:3}}><DownloadSimpleIcon size={11} weight="bold"/>Descargar</a>
       </div>
-      {canUpload&&<button onClick={remove} style={{background:C.dn+"12",color:C.dn,border:"none",borderRadius:8,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}><XIcon size={11} weight="bold"/>Quitar</button>}
+      {canUpload&&<button type="button" onClick={remove} title="Lo quita de esta orden (el archivo no se borra)" style={{background:C.sf,color:C.t2,border:"0.5px solid "+C.bd,borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}><XIcon size={12} weight="bold"/>Quitar</button>}
     </div>
     :uploading?<div style={{border:"1px solid "+C.ios+"40",background:C.ios+"08",borderRadius:10,padding:"10px 12px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -12041,7 +12059,7 @@ async function copyStorageImage(srcUrl,keyPrefix){
 //   títulos de card a 800). Además: header de sección unificado (F.meta/700/letterSpacing .5) para leerse un nivel
 //   por encima del label de campo (que queda en 600/.3). Cero cambio de lógica; solo tipografía. El fontSize:22 del
 //   contenedor del ícono de tipo-orden se deja (no es texto). Próximo del plan critique: quieter (color) + layout.
-function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast}) {
+function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast,actor,folioDeLaOC}) {
   const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [showMoreFin,setShowMoreFin]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
@@ -12125,6 +12143,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             wantImg1?copyStorageImage(src.image_url,"replica"):Promise.resolve(null),
             wantImg2?copyStorageImage(src.image_url_2,"replica"):Promise.resolve(null),
           ]);
+          [u1,u2].forEach(u=>{const pt=u&&u.split("/order-files/")[1];if(pt)imgUploadsRef.current.add(decodeURIComponent(pt))});   // v10.84.77 — la copia es de esta captura
           setF(prev=>{if(prev.client_id!==cid||(prev.client||"").trim()!==cnm)return prev;const next={...prev};
             if(wantImg1&&!prev.image_url)next.image_url=u1||src.image_url;
             if(wantImg2&&!prev.image_url_2)next.image_url_2=u2||src.image_url_2;
@@ -12149,6 +12168,34 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const specsOnly=editOrder?._specsOnly;
   // v10.58.26: folio pre-asignado → precios bloqueados pero costo proveedor editable
   const financialsLocked=editOrder?._financialsLocked||!!editOrder?.return_covered_by_folio;
+  // v10.84.77 — (critique independiente del 12-oct, P1) lo que NO se guarda no se deja tocar. App (update) descarta la razón social y
+  //   el RFC de una orden facturada (por su folio, por partes, agrupada o en el plan de su OC) y el precio, el cliente y el vendedor
+  //   cuando edita el vendedor; los campos seguían abiertos y el aviso decía «Orden actualizada». Ahora se cierran, con su porqué.
+  //   La de una OC con el folio de toda la OC (folioDeLaOC) también: su factura es de ese cliente.
+  const editando=!!editOrder?.id&&!editOrder?._fromOC;
+  //   Sobre la orden VIVA (el tiempo real): si la facturan mientras se edita, el candado y la pregunta la siguen.
+  const ordenViva=editando?(orders.find(o=>o.id===editOrder.id)||editOrder):null;
+  const queFactura=!ordenViva?null:(ordenViva.invoice_folio||ordenViva.grouped_invoice_folio||folioDeLaOC||(ordenViva.has_splits?"por partes":ordenViva.has_matrix_lines?"en el plan de su OC":null));
+  const esVendedor=role==="vendedor";
+  const candadoCliente=editando&&(!!queFactura||esVendedor);
+  const porQueCliente=queFactura?"La razón social y el RFC no se cambian aquí: la orden ya está facturada ("+queFactura+"). Se corrigen en CobranzaFlow.":"Los datos del cliente los cambia Lupita o Dirección.";
+  const candadoPrecioVendedor=editando&&esVendedor;
+  const precioBloqueado=financialsLocked||candadoPrecioVendedor;
+  const porQuePrecio=candadoPrecioVendedor&&!financialsLocked?"El precio al cliente lo cambia Lupita o Dirección.":"";
+  const candadoVendedor=editando&&esVendedor;
+  const candadoCantidad=editando&&!!ordenViva?.stock_loaded;
+  // v10.84.77 — el rechazo de la base se dice AQUÍ, en el pie (junto al botón que se vuelve a apretar), en palabras y una vez; antes
+  //   era un aviso rojo de 7 s que tapaba «Crear Orden», y otro de la forma encima, en inglés crudo
+  const [errGuardar,setErrGuardar]=useState("");const errGuardarRef=useRef(null);
+  useEffect(()=>{if(errGuardar)errGuardarRef.current?.focus({preventScroll:true})},[errGuardar]);
+  // v10.84.77 — lo que la × y «Quitar» sacaron de la orden (una imagen o el archivo guardados): se puede deshacer mientras la forma
+  //   siga abierta. Del servidor ya no se borra nada guardado (el archivo de impresión se queda como historial, v10.84.76)
+  const [imgQuitadas,setImgQuitadas]=useState({});
+  const [archivoQuitado,setArchivoQuitado]=useState(null);
+  const [preguntaFact,setPreguntaFact]=useState(null);
+  const enviandoRef=useRef(false);
+  const botonGuardarRef=useRef(null);   // al cerrar la pregunta con «Volver» o Esc, el foco regresa aquí (no al <body>)
+  const [revisando,setRevisando]=useState(false);   // leyendo la factura antes de la pregunta (tope de 8 s)
   // v10.59.0 — Catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge de Corona)
   // de la razón social seleccionada. Se carga al elegir cliente.
   const [clientAgents,setClientAgents]=useState([]);
@@ -12267,29 +12314,60 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     if(el){el.scrollIntoView({behavior:"smooth",block:"center"});const foc=el.matches("input,select,textarea")?el:el.querySelector("input,select,textarea");setTimeout(()=>{try{foc&&foc.focus({preventScroll:true})}catch(e){}},280);}
     else root.scrollIntoView({behavior:"smooth",block:"start"});
   };
+  // v10.84.77 — cambiar el precio o la cantidad de una orden ya facturada pregunta ANTES, con las cifras y lo que le pasa a la factura.
+  //   Lo que hace el puente (sync_post_invoice_edit): el precio recalcula su factura en CobranzaFlow, salvo timbrada (su importe no
+  //   cambia y queda anotada la diferencia) o por partes / en el plan de la OC (allá se ajusta a mano); la cantidad no cambia la
+  //   factura (por partes, lo que queda por facturar absorbe las piezas). La lectura es pf_price_drop_check (Dirección y Karla): si no
+  //   se puede leer, se dice la regla sin inventar cifras. Si ya se cobró más de lo que quedaría, no se pregunta aquí: la pregunta de
+  //   qué hacer con la diferencia la hace App (PriceDropModal).
+  const preguntarFacturada=async()=>{
+    const vivo=ordenViva||editOrder;
+    const num=v=>v===""||v==null?null:Number(v);
+    const campoP=isMaq?"maq_price":"price";
+    const pA=num(vivo[campoP]),pN=num(f[campoP]);
+    const cambiaPrecio=!precioBloqueado&&pA!==pN;
+    const qA=num(vivo.quantity),qN=num(f.quantity);
+    const cambiaCantidad=!candadoCantidad&&qA!==qN;
+    if(!queFactura||(!cambiaPrecio&&!cambiaCantidad))return true;
+    const folio=vivo.invoice_folio||folioDeLaOC||null;   // las que el puente recalcula con el precio
+    const deLaOC=!vivo.invoice_folio&&!!folioDeLaOC;
+    const nombreFact=folio?(deLaOC?"la factura de toda la "+vivo.purchase_order_id+" ("+folio+")":folio):null;
+    let chk=null;
+    if(cambiaPrecio&&folio){
+      // con tope de 8 s (como las puertas de cancelar): si la base no contesta, la pregunta sale con la regla, sin cifras
+      setRevisando(true);
+      try{chk=await Promise.race([db.checkPriceDrop(actor||role,vivo.id,isMaq?null:(pN??0),isMaq?(pN??0):null),new Promise((_,no)=>setTimeout(()=>no(new Error("no contestó en 8 s")),8000))])}
+      catch(e){console.warn("[guardar] no se pudo leer la factura:",e?.message)}
+      finally{setRevisando(false)}
+      if(chk?.aplica&&chk?.bloquea)return true;
+    }
+    const llevaIva=x=>/^(F|D|DP)-/i.test(x||"");
+    const filas=[];
+    if(cambiaCantidad)filas.push({titulo:"Cantidad",monto:Number(qA||0).toLocaleString("es-MX")+" → "+Number(qN||0).toLocaleString("es-MX")+" pzas"});
+    if(cambiaPrecio)filas.push({titulo:isMaq?"Precio al cliente":"Precio",sub:"sin IVA",monto:pesosMx(pA)+" → "+pesosMx(pN)});
+    if(cambiaPrecio&&chk?.aplica)filas.push({titulo:(chk.oc_compartida?"Factura de toda la "+vivo.purchase_order_id+", ":"Factura ")+chk.folio,sub:(llevaIva(chk.folio)?"con IVA, ":"")+"en CobranzaFlow",monto:chk.timbrada?pesosMx(chk.monto_factura)+" (no cambia)":pesosMx(chk.monto_factura)+" → "+pesosMx(chk.recalculo)});
+    const dichos=[];
+    if(cambiaPrecio){
+      if(chk?.aplica&&chk.timbrada)dichos.push(chk.folio+" ya está timbrada ante el SAT: su importe no cambia. Queda anotada la diferencia para cancelarla y volver a timbrarla en CobranzaFlow.");
+      else if(chk?.aplica)dichos.push((chk.oc_compartida?"La factura de toda la "+vivo.purchase_order_id+", "+chk.folio+",":chk.folio)+" se recalcula en CobranzaFlow con el precio nuevo."+(chk.cobrado>0?" Ya se cobraron "+pesosMx(chk.cobrado)+"; quedarían "+pesosMx(Math.max(0,chk.recalculo-chk.cobrado))+" por cobrar.":""));
+      else if(chk)dichos.push("No hay una factura viva con "+folio+": sólo cambia la orden.");
+      else if(folio)dichos.push("No se pudo leer "+nombreFact+": al guardar, CobranzaFlow la recalcula con el precio nuevo, salvo que ya esté timbrada.");
+    }
+    if(cambiaCantidad)dichos.push(vivo.has_splits?"Las partes ya facturadas no cambian; lo que queda por facturar absorbe la diferencia de piezas."
+      :vivo.has_matrix_lines?"Las facturas del plan de su OC no cambian: si cambian las piezas, ajústalas en el plan."
+      :cambiaPrecio&&folio?"Las piezas de la factura no cambian."
+      :(nombreFact||queFactura)+" no cambia: la factura ya declaró sus piezas.");
+    dichos.push("La orden queda marcada «Editada después de facturar»"+(vivo.invoice_folio?" y se le avisa a Karla":"")+".");
+    return await new Promise(res=>setPreguntaFact({titulo:"¿Guardar los cambios de "+(vivo.production_number||"la orden")+"?",filas,mensaje:dichos.join("\n"),resolver:res}));
+  };
   const submit=async()=>{
-    setTried(true);if(!canSubmit){scrollToFirstInvalid();return;}
-    // v10.34.4 fix #5 — flush debounce: si hay validación pendiente, ejecutarla sincrónicamente antes de seguir
-    if(canEditProductionNumber&&pnValidateTimerRef.current){
-      clearTimeout(pnValidateTimerRef.current);pnValidateTimerRef.current=null;
-      const num=(f.production_number||"").trim();
-      if(num&&num!==nextPN){
-        try{
-          const {data}=await supabase.rpc("validate_production_number",{p_number:num,p_exclude_order_id:editOrder?.id||null});
-          if(!data?.valid){
-            alert("⚠️ Folio inválido: "+(data?.message||"")+(data?.existing_order_id?"\nOrden existente: "+data.existing_client:""));
-            setPnValidation({valid:false,message:data?.message||"Folio duplicado",existing:data?.existing_order_id?{id:data.existing_order_id,client:data.existing_client}:null});
-            return;
-          }
-        }catch{} // si falla validación, dejamos que UNIQUE INDEX sea la red final
-      }
-    }
-    // 🆕 v10.14.0 — Bloquear submit si el folio P-XXXX está inválido (solo cuando es editable)
-    if(canEditProductionNumber&&!pnValidation.valid&&pnValidation.message){
-      alert("⚠️ Folio inválido: "+pnValidation.message+(pnValidation.existing?"\nOrden existente: "+pnValidation.existing.client:""));
-      return;
-    }
-    setSaving(true);
+    // v10.84.77 — una sola vez a la vez: las preguntas (¿ya existe el cliente?, la orden facturada) esperan respuesta y ni un clic ni
+    //   Ctrl+Enter la repiten. «Guardando…» sale cuando de verdad se guarda (antes, también mientras la pregunta esperaba).
+    if(enviandoRef.current||saving)return;
+    setTried(true);setErrGuardar("");
+    if(!canSubmit){scrollToFirstInvalid();return;}
+    // (v10.64.0: el número de producción ya no se teclea; con v10.84.77 se fue la validación del P- tecleado y sus alert())
+    enviandoRef.current=true;
     try{
       const clean={...f};delete clean._specsOnly;
       if(clean.agent==="otro")clean.agent=null;
@@ -12313,16 +12391,18 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           // se crea. v10.72.2 — la razón social nueva se confirma CONSCIENTE (nombre/RFC/contacto + aviso de duplicado; antes un
           // window.confirm nativo daba el «OK» reflejo a duplicados como UVEG).
           const r=await resolverClienteNuevo({nombre:clean.client.trim(),rfc:clean.client_rfc?.trim()||"",email:clean.client_email?.trim()||"",telefono:clean.client_phone?.trim()||""});
-          if(r.tipo==="cancelado"){setSaving(false);return}
+          if(r.tipo==="cancelado")return;
           clean.client_id=r.id;
-          if(r.tipo==="existente")showToast?.(`Vinculado automáticamente: ${r.nombre}`,"success");
-          else if(r.tipo==="nuevo")showToast?.(`Cliente "${clean.client.trim()}" creado en CobranzaFlow`,"success");
+          // v10.84.77 — el cliente que se dio de alta lo dice el aviso de la orden (el aviso propio lo pisaba el de la orden al instante)
+          if(r.tipo==="nuevo")clean._clienteNuevo=clean.client.trim();
         }catch(e){
           console.error("client resolution error:",e);
-          showToast?.(mensajeDeCliente(e,"la orden"),"error");
-          setSaving(false);return;
+          setErrGuardar(mensajeDeCliente(e,"la orden"));
+          return;
         }
       }
+      if(editando&&!(await preguntarFacturada()))return;
+      setSaving(true);
       await onSubmit(clean);
       if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false);agentTouchedRef.current=false} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
@@ -12331,8 +12411,12 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // a pintar crudo encima. Lo peor: cancelar el modal de baja de precio no es un error, y el
     // usuario veía "❌ price_drop_cancelled". Arregla de paso el toast duplicado de los otros 3
     // guards (cantidad bloqueada por stock, orden cambiada en otra sesión, orden en producción).
-    }catch(e){if(!e?._toasted)showToast("❌ "+(e?.message||"Error desconocido (revisa F12)"),"error")}
-    finally{setSaving(false)}
+    // v10.84.77 — y el rechazo se dice en el pie de la forma (errGuardar), no en un aviso: App lo manda ya en palabras (_enLaForma)
+    }catch(e){
+      if(e?._enLaForma)setErrGuardar(e.message);
+      else if(!e?._toasted)setErrGuardar((editOrder?.id?"No se guardaron los cambios: ":"No se creó la orden: ")+motivoDeLaBase(e)+". Lo que capturaste sigue aquí; vuelve a intentar.");
+    }
+    finally{setSaving(false);enviandoRef.current=false}
   };
   // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
   const selC=async c=>{
@@ -12389,13 +12473,15 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             if(!newAgent.name.trim()){setNewAgentErr("Escribe el nombre del agente de compras");return}
             setNewAgentErr(""); // v10.72.22 — contacto OPCIONAL; si queda sin celular/correo, el form avisa al seleccionarlo
             try{
-              await supabase.rpc("add_client_agent",{p_client_id:f.client_id,p_name:newAgent.name.trim(),p_phone:newAgent.phone.trim()||null,p_email:newAgent.email.trim()||null,p_actor:role||"sistema"});
+              // v10.84.77 — supabase-js NO lanza: sin mirar `error`, con la base rechazando decía «Agente de compras registrado»
+              const {error:eAg}=await supabase.rpc("add_client_agent",{p_client_id:f.client_id,p_name:newAgent.name.trim(),p_phone:newAgent.phone.trim()||null,p_email:newAgent.email.trim()||null,p_actor:role||"sistema"});
+              if(eAg)throw eAg;
               const {data}=await supabase.rpc("list_client_agents",{p_client_id:f.client_id});
               setClientAgents(data||[]);
               s("client_agent",newAgent.name.trim());
               setNewAgentOpen(false);
               showToast?.("✅ Agente de compras registrado");
-            }catch(e){setNewAgentErr("No se pudo registrar: "+(e?.message||"error"))}
+            }catch(e){setNewAgentErr("No se pudo registrar a "+newAgent.name.trim()+": "+motivoDeLaBase(e)+". Vuelve a intentar.")}
           }} style={{flex:1,padding:11,borderRadius:10,border:"none",background:C.ac,color:"#fff",fontWeight:700,cursor:"pointer"}}>Registrar</button>
         </div>
       </div>
@@ -12406,7 +12492,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!editOrder&&canP&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8}}>{["interna","maquila"].map(t=><button key={t} onClick={()=>s("order_type",t)} style={{flex:1,padding:12,borderRadius:12,border:"1.5px solid "+(f.order_type===t?(t==="maquila"?C.maq:C.ac):C.bd),background:f.order_type===t?(t==="maquila"?C.maq+"08":C.acL):C.bg,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}><div style={{fontSize:22,display:"flex",justifyContent:"center"}}>{t==="interna"?<FactoryIcon size={24} weight="bold"/>:<TruckIcon size={24} weight="bold"/>}</div><div style={{fontSize:F.body,fontWeight:700}}>{t==="interna"?"Producción Interna":"Maquila Completa"}</div></button>)}</div>}
     {!specsOnly&&<div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Prioridad</label><div style={{display:"flex",gap:6}}>{PRIOS.map(p=><button key={p.id} onClick={()=>s("priority",p.id)} style={{flex:1,padding:"10px 4px",borderRadius:10,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:600,color:f.priority===p.id?p.c:C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5}}><PrioLbl priority={p.id} size={12}/></button>)}</div></div>}
     <div style={{padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:.5}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:F.title,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br><div id="ff-client" style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:F.title,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br>{candadoCliente?<div id="ff-client" aria-readonly="true" title={porQueCliente} style={{...inp,display:"flex",alignItems:"center",gap:7,background:C.sf,color:C.t2,cursor:"not-allowed",overflow:"hidden",whiteSpace:"nowrap"}}><LockIcon size={12} weight="bold" style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{f.client||"—"}</span></div>:<div id="ff-client" style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput value={f.client} onChange={v=>{
   // v10.46.9 F1 FIX — Solo limpiar client_id (+ stock_role/product_id) si el NOMBRE realmente cambió.
   // Antes (v10.46.5): cualquier onChange con f.client_id existente entraba al reset, incluso si v===f.client
   // (caso onSelect del autocomplete: selC setea client_id+client; el ClientInput dispara onChange con el
@@ -12418,7 +12504,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     s("billing_mode","normal");
     if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
   }
-}} onSelect={selC} clients={clients}/></div></FC><FC label="Agente de compras del cliente"><input style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Quién pide por parte del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
+}} onSelect={selC} clients={clients}/></div>}</FC><FC label="Agente de compras del cliente"><input style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Quién pide por parte del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
       <datalist id="pf-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
       {f.client_id&&(f.client_agent||"").trim()&&!clientAgents.some(a=>(a.name||"").trim().toLowerCase()===(f.client_agent||"").trim().toLowerCase())&&<button type="button" onClick={()=>{setNewAgent({name:(f.client_agent||"").trim(),phone:"",email:""});setNewAgentOpen(true)}} style={{marginTop:4,fontSize:F.meta,fontWeight:600,color:C.ac,background:C.ac+"10",border:"1px solid "+C.ac+"30",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}><UserPlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Registrar "{(f.client_agent||"").trim()}" como agente de compras</button>}</FC></div>
     {/* v10.72.22 — advertencia VISIBLE si el agente seleccionado existe pero no tiene celular ni correo.
@@ -12432,7 +12518,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
         <b>Cliente nuevo:</b> captura al menos un Email o WhatsApp para crearlo en CobranzaFlow. Sin contacto no podremos avisarle del estado de su orden.
       </div>
     </div>}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><EnvelopeIcon size={12} weight="bold"/><span>Email{f.client_phone?.trim()?"":" *"}</span></span>} br><input style={{...inp,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} id="ff-contacto" type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><WhatsappLogoIcon size={12} weight="bold"/><span>WhatsApp{f.client_email?.trim()?"":" *"}</span></span>} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:F.body}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input id="ff-rfc" style={inp} value={f.client_rfc} onChange={e=>s("client_rfc",e.target.value.toUpperCase())} placeholder="XAXX010101000" maxLength={13}/></FC></div></>}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><EnvelopeIcon size={12} weight="bold"/><span>Email{f.client_phone?.trim()?"":" *"}</span></span>} br><input style={{...inp,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} id="ff-contacto" type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><WhatsappLogoIcon size={12} weight="bold"/><span>WhatsApp{f.client_email?.trim()?"":" *"}</span></span>} br><div style={{display:"flex",gap:4}}><select style={{...inp,width:70,padding:"10px 4px",fontSize:F.body}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">🇲🇽+52</option><option value="+1">🇺🇸+1</option></select><input style={{...inp,flex:1,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC"><input id="ff-rfc" style={candadoCliente?{...inp,background:C.sf,color:C.t2,cursor:"not-allowed"}:inp} value={f.client_rfc} onChange={e=>!candadoCliente&&s("client_rfc",e.target.value.toUpperCase())} readOnly={candadoCliente} disabled={candadoCliente} title={candadoCliente?porQueCliente:undefined} placeholder="XAXX010101000" maxLength={13}/></FC></div>{candadoCliente&&<div role="note" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:F.label,color:C.t2,lineHeight:1.45}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{porQueCliente}</span></div>}</>}
     {/* v10.72.0 — Distribución: checkbox MUY visible + lista de lugares. Aplica a órdenes normales y de maquila. */}
     {!specsOnly&&<div style={{margin:"12px 20px",padding:"12px 14px",borderRadius:12,border:"1.5px solid "+(f.distribution!=null?C.ac:C.bd),background:f.distribution!=null?C.ac+"0c":C.sf}}>
       <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
@@ -12553,8 +12639,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NotePencilIcon size={12} weight="bold"/>Descripción del trabajo</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><BookOpenIcon size={12} weight="bold"/>Datos Técnicos Completos</span>}><div style={{background:(isMaq?C.maq:C.ac)+"08",borderRadius:12,padding:2}}><textarea style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:F.label}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:F.micro,color:C.ac,marginTop:4,fontStyle:"italic"}}>💡 Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico</div>}</FC></div>}
     {/* v10.25.1 — Pantones también disponibles en modo Avanzado (no en Maquila por D-7) */}
     {!specsOnly&&advMode&&!isMaq&&<><PantoneInput label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><PaletteIcon size={12} weight="bold"/>Pantones Frente</span>} value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><PaletteIcon size={12} weight="bold"/>Pantones Vuelta</span>} value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/></>}
-    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" req br><input id="ff-cantidad" style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0)}} type="number" value={f.quantity} onChange={e=>s("quantity",e.target.value.replace(/[^0-9]/g,""))} placeholder="Ejemplo · 1000"/></FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.micro,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:F.label,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:F.micro,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>{pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok,display:"inline-flex",alignItems:"center",gap:3}}><CheckIcon size={11} weight="bold"/>OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.micro,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)"><LightbulbIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:F.label,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:F.micro,color:C.ok,fontWeight:600}}><CheckIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
-    {!specsOnly&&canP&&(()=>{const agentRequired=(!editOrder||editOrder?._fromOC)||(editOrder&&!editOrder._fromOC&&editOrder.source==="internal"&&editOrder.agent&&String(editOrder.agent).trim());const agentInvalid=agentRequired&&!(f.agent&&f.agent.trim()&&f.agent!=="otro");return <div id="ff-agent" style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:tried&&agentInvalid?C.dn:undefined}}><UserIcon size={12} weight="bold"/>Nuestro vendedor{agentRequired&&" *"}</label><div style={{fontSize:F.meta,color:C.t2,margin:"-2px 0 8px"}}>El agente de ventas de SYGMA que lleva este trabajo y cobra su comisión.</div>{tried&&agentInvalid&&<div style={{fontSize:F.micro,color:C.dn,fontWeight:600,marginBottom:6}}>Elige quién es nuestro vendedor (obligatorio).</div>}<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} onClick={()=>{agentTouchedRef.current=true;s("agent",a)}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{a}</button>)}<button onClick={()=>{agentTouchedRef.current=true;s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>Otro...</button></div>{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>{agentTouchedRef.current=true;s("agent",e.target.value||"otro")}} placeholder="Nombre del vendedor"/>}
+    {!specsOnly&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Cantidad" req br><input id="ff-cantidad" style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" value={f.quantity} onChange={e=>!candadoCantidad&&s("quantity",e.target.value.replace(/[^0-9]/g,""))} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec br><input style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/><button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.micro,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC><FC label={canEditProductionNumber?"# Producción (editable)":"# Producción (automático)"}>{canEditProductionNumber?<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:F.label,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><input type="text" value={(f.production_number||"").replace(/^P-/,"")} onChange={e=>{const digits=e.target.value.replace(/\D/g,"");s("production_number",digits?"P-"+digits:"")}} placeholder={nextPN?nextPN.replace(/^P-/,""):"3496"} style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,fontWeight:700}}/></div><div style={{marginTop:4,fontSize:F.micro,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{!pnValidation.valid&&pnValidation.message?<span style={{color:C.dn}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>{pnValidation.message}{pnValidation.existing&&<span style={{color:C.t3,fontWeight:400,marginLeft:4}}>({pnValidation.existing.client})</span>}</span>:<><span style={{color:C.ok,display:"inline-flex",alignItems:"center",gap:3}}><CheckIcon size={11} weight="bold"/>OK</span>{nextPN&&f.production_number!==nextPN&&<button type="button" onClick={()=>s("production_number",nextPN)} style={{padding:"2px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.micro,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Usar el folio sugerido (siguiente consecutivo)"><LightbulbIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>Sugerido: {nextPN}</button>}{lastPN&&<span style={{color:C.t3,fontWeight:400}}>Último: {lastPN}</span>}</>}</div></>:<><div style={{display:"flex",alignItems:"center",gap:0}}><span style={{padding:"10px 8px 10px 14px",background:"#fff",borderRadius:"12px 0 0 12px",fontSize:F.label,fontWeight:700,color:C.ac,boxShadow:"0 0 0 0.5px rgba(0,0,0,0.06)"}}>P-</span><div style={{...inp,borderRadius:"0 12px 12px 0",paddingLeft:6,background:C.sf,color:C.tx,fontWeight:700,display:"flex",alignItems:"center"}}>{f.production_number?.replace(/^P-/,"")||"..."}</div></div>{!editOrder&&<div style={{marginTop:4,fontSize:F.micro,color:C.ok,fontWeight:600}}><CheckIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Asignado automáticamente{lastPN&&<span style={{color:C.t3,fontWeight:400,marginLeft:6}}>Último: {lastPN}</span>}</div>}</>}</FC></div>}
+    {!specsOnly&&canP&&(()=>{const agentRequired=(!editOrder||editOrder?._fromOC)||(editOrder&&!editOrder._fromOC&&editOrder.source==="internal"&&editOrder.agent&&String(editOrder.agent).trim());const agentInvalid=agentRequired&&!(f.agent&&f.agent.trim()&&f.agent!=="otro");return <div id="ff-agent" style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:tried&&agentInvalid?C.dn:undefined}}><UserIcon size={12} weight="bold"/>Nuestro vendedor{agentRequired&&" *"}</label><div style={{fontSize:F.meta,color:C.t2,margin:"-2px 0 8px"}}>El agente de ventas de SYGMA que lleva este trabajo y cobra su comisión.</div>{tried&&agentInvalid&&<div style={{fontSize:F.micro,color:C.dn,fontWeight:600,marginBottom:6}}>Elige quién es nuestro vendedor (obligatorio).</div>}<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} type="button" disabled={candadoVendedor} aria-pressed={f.agent===a} onClick={()=>{agentTouchedRef.current=true;s("agent",a)}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Geist',sans-serif",...(candadoVendedor?{opacity:.55,cursor:"not-allowed"}:{})}}>{a}</button>)}<button type="button" disabled={candadoVendedor} aria-pressed={!!f.agent&&!AGENTS.includes(f.agent)} onClick={()=>{agentTouchedRef.current=true;s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Geist',sans-serif",...(candadoVendedor?{opacity:.55,cursor:"not-allowed"}:{})}}>Otro...</button></div>{candadoVendedor&&<div style={{marginTop:8,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.label,color:C.t2,lineHeight:1.45}}><LockIcon size={12} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>El vendedor de una orden lo cambia Lupita o Dirección.</span></div>}{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>{if(candadoVendedor)return;agentTouchedRef.current=true;s("agent",e.target.value||"otro")}} readOnly={candadoVendedor} disabled={candadoVendedor} placeholder="Nombre del vendedor"/>}
       {/* v10.74.6 (scan w4c9bpdbf #14) — un nombre libre que no está en la lista NO resuelve a ningún
           vendedor: la venta se factura sin vendedor y la comisión se pierde en silencio. */}
       {f.agent&&f.agent!=="otro"&&!AGENTS.includes(f.agent)&&<div style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.micro,fontWeight:600,color:C.amb,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>"{f.agent}" no es un vendedor del sistema: esta venta <b>no generará comisión</b>. Si debe comisionar, elige uno de los botones.</span></div>}
@@ -12562,9 +12648,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           comisión: esa vive en la factura (CobranzaFlow), no en la orden. */}
       {editOrder&&!editOrder._fromOC&&editOrder.invoice_folio&&<div style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.micro,fontWeight:600,color:C.amb,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esta orden ya está facturada ({editOrder.invoice_folio}). Cambiar el vendedor aquí <b>no mueve la comisión</b>: hazlo en CobranzaFlow → Comisiones → botón "Cambiar".</span></div>}</div>})()}
     {/* v10.58.26: banner si folio pre-asignado bloquea precios */}
-    {financialsLocked&&<div style={{margin:"12px 20px",padding:"10px 14px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:F.body,color:"#9a3412",lineHeight:1.4,display:"flex",alignItems:"flex-start",gap:8}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{editOrder?.return_covered_by_folio?<><strong>Re-trabajo cubierto por {editOrder.return_covered_by_folio}.</strong> A costo de la imprenta: el precio de venta queda en 0 (sin 2ª factura). El costo real va en costo de maquila/material (Fase 2).</>:<><strong>Folio fiscal pre-asignado ({editOrder?.invoice_folio}).</strong> Puedes editar costo proveedor y datos operativos, pero <strong>precio cliente está bloqueado</strong> para no alterar la facturación. Solo admin puede modificar precios en órdenes ya facturadas.</>}</span></div>}
-    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.maq,textTransform:"uppercase",letterSpacing:.5}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input id="ff-maq" style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} placeholder="$0"/></FC><FC label={financialsLocked?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente (sin IVA) <LockIcon size={11} weight="bold"/></span>:"Precio cliente (sin IVA)"} br><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.maq_price} onChange={e=>!financialsLocked&&s("maq_price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/></FC><FC label="% Ganancia"><div title={"Margen sobre el PRECIO DE VENTA: ganancia ÷ precio cliente = (precio − costo) ÷ precio."+(maqMarkup!=null?"\n\nEjemplo: cobras "+fmt(f.maq_price)+" con costo "+fmt(f.maq_cost)+" → ganas "+fmt(Number(f.maq_price)-Number(f.maq_cost))+".\n• "+margin+"% sobre venta (esta tarjeta)\n• "+maqMarkup+"% sobre costo (cuanto le subiste al proveedor)\n\nMismo dinero de ganancia, distinta base. El de venta siempre sale mas bajo.":"")} style={{padding:10,background:"#fff",borderRadius:12,fontSize:F.title,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center",cursor:"help"}}>{margin!==null?margin+"%":"—"}</div><div style={{fontSize:F.micro,color:C.t3,textAlign:"center",marginTop:4,lineHeight:1.35}}>margen s/ venta{maqMarkup!=null?<> · <b style={{color:C.t2,fontWeight:700}}>{maqMarkup}%</b> s/ costo</>:null}</div></FC></div><div style={{padding:"0 20px 12px",borderBottom:"0.5px solid "+C.bd,fontSize:F.meta,color:C.t2,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura <b style={{color:C.tx}}>Costo</b> y <b style={{color:C.tx}}>Precio cliente</b> <b style={{color:C.tx}}>SIN IVA</b> — el 16% se agrega automáticamente al facturar.</div></>}
-    {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){financialsLocked&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(financialsLocked?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!financialsLocked&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={financialsLocked} disabled={financialsLocked} placeholder="$0.00" title={financialsLocked?"Bloqueado: folio fiscal pre-asignado":""}/><div style={{fontSize:F.meta,color:C.t2,marginTop:5,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura el precio <b style={{color:C.tx}}>SIN IVA</b> — el sistema agrega el 16% automáticamente al facturar.</div></div>}
+    {/* v10.84.77 — en su tinta (AA) y con el caso de verdad: a la facturada por partes / agrupada / en el plan de la OC le decía «Folio fiscal pre-asignado ()»; sin «(Fase 2)» */}
+    {financialsLocked&&<div style={{margin:"12px 20px",padding:"10px 14px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:F.label,color:C.wnInk,lineHeight:1.45,display:"flex",alignItems:"flex-start",gap:8}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{editOrder?.return_covered_by_folio?<><strong>Re-trabajo cubierto por {editOrder.return_covered_by_folio}.</strong> Va a costo de la imprenta: el precio de venta queda en $0 (sin segunda factura).</>:editOrder?.invoice_folio?<><strong>{editOrder.invoice_folio} ya está asignado a esta orden.</strong> El precio al cliente no se cambia aquí (sólo Dirección); el costo del proveedor y lo demás, sí.</>:<><strong>La orden ya está facturada ({queFactura||"por partes"}).</strong> El precio no se cambia aquí: las facturas ya hechas no lo seguirían. Se ajusta en CobranzaFlow.</>}</span></div>}
+    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.maq,textTransform:"uppercase",letterSpacing:.5}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Proveedor *</label><input id="ff-maq" style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}><FC label="Costo" br><input style={inp} type="number" step=".01" value={f.maq_cost} onChange={e=>s("maq_cost",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} placeholder="$0"/></FC><FC label={precioBloqueado?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente (sin IVA) <LockIcon size={11} weight="bold"/></span>:"Precio cliente (sin IVA)"} br><input style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.maq_price} onChange={e=>!precioBloqueado&&s("maq_price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{porQuePrecio&&<div style={{marginTop:4,fontSize:F.body,color:C.t2,lineHeight:1.4}}>{porQuePrecio}</div>}</FC><FC label="% Ganancia"><div title={"Margen sobre el PRECIO DE VENTA: ganancia ÷ precio cliente = (precio − costo) ÷ precio."+(maqMarkup!=null?"\n\nEjemplo: cobras "+fmt(f.maq_price)+" con costo "+fmt(f.maq_cost)+" → ganas "+fmt(Number(f.maq_price)-Number(f.maq_cost))+".\n• "+margin+"% sobre venta (esta tarjeta)\n• "+maqMarkup+"% sobre costo (cuanto le subiste al proveedor)\n\nMismo dinero de ganancia, distinta base. El de venta siempre sale mas bajo.":"")} style={{padding:10,background:"#fff",borderRadius:12,fontSize:F.title,fontWeight:800,color:margin!==null?(margin>=20?C.ok:margin>=10?C.wn:C.dn):C.ph,textAlign:"center",cursor:"help"}}>{margin!==null?margin+"%":"—"}</div><div style={{fontSize:F.micro,color:C.t3,textAlign:"center",marginTop:4,lineHeight:1.35}}>margen s/ venta{maqMarkup!=null?<> · <b style={{color:C.t2,fontWeight:700}}>{maqMarkup}%</b> s/ costo</>:null}</div></FC></div><div style={{padding:"0 20px 12px",borderBottom:"0.5px solid "+C.bd,fontSize:F.meta,color:C.t2,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura <b style={{color:C.tx}}>Costo</b> y <b style={{color:C.tx}}>Precio cliente</b> <b style={{color:C.tx}}>SIN IVA</b> — el 16% se agrega automáticamente al facturar.</div></>}
+    {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){precioBloqueado&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} type="number" step=".01" value={f.price} onChange={e=>!precioBloqueado&&s("price",e.target.value.replace(/[^0-9.]/g,"").replace(/(\..*)\./g,"$1"))} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0.00" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{porQuePrecio&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{porQuePrecio}</span></div>}<div style={{fontSize:F.meta,color:C.t2,marginTop:5,display:"flex",alignItems:"center",gap:4,lineHeight:1.4}}>💡 Captura el precio <b style={{color:C.tx}}>SIN IVA</b> — el sistema agrega el 16% automáticamente al facturar.</div></div>}
     {/* v10.15.0 — Bug 1: estado de placa CTP. Si "Ya existe" + ambas validaciones → auto-skip a "ready". */}
     {/* v10.72.3 — divisor de jerarquía: separa el núcleo obligatorio de la cola "adicional" (CTP / Imágenes / Notas) */}
     {/* v10.73.61 — "Adicional" (CTP · imágenes · archivo · notas): al CREAR ya NO es colapsable (header estático,
@@ -12577,23 +12664,26 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       <button type="button" onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.ok:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}<ArrowsClockwiseIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ya existe (reutilizar)</button>
     </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:F.meta,color:C.ok,fontWeight:600}}>⚡ Auto-saltará CTP. Al validar ambos roles, la orden irá directo a "Lista para imprimir".</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:F.meta,color:C.ac,fontWeight:600}}>ℹ️ Pasará por flujo normal (diseño → CTP).</div>}</div>}
     {/* v10.22.0 — Hasta 2 imágenes de referencia (compresión client-side via v10.16.0). */}
-    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><SignedImg src={val} alt="" fallback={<div style={{width:48,height:48,borderRadius:8,background:C.bg}}/>} style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={async()=>{if(f[slot]){try{const path=f[slot].split("/order-files/")[1];if(path)await supabase.storage.from("order-files").remove([decodeURIComponent(path)])}catch{}}s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}const prevUrl=f[slot];setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();/* v10.77.3 — el nombre del archivo se armaba con dos Date.now(): entropia CERO. 404 de los 468
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><SignedImg src={val} alt="" fallback={<div style={{width:48,height:48,borderRadius:8,background:C.bg}}/>} style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={()=>{/* v10.84.77 — la × QUITA la imagen de la orden; del servidor sólo se limpia la que se subió en esta misma captura (nadie más la usa). Antes borraba al clic la imagen guardada (y «Cancelar» no la regresaba) y, tras un «Replicar» que no pudo copiar, la de la orden de origen */const campo=f[slot]?slot:"image",antes=f[campo];const pth=typeof antes==="string"?antes.split("/order-files/")[1]:null;const pd=pth?decodeURIComponent(pth):null;if(pd&&imgUploadsRef.current.has(pd)){imgUploadsRef.current.delete(pd);supabase.storage.from("order-files").remove([pd]).catch(()=>{})}else if(antes)setImgQuitadas(q=>({...q,[slot]:{campo,valor:antes}}));s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}{!val&&imgQuitadas[slot]&&<button type="button" onClick={()=>{const q=imgQuitadas[slot];s(q.campo,q.valor);setImgQuitadas(x=>{const y={...x};delete y[slot];return y})}} style={{...bs(C.sf,C.t2),flexShrink:0,fontSize:F.body,border:"0.5px solid "+C.bd}} title="Regresa la imagen que quitaste (no se borró)"><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;setImgQuitadas(x=>{if(!x[slot])return x;const y={...x};delete y[slot];return y});if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}const prevUrl=f[slot];setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();/* v10.77.3 — el nombre del archivo se armaba con dos Date.now(): entropia CERO. 404 de los 468
    objetos del bucket siguen ese patron, y dos marcas de tiempo casi identicas dentro de una
    ventana conocida se pueden adivinar con esfuerzo. Mientras el bucket siga publico, el path ES
    la credencial. Se le pone entropia real (la ruta de "Replicar" ya lo hacia con un sufijo
    aleatorio; aqui se usa uuid, que es mas fuerte). No arregla lo ya subido: corta el goteo. */
                 const rnd=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():(Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));
                 const path=(f.id||"new-img-"+rnd)+"/img-"+(idx+1)+"-"+rnd+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);const newP=urlData.publicUrl.split("/order-files/")[1];if(newP)imgUploadsRef.current.add(decodeURIComponent(newP));s(slot,urlData.publicUrl);if(idx===0)s("image",null);/* v10.73.54 — al REEMPLAZAR, borrar la imagen anterior SOLO si la subimos en esta sesión (imgUploadsRef): nunca toca una imagen guardada ni la referencia ajena del fallback de "Replicar". */if(prevUrl){const pp=prevUrl.split("/order-files/")[1];const ppd=pp&&decodeURIComponent(pp);if(ppd&&imgUploadsRef.current.has(ppd)){imgUploadsRef.current.delete(ppd);supabase.storage.from("order-files").remove([ppd]).catch(()=>{});}}}catch(err){console.error("[image upload "+slot+"]",err);showToast?.("⚠️ Error al subir imagen: "+(err?.message||err),"error")}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
-    {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={()=>{s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
+    {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={borrado=>{if(!borrado&&f.file_url)setArchivoQuitado({url:f.file_url,name:f.file_name});s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
+    {archivoQuitado&&!f.file_url&&<div style={{margin:"-4px 20px 10px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:F.label,color:C.t2,lineHeight:1.4}}><span>Quitaste «{archivoQuitado.name||"el archivo"}» de la orden (no se borra del servidor).</span><button type="button" onClick={()=>{s("file_url",archivoQuitado.url);s("file_name",archivoQuitado.name);setArchivoQuitado(null)}} style={{...bs(C.sf,C.t2),fontSize:F.body,border:"0.5px solid "+C.bd}}><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button></div>}
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t3}}><NotePencilIcon size={12} weight="bold"/><span>Notas de Proceso / Aclaraciones <span style={{color:C.wn,fontSize:F.micro,fontWeight:500}}>(USO INTERNO)</span></span></label><textarea style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
     </>}
     {/* v10.73.59 — barra de acción STICKY: el submit/errores ya no viven solo al fondo de un scroll de ~2500px.
         Se pega a la ventana (el root del form ya no tiene overflow:hidden que atrapara el sticky). */}
     <div style={{position:"sticky",bottom:0,zIndex:5,background:C.sf,borderTop:"1px solid "+C.bd,boxShadow:"0 -5px 16px -10px rgba(26,26,31,.16)",padding:"10px 20px 12px",borderRadius:"0 0 16px 16px"}}>
-      {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:F.body,color:C.dn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button onClick={submit} disabled={saving||imgUploading} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?C.maq:C.ac),flex:1,justifyContent:"center",fontSize:F.title,padding:"14px",borderRadius:14,cursor:(saving||imgUploading)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
+      {errGuardar&&<div ref={errGuardarRef} tabIndex={-1} role="alert" style={{background:C.dn+"0d",border:"1px solid "+C.dn+"33",borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:F.label,color:C.dnInk,fontWeight:600,display:"flex",alignItems:"flex-start",gap:7,lineHeight:1.45,outline:"none"}}><WarningIcon size={14} weight="fill" style={{flexShrink:0,marginTop:2}}/><span>{errGuardar}</span></div>}
+      {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:F.body,color:C.dnInk,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button onClick={onCancel} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button ref={botonGuardarRef} onClick={submit} disabled={saving||imgUploading||revisando} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading||revisando?C.bdSt:!canSubmit&&tried?C.bdSt:isMaq?C.maq:C.ac),flex:1,justifyContent:"center",fontSize:F.title,padding:"14px",borderRadius:14,cursor:(saving||imgUploading||revisando)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":revisando?"Revisando la factura…":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
       {!specsOnly&&<div style={{fontSize:F.micro,color:C.t3,textAlign:"center",marginTop:7,display:"flex",alignItems:"center",justifyContent:"center",gap:8,flexWrap:"wrap"}}><span>Tip: <b style={{color:C.t2,fontWeight:700}}>Ctrl/⌘ + Enter</b> para guardar</span>{missing.length>0&&<span style={{color:C.t2,fontWeight:600}}>· {missing.length} campo{missing.length>1?"s":""} por completar</span>}</div>}
     </div>
+    {preguntaFact&&<ConfirmModal title={preguntaFact.titulo} detalle={{filas:preguntaFact.filas}} message={preguntaFact.mensaje} confirmLabel="Guardar los cambios" confirmColor={C.ac} cancelLabel="Volver a la forma" zIndex={2100} onConfirm={()=>{const r=preguntaFact.resolver;setPreguntaFact(null);r(true)}} onClose={()=>{const r=preguntaFact.resolver;setPreguntaFact(null);r(false);setTimeout(()=>botonGuardarRef.current?.focus({preventScroll:true}),0)}}/>}
     {/* v10.45.0 — Modal replicar orden anterior */}
     {replicateOpen&&<ReplicateFromOrderModal clientId={f.client_id} clientName={f.client} onReplicate={applyReplicate} onClose={()=>setReplicateOpen(false)}/>}
   </div>;
@@ -19440,18 +19530,20 @@ export default function PrintFlow() {
     // Convert empty strings to null for numeric/date columns (PostgREST rejects "" for NUMERIC/DATE types)
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     const toStr=v=>v===""||v==null?null:v;
-    // v10.34.3 — Respetar el folio que el usuario escribió (validado en vivo por validate_production_number en OrderForm).
-    // RPC next_production_number solo como fallback si el campo está vacío o con formato inválido.
-    // El UNIQUE INDEX idx_orders_production_number_unique es la red atómica final contra colisiones.
+    // v10.84.77 — (critique independiente del 12-oct, P1) TODO camino que no creó la orden LANZA, con el mensaje en palabras para la
+    //   forma (`_enLaForma`: lo pinta en su pie y conserva lo capturado). Antes, si la base no daba el número, aquí había un `return`
+    //   callado y la forma lo tomaba por éxito: se VACIABA (Lupita perdía la orden entera); y si fallaba el INSERT salían dos avisos
+    //   rojos, el segundo en inglés crudo encima del primero.
+    const noSeCreo=(e,porque)=>Object.assign(new Error("No se creó la orden: "+(porque||motivoDeLaBase(e))+". Lo que capturaste sigue aquí; vuelve a intentar."),{_enLaForma:true});
     // v10.64.0 — corte híbrido: el folio de producción SIEMPRE lo genera el RPC atómico
     // (next_production_number: advisory-lock + UNIQUE INDEX). Ya NO se respeta ningún folio
     // tecleado — la serie es 100% consecutiva generada por PrintFlow desde P-0001.
     let assignedPN;
-    try{
-      const {data:rpcPN,error:pnErr}=await supabase.rpc("next_production_number");
-      if(pnErr||!rpcPN){showToast("❌ No se pudo asignar folio: "+(pnErr?.message||"sin respuesta"),"error");throw new Error("folio_failed")}
-      assignedPN=rpcPN;
-    }catch(e){if(e?.message==="folio_failed")return;throw e}
+    {
+      let r;try{r=await supabase.rpc("next_production_number")}catch(e){r={data:null,error:e}}
+      if(r?.error||!r?.data)throw noSeCreo(r?.error,r?.error?null:"la base no le dio su número");
+      assignedPN=r.data;
+    }
     // v10.43.5 — Si el cliente no viene del typeahead (client_id NULL), crearlo/encontrarlo en cobranza
     // para que la próxima búsqueda lo encuentre con sus datos. Match por RFC primero, luego nombre.
     let resolvedClientId=f.client_id||null;
@@ -19463,38 +19555,45 @@ export default function PrintFlow() {
         });
       }catch(e){console.warn("[create] upsertClient falló (no bloqueante):",e?.message)}
     }
-    const newOrder={...f,client_id:resolvedClientId,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    const {_clienteNuevo,...fOrden}=f;   // v10.84.77 — lo que la forma le dice a App (el cliente que dio de alta), no una columna
+    const newOrder={...fOrden,client_id:resolvedClientId,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
-    await db.saveOrder(newOrder);
-    await db.addTimeline(newOrder.id,"📋 Orden creada",user,C.ac,newOrder.stage||"draft");
+      await db.saveOrder(newOrder);
+    }catch(e){
+      console.error("[create] Error al crear orden:",e);
+      setOrders(p=>p.filter(o=>o.id!==newOrder.id));
+      reload();
+      // v10.34.3 / v10.64.2 — la carrera por el UNIQUE INDEX de production_number: el número es automático, basta volver a apretar
+      const msg=String(e?.message||"");
+      if(msg.includes("idx_orders_production_number_unique")||msg.includes("duplicate key"))throw noSeCreo(e,"otra orden tomó el mismo número al mismo tiempo; al volver a apretar «Crear Orden» se le da otro");
+      throw noSeCreo(e);
+    }
+    // v10.84.77 — la orden YA existe: lo que sigue (su bitácora y los avisos) no la deshace. Antes caía en el mismo catch: «No se pudo
+    //   crear: addTimeline…» con la forma llena, y el segundo clic creaba OTRA orden con otro número (dos órdenes del mismo trabajo en
+    //   Validar). Ahora se da por creada y, si un aviso no salió, se dice a quién avisar.
+    try{await db.addTimeline(newOrder.id,"📋 Orden creada",user,C.ac,newOrder.stage||"draft")}catch(e){console.warn("[create] la bitácora falló (la orden sí se creó):",e?.message)}
+    const sinAviso=[];
+    const avisar=async(rol,msg)=>{try{await db.addNotification(rol,newOrder.id,"new_order",msg,null,user)}catch(e){console.warn("[create] el aviso a "+rol+" falló (la orden sí se creó):",e?.message);sinAviso.push({produccion:"Producción",preprensa:"Pre-prensa",admin:"Dirección"}[rol]||rol)}};
     if(!isMaq){
       const msg="📋 Nueva orden de "+f.client+" — "+f.product_type+" requiere validación";
-      await db.addNotification("produccion",newOrder.id,"new_order",msg,null,user);
-      await db.addNotification("preprensa",newOrder.id,"new_order",msg,null,user);
-      if(user!=="admin")await db.addNotification("admin",newOrder.id,"new_order",msg,null,user);
+      await avisar("produccion",msg);
+      await avisar("preprensa",msg);
+      if(user!=="admin")await avisar("admin",msg);
     } else {
       const msg="🚚 Nueva maquila: "+f.client+" — "+f.product_type+(f.maq_provider?" · Proveedor: "+f.maq_provider:"");
-      if(user!=="admin")await db.addNotification("admin",newOrder.id,"new_order",msg,null,user);
+      if(user!=="admin")await avisar("admin",msg);
     }
     // v10.72.6 — peak-end: nombrar el folio consecutivo asignado (el momento más ganado del flujo)
-    showToast(isMaq?"🚚 Orden "+assignedPN+" creada (maquila)":"✅ Orden "+assignedPN+" creada");
+    // v10.84.77 — con «Ver P-…» (llevaba al tablero sin la orden a la vista) y, si se dio de alta el cliente, también eso: el aviso de
+    //   «cliente creado en CobranzaFlow» de la forma lo pisaba éste en el mismo instante.
+    const dichos=["Orden "+assignedPN+" creada"+(isMaq?" (maquila)":"")];
+    if(_clienteNuevo)dichos.push(_clienteNuevo+" quedó dado de alta en CobranzaFlow");
+    if(sinAviso.length)dichos.push("no se pudo avisar a "+sinAviso.join(" ni a ")+": avísales tú");
+    showToast(dichos.join(" · "),sinAviso.length?"warning":"success",{label:"Ver "+assignedPN,onClick:()=>setDetailModalId(newOrder.id)});
     const wasOC=!!f.purchase_order_id;
     setEditO(null);
     setView(wasOC?"oc":"pipeline");
-    }catch(e){
-      console.error("[create] Error al crear orden:",e);
-      // v10.34.3 — mensaje específico para violación de UNIQUE INDEX en production_number (race condition entre validación y insert)
-      const msg=String(e?.message||"");
-      if(msg.includes("idx_orders_production_number_unique")||msg.includes("duplicate key")){
-        // v10.64.2 — el folio ya es automático: en la rara colisión solo hay que reintentar
-        showToast("❌ Colisión de folio (muy raro). Vuelve a guardar — el sistema asignará un folio nuevo automáticamente.","error");
-      }else{
-        showToast("❌ No se pudo crear: "+(e?.message||"error desconocido"),"error");
-      }
-      reload();
-      throw e;
-    }
   },[user,userLogin,showToast,reload]);
 
   // 🛒 v10.10.0 — Crear OC explícita (compleja)
@@ -19907,12 +20006,18 @@ export default function PrintFlow() {
     // NO es admin, quitar price/maq_price del payload aunque el frontend los haya enviado.
     // Previene cambio de precio vía DevTools cuando se está en modo edit limitado.
     const originalOrder=orders.find(o=>o.id===f.id);
+    // v10.84.77 — (critique del 12-oct, P1) lo que se descarta se NOMBRA en el aviso. Antes: «Orden actualizada» después de tirar en
+    //   silencio la razón social y el RFC de una orden facturada, o el precio y el cliente que cambió el vendedor. La forma ya no deja
+    //   tocarlos (candados con su porqué); esto queda como red contra DevTools y versiones viejas abiertas.
+    const descartados=new Set();
+    const ETQ_DESCARTE={client:"la razón social",client_rfc:"el RFC",price:"el precio",maq_price:"el precio",agent:"el vendedor"};
+    const quitar=k=>{if(!(k in safeUpdate))return;if(originalOrder&&ETQ_DESCARTE[k]&&!mismoValor(originalOrder[k],safeUpdate[k]))descartados.add(ETQ_DESCARTE[k]);delete safeUpdate[k]};
     if(originalOrder?.invoice_folio && originalOrder?.invoice_pre_assigned && user!=="admin"){
-      delete safeUpdate.price;
-      delete safeUpdate.maq_price;
+      quitar("price");
+      quitar("maq_price");
     }
     // v10.72.83 — re-trabajo cubierto: precio de venta SIEMPRE 0 (lo exige guard_covered_return_no_price). Strip defensivo anti DevTools.
-    if(originalOrder?.return_covered_by_folio){ delete safeUpdate.price; delete safeUpdate.maq_price; }
+    if(originalOrder?.return_covered_by_folio){ quitar("price"); quitar("maq_price"); }
     // v10.58.27 BUG HUNT: defense-in-depth adicional. El form bloquea production_number
     // con `canEditProductionNumber` UI, pero handler update NO re-validaba. Vendedor con
     // DevTools podría reasignar PN, client_id o agent — bug serio:
@@ -19927,10 +20032,10 @@ export default function PrintFlow() {
     // v10.73.45 (scan) — el candado cubre también órdenes facturadas por SPLIT / AGRUPADA / PLAN MATRIZ (invoice_folio null pero
     // ya hay ingreso en cobranza) — antes solo checaba invoice_folio → un admin podía cambiar la razón social y desincronizar.
     if(originalOrder?.invoice_folio||originalOrder?.has_splits||originalOrder?.grouped_invoice_folio||originalOrder?.has_matrix_lines){
-      if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) delete safeUpdate.client_id;
-      if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
-      if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
-      if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) delete safeUpdate.client_company;
+      if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) quitar("client_id");
+      if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) quitar("client");
+      if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) quitar("client_rfc");
+      if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) quitar("client_company");
     }
     // v10.76.8 (rescan wayd09m7h, P2) — defensa en profundidad que faltaba al candado v10.76.7: una orden comprometida
     // por SPLIT/MATRIZ/AGRUPADA pero SIN invoice_folio (el bridge de sync es por folio → NO la cubre) tampoco debe
@@ -19938,8 +20043,8 @@ export default function PrintFlow() {
     // strip anti-DevTools que SÍ tienen los otros dos disparadores de financialsLocked (folio pre-asignado, return_covered).
     // Aplica a TODOS los roles (incluido admin): a diferencia de invoice_folio, aquí no hay re-sync ni badge de auditoría.
     if(!originalOrder?.invoice_folio && (originalOrder?.has_splits || originalOrder?.has_matrix_lines || originalOrder?.grouped_invoice_folio)){
-      delete safeUpdate.price;
-      delete safeUpdate.maq_price;
+      quitar("price");
+      quitar("maq_price");
     }
     if(originalOrder && user!=="admin"){
       if("production_number" in safeUpdate && safeUpdate.production_number !== originalOrder.production_number){
@@ -19948,18 +20053,18 @@ export default function PrintFlow() {
       // Si la orden tiene folio fiscal, también bloqueamos cambios de cliente (desincronizaría factura)
       if(originalOrder.invoice_folio){
         if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id){
-          delete safeUpdate.client_id;
+          quitar("client_id");
         }
         if("client" in safeUpdate && safeUpdate.client !== originalOrder.client){
-          delete safeUpdate.client;
+          quitar("client");
         }
         if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc){
-          delete safeUpdate.client_rfc;
+          quitar("client_rfc");
         }
       }
       // Cambio de agent solo permitido por admin/secretaria (no vendedor — no puede apropiarse)
       if(user==="vendedor" && "agent" in safeUpdate && safeUpdate.agent !== originalOrder.agent){
-        delete safeUpdate.agent;
+        quitar("agent");
       }
       // v10.58.41 — Genaro (vendedor) NO edita PRECIOS AL CLIENTE ni datos de cliente.
       // v10.72.27 — pero SÍ el COSTO DE PROVEEDOR (maq_cost): es operativo, no comercial, y Genaro es quien
@@ -19968,12 +20073,12 @@ export default function PrintFlow() {
       // nunca estuvo deshabilitado — Genaro escribía el costo y al guardar se borraba en silencio. Se sigue
       // bloqueando price/maq_price (precio al CLIENTE) + datos de cliente.
       if(user==="vendedor"){
-        delete safeUpdate.price;
-        delete safeUpdate.maq_price;
-        if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) delete safeUpdate.client_id;
-        if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) delete safeUpdate.client;
-        if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) delete safeUpdate.client_rfc;
-        if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) delete safeUpdate.client_company;
+        quitar("price");
+        quitar("maq_price");
+        if("client_id" in safeUpdate && safeUpdate.client_id !== originalOrder.client_id) quitar("client_id");
+        if("client" in safeUpdate && safeUpdate.client !== originalOrder.client) quitar("client");
+        if("client_rfc" in safeUpdate && safeUpdate.client_rfc !== originalOrder.client_rfc) quitar("client_rfc");
+        if("client_company" in safeUpdate && safeUpdate.client_company !== originalOrder.client_company) quitar("client_company");
       }
     }
     // v10.43.6 FIX A5 — Si al editar el cliente quedó sin client_id (escrito a mano) pero
@@ -19993,8 +20098,8 @@ export default function PrintFlow() {
     // porque desincronizaría el saldo del inventario respecto al movimiento PRODUCED ya registrado.
     const _prevForGuard=orders.find(x=>x.id===f.id);
     if(_prevForGuard?.stock_loaded&&"quantity" in safeUpdate&&Number(safeUpdate.quantity)!==Number(_prevForGuard.quantity)){
-      showToast("❌ No se puede cambiar la cantidad: la orden ya cargó "+_prevForGuard.quantity+" pzas al stock. Si necesitas ajustar, usa el módulo de Inventario.","error");
-      const err=new Error("quantity_locked_by_stock");err._toasted=true;throw err;
+      // v10.84.77 — el mensaje va a la forma (en su pie, con lo capturado intacto), ya no en un aviso rojo que tapaba el botón
+      throw Object.assign(new Error("No se guardaron los cambios: la orden ya cargó "+_prevForGuard.quantity+" pzas al inventario; la cantidad se ajusta en Inventario."),{_enLaForma:true});
     }
     const toNum=(v,fn)=>v===""||v==null?null:(isNaN(fn(v))?null:fn(v));
     if("price" in safeUpdate)safeUpdate.price=toNum(safeUpdate.price,parseFloat);
@@ -20014,15 +20119,20 @@ export default function PrintFlow() {
     const orderBefore=orders.find(x=>x.id===f.id);
     // v10.34.4 fix #3 — abortar si la orden fue cancelada o rechazada en otra sesión (realtime trajo el cambio)
     if(orderBefore&&["cancelled","maq_cancelled","web_rejected"].includes(orderBefore.stage)){
-      showToast("❌ La orden cambió de estado ("+SM[orderBefore.stage]?.l+") mientras editabas. Recarga y vuelve a intentar.","error");
-      const err=new Error("order_stage_changed");err._toasted=true;throw err;
+      throw Object.assign(new Error("No se guardaron los cambios: mientras la editabas, la orden quedó «"+(SM[orderBefore.stage]?.l||orderBefore.stage)+"» en otra sesión. Sal de la forma y vuelve a abrirla."),{_enLaForma:true});
     }
     // v10.58.43 #17: el permiso de Genaro se validaba al ABRIR el form, no al GUARDAR.
     // Si la orden entró a producción mientras editaba, sus cambios de specs aplicarían
     // sobre un trabajo ya en máquina (la reimpresión costosa que queremos evitar).
     if(user==="vendedor"&&orderBefore&&orderBefore.order_type!=="maquila"&&!PRE_PROD_STAGES.includes(orderBefore.stage)){
-      showToast("❌ La orden avanzó a "+(SM[orderBefore.stage]?.l||orderBefore.stage)+" mientras editabas — el trabajo ya está en producción y no se puede modificar.","error");
-      const err=new Error("order_in_production");err._toasted=true;throw err;
+      throw Object.assign(new Error("No se guardaron los cambios: mientras la editabas, la orden pasó a «"+(SM[orderBefore.stage]?.l||orderBefore.stage)+"»; ya está en producción y no se puede modificar."),{_enLaForma:true});
+    }
+    // v10.84.77 — «Guardar» sin cambiar nada ya no dice «Orden actualizada» (ni escribe): lo dice. Se compara TODO campo de la forma
+    //   (mismoValor), no sólo los que avisan: un cambio sólo en la descripción o en una imagen sí es un cambio.
+    const cambiados=editableFields.filter(k=>k in safeUpdate&&!mismoValor(orderBefore?.[k],safeUpdate[k]));
+    if(orderBefore&&cambiados.length===0){
+      showToast("Sin cambios: "+(orderBefore.production_number||"la orden")+" queda igual"+(descartados.size?" (no se guardó "+[...descartados].join(" ni ")+": no se cambia desde aquí)":"")+".","info");
+      setEditO(null);setView("pipeline");return;
     }
     // 🔒 v10.75.11 — Bajarle el precio a una orden YA FACTURADA Y COBRADA.
     // Desde v10.75.10 el puente se NIEGA a bajar una factura con dinero cobrado, porque bajarla
@@ -20113,9 +20223,14 @@ export default function PrintFlow() {
       if(user!=="admin")await db.addNotification("admin",f.id,"order_edit",editMsg,null,user);
     }
     }catch(nErr){console.warn("[update] side-effects warn (guardado OK):",nErr?.message)}
-    showToast(willMarkPostEdit?"💾 Orden actualizada (marcada como editada post-factura)":"💾 Orden actualizada");
+    // v10.84.77 — con su número, «Ver P-…» y, si algo se descartó, cuál (antes «Orden actualizada» a secas)
+    const pnE=orderBefore?.production_number||"";
+    showToast("Orden "+(pnE?pnE+" ":"")+"actualizada"+(willMarkPostEdit?" · queda marcada «Editada después de facturar»":"")+(descartados.size?" · no se guardó "+[...descartados].join(" ni ")+": no se cambia desde aquí":""),descartados.size?"warning":"success",pnE?{label:"Ver "+pnE,onClick:()=>setDetailModalId(f.id)}:null);
     setEditO(null);setView("pipeline");
-    }catch(e){console.error("[update] Error al guardar:",e);if(!e?._toasted)showToast("❌ No se pudo guardar: "+(e?.message||"error desconocido"),"error");reload();throw e}
+    }catch(e){console.error("[update] Error al guardar:",e);reload();
+      // v10.84.77 — el rechazo va a la forma, en palabras y una vez (antes: un aviso rojo crudo de App y otro de la forma encima)
+      if(e?._toasted||e?._enLaForma)throw e;
+      throw Object.assign(new Error("No se guardaron los cambios: "+motivoDeLaBase(e)+". Lo que cambiaste sigue aquí; vuelve a intentar."),{_enLaForma:true});}
   },[user,userLogin,orders,showToast,reload]);
 
   // v10.84.67 — opts.jalada: la pasó Karla a Salidas (la bitácora lo dice y a Gerardo le llega aviso); opts.silencioso: quien llama
@@ -21850,7 +21965,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             {visibleStale.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
           </div>}
           {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden está":" órdenes están")+" en espera, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
-        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{editO?.id?"Editar Orden":(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
+        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{/* v10.84.77 — el título dice qué orden (y su folio): «Editar Orden» no decía cuál */}{editO?.id?(editO._specsOnly?"Specs de "+(editO.production_number||"la orden"):"Editar "+(editO.production_number||"orden")+((editO.invoice_folio||editO.grouped_invoice_folio)?" · "+(editO.invoice_folio||editO.grouped_invoice_folio):"")):(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} actor={userLogin||user} folioDeLaOC={editO?.id&&!editO.invoice_folio&&editO.purchase_order_id?(purchaseOrders.find(p=>p.id===editO.purchase_order_id)?.shared_invoice_folio||null):null} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá cuántas placas chicas y grandes lleva la orden (puedes poner de ambas). Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/>{/* v10.73.81 — `viewOrders`, NO `filteredOrders`: el buscador ya no filtra el tablero, lo RESALTA (ver Kanban).

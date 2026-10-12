@@ -56,6 +56,9 @@ const TANDAS = [
   // las puertas de cancelar: la orden, la orden con folio, una parte y el plan matriz (v10.84.73, la critique de la noche del 12-oct);
   // el banco extrae las cuatro ventanas con extraer.mjs y simula lo que hace App al confirmar
   { nombre: "cancelar", gen: "tests/banco/gen-cancelar.mjs", romper: "tests/romper/cancelar.mjs", puerto: 5187 },
+  // la forma de la orden, crear y editar (v10.84.77, la critique independiente del 12-oct): el banco extrae OrderForm y COPIA de
+  // App.jsx lo que hace al guardar (create, update), con la base simulada
+  { nombre: "orden", gen: "tests/banco/gen-orden.mjs", romper: "tests/romper/orden.mjs", puerto: 5188 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
@@ -63,7 +66,7 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
-const TANDAS_DE_DINERO = ["folio", "oc", "partes", "cancelar"];   // cancelar mueve facturas y saldos: sin segunda oportunidad
+const TANDAS_DE_DINERO = ["folio", "oc", "partes", "cancelar", "orden"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
