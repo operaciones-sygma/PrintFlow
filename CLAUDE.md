@@ -105,7 +105,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1135 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1179 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -174,7 +174,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.79 (12-oct, ~14:28; READY `dpl_Gq5TmDVv3Gm1SYxonyd7MyKdXiVU`, commit `11c0140`; vuelta atrás: promover
+- **LIVE:** v10.84.80 (12-oct, ~17:30; READY `dpl_GdFpLzQB6rdB8LQvMoJrLQaiKt4W`, commit `b2f826b`; vuelta atrás: promover
+  `dpl_6JsC58NzJ3dxqno6vVAcSPuN8zn7` (el código de v10.84.79) o `git revert b2f826b`; la base no cambió; 1179 pruebas). v10.84.80: **la
+  segunda revisión independiente de OrderForm (28/40, un P1 y cuatro P2)**: el cliente no se mezcla (🔑 en «¿ya existe?» elegir pone al
+  cliente COMPLETO en la forma y no crea, en las dos puertas: `resolverClienteNuevo` devuelve `cliente`; cambiar el nombre suelta lo del
+  anterior), Replicar sin notas ni distribución, 🔑 al crear la forma se queda («P-… creada · Ver · Imprimir · Capturar otra») y editar o
+  Cancelar regresan a donde se abrió (`volverDeLaForma`), vendedor (lista) y precio junto a tipo/cantidad/entrega, y el teclado. 🔥 La app
+  real encontró hooks de App después de sus `return` tempranos (React #310 al entrar): regla 19b y la tanda `hooks`. Sigue la tercera
+  revisión independiente.
+  v10.84.79 (12-oct, ~14:28; READY `dpl_Gq5TmDVv3Gm1SYxonyd7MyKdXiVU`, commit `11c0140`; vuelta atrás: promover
   `dpl_4dmg5XSrao5DAovfBgzv1GskQwrT` (el código de v10.84.78) o `git revert 11c0140`; la base no cambió; 1135 pruebas). v10.84.79: **el
   reacomodo de OrderForm**: lo esencial en la primera pantalla de la laptop, dos columnas desde 1150 px de forma (1040 en «Specs»; 🔑 un
   solo árbol para los dos acomodos, sólo cambia el CSS), «Más de esta orden» para lo que se usa poco, `VIEW_MAXW.form` 1212 (con 820 las

@@ -67,7 +67,16 @@ y precio arriba del pie a 1366, y «P-… creada» con la creación simulada; y 
 defecto: 32 de 32 (uno después de corregir la prueba: el doble clic rápido ya lo frenaba «guardando»). Cambian por decisión de Marcelo:
 ord-02, 04, 05, 06 y 57 (la forma se queda), seis que elegían al vendedor con su botón y cli-20 (Enter cae en «Volver a la forma»).
 
-**Para Marcelo:** nada que decidir. Sigue la tercera revisión independiente de la forma (aprobada: un agente, ~400-450 mil tokens).
+**En producción** (12-oct, ~17:30): READY `dpl_GdFpLzQB6rdB8LQvMoJrLQaiKt4W` (commit `b2f826b`), candado 1179 de 1179 (44 nuevas). Una
+INESTABLE, `sesion/ses-24`: con las 19 tandas en paralelo la app tardó en enseñar la pantalla de entrar; sola pasa 2 de 2 (38/38), no es la
+app ni la prueba (esta versión no toca la sesión), revisada y marcada. Vuelta atrás: promover `dpl_6JsC58NzJ3dxqno6vVAcSPuN8zn7` (el código de
+v10.84.79) o `git revert b2f826b`. Revisado sin escribir contra produccion.sygma.mx (la cuenta de pruebas, las escrituras cortadas):
+`.banco-revisor-orden/medir-80.mjs`, 4 de 4 (vendedor y precio arriba del pie a 1366; las dos puertas con un cliente parecido de verdad,
+GODI: su RFC real, ninguna escritura; «P-9999 creada» con la creación simulada), y `npm run recorrido` (8 roles): nada truena.
+
+**Para Marcelo:** nada que decidir. Sigue la tercera revisión independiente de la forma (aprobada: un agente, ~400-450 mil tokens). Una
+opción para después (de CobranzaFlow v3.7.999v): que la casilla de traslado de PrintFlow use los conceptos de la factura
+(`cobranza.traslado_facturas_oc`); hoy sus renglones salen de las órdenes.
 
 ## v10.84.79 — La forma de la orden: lo esencial en la primera pantalla de la laptop, dos columnas en la grande — 12-oct-2026
 
