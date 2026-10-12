@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1021 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1063 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,7 +171,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.76 (12-oct, 08:45; READY `dpl_B6BQ1X73ZZtfy3iMqjNN5uqhnnD7`, commit `04066e6`; vuelta atrás: promover
+- **LIVE:** v10.84.77 (12-oct, 11:11; READY `dpl_BdXffMrLRY1xHDnwdxCmS2r2JdNJ`, commit `c65326d`; vuelta atrás: promover
+  `dpl_E3uK64f6DW85YVkUQS2m3RJzfwZv` (el código de v10.84.76) o `git revert c65326d`; la base no cambió; 1063 pruebas). **La forma de la
+  orden (OrderForm) en `/impeccable critique`: revisor independiente 22/40, 3 P1, los tres hechos en v10.84.77** (snapshot
+  `.impeccable/critique/2026-10-12T16-15-36Z__src-app-jsx-orderform-formulario-orden-nueva.md`): guardar con la base que falla ya no
+  vacía la forma ni duplica la orden (el rechazo se dice en el pie, en palabras); la × y «Quitar» quitan sin borrar del servidor, con
+  «Deshacer»; la orden facturada y el vendedor tienen candados con su porqué, y cambiar precio o cantidad de una facturada pregunta con las
+  cifras de su factura. 🔑 **El banco `tests/banco/gen-orden.mjs` COPIA `create` y `update` de App.jsx**: un cambio ahí se prueba solo con
+  la tanda `orden`. Decisiones de Marcelo (12-oct): los P1, los P2 y el reacomodo; facturada = «candados con su porqué»; salir con algo
+  capturado = preguntar. Siguen v10.84.78 (los P2) y v10.84.79 (el reacomodo), luego la segunda revisión independiente.
+  v10.84.76 (12-oct, 08:45; READY `dpl_B6BQ1X73ZZtfy3iMqjNN5uqhnnD7`, commit `04066e6`; vuelta atrás: promover
   `dpl_Cy75fdkUcn6WxypyzzyPEAvsZvAJ` (el código de v10.84.75) o `git revert 04066e6`; la base no cambió; 1021 pruebas). v10.84.76, decisiones
   de Marcelo: 🔑 **el archivo de impresión (`file_url`) ya no se borra** al cancelar ni a los 30 días («así queda un historial»; el
   archivado diario sólo comprime imágenes), y **a Karla se le avisa** cuando una parte vuelve a quedar por facturar.

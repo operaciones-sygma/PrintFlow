@@ -66,6 +66,13 @@ abierta, maquila facturada, lo subido y quitado en la misma captura, el vendedor
 **Sin probar:** la escritura real (el banco simula la base; App se copia tal cual), la cuenta de un vendedor dueño de órdenes, la
 pregunta de cobrado de más (PriceDropModal, sin cambios) y un lector de pantalla.
 
+**En producción** (12-oct, 11:11): READY `dpl_BdXffMrLRY1xHDnwdxCmS2r2JdNJ` (commit `c65326d`), candado 1063 de 1063. El primer intento
+lo frenó el entorno, no el código: un servidor del banco que se quedó vivo en el puerto 5188 (la tanda `orden` no pudo arrancar) y dos
+casos con `ERR_NO_BUFFER_SPACE` de Windows (`oc-20`, `can-10`; solos, 118 de 118). Vuelta atrás: promover `dpl_E3uK64f6DW85YVkUQS2m3RJzfwZv`
+(el código de v10.84.76) o `git revert c65326d`. Revisado sin escribir contra produccion.sygma.mx (la cuenta de pruebas, las escrituras
+cortadas): con la base que no da el número, el pie dice «No se creó la orden: no tienes permiso. Lo que capturaste sigue aquí» y la forma
+queda intacta; «Editar P-0618».
+
 **Para Marcelo:** nada que decidir en esta versión. Siguen v10.84.78 (los P2: preguntar antes de tirar la captura, Replicar sin pisar,
 Enter en «Tipo», números validados, foco y teclado, texto con AA) y v10.84.79 (el reacomodo).
 
