@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 990 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1006 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,7 +171,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.73 (12-oct, madrugada, segunda noche de `/impeccable`, paso 1; READY `dpl_5uPUiEAGp2oA6zNHFbPZkKUxx4or`, commits
+- **LIVE:** v10.84.74 (12-oct, 05:21; READY `dpl_FiXNpaiGEN5F7ZpAqabxEyaq5Mk9`, commit `7255dd8`; vuelta atrás: promover
+  `dpl_DhXYRqH7TstLZyUk7ryKwqs9i1oZ` (el código de v10.84.73) o `git revert 7255dd8`; la base no cambió; 1006 pruebas). v10.84.74: **lo que
+  dejó la segunda revisión de las puertas de cancelar (27/40, un P1)**: la orden facturada con cada factura en cifras y la de toda su OC
+  leída al abrir (timbrada no deja), el teclado que no se sale mientras cancela, el saldo que llega tarde, la orden con folio anticipado
+  que corría ya sale de la fila de su máquina, y «Cancelar con su folio» con el motivo escrito. Para Marcelo: una lectura de «¿timbrado?»
+  por folio en la base (partes, agrupada, plan matriz). Revisado en producción sin escribir: `ventanas-encima`, 3 de 3.
+  v10.84.73 (12-oct, madrugada, segunda noche de `/impeccable`, paso 1; READY `dpl_5uPUiEAGp2oA6zNHFbPZkKUxx4or`, commits
   `ebca474` + `877b20c`; vuelta atrás: promover `dpl_5PkzTT5y9ZRAvsoZQbuiTaTRenns` (el código de v10.84.72) o `git revert 877b20c ebca474`;
   la base no cambió; 990 pruebas). v10.84.73: **las puertas de cancelar** (la orden, la orden con folio, la parte, la línea o factura del
   plan matriz), revisión independiente **18/40** con 3 P1: un solo marco (`VentanaDeCancelar`: diálogo, Esc y el fondo preguntan, el

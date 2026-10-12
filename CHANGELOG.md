@@ -63,6 +63,11 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
   timbrada que no bloquea, el campo vivo bloqueada: **4 de 4 atrapados**.
 - **Sin probar:** que App saque de la fila a la orden con folio (el banco simula lo que hace App al confirmar; la RPC es la de `cancelOrder`).
 
+**En producción** (12-oct, 05:21): READY `dpl_FiXNpaiGEN5F7ZpAqabxEyaq5Mk9` (commit `7255dd8`), candado 1006 de 1006 al primer intento.
+Vuelta atrás: promover `dpl_DhXYRqH7TstLZyUk7ryKwqs9i1oZ` (el código de v10.84.73) o `git revert 7255dd8`. Revisado sin escribir:
+`ventanas-encima` contra produccion.sygma.mx con P-0622 y P-0619, 3 de 3 (la ventana real abre con el foco en el motivo y dice «Está en
+la fila de Printmaster 52: sale de la fila»).
+
 **Para Marcelo:** una lectura de sólo consulta en la base («¿está timbrado este folio y cuánto se cobró?», por folio) volvería cifra lo que
 hoy la de la orden facturada, la de la parte y la del plan matriz dicen como regla.
 
