@@ -2914,7 +2914,8 @@ function Toast({message,type="success",onDone,action=null,abajo=24}) {
     wordBreak:"break-word",
     lineHeight:1.45,
     textAlign: isSecurityLock ? "left" : "center",
-  }}><TIcon size={17} weight="bold" style={{flexShrink:0}}/><span style={{minWidth:0}}>{cleanMsg}</span>{action&&<button onClick={()=>{cb.current();action.onClick()}} style={{marginLeft:6,background:"rgba(255,255,255,.22)",color:"#fff",border:"1px solid rgba(255,255,255,.4)",borderRadius:8,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0,whiteSpace:"nowrap"}}>{action.label}</button>}</div>;
+  }}><TIcon size={17} weight="bold" style={{flexShrink:0}}/><span style={{minWidth:0}}>{cleanMsg}</span>{/* v10.84.80 — el botón va claro con la letra en el color del aviso (el mismo contraste que el aviso, ≥4.6:1): blanco sobre un lavado
+      blanco del 22 % daba 3.22:1 («Ver P-…», «Deshacer») */}{action&&<button onClick={()=>{cb.current();action.onClick()}} style={{marginLeft:6,background:C.bg,color:bg,border:"none",borderRadius:8,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0,whiteSpace:"nowrap"}}>{action.label}</button>}</div>;
 }
 
 // ─── ESC CLOSE HOOK ───────────────────────────────
@@ -3059,8 +3060,10 @@ function FlowDiagram({currentStage,orderType,onClose}) {
 // ─── SMALL COMPONENTS ──────────────────────────────
 // v10.84.78 — `para`: el id del campo, para que la etiqueta sea su nombre (lectores de pantalla y clic en la etiqueta); sin él, como
 //   antes. «(recomendado)» en su tinta y a 10 px (era naranja de semáforo a 9 px: 2.3:1).
-function FC({label:lb,children,req,rec,br,para}) {
-  return <div style={{padding:"12px 20px",...(br?{borderRight:"0.5px solid "+C.bd}:{})}}><label htmlFor={para} style={lbl}>{lb}{req && <span style={{color:C.ac}}> *</span>}{rec && <span style={{color:C.wnTx,fontSize:10,fontWeight:500}}> (recomendado)</span>}</label>{children}</div>;
+// v10.84.80 — `falta`: el faltante se dice EN su campo, debajo y en su tinta (el campo lo nombra con aria-describedby = para+"-falta");
+//   sólo era un borde rojo de 1.7:1 sin texto (segunda revisión independiente de la forma de la orden)
+function FC({label:lb,children,req,rec,br,para,falta}) {
+  return <div style={{padding:"12px 20px",...(br?{borderRight:"0.5px solid "+C.bd}:{})}}><label htmlFor={para} style={lbl}>{lb}{req && <span style={{color:C.ac}}> *</span>}{rec && <span style={{color:C.wnTx,fontSize:10,fontWeight:500}}> (recomendado)</span>}</label>{children}{falta&&<div id={para?para+"-falta":undefined} style={{marginTop:5,fontSize:F.body,fontWeight:600,color:C.dnInk,lineHeight:1.4}}>{falta}</div>}</div>;
 }
 function GuideBanner({text,color=C.ac}) {
   return <div style={{background:color+"08",border:"1px solid "+color+"20",borderRadius:12,padding:"10px 14px",marginBottom:10,fontSize:12,color:C.tx,fontWeight:500}}>{text}</div>;
@@ -3509,7 +3512,7 @@ function ClientAliasManager({clientId, role, userLogin}){
 //   flechas para moverse, Enter para elegir y Esc para cerrar la lista, con el patrón combobox (aria-activedescendant). Con
 //   `alSalirElegir`, al dejar el campo con el nombre idéntico al de un resultado, lo elige (antes quedaba como «Cliente nuevo» y pedía el
 //   RFC de un cliente que existe). Lo usan cinco pantallas: lo nuevo es teclado y atributos; el clic elige igual, sin perder el foco.
-function ClientInput({value,onChange,onSelect,clients,id,alSalirElegir=false}) {
+function ClientInput({value,onChange,onSelect,clients,id,alSalirElegir=false,invalido=false,describe}) {
   const [show,setShow]=useState(false);
   const [matches,setMatches]=useState([]);
   const [searching,setSearching]=useState(false);
@@ -3546,7 +3549,7 @@ function ClientInput({value,onChange,onSelect,clients,id,alSalirElegir=false}) {
     if(alSalirElegir&&!eligioRef.current){const v=norm(value);const igual=v?matches.find(c=>norm(c.name)===v):null;if(igual)elegir(igual)}
     setTimeout(()=>setShow(false),200);
   };
-  return <div style={{position:"relative"}}><input id={id} style={inp} value={value} role="combobox" aria-expanded={abierta} aria-controls={listaId} aria-autocomplete="list" aria-activedescendant={abierta&&hl>=0?listaId+"-"+hl:undefined} autoComplete="off" onChange={e=>{eligioRef.current=false;onChange(e.target.value);setShow(true)}} onKeyDown={alTeclear} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={alSalir}/>{abierta&&<div id={listaId} role="listbox" aria-label="Clientes" style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div role="presentation" style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} id={listaId+"-"+i} role="option" aria-selected={i===hl} onMouseDown={e=>{e.preventDefault();elegir(c)}} onMouseEnter={()=>setHl(i)} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none",background:i===hl?C.sf:C.bg}}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div>{Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:11,color:C.ac,marginTop:1,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}</div>)}</div>}</div>;
+  return <div style={{position:"relative"}}><input id={id} style={inp} value={value} aria-invalid={invalido||undefined} aria-describedby={describe||undefined} role="combobox" aria-expanded={abierta} aria-controls={listaId} aria-autocomplete="list" aria-activedescendant={abierta&&hl>=0?listaId+"-"+hl:undefined} autoComplete="off" onChange={e=>{eligioRef.current=false;onChange(e.target.value);setShow(true)}} onKeyDown={alTeclear} placeholder="Cliente (escribe para buscar)" onFocus={()=>setShow(true)} onBlur={alSalir}/>{abierta&&<div id={listaId} role="listbox" aria-label="Clientes" style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,borderRadius:10,boxShadow:C.sh3,zIndex:50,border:"0.5px solid "+C.bd,marginTop:4,maxHeight:320,overflowY:"auto"}}><div role="presentation" style={{padding:"5px 12px",fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",borderBottom:"0.5px solid "+C.bd}}>{searching?"Buscando...":`Clientes (${matches.length})`}</div>{matches.map((c,i)=><div key={c.id} id={listaId+"-"+i} role="option" aria-selected={i===hl} onMouseDown={e=>{e.preventDefault();elegir(c)}} onMouseEnter={()=>setHl(i)} style={{padding:"8px 12px",cursor:"pointer",borderBottom:i<matches.length-1?"0.5px solid "+C.bd:"none",background:i===hl?C.sf:C.bg}}><div style={{fontSize:12,fontWeight:600}}>{c.name}</div><div style={{fontSize:11,color:C.t2}}>{[c.rfc,c.whatsapp,c.dias_credito?`${c.dias_credito}d crédito`:null].filter(Boolean).join(" · ")}</div>{Array.isArray(c.aliases)&&c.aliases.length>0&&<div style={{fontSize:11,color:C.ac,marginTop:1,display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}><TagIcon size={9} weight="bold"/>{c.aliases.join(", ")}</div>}</div>)}</div>}</div>;
 }
 
 // 🔑 v10.84.69 — «¿YA EXISTE ESTE CLIENTE?», UNA SOLA LÓGICA PARA LAS DOS PUERTAS (la forma de la orden y «Crear OC»; eran dos copias).
@@ -3555,7 +3558,15 @@ function ClientInput({value,onChange,onSelect,clients,id,alSalirElegir=false}) {
 // nombre («ANA GARFIAS» era PREMIUM RESTAURANT BRANDS). La base (resolve_client_for_order, CobranzaFlow v3.7.999m) busca también por RFC,
 // alias, nombres ya fusionados, agentes de compra y contactos; marca lo que casi seguro es el mismo (`fuerte`, con su `motivo`) y lo que
 // existe dado de baja (`dados_de_baja`). La pregunta no ofrece crear ésos, y create_client_from_printflow los vuelve a frenar.
-// El RFC se manda sólo si se capturó (la base de antes no lo conocía). Devuelve { tipo: existente|elegido|nuevo|cancelado|falta_rfc, id }.
+// El RFC se manda sólo si se capturó (la base de antes no lo conocía). Devuelve { tipo: existente|elegido|nuevo|cancelado|falta_rfc|
+// corregir_rfc, id, cliente }. 🔑 v10.84.80 — «elegido» ya NO crea: trae al cliente COMPLETO y la puerta lo pone en su forma (la orden
+// salía con el nombre y el RFC escritos y el id del elegido: la identidad fiscal de dos clientes, P1 de la segunda revisión).
+// v10.84.80 — el cliente que se eligió en la pregunta, completo como lo da el buscador (correo, WhatsApp, modo de facturación); si el
+//   buscador no lo trae, lo que dijo la pregunta (la forma completa el contacto con su último contacto)
+async function clienteCompleto(m){
+  try{const {data,error}=await supabase.rpc("search_clients_typeahead",{p_query:m.name||"",p_limit:10});if(!error){const c=(data||[]).find(x=>x.id===m.id);if(c)return c}}catch(e){console.warn("[clienteCompleto]",e?.message)}
+  return {id:m.id,name:m.name||"",rfc:m.rfc||"",email:"",whatsapp:""};
+}
 async function resolverClienteNuevo({nombre,rfc="",email="",telefono="",rfcObligatorio=false,preguntar=window.__showClientConfirmModal}){
   const args={p_name:nombre};if(rfc)args.p_rfc=rfc;
   const {data:r,error}=await supabase.rpc("resolve_client_for_order",args);
@@ -3566,7 +3577,8 @@ async function resolverClienteNuevo({nombre,rfc="",email="",telefono="",rfcOblig
   if(parecidos.length||deBaja.length){
     const elegido=await preguntar?.({typed:nombre,matches:parecidos,dadosDeBaja:deBaja,rfc,contact:contacto});
     if(!elegido||elegido==="cancel")return {tipo:"cancelado"};
-    if(elegido!=="new")return {tipo:"elegido",id:elegido};
+    if(elegido==="corregir_rfc")return {tipo:"corregir_rfc"};
+    if(elegido!=="new"){const m=parecidos.find(c=>c.id===elegido)||{id:elegido,name:nombre};return {tipo:"elegido",id:elegido,cliente:await clienteCompleto(m)}}
     if(rfcObligatorio&&!rfc)return {tipo:"falta_rfc"};
   }else{
     if(rfcObligatorio&&!rfc)return {tipo:"falta_rfc"};
@@ -3596,22 +3608,28 @@ function mensajeDeCliente(e,que="la orden"){
 // OC de atrás, con lo capturado), el foco entra a la pregunta y Tab no se sale, un doble clic responde una vez, y el montaje le pasa el
 // RFC y el contacto (desde v10.72.2 la pregunta decía «sin RFC» aunque se hubiera capturado).
 function ClientConfirmModal({open,typed,matches,rfc,contact,dadosDeBaja,onResolve}) {
-  const panelRef=useRef(null), respondido=useRef(false);
+  const panelRef=useRef(null), respondido=useRef(false), volverRef=useRef(null);
   const responder=r=>{if(respondido.current)return;respondido.current=true;onResolve(r)};
   useEscClose(()=>{if(open)responder("cancel")});
-  useEffect(()=>{if(open)panelRef.current?.focus()},[open]);
+  // v10.84.80 — el foco entra en «Volver a la forma» (la salida segura): entraba al panel y el primer Tab caía en un cliente
+  useEffect(()=>{if(open)(volverRef.current||panelRef.current)?.focus()},[open]);
   if(!open)return null;
   const lista=Array.isArray(matches)?[...matches].sort((a,b)=>Number(!!b.fuerte)-Number(!!a.fuerte)):[];
   const baja=Array.isArray(dadosDeBaja)?dadosDeBaja:[];
   const hayFuerte=lista.some(c=>c.fuerte), hasMatches=lista.length>0||baja.length>0;
   const bloqueado=hayFuerte||baja.length>0;
   const titulo=hayFuerte?"Ya existe: elígelo":lista.length?"¿Quisiste decir alguno de estos clientes?":"Ya existe, pero está dado de baja";
+  // v10.84.80 — si lo que lo hace «el mismo» es el RFC que está en la forma, se dice de quién es ese RFC (puede venir de otro cliente
+  //   que se eligió antes) y se ofrece corregirlo
+  const rfcDe=rfc?lista.find(c=>c.fuerte&&c.rfc&&String(c.rfc).trim().toUpperCase()===String(rfc).trim().toUpperCase()):null;
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>responder("cancel")}>
     <div ref={panelRef} tabIndex={-1} onKeyDown={atraparTab} role="dialog" aria-modal="true" aria-label={hasMatches?titulo:"Confirmar cliente nuevo"} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,width:"90%",boxShadow:C.sh3,outline:"none",maxHeight:"90vh",overflowY:"auto",overflowWrap:"anywhere"}} onClick={e=>e.stopPropagation()}>
       {hasMatches?<>
         <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,marginBottom:8,color:C.tx}}>{bloqueado&&<WarningIcon size={18} weight="fill" color={C.amb} style={{flexShrink:0}}/>}{titulo}</div>
         <div style={{fontSize:12,color:C.t2,marginBottom:hayFuerte?8:16}}>Escribiste: <strong>"{typed}"</strong></div>
-        {hayFuerte&&<div style={{fontSize:12,color:C.t2,lineHeight:1.5,marginBottom:14}}>Casi seguro es el mismo cliente escrito de otra forma: elígelo para ligarle la orden. Si de verdad es otro, pídele a CxC (Karla) que lo dé de alta en CobranzaFlow.</div>}
+        {hayFuerte&&<div style={{fontSize:12,color:C.t2,lineHeight:1.5,marginBottom:10}}>Casi seguro es el mismo cliente escrito de otra forma: elígelo. Si de verdad es otro, pídele a CxC (Karla) que lo dé de alta en CobranzaFlow.</div>}
+        {rfcDe&&<div role="note" style={{fontSize:12,color:C.tx,lineHeight:1.5,marginBottom:10,background:C.sf,borderRadius:10,padding:"8px 12px"}}>El RFC <strong style={{fontFamily:"'Geist Mono',monospace"}}>{rfc}</strong> que está en la forma es de <strong>{rfcDe.name}</strong>. Si el cliente es otro, corrige el RFC.</div>}
+        {lista.length>0&&<div style={{fontSize:12,color:C.t2,lineHeight:1.5,marginBottom:12}}>Elegir uno lo pone en la forma con sus datos (RFC y contacto): nada se crea hasta que lo confirmes.</div>}
         {lista.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:baja.length?12:16}}>
           {lista.map(c=><button key={c.id} onClick={()=>responder(c.id)} style={{background:C.sf,border:"1px solid "+(c.fuerte?C.amb+"80":C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",transition:"background 0.1s",fontFamily:"'Geist',sans-serif",color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background=C.sf}>
             <div style={{fontSize:13,fontWeight:600}}>{c.name}</div>
@@ -3632,7 +3650,8 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,dadosDeBaja,onResolv
         <div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,padding:"10px 12px",fontSize:11,color:"#9a3412",lineHeight:1.45}}><WarningIcon size={15} weight="fill" color={C.amb} style={{flexShrink:0,marginTop:1}}/><span>Verifica que no sea un <strong>duplicado</strong> escrito de otra forma (acentos, abreviaturas, S.A. de C.V.). Si ya existe, cancela y búscalo por su nombre registrado.</span></div>
       </>}
       <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end",flexWrap:"wrap"}}>
-        <button onClick={()=>responder("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
+        <button ref={volverRef} onClick={()=>responder("cancel")} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Volver a la forma</button>
+        {rfcDe&&<button onClick={()=>responder("corregir_rfc")} style={{...bs(C.sf,C.ac),padding:"8px 16px",border:"1px solid "+C.ac+"55"}}>Corregir el RFC</button>}
         {!bloqueado&&<button onClick={()=>responder("new")} style={{...bs(C.ac),padding:"8px 16px"}}><PlusIcon size={13} weight="bold"/>{hasMatches?`Crear "${typed}" como nuevo`:"Sí, crear cliente nuevo"}</button>}
       </div>
     </div>
@@ -3652,6 +3671,11 @@ function ClientConfirmModal({open,typed,matches,rfc,contact,dadosDeBaja,onResolv
 // ya lo sabe cuando el cobro está conciliado (payments.bank_movement_id).
 function PriceDropModal({open,info,onResolve}) {
   const [choice,setChoice]=useState(null);
+  // v10.84.80 — (segunda revisión independiente de la forma) el contrato de las ventanas: el foco entra en «Volver a la forma», Tab no se
+  //   sale, Esc regresa a la forma sin guardar y el clic fuera ya no tira lo elegido. Abría con el foco en <body> y no cerraba con Esc.
+  const volverRef=useRef(null);
+  useEscClose(()=>{if(open&&info)onResolve(null)});
+  useEffect(()=>{if(open&&info)volverRef.current?.focus()},[open,info]);
   if(!open||!info)return null;
   const m=n=>"$"+Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   const conciliado=!!info.cobro_conciliado;
@@ -3662,8 +3686,8 @@ function PriceDropModal({open,info,onResolve}) {
     {v:"devolucion",   t:"Marcar para devolución",       d:"Hay que regresarle "+m(info.diferencia)+" al cliente."},
     ...(conciliado?[]:[{v:"error_captura",t:"El cobro registrado está mal",d:"No sobra nada: lo que hay que corregir es el pago de "+m(info.cobrado)+", no el precio."}]),
   ];
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>onResolve(null)}>
-    <div role="dialog" aria-modal="true" aria-label="Esta factura ya está cobrada" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:C.sh3}} onClick={e=>e.stopPropagation()}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget&&!choice)onResolve(null)}}>
+    <div role="dialog" aria-modal="true" aria-label="Esta factura ya está cobrada" tabIndex={-1} onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:540,width:"100%",maxHeight:"88vh",overflowY:"auto",boxShadow:C.sh3,outline:"none"}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,color:C.tx,marginBottom:6}}><WarningIcon size={18} weight="fill" color={C.amb}/>Esta factura ya está cobrada</div>
       <div style={{fontSize:12.5,color:C.t2,lineHeight:1.5,marginBottom:14}}>
         El folio <strong style={{color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{info.folio}</strong> tiene <strong style={{color:C.tx}}>{m(info.cobrado)}</strong> registrados como cobrados. Con el precio nuevo, la factura daría <strong style={{color:C.tx}}>{m(info.recalculo)}</strong>.
@@ -3674,7 +3698,7 @@ function PriceDropModal({open,info,onResolve}) {
         <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Factura hoy</span><span style={{fontWeight:700,color:C.tx}}>{m(info.monto_factura)}</span></div>
         <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Cobrado</span><span style={{fontWeight:700,color:C.tx}}>{m(info.cobrado)}</span></div>
         <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12.5}}><span style={{color:C.t3,fontWeight:600}}>Quedaría en</span><span style={{fontWeight:700,color:C.tx}}>{m(info.recalculo)}</span></div>
-        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:13,borderTop:"0.5px solid "+C.bd,paddingTop:9}}><span style={{color:C.tx,fontWeight:700}}>Sobrarían</span><span style={{fontWeight:800,color:C.amb}}>{m(info.diferencia)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:13,borderTop:"0.5px solid "+C.bd,paddingTop:9}}><span style={{color:C.tx,fontWeight:700}}>Sobrarían</span><span style={{fontWeight:800,color:C.wnTx}}>{m(info.diferencia)}</span></div>
       </div>
 
       {conciliado&&info.banco&&<div style={{display:"flex",alignItems:"flex-start",gap:8,background:C.ac+"10",border:"1px solid "+C.ac+"35",borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,lineHeight:1.45,marginBottom:14}}>
@@ -3692,7 +3716,7 @@ function PriceDropModal({open,info,onResolve}) {
 
       <div style={{fontSize:12.5,fontWeight:700,color:C.tx,marginBottom:8}}>¿Qué hacemos con {m(info.diferencia)}?</div>
       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
-        {opciones.map(o=><button key={o.v} onClick={()=>setChoice(o.v)} style={{background:choice===o.v?C.ac+"12":C.sf,border:"1px solid "+(choice===o.v?C.ac:C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+        {opciones.map(o=><button key={o.v} aria-pressed={choice===o.v} onClick={()=>setChoice(o.v)} style={{background:choice===o.v?C.ac+"12":C.sf,border:"1px solid "+(choice===o.v?C.ac:C.bd),borderRadius:10,padding:12,textAlign:"left",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
           <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{o.t}</div>
           <div style={{fontSize:11,color:C.t2,marginTop:2,lineHeight:1.4}}>{o.d}</div>
         </button>)}
@@ -3704,8 +3728,9 @@ function PriceDropModal({open,info,onResolve}) {
       </div>
 
       <div style={{borderTop:"0.5px solid "+C.bd,paddingTop:14,marginTop:14,display:"flex",gap:8,justifyContent:"flex-end"}}>
-        <button onClick={()=>onResolve(null)} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Cancelar</button>
-        <button onClick={()=>choice&&onResolve(choice)} disabled={!choice} style={{...bs(choice?C.ac:C.bd),padding:"8px 16px",opacity:choice?1:.55,cursor:choice?"pointer":"not-allowed"}}>Guardar el precio nuevo</button>
+        {!choice&&<span style={{alignSelf:"center",marginRight:"auto",fontSize:11,color:C.t2}}>Elige qué hacemos con {m(info.diferencia)}.</span>}
+        <button ref={volverRef} onClick={()=>onResolve(null)} style={{...bs(C.sf,C.t2),padding:"8px 16px"}}>Volver a la forma</button>
+        <button onClick={()=>choice&&onResolve(choice)} disabled={!choice} style={{...(choice?bs(C.ac):bs(C.sf,C.t2)),padding:"8px 16px",cursor:choice?"pointer":"not-allowed"}}>Guardar el precio nuevo</button>
       </div>
     </div>
   </div>;
@@ -6271,7 +6296,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
         })}
       </div>}
       <div style={{padding:"10px 22px",borderTop:"0.5px solid "+C.bd,fontSize:11,color:C.t2,background:C.sf,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-        <span style={{display:"inline-flex",alignItems:"flex-start",gap:5}}><LightbulbIcon size={12} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Al hacer click en una orden, sus datos (producto, papel, medidas, tintas, acabados, precio) se copian al formulario. <b>Los datos del cliente no se tocan</b>.</span></span>
+        <span style={{display:"inline-flex",alignItems:"flex-start",gap:5}}><LightbulbIcon size={12} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>{/* v10.84.80 — dice lo que de verdad copia (prometía «producto, papel, medidas, tintas, acabados, precio» y traía también Pantones, imagen, notas y distribución) */}Al elegir una orden se llena lo que esté vacío con su producto, papel, medidas, tintas, Pantones, acabados, precio e imagen. Sus notas y su distribución no se copian (son de esa orden), y <b>los datos del cliente no se tocan</b>.</span></span>
       </div>
     </div>
   </div>;
@@ -11724,6 +11749,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
 // ─── FILE UPLOAD ──────────────────────────────────
 function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
+  const archivoRef=useRef(null);   // v10.84.80 — el botón «Subir archivo» lo abre (con teclado también)
   const [uploading,setUploading]=useState(false);
   const [progress,setProgress]=useState(0);   // 0..100 = bytes reales; -1 = indeterminado (fallback)
   const [upInfo,setUpInfo]=useState(null);     // {name, mb} del archivo en curso
@@ -11831,10 +11857,12 @@ function FileUpload({orderId,fileUrl,fileName,onUploaded,onRemoved,canUpload}) {
       </div>
       <div style={{height:5,background:C.bd,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:"100%",background:C.ios,borderRadius:3,transformOrigin:"left",transform:"scaleX("+((progress<0?100:progress)/100)+")",transition:"transform .2s cubic-bezier(.22,1,.36,1)",opacity:progress<0?0.6:1}}/></div>
     </div>
-    :canUpload?<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,background:C.bg}}>
-      <UploadSimpleIcon size={14} weight="bold"/>Subir archivo (PDF, AI, PSD — máx 50MB)
-      <input type="file" accept=".pdf,.ai,.psd,.eps,.indd,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar" style={{display:"none"}} onChange={upload}/>
-    </label>
+    :canUpload?<>
+      <button type="button" onClick={()=>archivoRef.current?.click()} style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,background:C.bg,width:"100%",border:"none",fontFamily:"'Geist',sans-serif"}}>
+        <UploadSimpleIcon size={14} weight="bold"/>Subir archivo (PDF, AI, PSD; máx 50MB)
+      </button>
+      <input ref={archivoRef} type="file" tabIndex={-1} aria-hidden="true" accept=".pdf,.ai,.psd,.eps,.indd,.tiff,.tif,.jpg,.jpeg,.png,.zip,.rar" style={{display:"none"}} onChange={upload}/>
+    </>
     :<div style={{fontSize:11,color:C.t2,padding:"8px 0"}}>Sin archivo adjunto</div>}
     {upErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:8,fontSize:11,fontWeight:600,color:C.dnInk,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:8,padding:"7px 10px"}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{upErr}</div>}
   </div>;
@@ -12095,7 +12123,7 @@ async function copyStorageImage(srcUrl,keyPrefix){
 //   registra aquí; App (el menú, el atajo N, «Editar» desde un detalle abierto encima) llama salirDeLaForma(seguir) antes de cambiarla:
 //   si tiene algo sin guardar, ella pregunta y, con «Salir sin guardar», llama `seguir`; si no, devuelve false y App sigue. `altoPie` lo
 //   mide la forma: el aviso de abajo se pone encima de su pie fijo (lo tapaba).
-const FORMA_ABIERTA={preguntar:null,altoPie:0};
+const FORMA_ABIERTA={preguntar:null,altoPie:0,nueva:false,enfocar:null};
 function salirDeLaForma(seguir){return !!FORMA_ABIERTA.preguntar&&FORMA_ABIERTA.preguntar(seguir)===true}
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast,actor,folioDeLaOC}) {
   const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false};
@@ -12168,7 +12196,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.73.22 — Marcelo pidió que en reimpresiones SÍ se copie el arte (imagen 1 y 2). Se copian image_url/
     // image_url_2 igual que "Duplicar orden" (por referencia), PERO solo en slots VACÍOS: si el usuario ya adjuntó
     // una imagen en el form, NO se pisa (preserva la intención del fix v10.64.1 contra clobber silencioso del arte).
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back","notes","distribution"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
+    // v10.84.80 — sin «notes» ni «distribution» (Marcelo, 12-oct: specs, Pantones e imagen): son de ESA orden. Replicar trajo «YA AUTORIZO
+    //   PRUEBA DE COLOR» de un trabajo del 30-sep a una orden nueva (segunda revisión independiente).
+    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
     // v10.84.78 — (critique del 12-oct) sólo LLENA lo vacío: lo que ya se escribió se queda (pisaba la cantidad 250 con 1000 y el precio,
     //   con sólo «Datos replicados»), el aviso dice qué dejó como estaba y trae «Deshacer». Se calcula sobre la forma de ahora: dentro
     //   del setF, `skuOmitted` (v10.46.10) llegaba tarde al aviso y nunca salía.
@@ -12217,6 +12247,8 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     const dichos=["Datos de "+(src.production_number||"la orden anterior")+(wantImg1||wantImg2?", con su imagen":"")];
     if(dejados.length)dichos.push("se dejó como estaba "+listaY(dejados));
     if(skuOmitted)dichos.push("sin el producto del catálogo (es de otro cliente)");
+    const deEsaOrden=[String(src.notes||"").trim()?"sus notas":null,Array.isArray(src.distribution)&&src.distribution.some(x=>String(x||"").trim())?"su distribución":null].filter(Boolean);
+    if(deEsaOrden.length)dichos.push(listaY(deEsaOrden)+" no se copia"+(deEsaOrden.length>1?"n":"")+" (son de esa orden)");
     showToast?.(dichos.join(" · "),"success",{label:"Deshacer",onClick:()=>{replicaVerRef.current++;setF(antes.f);setCustomFinish(antes.customFinish);setShowOtroFinish(antes.showOtroFinish);setBlocksRaw(antes.blocksRaw);setFolioRaw(antes.folioRaw);setTextos(antes.textos)}});
   };
   // v10.58.22: agregada karla. Marcelo pidió que Karla pueda editar precio de órdenes
@@ -12235,7 +12267,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const queFactura=!ordenViva?null:(ordenViva.invoice_folio||ordenViva.grouped_invoice_folio||folioDeLaOC||(ordenViva.has_splits?"por partes":ordenViva.has_matrix_lines?"en el plan de su OC":null));
   const esVendedor=role==="vendedor";
   const candadoCliente=editando&&(!!queFactura||esVendedor);
-  const porQueCliente=queFactura?"La razón social y el RFC no se cambian aquí: la orden ya está facturada ("+queFactura+"). Se corrigen en CobranzaFlow.":"Los datos del cliente los cambia Lupita o Dirección.";
+  const porQueCliente=queFactura?"La razón social y el RFC no se cambian aquí: la orden ya está facturada ("+queFactura+"). Se corrigen en CobranzaFlow.":"La razón social y el RFC los cambia Lupita o Dirección.";
   const candadoPrecioVendedor=editando&&esVendedor;
   const precioBloqueado=financialsLocked||candadoPrecioVendedor;
   const porQuePrecio=candadoPrecioVendedor&&!financialsLocked?"El precio al cliente lo cambia Lupita o Dirección.":"";
@@ -12249,6 +12281,17 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   //   siga abierta. Del servidor ya no se borra nada guardado (el archivo de impresión se queda como historial, v10.84.76)
   const [imgQuitadas,setImgQuitadas]=useState({});
   const [archivoQuitado,setArchivoQuitado]=useState(null);
+  // v10.84.80 — lo que la forma dice del cliente: que se quitaron los datos del anterior, que se puso el elegido, de quién es el RFC
+  const [avisoCliente,setAvisoCliente]=useState(null);
+  const listaYCon=x=>x.length<2?x.join(""):x.slice(0,-1).join(", ")+" y "+x[x.length-1];
+  // v10.84.80 — la orden recién creada: la forma se queda, vacía, con «P-… creada · Ver · Imprimir · Capturar otra» (Marcelo, 12-oct:
+  //   «quedarse para capturar otra»); el número iba en un aviso de 6.5 s sobre el Dashboard abierto a media página
+  const [creada,setCreada]=useState(null);const creadaRef=useRef(null);const creadaEnRef=useRef(0);
+  useEffect(()=>{if(creada)creadaRef.current?.focus()},[creada]);
+  // v10.84.80 — el pie chico donde hay poco alto (la laptop al 200 %: con 384 px el pie era el 24 % y, con los faltantes, el 38 %)
+  const [altoVentana,setAltoVentana]=useState(()=>typeof window!=="undefined"?window.innerHeight:768);
+  useEffect(()=>{const r=()=>setAltoVentana(window.innerHeight);window.addEventListener("resize",r);return()=>window.removeEventListener("resize",r)},[]);
+  const pieChico=altoVentana<560;
   const [preguntaFact,setPreguntaFact]=useState(null);
   const enviandoRef=useRef(false);
   // v10.84.78 — ¿hay algo capturado sin guardar? Contra la foto de al abrir (o al re-iniciar con otra orden). La usan «Cancelar», el
@@ -12308,6 +12351,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const resumenMas=[Array.isArray(f.distribution)?"Distribución: "+f.distribution.filter(x=>String(x||"").trim()).length+" lugares":null,f.sin_empaque_sygma?"Sin empaque de SYGMA":null,f.file_url?"Archivo: "+(f.file_name||"adjunto"):null].filter(Boolean);
   const sucia=useMemo(()=>{const a=inicialRef.current||{};return Object.keys({...a,...f}).some(k=>!mismoValor(a[k],f[k]))},[f])||numMalos.length>0;
   suciaRef.current=sucia;
+  useEffect(()=>{if(sucia&&creada)setCreada(null)},[sucia]);
+  // v10.84.80 — la N con la forma de una orden NUEVA abierta no pregunta «¿Salir sin guardar?» (ya está ahí): lleva el foco al cliente
+  useEffect(()=>{FORMA_ABIERTA.nueva=!editOrder;FORMA_ABIERTA.enfocar=()=>document.getElementById("ff-cliente-input")?.focus();return()=>{FORMA_ABIERTA.nueva=false;FORMA_ABIERTA.enfocar=null}},[editOrder]);
   useEffect(()=>{
     FORMA_ABIERTA.preguntar=seguir=>{if(!suciaRef.current||enviandoRef.current)return false;setPreguntaSalir({seguir});return true};
     const alCerrar=e=>{if(suciaRef.current&&!enviandoRef.current){e.preventDefault();e.returnValue=""}};
@@ -12351,14 +12397,16 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     return m;
   },[f.client,f.client_id,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,f.quantity,f.agent,canP,hideC,specsOnly,editOrder,numMalos.join("|")]);
   const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
-  const errBorder=k=>tried&&!k?"1.5px solid "+C.dn+"60":"none";
+  // v10.84.80 — el borde del faltante en su tinta (al 38 % daba 1.7:1) y `falta(etq)` para nombrarlo en su campo (aria-invalid + «Falta…»)
+  const errBorder=k=>tried&&!k?"1.5px solid "+C.dnInk:"none";
+  const falta=etq=>tried&&missing.includes(etq);
   // v10.49.1 punto 2 — Cliente nuevo (sin client_id) requiere email o whatsapp.
   // Mostrar alerta + border rojo SIN esperar a `tried` (más visible para Lupita).
   const isNewClient=!editOrder&&!f.client_id&&(f.client||"").trim().length>0;
   // v10.84.78 — sale al DEJAR el campo del cliente (con dos letras escritas ya salía, en naranja de 1.85:1, con el contacto en rojo
   //   mientras la lista todavía ofrecía clientes); el contacto se pone en rojo hasta intentar guardar
   const showContactWarn=isNewClient&&!clienteEnfocado&&!hideC&&!specsOnly&&!f.client_email?.trim()&&!f.client_phone?.trim();
-  const contactBorder=(val)=>(tried&&!val)?"1.5px solid "+C.dn+"60":"none";
+  const contactBorder=(val)=>(tried&&!val)?"1.5px solid "+C.dnInk:"none";
   const faltaContacto=!hideC&&!specsOnly&&editOrder?.created_by!=="import-historico"&&!f.client_email?.trim()&&!f.client_phone?.trim();
   // Compute last and next production number
   const {lastPN,nextPN}=useMemo(()=>{
@@ -12382,6 +12430,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // "Reemplazar" (delete-on-replace seguro): nunca una imagen guardada ni la referencia ajena del fallback
   // de "Replicar orden anterior". El borrado-al-cancelar se revirtió (v10.73.53) por riesgo de data-loss.
   const imgUploadsRef=useRef(new Set());
+  const imgInputRefs=useRef([]);   // v10.84.80 — «Subir 1ra» / «Subir 2da» son botones que abren su campo de archivo
   // v10.74.3 (scan wou3xnran) — ¿el usuario ya eligió vendedor a mano? Mientras sea false, el valor
   // del campo lo pusimos nosotros por sugerencia y se puede reemplazar/limpiar al cambiar de cliente.
   // Sustituye a sugAgentRef (comparar contra "la última sugerencia" reclasificaba una elección manual
@@ -12426,15 +12475,17 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.72.36 — markup sobre costo, para aclarar la confusion "23% vs 30%": margin=ganancia/precio (sobre venta), maqMarkup=ganancia/costo (sobre costo). Mismo $ de ganancia, distinta base.
   const maqMarkup=isMaq&&Number(f.maq_cost)>0&&Number(f.maq_price)>0?Math.round(((Number(f.maq_price)-Number(f.maq_cost))/Number(f.maq_cost))*100):null;
   // v10.73.59 — al fallar el submit, llevar/enfocar el PRIMER campo faltante (antes saltaba al tope, lejos del campo).
-  const scrollToFirstInvalid=()=>{
+  // v10.84.80 — ir a un faltante (el primero al intentar crear, o el que se apriete en el resumen del pie): el foco y la vista en su campo
+  const irAFaltante=etq=>{
     const root=formRef.current;if(!root)return;
     const MAP={"Razón social":"ff-client","Tipo de Producto":"ff-tipo","Proveedor (Maquila)":"ff-maq","Contacto (Email o WhatsApp)":"ff-contacto","RFC (razón social nueva)":"ff-rfc","Cantidad":"ff-cantidad","Nuestro vendedor":"ff-agent"};
-    const num=Object.values(NUMEROS).find(n=>missing[0]===n.etq+" (revisa el número)");   // v10.84.78
-    const id=missing.length?(MAP[missing[0]]||num?.id):null;
+    const num=Object.values(NUMEROS).find(n=>etq===n.etq+" (revisa el número)");   // v10.84.78
+    const id=etq?(MAP[etq]||num?.id):null;
     const el=id?root.querySelector("#"+id):null;
-    if(el){el.scrollIntoView({behavior:"smooth",block:"center"});const foc=el.matches("input,select,textarea")?el:el.querySelector("input,select,textarea");setTimeout(()=>{try{foc&&foc.focus({preventScroll:true})}catch(e){}},280);}
+    if(el){const foc=el.matches("input,select,textarea")?el:el.querySelector("input,select,textarea");try{(foc||el).focus({preventScroll:true})}catch(e){}(foc||el).scrollIntoView({block:"center"})}
     else root.scrollIntoView({behavior:"smooth",block:"start"});
   };
+  const scrollToFirstInvalid=()=>irAFaltante(missing[0]);
   // v10.84.77 — cambiar el precio o la cantidad de una orden ya facturada pregunta ANTES, con las cifras y lo que le pasa a la factura.
   //   Lo que hace el puente (sync_post_invoice_edit): el precio recalcula su factura en CobranzaFlow, salvo timbrada (su importe no
   //   cambia y queda anotada la diferencia) o por partes / en el plan de la OC (allá se ajusta a mano); la cantidad no cambia la
@@ -12484,7 +12535,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const submit=async()=>{
     // v10.84.77 — una sola vez a la vez: las preguntas (¿ya existe el cliente?, la orden facturada) esperan respuesta y ni un clic ni
     //   Ctrl+Enter la repiten. «Guardando…» sale cuando de verdad se guarda (antes, también mientras la pregunta esperaba).
-    if(enviandoRef.current||saving)return;
+    // v10.84.80 — y 800 ms después de crear, nada: el segundo clic de un doble clic (o un segundo Ctrl+Enter) caía en la forma vacía
+    //   que ahora se queda, y la marcaba entera de faltantes
+    if(enviandoRef.current||saving||Date.now()-creadaEnRef.current<800)return;
     setTried(true);setErrGuardar("");
     if(!canSubmit){scrollToFirstInvalid();return;}
     // (v10.64.0: el número de producción ya no se teclea; con v10.84.77 se fue la validación del P- tecleado y sus alert())
@@ -12513,6 +12566,10 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           // window.confirm nativo daba el «OK» reflejo a duplicados como UVEG).
           const r=await resolverClienteNuevo({nombre:clean.client.trim(),rfc:clean.client_rfc?.trim()||"",email:clean.client_email?.trim()||"",telefono:clean.client_phone?.trim()||""});
           if(r.tipo==="cancelado")return;
+          // v10.84.80 — (P1) elegir en la pregunta pone al cliente en la forma, COMPLETO (nombre, RFC y contacto suyos), y no crea: se
+          //   revisa y se crea con el botón de siempre. Antes creaba ahí mismo con el nombre y el RFC escritos y el id del elegido.
+          if(r.tipo==="elegido"){await selC(r.cliente);setAvisoCliente({tipo:"puesto",texto:"Pusimos a "+(r.cliente.name||"ese cliente")+" con sus datos (RFC y contacto). Revisa y crea la orden."});setTimeout(()=>{const e=document.getElementById("ff-cliente-input");e?.scrollIntoView({block:"center"});e?.focus({preventScroll:true})},0);return}
+          if(r.tipo==="corregir_rfc"){setAvisoCliente({tipo:"rfc",texto:"El RFC "+(clean.client_rfc||"")+" es de otro cliente: corrígelo, o elige a ese cliente."});setTimeout(()=>{const e=document.getElementById("ff-rfc");e?.focus();e?.select?.()},0);return}
           clean.client_id=r.id;
           // v10.84.77 — el cliente que se dio de alta lo dice el aviso de la orden (el aviso propio lo pisaba el de la orden al instante)
           if(r.tipo==="nuevo")clean._clienteNuevo=clean.client.trim();
@@ -12524,8 +12581,13 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       }
       if(editando&&!(await preguntarFacturada()))return;
       setSaving(true);
-      await onSubmit(clean);
-      if(!editOrder?.id){setF({...empty,production_number:""});setAdvMode(false);agentTouchedRef.current=false} // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
+      const hecho=await onSubmit(clean);
+      if(!editOrder?.id){
+        // v10.84.80 — vacía y como al abrir (también la foto de «lo capturado» y lo subido en esta captura, que ya es de la orden creada)
+        const vacia={...empty,production_number:""};setF(vacia);inicialRef.current=vacia;setTextos({});setAdvMode(false);agentTouchedRef.current=false;
+        setMasAbierto(false);setShowOtroFinish(false);setCustomFinish("");setBlocksRaw("");setFolioRaw("");setImgQuitadas({});setArchivoQuitado(null);setAvisoCliente(null);imgUploadsRef.current=new Set();
+        if(hecho&&hecho.pn){creadaEnRef.current=Date.now();setCreada(hecho)}
+      } // v10.34.4 fix #7 — limpiar; el placeholder del useMemo nextPN (con detección de hueco) lo rellena correctamente
       setTried(false);
     // v10.75.17 (scan wu9ahtseu) — respetar la convención `_toasted`. Los guards de update() ya
     // muestran su propio mensaje en español y marcan el error como _toasted; este catch lo volvía
@@ -12541,6 +12603,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   };
   // 🆕 v10.13.1 — Async: aplica master + completa huecos con la última orden del cliente
   const selC=async c=>{
+    setAvisoCliente(null);   // v10.84.80 — un cliente elegido: lo que se dijo del anterior ya no aplica
     // v10.43.2 FIX A4 — Al cambiar de cliente, resetear campos stock para evitar inconsistencias
     // (orden con stock_role/client_product_id de un cliente apuntando a otro).
     // Excepción: si la orden YA tiene stock_loaded=true (edición de orden ya cargada), no tocar.
@@ -12581,7 +12644,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.84.79 — el reacomodo (Marcelo, 12-oct): cada bloque una vez; se acomodan en una columna o en dos según el ancho que hay
   const bCliente=<>
     <div style={{padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:.5}}>Cliente</div>
-    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:F.title,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:angosta?"1fr":"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br para="ff-cliente-input">{candadoCliente?<div id="ff-client" aria-readonly="true" title={porQueCliente} style={{...inp,display:"flex",alignItems:"center",gap:7,background:C.sf,color:C.t2,cursor:"not-allowed",overflow:"hidden",whiteSpace:"nowrap"}}><LockIcon size={12} weight="bold" style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{f.client||"—"}</span></div>:<div id="ff-client" onFocus={()=>setClienteEnfocado(true)} onBlur={()=>setClienteEnfocado(false)} style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput id="ff-cliente-input" alSalirElegir value={f.client} onChange={v=>{
+    {hideC||specsOnly?<div style={{padding:"8px 20px 14px",borderBottom:"0.5px solid "+C.bd}}><div style={{fontSize:F.title,fontWeight:700}}>{f.client||"—"}</div></div>:<><div style={{display:"grid",gridTemplateColumns:angosta?"1fr":"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Razón social" req br para="ff-cliente-input" falta={falta("Razón social")&&!candadoCliente?"Falta la razón social":null}>{candadoCliente?<div id="ff-client" aria-readonly="true" title={porQueCliente} style={{...inp,display:"flex",alignItems:"center",gap:7,background:C.sf,color:C.t2,cursor:"not-allowed",overflow:"hidden",whiteSpace:"nowrap"}}><LockIcon size={12} weight="bold" style={{flexShrink:0}}/><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{f.client||"—"}</span></div>:<div id="ff-client" onFocus={()=>setClienteEnfocado(true)} onBlur={()=>setClienteEnfocado(false)} style={{border:errBorder(f.client?.trim()),borderRadius:12}}><ClientInput id="ff-cliente-input" alSalirElegir value={f.client} onChange={v=>{
   // v10.46.9 F1 FIX — Solo limpiar client_id (+ stock_role/product_id) si el NOMBRE realmente cambió.
   // Antes (v10.46.5): cualquier onChange con f.client_id existente entraba al reset, incluso si v===f.client
   // (caso onSelect del autocomplete: selC setea client_id+client; el ClientInput dispara onChange con el
@@ -12592,8 +12655,18 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     s("client_id",null);
     s("billing_mode","normal");
     if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
+    // v10.84.80 — (P1 de la segunda revisión) lo que trajo el cliente anterior se va con él: el RFC, el contacto, su agente de compras y
+    //   el vendedor que se le sugirió (no el que se eligió a mano). Se quedaban: la orden salía con el nombre de uno y el RFC del otro, y
+    //   con el contacto lleno ya no salía «Cliente nuevo».
+    const quitados=[];
+    if((f.client_rfc||"").trim()){s("client_rfc","");quitados.push("el RFC")}
+    if((f.client_email||"").trim()||(f.client_phone||"").trim()){s("client_email","");s("client_phone","");s("client_lada","+52");quitados.push("el contacto")}
+    if(f.client_agent&&clientAgents.some(a=>a.name===f.client_agent)){s("client_agent","");quitados.push("su agente de compras")}
+    if(!editOrder?.id&&!agentTouchedRef.current&&f.agent){s("agent","");quitados.push("el vendedor")}
+    s("client_company","");
+    if(quitados.length)setAvisoCliente({tipo:"quitado",texto:"Cambiaste de cliente: se quitaron "+listaYCon(quitados)+" que venían de "+f.client+"."});
   }
-}} onSelect={selC} clients={clients}/></div>}</FC><FC label="Agente de compras del cliente" para="ff-agente-compras"><input id="ff-agente-compras" style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Quién pide por parte del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
+}} onSelect={selC} clients={clients} invalido={falta("Razón social")} describe={falta("Razón social")?"ff-cliente-input-falta":undefined}/></div>}</FC><FC label="Agente de compras del cliente" para="ff-agente-compras"><input id="ff-agente-compras" style={inp} value={f.client_agent||""} onChange={e=>s("client_agent",e.target.value)} placeholder="Quién pide por parte del cliente (ej. Eva)" list="pf-client-agents" autoComplete="off"/>
       <datalist id="pf-client-agents">{clientAgents.map(a=><option key={a.id} value={a.name}/>)}</datalist>
       {f.client_id&&(f.client_agent||"").trim()&&!clientAgents.some(a=>(a.name||"").trim().toLowerCase()===(f.client_agent||"").trim().toLowerCase())&&<button type="button" onClick={()=>{setNewAgent({name:(f.client_agent||"").trim(),phone:"",email:""});setNewAgentOpen(true)}} style={{marginTop:4,fontSize:F.body,fontWeight:600,color:C.ac,background:C.ac+"10",border:"1px solid "+C.ac+"30",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}><UserPlusIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Registrar "{(f.client_agent||"").trim()}" como agente de compras</button>}</FC></div>
     {/* v10.72.22 — advertencia VISIBLE si el agente seleccionado existe pero no tiene celular ni correo.
@@ -12608,7 +12681,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       </div>
     </div>}
     {/* v10.84.79 — no a tercios: el WhatsApp lleva la lada (70 px) y el número, el RFC son 13 letras (a tercios el número se cortaba) */}
-    <div style={{display:"grid",gridTemplateColumns:angosta?"1fr":"minmax(0,1fr) minmax(0,1.1fr) minmax(0,0.85fr)",borderBottom:"0.5px solid "+C.bd}}><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><EnvelopeIcon size={12} weight="bold"/><span>Email{faltaContacto?" o WhatsApp *":""}</span></span>} br para="ff-contacto"><input style={{...inp,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} id="ff-contacto" type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><WhatsappLogoIcon size={12} weight="bold"/><span>WhatsApp{faltaContacto?" o email *":""}</span></span>} br para="ff-whatsapp"><div style={{display:"flex",gap:4}}><select aria-label="Lada" style={{...inp,width:70,padding:"10px 4px",fontSize:F.body}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">+52 MX</option><option value="+1">+1 EU</option></select><input id="ff-whatsapp" style={{...inp,flex:1,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC" req={isNewClient&&!candadoCliente} para="ff-rfc"><input id="ff-rfc" style={candadoCliente?{...inp,background:C.sf,color:C.t2,cursor:"not-allowed"}:inp} value={f.client_rfc} onChange={e=>!candadoCliente&&s("client_rfc",e.target.value.toUpperCase())} readOnly={candadoCliente} disabled={candadoCliente} title={candadoCliente?porQueCliente:undefined} placeholder="XAXX010101000" maxLength={13}/></FC></div>{candadoCliente&&<div role="note" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:F.label,color:C.t2,lineHeight:1.45}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{porQueCliente}</span></div>}</>}
+    <div style={{display:"grid",gridTemplateColumns:angosta?"1fr":"minmax(0,1fr) minmax(0,1.1fr) minmax(0,0.85fr)",borderBottom:"0.5px solid "+C.bd}}><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><EnvelopeIcon size={12} weight="bold"/><span>Email{faltaContacto?" o WhatsApp *":""}</span></span>} br para="ff-contacto" falta={falta("Contacto (Email o WhatsApp)")?"Falta el correo o el WhatsApp":null}><input style={{...inp,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} aria-invalid={falta("Contacto (Email o WhatsApp)")||undefined} aria-describedby={falta("Contacto (Email o WhatsApp)")?"ff-contacto-falta":undefined} id="ff-contacto" type="email" value={f.client_email} onChange={e=>s("client_email",e.target.value)} placeholder="correo@ej.com"/></FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><WhatsappLogoIcon size={12} weight="bold"/><span>WhatsApp{faltaContacto?" o email *":""}</span></span>} br para="ff-whatsapp"><div style={{display:"flex",gap:4}}><select aria-label="Lada" style={{...inp,width:70,padding:"10px 4px",fontSize:F.body}} value={f.client_lada||"+52"} onChange={e=>s("client_lada",e.target.value)}><option value="+52">+52 MX</option><option value="+1">+1 EU</option></select><input id="ff-whatsapp" aria-invalid={falta("Contacto (Email o WhatsApp)")||undefined} aria-describedby={falta("Contacto (Email o WhatsApp)")?"ff-contacto-falta":undefined} style={{...inp,flex:1,border:contactBorder(f.client_email?.trim()||f.client_phone?.trim())}} type="tel" value={f.client_phone} onChange={e=>s("client_phone",e.target.value)} placeholder="55 1234 5678"/></div></FC><FC label="RFC" req={isNewClient&&!candadoCliente} para="ff-rfc" falta={falta("RFC (razón social nueva)")?"Falta el RFC (es un cliente nuevo)":null}><input id="ff-rfc" aria-invalid={falta("RFC (razón social nueva)")||undefined} aria-describedby={falta("RFC (razón social nueva)")?"ff-rfc-falta":undefined} style={candadoCliente?{...inp,background:C.sf,color:C.t2,cursor:"not-allowed"}:{...inp,border:errBorder(!falta("RFC (razón social nueva)"))}} value={f.client_rfc} onChange={e=>!candadoCliente&&s("client_rfc",e.target.value.toUpperCase())} readOnly={candadoCliente} disabled={candadoCliente} title={candadoCliente?porQueCliente:undefined} placeholder="XAXX010101000" maxLength={13}/></FC></div>{avisoCliente&&<div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"9px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:F.label,color:avisoCliente.tipo==="rfc"?C.wnTx:C.t2,lineHeight:1.45}}><InfoIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{avisoCliente.texto}</span></div>}{candadoCliente&&<div role="note" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:F.label,color:C.t2,lineHeight:1.45}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{porQueCliente}</span></div>}</>}
   </>;
   const bReplicar=<>
     {/* v10.45.0 — Replicar de orden anterior: visible al crear (no editar) cuando hay cliente capturado */}
@@ -12648,7 +12721,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   </>;
   const bTipoCantidadEntrega=<>
     {/* v10.84.79 — Tipo, Cantidad y Entrega en un renglón: lo primero que se sabe de un trabajo, junto (Cantidad estaba a 1,600 px) */}
-    <div style={{display:"grid",gridTemplateColumns:specsOnly||angosta?"1fr":"minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req br={!specsOnly&&!angosta} para="ff-tipo">
+    <div style={{display:"grid",gridTemplateColumns:specsOnly||angosta?"1fr":"minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req br={!specsOnly&&!angosta} para="ff-tipo" falta={falta("Tipo de Producto")?"Falta el tipo":null}>
       {/* v10.34.2 — Combobox typeahead con keyboard nav, accent-insensitive, focus en "Otro", normalize casing onBlur */}
       {(()=>{
         const isOtro=f.product_type==="Otro";
@@ -12663,7 +12736,9 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
             id="ff-tipo"
             style={{...inp,paddingRight:32,border:errBorder(!!(f.product_type||"").trim()&&f.product_type!=="Otro")}}
             value={isOtro?"":(f.product_type||"")}
-            onChange={e=>{s("product_type",e.target.value);setProdTypeHl(0)}}
+            onChange={e=>{s("product_type",e.target.value);setProdTypeHl(0);setProdTypeOpen(true)}}
+            role="combobox" aria-expanded={prodTypeOpen} aria-controls="ff-tipo-lista" aria-autocomplete="list" aria-activedescendant={prodTypeOpen?"ff-tipo-op-"+hl:undefined}
+            aria-invalid={falta("Tipo de Producto")||undefined} aria-describedby={falta("Tipo de Producto")?"ff-tipo-falta":undefined}
             onFocus={()=>{setProdTypeOpen(true);setProdTypeHl(0)}}
             onBlur={()=>setTimeout(()=>{
               setProdTypeOpen(false);
@@ -12675,26 +12750,28 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
               }
             },200)}
             onKeyDown={e=>{
-              if(!prodTypeOpen)return;
+              // v10.84.80 — con la lista cerrada, la flecha abajo la abre; Tab la cierra y sigue (lo escrito se queda)
+              if(!prodTypeOpen){if(e.key==="ArrowDown"){e.preventDefault();setProdTypeOpen(true)}return}
+              if(e.key==="Tab"){setProdTypeOpen(false);return}
               if(e.key==="ArrowDown"){e.preventDefault();setProdTypeHl(h=>Math.min(matches.length,h+1))}
               else if(e.key==="ArrowUp"){e.preventDefault();setProdTypeHl(h=>Math.max(0,h-1))}
               else if(e.key==="Enter"){
                 e.preventDefault();
-                if(hl<matches.length){s("product_type",matches[hl]);setProdTypeOpen(false);prodTypeInputRef.current?.blur()}
+                if(hl<matches.length){s("product_type",matches[hl]);setProdTypeOpen(false)}   // v10.84.80 — el foco se queda en el campo (caía a <body>)
                 // v10.84.78 — sin coincidencias, Enter acepta lo escrito (la lista prometía «se guardará como "…"» y lo borraba)
-                else if(q.trim()&&matches.length===0){setProdTypeOpen(false);prodTypeInputRef.current?.blur()}
+                else if(q.trim()&&matches.length===0){setProdTypeOpen(false)}
                 else{s("product_type","Otro");setProdTypeOpen(false);prodTypeInputRef.current?.focus()}
               }
-              else if(e.key==="Escape"){e.preventDefault();setProdTypeOpen(false);prodTypeInputRef.current?.blur()}
+              else if(e.key==="Escape"){e.preventDefault();setProdTypeOpen(false)}
             }}
             placeholder={isOtro?"Escribe el tipo personalizado...":"Escribe o busca un tipo..."}
             autoComplete="off"
           />
           <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:F.meta,color:C.t3,pointerEvents:"none"}}>{prodTypeOpen?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}</span>
-          {prodTypeOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:C.sh3}}>
-            {matches.map((t,i)=><div key={t} onMouseDown={e=>{e.preventDefault();s("product_type",t);setProdTypeOpen(false)}} onMouseEnter={()=>setProdTypeHl(i)} style={{padding:"8px 12px",cursor:"pointer",fontSize:F.body,borderBottom:"0.5px solid "+C.bd,background:i===hl?C.ac+"15":(f.product_type===t?C.ac+"08":"transparent")}}>{t}</div>)}
+          {prodTypeOpen&&<div id="ff-tipo-lista" role="listbox" aria-label="Tipos de producto" style={{position:"absolute",top:"100%",left:0,right:0,background:C.bg,border:"1px solid "+C.bd,borderRadius:8,maxHeight:280,overflowY:"auto",zIndex:10,marginTop:2,boxShadow:C.sh3}}>
+            {matches.map((t,i)=><div key={t} id={"ff-tipo-op-"+i} role="option" aria-selected={i===hl} onMouseDown={e=>{e.preventDefault();s("product_type",t);setProdTypeOpen(false)}} onMouseEnter={()=>setProdTypeHl(i)} style={{padding:"8px 12px",cursor:"pointer",fontSize:F.body,borderBottom:"0.5px solid "+C.bd,background:i===hl?C.ac+"15":(f.product_type===t?C.ac+"08":"transparent")}}>{t}</div>)}
             {matches.length===0&&q&&<div style={{padding:"8px 12px",fontSize:F.body,color:C.t3,fontStyle:"italic"}}>Sin coincidencias en lista — se guardará como "{f.product_type}"</div>}
-            <div onMouseDown={e=>{
+            <div id={"ff-tipo-op-"+matches.length} role="option" aria-selected={matches.length===hl} onMouseDown={e=>{
               e.preventDefault();
               // v10.34.2 fix #4 — refocus input para que user vea claro que está en modo "Otro" y escriba
               s("product_type","Otro");
@@ -12704,7 +12781,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           </div>}
         </div>;
       })()}
-    </FC>{!specsOnly&&<><FC label="Cantidad" req br para="ff-cantidad"><input id="ff-cantidad" style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="numeric" value={valorNum("quantity")} onChange={e=>!candadoCantidad&&teclear("quantity",e.target.value)} aria-describedby={numMalos.includes("quantity")?"err-quantity":undefined} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{errNum("quantity")}{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec para="ff-entrega"><input id="ff-entrega" style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/>{f.due_date&&f.due_date<hoyISO&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esa fecha ya pasó ({new Date(f.due_date+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}).</span></div>}<button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.body,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC></>}</div>
+    </FC>{!specsOnly&&<><FC label="Cantidad" req br para="ff-cantidad" falta={falta("Cantidad")?"Falta la cantidad":null}><input id="ff-cantidad" aria-invalid={falta("Cantidad")||undefined} style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="numeric" value={valorNum("quantity")} onChange={e=>!candadoCantidad&&teclear("quantity",e.target.value)} aria-describedby={[numMalos.includes("quantity")?"err-quantity":null,falta("Cantidad")?"ff-cantidad-falta":null].filter(Boolean).join(" ")||undefined} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{errNum("quantity")}{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec para="ff-entrega"><input id="ff-entrega" style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/>{f.due_date&&f.due_date<hoyISO&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esa fecha ya pasó ({new Date(f.due_date+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}).</span></div>}<button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.body,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC></>}</div>
   </>;
   const bModo=<>
     {!isMaq&&!specsOnly&&<div style={{padding:"10px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{...lbl,marginBottom:0}}>Modo de captura</span><div role="group" aria-label="Modo de captura" style={{display:"flex",gap:4,background:C.bg,borderRadius:10,padding:3,boxShadow:"0 0 0 1px "+C.bd}}><button type="button" aria-pressed={!advMode} onClick={()=>setAdvMode(false)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:"none",background:!advMode?C.acL:"transparent",color:!advMode?C.ac:C.t2,cursor:"pointer",fontSize:F.body,fontWeight:!advMode?700:500,fontFamily:"'Geist',sans-serif"}}><ClipboardTextIcon size={13} weight="bold"/>Sencillo</button><button type="button" aria-pressed={advMode} onClick={()=>setAdvMode(true)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:8,border:"none",background:advMode?C.acL:"transparent",color:advMode?C.ac:C.t2,cursor:"pointer",fontSize:F.body,fontWeight:advMode?700:500,fontFamily:"'Geist',sans-serif"}}><BookOpenIcon size={13} weight="bold"/>Avanzado</button></div><span style={{fontSize:F.body,color:C.t2}}>{!advMode?"Etiquetas, flyers, volantes: descripción rápida":"Libros, cuadernos: todos los datos técnicos"}</span></div>}
@@ -12715,14 +12792,36 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const bDatosTecnicos=<>
     {!specsOnly&&(advMode||isMaq)&&<div style={{borderBottom:"0.5px solid "+C.bd}}><FC label={isMaq?<span style={{display:"inline-flex",alignItems:"center",gap:5}}><NotePencilIcon size={12} weight="bold"/>Descripción del trabajo</span>:<span style={{display:"inline-flex",alignItems:"center",gap:5}}><BookOpenIcon size={12} weight="bold"/>Datos Técnicos Completos</span>} para="ff-descripcion"><div style={{background:(isMaq?C.maq:C.ac)+"08",borderRadius:12,padding:2}}><textarea id="ff-descripcion" style={{...inp,minHeight:180,resize:"vertical",lineHeight:1.7,fontSize:F.label}} value={f.product} onChange={e=>s("product",e.target.value)} placeholder={isMaq?"Describe el trabajo completo para el proveedor:\n\nEjemplo:\n1,000 Calendarios de pared tamaño tabloide\nEngargolado doble aro metálico\n13 hojas interiores couché 150g a 4×4 tintas\nPortada cartulina 300g con laminado mate\nBase de cartón gris\nMedida final: 28 × 43 cm":"Escribe TODOS los datos técnicos del trabajo:\n\nEjemplo:\nLibro 100 páginas + portada\nPortada: Couché 300g, 4×0 tintas, laminado mate\nInteriores: Bond 90g, 1×1 tinta\nTamaño: 21.5 × 28 cm (carta)\nEncuadernado: Hot melt\nAcabados: Suaje, barniz UV selectivo en portada\nTintas especiales: Pantone 186C en lomo"}/></div>{!isMaq&&<div style={{fontSize:F.body,color:C.t2,marginTop:4}}>Incluye: papel, gramaje, tintas, medidas, acabados, encuadernado y cualquier detalle técnico.</div>}</FC></div>}
   </>;
-  const bVendedor=<>
-    {!specsOnly&&canP&&(()=>{const agentRequired=(!editOrder||editOrder?._fromOC)||(editOrder&&!editOrder._fromOC&&editOrder.source==="internal"&&editOrder.agent&&String(editOrder.agent).trim());const agentInvalid=agentRequired&&!(f.agent&&f.agent.trim()&&f.agent!=="otro");return <div id="ff-agent" style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:tried&&agentInvalid?C.dnInk:undefined}}><UserIcon size={12} weight="bold"/>Nuestro vendedor{agentRequired&&" *"}</label><div style={{fontSize:F.body,color:C.t2,margin:"-2px 0 8px"}}>El agente de ventas de SYGMA que lleva este trabajo y cobra su comisión.</div>{tried&&agentInvalid&&<div style={{fontSize:F.body,color:C.dnInk,fontWeight:600,marginBottom:6}}>Elige quién es nuestro vendedor (obligatorio).</div>}<div role="group" aria-label="Nuestro vendedor" style={{display:"flex",gap:6,flexWrap:"wrap"}}>{AGENTS.map(a=><button key={a} type="button" disabled={candadoVendedor} aria-pressed={f.agent===a} onClick={()=>{agentTouchedRef.current=true;s("agent",a)}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent===a?C.ac:C.bd),background:f.agent===a?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent===a?700:500,color:f.agent===a?C.ac:C.t2,fontFamily:"'Geist',sans-serif",...(candadoVendedor?{opacity:.55,cursor:"not-allowed"}:{})}}>{a}</button>)}<button type="button" disabled={candadoVendedor} aria-pressed={!!f.agent&&!AGENTS.includes(f.agent)} onClick={()=>{agentTouchedRef.current=true;s("agent",f.agent&&!AGENTS.includes(f.agent)?f.agent:"otro")}} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.agent&&!AGENTS.includes(f.agent)?C.ac:C.bd),background:f.agent&&!AGENTS.includes(f.agent)?C.acL:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.agent&&!AGENTS.includes(f.agent)?700:500,color:f.agent&&!AGENTS.includes(f.agent)?C.ac:C.t2,fontFamily:"'Geist',sans-serif",...(candadoVendedor?{opacity:.55,cursor:"not-allowed"}:{})}}>Otro...</button></div>{candadoVendedor&&<div style={{marginTop:8,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.label,color:C.t2,lineHeight:1.45}}><LockIcon size={12} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>El vendedor de una orden lo cambia Lupita o Dirección.</span></div>}{f.agent&&!AGENTS.includes(f.agent)&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>{if(candadoVendedor)return;agentTouchedRef.current=true;s("agent",e.target.value||"otro")}} readOnly={candadoVendedor} disabled={candadoVendedor} aria-label="Nombre del vendedor" placeholder="Nombre del vendedor"/>}
-      {/* v10.74.6 (scan w4c9bpdbf #14) — un nombre libre que no está en la lista NO resuelve a ningún
-          vendedor: la venta se factura sin vendedor y la comisión se pierde en silencio. */}
-      {f.agent&&f.agent!=="otro"&&!AGENTS.includes(f.agent)&&<div style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>"{f.agent}" no es un vendedor del sistema: esta venta <b>no generará comisión</b>. Si debe comisionar, elige uno de los botones.</span></div>}
-      {/* v10.74.6 (scan w4c9bpdbf #10) — cambiar el agente de una orden YA facturada no mueve la
-          comisión: esa vive en la factura (CobranzaFlow), no en la orden. */}
-      {editOrder&&!editOrder._fromOC&&editOrder.invoice_folio&&<div style={{marginTop:6,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esta orden ya está facturada ({editOrder.invoice_folio}). Cambiar el vendedor aquí <b>no mueve la comisión</b>: hazlo en CobranzaFlow → Comisiones → botón "Cambiar".</span></div>}</div>})()}
+  // v10.84.80 — vendedor y precio JUNTO al tipo, la cantidad y la entrega: a 1366 con el menú abierto quedaban bajo el pie (739 y 835 px,
+  //   el pie en 677). El vendedor es una lista: ocho botones eran ocho paradas de Tab, dos renglones y la decisión más larga de la forma;
+  //   apagados con opacidad (el vendedor que edita) se leían a 2.19:1. Con candado, el nombre y su porqué, como el cliente.
+  const agentRequired=(!editOrder||editOrder?._fromOC)||(editOrder&&!editOrder._fromOC&&editOrder.source==="internal"&&editOrder.agent&&String(editOrder.agent).trim());
+  const agentInvalid=!!agentRequired&&!(f.agent&&f.agent.trim()&&f.agent!=="otro");
+  const agenteLibre=!!f.agent&&!AGENTS.includes(f.agent);
+  const muestraVend=!specsOnly&&canP, muestraPrecio=!isMaq&&canP;
+  const bVendedorPrecio=<>
+    {(muestraVend||muestraPrecio)&&<div style={{display:"grid",gridTemplateColumns:angosta||!(muestraVend&&muestraPrecio)?"1fr":"minmax(0,1fr) minmax(0,1fr)",borderBottom:"0.5px solid "+C.bd}}>
+      {muestraVend&&<FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><UserIcon size={12} weight="bold"/>Nuestro vendedor{candadoVendedor&&<LockIcon size={11} weight="bold"/>}</span>} req={!!agentRequired&&!candadoVendedor} br={!angosta&&muestraPrecio} para="ff-agent" falta={tried&&agentInvalid&&!candadoVendedor?"Falta quién es nuestro vendedor":null}>
+        {candadoVendedor?<div id="ff-agent" aria-readonly="true" style={{...inp,display:"flex",alignItems:"center",gap:7,background:C.sf,color:C.t2,cursor:"not-allowed"}}><LockIcon size={12} weight="bold" style={{flexShrink:0}}/>{f.agent&&f.agent!=="otro"?f.agent:"Sin vendedor"}</div>
+        :<select id="ff-agent" value={agenteLibre?"otro":(f.agent||"")} onChange={e=>{agentTouchedRef.current=true;const v=e.target.value;s("agent",v==="otro"?(agenteLibre&&f.agent!=="otro"?f.agent:"otro"):v)}} aria-invalid={(tried&&agentInvalid)||undefined} aria-describedby={tried&&agentInvalid?"ff-agent-falta ff-agent-ayuda":"ff-agent-ayuda"} style={{...inp,border:errBorder(!agentInvalid),cursor:"pointer"}}>
+          <option value="">Elige al vendedor</option>
+          {AGENTS.map(a=><option key={a} value={a}>{a}</option>)}
+          <option value="otro">Otro (escribir el nombre)</option>
+        </select>}
+        {!candadoVendedor&&agenteLibre&&<input style={{...inp,marginTop:8}} value={f.agent==="otro"?"":f.agent} onChange={e=>{agentTouchedRef.current=true;s("agent",e.target.value||"otro")}} aria-label="Nombre del vendedor" placeholder="Nombre del vendedor"/>}
+        <div id="ff-agent-ayuda" style={{fontSize:F.body,color:C.t2,marginTop:5,lineHeight:1.4}}>{candadoVendedor?"El vendedor de una orden lo cambia Lupita o Dirección.":"El de SYGMA que lleva el trabajo y cobra la comisión."}</div>
+      </FC>}
+      {muestraPrecio&&<FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){precioBloqueado&&<LockIcon size={11} weight="bold"/>}</span>} para="ff-precio">
+        <input id="ff-precio" style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="decimal" value={valorNum("price")} onChange={e=>!precioBloqueado&&teclear("price",e.target.value)} aria-describedby={numMalos.includes("price")?"err-price":undefined} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0.00" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{errNum("price")}
+        {porQuePrecio&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{porQuePrecio}</span></div>}
+        <div style={{fontSize:F.body,color:C.t2,marginTop:5,lineHeight:1.4}}>Captura el precio <b style={{color:C.tx}}>sin IVA</b>: el 16 % se agrega al facturar.</div>
+      </FC>}
+    </div>}
+    {/* v10.74.6 (scan w4c9bpdbf #14) — un nombre libre que no está en la lista NO resuelve a ningún vendedor: la venta se factura sin
+        vendedor y la comisión se pierde en silencio. */}
+    {muestraVend&&agenteLibre&&f.agent!=="otro"&&<div style={{padding:"8px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>"{f.agent}" no es un vendedor del sistema: esta venta <b>no generará comisión</b>. Si debe comisionar, elige uno de la lista.</span></div>}
+    {/* v10.74.6 (scan w4c9bpdbf #10) — cambiar el vendedor de una orden YA facturada no mueve la comisión: esa vive en la factura. */}
+    {muestraVend&&editOrder&&!editOrder._fromOC&&editOrder.invoice_folio&&<div style={{padding:"8px 20px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"flex-start",gap:6,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.45}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esta orden ya está facturada ({editOrder.invoice_folio}). Cambiar el vendedor aquí <b>no mueve la comisión</b>: hazlo en CobranzaFlow → Comisiones → botón "Cambiar".</span></div>}
   </>;
   const bCandadoPrecio=<>
     {/* v10.58.26: banner si folio pre-asignado bloquea precios */}
@@ -12730,10 +12829,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     {financialsLocked&&<div style={{margin:"12px 20px",padding:"10px 14px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:F.label,color:C.wnTx,lineHeight:1.45,display:"flex",alignItems:"flex-start",gap:8}}><LockIcon size={13} weight="bold" style={{flexShrink:0,marginTop:2}}/><span>{editOrder?.return_covered_by_folio?<><strong>Re-trabajo cubierto por {editOrder.return_covered_by_folio}.</strong> Va a costo de la imprenta: el precio de venta queda en $0 (sin segunda factura).</>:editOrder?.invoice_folio?<><strong>{editOrder.invoice_folio} ya está asignado a esta orden.</strong> El precio al cliente no se cambia aquí (sólo Dirección); el costo del proveedor y lo demás, sí.</>:<><strong>La orden ya está facturada ({queFactura||"por partes"}).</strong> El precio no se cambia aquí: las facturas ya hechas no lo seguirían. Se ajusta en CobranzaFlow.</>}</span></div>}
   </>;
   const bMaquila=<>
-    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.wnTx,textTransform:"uppercase",letterSpacing:.5}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label htmlFor="ff-maq" style={lbl}>Proveedor *</label><input id="ff-maq" style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}><FC label="Costo" br para="ff-maq-costo"><input id="ff-maq-costo" style={inp} inputMode="decimal" value={valorNum("maq_cost")} onChange={e=>teclear("maq_cost",e.target.value)} aria-describedby={numMalos.includes("maq_cost")?"err-maq_cost":undefined} placeholder="$0"/>{errNum("maq_cost")}</FC><FC label={precioBloqueado?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente (sin IVA) <LockIcon size={11} weight="bold"/></span>:"Precio cliente (sin IVA)"} br para="ff-maq-precio"><input id="ff-maq-precio" style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="decimal" value={valorNum("maq_price")} onChange={e=>!precioBloqueado&&teclear("maq_price",e.target.value)} aria-describedby={numMalos.includes("maq_price")?"err-maq_price":undefined} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{errNum("maq_price")}{porQuePrecio&&<div style={{marginTop:4,fontSize:F.body,color:C.t2,lineHeight:1.4}}>{porQuePrecio}</div>}</FC><FC label="% Ganancia"><div title={"Margen sobre el PRECIO DE VENTA: ganancia ÷ precio cliente = (precio − costo) ÷ precio."+(maqMarkup!=null?"\n\nEjemplo: cobras "+fmt(f.maq_price)+" con costo "+fmt(f.maq_cost)+" → ganas "+fmt(Number(f.maq_price)-Number(f.maq_cost))+".\n• "+margin+"% sobre venta (esta tarjeta)\n• "+maqMarkup+"% sobre costo (cuanto le subiste al proveedor)\n\nMismo dinero de ganancia, distinta base. El de venta siempre sale mas bajo.":"")} style={{padding:10,background:"#fff",borderRadius:12,fontSize:F.title,fontWeight:800,color:margin!==null?(margin>=20?C.okTx:margin>=10?C.wnTx:C.dnInk):C.t2,textAlign:"center",cursor:"help"}}>{margin!==null?margin+"%":"—"}</div><div style={{fontSize:F.body,color:C.t2,textAlign:"center",marginTop:4,lineHeight:1.35}}>margen s/ venta{maqMarkup!=null?<> · <b style={{color:C.t2,fontWeight:700}}>{maqMarkup}%</b> s/ costo</>:null}</div></FC></div><div style={{padding:"0 20px 12px",borderBottom:"0.5px solid "+C.bd,fontSize:F.body,color:C.t2,lineHeight:1.4}}>El costo y el precio al cliente van <b style={{color:C.tx}}>sin IVA</b>: el 16 % se agrega al facturar.</div></>}
-  </>;
-  const bPrecio=<>
-    {!isMaq&&canP&&<div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label htmlFor="ff-precio" style={{...lbl,display:"flex",alignItems:"center",gap:5}}><CurrencyDollarIcon size={12} weight="bold"/>Precio MXN (sin IVA){precioBloqueado&&<LockIcon size={11} weight="bold" style={{marginLeft:2}}/>}</label><input id="ff-precio" style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="decimal" value={valorNum("price")} onChange={e=>!precioBloqueado&&teclear("price",e.target.value)} aria-describedby={numMalos.includes("price")?"err-price":undefined} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0.00" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{errNum("price")}{porQuePrecio&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{porQuePrecio}</span></div>}<div style={{fontSize:F.body,color:C.t2,marginTop:5,lineHeight:1.4}}>Captura el precio <b style={{color:C.tx}}>sin IVA</b>: el 16 % se agrega al facturar.</div></div>}
+    {isMaq&&!specsOnly&&<><div style={{display:"flex",alignItems:"center",gap:6,padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.wnTx,textTransform:"uppercase",letterSpacing:.5}}><TruckIcon size={13} weight="bold"/>Maquila</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label htmlFor="ff-maq" style={lbl}>Proveedor *</label><input id="ff-maq" aria-invalid={falta("Proveedor (Maquila)")||undefined} aria-describedby={falta("Proveedor (Maquila)")?"ff-maq-falta":undefined} style={{...inp,border:errBorder(f.maq_provider?.trim())}} value={f.maq_provider} onChange={e=>s("maq_provider",e.target.value)} placeholder="Nombre"/>{falta("Proveedor (Maquila)")&&<div id="ff-maq-falta" style={{marginTop:5,fontSize:F.body,fontWeight:600,color:C.dnInk}}>Falta el proveedor</div>}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr"}}><FC label="Costo" br para="ff-maq-costo"><input id="ff-maq-costo" style={inp} inputMode="decimal" value={valorNum("maq_cost")} onChange={e=>teclear("maq_cost",e.target.value)} aria-describedby={numMalos.includes("maq_cost")?"err-maq_cost":undefined} placeholder="$0"/>{errNum("maq_cost")}</FC><FC label={precioBloqueado?<span style={{display:"inline-flex",alignItems:"center",gap:5}}>Precio cliente (sin IVA) <LockIcon size={11} weight="bold"/></span>:"Precio cliente (sin IVA)"} br para="ff-maq-precio"><input id="ff-maq-precio" style={{...inp,...(precioBloqueado?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="decimal" value={valorNum("maq_price")} onChange={e=>!precioBloqueado&&teclear("maq_price",e.target.value)} aria-describedby={numMalos.includes("maq_price")?"err-maq_price":undefined} readOnly={precioBloqueado} disabled={precioBloqueado} placeholder="$0" title={precioBloqueado?(porQuePrecio||"No se cambia aquí: ver el aviso del candado"):""}/>{errNum("maq_price")}{porQuePrecio&&<div style={{marginTop:4,fontSize:F.body,color:C.t2,lineHeight:1.4}}>{porQuePrecio}</div>}</FC><FC label="% Ganancia"><div title={"Margen sobre el PRECIO DE VENTA: ganancia ÷ precio cliente = (precio − costo) ÷ precio."+(maqMarkup!=null?"\n\nEjemplo: cobras "+fmt(f.maq_price)+" con costo "+fmt(f.maq_cost)+" → ganas "+fmt(Number(f.maq_price)-Number(f.maq_cost))+".\n• "+margin+"% sobre venta (esta tarjeta)\n• "+maqMarkup+"% sobre costo (cuanto le subiste al proveedor)\n\nMismo dinero de ganancia, distinta base. El de venta siempre sale mas bajo.":"")} style={{padding:10,background:"#fff",borderRadius:12,fontSize:F.title,fontWeight:800,color:margin!==null?(margin>=20?C.okTx:margin>=10?C.wnTx:C.dnInk):C.t2,textAlign:"center",cursor:"help"}}>{margin!==null?margin+"%":"—"}</div><div style={{fontSize:F.body,color:C.t2,textAlign:"center",marginTop:4,lineHeight:1.35}}>margen s/ venta{maqMarkup!=null?<> · <b style={{color:C.t2,fontWeight:700}}>{maqMarkup}%</b> s/ costo</>:null}</div></FC></div><div style={{padding:"0 20px 12px",borderBottom:"0.5px solid "+C.bd,fontSize:F.body,color:C.t2,lineHeight:1.4}}>El costo y el precio al cliente van <b style={{color:C.tx}}>sin IVA</b>: el 16 % se agrega al facturar.</div></>}
   </>;
   const bEspecificaciones=<>
     {!isMaq&&(specsOnly||(editOrder&&!advMode)||(!editOrder&&!advMode))&&<><div style={{padding:"12px 20px 4px",fontSize:F.meta,fontWeight:700,color:C.t2,textTransform:"uppercase",letterSpacing:.5}}>Especificaciones</div>{specsOnly&&f.product&&<div style={{padding:"4px 20px 8px",borderBottom:"0.5px solid "+C.bd}}><div style={{display:"flex",alignItems:"center",gap:5,fontSize:F.body,fontWeight:600,color:C.t2,marginBottom:2}}><NotePencilIcon size={11} weight="bold"/>Descripción:</div><div style={{fontSize:F.body,color:C.tx,lineHeight:1.5,whiteSpace:"pre-wrap",background:C.sf,borderRadius:8,padding:"6px 10px"}}>{f.product}</div></div>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Papel" rec br para="ff-papel"><input id="ff-papel" style={inp} value={f.paper_type} onChange={e=>s("paper_type",e.target.value)} placeholder="Ejemplo · Couché, Bond..."/></FC><FC label="Gramaje (grs)" para="ff-gramaje"><input id="ff-gramaje" style={inp} inputMode="numeric" value={valorNum("paper_grammage")} onChange={e=>teclear("paper_grammage",e.target.value)} aria-describedby={numMalos.includes("paper_grammage")?"err-paper_grammage":undefined} placeholder="Ejemplo · 150"/>{errNum("paper_grammage")}</FC></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"0.5px solid "+C.bd}}><FC label="Tintas Frente" br para="ff-tintas-frente"><input id="ff-tintas-frente" style={inp} value={f.ink_front} onChange={e=>s("ink_front",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC><FC label="Tintas Vuelta" para="ff-tintas-vuelta"><input id="ff-tintas-vuelta" style={inp} value={f.ink_back} onChange={e=>s("ink_back",e.target.value)} placeholder="Ejemplo · 4 tintas, CMYK"/></FC></div><PantoneInput label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><PaletteIcon size={12} weight="bold"/>Pantones Frente</span>} nombre="Pantones del frente" value={f.pantone_front||[]} onChange={v=>s("pantone_front",v)}/><PantoneInput label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><PaletteIcon size={12} weight="bold"/>Pantones Vuelta</span>} nombre="Pantones de la vuelta" value={f.pantone_back||[]} onChange={v=>s("pantone_back",v)}/><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Medida final</label><div style={{display:"flex",gap:6,marginTop:4,marginBottom:8}}><button type="button" aria-pressed={!f.standard_size} onClick={()=>{s("standard_size","")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(!f.standard_size?C.ac:C.bd),background:!f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:!f.standard_size?700:500,color:!f.standard_size?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}><NotePencilIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Medida en cm</button><button type="button" aria-pressed={!!f.standard_size} onClick={()=>{if(!f.standard_size)s("standard_size","carta")}} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(f.standard_size?C.ac:C.bd),background:f.standard_size?C.ac+"15":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.standard_size?700:500,color:f.standard_size?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}><RulerIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Tamaño estándar</button></div>{f.standard_size?(()=>{const groups={};STANDARD_SIZES.forEach(sz=>{(groups[sz.group]=groups[sz.group]||[]).push(sz)});return <select aria-label="Tamaño estándar" style={inp} value={f.standard_size} onChange={e=>s("standard_size",e.target.value)}>{Object.entries(groups).map(([g,szs])=><optgroup key={g} label={g}>{szs.map(sz=><option key={sz.id} value={sz.id}>{sz.label} ({sz.w.toFixed(1)} × {sz.h.toFixed(1)} cm)</option>)}</optgroup>)}</select>})():<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><div><label htmlFor="ff-ancho" style={lbl}>Ancho (cm)</label><input id="ff-ancho" aria-label="Ancho (cm)" style={inp} inputMode="decimal" value={valorNum("width_cm")} onChange={e=>teclear("width_cm",e.target.value)} aria-describedby={numMalos.includes("width_cm")?"err-width_cm":undefined}/>{errNum("width_cm")}</div><div><label htmlFor="ff-alto" style={lbl}>Alto (cm)</label><input id="ff-alto" aria-label="Alto (cm)" style={inp} inputMode="decimal" value={valorNum("height_cm")} onChange={e=>teclear("height_cm",e.target.value)} aria-describedby={numMalos.includes("height_cm")?"err-height_cm":undefined}/>{errNum("height_cm")}</div></div>}</div><div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={lbl}>Acabados</label><div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>{[...FINISHES_TOP,...(showMoreFin?FINISHES_REST:FINISHES_REST.filter(fn=>finHas(f.finishes,fn)))].map(fin=>{const active=finHas(f.finishes,fin);return <button key={fin} type="button" aria-pressed={active} onClick={()=>{s("finishes",active?finWithout(f.finishes,fin):finWith(f.finishes,fin,""));if(fin==="Blocks")setBlocksRaw("");else if(fin==="Folio")setFolioRaw("")}} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(active?C.ac:C.bd),background:active?C.ac+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:active?700:500,color:active?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{active?"✓ ":""}{fin}</button>})}{(()=>{const _nh=FINISHES_REST.filter(fn=>!finHas(f.finishes,fn)).length;return (showMoreFin||_nh>0)?<button type="button" onClick={()=>setShowMoreFin(v=>!v)} aria-expanded={showMoreFin} style={{padding:"6px 10px",borderRadius:8,border:"1.5px dashed "+C.bd,background:C.bg,cursor:"pointer",fontSize:F.body,fontWeight:600,color:C.t2,fontFamily:"'Geist',sans-serif"}} title={showMoreFin?"Mostrar solo los más usados":"Mostrar acabados menos frecuentes"}>{showMoreFin?"− Menos":"+ Más ("+_nh+")"}</button>:null})()}<button type="button" aria-pressed={showOtroFinish} onClick={()=>setShowOtroFinish(!showOtroFinish)} style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid "+(showOtroFinish?C.ac:C.bd),background:showOtroFinish?C.ac+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:showOtroFinish?700:500,color:showOtroFinish?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{showOtroFinish?"✓ ":""}Otro...</button></div>{finHas(f.finishes,"Plastificado")&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:F.body,fontWeight:600,color:C.ac}}>Plastificado:</span>{["Mate","Brillante"].map(t=>{const sel=finGetDetail(f.finishes,"Plastificado")===t;return <button key={t} type="button" aria-pressed={sel} onClick={()=>s("finishes",finWith(f.finishes,"Plastificado",t))} style={{padding:"5px 12px",borderRadius:8,border:"1.5px solid "+(sel?C.ac:C.bd),background:sel?C.ac+"15":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:sel?700:500,color:sel?C.ac:C.t2,fontFamily:"'Geist',sans-serif"}}>{t}</button>})}</div>}{finHas(f.finishes,"Blocks")&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:F.body,fontWeight:600,color:C.ac}}>Blocks:</span><input aria-label="Blocks: de cuántas hojas" style={{...inp,maxWidth:260}} value={blocksRaw} onChange={e=>{const v=e.target.value.replace(/,/g," ");setBlocksRaw(v);s("finishes",finWith(f.finishes,"Blocks",v))}} placeholder="Ej. EN BLOCKS DE 100"/></div>}{finHas(f.finishes,"Folio")&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:F.body,fontWeight:600,color:C.ac}}>Folio del:</span><input aria-label="Folio: del número al número" style={{...inp,maxWidth:260}} value={folioRaw} onChange={e=>{const v=e.target.value.replace(/,/g," ");setFolioRaw(v);s("finishes",finWith(f.finishes,"Folio",v))}} placeholder="Ej. 1000 al 2000"/></div>}{showOtroFinish&&<input aria-label="Otros acabados" style={{...inp,marginTop:8}} value={customFinish} onChange={e=>{const v=e.target.value;const prevCustom=new Set(customFinish.split(",").map(x=>x.trim()).filter(Boolean));const std=finList(f.finishes).filter(x=>!prevCustom.has(x));setCustomFinish(v);const custom=v.split(",").map(x=>x.trim()).filter(Boolean);s("finishes",[...std,...custom].join(", "))}} placeholder="Ej: Hot stamping, Foil, Troquel especial..."/>}</div></>}
@@ -12751,18 +12847,18 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       <button type="button" aria-pressed={f.plate_status==="existing"} onClick={()=>s("plate_status",f.plate_status==="existing"?"":"existing")} style={{padding:"8px 14px",borderRadius:10,border:"1.5px solid "+(f.plate_status==="existing"?C.ok:C.bd),background:f.plate_status==="existing"?C.ok+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:f.plate_status==="existing"?700:500,color:f.plate_status==="existing"?C.okTx:C.t2,fontFamily:"'Geist',sans-serif"}}>{f.plate_status==="existing"?"✓ ":""}<ArrowsClockwiseIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Ya existe (reutilizar)</button>
     </div>{f.plate_status==="existing"&&<div style={{marginTop:6,fontSize:F.body,color:C.okTx,fontWeight:600}}>Se reutiliza la placa: cuando Producción y Pre-prensa la validen, pasa directo a «Lista para imprimir».</div>}{f.plate_status==="new_ctp"&&<div style={{marginTop:6,fontSize:F.body,color:C.ac,fontWeight:600}}>Pasa por diseño y CTP.</div>}</div>}
     {/* v10.22.0 — Hasta 2 imágenes de referencia (compresión client-side via v10.16.0). */}
-    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t2}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><SignedImg src={val} alt="" fallback={<div style={{width:48,height:48,borderRadius:8,background:C.bg}}/>} style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={()=>{/* v10.84.77 — la × QUITA la imagen de la orden; del servidor sólo se limpia la que se subió en esta misma captura (nadie más la usa). Antes borraba al clic la imagen guardada (y «Cancelar» no la regresaba) y, tras un «Replicar» que no pudo copiar, la de la orden de origen */const campo=f[slot]?slot:"image",antes=f[campo];const pth=typeof antes==="string"?antes.split("/order-files/")[1]:null;const pd=pth?decodeURIComponent(pth):null;if(pd&&imgUploadsRef.current.has(pd)){imgUploadsRef.current.delete(pd);supabase.storage.from("order-files").remove([pd]).catch(()=>{})}else if(antes)setImgQuitadas(q=>({...q,[slot]:{campo,valor:antes}}));s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}{!val&&imgQuitadas[slot]&&<button type="button" onClick={()=>{const q=imgQuitadas[slot];s(q.campo,q.valor);setImgQuitadas(x=>{const y={...x};delete y[slot];return y})}} style={{...bs(C.sf,C.t2),flexShrink:0,fontSize:F.body,border:"0.5px solid "+C.bd}} title="Regresa la imagen que quitaste (no se borró)"><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button>}<label style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}<input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;setImgQuitadas(x=>{if(!x[slot])return x;const y={...x};delete y[slot];return y});if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}const prevUrl=f[slot];setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();/* v10.77.3 — el nombre del archivo se armaba con dos Date.now(): entropia CERO. 404 de los 468
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t2}}><CameraIcon size={12} weight="bold"/>Imágenes (opcional, hasta 2)</label><div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>{["image_url","image_url_2"].map((slot,idx)=>{const val=f[slot]||(idx===0?f.image:null);return <div key={slot} style={{display:"flex",alignItems:"center",gap:6,flex:"1 1 220px",minWidth:0}}>{val&&<div style={{position:"relative",flexShrink:0}}><SignedImg src={val} alt="" fallback={<div style={{width:48,height:48,borderRadius:8,background:C.bg}}/>} style={{width:48,height:48,objectFit:"cover",borderRadius:8}}/><button type="button" onClick={()=>{/* v10.84.77 — la × QUITA la imagen de la orden; del servidor sólo se limpia la que se subió en esta misma captura (nadie más la usa). Antes borraba al clic la imagen guardada (y «Cancelar» no la regresaba) y, tras un «Replicar» que no pudo copiar, la de la orden de origen */const campo=f[slot]?slot:"image",antes=f[campo];const pth=typeof antes==="string"?antes.split("/order-files/")[1]:null;const pd=pth?decodeURIComponent(pth):null;if(pd&&imgUploadsRef.current.has(pd)){imgUploadsRef.current.delete(pd);supabase.storage.from("order-files").remove([pd]).catch(()=>{})}else if(antes)setImgQuitadas(q=>({...q,[slot]:{campo,valor:antes}}));s(slot,null);if(idx===0)s("image",null)}} aria-label="Quitar imagen" title="Quitar imagen" style={{position:"absolute",top:-6,right:-6,width:20,height:20,borderRadius:"50%",background:C.dn,color:"#fff",border:"1.5px solid #fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.25)"}}><XIcon size={12} weight="bold"/></button></div>}{!val&&imgQuitadas[slot]&&<button type="button" onClick={()=>{const q=imgQuitadas[slot];s(q.campo,q.valor);setImgQuitadas(x=>{const y={...x};delete y[slot];return y})}} style={{...bs(C.sf,C.t2),flexShrink:0,fontSize:F.body,border:"0.5px solid "+C.bd}} title="Regresa la imagen que quitaste (no se borró)"><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button>}<button type="button" onClick={()=>imgInputRefs.current[idx]?.click()} style={{...inp,display:"flex",alignItems:"center",justifyContent:"center",gap:6,cursor:"pointer",color:C.t2,flex:1,minWidth:0,border:"none",fontFamily:"'Geist',sans-serif"}}><CameraIcon size={14}/>{val?"Cambiar":idx===0?"Subir 1ra":"Subir 2da"}</button><input ref={el=>{imgInputRefs.current[idx]=el}} type="file" tabIndex={-1} aria-hidden="true" accept="image/*" style={{display:"none"}} onChange={async e=>{const rawFile=e.target.files[0];e.target.value="";if(!rawFile)return;setImgQuitadas(x=>{if(!x[slot])return x;const y={...x};delete y[slot];return y});if(rawFile.size>10*1024*1024){showToast?.("⚠️ Imagen muy grande (máx 10MB)","error");return}const prevUrl=f[slot];setImgUploading(true);try{const file=await compressImg(rawFile);const ext=(file.name.split(".").pop()||"jpg").toLowerCase();/* v10.77.3 — el nombre del archivo se armaba con dos Date.now(): entropia CERO. 404 de los 468
    objetos del bucket siguen ese patron, y dos marcas de tiempo casi identicas dentro de una
    ventana conocida se pueden adivinar con esfuerzo. Mientras el bucket siga publico, el path ES
    la credencial. Se le pone entropia real (la ruta de "Replicar" ya lo hacia con un sufijo
    aleatorio; aqui se usa uuid, que es mas fuerte). No arregla lo ya subido: corta el goteo. */
                 const rnd=(typeof crypto!=="undefined"&&crypto.randomUUID)?crypto.randomUUID():(Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));
-                const path=(f.id||"new-img-"+rnd)+"/img-"+(idx+1)+"-"+rnd+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);const newP=urlData.publicUrl.split("/order-files/")[1];if(newP)imgUploadsRef.current.add(decodeURIComponent(newP));s(slot,urlData.publicUrl);if(idx===0)s("image",null);/* v10.73.54 — al REEMPLAZAR, borrar la imagen anterior SOLO si la subimos en esta sesión (imgUploadsRef): nunca toca una imagen guardada ni la referencia ajena del fallback de "Replicar". */if(prevUrl){const pp=prevUrl.split("/order-files/")[1];const ppd=pp&&decodeURIComponent(pp);if(ppd&&imgUploadsRef.current.has(ppd)){imgUploadsRef.current.delete(ppd);supabase.storage.from("order-files").remove([ppd]).catch(()=>{});}}}catch(err){console.error("[image upload "+slot+"]",err);showToast?.("⚠️ Error al subir imagen: "+(err?.message||err),"error")}finally{setImgUploading(false)}}}/></label></div>})}</div></div>
+                const path=(f.id||"new-img-"+rnd)+"/img-"+(idx+1)+"-"+rnd+"."+ext;const{error:upErr}=await supabase.storage.from("order-files").upload(path,file,{upsert:true,contentType:file.type});if(upErr)throw upErr;const{data:urlData}=supabase.storage.from("order-files").getPublicUrl(path);const newP=urlData.publicUrl.split("/order-files/")[1];if(newP)imgUploadsRef.current.add(decodeURIComponent(newP));s(slot,urlData.publicUrl);if(idx===0)s("image",null);/* v10.73.54 — al REEMPLAZAR, borrar la imagen anterior SOLO si la subimos en esta sesión (imgUploadsRef): nunca toca una imagen guardada ni la referencia ajena del fallback de "Replicar". */if(prevUrl){const pp=prevUrl.split("/order-files/")[1];const ppd=pp&&decodeURIComponent(pp);if(ppd&&imgUploadsRef.current.has(ppd)){imgUploadsRef.current.delete(ppd);supabase.storage.from("order-files").remove([ppd]).catch(()=>{});}}}catch(err){console.error("[image upload "+slot+"]",err);showToast?.("⚠️ Error al subir imagen: "+(err?.message||err),"error")}finally{setImgUploading(false)}}}/></div>})}</div></div>
     {specsOnly&&<>
     {(canP||role==="preprensa"||role==="german")&&<FileUpload orderId={f.id} fileUrl={f.file_url} fileName={f.file_name} onUploaded={(url,name)=>{s("file_url",url);s("file_name",name)}} onRemoved={borrado=>{if(!borrado&&f.file_url)setArchivoQuitado({url:f.file_url,name:f.file_name});s("file_url",null);s("file_name",null)}} canUpload={canP||role==="preprensa"}/>}
     {archivoQuitado&&!f.file_url&&<div style={{margin:"-4px 20px 10px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:F.label,color:C.t2,lineHeight:1.4}}><span>Quitaste «{archivoQuitado.name||"el archivo"}» de la orden (no se borra del servidor).</span><button type="button" onClick={()=>{s("file_url",archivoQuitado.url);s("file_name",archivoQuitado.name);setArchivoQuitado(null)}} style={{...bs(C.sf,C.t2),fontSize:F.body,border:"0.5px solid "+C.bd}}><ArrowUUpLeftIcon size={12} weight="bold"/>Deshacer</button></div>}
     </>}
-    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label htmlFor="ff-notas" style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t2}}><NotePencilIcon size={12} weight="bold"/><span>Notas de Proceso / Aclaraciones <span style={{color:C.wnTx,fontSize:F.meta,fontWeight:600}}>(uso interno)</span></span></label><textarea id="ff-notas" style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
+    <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}><label htmlFor="ff-notas" style={{...lbl,display:"flex",alignItems:"center",gap:5,color:C.t2}}><NotePencilIcon size={12} weight="bold"/><span>Notas de proceso <span style={{color:C.t2,fontSize:F.body,fontWeight:500,textTransform:"none",letterSpacing:0}}>(uso interno)</span></span></label><textarea id="ff-notas" style={{...inp,minHeight:48,resize:"vertical"}} value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Ejemplo (escribe aquí) · No hay archivo, el cliente lo manda directo a Noemí. Entregar en 2 paquetes separados..."/></div>
   </>;
   const bMas=<>
     {/* v10.84.79 — «Más de esta orden»: cerrado en una orden nueva y abierto si la orden ya trae algo de aquí; cerrado, dice lo que trae */}
@@ -12804,9 +12900,20 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       </>}
     </div>}
   </>;
-  return <div ref={formRef} className="pf-forma" onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!saving&&!imgUploading&&!preguntaSalir){e.preventDefault();submit()}}} style={{background:C.sf,borderRadius:16,maxWidth:dosColumnas?1180:760,margin:"0 auto"}}>
+  return <div ref={formRef} className="pf-forma" onFocusCapture={e=>{/* v10.84.80 — el textarea completo arriba del pie (Chrome sólo trae el cursor) */const el=e.target;if(el?.tagName!=="TEXTAREA")return;requestAnimationFrame(()=>{const r=el.getBoundingClientRect(),pie=pieRef.current?.getBoundingClientRect();if(pie&&r.bottom>pie.top-4)el.scrollIntoView({block:"nearest"})})}} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&!saving&&!imgUploading&&!preguntaSalir){e.preventDefault();submit()}}} style={{background:C.sf,borderRadius:16,maxWidth:dosColumnas?1180:760,margin:"0 auto"}}>
     {/* v10.84.78 — el foco se ve (los campos tenían outline:none y la misma sombra con y sin foco) */}
-    <style>{`.pf-forma :is(input,textarea,select):focus-visible{box-shadow:0 0 0 2px ${C.ac}!important}.pf-forma :is(button,[role="button"],a):focus-visible{outline:2px solid ${C.ac};outline-offset:2px}`}</style>
+    {/* v10.84.80 — y los placeholders en Gris Tenue (4.6:1): el gris global #c7c7cc daba 1.65:1 */}
+    <style>{`.pf-forma :is(input,textarea)::placeholder{color:${C.t3}}.pf-forma :is(input,textarea,select):focus-visible{box-shadow:0 0 0 2px ${C.ac}!important}.pf-forma :is(button,[role="button"],a):focus-visible{outline:2px solid ${C.ac};outline-offset:2px}`}</style>
+    {/* v10.84.80 — la orden recién creada: la forma se queda para capturar otra; el número ya no se va a los 6.5 s */}
+    {creada&&<div ref={creadaRef} tabIndex={-1} role="status" style={{margin:"12px 20px 0",padding:"10px 14px",background:C.bg,border:"1px solid "+(creada.aviso?C.wn:C.ok)+"66",borderRadius:12,display:"flex",alignItems:"center",gap:"8px 12px",flexWrap:"wrap",outline:"none"}}>
+      <CheckCircleIcon size={18} weight="fill" color={C.okInk} style={{flexShrink:0}}/>
+      <span style={{fontSize:F.label,color:C.tx,flex:"1 1 240px",lineHeight:1.45}}><b>{creada.pn} creada</b>{creada.cliente?" para "+creada.cliente:""}{creada.maquila?" (maquila)":""}.{(creada.extra||[]).map(t=><span key={t} style={{color:/avisar/.test(t)?C.wnTx:C.t2}}> {t.charAt(0).toUpperCase()+t.slice(1)}.</span>)}</span>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button type="button" onClick={()=>creada.ver?.()} style={{...bs(C.sf,C.ac),border:"0.5px solid "+C.bd}}>Ver {creada.pn}</button>
+        <button type="button" onClick={()=>creada.imprimir?.()} style={{...bs(C.sf,C.t2),border:"0.5px solid "+C.bd,gap:5}}><PrinterIcon size={13} weight="bold"/>Imprimir</button>
+        <button type="button" onClick={()=>{setCreada(null);const e=document.getElementById("ff-cliente-input");e?.focus({preventScroll:true});e?.scrollIntoView({block:"center"})}} style={{...bs(C.ac),gap:5}}><PlusIcon size={13} weight="bold"/>Capturar otra</button>
+      </div>
+    </div>}
     {/* v10.59.0 — Modal: registrar nuevo AGENTE (contacto del cliente) con su contacto */}
     {newAgentOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16}} onMouseDown={e=>{if(e.target===e.currentTarget)e.preventDefault()}}>
       <div ref={agenteRef} role="dialog" aria-modal="true" aria-labelledby="dlg-agente-titulo" onKeyDown={e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();cerrarAgente();return}atraparTab(e)}} style={{background:C.bg,borderRadius:20,padding:22,maxWidth:380,width:"100%",boxShadow:C.sh3}}>
@@ -12847,20 +12954,23 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
       {!specsOnly&&<div role="group" aria-label="Prioridad" style={{display:"flex",alignItems:"center",gap:4}}>{!angosta&&<span style={{...lbl,marginBottom:0,marginRight:4}}>Prioridad</span>}{PRIOS.map(p=><button key={p.id} type="button" aria-pressed={f.priority===p.id} onClick={()=>s("priority",p.id)} style={{padding:"7px 10px",borderRadius:9,border:"1.5px solid "+(f.priority===p.id?p.c:C.bd),background:f.priority===p.id?p.c+"10":C.bg,cursor:"pointer",fontSize:F.body,fontWeight:600,color:f.priority===p.id?({urgente:C.dnInk,normal:C.wnTx,baja:C.okTx}[p.id]||C.tx):C.t2,fontFamily:"'Geist',sans-serif",display:"inline-flex",alignItems:"center",gap:5}}><PrioLbl priority={p.id} size={12}/></button>)}</div>}
       {!editOrder&&canP&&!angosta&&<div style={{flexBasis:"100%",fontSize:F.body,color:C.t2,lineHeight:1.4}}>{isMaq?"Maquila: la hace un proveedor completa; lleva proveedor, costo y precio al cliente.":"Producción interna: se imprime en la planta."}</div>}
     </div>}
-    {/* v10.84.79 — dos columnas desde 1150 px: cliente, producto, vendedor y precio a la izquierda (la más ancha: sus renglones son de
+    {/* v10.84.80 — a la izquierda, después de tipo, cantidad y entrega van el vendedor y el precio (luego maquila, modo y descripción).
+        v10.84.79 — dos columnas desde 1150 px: cliente, producto, vendedor y precio a la izquierda (la más ancha: sus renglones son de
         tres campos); la descripción larga (Avanzado o maquila), las especificaciones, «Para producción» y «Más de esta orden» a la
         derecha. En «Specs» (Pre-prensa) la izquierda casi no trae nada: ahí las especificaciones van a la izquierda y lo de producción
         (el archivo) a la derecha. Más angosta, la derecha va debajo de la izquierda en el mismo orden. 🔑 El ÁRBOL es el mismo en los
         dos acomodos (sólo cambia el CSS): plegar el menú o partir la ventana no vuelve a montar nada, así que el foco, lo escrito a
         medias y lo que se está subiendo se quedan, y Tab recorre igual. */}
-    <div style={{display:"grid",gridTemplateColumns:dosColumnas?"minmax(0,1.3fr) minmax(0,1fr)":"minmax(0,1fr)",alignItems:"start"}}><div style={{borderRight:dosColumnas?"0.5px solid "+C.bd:"none",minWidth:0}}>{bCliente}{bReplicar}{bStock}{bProductoTitulo}{bTipoCantidadEntrega}{bModo}{bDescripcion}{bVendedor}{bCandadoPrecio}{bMaquila}{bPrecio}{specsOnly&&<>{bDatosTecnicos}{bEspecificaciones}{bPantonesAvanzado}</>}</div><div style={{minWidth:0}}>{!specsOnly&&<>{bDatosTecnicos}{bEspecificaciones}{bPantonesAvanzado}</>}{bParaProduccion}{bMas}</div></div>
+    <div style={{display:"grid",gridTemplateColumns:dosColumnas?"minmax(0,1.3fr) minmax(0,1fr)":"minmax(0,1fr)",alignItems:"start"}}><div style={{borderRight:dosColumnas?"0.5px solid "+C.bd:"none",minWidth:0}}>{bCliente}{bReplicar}{bStock}{bProductoTitulo}{bTipoCantidadEntrega}{bVendedorPrecio}{bCandadoPrecio}{bMaquila}{bModo}{bDescripcion}{specsOnly&&<>{bDatosTecnicos}{bEspecificaciones}{bPantonesAvanzado}</>}</div><div style={{minWidth:0}}>{!specsOnly&&<>{bDatosTecnicos}{bEspecificaciones}{bPantonesAvanzado}</>}{bParaProduccion}{bMas}</div></div>
     {/* v10.73.59 — barra de acción STICKY: el submit/errores ya no viven solo al fondo de un scroll de ~2500px.
         Se pega a la ventana (el root del form ya no tiene overflow:hidden que atrapara el sticky). */}
-    <div ref={pieRef} style={{position:"sticky",bottom:0,zIndex:5,background:C.sf,borderTop:"1px solid "+C.bd,boxShadow:"0 -5px 16px -10px rgba(26,26,31,.16)",padding:"10px 20px 12px",borderRadius:"0 0 16px 16px"}}>
+    <div ref={pieRef} style={{position:"sticky",bottom:0,zIndex:5,background:C.sf,borderTop:"1px solid "+C.bd,boxShadow:"0 -5px 16px -10px rgba(26,26,31,.16)",padding:pieChico?"7px 16px 8px":"10px 20px 12px",borderRadius:"0 0 16px 16px"}}>
       {errGuardar&&<div ref={errGuardarRef} tabIndex={-1} role="alert" style={{background:C.dn+"0d",border:"1px solid "+C.dn+"33",borderRadius:10,padding:"9px 12px",marginBottom:10,fontSize:F.label,color:C.dnInk,fontWeight:600,display:"flex",alignItems:"flex-start",gap:7,lineHeight:1.45,outline:"none"}}><WarningIcon size={14} weight="fill" style={{flexShrink:0,marginTop:2}}/><span>{errGuardar}</span></div>}
-      {tried&&!canSubmit&&<div style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:F.body,color:C.dnInk,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Campos obligatorios faltantes: {missing.join(", ")}</div>}
-      <div style={{display:"flex",gap:8}}>{onCancel&&<button type="button" onClick={()=>{if(suciaRef.current&&!enviandoRef.current)setPreguntaSalir({seguir:onCancel});else onCancel()}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd}}>Cancelar</button>}<button ref={botonGuardarRef} onClick={submit} disabled={saving||imgUploading||revisando} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading||revisando?C.bdSt:C.ac,saving||imgUploading||revisando?C.t2:"#fff"),flex:1,justifyContent:"center",fontSize:F.title,padding:"14px",borderRadius:14,cursor:(saving||imgUploading||revisando)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":revisando?"Revisando la factura…":saving?"Guardando...":editOrder?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
-      {!specsOnly&&<div style={{fontSize:F.body,color:C.t2,textAlign:"center",marginTop:7,display:"flex",alignItems:"center",justifyContent:"center",gap:8,flexWrap:"wrap"}}><span>Tip: <b style={{color:C.t2,fontWeight:700}}>Ctrl/⌘ + Enter</b> para guardar</span>{missing.length>0&&<span style={{color:C.t2,fontWeight:600}}>· {missing.length} campo{missing.length>1?"s":""} por completar</span>}</div>}
+      {/* v10.84.80 — el resumen se anuncia y cada faltante es un botón que lleva a su campo (era texto: había que buscarlos) */}
+      {tried&&missing.length>0&&<div role="status" style={{background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:pieChico?"5px 10px":"8px 12px",marginBottom:pieChico?6:10,fontSize:F.body,color:C.dnInk,fontWeight:600,display:"flex",alignItems:"center",gap:"2px 6px",flexWrap:pieChico?"nowrap":"wrap",lineHeight:1.4}}><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>{pieChico?<><span style={{whiteSpace:"nowrap"}}>Falta{missing.length>1?"n "+missing.length+" campos":" un campo"}:</span><button type="button" onClick={()=>irAFaltante(missing[0])} style={{background:"none",border:"none",padding:0,margin:0,font:"inherit",fontWeight:700,color:C.dnInk,textDecoration:"underline",textUnderlineOffset:2,cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>ir a {missing[0]}</button></>:<><span>Falta{missing.length>1?"n":""}:</span>{missing.map((m,i)=><button key={m} type="button" onClick={()=>irAFaltante(m)} style={{background:"none",border:"none",padding:0,margin:0,font:"inherit",fontWeight:700,color:C.dnInk,textDecoration:"underline",textUnderlineOffset:2,cursor:"pointer"}}>{m}{i<missing.length-1?",":""}</button>)}</>}</div>}
+      <div style={{display:"flex",gap:8}}>{onCancel&&<button type="button" disabled={saving} title={saving?"Se está guardando: espera a que termine":undefined} onClick={()=>{if(saving)return;if(suciaRef.current&&!enviandoRef.current)setPreguntaSalir({seguir:onCancel});else onCancel()}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,...(saving?{cursor:"not-allowed"}:{})}}>Cancelar</button>}<button ref={botonGuardarRef} onClick={submit} disabled={saving||imgUploading||revisando} title={missing.length>0?"Faltan: "+missing.join(", "):""} style={{...bt(saving||imgUploading||revisando?C.bdSt:C.ac,saving||imgUploading||revisando?C.t2:"#fff"),flex:1,justifyContent:"center",fontSize:F.title,padding:pieChico?"10px":"14px",borderRadius:14,cursor:(saving||imgUploading||revisando)?"not-allowed":"pointer"}}>{imgUploading?"Subiendo imagen...":revisando?"Revisando la factura…":saving?"Guardando...":editOrder?.id?<><FloppyDiskIcon size={16} weight="bold"/>Guardar</>:editOrder?._fromOC?<><PlusIcon size={16} weight="bold"/>Agregar a {editOrder.purchase_order_id||"la OC"}</>:<><PlusIcon size={16} weight="bold"/>Crear Orden</>}</button></div>
+      {/* v10.84.80 — sin «⌘» (Windows) y sin esta línea donde hay poco alto */}
+      {!specsOnly&&!pieChico&&<div style={{fontSize:F.body,color:C.t2,textAlign:"center",marginTop:7,display:"flex",alignItems:"center",justifyContent:"center",gap:8,flexWrap:"wrap"}}><span><b style={{color:C.t2,fontWeight:700}}>Ctrl+Enter</b> {editOrder?.id?"guarda":"crea la orden"}</span>{missing.length>0&&<span style={{color:C.t2,fontWeight:600}}>· {missing.length} campo{missing.length>1?"s":""} por completar</span>}</div>}
     </div>
     {preguntaFact&&<ConfirmModal title={preguntaFact.titulo} detalle={{filas:preguntaFact.filas}} message={preguntaFact.mensaje} confirmLabel="Guardar los cambios" confirmColor={C.ac} cancelLabel="Volver a la forma" zIndex={2100} onConfirm={()=>{const r=preguntaFact.resolver;setPreguntaFact(null);r(true)}} onClose={()=>{const r=preguntaFact.resolver;setPreguntaFact(null);r(false);setTimeout(()=>botonGuardarRef.current?.focus({preventScroll:true}),0)}}/>}
     {preguntaSalir&&<ConfirmModal title={editando?"¿Salir sin guardar los cambios de "+(editOrder.production_number||"la orden")+"?":"¿Salir sin guardar la orden?"} message={editando?"Los cambios que hiciste se pierden.":"Lo que capturaste se pierde."} confirmLabel="Salir sin guardar" confirmColor={C.dnInk} cancelLabel="Seguir capturando" zIndex={2100} onConfirm={()=>{const ir=preguntaSalir.seguir;suciaRef.current=false;setPreguntaSalir(null);ir()}} onClose={()=>setPreguntaSalir(null)}/>}
@@ -16234,7 +16344,6 @@ function Analytics({orders,onReload}) {
 function WIPDashboard({ orders, role, onAction }) {
   const [expandedZone, setExpandedZone] = useState(null);
 
-  if (role !== "admin") return null;
 
   const active = useMemo(() => {
     const terminal = ["delivered", "maq_delivered", "cancelled", "maq_cancelled", "web_pending", "web_rejected"];
@@ -16261,6 +16370,7 @@ function WIPDashboard({ orders, role, onAction }) {
       withoutPriceList: ordersWithoutPrice
     };
   }, [active]);
+
 
   const byZone = useMemo(() => {
     return WORKFLOW_ZONES.map(zone => {
@@ -16342,6 +16452,8 @@ function WIPDashboard({ orders, role, onAction }) {
       .slice(0, 5)
       .map(c => ({ ...c, stages: Array.from(c.stages).join(", ") }));
   }, [active]);
+  // v10.84.80 — el «return» por rol va DESPUÉS de los hooks (antes los dejaba fuera según el rol: regla de los hooks; tests/romper/hooks.mjs)
+  if (role !== "admin") return null;
 
   return (
     <div style={{ padding: "20px 24px", maxWidth: "min(1680px, 100%)", margin: "0 auto" }}>
@@ -16730,7 +16842,6 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   // v10.32.0 — admin (Salud Operativa completa) o secretaria (Datos Pendientes con scope limitado)
   // v10.58.24: agregada karla. v10.58.22 habilitó la entrada de nav y el render exterior pero
   // este return null interno seguía bloqueándole la vista (pantalla en blanco para Karla).
-  if (role !== "admin" && role !== "secretaria" && role !== "karla") return null;
 
   // v10.64.3 — excluir snoozed (parkeados desde la Torre), consistente con la Torre, para no
   // inflar los contadores de Salud Operativa con órdenes que el admin ya difirió a propósito.
@@ -16811,6 +16922,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
     (notifications || []).filter(n => !n.read && n.target_role === "admin"),
     [notifications]
   );
+  // v10.84.80 — el «return» por rol va DESPUÉS de los hooks (regla de los hooks; tests/romper/hooks.mjs)
+  if (role !== "admin" && role !== "secretaria" && role !== "karla") return null;
 
   const notifyResponsible = (order) => {
     const resp = orderResponsible(order); // v10.58.65: maquila → vendedor
@@ -18634,6 +18747,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
   const [f, setF] = useState({client:"",client_id:null,client_email:"",client_phone:"",client_rfc:"",client_agent:"",vendedor:"",delivery_date:"",notes:""});
   const [saving, setSaving] = useState(false);
   const [ocErr,setOcErr]=useState(""); // v10.72.9 — error inline del gate de RFC (antes toast pasajero, un hard-stop necesita quedarse fijo)
+  const [ocAviso,setOcAviso]=useState("");   // v10.84.80 — lo que se dice del cliente (se quitaron los datos del anterior, se puso el elegido)
   const rfcRef=useRef(null); // v10.72.10 — para enfocar/traer a la vista el campo RFC cuando el gate dispara
   // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
   const [clientAgents,setClientAgents]=useState([]);
@@ -18651,6 +18765,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
   // pero NO rfc, el fallback a last_contact nunca se disparaba — el RFC quedaba vacío
   // aunque last_contact tuviera uno disponible.
   const selC = async c => {
+    setOcAviso("");
     setF(p => ({...p, client_id:c.id, client:c.name, client_email:c.email||"", client_phone:c.whatsapp||"", client_rfc:c.rfc||""}));
     if (!c.email || !c.whatsapp || !c.rfc) {
       try {
@@ -18674,6 +18789,9 @@ function CreateOCModal({onCreate, onClose, showToast}){
           const r=await resolverClienteNuevo({nombre:nm,rfc:f.client_rfc.trim(),email:f.client_email.trim(),telefono:f.client_phone.trim(),rfcObligatorio:true});
           if(r.tipo==="cancelado"){setSaving(false);return}
           if(r.tipo==="falta_rfc"){setOcErr("⚠️ El RFC es obligatorio para crear una razón social NUEVA. Captúralo arriba.");setSaving(false);setTimeout(()=>rfcRef.current?.focus(),50);return}
+          // v10.84.80 — elegir en la pregunta pone al cliente en la forma, completo, y no crea la OC (como la forma de la orden)
+          if(r.tipo==="elegido"){await selC(r.cliente);setOcAviso("Pusimos a "+(r.cliente.name||"ese cliente")+" con sus datos (RFC y contacto). Revisa y crea la OC.");setSaving(false);return}
+          if(r.tipo==="corregir_rfc"){setOcErr("El RFC "+f.client_rfc.trim()+" es de otro cliente: corrígelo, o elige a ese cliente.");setSaving(false);setTimeout(()=>{rfcRef.current?.focus();rfcRef.current?.select?.()},50);return}
           resolvedClientId=r.id;
         }catch(e){
           console.error("[CreateOCModal] client resolution error:",e);
@@ -18703,7 +18821,10 @@ function CreateOCModal({onCreate, onClose, showToast}){
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:4}}>Cliente *</label>
-          <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}}}} onSelect={selC} clients={[]}/>
+          <ClientInput value={f.client} onChange={v=>{s("client",v);if(f.client_id&&(v||"").trim()!==(f.client||"").trim()){s("client_id",null);s("billing_mode","normal");if(!f.stock_loaded){s("stock_role",null);s("client_product_id",null)}
+            // v10.84.80 — (como la forma de la orden) lo que trajo el cliente anterior se va con él, y se dice
+            const quitados=[];if((f.client_rfc||"").trim()){s("client_rfc","");quitados.push("el RFC")}if((f.client_email||"").trim()||(f.client_phone||"").trim()){s("client_email","");s("client_phone","");quitados.push("el contacto")}if(f.client_agent&&clientAgents.some(a=>a.name===f.client_agent)){s("client_agent","");quitados.push("su agente de compras")}
+            if(quitados.length)setOcAviso("Cambiaste de cliente: se quitaron "+(quitados.length<2?quitados[0]:quitados.slice(0,-1).join(", ")+" y "+quitados[quitados.length-1])+" que venían de "+f.client+".")}}} onSelect={selC} clients={[]}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <div>
@@ -18740,6 +18861,7 @@ function CreateOCModal({onCreate, onClose, showToast}){
           <textarea value={f.notes} onChange={e=>s("notes",e.target.value)} placeholder="Detalles del pedido, referencia interna, etc." rows={3} style={{...inp,resize:"vertical"}}/>
         </div>
       </div>
+      {ocAviso&&<div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,color:C.t2,lineHeight:1.45,marginTop:12}}><InfoIcon size={13} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{ocAviso}</span></div>}
       {ocErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginTop:16}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{ocErr}</div>}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:ocErr?10:20}}>
         <button onClick={onClose} disabled={saving} style={{...bt(C.t3),fontSize:13,padding:"10px 18px"}}>Cancelar</button>
@@ -19289,7 +19411,8 @@ export default function PrintFlow() {
         const s = [...document.querySelectorAll("[data-pf-search]")].find(el => el.offsetParent !== null);
         if (s) { e.preventDefault(); s.focus(); }
       } else if ((e.key === "n" || e.key === "N") && (isSec(user) || user === "admin")) {
-        e.preventDefault(); const nueva=()=>{setEditO(null); setView("form")}; if(!salirDeLaForma(nueva))nueva();   // v10.84.78 — con algo capturado, pregunta
+        e.preventDefault(); if(FORMA_ABIERTA.nueva&&FORMA_ABIERTA.enfocar){FORMA_ABIERTA.enfocar();return}   // v10.84.80 — ya está en «Nueva Orden»
+        const nueva=()=>{setEditO(null); setView("form")}; if(!salirDeLaForma(nueva))nueva();   // v10.84.78 — con algo capturado, pregunta
       } else if (e.key === "?") {
         showToast("Atajos: / buscar · n nueva orden · Esc cerrar", "info");
       }
@@ -19774,12 +19897,17 @@ export default function PrintFlow() {
     // v10.84.77 — con «Ver P-…» (llevaba al tablero sin la orden a la vista) y, si se dio de alta el cliente, también eso: el aviso de
     //   «cliente creado en CobranzaFlow» de la forma lo pisaba éste en el mismo instante.
     const dichos=["Orden "+assignedPN+" creada"+(isMaq?" (maquila)":"")];
-    if(_clienteNuevo)dichos.push(_clienteNuevo+" quedó dado de alta en CobranzaFlow");
-    if(sinAviso.length)dichos.push("no se pudo avisar a "+sinAviso.join(" ni a ")+": avísales tú");
-    showToast(dichos.join(" · "),sinAviso.length?"warning":"success",{label:"Ver "+assignedPN,onClick:()=>setDetailModalId(newOrder.id)});
+    const extra=[];
+    if(_clienteNuevo)extra.push(_clienteNuevo+" quedó dado de alta en CobranzaFlow");
+    if(sinAviso.length)extra.push("no se pudo avisar a "+sinAviso.join(" ni a ")+": avísales tú");
+    const ver=()=>setDetailModalId(newOrder.id);
     const wasOC=!!f.purchase_order_id;
+    // v10.84.80 — una orden nueva se queda en la forma, lista para la siguiente (Marcelo, 12-oct: «quedarse para capturar otra»): App le
+    //   devuelve lo creado y la forma lo enseña («P-… creada · Ver · Imprimir · Capturar otra»). «Agregar producto» regresa a su OC, como
+    //   antes. Si la forma ya no está (se salió mientras guardaba), el aviso de abajo, como antes.
+    if(wasOC||!FORMA_ABIERTA.preguntar){showToast([...dichos,...extra].join(" · "),sinAviso.length?"warning":"success",{label:"Ver "+assignedPN,onClick:ver});if(wasOC){setEditO(null);setView("oc")}return}
     setEditO(null);
-    setView(wasOC?"oc":"pipeline");
+    return {pn:assignedPN,id:newOrder.id,cliente:f.client,maquila:isMaq,extra,aviso:sinAviso.length>0,ver,imprimir:()=>setPrintModal(ordersRef.current.find(o=>o.id===newOrder.id)||newOrder)};
   },[user,userLogin,showToast,reload]);
 
   // 🛒 v10.10.0 — Crear OC explícita (compleja)
@@ -20318,7 +20446,7 @@ export default function PrintFlow() {
     const cambiados=editableFields.filter(k=>k in safeUpdate&&!mismoValor(orderBefore?.[k],safeUpdate[k]));
     if(orderBefore&&cambiados.length===0){
       showToast("Sin cambios: "+(orderBefore.production_number||"la orden")+" queda igual"+(descartados.size?" (no se guardó "+[...descartados].join(" ni ")+": no se cambia desde aquí)":"")+".","info");
-      setEditO(null);setView("pipeline");return;
+      volverDeLaForma();return;   // v10.84.80 — a donde se abrió la forma (iba siempre al Dashboard)
     }
     // 🔒 v10.75.11 — Bajarle el precio a una orden YA FACTURADA Y COBRADA.
     // Desde v10.75.10 el puente se NIEGA a bajar una factura con dinero cobrado, porque bajarla
@@ -20412,7 +20540,7 @@ export default function PrintFlow() {
     // v10.84.77 — con su número, «Ver P-…» y, si algo se descartó, cuál (antes «Orden actualizada» a secas)
     const pnE=orderBefore?.production_number||"";
     showToast("Orden "+(pnE?pnE+" ":"")+"actualizada"+(willMarkPostEdit?" · queda marcada «Editada después de facturar»":"")+(descartados.size?" · no se guardó "+[...descartados].join(" ni ")+": no se cambia desde aquí":""),descartados.size?"warning":"success",pnE?{label:"Ver "+pnE,onClick:()=>setDetailModalId(f.id)}:null);
-    setEditO(null);setView("pipeline");
+    volverDeLaForma();   // v10.84.80 — a donde se abrió la forma (iba siempre al Dashboard)
     }catch(e){console.error("[update] Error al guardar:",e);reload();
       // v10.84.77 — el rechazo va a la forma, en palabras y una vez (antes: un aviso rojo crudo de App y otro de la forma encima)
       if(e?._toasted||e?._enLaForma)throw e;
@@ -21946,6 +22074,13 @@ export default function PrintFlow() {
   // lo neutraliza en el display; esto además limpia el state para que la lista no se acote sorpresivamente después.
   useEffect(()=>{if(esperaKindFilter&&!esperaKindCounts[esperaKindFilter])setEsperaKindFilter(null);},[esperaKindFilter,esperaKindCounts]);
   // v10.17.0 — Mostrar loading screen mientras se restaura la sesión (evita flash del Login)
+  // 🔑 (los hooks de App van ANTES de sus «return» tempranos: después, al entrar la sesión cambia el número de hooks y React truena, error #310)
+  // v10.84.80 — la forma regresa a donde se abrió (crear, guardar, «Sin cambios» y Cancelar mandaban siempre al Dashboard, a media página):
+  //   la vista de origen es la última que no fue la forma, y al volver se pone donde estaba (su desplazamiento se anota al moverse)
+  const vistaDeOrigenRef=useRef("pipeline"),scrollDeVistaRef=useRef({}),vistaVivaRef=useRef(view);vistaVivaRef.current=view;
+  useEffect(()=>{const f=()=>{const v=vistaVivaRef.current;if(v!=="form")scrollDeVistaRef.current[v]=window.scrollY};window.addEventListener("scroll",f,{passive:true});return()=>window.removeEventListener("scroll",f)},[]);
+  useLayoutEffect(()=>{if(view==="form"){window.scrollTo(0,0);return}vistaDeOrigenRef.current=view;const r=scrollDeVistaRef.current.__volver;scrollDeVistaRef.current.__volver=null;if(r&&r.vista===view)window.scrollTo(0,r.y)},[view]);
+  const volverDeLaForma=()=>{const v=vistaDeOrigenRef.current||"pipeline";scrollDeVistaRef.current.__volver={vista:v,y:scrollDeVistaRef.current[v]||0};setEditO(null);setView(v)};
   if(!authChecked) return (
     <div style={{position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:C.bg,fontFamily:"'Geist',sans-serif"}}>
       <div style={{textAlign:"center"}}>
@@ -22152,7 +22287,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             {visibleStale.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}
           </div>}
           {normalTasks.length===0&&visibleStale.length===0?<div style={{textAlign:"center",padding:"40px 20px"}}><div style={{display:"flex",justifyContent:"center"}}>{taskFilters.size>0?<MagnifyingGlassIcon size={46} color={C.t3}/>:<CheckCircleIcon size={46} weight="fill" color={C.ok}/>}</div><div style={{fontSize:15,fontWeight:700,marginTop:8}}>{taskFilters.size>0?"Sin resultados con esos filtros":(search?"Sin resultados":(waitTasks.length>0?"Sin pendientes activos":"¡Sin pendientes!"))}</div><div style={{fontSize:12,color:C.t2,marginTop:4}}>{taskFilters.size>0?"Prueba quitando algún chip o presiona 'Limpiar'":(search?"Intenta con otro término":(waitTasks.length>0?waitTasks.length+(waitTasks.length===1?" orden está":" órdenes están")+" en espera, abajo":"Las órdenes aparecerán aquí cuando necesiten tu atención"))}</div>{taskFilters.size>0&&<button onClick={()=>setTaskFilters(new Set())} style={{...bs(C.sf,C.t2),marginTop:12,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Limpiar filtros</button>}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10}}>{normalTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div>}{waitTasks.length>0&&<details open style={{marginTop:16,background:C.sf,border:"1px solid "+C.bd,borderRadius:14,padding:"12px 14px"}}><summary style={{cursor:"pointer",fontSize:13.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:8,listStyle:"none"}} title="Clic para ver/ocultar"><CaretDownIcon size={12} weight="bold" color={C.t3} className="imp-caret" style={{flexShrink:0,transition:"transform .18s ease"}}/><span style={{background:C.bg,color:C.tx,minWidth:24,height:24,borderRadius:12,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,padding:"0 7px",border:"1px solid "+C.bd}}>{waitTasks.length}</span><BellSlashIcon size={14} weight="bold" color={C.t2} style={{flexShrink:0}}/>En espera <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>· en pausa; se reactivan al cambiar de etapa o al vencer</span></summary><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(440px,1fr))",gap:10,marginTop:12}}>{waitTasks.map(o=><OCard key={o.id} o={o} role={user} onAction={handleAction} busy={actionLoading===o.id} noDragHint userLogin={userLogin}/>)}</div></details>}</>})()}</div>}
-        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{/* v10.84.77 — el título dice qué orden (y su folio): «Editar Orden» no decía cuál */}{editO?.id?(editO._specsOnly?"Specs de "+(editO.production_number||"la orden"):"Editar "+(editO.production_number||"orden")+((editO.invoice_folio||editO.grouped_invoice_folio)?" · "+(editO.invoice_folio||editO.grouped_invoice_folio):"")):(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} actor={userLogin||user} folioDeLaOC={editO?.id&&!editO.invoice_folio&&editO.purchase_order_id?(purchaseOrders.find(p=>p.id===editO.purchase_order_id)?.shared_invoice_folio||null):null} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>{const wasOC=editO?._fromOC;setEditO(null);setView(wasOC?"oc":"pipeline")}} clients={clients} orders={orders} showToast={showToast}/></div>}
+        {view==="form"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>{/* v10.84.77 — el título dice qué orden (y su folio): «Editar Orden» no decía cuál */}{editO?.id?(editO._specsOnly?"Specs de "+(editO.production_number||"la orden"):"Editar "+(editO.production_number||"orden")+((editO.invoice_folio||editO.grouped_invoice_folio)?" · "+(editO.invoice_folio||editO.grouped_invoice_folio):"")):(editO?._fromOC?"Agregar Producto a "+editO.purchase_order_id:"Nueva Orden")}</h2><OrderForm role={user} actor={userLogin||user} folioDeLaOC={editO?.id&&!editO.invoice_folio&&editO.purchase_order_id?(purchaseOrders.find(p=>p.id===editO.purchase_order_id)?.shared_invoice_folio||null):null} onSubmit={editO?.id?update:create} editOrder={editO} onCancel={()=>volverDeLaForma()} clients={clients} orders={orders} showToast={showToast}/></div>}
         {view==="web_orders"&&(user==="secretaria"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><GlobeIcon size={18} weight="bold"/>Pedidos Web</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Pedidos recibidos desde sygma.mx · {webPendingCount} pendiente{webPendingCount!==1?"s":""} de revisar</p><WebOrdersBandeja orders={orders} onApprove={id=>handleAction(id,"web_approve")} onReject={o=>setWebRejectModal(o)} onApproveCart={cartFolio=>approveCartComplete(cartFolio)} onDetail={id=>setDetailModalId(id)} actionLoading={actionLoading}/></div>}
         {view==="board"&&user==="german"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero Germán</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes a CTP y Procesadora · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-german" text="Arrastra las órdenes de la lista izquierda hacia CTP. Al soltar, te pedirá cuántas placas chicas y grandes lleva la orden (puedes poner de ambas). Después mueve a Procesadora y marca 'Placas Listas'." color={C.ctp}/><PreprensaBoard orders={filteredOrders} onDrop={assignMachine} onAction={handleAction} onPlateRequired={(oid,mid,o,m)=>setPlateModal({oid,mid,order:o,machine:m})} maintenance={maintenance} role={user} platedIds={platedIds}/><CTPMaintenanceCounter user={user} userLogin={userLogin}/></div>}
         {view==="board"&&(user==="produccion"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Tablero de Producción</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Arrastra órdenes entre máquinas · ⠿ para mover</p><FirstTimeHint role={user} hintKey="board-prod" text="Las órdenes listas (verde) se arrastran a las máquinas. Para acabar, arrástralas a Empaque. Cuando estén empacadas, arrástralas a Salidas para que Karla asigne folio fiscal y entregue." color={C.ac}/>{/* v10.73.81 — `viewOrders`, NO `filteredOrders`: el buscador ya no filtra el tablero, lo RESALTA (ver Kanban).

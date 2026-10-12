@@ -603,3 +603,15 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   pasar de uno a otro no vuelve a montar nada, y Tab recorre igual. Lo que se usa poco (medido) va en una sección cerrada que, cerrada,
   dice lo que trae. Y el banco de pruebas mide dentro del contenedor y el menú de App, no en uno propio.
 - **Abajo de 900 px el menú lateral se pliega solo** (v10.84.79): abierto se comía un tercio de la pantalla a 683 px (la laptop al 200 %).
+- **Una forma que crea se queda para la siguiente** (v10.84.80, Marcelo: «quedarse para capturar otra»): vacía y como al abrir, con un
+  renglón fijo «P-… creada · Ver · Imprimir · Capturar otra» que se quita al empezar la siguiente. Editar y Cancelar regresan a donde se abrió
+  la forma, en su desplazamiento (no al Dashboard a media página).
+- **Elegir no es crear** (v10.84.80): en «¿ya existe?», elegir pone al cliente COMPLETO en la forma (nombre, RFC y contacto suyos) y crear
+  sigue siendo el botón de siempre; la pregunta abre con el foco en la salida segura. Cambiar el cliente suelta lo que trajo el anterior,
+  y lo dice: los datos de dos clientes en una orden es identidad fiscal mezclada.
+- **Ocho opciones son una lista** (v10.84.80): el vendedor era ocho botones (ocho paradas de Tab, dos renglones, la decisión más larga);
+  un `<select>` con «Otro». Lo que tiene candado se enseña como el cliente (el valor y su porqué), nunca con opacidad.
+- **El faltante se dice en su campo** (v10.84.80): `FC` con `falta` («Falta…» debajo y `aria-invalid`), el borde en `dnInk`, el foco al
+  primero, y el resumen del pie lleva a cada uno; con poco alto, cuántos y «ir a …».
+- **Subir un archivo es un botón** (v10.84.80): un `<input type=file>` escondido dentro de una etiqueta no se alcanza con Tab; el botón lo
+  abre (`ref.click()`). Y un placeholder se lee (Gris Tenue, 4.6:1; el gris global #c7c7cc daba 1.65:1).

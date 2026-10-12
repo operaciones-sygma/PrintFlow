@@ -29,6 +29,9 @@ const [, , srcPath, outDir] = process.argv;
 const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
+// v10.84.80 — el estilo global de los placeholders que App inyecta a nivel de módulo (sin él el banco medía el gris del navegador)
+const estiloPlaceholder = L.some(l => l.startsWith('if(typeof document!=="undefined"&&!document.getElementById("pf-placeholder-style"))'))
+  ? null : "";
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
 // un pedazo de App por su ancla: la línea que empieza con `inicio` y, con `fin`, hasta la primera línea que empieza con `fin`
 const pedazo = (inicio, fin, que) => {
@@ -38,6 +41,7 @@ const pedazo = (inicio, fin, que) => {
   return L.slice(s, e + 1).join("\n");
 };
 const linea = (trozo, que) => { const l = L.find(x => x.includes(trozo)); if (!l) throw new Error("no encuentro " + que); return l.trim(); };
+const placeholderGlobal = estiloPlaceholder === null ? pedazo('if(typeof document!=="undefined"&&!document.getElementById("pf-placeholder-style"))', "}", "el estilo global de los placeholders") : "";
 const addTL = pedazo("  const addTL=", null, "addTL de App");
 const create = pedazo("  const create=useCallback(async f=>{", "  },[", "create de App");
 const update = pedazo("  const update=useCallback(async f=>{", "  },[", "update de App");
@@ -54,6 +58,9 @@ const montajeToast = linea("{toast&&<Toast", "el montaje del Toast");
 // v10.84.79 — el contenedor de las vistas y el menú lateral, COPIADOS de App: con un contenedor propio el banco medía otra forma (la app
 // tenía un tope de 820 px para la forma que el banco no tenía: las dos columnas pasaban aquí y en la app no salían)
 const contenedor = linea('<div style={{boxSizing:"border-box",width:"100%",maxWidth:view==="board"', "el contenedor de las vistas");
+// v10.84.80 — la forma regresa a donde se abrió (la vista de origen y su desplazamiento) y el atajo N: copiados de App si los tiene
+const origenForma = L.some(l => l.startsWith("  // v10.84.80 — la forma regresa a donde se abrió")) ? pedazo("  // v10.84.80 — la forma regresa a donde se abrió", "  const volverDeLaForma=", "la vista de origen de la forma") : "";
+const atajos = L.some(l => l.startsWith("  // v10.65.1 — atajos de teclado")) ? pedazo("  // v10.65.1 — atajos de teclado", "  }, [user]);", "los atajos de teclado de App") : "";
 const menuAncho = /width:sbPlegado\?(\d+):(\d+),flexShrink:0,height:"100vh"/.exec(fuente);
 if (!menuAncho) throw new Error("no encuentro el ancho del menú lateral de App (width:sbPlegado?…:…)");
 const menuUmbral = /const sbPlegado=anchoVentana<(\d+)\?/.exec(fuente);
@@ -62,7 +69,7 @@ if (!menuUmbral) throw new Error("no encuentro desde qué ancho de ventana App p
 // lo que usan los pedazos copiados: lo de App lo pone el banco; lo de módulo se extrae; lo global es del navegador
 const APP = new Set(["setOrders", "showToast", "reload", "setEditO", "setView", "user", "userLogin", "orders", "editO", "view", "clients",
   "create", "update", "addTL", "navClick", "toast", "setToast", "clientConfirmModal", "setClientConfirmModal", "priceDropModal", "setPriceDropModal",
-  "purchaseOrders", "setDetailModalId"]);
+  "purchaseOrders", "setDetailModalId", "ordersRef", "setPrintModal", "vistaDeOrigenRef", "scrollDeVistaRef", "vistaVivaRef", "volverDeLaForma"]);
 const REACT = new Set(["React", "useState", "useEffect", "useCallback", "useMemo", "useRef", "useLayoutEffect"]);
 const GLOBALES = new Set(["window", "document", "console", "Number", "String", "Error", "Set", "Map", "Date", "JSON", "Math", "Promise", "Array",
   "Object", "isNaN", "parseFloat", "parseInt", "setTimeout", "clearTimeout", "crypto", "navigator", "encodeURIComponent", "decodeURIComponent",
@@ -79,7 +86,7 @@ function libres(codigo) {
   } });
   return [...fuera];
 }
-const sueltos = libres([addTL, create, update, navClick, preguntas, "return <>" + contenedor + montaje + "</div>" + montajeCliente + montajePrecio + montajeToast + "</>;"].join("\n"));
+const sueltos = libres([addTL, create, update, navClick, preguntas, origenForma, atajos, "return <>" + contenedor + montaje + "</div>" + montajeCliente + montajePrecio + montajeToast + "</>;"].join("\n"));
 const delModulo = sueltos.filter(n => !APP.has(n) && !REACT.has(n) && !GLOBALES.has(n));
 const RAICES = ["OrderForm", "ClientConfirmModal", "PriceDropModal", "Toast", ...delModulo];
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
@@ -109,6 +116,8 @@ const CLIENTES = [
   { id: "c-portland", name: "PORTLAND LEATHER", rfc: "PLE020202CD2", email: "", whatsapp: "", billing_mode: "normal", dias_credito: 0, aliases: [] },
   { id: "c-cuadra", name: "CUADRA BOOTS", rfc: "CBO030303EF3", email: "compras@cuadra.mx", whatsapp: "4771112233", billing_mode: "stock", dias_credito: 30, aliases: ["CUADRA"] },
   { id: "c-modelo", name: "CERVECERIA MODELO DE MEXICO", rfc: "CMM8601014G4", email: "eva@modelo.mx", whatsapp: "", billing_mode: "normal", dias_credito: 30, aliases: ["CORONA"] },
+  // v10.84.80 — el parecido de «¿Quisiste decir…?», completo como lo da el buscador (la pregunta sólo trae id, nombre y RFC)
+  { id: "c-papeleria", name: "PAPELERIA DEL BAJIO", rfc: "PBA040404IJ4", email: "ventas@papeleriabajio.mx", whatsapp: "4775556677", billing_mode: "normal", dias_credito: 0, aliases: [] },
 ];
 const VENDEDOR_DE = { "c-cuadra": [{ username: "pepechuy", display_name: "Pepe Chuy" }], "c-cosquim": [{ username: "manuel", display_name: "Manuel" }] };
 const CONTACTO_DE = { "c-portland": { last_email: "pedidos@portland.mx", last_phone: "", last_lada: "+52", last_rfc: "PLE020202CD2", last_company: "PORTLAND LEATHER" } };
@@ -120,13 +129,17 @@ const RESUELVE = {
   fuerte: { exact_match: null, similar_matches: [{ ...MODELO, motivo: "así le dicen en la casa", fuerte: true }], dados_de_baja: [] },
   parecido: { exact_match: null, similar_matches: [{ id: "c-papeleria", name: "PAPELERIA DEL BAJIO", rfc: null, dias_credito: 0, aliases: [], motivo: "se parece", fuerte: false }], dados_de_baja: [] },
   exacto: { exact_match: "c-modelo", exact_name: "CERVECERIA MODELO DE MEXICO", similar_matches: [], dados_de_baja: [] },
+  // v10.84.80 — «Ya existe» por el RFC que quedó en la forma (era de otro cliente)
+  rfc: { exact_match: null, similar_matches: [{ id: "c-cosquim", name: "COSQUIM", rfc: "COS010101AB1", dias_credito: 30, aliases: [], motivo: "mismo RFC", fuerte: true }], dados_de_baja: [] },
 };
 const IMG_URL = "https://x.supabase.co/storage/v1/object/public/order-files/OP-A1/img-1-abc.jpg";
 // la base: las órdenes de verdad (lo que la base tiene); App trabaja con su copia (orders) y la recarga con reload()
 const BASE = [
   { id: "OP-A1", production_number: "P-0648", client: "COSQUIM", client_id: "c-cosquim", client_company: "COSQUIM", client_email: "compras@cosquim.mx", product_type: "Etiquetas",
     product: "Etiqueta 5 x 4 cm couché adhesivo, 4 x 0", quantity: 1000, stage: "design", source: "internal", agent: "Manuel", created_by: "lupita", price: 4200,
-    order_type: "interna", paper_type: "Couché adhesivo", ink_front: "4 tintas", width_cm: 5, height_cm: 4, finishes: "Suajado", image_url: IMG_URL, created_at: "2026-10-09T10:00:00Z" },
+    order_type: "interna", paper_type: "Couché adhesivo", ink_front: "4 tintas", width_cm: 5, height_cm: 4, finishes: "Suajado", image_url: IMG_URL, created_at: "2026-10-09T10:00:00Z",
+    // v10.84.80 — lo que es de ESA orden (Replicar no lo copia) y lo del producto (sí)
+    notes: "YA AUTORIZO PRUEBA DE COLOR", distribution: ["Sucursal Centro"], pantone_front: ["186 C"] },
   { id: "OP-A2", production_number: "P-0649", client: "COSQUIM", client_id: "c-cosquim", client_company: "COSQUIM", client_email: "compras@cosquim.mx", product_type: "Cintillos",
     product: "Cintillo set básico", quantity: 500, stage: "ctp", source: "internal", agent: "Manuel", created_by: "lupita", price: 2600, order_type: "interna", created_at: "2026-10-09T11:00:00Z" },
   { id: "OP-ED", production_number: "P-0650", client: "PORTLAND LEATHER", client_id: "c-portland", client_company: "PORTLAND LEATHER", client_email: "pedidos@portland.mx",
@@ -259,6 +272,7 @@ const firmarOrderFile = async src => src;
 const useSignedFile = src => src;
 const abrirArchivoFirmado = () => {};
 function SignedImg({ alt, style }) { return <span style={{ ...style, display: "inline-block", background: "#ddd" }} aria-label={alt} />; }`,
+  placeholderGlobal,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `// ── el banco: App, lo justo para la forma (lo que hace al guardar, copiado de App.jsx) ──
 const ORDEN = id => ({ ...BASE.find(x => x.id === id) });
@@ -287,11 +301,15 @@ function Banco() {
   const clients = [];
   const purchaseOrders = PURCHASE_ORDERS;
   const setDetailModalId = id => anotar("detalle " + id);
+  const ordersRef = useRef(orders); ordersRef.current = orders;
+  const setPrintModal = o => anotar("imprimir " + (o && o.id));
 ${preguntas}
 ${addTL}
 ${create}
 ${update}
 ${navClick}
+${origenForma}
+${atajos}
   useEffect(() => { anotar("vista:" + view); }, [view]);
   const vivo = useRef({}); vivo.current = { view, editO, orders, navClick };
   useEffect(() => {
@@ -316,7 +334,7 @@ ${navClick}
     <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <div id="barra" style={{ height: 57, flexShrink: 0, borderBottom: "0.5px solid #ddd" }}/>
       ${contenedor}
-        {view !== "form" && <div id="fuera" data-vista={view} style={{ padding: 20 }}>Vista: {view}</div>}
+        {view !== "form" && <div id="fuera" data-vista={view} style={{ padding: 20, minHeight: 3000 }}>Vista: {view}</div>}
         ${montaje}
         <pre id="log" style={{ fontSize: 10, color: "#666", maxHeight: 140, overflow: "auto" }}>{log.join("\\n")}</pre>
       </div>

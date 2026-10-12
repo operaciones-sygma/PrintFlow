@@ -53,6 +53,25 @@ const alertasEnLaForma = p => p.evaluate(() => [...document.querySelectorAll('[r
   .map(e => { const r = e.getBoundingClientRect(); return { t: e.innerText.replace(/\s+/g, " ").trim(), visible: r.top >= 0 && r.bottom <= innerHeight }; }));
 const pregunta = p => p.locator('[role="dialog"]').last();
 const textoPregunta = async p => ((await pregunta(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+// v10.84.80 — el vendedor es una lista (antes, ocho botones): se elige igual con la forma de antes y la de ahora
+async function elegirVendedor(p, nombre) {
+  const sel = p.locator("select#ff-agent");
+  if (await sel.count()) { await sel.selectOption(nombre); await p.waitForTimeout(150); return; }
+  await p.getByRole("button", { name: nombre, exact: true }).first().click();
+}
+async function vendedorEditable(p) {
+  const sel = p.locator("select#ff-agent");
+  if (await sel.count()) return await sel.isEnabled();
+  if (await p.locator('#ff-agent[aria-readonly="true"]').count()) return false;
+  return await p.getByRole("button", { name: "Manuel", exact: true }).first().isEnabled().catch(() => false);
+}
+async function vendedorActual(p) {
+  const sel = p.locator("select#ff-agent");
+  if (await sel.count()) { const v = await sel.inputValue(); return v === "otro" ? "" : v; }
+  return p.evaluate(() => { const b = document.querySelector('#ff-agent [aria-pressed="true"]'); return b ? b.textContent.trim() : ""; });
+}
+// v10.84.80 — al crear, la forma se queda con «P-… creada» (antes: un aviso abajo de 6.5 s y al Dashboard)
+const creada = p => p.evaluate(() => { const b = [...document.querySelectorAll('.pf-forma [role="status"]')].find(e => /creada/.test(e.textContent || "")); return b ? b.innerText.replace(/\s+/g, " ").trim() : ""; });
 // una orden completa de un cliente que ya existe (COSQUIM: el buscador lo trae con su correo y su vendedor)
 async function capturar(p, { cantidad = "2000", descripcion = "Etiqueta 5 x 4 cm couché adhesivo a 4 tintas" } = {}) {
   await llenar(p, "Cliente (escribe para buscar)", "COS"); await espera(p, 600);
@@ -86,12 +105,12 @@ await caso("ord-01 si la base no da el número de la orden, lo capturado SIGUE e
 });
 await caso("ord-02 la orden que SÍ se guardó (falló sólo su bitácora) se da por creada, con su número, y no se puede duplicar", "guardar=timeline", async p => {
   await capturar(p); await crear(p); await espera(p, 1500);
-  const a1 = await avisos(p);
+  const c1 = await creada(p);   // v10.84.80 — la forma se queda con «P-… creada» (antes: aviso abajo y al Dashboard)
   if (await p.getByRole("button", { name: /Crear Orden/ }).count()) { await crear(p); await espera(p, 1500); }
-  const n = await nuevas(p), e = await estado(p);
+  const n = await nuevas(p), e = await estado(p), a1 = await avisos(p);
   ok("ord-02 la orden que SÍ se guardó (falló sólo su bitácora) se da por creada, con su número, y no se puede duplicar",
-    n.length === 1 && e.vista !== "form" && a1.some(t => /P-0651/.test(t) && /cread/i.test(t)) && !a1.some(t => /No se pudo crear|no se cre/i.test(t)),
-    `órdenes nuevas ${n.length} (${n.map(o => o.pn).join(", ")}) · vista ${e.vista} · avisos ${JSON.stringify(a1)}`);
+    n.length === 1 && e.vista === "form" && /P-0651/.test(c1) && /cread/i.test(c1) && !/no se cre/i.test(c1) && !a1.some(t => /No se pudo crear|no se cre/i.test(t)),
+    `órdenes nuevas ${n.length} (${n.map(o => o.pn).join(", ")}) · vista ${e.vista} · en la forma «${c1}» · avisos ${JSON.stringify(a1)}`);
 });
 await caso("ord-03 si la base rechaza la orden: UN mensaje, en la forma, en español, que no se guardó; lo capturado sigue", "guardar=falla", async p => {
   await capturar(p); await crear(p); await espera(p, 1500);
@@ -104,18 +123,18 @@ await caso("ord-03 si la base rechaza la orden: UN mensaje, en la forma, en espa
 await caso("ord-04 si falla sólo el aviso a Producción, la orden se creó: lo dice con su número, dice que no se pudo avisar y no la duplica", "guardar=aviso", async p => {
   await capturar(p); await crear(p); await espera(p, 1500);
   if (await p.getByRole("button", { name: /Crear Orden/ }).count()) { await crear(p); await espera(p, 1500); }
-  const a = await avisos(p), n = await nuevas(p);
+  const c = await creada(p), n = await nuevas(p);
   ok("ord-04 si falla sólo el aviso a Producción, la orden se creó: lo dice con su número, dice que no se pudo avisar y no la duplica",
-    n.length === 1 && a.some(t => /P-0651/.test(t) && /no se pudo avisar/i.test(t)) && !a.some(t => /No se pudo crear|no se cre/i.test(t)) && !a.some(crudo),
-    `órdenes nuevas ${n.length} · avisos ${JSON.stringify(a)}`);
+    n.length === 1 && /P-0651/.test(c) && /no se pudo avisar/i.test(c) && !/no se cre/i.test(c) && !crudo(c),
+    `órdenes nuevas ${n.length} · en la forma «${c}»`);
 });
 await caso("ord-05 con cliente nuevo, el aviso final dice la orden Y que el cliente quedó en CobranzaFlow, con «Ver P-…»", "cliente=nada", async p => {
   await llenar(p, "Cliente (escribe para buscar)", "ZZ PRUEBA CLAUDE SA"); await llenar(p, "correo@ej.com", "prueba@ejemplo.com");
   await llenar(p, "XAXX010101000", "ZZZ010101AAA"); await llenar(p, "Escribe o busca un tipo...", "Etiquetas"); await p.keyboard.press("Escape");
-  await llenar(p, "Ejemplo · 1000", "1000"); await p.getByRole("button", { name: "Manuel", exact: true }).click();
+  await llenar(p, "Ejemplo · 1000", "1000"); await elegirVendedor(p, "Manuel");
   await crear(p); await espera(p, 800);
   await p.getByRole("button", { name: /crear cliente nuevo/i }).click(); await espera(p, 1500);
-  const ultimo = (await avisos(p)).pop() || "";
+  const ultimo = await creada(p);
   const ver = p.getByRole("button", { name: /Ver P-0651/ });
   const hayVer = (await ver.count()) > 0;
   if (hayVer) { await ver.first().click(); await espera(p, 300); }
@@ -126,9 +145,9 @@ await caso("ord-06 después de un rechazo, volver a apretar «Crear Orden» crea
   await capturar(p); await crear(p); await espera(p, 1200);
   const antes = (await alertasEnLaForma(p)).filter(a => /no se cre/i.test(a.t)).length;
   await crear(p); await espera(p, 1500);
-  const n = await nuevas(p), e = await estado(p), despues = (await alertasEnLaForma(p)).filter(a => /no se cre/i.test(a.t)).length;
+  const n = await nuevas(p), e = await estado(p), despues = (await alertasEnLaForma(p)).filter(a => /no se cre/i.test(a.t)).length, c = await creada(p);
   ok("ord-06 después de un rechazo, volver a apretar «Crear Orden» crea la orden y el mensaje se va",
-    antes === 1 && n.length === 1 && n[0].pn === "P-0651" && e.vista !== "form" && despues === 0, `mensaje antes ${antes} · órdenes ${n.map(o => o.pn).join(",")} · vista ${e.vista} · mensaje después ${despues}`);
+    antes === 1 && n.length === 1 && n[0].pn === "P-0651" && e.vista === "form" && /P-0651/.test(c) && despues === 0, `mensaje antes ${antes} · órdenes ${n.map(o => o.pn).join(",")} · vista ${e.vista} · «${c}» · mensaje después ${despues}`);
 });
 await caso("ord-07 si la base rechaza los cambios de una orden: el mensaje va en la forma y lo editado sigue", "modo=editar&rol=admin&editar=falla", async p => {
   await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · CORREGIDO");
@@ -246,7 +265,7 @@ await caso("ord-44 si sólo cambia la cantidad, la pregunta dice que la factura 
 await caso("ord-45 el vendedor no puede tocar aquí el precio, el cliente ni el vendedor de una orden (y dice por qué)", "modo=editar&rol=vendedor", async p => {
   await editar(p, "OP-ED");
   const precio = await editable(p.getByPlaceholder("$0.00")), cliente = await editable(p.getByPlaceholder("Cliente (escribe para buscar)"));
-  const vend = await p.getByRole("button", { name: "Manuel", exact: true }).first().isEnabled().catch(() => true);
+  const vend = await vendedorEditable(p);
   const t = await texto(p);
   ok("ord-45 el vendedor no puede tocar aquí el precio, el cliente ni el vendedor de una orden (y dice por qué)", !precio && !cliente && !vend && /Lupita|Dirección/.test(t),
     `precio editable ${precio} · cliente editable ${cliente} · botón de vendedor activo ${vend}`);
@@ -352,16 +371,18 @@ await caso("ord-57 si el cliente ya existía (se eligió en la pregunta), el avi
   await llenar(p, "Cliente (escribe para buscar)", "CORONA SA"); await llenar(p, "correo@ej.com", "eva@modelo.mx");
   await llenar(p, "XAXX010101000", "CMM8601014G4");
   await llenar(p, "Escribe o busca un tipo...", "Etiquetas"); await p.keyboard.press("Escape");
-  await llenar(p, "Ejemplo · 1000", "1000"); await p.getByRole("button", { name: "Manuel", exact: true }).click();
+  await llenar(p, "Ejemplo · 1000", "1000"); await elegirVendedor(p, "Manuel");
   await crear(p); await espera(p, 800);
   await pregunta(p).getByRole("button", { name: /CERVECERIA MODELO/ }).first().click(); await espera(p, 1500);
-  const ultimo = (await avisos(p)).pop() || "";
-  ok("ord-57 si el cliente ya existía (se eligió en la pregunta), el aviso no dice que se dio de alta", /P-0651/.test(ultimo) && !/dado de alta/.test(ultimo), `último aviso «${ultimo}»`);
+  // v10.84.80 — elegir ya no crea: pone al cliente en la forma, y se crea con «Crear Orden»
+  if (await p.getByRole("button", { name: /Crear Orden/ }).count()) { await crear(p); await espera(p, 1500); }
+  const ultimo = await creada(p);
+  ok("ord-57 si el cliente ya existía (se eligió en la pregunta), el aviso no dice que se dio de alta", /P-0651/.test(ultimo) && !/dado de alta/.test(ultimo), `en la forma «${ultimo}»`);
 });
 await caso("ord-58 Esc en «¿ya existe?» regresa a la forma con todo, sin mensaje de error, y se puede volver a crear", "cliente=nada", async p => {
   await llenar(p, "Cliente (escribe para buscar)", "ZZ PRUEBA CLAUDE SA"); await llenar(p, "correo@ej.com", "prueba@ejemplo.com");
   await llenar(p, "XAXX010101000", "ZZZ010101AAA"); await llenar(p, "Escribe o busca un tipo...", "Etiquetas"); await p.keyboard.press("Escape");
-  await llenar(p, "Ejemplo · 1000", "1000"); await p.getByRole("button", { name: "Manuel", exact: true }).click();
+  await llenar(p, "Ejemplo · 1000", "1000"); await elegirVendedor(p, "Manuel");
   await crear(p); await espera(p, 800);
   const guardando = (await p.getByRole("button", { name: /Guardando/ }).count()) > 0;
   await p.keyboard.press("Escape"); await espera(p, 400);
@@ -378,7 +399,7 @@ await caso("ord-59 a 1920, el mensaje del rechazo queda a la vista junto al bot�
 }, { width: 1920, height: 1080 });
 await caso("ord-60 el vendedor, al CREAR, sí captura el precio, el cliente y el vendedor (el candado es sólo al editar)", "rol=vendedor", async p => {
   const precio = await editable(p.getByPlaceholder("$0.00")), cliente = await editable(p.getByPlaceholder("Cliente (escribe para buscar)"));
-  const vend = await p.getByRole("button", { name: "Manuel", exact: true }).first().isEnabled().catch(() => false);
+  const vend = await vendedorEditable(p);
   ok("ord-60 el vendedor, al CREAR, sí captura el precio, el cliente y el vendedor (el candado es sólo al editar)", precio && cliente && vend, `precio ${precio} · cliente ${cliente} · vendedor ${vend}`);
 });
 await caso("ord-61 una orden sin facturar se edita completa (sin candados de más)", "modo=editar&rol=admin", async p => {
@@ -707,7 +728,7 @@ await caso("ord-126 «Replicar» cuenta bien: «1 orden», «2 órdenes»", "", 
 await caso("ord-127 si la base no deja revisar el cliente, lo dice en palabras (no «Error resolviendo cliente»)", "cliente=permiso", async p => {
   await llenar(p, "Cliente (escribe para buscar)", "ZZ PRUEBA CLAUDE SA"); await llenar(p, "correo@ej.com", "prueba@ejemplo.com");
   await llenar(p, "XAXX010101000", "ZZZ010101AAA"); await llenar(p, "Escribe o busca un tipo...", "Etiquetas"); await p.keyboard.press("Escape");
-  await llenar(p, "Ejemplo · 1000", "1000"); await p.getByRole("button", { name: "Manuel", exact: true }).click();
+  await llenar(p, "Ejemplo · 1000", "1000"); await elegirVendedor(p, "Manuel");
   await crear(p); await espera(p, 900);
   const al = (await alertasEnLaForma(p)).map(a => a.t).join(" | ");
   ok("ord-127 si la base no deja revisar el cliente, lo dice en palabras (no «Error resolviendo cliente»)", /no tienes permiso/i.test(al) && !/Error resolviendo|permission denied/i.test(al), al);
@@ -898,7 +919,7 @@ await caso("ord-171 maquila a 1920: dos columnas y proveedor, costo y precio a l
 await caso("ord-172 Pre-prensa a 1366: las especificaciones y el archivo a la vista", "modo=specs&rol=preprensa", async p => {
   await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
   const top = await pieTop(p), papel = await rect(p, "#ff-papel");
-  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label")].find(x => /Subir archivo/.test(x.textContent)); return e ? e.getBoundingClientRect().top : null; });
+  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label, button")].find(x => /Subir archivo/.test(x.textContent)); return e ? e.getBoundingClientRect().top : null; });
   ok("ord-172 Pre-prensa a 1366: las especificaciones y el archivo a la vista", !!papel && papel.bottom <= top && subir !== null && subir < 768 * 1.5, `papel @${papel && Math.round(papel.bottom)} · subir archivo @${subir && Math.round(subir)} · pie ${Math.round(top)}`);
 });
 await caso("ord-173 se lee también a 683×384 con maquila elegida (el renglón chico de arriba)", "", async p => {
@@ -987,7 +1008,7 @@ await caso("ord-183 al abrir, la forma sale ya con su acomodo (no se pinta a dos
 await caso("ord-184 Pre-prensa a 1920: las especificaciones a la izquierda y el archivo a la derecha, todo sin desplazar", "modo=specs&rol=preprensa", async p => {
   await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
   const top = await pieTop(p), papel = await rect(p, "#ff-papel"), alto = await rect(p, "#ff-alto");
-  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label")].find(x => /Subir archivo/.test(x.textContent)); return e ? (r => ({ left: r.left, bottom: r.bottom }))(e.getBoundingClientRect()) : null; });
+  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label, button")].find(x => /Subir archivo/.test(x.textContent)); return e ? (r => ({ left: r.left, bottom: r.bottom }))(e.getBoundingClientRect()) : null; });
   ok("ord-184 Pre-prensa a 1920: las especificaciones a la izquierda y el archivo a la derecha, todo sin desplazar",
     !!papel && !!alto && !!subir && alto.bottom <= top && subir.bottom <= top && subir.left > papel.right,
     `papel @${papel && Math.round(papel.left)} · medida @${alto && Math.round(alto.bottom)} · subir archivo @${subir && Math.round(subir.left)},${subir && Math.round(subir.bottom)} · pie ${Math.round(top)}`);
@@ -998,6 +1019,384 @@ await caso("ord-185 en el borde (la forma más angosta que va a dos columnas, 11
   const c = await cortados(p);
   ok("ord-185 en el borde (la forma más angosta que va a dos columnas, 1150 px) tampoco se corta lo que se escribe", dos && c.length === 0, `dos columnas ${dos} · ${c.join(" · ") || "nada cortado"}`);
 }, { width: 1404, height: 768 });   // 1404 − 222 (menú) − 32 (relleno) = 1150
+
+// ════ v10.84.80 — la segunda revisión independiente de la forma (12-oct, 28/40): el cliente que se mezclaba (P1), Replicar, al terminar,
+//      vendedor y precio a la vista en la laptop, y lo que sólo servía con ratón (P2). Decisiones de Marcelo: los cinco; Replicar copia
+//      specs, Pantones e imagen (no notas ni distribución); al crear, la forma se queda para capturar otra. ════
+const elegirCliente = async (p, nombre, letras) => { await llenar(p, "Cliente (escribe para buscar)", letras || nombre.slice(0, 3)); await espera(p, 600); await p.getByText(nombre, { exact: true }).first().click(); await espera(p, 700); };
+const valorDe = (p, sel) => p.locator(sel).first().inputValue().catch(() => null);
+// lo que la forma dice del cliente (los role=status que no son la orden creada ni el resumen de faltantes)
+const avisoDeCliente = p => p.evaluate(() => [...document.querySelectorAll('.pf-forma [role="status"]')].map(e => e.innerText.replace(/\s+/g, " ").trim()).filter(t => !/ creada|^Falta/.test(t)).join(" | "));
+const fuera = p => p.locator("h2").first().click();
+// una orden de un cliente escrito a mano (no elegido): para las preguntas de «¿ya existe?»
+async function capturarEscrito(p, { cliente, rfc, correo = "x@correo.mx" }) {
+  await llenar(p, "Cliente (escribe para buscar)", cliente); await fuera(p); await espera(p, 400);
+  await llenar(p, "correo@ej.com", correo); await llenar(p, "XAXX010101000", rfc);
+  await llenar(p, "Escribe o busca un tipo...", "Etiquetas"); await fuera(p);
+  await llenar(p, "Ejemplo · 1000", "1000"); await elegirVendedor(p, "Manuel");
+}
+// el contraste de UN elemento, con la misma cuenta que `legibilidad`: su texto, su borde o su placeholder contra su fondo
+const contraste = (p, buscar, que = "texto") => p.evaluate(([buscar, que]) => {
+  const rgba = c => { const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(",").map(x => parseFloat(x)); return { r: v[0], g: v[1], b: v[2], a: v.length > 3 ? v[3] : 1 }; };
+  const sobre = (a, b) => ({ r: a.r * a.a + b.r * (1 - a.a), g: a.g * a.a + b.g * (1 - a.a), b: a.b * a.a + b.b * (1 - a.a), a: 1 });
+  const fondo = el => { const capas = []; for (let e = el; e; e = e.parentElement) { const c = rgba(getComputedStyle(e).backgroundColor); if (c && c.a > 0) { capas.push(c); if (c.a >= 0.99) break; } } let base = { r: 255, g: 255, b: 255, a: 1 }; for (let i = capas.length - 1; i >= 0; i--) base = sobre(capas[i], base); return base; };
+  const L = ({ r, g, b }) => { const t = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * t(r) + 0.7152 * t(g) + 0.0722 * t(b); };
+  const ratio = (a, b) => { const x = L(a), y = L(b); return Math.round((Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) * 100) / 100; };
+  const el = new Function("return (" + buscar + ")")(); if (!el) return null;
+  if (que === "borde") { const c = rgba(getComputedStyle(el).borderTopColor), f = fondo(el.parentElement || el); return c && parseFloat(getComputedStyle(el).borderTopWidth) > 0 ? ratio(sobre(c, f), f) : 0; }
+  const c = rgba(getComputedStyle(el, que === "placeholder" ? "::placeholder" : null).color), f = fondo(el); return c ? ratio(sobre(c, f), f) : null;
+}, [buscar, que]);
+
+// ── [P1] el cliente de una orden no se mezcla ──
+await caso("ord-190 cambiar el nombre después de elegir un cliente quita su RFC, su contacto y el vendedor sugerido, y lo dice", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  const antes = { rfc: await valorDe(p, "#ff-rfc"), correo: await valorDe(p, "#ff-contacto"), vend: await vendedorActual(p) };
+  await p.locator("#ff-cliente-input").fill("Taller Ficticio de Prueba"); await fuera(p); await espera(p, 500);
+  const despues = { rfc: await valorDe(p, "#ff-rfc"), correo: await valorDe(p, "#ff-contacto"), wa: await valorDe(p, "#ff-whatsapp"), vend: await vendedorActual(p) };
+  const aviso = await avisoDeCliente(p);
+  ok("ord-190 cambiar el nombre después de elegir un cliente quita su RFC, su contacto y el vendedor sugerido, y lo dice",
+    antes.rfc === "COS010101AB1" && antes.vend === "Manuel" && despues.rfc === "" && despues.correo === "" && despues.wa === "" && despues.vend === "" && /COSQUIM/.test(aviso) && /RFC/.test(aviso),
+    `antes ${JSON.stringify(antes)} · después ${JSON.stringify(despues)} · aviso «${aviso}»`);
+});
+await caso("ord-191 después de cambiar el cliente, sale «Cliente nuevo» (pide su contacto, como a cualquiera nuevo)", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  await p.locator("#ff-cliente-input").fill("Taller Ficticio de Prueba"); await fuera(p); await espera(p, 600);
+  const t = await texto(p);
+  ok("ord-191 después de cambiar el cliente, sale «Cliente nuevo» (pide su contacto, como a cualquiera nuevo)", /Cliente nuevo:/.test(t), (t.match(/Cliente nuevo:.{0,60}/) || ["sin el aviso"])[0]);
+});
+await caso("ord-192 elegir un cliente en «¿Quisiste decir…?» lo pone en la forma con SUS datos y no crea la orden; al crear, va completa", "cliente=parecido", async p => {
+  await capturarEscrito(p, { cliente: "Papeleria Bajio SA", rfc: "XYZ990101AB1", correo: "otro@correo.mx" });
+  await crear(p); await espera(p, 900);
+  await pregunta(p).getByRole("button", { name: /PAPELERIA DEL BAJIO/ }).first().click(); await espera(p, 1200);
+  const sinCrear = (await nuevas(p)).length === 0 && (await cuenta(p, "saveOrder")) === 0;
+  const puesto = { cliente: await valorDe(p, "#ff-cliente-input"), rfc: await valorDe(p, "#ff-rfc"), correo: await valorDe(p, "#ff-contacto") };
+  const aviso = await avisoDeCliente(p);
+  if (await p.getByRole("button", { name: /Crear Orden/ }).count()) { await crear(p); await espera(p, 1500); }
+  const n = await nuevas(p), o = n[0] ? await p.evaluate(id => { const x = window.__estado().base.find(y => y.id === id); return { client: x.client, client_id: x.client_id, rfc: x.client_rfc, correo: x.client_email }; }, n[0].id) : null;
+  ok("ord-192 elegir un cliente en «¿Quisiste decir…?» lo pone en la forma con SUS datos y no crea la orden; al crear, va completa",
+    sinCrear && puesto.cliente === "PAPELERIA DEL BAJIO" && puesto.rfc === "PBA040404IJ4" && puesto.correo === "ventas@papeleriabajio.mx" && /PAPELERIA DEL BAJIO/.test(aviso)
+    && n.length === 1 && o.client_id === "c-papeleria" && o.client === "PAPELERIA DEL BAJIO" && o.rfc === "PBA040404IJ4",
+    `sin crear ${sinCrear} · en la forma ${JSON.stringify(puesto)} · aviso «${aviso}» · creada ${JSON.stringify(o)}`);
+});
+await caso("ord-193 «¿Quisiste decir…?» abre con el foco en «Volver a la forma»: Enter no liga a nadie", "cliente=parecido", async p => {
+  await capturarEscrito(p, { cliente: "Papeleria Bajio SA", rfc: "XYZ990101AB1" });
+  await crear(p); await espera(p, 900);
+  const foco = await p.evaluate(() => (document.activeElement?.tagName === "BUTTON" ? document.activeElement.textContent.trim() : document.activeElement?.tagName) || "");
+  await p.keyboard.press("Enter"); await espera(p, 600);
+  const n = (await nuevas(p)).length, cli = await valorDe(p, "#ff-cliente-input"), abierta = await hayPregunta(p);
+  ok("ord-193 «¿Quisiste decir…?» abre con el foco en «Volver a la forma»: Enter no liga a nadie", /Volver a la forma/.test(foco) && n === 0 && cli === "Papeleria Bajio SA" && !abierta,
+    `foco «${foco.slice(0, 40)}» · órdenes ${n} · cliente «${cli}» · pregunta abierta ${abierta}`);
+});
+await caso("ord-194 «Ya existe» por el RFC: dice de quién es el RFC de la forma y «Corregir el RFC» regresa a ese campo", "cliente=rfc", async p => {
+  await capturarEscrito(p, { cliente: "Cosquim Industrial", rfc: "COS010101AB1" });
+  await crear(p); await espera(p, 900);
+  const t = await textoPregunta(p), corregir = pregunta(p).getByRole("button", { name: /Corregir el RFC/ });
+  const hay = (await corregir.count()) > 0;
+  if (hay) { await corregir.click(); await espera(p, 500); }
+  const foco = await p.evaluate(() => document.activeElement?.id || "");
+  ok("ord-194 «Ya existe» por el RFC: dice de quién es el RFC de la forma y «Corregir el RFC» regresa a ese campo",
+    /COS010101AB1/.test(t) && /es de COSQUIM/.test(t) && hay && foco === "ff-rfc" && (await nuevas(p)).length === 0, `«${t.slice(0, 220)}» · botón ${hay} · foco ${foco}`);
+});
+await caso("ord-195 al editar, cambiar el cliente de una orden ligada quita su contacto (el vendedor se queda) y lo dice", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED");
+  await p.locator("#ff-cliente-input").fill("OTRA EMPRESA SA"); await fuera(p); await espera(p, 500);
+  const d = { correo: await valorDe(p, "#ff-contacto"), vend: await vendedorActual(p), aviso: await avisoDeCliente(p) };
+  ok("ord-195 al editar, cambiar el cliente de una orden ligada quita su contacto (el vendedor se queda) y lo dice", d.correo === "" && d.vend === "Genaro" && /PORTLAND/.test(d.aviso), JSON.stringify(d));
+});
+
+// ── [P2] Replicar trae lo del producto, no lo de la otra orden ──
+await caso("ord-196 «Replicar» copia specs, Pantones e imagen, NO las notas ni la distribución de la otra orden, y lo dice", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  await replicar(p);
+  const notas = await valorDe(p, "#ff-notas"), papel = await valorDe(p, "#ff-papel");
+  const ultimo = (await avisos(p)).pop() || "";
+  const mas = (await p.getByRole("button", { name: /Más de esta orden/ }).first().innerText().catch(() => "")).replace(/\s+/g, " ");
+  const pantone = await p.evaluate(() => /186 C/.test(document.querySelector(".pf-forma")?.innerText || ""));
+  ok("ord-196 «Replicar» copia specs, Pantones e imagen, NO las notas ni la distribución de la otra orden, y lo dice",
+    notas === "" && !/Distribuci/.test(mas) && pantone && /Couché adhesivo/.test(papel || "") && /notas/i.test(ultimo) && /imagen/.test(ultimo),
+    `notas «${notas}» · Más «${mas}» · Pantone ${pantone} · papel «${papel}» · aviso «${ultimo}»`);
+});
+await caso("ord-197 la ventana de «Replicar» dice lo que copia (con Pantones e imagen) y que las notas y la distribución no", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  await p.getByRole("button", { name: /Replicar de orden anterior/ }).click(); await espera(p, 800);
+  const t = ((await p.getByRole("dialog", { name: /Replicar/ }).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("ord-197 la ventana de «Replicar» dice lo que copia (con Pantones e imagen) y que las notas y la distribución no",
+    /Pantones/.test(t) && /imagen/i.test(t) && /notas/i.test(t) && /distribución/i.test(t) && /no se copian/i.test(t), t.slice(0, 320));
+});
+
+// ── [P2] al terminar: la forma se queda para capturar otra; editar y Cancelar regresan a donde se abrió ──
+await caso("ord-198 al crear, la forma se queda vacía con «P-… creada · Ver · Imprimir · Capturar otra», que no se va solo", "", async p => {
+  await capturar(p); await crear(p); await espera(p, 1500);
+  const e = await estado(p), c1 = await creada(p);
+  const foco = await p.evaluate(() => !!document.activeElement?.closest('[role="status"]'));
+  await espera(p, 7500);   // el aviso de abajo duraba 6.5 s
+  const c2 = await creada(p), vacia = (await valorDe(p, "#ff-cliente-input")) === "";
+  const botones = await p.evaluate(() => { const b = [...document.querySelectorAll('.pf-forma [role="status"]')].find(x => /creada/.test(x.textContent)); return b ? [...b.querySelectorAll("button")].map(x => x.textContent.trim()) : []; });
+  ok("ord-198 al crear, la forma se queda vacía con «P-… creada · Ver · Imprimir · Capturar otra», que no se va solo",
+    e.vista === "form" && /P-0651 creada/.test(c1) && /P-0651/.test(c2) && vacia && foco && botones.some(b => /Ver P-0651/.test(b)) && botones.some(b => /Imprimir/.test(b)) && botones.some(b => /Capturar otra/.test(b)),
+    `vista ${e.vista} · «${c1}» · a los 7.5 s «${c2}» · vacía ${vacia} · foco en el aviso ${foco} · botones ${JSON.stringify(botones)}`);
+});
+await caso("ord-199 «Ver», «Imprimir» y «Capturar otra» de la orden creada hacen lo suyo", "", async p => {
+  await capturar(p); await crear(p); await espera(p, 1500);
+  const id = (await nuevas(p))[0]?.id || "?";
+  await p.getByRole("button", { name: /Ver P-0651/ }).first().click().catch(() => {}); await espera(p, 300);
+  await p.getByRole("button", { name: /^Imprimir/ }).first().click().catch(() => {}); await espera(p, 300);
+  await p.getByRole("button", { name: /Capturar otra/ }).first().click().catch(() => {}); await espera(p, 400);
+  const foco = await p.evaluate(() => document.activeElement?.id || ""), queda = await creada(p);
+  ok("ord-199 «Ver», «Imprimir» y «Capturar otra» de la orden creada hacen lo suyo",
+    (await cuenta(p, "detalle " + id)) === 1 && (await cuenta(p, "imprimir " + id)) === 1 && foco === "ff-cliente-input" && queda === "",
+    `detalle ${await cuenta(p, "detalle ")} · imprimir ${await cuenta(p, "imprimir ")} · foco ${foco} · aviso «${queda}»`);
+});
+await caso("ord-200 al empezar la siguiente orden se quita el aviso de la anterior, y «el último fue» ya dice su número", "", async p => {
+  await capturar(p); await crear(p); await espera(p, 1500);
+  const antes = await creada(p);
+  await llenar(p, "Cliente (escribe para buscar)", "POR"); await espera(p, 500);
+  const queda = await creada(p), t = await texto(p);
+  ok("ord-200 al empezar la siguiente orden se quita el aviso de la anterior, y «el último fue» ya dice su número", /P-0651/.test(antes) && queda === "" && /el último fue P-0651/.test(t),
+    `antes «${antes}» · después «${queda}» · ${(t.match(/el último fue P-\d+/) || ["sin «el último fue»"])[0]}`);
+});
+await caso("ord-201 guardar, «Sin cambios» y Cancelar regresan a donde se abrió la forma (desde «Todas», a «Todas»)", "rol=admin", async p => {
+  const r = [];
+  for (const como of ["guardar", "sin cambios", "cancelar"]) {
+    await p.evaluate(() => window.__ir("orders")); await espera(p, 300);
+    await p.evaluate(() => window.__editar("OP-ED")); await espera(p, 900);
+    if (como === "guardar") { await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · " + r.length); await guardar(p); }
+    else if (como === "sin cambios") await guardar(p);
+    else await p.getByRole("button", { name: /^Cancelar$/ }).click();
+    await espera(p, 1000);
+    r.push(como + "→" + (await estado(p)).vista);
+  }
+  ok("ord-201 guardar, «Sin cambios» y Cancelar regresan a donde se abrió la forma (desde «Todas», a «Todas»)", r.every(x => x.endsWith("→orders")), r.join(" · "));
+});
+await caso("ord-202 «Agregar producto» a una OC: el botón dice «Agregar a OC-…» y al crear regresa a la OC", "modo=oc", async p => {
+  await llenar(p, "Ejemplo · 1000", "500"); await elegirVendedor(p, "Manuel");
+  const boton = p.getByRole("button", { name: /Agregar a OC-0900/ }), dice = (await boton.count()) > 0;
+  if (dice) await boton.first().click(); else await p.locator("button", { hasText: /^Guardar$/ }).first().click().catch(() => {});
+  await espera(p, 1500);
+  const e = await estado(p), n = (await nuevas(p)).length;
+  ok("ord-202 «Agregar producto» a una OC: el botón dice «Agregar a OC-…» y al crear regresa a la OC", dice && e.vista === "oc" && n === 1, `botón «Agregar a OC-0900» ${dice} · vista ${e.vista} · órdenes ${n}`);
+});
+await caso("ord-203 al regresar a «Todas», la página queda donde estaba (no a media página)", "rol=admin", async p => {
+  await p.evaluate(() => window.__ir("orders")); await espera(p, 300);
+  await p.evaluate(() => scrollTo(0, 700)); await espera(p, 400);
+  await p.evaluate(() => window.__editar("OP-ED")); await espera(p, 900);
+  await p.evaluate(() => scrollTo(0, document.body.scrollHeight)); await espera(p, 300);   // al fondo de la forma, junto a «Guardar»
+  await p.getByRole("button", { name: /^Cancelar$/ }).click(); await espera(p, 900);
+  const e = await estado(p), y = await p.evaluate(() => Math.round(scrollY));
+  ok("ord-203 al regresar a «Todas», la página queda donde estaba (no a media página)", e.vista === "orders" && Math.abs(y - 700) <= 5, `vista ${e.vista} · y ${y}`);
+});
+await caso("ord-204 el botón de un aviso («Ver P-…» al guardar) se lee: 4.5:1 o más", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED");
+  await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · cambio"); await guardar(p); await espera(p, 900);
+  const r = await contraste(p, `[...document.querySelectorAll("button")].find(b => /^Ver P-/.test(b.textContent.trim()) && getComputedStyle(b.parentElement).position === "fixed")`);
+  ok("ord-204 el botón de un aviso («Ver P-…» al guardar) se lee: 4.5:1 o más", r !== null && r >= 4.5, `contraste ${r}`);
+});
+
+// ── [P2] en la laptop, vendedor y precio a la vista; el pie chico donde hay poco alto ──
+await caso("ord-205 a 1366×768 con el menú abierto, el vendedor y el precio quedan arriba del pie sin desplazar", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), v = await rect(p, "#ff-agent"), pr = await rect(p, "#ff-precio");
+  ok("ord-205 a 1366×768 con el menú abierto, el vendedor y el precio quedan arriba del pie sin desplazar", !!v && !!pr && v.bottom <= top && pr.bottom <= top,
+    `vendedor @${v && Math.round(v.bottom)} · precio @${pr && Math.round(pr.bottom)} · pie ${Math.round(top)}`);
+});
+await caso("ord-206 a 1366×768 con el menú plegado (dos columnas), también", "menu=plegado", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), v = await rect(p, "#ff-agent"), pr = await rect(p, "#ff-precio");
+  ok("ord-206 a 1366×768 con el menú plegado (dos columnas), también", !!v && !!pr && v.bottom <= top && pr.bottom <= top,
+    `vendedor @${v && Math.round(v.bottom)} · precio @${pr && Math.round(pr.bottom)} · pie ${Math.round(top)}`);
+});
+await caso("ord-207 a 683×384 el pie es chico: 18 % de la pantalla o menos, y 25 % o menos con los faltantes", "", async p => {
+  const alto0 = 384 - await pieTop(p);
+  await crear(p); await espera(p, 700);
+  const alto1 = 384 - await pieTop(p);
+  ok("ord-207 a 683×384 el pie es chico: 18 % de la pantalla o menos, y 25 % o menos con los faltantes", alto0 <= 384 * 0.18 && alto1 <= 384 * 0.25,
+    `pie ${Math.round(alto0)} px (${Math.round(alto0 / 3.84)} %) · con faltantes ${Math.round(alto1)} px (${Math.round(alto1 / 3.84)} %)`);
+}, { width: 683, height: 384 });
+
+// ── [P2] lo que sólo servía con ratón y buena vista ──
+await caso("ord-208 al intentar crear con faltantes, el foco va al primero y cada uno dice «Falta…» en su campo (aria-invalid)", "", async p => {
+  await crear(p); await espera(p, 700);
+  const r = await p.evaluate(() => ({ foco: document.activeElement?.id || "", campos: ["ff-cliente-input", "ff-tipo", "ff-cantidad", "ff-agent"].map(id => { const e = document.getElementById(id);
+    const dice = (e?.getAttribute("aria-describedby") || "").split(" ").map(x => document.getElementById(x)?.textContent || "").join(" ").trim();
+    return { id, invalido: e?.getAttribute("aria-invalid") || null, dice }; }) }));
+  ok("ord-208 al intentar crear con faltantes, el foco va al primero y cada uno dice «Falta…» en su campo (aria-invalid)",
+    r.foco === "ff-cliente-input" && r.campos.every(c => c.invalido === "true" && /Falta/i.test(c.dice)), JSON.stringify(r));
+});
+await caso("ord-209 el borde del campo que falta se distingue (3:1 o más contra el fondo)", "", async p => {
+  await crear(p); await espera(p, 700);
+  const cli = await contraste(p, `document.getElementById("ff-client")`, "borde"), tipo = await contraste(p, `document.getElementById("ff-tipo")`, "borde");
+  ok("ord-209 el borde del campo que falta se distingue (3:1 o más contra el fondo)", cli >= 3 && tipo >= 3, `cliente ${cli} · tipo ${tipo}`);
+});
+await caso("ord-210 el resumen de faltantes se anuncia y cada faltante lleva a su campo", "", async p => {
+  await crear(p); await espera(p, 700);
+  const r = await p.evaluate(() => { const res = [...document.querySelectorAll('.pf-forma [role="status"],.pf-forma [aria-live]')].find(x => /Falta/.test(x.textContent || ""));
+    return res ? { texto: res.innerText.replace(/\s+/g, " ").slice(0, 160), botones: [...res.querySelectorAll("button")].map(b => b.textContent.trim()) } : null; });
+  let foco = "";
+  if (r && r.botones.some(b => /Tipo/.test(b))) { await p.locator('.pf-forma button', { hasText: /^Tipo/ }).last().click(); await espera(p, 300); foco = await p.evaluate(() => document.activeElement?.id || ""); }
+  ok("ord-210 el resumen de faltantes se anuncia y cada faltante lleva a su campo", !!r && r.botones.length >= 3 && foco === "ff-tipo", `${JSON.stringify(r)} · foco ${foco}`);
+});
+await caso("ord-211 la imagen: «Subir 1ra» se alcanza con el teclado y Enter abre el archivo", "", async p => {
+  const b = p.getByRole("button", { name: /Subir 1ra/ });
+  const hay = (await b.count()) > 0;
+  let abre = false, foco = "";
+  if (hay) { await p.bringToFront(); await b.first().waitFor({ state: "visible" }); await b.first().focus(); await espera(p, 150); foco = await p.evaluate(() => document.activeElement?.textContent?.trim().slice(0, 30) || "");
+    // Playwright prende la intercepción del selector de archivos sin esperar respuesta: con la máquina cargada, un Enter inmediato le ganaba
+    const fc = p.waitForEvent("filechooser", { timeout: 4000 }).then(() => true, () => false); await espera(p, 300); await p.keyboard.press("Enter"); abre = await fc; }
+  ok("ord-211 la imagen: «Subir 1ra» se alcanza con el teclado y Enter abre el archivo", hay && abre, `botón ${hay} · foco «${foco}» · abre el archivo ${abre}`);
+});
+await caso("ord-212 Pre-prensa: «Subir archivo» se alcanza con el teclado y Enter abre el archivo", "modo=specs&rol=preprensa", async p => {
+  const b = p.getByRole("button", { name: /Subir archivo/ });
+  const hay = (await b.count()) > 0;
+  let abre = false, foco = "";
+  if (hay) { await p.bringToFront(); await b.first().waitFor({ state: "visible" }); await b.first().focus(); await espera(p, 150); foco = await p.evaluate(() => document.activeElement?.textContent?.trim().slice(0, 30) || "");
+    // Playwright prende la intercepción del selector de archivos sin esperar respuesta: con la máquina cargada, un Enter inmediato le ganaba
+    const fc = p.waitForEvent("filechooser", { timeout: 4000 }).then(() => true, () => false); await espera(p, 300); await p.keyboard.press("Enter"); abre = await fc; }
+  ok("ord-212 Pre-prensa: «Subir archivo» se alcanza con el teclado y Enter abre el archivo", hay && abre, `botón ${hay} · foco «${foco}» · abre el archivo ${abre}`);
+});
+await caso("ord-213 «Tipo» es una lista de verdad: flechas y Enter eligen sin perder el foco, y Tab sigue al siguiente campo", "", async p => {
+  const t = p.locator("#ff-tipo");
+  await t.click(); await t.fill("Eti"); await espera(p, 200);
+  const r1 = await p.evaluate(() => { const e = document.getElementById("ff-tipo"); return { rol: e.getAttribute("role"), abierta: e.getAttribute("aria-expanded"), lista: !!document.querySelector('[role="listbox"]') }; });
+  await p.keyboard.press("ArrowDown"); await espera(p, 100);
+  const act = await p.evaluate(() => document.getElementById("ff-tipo").getAttribute("aria-activedescendant"));
+  await p.keyboard.press("Enter"); await espera(p, 400);
+  const elegido = await valorDe(p, "#ff-tipo"), focoTras = await p.evaluate(() => document.activeElement?.id || document.activeElement?.tagName);
+  await t.fill("Folde"); await espera(p, 150);
+  await p.keyboard.press("Tab"); await espera(p, 500);
+  const focoTab = await p.evaluate(() => document.activeElement === document.body ? "body" : (document.activeElement?.id || document.activeElement?.tagName));
+  ok("ord-213 «Tipo» es una lista de verdad: flechas y Enter eligen sin perder el foco, y Tab sigue al siguiente campo",
+    r1.rol === "combobox" && r1.abierta === "true" && r1.lista && !!act && /Etiqueta/.test(elegido || "") && focoTras === "ff-tipo" && focoTab !== "body",
+    `${JSON.stringify(r1)} · activa ${act} · elegido «${elegido}» · foco tras Enter ${focoTras} · foco tras Tab ${focoTab}`);
+});
+await caso("ord-214 la pregunta de la factura cobrada: el foco entra, Tab no se sale, la opción dice que está elegida, «Sobrarían» se lee y Esc regresa sin guardar", "modo=editar&rol=admin&precio=cobrada", async p => {
+  await editar(p, "OP-FA");
+  await p.locator("#ff-precio").fill("1978"); await guardar(p); await espera(p, 1000);
+  const d = p.getByRole("dialog", { name: /ya está cobrada/ });
+  const abierta = (await d.count()) > 0;
+  const dentro = () => p.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+  const focoDentro = abierta && await dentro();
+  let salio = 0; for (let i = 0; i < 10; i++) { await p.keyboard.press("Tab"); await espera(p, 40); if (!(await dentro())) salio++; }
+  const op = d.getByRole("button", { name: /saldo a favor/ });
+  if (await op.count()) { await op.first().click(); await espera(p, 200); }
+  const presionada = await op.first().getAttribute("aria-pressed").catch(() => null);
+  const sobra = await contraste(p, `[...document.querySelectorAll('[role="dialog"] span')].find(x => x.textContent.trim() === "Sobrarían")?.nextElementSibling`);
+  await p.keyboard.press("Escape"); await espera(p, 600);
+  const cerrada = (await d.count()) === 0, ups = await cuenta(p, "update OP-FA");
+  ok("ord-214 la pregunta de la factura cobrada: el foco entra, Tab no se sale, la opción dice que está elegida, «Sobrarían» se lee y Esc regresa sin guardar",
+    abierta && focoDentro && salio === 0 && presionada === "true" && sobra >= 4.5 && cerrada && ups === 0,
+    `abierta ${abierta} · foco dentro ${focoDentro} · Tab salió ${salio} · aria-pressed ${presionada} · «Sobrarían» ${sobra} · cerrada con Esc ${cerrada} · guardados ${ups}`);
+});
+await caso("ord-215 los placeholders se leen (4.5:1 o más)", "", async p => {
+  const cli = await contraste(p, `document.getElementById("ff-cliente-input")`, "placeholder"), cant = await contraste(p, `document.getElementById("ff-cantidad")`, "placeholder");
+  ok("ord-215 los placeholders se leen (4.5:1 o más)", cli >= 4.5 && cant >= 4.5, `cliente ${cli} · cantidad ${cant}`);
+});
+await caso("ord-216 la N en «Nueva Orden» con algo capturado no pregunta «¿Salir sin guardar?»: lleva el foco al cliente", "", async p => {
+  await llenar(p, "Ejemplo · 1000", "250");
+  await p.getByRole("button", { name: /Normal/ }).first().focus();
+  await p.keyboard.press("n"); await espera(p, 400);
+  const pregunto = await hayPregunta(p), foco = await p.evaluate(() => document.activeElement?.id || ""), cant = await valorDe(p, "#ff-cantidad");
+  ok("ord-216 la N en «Nueva Orden» con algo capturado no pregunta «¿Salir sin guardar?»: lleva el foco al cliente", !pregunto && foco === "ff-cliente-input" && cant === "250",
+    `preguntó ${pregunto} · foco ${foco} · cantidad «${cant}»`);
+});
+await caso("ord-217 «Cancelar» mientras se guarda no se puede apretar (la orden se está creando)", "guardar=lento&lento=2", async p => {
+  await capturar(p); await crear(p); await espera(p, 400);
+  const c = p.getByRole("button", { name: /^Cancelar$/ });
+  const activo = await c.first().isEnabled().catch(() => false);
+  await c.first().click({ force: true, timeout: 1500 }).catch(() => {}); await espera(p, 2800);
+  const e = await estado(p), n = (await nuevas(p)).length, cr = await creada(p);
+  ok("ord-217 «Cancelar» mientras se guarda no se puede apretar (la orden se está creando)", !activo && e.vista === "form" && n === 1 && /P-0651/.test(cr), `activo ${activo} · vista ${e.vista} · órdenes ${n} · «${cr}»`);
+});
+await caso("ord-218 ninguna etiqueta en mayúsculas pasa de 30 letras (las largas se leen mal en mayúsculas)", "", async p => {
+  // sólo el texto que de verdad va en mayúsculas (lo que adentro lleva text-transform:none no cuenta)
+  const largas = await p.evaluate(() => { const out = [];
+    const raices = [...document.querySelectorAll(".pf-forma *")].filter(e => getComputedStyle(e).textTransform === "uppercase" && (!e.parentElement || getComputedStyle(e.parentElement).textTransform !== "uppercase"));
+    for (const r of raices) { let t = ""; const w = document.createTreeWalker(r, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) if (n.parentElement && getComputedStyle(n.parentElement).textTransform === "uppercase") t += n.textContent;
+      t = t.replace(/\s+/g, " ").trim(); if (t.length > 30) out.push(t); }
+    return out; });
+  ok("ord-218 ninguna etiqueta en mayúsculas pasa de 30 letras (las largas se leen mal en mayúsculas)", largas.length === 0, largas.slice(0, 4).join(" | ") || "ninguna");
+});
+await caso("ord-219 el vendedor que edita su orden: la nota del candado dice lo que de verdad no cambia (razón social y RFC)", "modo=editar&rol=vendedor", async p => {
+  await editar(p, "OP-ED");
+  const correo = await editable(p.getByPlaceholder("correo@ej.com"));
+  const dice = await p.evaluate(() => { const e = [...document.querySelectorAll(".pf-forma span, .pf-forma div")].find(x => x.children.length === 0 && /cambia Lupita o Direcci/.test(x.textContent || "") && !/vendedor/i.test(x.textContent || "")); return e ? e.textContent.trim() : ""; });
+  ok("ord-219 el vendedor que edita su orden: la nota del candado dice lo que de verdad no cambia (razón social y RFC)",
+    !!dice && (correo ? /raz[oó]n social/i.test(dice) && !/datos del cliente/i.test(dice) : true), `correo editable ${correo} · «${dice}»`);
+});
+
+// ── Vuelta 2 de v10.84.80: por donde no se diseñó ──
+await caso("ord-220 un segundo clic en «Crear Orden» justo al terminar: una orden, y la forma vacía que sigue NO sale marcada de faltantes", "", async p => {
+  await capturar(p);
+  // el clic rápido de un doble clic lo frena «guardando»; éste es el lento: llega cuando la orden YA se creó (red rápida, mano lenta)
+  await crear(p);
+  for (let i = 0; i < 60 && !(await creada(p)); i++) await espera(p, 25);
+  await p.getByRole("button", { name: /Crear Orden/ }).click({ timeout: 1000 }).catch(() => {}); await espera(p, 600);
+  const n = (await nuevas(p)).length, folios = await cuenta(p, "rpc next_production_number");
+  const marcada = await p.evaluate(() => !!document.querySelector('.pf-forma [aria-invalid="true"]') || [...document.querySelectorAll('.pf-forma [role="status"]')].some(e => /^\s*Falta/.test(e.textContent || "")));
+  ok("ord-220 un segundo clic en «Crear Orden» justo al terminar: una orden, y la forma vacía que sigue NO sale marcada de faltantes", n === 1 && folios === 1 && !marcada && /P-0651/.test(await creada(p)), `órdenes ${n} · números pedidos ${folios} · marcada ${marcada}`);
+});
+await caso("ord-221 vendedor «Otro»: pide el nombre, avisa que no comisiona, y elegir uno de la lista lo quita", "", async p => {
+  const sel = p.locator("select#ff-agent");
+  await sel.selectOption("otro"); await espera(p, 200);
+  const nombre = p.getByLabel("Nombre del vendedor"), hayNombre = (await nombre.count()) > 0;
+  if (hayNombre) { await nombre.fill("Fulano Externo"); await espera(p, 200); }
+  const avisa = /no generará comisión/.test(await texto(p));
+  await sel.selectOption("Genaro"); await espera(p, 200);
+  const quitado = (await p.getByLabel("Nombre del vendedor").count()) === 0 && !/no generará comisión/.test(await texto(p)) && (await vendedorActual(p)) === "Genaro";
+  ok("ord-221 vendedor «Otro»: pide el nombre, avisa que no comisiona, y elegir uno de la lista lo quita", hayNombre && avisa && quitado, `nombre ${hayNombre} · avisa ${avisa} · quitado ${quitado}`);
+});
+await caso("ord-222 cambiar de cliente con el vendedor elegido A MANO: el vendedor se queda (sólo se quita el sugerido)", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  await elegirVendedor(p, "Jaime");
+  await p.locator("#ff-cliente-input").fill("Taller Ficticio de Prueba"); await fuera(p); await espera(p, 500);
+  const v = await vendedorActual(p), rfc = await valorDe(p, "#ff-rfc");
+  ok("ord-222 cambiar de cliente con el vendedor elegido A MANO: el vendedor se queda (sólo se quita el sugerido)", v === "Jaime" && rfc === "", `vendedor «${v}» · RFC «${rfc}»`);
+});
+await caso("ord-223 escribir y borrar una letra en el cliente elegido: al salir del campo vuelve a ser ese cliente, con sus datos", "", async p => {
+  await elegirCliente(p, "COSQUIM");
+  const c = p.locator("#ff-cliente-input");
+  await c.click(); await c.press("End"); await c.type("x"); await espera(p, 300); await c.press("Backspace"); await espera(p, 600);
+  await fuera(p); await espera(p, 900);
+  const d = { cliente: await valorDe(p, "#ff-cliente-input"), rfc: await valorDe(p, "#ff-rfc"), correo: await valorDe(p, "#ff-contacto") };
+  ok("ord-223 escribir y borrar una letra en el cliente elegido: al salir del campo vuelve a ser ese cliente, con sus datos", d.cliente === "COSQUIM" && d.rfc === "COS010101AB1" && d.correo === "compras@cosquim.mx", JSON.stringify(d));
+});
+await caso("ord-224 dos órdenes seguidas: el renglón dice la segunda (P-0652) y es uno solo", "", async p => {
+  await capturar(p); await crear(p); await espera(p, 1500);
+  await capturar(p); await crear(p); await espera(p, 1500);
+  const r = await p.evaluate(() => [...document.querySelectorAll('.pf-forma [role="status"]')].filter(e => /creada/.test(e.textContent || "")).map(e => e.innerText.replace(/\s+/g, " ").slice(0, 60)));
+  ok("ord-224 dos órdenes seguidas: el renglón dice la segunda (P-0652) y es uno solo", r.length === 1 && /P-0652 creada/.test(r[0]) && (await nuevas(p)).length === 2, JSON.stringify(r));
+});
+await caso("ord-225 «Nueva» abierta desde «Todas»: Cancelar regresa a «Todas»", "", async p => {
+  await p.evaluate(() => window.__ir("orders")); await espera(p, 300);
+  await p.evaluate(() => window.__ir("form")); await espera(p, 600);
+  await p.getByRole("button", { name: /^Cancelar$/ }).click(); await espera(p, 600);
+  const e = await estado(p);
+  ok("ord-225 «Nueva» abierta desde «Todas»: Cancelar regresa a «Todas»", e.vista === "orders", `vista ${e.vista}`);
+});
+await caso("ord-226 la N editando una orden con cambios SÍ pregunta (como antes): sólo en «Nueva Orden» enfoca el cliente", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED");
+  await p.locator("textarea").first().fill("Recetas · cambio para la N");
+  await p.getByRole("button", { name: /Normal/ }).first().focus();
+  await p.keyboard.press("n"); await espera(p, 400);
+  const pregunto = await hayPregunta(p);
+  ok("ord-226 la N editando una orden con cambios SÍ pregunta (como antes): sólo en «Nueva Orden» enfoca el cliente", pregunto, `preguntó ${pregunto}`);
+});
+await caso("ord-227 la pregunta de la factura cobrada: con una opción elegida, el clic fuera no la cierra (no se pierde lo elegido)", "modo=editar&rol=admin&precio=cobrada", async p => {
+  await editar(p, "OP-FA");
+  await p.locator("#ff-precio").fill("1978"); await guardar(p); await espera(p, 1000);
+  const d = p.getByRole("dialog", { name: /ya está cobrada/ });
+  await d.getByRole("button", { name: /saldo a favor/ }).first().click(); await espera(p, 200);
+  await p.mouse.click(8, 8); await espera(p, 400);
+  const sigue = (await d.count()) > 0, elegida = sigue ? await d.getByRole("button", { name: /saldo a favor/ }).first().getAttribute("aria-pressed") : null;
+  ok("ord-227 la pregunta de la factura cobrada: con una opción elegida, el clic fuera no la cierra (no se pierde lo elegido)", sigue && elegida === "true", `sigue abierta ${sigue} · elegida ${elegida}`);
+});
+await caso("ord-228 maquila a 1366 con el menú abierto: el vendedor arriba del pie, y el precio una vez (el de maquila)", "", async p => {
+  await p.getByRole("button", { name: /^Maquila/ }).first().click(); await espera(p, 400);
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), v = await rect(p, "#ff-agent"), precioInterno = await p.locator("#ff-precio").count(), precioMaq = await p.locator("#ff-maq-precio").count();
+  ok("ord-228 maquila a 1366 con el menú abierto: el vendedor arriba del pie, y el precio una vez (el de maquila)", !!v && v.bottom <= top && precioInterno === 0 && precioMaq === 1,
+    `vendedor @${v && Math.round(v.bottom)} · pie ${Math.round(top)} · precio interno ${precioInterno} · de maquila ${precioMaq}`);
+});
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

@@ -12,6 +12,63 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.80 — La forma de la orden: el cliente no se mezcla, se queda para capturar otra, y sirve con teclado — 12-oct-2026
+
+**Qué pasaba** (la segunda revisión independiente de la forma, 12-oct en la tarde: 28/40, un P1 y cuatro P2; snapshot
+`.impeccable/critique/2026-10-12T21-31-16Z__src-app-jsx-orderform-formulario-orden-nueva.md`):
+- **[P1] El cliente se mezclaba**, en las dos puertas (la orden y «Crear OC»). Elegir un cliente y luego escribir otro nombre dejaba el
+  RFC, el contacto y el vendedor del primero (y ya no salía «Cliente nuevo»); en «¿Quisiste decir…?», elegir CREABA la orden con el nombre
+  y el RFC escritos y el id del elegido; y con «Ya existe: elígelo — mismo RFC» nadie decía que ese RFC venía del cliente anterior.
+- **Replicar traía instrucciones de otra orden**: las notas («YA AUTORIZO PRUEBA DE COLOR», de un trabajo del 30-sep) y la distribución,
+  y la ventana prometía sólo «producto, papel, medidas, tintas, acabados, precio».
+- **Al terminar te dejaba en otro lado**: crear, guardar, «Sin cambios» y Cancelar iban al Dashboard (a media página), y el número de la
+  orden creada vivía 6.5 s en un aviso con su botón «Ver» a 3.22:1.
+- **En la laptop con el menú abierto, vendedor y precio bajo el pie** (739 y 835 px; el pie en 677); a 683×384 el pie era el 24 % de la
+  pantalla, y el 38 % con los faltantes.
+- **Sólo con ratón y buena vista**: los faltantes, un borde de 1.7:1 sin `aria-invalid` ni texto; subir imágenes y el archivo de
+  producción no se alcanzaba con Tab (es la tarea de Pre-prensa); «Tipo» sin combobox (el foco caía a `<body>` al elegir); la pregunta de
+  la factura cobrada sin foco ni Esc, con «Sobrarían» a 1.96:1; los placeholders a 1.65:1.
+- De sus observaciones: la N en «Nueva Orden» preguntaba «¿Salir sin guardar?»; «Cancelar» mientras guardaba no cancelaba (la orden se
+  creaba igual); «Agregar producto» a una OC decía «Guardar»; la etiqueta de las notas, 45 letras en mayúsculas; al vendedor que edita su
+  orden la nota le decía «los datos del cliente los cambia Lupita» con el correo editable.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **El cliente**: cambiar el nombre suelta lo que trajo el anterior (el RFC, el contacto, su agente de compras y el vendedor que se le
+  sugirió, no el que se eligió a mano) y lo dice. En «¿ya existe?», elegir pone al cliente COMPLETO en la forma (por el buscador:
+  `clienteCompleto`) y no crea: se crea con el botón de siempre. El foco entra en «Volver a la forma» (el primer Tab caía en un cliente),
+  y si el RFC de la forma es de otro, se dice de quién y hay «Corregir el RFC». Igual en «Crear OC»: `resolverClienteNuevo` devuelve el
+  `cliente` y `corregir_rfc`.
+- **Replicar** copia specs, Pantones e imagen; las notas y la distribución no (decisión de Marcelo), y la ventana y el aviso lo dicen.
+- **Al crear, la forma se queda** (decisión de Marcelo), vacía y como al abrir, con «P-… creada · Ver · Imprimir · Capturar otra» arriba,
+  que se quita al empezar la siguiente; un segundo clic que llega cuando la orden ya se creó no marca la forma vacía (800 ms). «Agregar
+  producto» regresa a su OC, como antes. Guardar, «Sin cambios» y Cancelar regresan a donde se abrió la forma, en su desplazamiento.
+- **Vendedor y precio** en un renglón después de tipo, cantidad y entrega. El vendedor es una lista (eran ocho botones: ocho paradas de Tab
+  y dos renglones), con «Otro»; con candado se lee (los botones apagados con opacidad iban a 2.19:1). Con poco alto, el pie se compacta.
+- **Teclado y vista**: el faltante se dice en su campo («Falta…», `aria-invalid`, borde en tinta) y el resumen del pie lleva a cada uno;
+  «Subir 1ra/2da» y «Subir archivo» son botones; «Tipo» es un combobox; la pregunta de la factura cobrada tiene el contrato de las
+  ventanas (foco, Tab, Esc, `aria-pressed`, el clic fuera no tira lo elegido); los placeholders en Gris Tenue (4.6:1); un textarea
+  enfocado se trae completo arriba del pie (Chrome sólo trae el cursor). El botón de los avisos, en el color del aviso sobre claro.
+- Lo demás: la N en «Nueva Orden» enfoca el cliente; «Cancelar» no se aprieta mientras guarda; «Agregar a OC-…»; «Notas de proceso (uso
+  interno)»; al vendedor, «La razón social y el RFC los cambia Lupita o Dirección».
+- 🔥 **Lo que encontró la app real**: tres hooks de App puestos después de sus `return` tempranos (`if(!authChecked)`, `if(!user)`) tumbaban
+  la app entera al entrar («React error #310»); ningún banco lo veía. Se movieron arriba, y la tanda nueva **`hooks`** lee App.jsx y vigila
+  las reglas de los hooks en sus 137 componentes: encontró dos que ya existían (WIPDashboard y OperationalHealthView devolvían `null` por
+  rol antes de sus hooks), arreglados.
+- **Compartido, con sus usos:** `Toast` (el botón de acción de todos los avisos), `FC` (`falta`, opcional), `ClientInput` (`invalido` y
+  `describe`, opcionales), `ClientConfirmModal` y `resolverClienteNuevo` (las dos puertas), WIPDashboard y OperationalHealthView (el
+  `return` por rol). `FileUpload` y `PriceDropModal` sólo los usa la forma.
+
+**Cómo se probó**: tandas `orden` (153; eran 114), `cliente` (27; eran 24) y `hooks` (2, nueva). Vuelta 1, escrita antes del cambio: 39
+casos (30 nuevos y 9 adaptados); contra v10.84.79 fallaban 35. Vuelta 2 (por donde no se diseñó: un segundo clic al terminar, «Otro»
+vendedor, el vendedor elegido a mano, escribir y borrar una letra en el cliente, dos órdenes seguidas, «Nueva» desde «Todas», la N al
+editar, el clic fuera de la factura cobrada, maquila a 1366): 9 casos; encontró el segundo clic que marcaba la forma vacía. **La app real**
+(la cuenta de pruebas, las escrituras cortadas): las dos puertas con un cliente parecido de verdad (GODI: su RFC, sin escribir nada), vendedor
+y precio arriba del pie a 1366, y «P-… creada» con la creación simulada; y encontró el error de los hooks. Sabotajes con un control sin
+defecto: 32 de 32 (uno después de corregir la prueba: el doble clic rápido ya lo frenaba «guardando»). Cambian por decisión de Marcelo:
+ord-02, 04, 05, 06 y 57 (la forma se queda), seis que elegían al vendedor con su botón y cli-20 (Enter cae en «Volver a la forma»).
+
+**Para Marcelo:** nada que decidir. Sigue la tercera revisión independiente de la forma (aprobada: un agente, ~400-450 mil tokens).
+
 ## v10.84.79 — La forma de la orden: lo esencial en la primera pantalla de la laptop, dos columnas en la grande — 12-oct-2026
 
 **Qué pasaba** (el reacomodo de la critique independiente del 12-oct, 22/40; Marcelo: «P1, P2 y reacomodo»):

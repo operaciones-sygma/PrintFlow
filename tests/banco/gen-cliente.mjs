@@ -54,6 +54,11 @@ const supabase = { rpc: async (fn, args) => {
     if (RESOLVE === "falla") return { data: null, error: { message: "upstream connect error", code: "" } };
     return { data: RESP[RESOLVE], error: null };
   }
+  if (fn === "search_clients_typeahead") {   // v10.84.80 — el cliente completo (correo, WhatsApp, modo de facturación) para «elegido»
+    const todos = [{ ...MODELO, email: "eva@modelo.mx", whatsapp: "", billing_mode: "normal" }, { ...PAPELERIA, rfc: "PBA040404IJ4", email: "ventas@papeleriabajio.mx", whatsapp: "4775556677", billing_mode: "normal" }];
+    const q = String(args.p_query || "").toLowerCase();
+    return { data: todos.filter(c => c.name.toLowerCase().includes(q)), error: null };
+  }
   if (fn === "create_client_from_printflow") {
     if (CREAR === "frena") return { data: null, error: { code: "22023", message: "Ya existe «CERVECERIA MODELO DE MEXICO» (mismo nombre): elígelo en la lista en vez de crearlo. Si de verdad es otro cliente, pídele a CxC (Karla) que lo dé de alta en CobranzaFlow." } };
     if (CREAR === "baja") return { data: null, error: { code: "22023", message: "Ya existe «TEST CLIENTE» (mismo nombre), pero está dado de baja: pídele a CxC (Karla) que lo revise en CobranzaFlow en vez de crearlo otra vez." } };
@@ -68,6 +73,7 @@ const supabase = { rpc: async (fn, args) => {
   hay("mensajeDeCliente") ? (L.find(l => l.startsWith("const mensajeDeCliente=")) || fnBlock("mensajeDeCliente"))
     : `// (el código anterior: cada puerta armaba su propio aviso)
 const mensajeDeCliente = e => "Error resolviendo cliente: " + (e?.message || "desconocido");`,
+  hay("clienteCompleto") ? fnBlock("clienteCompleto") : "",
   hay("resolverClienteNuevo") ? fnBlock("resolverClienteNuevo") : `// (el código anterior a v10.84.69: lo que la forma de la orden hacía en línea, copiado de App.jsx 11653-11685 y la OC 17762-17790)
 async function resolverClienteNuevo({ nombre, rfc, email, telefono, rfcObligatorio = false, preguntar = window.__showClientConfirmModal }) {
   const { data: resolution, error: resErr } = await supabase.rpc("resolve_client_for_order", { p_name: nombre });

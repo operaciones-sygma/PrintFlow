@@ -59,6 +59,9 @@ const TANDAS = [
   // la forma de la orden, crear y editar (v10.84.77, la critique independiente del 12-oct): el banco extrae OrderForm y COPIA de
   // App.jsx lo que hace al guardar (create, update), con la base simulada
   { nombre: "orden", gen: "tests/banco/gen-orden.mjs", romper: "tests/romper/orden.mjs", puerto: 5188 },
+  // las reglas de los hooks de React en App.jsx, leídas del código (v10.84.80: tres hooks de App después de sus «return» tempranos
+  // tumbaban la app al entrar, «React error #310», y ningún banco lo veía: montan los componentes sin esos «return»)
+  { nombre: "hooks", romper: "tests/romper/hooks.mjs" },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

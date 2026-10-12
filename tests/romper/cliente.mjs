@@ -68,7 +68,7 @@ await caso("cli-03 el que ya existe dado de baja: lo dice, a quién pedírselo, 
   const que = await guardar(p);
   const t = await txt(dlg(p));
   const nuevo = await botonNuevo(p).count();
-  if (que === "pregunta") { await dlg(p).getByRole("button", { name: "Cancelar" }).click(); await espera(p, 300); }
+  if (que === "pregunta") { await dlg(p).getByRole("button", { name: /^(Cancelar|Volver a la forma)$/ }).click(); await espera(p, 300); }
   const r = await resultado(p);
   ok("cli-03 el que ya existe dado de baja: lo dice, a quién pedírselo, y no deja crearlo",
     que === "pregunta" && t.includes("TEST CLIENTE") && /dado de baja/.test(t) && /Karla/.test(t) && nuevo === 0 && r?.tipo === "cancelado" && !(await llamadas(p, "create_client_from_printflow")).length,
@@ -202,8 +202,10 @@ for (const [ancho, alto] of [[1366, 768], [1920, 1080]]) {
 await caso("cli-20 Enter con la pregunta abierta no crea ni liga nada", "resolve=parecido", async p => {
   await guardar(p);
   await p.keyboard.press("Enter"); await espera(p, 500);
-  const resp = (await lineas(p, "resuelto:")).length;
-  ok("cli-20 Enter con la pregunta abierta no crea ni liga nada", resp === 0 && (await dlg(p).count()) === 1 && !(await llamadas(p, "create_client_from_printflow")).length, `respuestas ${resp}`);
+  // v10.84.80 — el foco entra en «Volver a la forma»: Enter regresa a la forma (antes no hacía nada); lo que cuida la prueba sigue: ni crea ni liga
+  const resp = (await lineas(p, "resuelto:")).map(l => l.slice(9)), r = await resultado(p);
+  ok("cli-20 Enter con la pregunta abierta no crea ni liga nada", resp.every(x => x === "cancel") && (!r || r.tipo === "cancelado") && !(await llamadas(p, "create_client_from_printflow")).length,
+    `respuestas ${JSON.stringify(resp)} · ${JSON.stringify(r)}`);
 });
 await caso("cli-23 Escape con el foco en una opción cancela la pregunta, sin cerrar la forma", "resolve=parecido", async p => {
   await guardar(p);
@@ -217,7 +219,7 @@ await caso("cli-21 con muchos parecidos en la laptop, la pregunta cabe en la pan
   await guardar(p);
   const r = await dlg(p).evaluate(el => el.getBoundingClientRect().toJSON());
   const t = await txt(dlg(p));
-  await dlg(p).getByRole("button", { name: "Cancelar" }).click(); await espera(p, 300);
+  await dlg(p).getByRole("button", { name: /^(Cancelar|Volver a la forma)$/ }).click(); await espera(p, 300);
   const res2 = await resultado(p);
   await p.screenshot({ path: `${OUT}/cli-21-muchos.png` });
   ok("cli-21 con muchos parecidos en la laptop, la pregunta cabe en la pantalla y «Cancelar» se alcanza",
@@ -227,10 +229,33 @@ await caso("cli-22 en el celular la pregunta se lee sin barra horizontal y con s
   await guardar(p);
   const m = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, vw: innerWidth }));
   const panel = await dlg(p).evaluate(el => ({ sw: el.scrollWidth, cw: el.clientWidth, r: el.getBoundingClientRect().toJSON() }));
-  const cancelar = await dlg(p).getByRole("button", { name: "Cancelar" }).isVisible();
+  const cancelar = await dlg(p).getByRole("button", { name: /^(Cancelar|Volver a la forma)$/ }).isVisible();
   ok("cli-22 en el celular la pregunta se lee sin barra horizontal y con sus botones a la vista", m.doc <= m.vw && panel.sw <= panel.cw + 1 && panel.r.right <= 390 && cancelar, `${JSON.stringify(m)} · ${JSON.stringify(panel)}`);
 }, { width: 390, height: 844 });
 
+// ───────────── v10.84.80 (segunda revisión independiente de la forma de la orden, P1): elegir NO crea; el RFC de otro se dice
+await caso("cli-30 elegir un cliente en la pregunta lo regresa COMPLETO (su RFC y su correo, del buscador) y no crea a nadie", "resolve=parecido&rfc=XYZ990101AB1&correo=otro@correo.mx", async p => {
+  await guardar(p);
+  await dlg(p).getByRole("button", { name: /PAPELERIA DEL BAJIO/ }).click(); await espera(p, 600);
+  const r = await resultado(p);
+  ok("cli-30 elegir un cliente en la pregunta lo regresa COMPLETO (su RFC y su correo, del buscador) y no crea a nadie",
+    r?.tipo === "elegido" && r?.id === "c-papeleria" && r?.cliente?.rfc === "PBA040404IJ4" && r?.cliente?.email === "ventas@papeleriabajio.mx" && !(await llamadas(p, "create_client_from_printflow")).length,
+    JSON.stringify(r));
+});
+await caso("cli-31 si el RFC de la forma es el de un cliente que ya existe, la pregunta dice de quién es y ofrece «Corregir el RFC»", "resolve=fuerte&rfc=CMM8601014G4", async p => {
+  await guardar(p);
+  const t = await txt(dlg(p)), b = dlg(p).getByRole("button", { name: /Corregir el RFC/ }), hay = (await b.count()) > 0;
+  if (hay) { await b.click(); await espera(p, 400); }
+  const r = await resultado(p);
+  ok("cli-31 si el RFC de la forma es el de un cliente que ya existe, la pregunta dice de quién es y ofrece «Corregir el RFC»",
+    /CMM8601014G4/.test(t) && /es de CERVECERIA MODELO DE MEXICO/.test(t) && hay && r?.tipo === "corregir_rfc", `«${t.slice(0, 200)}» · botón ${hay} · ${JSON.stringify(r)}`);
+});
+await caso("cli-32 la pregunta abre con el foco en «Volver a la forma» (no en un cliente) y dice qué hace elegir", "resolve=parecido", async p => {
+  await guardar(p);
+  const foco = await p.evaluate(() => document.activeElement?.tagName === "BUTTON" ? document.activeElement.textContent.trim() : document.activeElement?.tagName || "");
+  const t = await txt(dlg(p));
+  ok("cli-32 la pregunta abre con el foco en «Volver a la forma» (no en un cliente) y dice qué hace elegir", /Volver a la forma/.test(foco) && /nada se crea hasta que lo confirmes/.test(t), `foco «${foco.slice(0, 40)}» · «${t.slice(0, 160)}»`);
+});
 await browser.close();
 for (const r of res) console.log(r);
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

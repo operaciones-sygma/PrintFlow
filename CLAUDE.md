@@ -95,6 +95,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     guarda username, no rol.
 19. Prefijo `// vX.Y.Z — ` en cada cambio, con el **porqué** (los comentarios son el historial que sí
     se lee).
+19b. 🔥 **Los hooks de un componente van ANTES de cualquier `return` temprano** (en App: `if(!authChecked)` y `if(!user)`). En v10.84.80
+    tres hooks de App después de ellos tumbaban la app entera al entrar («React error #310») y ningún banco lo veía (montan sin esos
+    `return`). La tanda `hooks` (`tests/romper/hooks.mjs`) lo vigila en todos los componentes, y sólo la app real lo enseña.
 
 ### Proceso
 20. **Edits quirúrgicos** (`str_replace` con anclas únicas; en Python `assert s.count(a)==1`). Nunca
