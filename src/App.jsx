@@ -2967,7 +2967,7 @@ function Login({onLogin,aviso,onReintentar,onIntentar}) {
         <img src={LOGO} alt="PrintFlow" style={{width:120,height:120,marginBottom:12,borderRadius:20,display:"block",margin:"0 auto 12px"}}/>
         <h1 style={{fontSize:34,fontWeight:800,letterSpacing:"-0.02em",color:C.tx,margin:"0 0 8px"}}>PrintFlow</h1>
         <p style={{fontSize:11,color:C.t2,textTransform:"uppercase",margin:"0 0 32px"}}>Sistema de Producción</p>
-        {aviso&&<div data-aviso-sesion={aviso.tipo} role="status" style={{textAlign:"left",background:C.wn+"14",borderLeft:"3px solid "+C.wn,borderRadius:10,padding:"10px 12px",margin:"-12px 0 20px",fontSize:13,lineHeight:1.45,color:C.tx}}>
+        {aviso&&<div data-aviso-sesion={aviso.tipo} role="status" style={{textAlign:"left",background:C.wn+"14",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"10px 12px",margin:"-12px 0 20px",fontSize:13,lineHeight:1.45,color:C.tx}}>
           {aviso.texto}
           {aviso.tipo==="sin-red"&&onReintentar&&<div style={{marginTop:8}}><button onClick={onReintentar} disabled={!!aviso.comprobando} style={{...bs(C.sf,C.tx),border:"0.5px solid "+C.bdSt,fontSize:13,padding:"8px 14px",cursor:aviso.comprobando?"wait":"pointer"}}>{aviso.comprobando?"Comprobando…":"Reintentar"}</button></div>}
         </div>}
@@ -7144,7 +7144,7 @@ const METODO_PALABRA={efectivo:"Efectivo",transferencia:"Transferencia",tarjeta:
 const montoLimpio=v=>{let s=String(v??"").replace(/[^\d.]/g,"");const i=s.indexOf(".");if(i>=0)s=s.slice(0,i+1)+s.slice(i+1).replace(/\./g,"").slice(0,2);return s};
 // Lo que le falta a un pago, en palabras (la misma regla que refComplete); null si está completo
 const faltaDelPago=r=>!r.method?"el método":!(Number(r.amount)>0)?"el monto":(r.method==="otro"&&!r.otro_category)?"el motivo":(r.method==="otro"&&r.otro_category==="otro_especificar"&&!(r.otro_detail||"").trim())?"escribir el motivo":null;
-function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, allowCash=false}) {
+function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, allowCash=false, notaSinPrecio=null}) {
   const METHODS = [
     // v10.73.65 Nivel 3 — Efectivo real (solo donde allowCash=true, hoy InvoiceModal): crea un vale de caja (VC-XXXX)
     // que baja el balance de la factura y aparece en el corte de Lucero. El efectivo NUNCA va por assign_invoice.
@@ -7198,12 +7198,22 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
     onChange(st, [nuevo(st === "paid" ? totalDisplay : 0)]);
   };
   const addRef = () => { escudoDeClics(500); enfocarNuevo.current = true; onChange(status, [...list, nuevo(sumRemaining)]); };
+  // v10.84.72 (tercera revisión) — al quitar un pago, su «×» desaparece y el foco caía al <body> (fuera del diálogo: Tab y Ctrl+Enter
+  //   dejaban de responder). Va al método del pago que queda en su lugar (o al de antes).
+  const enfocarTras = useRef(null);
+  useEffect(() => {
+    if (enfocarTras.current == null) return;
+    const i = enfocarTras.current; enfocarTras.current = null;
+    const gs = contRef.current?.querySelectorAll("[data-metodos]"), g = gs && gs[Math.min(i, gs.length - 1)];
+    g?.querySelector('[tabindex="0"]')?.focus({preventScroll: true});
+  }, [list.length]);
   const updateRef = (idx, patch) => {
     const next = list.map((r, i) => i === idx ? {...r, ...patch} : r);
     onChange(status, next);
   };
   const removeRef = (idx) => {
     escudoDeClics(500);
+    enfocarTras.current = Math.max(0, idx - 1);
     onChange(status, list.filter((_, i) => i !== idx));
   };
   const elegirMetodo = (idx, r, id) => {
@@ -7233,6 +7243,8 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
   // v10.50.3 — Comparación exacta en centavos (sin tolerancia float).
   const sumExactPaid = sumCents === totalCents;
   const sumOverPaid = sumCents > totalCents;
+  // v10.84.72 (tercera revisión) — «✓ Cubierto» en verde salía con «falta el método» al lado: sólo con todos los pagos completos
+  const completos = list.every(r => !faltaDelPago(r));
 
   // El estado elegido se marca con SU color (no pagada: neutro; parcial: ámbar, queda saldo; pagada: verde) y aria-pressed
   const estado = (st, label, Icon, color, tinta) => {
@@ -7253,7 +7265,9 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
           {estado("partial", "Parcial", CircleHalfIcon, C.amb, C.wnInk)}
           {estado("paid", "Pagada", CheckCircleIcon, C.ok, C.okInk)}
         </div>
-        {sinTotal && <div style={{fontSize: 11, color: C.t2, marginTop: 6, lineHeight: 1.45}}>Sin precio no se registran pagos aquí: va como «No pagada», y el cobro se registra cuando tenga precio.</div>}
+        {/* v10.84.72 (tercera revisión, P2) — sin precio, UNA nota con lo que sí aplica (abajo decía «elige Pagada o Parcial con
+            Efectivo», que están apagados, e «irá a CobranzaFlow como pendiente»); quien la usa puede dar la suya (`notaSinPrecio`) */}
+        {sinTotal && <div style={{fontSize: 11, color: C.t2, marginTop: 6, lineHeight: 1.45}}>{notaSinPrecio || "Sin precio no se registran pagos aquí: va como «No pagada», y el cobro se registra cuando tenga precio."}</div>}
       </div>
 
       {(status === "paid" || status === "partial") && (
@@ -7262,9 +7276,9 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
               v10.84.70: con «Parcial», lo capturado por el total no es «✓ Cubierto» (salía junto al aviso en rojo de usar «Pagada») */}
           <div role="status" aria-live="polite" aria-atomic="true" style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 10, padding: "8px 10px", background: C.bg, borderRadius: 8, border: "0.5px solid " + C.bd}}>
             <div style={{fontSize: 11, color: C.t2}}>Total {invoiceType === "factura" ? "(con IVA)" : "(sin IVA)"}: <b style={{color: C.tx, fontSize: 13, fontFamily: "'Geist Mono',monospace"}}>${fmtMx(totalDisplay)}</b></div>
-            <div style={{fontSize: 11, color: sumOverPaid ? C.dnInk : (sumExactPaid && status === "paid") ? C.okInk : C.t2}}>
+            <div style={{fontSize: 11, color: sumOverPaid ? C.dnInk : (sumExactPaid && status === "paid" && completos) ? C.okInk : C.t2}}>
               {sumOverPaid ? <><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:2}}/>Excede ${fmtMx(sum - totalDisplay)}</> :
-               sumExactPaid ? (status === "paid" ? <><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Cubierto</> : <>Capturado: <b>${fmtMx(sum)}</b> · cubre el total</>) :
+               sumExactPaid ? (status === "paid" && completos ? <><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>Cubierto</> : <>Capturado: <b>${fmtMx(sum)}</b> · cubre el total</>) :
                <>Capturado: <b>${fmtMx(sum)}</b> · Falta <b>${fmtMx(sumRemaining)}</b></>}
             </div>
           </div>
@@ -7306,7 +7320,8 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
               {r.method === "otro" && (
                 <div style={{fontSize: 10.5, color: C.wnInk, background: C.amb + "10", border: "1px solid " + C.amb + "40", borderRadius: 8, padding: "7px 9px", marginBottom: 8, lineHeight: 1.45}}>
                   <WarningIcon size={11} weight="fill" style={{verticalAlign: "-2px", marginRight: 4}}/>
-                  <b>¿Es efectivo?</b> No lo pongas como «Otro»: usa el método <b>Efectivo</b>{allowCash ? " (arriba)" : ""}: crea el <b>vale de caja VC-XXXX</b>, lo imprime y deja la orden <b>Pagada</b>. «Otro» es sólo para pagos <b>no-efectivo</b> sin categoría (compensación, nota de crédito, transferencia sin referencia).
+                  {/* v10.84.72 (tercera revisión) — corto: eran ~40 palabras y 5 negritas que regañaban antes de equivocarse */}
+                  <b>¿Es efectivo?</b> {allowCash ? "Usa «Efectivo» (arriba): crea el vale de caja." : "Aquí no va: el efectivo lo registra Tesorería con su vale de caja."} «Otro» es para pagos sin efectivo: compensación, nota de crédito o transferencia sin referencia.
                 </div>
               )}
 
@@ -7423,7 +7438,7 @@ function MultiPaymentPicker({status, refs, orderTotal, invoiceType, onChange, al
           {guardados.current.length === 1 ? "El pago que capturaste se guardó" : "Los " + guardados.current.length + " pagos que capturaste se guardaron"}: regresa{guardados.current.length === 1 ? "" : "n"} si eliges «Pagada» o «Parcial».
         </div>
       )}
-      {status === "unpaid" && (
+      {status === "unpaid" && !sinTotal && (
         <div style={{background: C.ctp + "0d", border: "1px solid " + C.ctp + "33", borderRadius: 8, padding: "8px 12px", marginTop: 8, fontSize: 11, color: C.tx, lineHeight: 1.5}}>
           <LightbulbIcon size={12} weight="fill" color={C.ctp} style={{verticalAlign:"-2px",marginRight:3}}/><strong>Sin pago capturado:</strong> la factura o remisión irá a CobranzaFlow como pendiente. {allowCash ? <>Si ya pagó en efectivo, elige «Pagada» o «Parcial» con <b>Efectivo</b>: el vale de caja se crea aquí.</> : <>Si paga en efectivo, Tesorería crea el vale de caja.</>}
         </div>
@@ -9632,9 +9647,20 @@ function FolioAutoNote({label}){
 // (anticipo/prepago recibido en efectivo) para que Karla lo aplique y no lo cobre doble. Es
 // informativo: NO descuenta el saldo aquí — la aplicación se hace en CobranzaFlow. Gemelo del
 // banner Corona (mismo estilo), pero para clientes normales con current_balance>0.
-function SaldoFavorAmarreBanner({balance}){
-  return <div style={{background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:10,padding:10,marginTop:10,marginBottom:4,fontSize:11,color:"#075985",lineHeight:1.5}}>
-    <LightbulbIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:4}}/>Este cliente tiene <b>${Number(balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</b> a favor (anticipo o saldo previo). Esta factura o remisión <b>no lo descuenta</b>: captúrala normal y aplica el saldo a favor desde <b>CobranzaFlow</b> al registrar el pago, para no cobrarle de más.
+// v10.84.72 (tercera revisión, P2) — EL SALDO A FAVOR, JUNTO AL PAGO Y CON CIFRAS. Estaba en la columna del documento, sin decir cuánto
+//   cobrar, y «Pagada» proponía el total: con efectivo se cobraba de más. Ahora dice cuánto cobrar aquí y cuánto aplicar en CobranzaFlow
+//   (este documento no lo descuenta), y un botón lo deja así: Parcial por lo que falta, o «No pagada» si el saldo lo cubre todo.
+//   Las cifras llegan de la ventana (una sola cuenta: el botón deja justo lo que el aviso dice; el sabotaje S1 las desincronizaba).
+function SaldoFavorAmarreBanner({balance,total=0,aplica=0,cobrar=0,doc="factura",yaAsi=false,onDejarAsi=null}){
+  const fmtD=n=>"$"+Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const saldo=Number(balance||0);
+  const palabra=doc==="remision"?"remisión":"factura", mono={fontFamily:"'Geist Mono',monospace"};
+  return <div role="note" style={{background:C.ctp+"0d",border:"1px solid "+C.ctp+"33",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.tx,lineHeight:1.5}}>
+    <div style={{display:"flex",gap:6,alignItems:"flex-start"}}><LightbulbIcon size={13} weight="fill" color={C.ctp} style={{flexShrink:0,marginTop:2}}/><span>Este cliente tiene <b style={mono}>{fmtD(saldo)}</b> a favor.{total>0?(cobrar>0
+      ?<> Cóbrale <b style={mono}>{fmtD(cobrar)}</b> y aplica los {fmtD(aplica)} a favor en CobranzaFlow al registrar el pago: esta {palabra} no los descuenta.</>
+      :<> Cubre toda la {palabra}: déjala «No pagada» y aplica {fmtD(aplica)} del saldo en CobranzaFlow.</>)
+      :<> Esta {palabra} no lo descuenta: aplícalo en CobranzaFlow al registrar el pago.</>}</span></div>
+    {onDejarAsi&&total>0&&!yaAsi&&<button type="button" onClick={onDejarAsi} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:12,padding:"7px 12px",marginTop:8,marginLeft:19}}>{cobrar>0?"Cobrar sólo "+fmtD(cobrar):"Dejarla «No pagada»"}</button>}
   </div>;
 }
 
@@ -9681,17 +9707,21 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // aunque el cliente sí lo sea — banner + botón "Recargar" para que Karla reintente sin cerrar.
   const [coronaInfoFallback,setCoronaInfoFallback]=useState(false);
   const [coronaReloadKey,setCoronaReloadKey]=useState(0);
+  const [clienteLlego,setClienteLlego]=useState(false);   // v10.84.72 — los datos del cliente llegaron después del tope (se dice)
   useEffect(()=>{
     let alive=true;
     // v10.43.24 — fallback por nombre para órdenes preexistentes sin client_id
     if(!order?.client_id && !order?.client){setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(false);return}
     // v10.46.10 M5 — timeout 5s con fallback a billing_mode='normal' si la red queda colgada.
     // v10.84.70 — 8 s (eran 5): el tope de todo lo que se consulta al abrir (DESIGN.md)
+    // v10.84.72 (tercera revisión) — si la respuesta llega después del tope, la ventana lo dice: aparecía «Aplicar saldo» a los 10 s sin aviso
+    let tarde=false;
     const timeoutId=setTimeout(()=>{
-      if(alive&&!coronaInfo){console.warn("[InvoiceModal] billing info timeout 8s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(true)}
+      if(alive&&!coronaInfo){tarde=true;console.warn("[InvoiceModal] billing info timeout 8s — fallback a normal");setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(true)}
     },8000);
     db.getClientBillingInfo(order.client_id,order.client).then(info=>{
-      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0});setCoronaInfoFallback(!info)}
+      // (vuelta 2) sólo si lo que llegó cambia algo en la ventana (Corona, Cuadra o un saldo a favor): un cliente normal no hace ruido
+      if(alive){clearTimeout(timeoutId);setCoronaInfo(info||{billing_mode:"normal",current_balance:0});setCoronaInfoFallback(!info);if(tarde&&info&&(info.billing_mode==="anticipo"||info.billing_mode==="stock"||Number(info.current_balance||0)>0.005))setClienteLlego(true)}
     }).catch(e=>{
       console.warn("[InvoiceModal] billing info:",e);
       if(alive){clearTimeout(timeoutId);setCoronaInfo({billing_mode:"normal",current_balance:0});setCoronaInfoFallback(true)}
@@ -9699,7 +9729,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     return ()=>{alive=false;clearTimeout(timeoutId)};
   },[order?.client_id,order?.client,coronaReloadKey]);
   // v10.58.5 F1: trigger de retry — incrementa coronaReloadKey + reset coronaInfo.
-  const reloadCoronaInfo=()=>{setCoronaInfo(null);setCoronaInfoFallback(false);setCoronaReloadKey(k=>k+1)};
+  const reloadCoronaInfo=()=>{setCoronaInfo(null);setCoronaInfoFallback(false);setClienteLlego(false);setCoronaReloadKey(k=>k+1)};
   const isCorona=coronaInfo?.billing_mode==="anticipo";
   // v10.46.0 — Cuadra: 3ra opción "Sin factura · Stock". Solo aplica a producciones (nuevas);
   // si la orden ya es una VENTA desde stock (stock_role='sale'), no permitimos volverla a stock.
@@ -9740,11 +9770,14 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   //   · Si no se pudo leer: sin efectivo se puede seguir (la base frena el mismo importe); con efectivo, no se cobra a ciegas.
   const [cands,setCands]=useState(cargarCandidatas?undefined:[]);
   const [candKey,setCandKey]=useState(0);
+  // v10.84.72 (tercera revisión) — al tope de 8 s se decía «falló la red» aunque sólo TARDABA, y la respuesta que llegaba después cambiaba
+  //   el aviso (o abría el camino de ligar) sin decirlo. Ahora: «está tardando» y, si llega tarde, «Llegó la revisión que tardaba».
+  const [candsTarde,setCandsTarde]=useState(false), [candsLlego,setCandsLlego]=useState(false);
   useEffect(()=>{
     if(!cargarCandidatas||!order?.id){setCands([]);return}
-    let vivo=true;setCands(undefined);
-    const tope=setTimeout(()=>{if(vivo)setCands(c=>c===undefined?null:c)},8000);
-    Promise.resolve(cargarCandidatas(order.id)).then(r=>{if(vivo){clearTimeout(tope);setCands(Array.isArray(r)?r:null)}}).catch(()=>{if(vivo){clearTimeout(tope);setCands(null)}});
+    let vivo=true, tarde=false;setCands(undefined);setCandsTarde(false);setCandsLlego(false);
+    const tope=setTimeout(()=>{if(vivo){tarde=true;setCands(c=>c===undefined?null:c);setCandsTarde(true)}},8000);
+    Promise.resolve(cargarCandidatas(order.id)).then(r=>{if(vivo){clearTimeout(tope);setCands(Array.isArray(r)?r:null);setCandsTarde(false);if(tarde&&Array.isArray(r))setCandsLlego(true)}}).catch(()=>{if(vivo){clearTimeout(tope);setCands(null);setCandsTarde(false)}});
     return ()=>{vivo=false;clearTimeout(tope)};
   },[order?.id,candKey]);
   const facturaPorLigar=Array.isArray(cands)?(cands.find(c=>c&&c.monto_cuadra&&(c.doc_type==="factura"||c.doc_type==="remision"))||null):null;
@@ -9792,6 +9825,12 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const folioNum=(!isNoFolio&&!isStockLoad&&folioValid)?parseInt(folio.split("-")[1],10):0;
   const suggestedNum=(!isNoFolio&&!isStockLoad&&suggestion[type])?parseInt(suggestion[type].split("-")[1],10):0;
   const folioIsLower=(!isNoFolio&&!isStockLoad)&&folioValid&&suggestedNum>0&&folioNum<suggestedNum;
+  // v10.84.72 (tercera revisión) — arriba del siguiente también deja un hueco (F-200 con F-137 libre no decía nada), y la serie del otro
+  //   tipo se dice como tal («RS-1250» en una factura recibía el mensaje genérico)
+  const folioIsHigher=(!isNoFolio&&!isStockLoad)&&folioValid&&suggestedNum>0&&folioNum>suggestedNum;
+  const saltoFolio=folioIsHigher?folioNum-suggestedNum:0;
+  const serieAjena=(type==="factura"&&/^(RS|R)-/.test(folio))?"RS- es la serie de las remisiones: para una factura va F- (p. ej. "+(suggestion.factura||"F-123")+")."
+    :(type==="remision"&&/^(F|D)-/.test(folio))?"F- es la serie de las facturas: para una remisión va RS- (p. ej. "+(suggestion.remision||"RS-123")+").":null;
   // v10.46.0 — stockLoadValid: necesita SKU seleccionado del catálogo
   // v10.46.2 FIX — además el SKU debe seguir existiendo en la lista cargada (no stale)
   // y la cantidad debe ser > 0 (movimiento PRODUCED de 0 piezas es inválido).
@@ -9815,6 +9854,16 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // v10.58.32: monto que REALMENTE se descuenta del saldo Corona (siempre sin IVA)
   const coronaConsumoAmount=orderBaseAmount;
   const amountNum=Number(paymentAmount)||0;
+  // v10.84.72 (tercera revisión, P2) — el saldo a favor (no Corona): cuánto cobrar aquí y cuánto se aplica en CobranzaFlow
+  const saldoFavor=(!isCorona&&(type==="factura"||type==="remision")&&!sinPrecio)?Math.round(Number(coronaInfo?.current_balance||0)*100)/100:0;
+  const hayFavor=saldoFavor>0.005;
+  const aplicaFavor=hayFavor?Math.min(saldoFavor,totalDisplay):0, cobrarFavor=hayFavor?Math.round((totalDisplay-aplicaFavor)*100)/100:0;
+  const favorYaAsi=hayFavor&&(cobrarFavor>0
+    ?(paymentStatus==="partial"&&paymentRefs.length===1&&Math.round((Number(paymentRefs[0].amount)||0)*100)===Math.round(cobrarFavor*100))
+    :paymentStatus==="unpaid");
+  const dejarFavorAsi=()=>{escudoDeClics(500);
+    if(cobrarFavor>0){const r=paymentRefs[0]||{method:null,bank_reference:"",bank_ref_omitted_intentional:false};setPaymentStatus("partial");setPaymentRefs([{...r,amount:cobrarFavor.toFixed(2)}])}
+    else{setPaymentStatus("unpaid");setPaymentRefs([])}};
   // v10.36.0 — exigir bank_reference para métodos bancarios cuando paid/partial.
   // v10.50.0 — MultiPaymentPicker reemplaza al PaymentStatusPicker. paymentRefs es el array de pagos.
   const refsValid = (() => {
@@ -9846,6 +9895,13 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     if(folioIsLower&&!warnLow){
       preguntar({title:"¿Usar un folio menor al último?",
         message:"El folio que escribiste ("+folio+") es menor al último registrado ("+suggestion[type]+"). Puede dejar un hueco en la serie fiscal.",
+        confirmLabel:"Usar "+folio, confirmColor:C.wnInk,
+        onConfirm:()=>{setPregunta(null);setWarnLow(true);setConfirming(true)}});
+      return;
+    }
+    if(folioIsHigher&&!warnLow){   // v10.84.72 — arriba del siguiente deja un hueco en la serie: se pregunta, como el menor
+      preguntar({title:"¿Saltar "+saltoFolio+(saltoFolio===1?" folio?":" folios?"),
+        message:"El folio que escribiste ("+folio+") está "+saltoFolio+" arriba del siguiente ("+suggestion[type]+"): deja un hueco de "+saltoFolio+(saltoFolio===1?" folio":" folios")+" en la serie fiscal.",
         confirmLabel:"Usar "+folio, confirmColor:C.wnInk,
         onConfirm:()=>{setPregunta(null);setWarnLow(true);setConfirming(true)}});
       return;
@@ -9920,7 +9976,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // del otro tipo). v10.84.34: UNA puerta para los cuatro tipos —«Aplicar saldo» (Corona) y «Sin factura · Stock» (Cuadra)
   // borraban los pagos sin preguntar—, con ConfirmModal, y el tercero a medio capturar también cuenta como trabajo.
   // v10.84.70 (segunda revisión) — sin precio, factura o remisión nacen con «No pagada» (la única salida; antes había que elegirla)
-  const aplicarTipo=t=>{setType(t);setFolio("");setWarnLow(false);setPaymentStatus((t==="factura"||t==="remision")&&sinPrecio?"unpaid":null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);setBillTo(null);setErr("")};
+  const aplicarTipo=t=>{setCandsLlego(false);setClienteLlego(false);setType(t);setFolio("");setWarnLow(false);setPaymentStatus((t==="factura"||t==="remision")&&sinPrecio?"unpaid":null);setPaymentMethod(null);setPaymentAmount("");setBankReference("");setPaymentRefs([]);setBillTo(null);setErr("")};
   const cambiarTipo=t=>{
     if(t===type)return; // mismo tipo, no-op
     escudoDeClics(400);   // v10.84.70 (tercera revisión, P1) — las tarjetas se encogen y el pago aparece: el segundo clic caía en él
@@ -9975,7 +10031,9 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   useEffect(()=>{ panelRef.current?.focus(); },[]);   // el foco entra al diálogo (en modo emisor no hay campo con autoFocus)
   // v10.84.70 — en la vista previa el foco va a ella; y al regresar con «Atrás», al diálogo (el botón que lo tenía desaparece y caía al <body>)
   const yaConfirmaba=useRef(false);
-  useEffect(()=>{ if(confirming) vistaRef.current?.focus(); else if(yaConfirmaba.current) panelRef.current?.focus(); yaConfirmaba.current=confirming; },[confirming]);
+  // v10.84.72 (tercera revisión) — al regresar con «Atrás», al botón que abrió la vista previa (iba al panel: ~10 Tab para volver al monto)
+  const continuarRef=useRef(null);
+  useEffect(()=>{ if(confirming) vistaRef.current?.focus(); else if(yaConfirmaba.current){const b=continuarRef.current;(b&&!b.disabled?b:panelRef.current)?.focus();} yaConfirmaba.current=confirming; },[confirming]);
   // v10.84.70 (segunda revisión) — el foco ya no cae al <body>: (1) al cerrar una pregunta regresa a donde estaba (el tipo que se
   //   apretó, «Cancelar»…); (2) al pasar a ligar o regresar al camino normal, el botón apretado desaparece: va al aviso de ligar o
   //   al primer tipo; (3) un rechazo de la base se lleva el foco a su aviso (el botón se apaga mientras trabaja y lo soltaba).
@@ -10040,7 +10098,9 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
         return aviso("La suma de los pagos no cuadra con el total.");})())
     :(billTo&&billTo.incomplete)?aviso("Completa o quita el tercero («Facturar a un tercero»).")
     :null;   // revisando las facturas por adelantado: lo dice el aviso de arriba
-  const anchoDialogo=ancha&&!ligando?960:520;
+  // v10.84.72 (tercera revisión, el P1 de raíz) — UN solo ancho por camino (era 960 ↔ 520 al ligar: el segundo clic de un doble clic caía
+  //   en el fondo) y la ventana ANCLADA ARRIBA (centrada, cada cambio de alto movía todo bajo el cursor: al elegir «Pagada» subía 99 px)
+  const anchoDialogo=ancha?960:520;
   // lo capturado, en palabras: «1 pago por $66,004.00, el folio F-100» (las preguntas de cerrar, cambiar el tipo e ir a partes)
   const resumenCapturado=()=>{const xs=[];const n=paymentRefs.length;
     if(n){const s=paymentRefs.reduce((a,r)=>a+(Number(r.amount)||0),0);xs.push((n===1?"1 pago":n+" pagos")+(s>0?" por "+fmtD(s):""))}
@@ -10065,13 +10125,14 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const caja={background:C.bg,border:"1px solid "+C.bd,borderRadius:10,padding:"8px 10px",fontSize:12,color:C.tx,lineHeight:1.45,minWidth:0};
   const botonClaro={...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:12,padding:"8px 14px",minHeight:36};
   const bannerCandidatas=<>
+    {candsLlego&&<div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.tx,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><InfoIcon size={12} weight="bold" style={{flexShrink:0}}/>Llegó la revisión que tardaba: {facturaPorLigar?facturaPorLigar.doc_number+" es del mismo importe (abajo).":otrasSinLigar.length?"el cliente tiene facturas hechas por adelantado (abajo).":"no hay facturas hechas por adelantado."}</div>}
     {cands===undefined&&<div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Revisando si ya se facturó por adelantado…</div>}
     {cands===null&&<div role="alert" style={{fontSize:11.5,color:C.wnInk,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-      <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>No se pudo revisar si ya hay una factura por adelantado (falló la red). {conEfectivo?"Con efectivo hay que revisarlo antes de cobrar.":"Sin efectivo puedes seguir: la base no deja emitir otra por el mismo importe."}</span></div>
+      <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>{candsTarde?"La revisión de facturas por adelantado está tardando (más de 8 s).":"No se pudo revisar si ya hay una factura por adelantado (falló la red)."} {conEfectivo?"Con efectivo hay que revisarlo antes de cobrar.":"Sin efectivo puedes seguir: la base no deja emitir otra por el mismo importe."}</span></div>
       <button onClick={()=>setCandKey(k=>k+1)} style={{...bt(C.wnInk),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}><ArrowsClockwiseIcon size={12} weight="bold"/>Reintentar</button>
     </div>}
     {facturaPorLigar&&(ligando
-      ? <div ref={ligaRef} tabIndex={-1} role="group" aria-labelledby="liga-titulo" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      ? <div ref={ligaRef} tabIndex={-1} role="group" aria-labelledby="liga-titulo" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:12,padding:"12px 14px",marginBottom:14,maxWidth:760}}>
           <div id="liga-titulo" style={{display:"flex",alignItems:"flex-start",gap:7,fontSize:13.5,fontWeight:700,color:C.tx,marginBottom:8,lineHeight:1.35}}><LinkIcon size={15} weight="bold" color={C.fac} style={{flexShrink:0,marginTop:2}}/>{facturaPorLigar.doc_number} es del mismo importe: ¿es la {docPalabra(facturaPorLigar)} de este trabajo?</div>
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:8,marginBottom:8}}>
             <div style={caja}>
@@ -10110,16 +10171,20 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // v10.84.70 (tercera revisión, P1) — el fondo cierra sólo si el clic EMPEZÓ en el fondo (arrastrar desde la ventana y soltar fuera
   //   la cerraba); con algo capturado pregunta, como Esc (antes no hacía nada y no decía por qué); trabajando, nada.
   return <>
-  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}
+  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:999,padding:"5vh 16px 16px"}}
     onMouseDown={e=>{pulsoEnFondo.current=e.target===e.currentTarget}}
     onClick={e=>{ if(e.target!==e.currentTarget||!pulsoEnFondo.current)return; pulsoEnFondo.current=false; if(busyRef.current)return; if(capturado){pedirCerrar();return} onClose(); }}>
     <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title" onKeyDown={e=>{atraparTab(e);atajoDelDialogo(e)}} style={{background:C.bg,borderRadius:20,maxWidth:anchoDialogo,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}} onClick={e=>e.stopPropagation()}>
       {/* v10.84.34 — el pie (errores y botones) queda FIJO y sólo el cuerpo hace scroll: con dos pagos, «Continuar» quedaba debajo del pliegue en la laptop */}
       <div style={{overflowY:"auto",padding:"24px 24px 12px"}}>
       <h3 id="invoice-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:F.title,fontWeight:700,margin:"0 0 4px",color:C.tx}}><FileTextIcon size={17} weight="bold" color={C.fac}/>Asignar folio y entregar</h3>
-      <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{[order?.client,order?.product_type].filter(Boolean).join(" · ")}</p>
       <p style={{fontSize:11,color:C.ac,margin:"0 0 6px",fontWeight:600}}>{order?.production_number||""}{order?.cart_folio?<> · <ShoppingCartIcon size={11} weight="bold" style={{verticalAlign:"-1px"}}/> {order.cart_folio}</>:""}{order?.web_folio?" · "+order.web_folio:""}</p>
-      <div style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{orderBaseAmount>0
+      {/* v10.84.72 (tercera revisión, P2) — en modo ligar el encabezado dice LO QUE SE LIGA: conservaba el total del otro camino
+          («$56,900.00 · remisión, sin IVA» sobre «Vas a ligar F-9135… Factura por $66,004.00»). Sin tipo de producto, sin «·» colgando. */}
+      <div style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{ligando
+        ? <>Se liga <b style={{color:C.tx,fontSize:14}}>{facturaPorLigar.doc_number}</b> · {docPalabra(facturaPorLigar)} por <b style={{color:C.tx,fontSize:14}}>{fmtD(facturaPorLigar.amount)}</b>{facturaPorLigar.doc_type==="remision"?", sin IVA":" con IVA"}</>
+        : orderBaseAmount>0
         ? (type==="factura"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(conIvaTotal)}</b> con IVA · subtotal ${fmtMx(orderBaseAmount)}</>
           : type==="remision"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · remisión, sin IVA</>
           : <>Subtotal <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · con IVA ${fmtMx(conIvaTotal)}</>)
@@ -10133,6 +10198,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
         <div>
         <div style={{...lbl,marginBottom:8}}>Tipo de comprobante</div>
         {coronaInfoLoading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Cargando datos del cliente…</div>}
+        {clienteLlego&&!coronaInfoFallback&&<div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.tx,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><InfoIcon size={12} weight="bold" style={{flexShrink:0}}/>Llegaron los datos del cliente, que tardaban{isCorona?": ahora sale «Aplicar saldo».":isCuadra?": ahora sale «Sin factura · Stock».":"."}</div>}
         {coronaInfoFallback&&!coronaInfoLoading&&<div style={{fontSize:11,color:C.wnInk,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>No se terminó de cargar el cliente (red lenta). Si debería salir «Aplicar saldo» o «Sin factura · Stock», recarga.</span></div>
           <button onClick={reloadCoronaInfo} style={{...bt(C.wnInk),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}><ArrowsClockwiseIcon size={12} weight="bold"/>Recargar</button>
@@ -10205,7 +10271,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <input
               id="invoice-folio"
-              style={{...inp,outline:undefined,fontFamily:"'Geist Mono',monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":(folioIsLower?C.amb:C.bd))}}
+              style={{...inp,outline:undefined,fontFamily:"'Geist Mono',monospace",fontSize:16,fontWeight:700,letterSpacing:0.5,border:"1.5px solid "+(folio&&!folioValid?C.dn+"60":((folioIsLower||folioIsHigher)?C.amb:C.bd))}}
               value={folio}
               onChange={e=>{setFolio(e.target.value.toUpperCase().trim());setWarnLow(false)}}
               placeholder={folioPrefix+"XXXX"}
@@ -10213,11 +10279,11 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             />
             <button onClick={useSuggestion} disabled={!suggestion[type]} style={{...bt(C.sf,C.tx),padding:"0 14px",border:"0.5px solid "+C.bd,whiteSpace:"nowrap"}}>Usar {suggestion[type]||"…"}</button>
           </div>
-          {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:F.meta,color:C.dnInk,marginBottom:8}}><WarningIcon size={11} weight="fill" color={C.dn}/>Va la serie, un guion y el número, sin ceros a la izquierda (p. ej. {suggestion[type]||folioPrefix+"123"}).</div>}
+          {folio&&!folioValid&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:F.meta,color:C.dnInk,marginBottom:8}}><WarningIcon size={11} weight="fill" color={C.dn}/>{serieAjena||<>Va la serie, un guion y el número, sin ceros a la izquierda (p. ej. {suggestion[type]||folioPrefix+"123"}).</>}</div>}
           {folioIsLower&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:F.meta,color:C.wnInk,marginBottom:8,fontWeight:600}}><WarningIcon size={11} weight="fill" color={C.wn}/>Es menor al último registrado ({suggestion[type]})</div>}
+          {folioIsHigher&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:F.meta,color:C.wnInk,marginBottom:8,fontWeight:600}}><WarningIcon size={11} weight="fill" color={C.wn}/>Es {saltoFolio} arriba del siguiente ({suggestion[type]}): deja un hueco de {saltoFolio} {saltoFolio===1?"folio":"folios"} en la serie.</div>}
         </>)}
-        {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al asignar folio */}
-        {type&&folioValid&&!isStockLoad&&!isNoFolio&&!isCorona&&Number(coronaInfo?.current_balance||0)>0.005&&<SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
+        {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al asignar folio. v10.84.72: junto al pago (la otra columna) */}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto). v10.84.70: con el documento */}
         {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={C.ac}/></div>}
         </div>
@@ -10233,18 +10299,21 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             const ledgerDeduct=orderBaseAmount;
             const newBalance=(coronaInfo.current_balance||0)-ledgerDeduct;
             const negative=newBalance<0;
-            return <div style={{background:C.emr+"10",border:"1px solid "+C.emr+"40",borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.emrInk,textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Descontar de lo facturado por adelantado (Corona) · sin folio fiscal</div>
+            // v10.84.72 (tercera revisión) — en neutro: lo facturado por adelantado NO es dinero del cliente (iba en esmeralda, el color de lo a favor)
+            return <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:14,marginTop:8,marginBottom:4}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CurrencyDollarIcon size={12} weight="bold"/>Descontar de lo facturado por adelantado (Corona) · sin folio fiscal</div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:11}}>
-                <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:C.emrInk}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+                <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Saldo actual (sin IVA)</div><div style={{fontSize:14,fontWeight:800,color:C.tx}}>${(coronaInfo.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
                 <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Esta orden (subtotal)</div><div style={{fontSize:14,fontWeight:800}}>−${ledgerDeduct.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-                <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dnInk:C.emrInk}}>{fmtSigno(newBalance)}</div></div>
+                <div><div style={{color:C.t2,fontSize:10,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:14,fontWeight:800,color:negative?C.dnInk:C.tx}}>{fmtSigno(newBalance)}</div></div>
               </div>
               {negative&&<div style={{display:"flex",alignItems:"flex-start",gap:5,fontSize:11,color:C.dnInk,marginTop:8,padding:"6px 8px",background:C.dn+"08",borderRadius:6,lineHeight:1.45}}><WarningIcon size={11} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/>El saldo quedará negativo. Sigue siendo válido (se permite descubierto); Tesorería deberá registrar el depósito faltante.</div>}
               <div style={{fontSize:11,color:C.t2,marginTop:6,lineHeight:1.45}}>Sin folio fiscal: la orden se entrega y el monto se descuenta del saldo directamente. No se crea factura ni remisión.</div>
             </div>;
           })()
-          :<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} allowCash onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>
+          :<>{hayFavor&&<SaldoFavorAmarreBanner balance={saldoFavor} total={totalDisplay} aplica={aplicaFavor} cobrar={cobrarFavor} doc={type} yaAsi={favorYaAsi} onDejarAsi={paymentRefs.length<=1?dejarFavorAsi:null}/>}
+            <MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} allowCash onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}
+              notaSinPrecio="Sin precio no se registran pagos aquí: va como «No pagada». CobranzaFlow la ve cuando se capture el precio de la orden, y el cobro se registra entonces."/></>
         )}
         </div>
         </div>}
@@ -10283,21 +10352,21 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
             <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará <strong style={{color:C.tx}}>En stock</strong>, sin folio fiscal. Cuando Cuadra pida estas piezas, se venden desde el inventario con factura o remisión normal.</p>
           </>;
         })() : isNoFolio ? <>
-          <div ref={vistaRef} tabIndex={-1} role="group" aria-label="Lo que vas a hacer" style={{background:C.emr+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+C.emr+"40"}}>
+          <div ref={vistaRef} tabIndex={-1} role="group" aria-label="Lo que vas a hacer" style={{background:C.sf,borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+C.bd}}>
             <div style={{fontSize:11,color:C.t2,marginBottom:4}}>Vas a aplicar:</div>
             {/* v10.84.70 — la acción y el monto, como «Factura por $X» (decía el nombre del modo) */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:21,fontWeight:800,color:C.emrInk,lineHeight:1.25}}><CurrencyDollarIcon size={20} weight="bold"/>Descontar {fmtD(coronaConsumoAmount)} de lo facturado por adelantado</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:21,fontWeight:800,color:C.tx,lineHeight:1.25}}><CurrencyDollarIcon size={20} weight="bold"/>Descontar {fmtD(coronaConsumoAmount)} de lo facturado por adelantado</div>
             <div style={{fontSize:12,color:C.t2,marginTop:4}}>Sin folio fiscal · sólo se descuenta del saldo</div>
           </div>
-          <div style={{background:C.emr+"08",borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
             {/* v10.58.32: ledger y descuento son SIN IVA (no con IVA como decía antes).
                 Mostramos el subtotal (coronaConsumoAmount) para que coincida con lo que
                 realmente descuenta apply_credit_no_folio. Mantenemos el monto con IVA
                 como nota informativa abajo para que Karla vea la equivalencia fiscal. */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,fontSize:11,textAlign:"center"}}>
-              <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:13,fontWeight:800,color:C.emrInk}}>${(coronaInfo?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
+              <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo actual</div><div style={{fontSize:13,fontWeight:800,color:C.tx}}>${(coronaInfo?.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
               <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Descuento (sin IVA)</div><div style={{fontSize:13,fontWeight:800}}>−${coronaConsumoAmount.toLocaleString("es-MX",{minimumFractionDigits:2})}</div></div>
-              <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:13,fontWeight:800,color:((coronaInfo?.current_balance||0)-coronaConsumoAmount)<0?C.dnInk:C.emrInk}}>{fmtSigno((coronaInfo?.current_balance||0)-coronaConsumoAmount)}</div></div>
+              <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo después</div><div style={{fontSize:13,fontWeight:800,color:((coronaInfo?.current_balance||0)-coronaConsumoAmount)<0?C.dnInk:C.tx}}>{fmtSigno((coronaInfo?.current_balance||0)-coronaConsumoAmount)}</div></div>
             </div>
             <div style={{fontSize:11,color:C.t2,textAlign:"center",marginTop:8}}>
               Equivalente con IVA: ${(Math.round(orderBaseAmount*116)/100).toLocaleString("es-MX",{minimumFractionDigits:2})}
@@ -10332,16 +10401,23 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
                 <div style={{fontSize:14,fontWeight:700,color:paymentStatus==="paid"?C.okInk:paymentStatus==="partial"?C.wnInk:C.tx,marginTop:2}}>
                   {paymentStatus==="paid"&&<><CheckCircleIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Pagada · {methodLabel}</>}
                   {paymentStatus==="partial"&&<><CircleHalfIcon size={13} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Parcial · ${amountForPartial.toLocaleString("es-MX",{minimumFractionDigits:2})} · {methodLabel}</>}
-                  {paymentStatus==="unpaid"&&<><HourglassIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>No pagada (irá a cobranza)</>}
+                  {paymentStatus==="unpaid"&&<><HourglassIcon size={13} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{sinPrecio?"No pagada · sin precio":"No pagada (irá a cobranza)"}</>}
                   {/* v10.57.0: el bridge ya NO consume saldo automático; Corona+factura/remisión requiere MultiPaymentPicker */}
                 </div>
                 {paymentStatus==="partial"&&<div style={{fontSize:11.5,color:C.t2,marginTop:4}}>
                   Saldo pendiente a CobranzaFlow: ${(totalDisplay-amountForPartial).toLocaleString("es-MX",{minimumFractionDigits:2})}
                 </div>}
                 {usingMulti&&paymentRefs.length>1&&<div style={{fontSize:11,color:C.t2,marginTop:6,padding:"4px 8px",background:C.bg,borderRadius:6,textAlign:"left"}}>
-                  {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"'Geist Mono',monospace"}}>#{i+1} {palabra(r.method)} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}</div>)}
+                  {paymentRefs.map((r,i)=><div key={i} style={{fontFamily:"'Geist Mono',monospace"}}>#{i+1} {palabra(r.method)} · ${Number(r.amount).toLocaleString("es-MX",{minimumFractionDigits:2})}{r.bank_reference?" · "+r.bank_reference:""}{r.method==="efectivo"&&(r.delivered_by||"").trim()?" · entregó "+r.delivered_by.trim():""}</div>)}
                 </div>}
+                {/* v10.84.72 (tercera revisión) — la referencia y quién entregó el efectivo, también con un solo pago (salían sólo con dos o más) */}
+                {usingMulti&&paymentRefs.length===1&&(()=>{const r=paymentRefs[0];
+                  const extra=r.method==="efectivo"?((r.delivered_by||"").trim()?"Entregó "+r.delivered_by.trim():null)
+                    :(r.bank_reference||"").trim()?"Referencia "+r.bank_reference.trim()
+                    :r.bank_ref_omitted_intentional?"Sin referencia: el cliente no la dio":null;
+                  return extra&&<div style={{fontSize:11.5,color:C.t2,marginTop:4}}>{extra}</div>;})()}
                 {efectivoTotal>0&&<div style={{fontSize:11.5,color:C.tx,marginTop:6,lineHeight:1.45}}>Se crea el vale de caja por ${fmtMx(efectivoTotal)} y se imprime: entrégalo a Tesorería con el efectivo.</div>}
+                {hayFavor&&<div style={{fontSize:11.5,color:C.tx,marginTop:6,lineHeight:1.45}}>El cliente tiene {fmtD(saldoFavor)} a favor: aplica {fmtD(aplicaFavor)} en CobranzaFlow al registrar el pago (este documento no los descuenta).</div>}
               </>;
             })()}
           </div>
@@ -10363,8 +10439,8 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
         {!confirming ? <div key="paso1" style={{display:"flex",gap:8}}>
           <button onClick={pedirCerrar} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
           {ligando
-            ? <button onClick={handleProceed} disabled={!puedeLigar} aria-keyshortcuts="Control+Enter" style={{...(puedeLigar?bt(C.ac):bt(C.sf,C.t2)),flex:1.4,justifyContent:"center",cursor:puedeLigar?"pointer":"not-allowed",...(puedeLigar?{}:{border:"0.5px solid "+C.bd})}}><LinkIcon size={13} weight="bold"/>Ligar {facturaPorLigar.doc_number} y entregar</button>
-            : <button onClick={handleProceed} disabled={!puedeSeguir} aria-keyshortcuts="Control+Enter" style={{...(puedeSeguir?bt(C.ac):bt(C.sf,C.t2)),flex:1,justifyContent:"center",cursor:puedeSeguir?"pointer":"not-allowed",...(puedeSeguir?{}:{border:"0.5px solid "+C.bd})}}>Continuar<CaretRightIcon size={13} weight="bold"/>{ancha&&puedeSeguir&&<span aria-hidden="true" style={atajoVisible}>Ctrl+Enter</span>}</button>}
+            ? <button ref={continuarRef} onClick={handleProceed} disabled={!puedeLigar} aria-keyshortcuts="Control+Enter" style={{...(puedeLigar?bt(C.ac):bt(C.sf,C.t2)),flex:1.4,justifyContent:"center",cursor:puedeLigar?"pointer":"not-allowed",...(puedeLigar?{}:{border:"0.5px solid "+C.bd})}}><LinkIcon size={13} weight="bold"/>Ligar {facturaPorLigar.doc_number} y entregar</button>
+            : <button ref={continuarRef} onClick={handleProceed} disabled={!puedeSeguir} aria-keyshortcuts="Control+Enter" style={{...(puedeSeguir?bt(C.ac):bt(C.sf,C.t2)),flex:1,justifyContent:"center",cursor:puedeSeguir?"pointer":"not-allowed",...(puedeSeguir?{}:{border:"0.5px solid "+C.bd})}}>Continuar<CaretRightIcon size={13} weight="bold"/>{ancha&&puedeSeguir&&<span aria-hidden="true" style={atajoVisible}>Ctrl+Enter</span>}</button>}
         </div> : <div key="paso2" style={{display:"flex",gap:8,maxWidth:560,margin:"0 auto"}}>
           <button onClick={()=>setConfirming(false)} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}><CaretLeftIcon size={13} weight="bold"/>Atrás</button>
           <button onClick={handleConfirm} disabled={busy} style={{...bt(busy?C.acH:C.ac),flex:1.4,justifyContent:"center",cursor:busy?"progress":"pointer"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Procesando…</>:<><CheckCircleIcon size={14} weight="bold"/>{verboFinal}</>}</button>
@@ -10726,7 +10802,7 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}} onClick={busy?undefined:onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="deliveronly-modal-title" style={{background:C.bg,borderRadius:20,padding:24,maxWidth:480,width:"100%",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
         <h3 id="deliveronly-modal-title" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px"}}><CheckCircleIcon size={17} weight="bold"/>Marcar como Entregada</h3>
-        <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{order?.client||""} · {order?.product_type||""}</p>
+        <p style={{fontSize:12,color:C.t2,margin:"0 0 4px"}}>{[order?.client,order?.product_type].filter(Boolean).join(" · ")}</p>
         <p style={{fontSize:11,color:C.ac,margin:"0 0 14px",fontWeight:600}}>{order?.production_number||""}</p>
 
         {/* Bloque: Folio ya asignado */}

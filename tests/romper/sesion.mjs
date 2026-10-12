@@ -686,6 +686,10 @@ for (const [id, viewport] of [["ses-19-aviso-a-1366", { width: 1366, height: 768
     const sinBarra = await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
     ok(id, m.dentro && m.contraste >= 4.5 && m.letra >= 12 && btnDentro && sinBarra,
       `a ${vp.width}: el aviso se ve entero (${m.dentro}), con contraste ${m.contraste} (≥4.5) y letra de ${m.letra} px (≥12); «Entrar» a la vista sin bajar (${btnDentro}); sin barra horizontal (${sinBarra})`);
+    // v10.84.72 — DESIGN.md: nada de franjas laterales de color (border-left grueso) en avisos; borde completo de 1 px o tinte
+    const bordes = await p.locator("[data-aviso-sesion]").first().evaluate(el => { const cs = getComputedStyle(el); return [cs.borderLeftWidth, cs.borderRightWidth, cs.borderTopWidth].map(parseFloat); }).catch(() => null);
+    ok(id + "-sin-franja", !!bordes && bordes[0] <= 1.5 && bordes[0] === bordes[1] && bordes[1] === bordes[2],
+      `el aviso no lleva franja lateral de color: bordes izquierdo/derecho/arriba ${bordes ? bordes.join("/") : "?"} px`);
   }, { viewport });
 }
 

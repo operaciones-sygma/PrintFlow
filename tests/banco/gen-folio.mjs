@@ -2,7 +2,7 @@
 // reales (tokens, estilos, escStack, atraparTab, ConfirmModal, OTRO_CATS, refComplete, toBackendRef) y la base simulada.
 // BillToSection y StageLbl van simulados (arrastran el buscador de clientes y el mapa de etapas; aquí no se cambiaron).
 // Uso: node gen-banco-folio.mjs <App.jsx> <dirSalida>
-// Variantes por URL: emisor=off|falla|falla1 (falla una vez y luego sí) · cliente=corona|cuadra|saldo · precio0=1 · maquila=1 ·
+// Variantes por URL: emisor=off|falla|falla1 (falla una vez y luego sí) · cliente=corona|cuadra|saldo (saldo=N, el monto; 5000) · precio0=1 · maquila=1 ·
 //   incompleto=1 (a la orden le falta el tipo de producto) · lenta=1 (el cliente tarda 10 s, más que el tope de 8) · falla=1 (la base rechaza)
 import fs from "node:fs";
 import path from "node:path";
@@ -51,7 +51,7 @@ const db = {
   getFolioEmitterEnabled: async () => { emisorLlamadas++; if (EMISOR === "falla") return null; if (EMISOR === "falla1") return emisorLlamadas === 1 ? null : true; return EMISOR !== "off"; },
   getNextFolioSuggestion: async t => t === "factura" ? "F-137" : "RS-1250",
   getClientBillingInfo: async () => { if (LENTA) await new Promise(r => setTimeout(r, 10000));   // (v10.84.70) más que el tope de 8 s
-    return CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: 30000 } : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" } : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? 5000 : 0 }; },
+    return CLIENTE === "corona" ? { billing_mode: "anticipo", current_balance: 30000 } : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" } : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? Number(Q.get("saldo") || 5000) : 0 }; },
   loadClientProducts: async () => [{ id: "sku1", name: "Etiqueta Cuadra", sku: "CU-1", stock_actual: 120 }],
 };
 // simulados: BillToSection (el de verdad trae el buscador de clientes) y StageLbl (el mapa de etapas)

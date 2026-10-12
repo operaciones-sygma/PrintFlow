@@ -541,4 +541,16 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   «Tarjeta» en un pago que ya traía el monto). `escudoDeClics` en todo lo que cambia el acomodo: **400 ms** en lo que se hace seguido
   (tipo, estado, método: atrapa el doble clic y deja pasar el siguiente clic a propósito) y **500 ms** en lo que nunca va seguido
   (agregar o quitar una fila, cambiar de camino). Y **el fondo cierra sólo si el clic empezó en el fondo** (`onMouseDown` en el fondo);
-  con algo capturado, el clic fuera pregunta como Esc. Lo pendiente, mejor que el escudo: anclar la ventana arriba y de un solo ancho.
+  con algo capturado, el clic fuera pregunta como Esc.
+- **Una ventana que cambia de alto va anclada arriba y de un solo ancho** (v10.84.72): centrada, cada elección movía todo bajo el
+  cursor (al elegir «Pagada» subía 99 px) y ligar la angostaba de 960 a 520. Anclada a `5vh` del borde de arriba (`alignItems:
+  "flex-start"`), el mismo ancho por cualquier camino; lo que es prosa dentro de ella se acota (~760 px) para no leer renglones de 150
+  letras. El escudo sigue, pero ya casi no tiene qué atrapar.
+- **Lo que llega tarde se dice** (v10.84.72): al tope de 8 s una consulta que sólo TARDA dice «está tardando», no «falló la red»; y si
+  la respuesta llega después, la ventana lo dice («Llegó la revisión que tardaba», «Llegaron los datos del cliente: ahora sale «Aplicar
+  saldo»») en vez de cambiar en silencio. Sólo si lo que llegó cambia algo: un cliente normal que tarda no deja aviso.
+- **El dinero que otra app aplica, junto al pago y con sus cifras** (v10.84.72): el saldo a favor del cliente no se descuenta al foliar;
+  la nota va donde se captura el pago, dice cuánto cobrar aquí y cuánto aplicar en CobranzaFlow, y un botón lo deja así. Las cifras
+  salen de UNA cuenta (la ventana se las pasa al aviso): el aviso y el botón no pueden decir cosas distintas.
+- **Una nota por hecho** (v10.84.72): sin precio, el selector de pagos decía «va como No pagada» y abajo «elige Pagada o Parcial con
+  Efectivo» (apagados). Lo que no aplica no se ofrece; la ventana que sabe más da su nota (`notaSinPrecio`).

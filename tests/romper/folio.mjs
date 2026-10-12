@@ -192,7 +192,9 @@ await caso("inv-23 parcial que cubre todo", "", async p => {
 await caso("inv-24 «Otro» sin motivo", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p, "66004", "Otro");
   const bloquea = await continuar(p).isDisabled() && await ve(p, /Elige el motivo/);
-  ok("inv-24 «Otro» sin motivo no deja continuar y lo dice; el aviso de efectivo sin raya larga", bloquea && await ve(p, /No lo pongas como «Otro»: usa el método/));
+  // (v10.84.72: el aviso se acortó a propósito; la prueba buscaba el texto largo de antes)
+  const aviso = await p.evaluate(() => ([...document.querySelectorAll('[role="dialog"] div')].find(d => /^¿Es efectivo\?/.test((d.innerText || "").trim()))?.innerText) || "");
+  ok("inv-24 «Otro» sin motivo no deja continuar y lo dice; el aviso de efectivo sin raya larga", bloquea && /Usa «Efectivo»/.test(aviso) && !/—/.test(aviso), "«" + aviso.slice(0, 90) + "»");
 });
 await caso("inv-25 «Atrás» conserva lo capturado", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p);
@@ -232,7 +234,7 @@ await caso("inv-30 remisión en la vista previa", "", async p => {
 });
 await caso("inv-31 saldo a favor", "cliente=saldo", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p);
-  ok("inv-31 cliente con saldo a favor: el aviso sale al elegir el tipo", await ve(p, /no lo descuenta/));
+  ok("inv-31 cliente con saldo a favor: el aviso sale al elegir el tipo", await ve(p, /no los? descuenta/));   // (v10.84.72: «no los descuenta», los $5,000.00)
 });
 await caso("inv-32 dos Esc seguidos", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p);
@@ -597,7 +599,8 @@ await caso("inv-70 la lectura tarda más que el tope", "anticipo=lenta", async p
   const apagado = await continuar(p).isDisabled();
   // (tercera revisión: espera a lo que mide, no segundos fijos. Medía en la ventana entre los 8 s del tope y los 9.5 s de la
   //  respuesta tardía, y el escudo contra el doble clic retrasó sus clics ~0.4 s: medía tarde, ya con F-9140 en pantalla)
-  const tope = await p.getByText(/No se pudo revisar si (ya )?hay una factura por adelantado/).first().waitFor({ timeout: 9000 }).then(() => true, () => false)
+  // (v10.84.72: al tope dice que TARDA —no «falló la red»—; lo que mide sigue igual: sin efectivo se puede seguir)
+  const tope = await p.getByText(/está tardando|No se pudo revisar si (ya )?hay una factura por adelantado/).first().waitFor({ timeout: 9000 }).then(() => true, () => false)
     && !(await continuar(p).isDisabled());
   const tarde = await p.getByText(/F-9140/).first().waitFor({ timeout: 4000 }).then(() => true, () => false);
   ok("inv-70 mientras revisa, «Continuar» espera y lo dice; a los 8 s lo da por no leído (sin efectivo sigue); si llega tarde, lo muestra", revisando && apagado && tope && tarde, `revisando=${revisando} · apagado=${apagado} · tope=${tope} · tarde=${tarde}`);
@@ -796,6 +799,231 @@ await caso("inv-101 el fondo cierra sólo si el clic empezó en él", "", async 
   const sigue = await dlgInv(p).isVisible() && (await cuenta(p, "inv:cerrado")) === 0;
   await p.mouse.click(8, 8); await espera(p, 300);
   ok("inv-101 arrastrar desde la ventana y soltar en el fondo no la cierra; un clic en el fondo sí (sin nada capturado)", sigue && (await cuenta(p, "inv:cerrado")) === 1, "sigue tras arrastrar=" + sigue);
+});
+
+// ───────────── v10.84.72: lo que dejó la tercera revisión independiente (30/40), escrito ANTES del arreglo
+const encabezado = p => p.evaluate(() => { const h = document.getElementById("invoice-modal-title"); let t = "", n = h?.nextElementSibling;
+  for (let i = 0; i < 3 && n; i++, n = n.nextElementSibling) t += " " + n.innerText; return t.replace(/\s+/g, " ").trim(); });
+await caso("inv-102 ligar: el encabezado dice lo que se liga", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 300);
+  await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 700);
+  await tipo(p, "Remisión").click(); await espera(p, 600);
+  const conRemision = await ve(p, /Total \$56,900\.00 · remisión, sin IVA/);
+  await p.getByRole("button", { name: /Ligar F-9135 a esta orden/ }).click(); await espera(p, 700);
+  const e1 = await encabezado(p);
+  ok("inv-102 al regresar a ligar, el encabezado describe F-9135 ($66,004.00 con IVA), no el total de la remisión", conRemision && /66,004\.00/.test(e1) && !/56,900\.00|remisión, sin IVA/.test(e1), "«" + e1.slice(0, 150) + "»");
+  await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).click(); await espera(p, 700);
+  const e2 = await encabezado(p);
+  ok("inv-102b la vista previa de ligar tampoco enseña arriba el total de otro camino", /66,004\.00/.test(e2) && !/56,900\.00|remisión, sin IVA/.test(e2), "«" + e2.slice(0, 150) + "»");
+});
+await caso("inv-103 saldo a favor junto al pago, con cuánto cobrar", "cliente=saldo", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 500);
+  const info = await p.evaluate(() => { const d = document.querySelector('[role="dialog"]'), r = d.getBoundingClientRect();
+    const e = [...d.querySelectorAll("div,p")].filter(x => /a favor/.test(x.innerText || "") && /61,004\.00/.test(x.innerText || "")).sort((a, b) => a.innerText.length - b.innerText.length)[0];
+    if (!e) return { hay: false }; const b = e.getBoundingClientRect(); return { hay: true, enElPago: b.left > r.left + r.width * 0.45, t: e.innerText.slice(0, 120) }; });
+  const boton = p.getByRole("button", { name: /Cobrar sólo \$61,004\.00/ });
+  const hayBoton = (await boton.count()) > 0;
+  if (hayBoton) { await boton.click(); await espera(p, 700); }
+  const parcial = (await p.getByRole("button", { name: "Parcial", exact: true }).getAttribute("aria-pressed")) === "true";
+  const monto = await p.getByLabel("Monto del pago 1").inputValue().catch(() => "");
+  ok("inv-103 con $5,000.00 a favor, junto al pago dice cuánto cobrar ($61,004.00) y un botón lo deja así (Parcial por $61,004.00)", info.hay && info.enElPago && hayBoton && parcial && monto === "61004.00", JSON.stringify(info) + " · botón " + hayBoton + " · parcial " + parcial + " · monto " + monto);
+  let enVista = false;
+  if (hayBoton) { await p.getByRole("radio", { name: "Transferencia" }).first().click(); await espera(p, 500); await continuar(p).click(); await espera(p, 700);
+    enVista = await dlgInv(p).getByRole("group", { name: "Lo que vas a emitir" }).isVisible().catch(() => false); }
+  ok("inv-103b la vista previa repite el saldo a favor ($5,000.00 que se aplican en CobranzaFlow)", enVista && await ve(p, /5,000\.00/) && await ve(p, /a favor/), "en la vista previa " + enVista);
+});
+await caso("inv-104 sin precio, una sola nota que no se contradice", "precio0=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  const t = (await dlgInv(p).innerText()).replace(/\s+/g, " ");
+  const contradice = /elige «Pagada» o «Parcial»/.test(t) || /irá a CobranzaFlow como pendiente/.test(t);
+  ok("inv-104 sin precio no ofrece «Pagada»/«Parcial» con efectivo ni dice que irá a CobranzaFlow como pendiente, y dice cuándo la ve CobranzaFlow", !contradice && /cuando se capture el precio/.test(t), "contradice " + contradice);
+});
+await caso("inv-105 la ventana no cambia de ancho ni se mueve arriba", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 300);
+  const caja = async () => await dlgInv(p).boundingBox();
+  const a = await caja();
+  await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 700);
+  const b = await caja();
+  await tipo(p, "Factura").click(); await espera(p, 700);
+  const c = await caja();
+  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 700);
+  const d = await caja();
+  const anchos = [a, b, c, d].map(x => Math.round(x.width)), tops = [a, b, c, d].map(x => Math.round(x.y));
+  ok("inv-105 un solo ancho y la orilla de arriba quieta (ligar → camino normal → Factura → Pagada)", new Set(anchos).size === 1 && Math.max(...tops) - Math.min(...tops) <= 2, "anchos " + anchos.join("/") + " · arriba " + tops.join("/"));
+});
+await caso("inv-106 «Cubierto» sólo con el pago completo", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 500);   // trae el total, sin método
+  const falta = await ve(p, /falta el método/), cub1 = await ve(p, /Cubierto/);
+  await p.getByRole("radio", { name: "Transferencia" }).first().click(); await espera(p, 500);
+  const cub2 = await ve(p, /Cubierto/);
+  ok("inv-106 con el total pero sin método no dice «Cubierto»; con el método, sí", falta && !cub1 && cub2, "falta el método " + falta + " · Cubierto sin método " + cub1 + " · con método " + cub2);
+});
+await caso("inv-107 tras quitar un pago, el foco sigue en la ventana", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "30000", "Transferencia");
+  await p.getByRole("button", { name: /Agregar otro pago/ }).click(); await espera(p, 800);
+  await p.getByRole("button", { name: "Quitar el pago 2" }).click(); await espera(p, 800);
+  const f = await p.evaluate(() => { const a = document.activeElement, d = a?.closest?.('[role="dialog"]');
+    return { enUnControl: !!d && a !== d && a !== document.body, cual: a?.getAttribute?.("aria-label") || (a?.textContent || "").trim().slice(0, 30) || a?.tagName }; });
+  ok("inv-107 al quitar el pago 2, el foco va a un control de la ventana (no al <body> ni al panel)", f.enUnControl, JSON.stringify(f));
+});
+await caso("inv-108 tras «Atrás», el foco regresa a «Continuar»", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await p.getByRole("button", { name: "No pagada", exact: true }).click(); await espera(p, 500);
+  await continuar(p).click(); await espera(p, 800);
+  await p.getByRole("button", { name: /Atrás/ }).click(); await espera(p, 600);
+  const foco = await p.evaluate(() => (document.activeElement?.textContent || "").trim().slice(0, 30) || document.activeElement?.tagName);
+  ok("inv-108 al regresar con «Atrás», el foco va a «Continuar» (el botón que abrió la vista previa)", /^Continuar/.test(foco), "foco en «" + foco + "»");
+});
+await caso("inv-109 la vista previa enseña la referencia de un pago único", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "66004", "Transferencia");
+  await p.getByLabel("Referencia bancaria del pago 1").fill("RASTREO778899"); await espera(p, 300);
+  await continuar(p).click(); await espera(p, 800);
+  ok("inv-109 la vista previa dice la referencia del pago (RASTREO778899)", await ve(p, /RASTREO778899/));
+});
+await caso("inv-110 la vista previa dice quién entregó el efectivo", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "66004", "Efectivo");
+  await p.getByLabel("Quién entregó el efectivo del pago 1").fill("Sr. Ramírez"); await espera(p, 300);
+  await continuar(p).click(); await espera(p, 800);
+  ok("inv-110 la vista previa dice quién entregó el efectivo (Sr. Ramírez)", await ve(p, /Sr\. Ramírez/));
+});
+await caso("inv-111 el aviso de «Otro» es corto", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "66004", "Otro"); await espera(p, 300);
+  const m = await p.evaluate(() => { const el = [...document.querySelectorAll('[role="dialog"] div')].find(d => /^¿Es efectivo\?/.test((d.innerText || "").trim()));
+    return el ? { palabras: el.innerText.trim().split(/\s+/).length, negritas: el.querySelectorAll("b,strong").length } : null; });
+  ok("inv-111 «¿Es efectivo?» en 30 palabras o menos y con 2 negritas o menos", !!m && m.palabras <= 30 && m.negritas <= 2, JSON.stringify(m));
+});
+await caso("inv-112 Corona: lo facturado por adelantado no va en verde", "cliente=corona", async p => {
+  await inv(p); await espera(p, 300);
+  await p.getByRole("button", { name: /Aplicar saldo/ }).click(); await espera(p, 600);
+  const color = () => p.evaluate(() => { const el = [...document.querySelectorAll('[role="dialog"] div')].find(d => d.children.length === 0 && /^\$30,000\.00$/.test(d.textContent.trim()));
+    return el ? getComputedStyle(el).color : null; });
+  const verde = c => !c || c === "rgb(4, 120, 87)" || c === "rgb(16, 185, 129)";
+  const c1 = await color();
+  await continuar(p).click(); await espera(p, 800);
+  const c2 = await color();
+  ok("inv-112 «$30,000.00» (lo facturado por adelantado, no dinero del cliente) no va en esmeralda, ni al elegir ni en la vista previa", !verde(c1) && !verde(c2), "al elegir " + c1 + " · vista previa " + c2);
+});
+await caso("inv-113 folio a mano: la serie de remisiones en una factura lo dice", "emisor=off", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.locator("#invoice-folio").fill("RS-1250"); await espera(p, 300);
+  ok("inv-113 «RS-1250» en una factura dice que RS- es de remisiones (no el mensaje genérico)", await ve(p, /RS- es (la serie )?de (las )?remisiones/i));
+});
+await caso("inv-114 folio a mano muy arriba del siguiente avisa", "emisor=off", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.locator("#invoice-folio").fill("F-200"); await espera(p, 300);
+  ok("inv-114 «F-200» (63 arriba de F-137) avisa del hueco que deja", await ve(p, /hueco/i));
+});
+await caso("inv-115 al tope de 8 s dice que tarda; si llega tarde, lo dice", "anticipo=lenta", async p => {
+  await inv(p);
+  await p.waitForTimeout(8700);
+  const t1 = (await dlgInv(p).innerText()).replace(/\s+/g, " ");
+  await p.waitForTimeout(1900);   // el banco contesta a los ~9.6 s
+  const t2 = (await dlgInv(p).innerText()).replace(/\s+/g, " ");
+  ok("inv-115 a los 8.7 s dice que la revisión tarda, no que falló la red", !/falló la red/.test(t1) && /tard/i.test(t1), "«" + ((t1.match(/[^.]*(No se pudo revisar|tard)[^.]*\./i) || [""])[0]).slice(0, 120) + "»");
+  ok("inv-115b cuando la revisión llega tarde, lo dice", /lleg/i.test(t2), "");
+});
+await caso("inv-116 el cliente que llega tarde lo dice", "cliente=corona&lenta=1", async p => {
+  await inv(p);
+  await p.waitForTimeout(8600);
+  const antes = await p.getByRole("button", { name: /Aplicar saldo/ }).count();
+  await p.waitForTimeout(2300);   // el banco contesta a los 10 s
+  const despues = await p.getByRole("button", { name: /Aplicar saldo/ }).count();
+  const t = (await dlgInv(p).innerText()).replace(/\s+/g, " ");
+  ok("inv-116 cuando el cliente llega tarde y trae «Aplicar saldo», la ventana lo dice", antes === 0 && despues === 1 && /lleg/i.test(t), "antes " + antes + " · después " + despues);
+});
+await caso("inv-117 sin tipo de producto, el encabezado no deja un «·» colgando", "incompleto=1", async p => {
+  await inv(p);
+  const e = await p.evaluate(() => document.getElementById("invoice-modal-title").nextElementSibling.innerText.trim());
+  ok("inv-117 «PORTLAND STUDIO» sin « ·» al final", !/·\s*$/.test(e), "«" + e + "»");
+});
+
+// ───────────── v10.84.72, vuelta 2: por donde no se diseñó
+const metodosElegidos = p => p.evaluate(() => [...document.querySelectorAll('[role="dialog"] [role="radio"][aria-checked="true"][data-metodo]')].length);
+await caso("inv-118 el saldo a favor que cubre todo", "cliente=saldo&saldo=70000", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  const dice = await ve(p, /Cubre toda la factura/);
+  const b = p.getByRole("button", { name: /Dejarla «No pagada»/ });
+  const hay = (await b.count()) > 0; if (hay) { await b.click(); await espera(p, 700); }
+  const np = (await p.getByRole("button", { name: "No pagada", exact: true }).getAttribute("aria-pressed")) === "true";
+  ok("inv-118 con $70,000.00 a favor (más que la factura): lo dice y «Dejarla «No pagada»» la deja así", dice && hay && np, "dice " + dice + " · botón " + hay + " · No pagada " + np);
+});
+await caso("inv-119 el saldo a favor con remisión (sin IVA)", "cliente=saldo", async p => {
+  await inv(p); await tipo(p, "Remisión").click(); await espera(p, 600);
+  ok("inv-119 con remisión ($56,900.00 sin IVA) dice «Cóbrale $51,900.00» y el botón lo deja así", await ve(p, /Cóbrale \$51,900\.00/) && (await p.getByRole("button", { name: /Cobrar sólo \$51,900\.00/ }).count()) === 1);
+});
+await caso("inv-120 doble clic en «Cobrar sólo»", "cliente=saldo", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.getByRole("button", { name: /Cobrar sólo \$61,004\.00/ }).dblclick(); await espera(p, 800);
+  const pagos = await p.getByRole("group", { name: /^Pago \d+$/ }).count();
+  const monto = await p.getByLabel("Monto del pago 1").inputValue().catch(() => "");
+  const parcial = (await p.getByRole("button", { name: "Parcial", exact: true }).getAttribute("aria-pressed")) === "true";
+  const metodos = await metodosElegidos(p);
+  ok("inv-120 doble clic en «Cobrar sólo $61,004.00»: un pago de $61,004.00 en Parcial, sin método elegido por el segundo clic", pagos === 1 && monto === "61004.00" && parcial && metodos === 0, "pagos " + pagos + " · monto " + monto + " · parcial " + parcial + " · métodos elegidos " + metodos);
+});
+await caso("inv-121 el saldo a favor con dos pagos", "cliente=saldo", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await pagada(p, "30000", "Transferencia");
+  await p.getByRole("button", { name: /Agregar otro pago/ }).click(); await espera(p, 800);
+  const cifras = await ve(p, /Cóbrale \$61,004\.00/), boton = await p.getByRole("button", { name: /Cobrar sólo/ }).count();
+  ok("inv-121 con dos pagos capturados, la nota sigue diciendo cuánto cobrar y no hay botón que los junte en uno", cifras && boton === 0, "cifras " + cifras + " · botones " + boton);
+});
+await caso("inv-122 el folio que salta pregunta antes", "emisor=off", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.locator("#invoice-folio").fill("F-200"); await espera(p, 200);
+  await p.getByRole("button", { name: "No pagada", exact: true }).click(); await espera(p, 500);
+  await continuar(p).click(); await espera(p, 700);
+  const preg = p.getByRole("dialog", { name: /Saltar 63 folios/ });
+  const pregunto = (await preg.count()) === 1;
+  await p.keyboard.press("Escape"); await espera(p, 500);
+  const sigue = (await dlgInv(p).getByRole("group", { name: "Lo que vas a emitir" }).count()) === 0;
+  await continuar(p).click(); await espera(p, 700);
+  await p.getByRole("button", { name: "Usar F-200" }).click(); await espera(p, 800);
+  ok("inv-122 «F-200» con F-137 libre: «Continuar» pregunta «¿Saltar 63 folios?»; Esc no sigue; «Usar F-200» lleva a la vista previa con F-200", pregunto && sigue && await ve(p, /Folio F-200/), "preguntó " + pregunto + " · Esc no siguió " + sigue);
+});
+await caso("inv-123 el folio uno arriba", "emisor=off", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 600);
+  await p.locator("#invoice-folio").fill("F-138"); await espera(p, 300);
+  ok("inv-123 «F-138» dice que deja un hueco de 1 folio (en singular)", await ve(p, /hueco de 1 folio en/));
+});
+await caso("inv-124 el cliente normal que llega tarde no hace ruido", "lenta=1", async p => {
+  await inv(p);
+  await p.waitForTimeout(10700);   // el banco contesta a los 10 s
+  const t = (await dlgInv(p).innerText()).replace(/\s+/g, " ");
+  ok("inv-124 un cliente normal (sin saldo ni modo especial) que llega tarde no deja avisos: no cambió nada", !/Llegaron los datos/.test(t) && !/No se terminó de cargar el cliente/.test(t), "«" + t.slice(0, 120) + "»");
+});
+await caso("inv-125 la laptop corta (1366×657): el botón a la vista", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "66004", "Transferencia");
+  const caja = await dlgInv(p).boundingBox(), b = await continuar(p).boundingBox();
+  ok("inv-125 a 1366×657, la ventana empieza a la vista y «Continuar» se ve sin bajar", caja.y >= 0 && !!b && b.y + b.height <= 657, "ventana y=" + Math.round(caja.y) + " · Continuar abajo=" + (b ? Math.round(b.y + b.height) : "?"));
+}, { width: 1366, height: 657 });
+await caso("inv-126 la ventana angosta tampoco cambia de ancho", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 300);
+  const a = await dlgInv(p).boundingBox();
+  await p.getByRole("button", { name: "No es de este trabajo" }).click(); await espera(p, 700);
+  const b = await dlgInv(p).boundingBox();
+  ok("inv-126 a 1024 de ancho, ligar y el camino normal miden lo mismo", Math.round(a.width) === Math.round(b.width) && Math.abs(a.y - b.y) <= 2, "anchos " + Math.round(a.width) + "/" + Math.round(b.width) + " · arriba " + Math.round(a.y) + "/" + Math.round(b.y));
+}, { width: 1024, height: 768 });
+await caso("inv-127 «Atrás» desde la vista previa de ligar", "anticipo=mismo", async p => {
+  await inv(p); await espera(p, 300);
+  await p.getByRole("button", { name: /^Ligar F-9135 y entregar/ }).click(); await espera(p, 800);
+  await p.getByRole("button", { name: /Atrás/ }).click(); await espera(p, 600);
+  const foco = await p.evaluate(() => (document.activeElement?.textContent || "").trim().slice(0, 40));
+  ok("inv-127 al regresar con «Atrás» desde ligar, el foco va a «Ligar F-9135 y entregar»", /^Ligar F-9135 y entregar/.test(foco), "foco en «" + foco + "»");
+});
+await caso("inv-128 tras quitar el pago 1, el foco sigue en la ventana", "", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p, 500);
+  await pagada(p, "30000", "Transferencia");
+  await p.getByRole("button", { name: /Agregar otro pago/ }).click(); await espera(p, 800);
+  await p.getByRole("button", { name: "Quitar el pago 1" }).click(); await espera(p, 800);
+  const f = await p.evaluate(() => { const a = document.activeElement; return { radio: a?.getAttribute?.("role") === "radio", grupo: a?.closest?.('[role="group"]')?.getAttribute("aria-label") || null }; });
+  ok("inv-128 al quitar el pago 1, el foco va al método del pago que queda", f.radio && f.grupo === "Pago 1", JSON.stringify(f));
 });
 
 await browser.close();

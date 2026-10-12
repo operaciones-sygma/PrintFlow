@@ -12,6 +12,65 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.72 — «Asignar folio»: lo que dejó la tercera revisión (la ventana quieta, el saldo a favor con cifras, lo que llega tarde) — 12-oct-2026
+
+**Qué pasaba** (la tercera revisión independiente, 30/40, `.impeccable/critique/2026-10-09T01-32-06Z__…asignarfolio.md`; primera noche de
+`/impeccable` en la PC de casa, `noches/impeccable-printflow.md`, paso 0):
+- **La ventana se movía bajo el cursor.** Centrada y con dos anchos (960 ↔ 520 al ligar), cada elección cambiaba su alto y su lugar: al
+  elegir «Pagada» todo subía 99 px, y la orilla de arriba iba de 142 a 38 px entre ligar, el camino normal y «Pagada».
+- **[P2] La vista previa de ligar enseñaba el total de otro camino**: «Total $56,900.00 · remisión, sin IVA» sobre «Vas a ligar F-9135…
+  Factura por $66,004.00».
+- **[P2] El saldo a favor lejos del monto**: la nota estaba en la columna del documento, sin decir cuánto cobrar, y «Pagada» proponía el
+  total: con efectivo se cobraba de más. La vista previa no lo decía.
+- **[P2] Sin precio, la ventana se contradecía**: «va como No pagada» y abajo «elige Pagada o Parcial con Efectivo» (apagados), e «irá a
+  CobranzaFlow como pendiente» contra «CobranzaFlow no la ve hasta que se capture el precio».
+- **Lo menor:** «✓ Cubierto» en verde con «falta el método» al lado; el foco caía al `<body>` al quitar un pago y al panel tras «Atrás»
+  (~10 Tab para volver); la vista previa no decía la referencia de un pago único ni quién entregó el efectivo; «¿Es efectivo?» de 40
+  palabras y 5 negritas; en Corona, lo facturado por adelantado en esmeralda (no es dinero del cliente); «RS-1250» en una factura
+  recibía el mensaje genérico y «F-200» (63 arriba de F-137) no avisaba; al tope de 8 s decía «falló la red» aunque sólo tardaba, y
+  la respuesta tardía (o el cliente lento, con «Aplicar saldo» a los 10 s) cambiaba la ventana sin decirlo; «PORTLAND STUDIO ·» con el
+  tipo de producto vacío.
+- Y uno mío de v10.84.71: el aviso de la pantalla de entrar llevaba una franja lateral de color (3 px), que DESIGN.md prohíbe.
+
+**Qué se cambió** (todo en `src/App.jsx`; la base NO cambió):
+- **La ventana, anclada arriba y de un solo ancho** (`anchoDialogo` ya no depende de ligar; el fondo con `alignItems:"flex-start"` a
+  `5vh`); el recuadro de ligar se acota a 760 px.
+- **Ligar**: el encabezado dice lo que se liga («Se liga F-9135 · factura por $66,004.00 con IVA»), también en la vista previa.
+- **El saldo a favor** (`SaldoFavorAmarreBanner`, rehecho): en la columna del pago, con las cifras («Cóbrale $61,004.00 y aplica los
+  $5,000.00 a favor en CobranzaFlow…») y «Cobrar sólo $61,004.00» (Parcial por lo que falta; si el saldo cubre todo, «Dejarla «No
+  pagada»»); con dos pagos, sólo las cifras. La vista previa lo repite. Las cifras salen de UNA cuenta (la ventana se las pasa al aviso).
+- **Sin precio, una nota**: el selector de pagos (compartido) no ofrece lo que no aplica y acepta la nota de quien lo usa
+  (`notaSinPrecio`); la vista previa dice «No pagada · sin precio».
+- **El selector de pagos (compartido, cuatro ventanas)**: «Cubierto» sólo con los pagos completos; al quitar un pago, el foco va al
+  método del que queda; «¿Es efectivo?» en 24 palabras y una negrita (y sin efectivo en la ventana, «Aquí no va: el efectivo lo
+  registra Tesorería…»).
+- **«Atrás»** regresa el foco al botón que abrió la vista previa («Continuar» o «Ligar F-… y entregar»).
+- **La vista previa** dice la referencia de un pago único, o «Entregó Sr. Ramírez» con efectivo (y en la lista de varios pagos).
+- **Corona**: lo facturado por adelantado, en neutro (era el esmeralda de lo a favor), al elegir y en la vista previa.
+- **Folio a mano**: «RS- es la serie de las remisiones: para una factura va F-…» (y al revés); arriba del siguiente avisa «deja un hueco
+  de N folios» y, al seguir, pregunta «¿Saltar N folios?» como ya preguntaba el menor.
+- **Lo que llega tarde**: al tope de 8 s, «está tardando» (no «falló la red»); si la respuesta llega después, «Llegó la revisión que
+  tardaba: …»; y si los datos del cliente llegan tarde y cambian algo, «Llegaron los datos del cliente: ahora sale «Aplicar saldo»».
+- El encabezado sin «·» colgando (también en «Folio anticipado»); el aviso de la pantalla de entrar con borde completo, sin franja.
+- **Qué NO se toca:** la base, las RPC, lo que App hace al confirmar, el vale de caja al emitir con efectivo. **Fuera de esta versión:**
+  ligar con el efectivo capturado y crear el vale en un paso (cambio de base, decisión de Marcelo: sigue en PENDIENTES).
+
+**Cómo se probó** (tanda `folio`, casos inv-102 a inv-128, escritos ANTES del arreglo; y `sesion`, la franja):
+- **Vuelta 1** (19 casos + 2 de la franja): contra v10.84.71 **fallaban los 21**. Con el arreglo, 21 de 21. Tres pruebas viejas
+  (inv-24, inv-31, inv-70) buscaban textos que cambiaron a propósito («No lo pongas como «Otro»», «no lo descuenta», «No se pudo
+  revisar» al tope): se actualizaron, con lo que miden igual.
+- **Vuelta 2** (11 casos por donde no se diseñó: el saldo que cubre todo, remisión con saldo, doble clic en «Cobrar sólo», dos pagos, el
+  folio que salta con Esc y «Usar F-200», un folio arriba, el cliente normal que llega tarde, 1366×657, 1024 de ancho, «Atrás» desde
+  ligar, quitar el pago 1): **falló 1** (un cliente normal que llegaba tarde dejaba «Llegaron los datos…» sin que nada cambiara: ruido;
+  ahora sólo si cambia algo). 11 de 11.
+- **Sabotajes** (cada defecto metido en una copia y corrida sólo su prueba, con un CONTROL sin defecto que tiene que pasar): **9 de 10
+  atrapados**. El que no: quitar el escudo de «Cobrar sólo» (con la geometría de hoy el segundo clic cae en el texto de la nota; el
+  escudo queda de más). El arnés de sabotajes mintió en su primera versión: `spawnSync` bloqueaba el proceso donde vivía el servidor
+  del banco y todo «caía» por conexión rechazada; sin el control, eso se leía como «10 de 10 atrapados». Y el sabotaje S1 destapó dos
+  cuentas del mismo dato (el aviso calculaba su «cobrar», el botón el suyo): ahora una.
+- Las ventanas que también usan el selector de pagos: `oc` y `partes` completas, sin regresiones. **Sin probar:** la venta en bloque de
+  Cuadra (`BulkSellModal`, usa el selector y no tiene banco).
+
 ## v10.84.71 — La sesión: nadie sale de todas las estaciones por un corte de red, y la que se cierra sola lleva a entrar diciendo por qué — 9-oct-2026
 
 **Qué pasaba.** Era el pendiente de revisar si PrintFlow tenía el hueco que CobranzaFlow arregló en v3.7.999o (un `SIGNED_OUT` que
