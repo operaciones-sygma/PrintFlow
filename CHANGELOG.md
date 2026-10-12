@@ -86,7 +86,10 @@ noche de `/impeccable`, `noches/impeccable-printflow.md`, paso 1: las cuatro ven
   escrito la ventana PREGUNTABA en vez de cerrar y la prueba sólo miraba que no cerrara; «Cerrar sin cancelar» a media cancelación
   también es un defecto, y la prueba ahora lo mira (cae en las seis).
 - **Corrida doble** de la tanda final (155) contra v10.84.72: fallan 113; contra v10.84.73: 0. `partes`: 65 de 65. Y TODAS las tandas
-  en el candado al subir.
+  en el candado al subir. El primer intento frenó con 4: dos pruebas viejas del detalle (`det-20`, `det-24`) buscaban la opción del «⋯
+  Más» por su nombre viejo («Cancelar con nota de crédito»): se actualizaron, miden lo mismo; una de `folio` por `ERR_NO_BUFFER_SPACE`
+  (la red de Windows bajo carga); y una de `cancelar` porque yo regeneré el banco del revisor en `.banco-cancelar/`, que es la carpeta
+  temporal de la tanda (el candado la borra y la arma al correr): el banco del revisor vive ahora en `.banco-revisor-cancelar/`.
 - **Sin probar:** la cancelación múltiple (`CancelacionesView`), y cancelar de verdad contra la base (el recorrido no escribe): lo que App
   hace al confirmar va simulado en el banco como lo hace App.
 

@@ -169,7 +169,8 @@ await caso("det-20-cancelar-nc-en-mas", "caso=factura&rol=admin", async p => {
   const suelto = await p.getByRole("button", { name: /Cancelar Orden \(con NC\)/ }).count();
   const hay = await abrirMas(p);
   const items = hay ? await itemsMas(p) : [];
-  ok("det-20-cancelar-nc-en-mas", suelto === 0 && items.some(x => /Cancelar con nota de crédito/i.test(x)), `suelto: ${suelto ? "SÍ (botón rojo enorme)" : "no"}; en «Más»: ${items.join(" | ") || "(no hay «Más»)"}`);
+  // (v10.84.73) la opción se llamaba «Cancelar con nota de crédito»; ahora «Cancelar con su folio» (PrintFlow no emite ninguna nota)
+  ok("det-20-cancelar-nc-en-mas", suelto === 0 && items.some(x => /Cancelar con su folio/i.test(x)), `suelto: ${suelto ? "SÍ (botón rojo enorme)" : "no"}; en «Más»: ${items.join(" | ") || "(no hay «Más»)"}`);
 });
 await caso("det-21-anticipado-en-mas", "caso=maquila&rol=karla", async p => {
   const suelto = await p.getByRole("button", { name: /Asignar Folio Anticipado/ }).count();
@@ -190,8 +191,8 @@ await caso("det-23-mas-explica", "caso=cancelada&rol=admin", async p => {
 });
 await caso("det-24-mas-despacha", "caso=factura&rol=admin", async p => {
   await abrirMas(p);
-  await p.getByRole("menuitem", { name: /Cancelar con nota de crédito/i }).click(); await espera(p, 300);
-  ok("det-24-mas-despacha", /accion:cancel_with_nc/.test(await log(p)), "elegir «Cancelar con nota de crédito» " + (/accion:cancel_with_nc/.test(await log(p)) ? "pide la cancelación (con su propio diálogo)" : "NO hace nada"));
+  await p.getByRole("menuitem", { name: /Cancelar con su folio/i }).click(); await espera(p, 300);   // v10.84.73: antes «…con nota de crédito»
+  ok("det-24-mas-despacha", /accion:cancel_with_nc/.test(await log(p)), "elegir «Cancelar con su folio» " + (/accion:cancel_with_nc/.test(await log(p)) ? "pide la cancelación (con su propio diálogo)" : "NO hace nada"));
 });
 await caso("det-25-esc-cierra-el-menu-primero", "caso=factura&rol=admin", async p => {
   await abrirMas(p);
