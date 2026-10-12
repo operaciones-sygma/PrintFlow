@@ -560,8 +560,8 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   con algo escrito, trabajando no se cierra, el rechazo de la base adentro con el foco, pie fijo, «¿Por qué se cancela?» de 5 letras y
   el renglón que dice qué falta). Una ventana nueva que cancele algo va en ese marco, no en uno propio.
 - **Cancelar dice lo que hace ADEMÁS de cancelar, un hecho por renglón** (v10.84.73): las facturas que caen, la fila de la máquina y
-  quién entra, el archivo que se borra, a quién se avisa, el dinero que regresa y si se puede deshacer (sólo se promete cuando la base
-  lo deja). El botón dice qué cancela («Cancelar la orden y sus facturas», «Cancelar la línea y F-141»). Lo que la base ya sabe se le
+  quién entra, a quién se avisa, el dinero que regresa y si se puede deshacer (sólo se promete cuando la base lo deja; desde v10.84.76
+  el archivo de impresión ya no se borra al cancelar: se queda como historial, y no hay renglón que decir). El botón dice qué cancela («Cancelar la orden y sus facturas», «Cancelar la línea y F-141»). Lo que la base ya sabe se le
   pregunta al ABRIR (con «Revisando…», tope de 8 s y «Reintentar»), no se le pide a la persona que lo adivine entre cuatro «si».
 - **Esc en el campo también pregunta** donde el foco vive en un campo (v10.84.73): la pila de Esc ignora los campos para no tirar lo
   escrito; en una ventana que PREGUNTA antes de tirarlo, eso dejaba Esc mudo. El panel lo atiende en su `onKeyDown`.
