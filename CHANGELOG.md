@@ -12,6 +12,38 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.75 — Las puertas de cancelar, lo que dejó la tercera revisión (la que cierra): abren desde arriba y el botón dice lo mismo — 12-oct-2026
+
+**Qué pasaba** (tercera revisión independiente, **28/40** «Bueno», `.impeccable/critique/2026-10-12T11-43-51Z__src-app-jsx-cancelar.md`; la
+que cierra la pantalla, 18 → 27 → 28):
+- **[P1] Lo puse yo en v10.84.74:** el foco en el motivo (`autoFocus`) desplazaba el cuerpo de la ventana; a 683×384 (la laptop al 200 %)
+  la de la orden facturada abría con `scrollTop` 165, sin el título ni «Ya está facturada por partes… F-150»: se cancelaba sin ver qué
+  facturas caían (también la del plan matriz, la línea, la factura pagada y la del folio que corre, a 683×340).
+- **[P1]** La de la orden con la factura de toda su OC: el cuerpo decía «no se cancela; se le resta esta orden» y el botón «Cancelar la
+  orden y sus facturas» (leían campos distintos; con «sin factura viva» y con la lectura fallida, siempre).
+- **[P2]** Con el saldo que llegaba tarde, el botón destructivo crecía y quedaba bajo el cursor que estaba sobre «Volver»; lo definitivo
+  («no se deshace») nunca tenía renglón propio y en la de la parte lo primero y más fuerte era «Si F-128 ya está timbrada…»; las ventanas
+  bloqueadas seguían diciendo «puede deshacerla» y «Les avisamos…», y a Lupita el pie la mandaba a «Cancelar con su folio», que no tiene;
+  con el folio liberado quedaban renglones de la lectura vieja.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- El foco entra sin desplazar (`focus({preventScroll:true})`, y el cuerpo abre arriba); «Volver» va fijo a la izquierda y lo tardío que
+  cambia la acción pone el escudo (500 ms); el aviso tardío de Corona cabe en el alto reservado.
+- La de la orden: un solo desenlace para el cuerpo y el botón («Cancelar la orden y restarla de F-200»; «…y su factura» con una sola);
+  bloqueada, sólo la causa y la salida, y el pie según quién cancela.
+- La de la parte: qué se cancela primero, «No se deshace desde PrintFlow» en su renglón, y la regla de lo timbrado al final y neutra; «$X de
+  $Y» sólo si la parte no es la orden entera. La del plan y la del folio: «no se deshace» en su renglón. La del folio: si el folio cambia
+  con la ventana abierta lo dice; si se libera, se tira la lectura vieja; timbrada, sin los renglones que ya no aplican.
+
+**Cómo se probó:** 11 casos nuevos (can-80 a can-86, a 683×384 y 683×340), escritos ANTES del arreglo: contra v10.84.74 **fallaban los 11**.
+Con el arreglo, 245 de 246: `can-82` vio que «Volver» ya no se movía de lado pero bajaba 16 px (el aviso tardío de Corona usaba un renglón
+más que el alto reservado); se acortó. **181 de 181** en `cancelar`, `partes` 65 de 65. Sabotajes (control con 28 casos en verde): el foco
+que desplaza el cuerpo y el botón que no lee el desenlace, **2 de 2 atrapados**.
+
+**Quedan para la siguiente vuelta** (P2 y P3 de la tercera, en su snapshot): la lectura de «¿timbrada?» por folio (decisión de Marcelo, base),
+los «siguientes pasos» como botones que lleven (Ajustar inventario, Cancelaciones, la lista de partes), la jerga para quien suple, el
+renglón del saldo a favor en clientes que no son de Corona, «.....» como motivo, y que Karla se entere de las partes y del plan matriz.
+
 ## v10.84.74 — Las puertas de cancelar, lo que dejó la segunda revisión: las cifras de lo facturado, el teclado que no se sale, la fila de la máquina — 12-oct-2026
 
 **Qué pasaba** (segunda revisión independiente, **27/40** con un P1, `.impeccable/critique/2026-10-12T10-51-20Z__src-app-jsx-cancelar.md`):

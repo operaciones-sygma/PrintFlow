@@ -463,6 +463,56 @@ await caso("can-74 el aviso dice lo que regresó", "saldo=corona", async p => {
   ok("can-74 el aviso de éxito de la de Corona dice el saldo que regresó ($45,200.00)", /cancelada/i.test(t) && /45,200\.00/.test(t), "«" + t.slice(-160) + "»");
 });
 
+// ───────────── la tercera revisión independiente (28/40, sobre v10.84.74)
+// [P1] en la laptop al 200 %, la ventana abre desde arriba: el título y lo que cae se ven (el foco en el motivo la desplazaba)
+const arriba = p => capas(p).last().evaluate(el => { const d = el.querySelector('[role="dialog"]'), c = d && [...d.querySelectorAll("div")].find(x => getComputedStyle(x).overflowY === "auto"), h = d && d.querySelector("h3");
+  const r = h && h.getBoundingClientRect(); return { scroll: c ? Math.round(c.scrollTop) : null, titulo: r ? Math.round(r.top) : null }; });
+for (const [k, q, vp] of [["facturada", "rol=admin", { width: 683, height: 384 }], ["matriz", "rol=admin", { width: 683, height: 340 }], ["corriendo", "", { width: 683, height: 340 }], ["grupo-pagado", "", { width: 683, height: 340 }]])
+  await caso(`can-80-${k} abre desde arriba al 200 %`, q, async p => {
+    await abrirOrden(p, k); await espera(p, 400); const a = await arriba(p);
+    ok(`can-80-${k} a ${vp.width}×${vp.height} abre desde arriba: se ven el título y lo que cae (el cuerpo sin desplazar)`, a.scroll === 0 && a.titulo != null && a.titulo >= 0, JSON.stringify(a));
+  }, vp);
+// [P1] la de la orden con la factura de toda su OC: el botón dice lo mismo que el cuerpo
+for (const fac of ["normal", "sinfactura"]) await caso(`can-81-${fac} el botón dice lo mismo que el cuerpo`, "rol=admin&fac=" + fac, async p => {
+  await abrirOrden(p, "ocfolio"); await espera(p, 600); await p.locator("textarea").first().fill("Cliente canceló el pedido"); await espera(p, 200);
+  const t = await enLaVentana(p), b = await botonFinal(p).innerText();
+  const resta = /se le resta|baja a/i.test(t);
+  ok(`can-81-${fac} con la factura de toda su OC, el botón no dice «sus facturas» y, si el cuerpo dice que se le resta, el botón también`,
+    !/sus facturas/i.test(b) && (!resta || /restarla/i.test(b)), "botón «" + b + "» · «" + t.slice(0, 160) + "»");
+});
+// [P2] lo que llega tarde no mueve «Volver» bajo el cursor
+await caso("can-82 lo tardío no mueve «Volver»", "saldo=corona&saldoMs=9500", async p => {
+  await p.click("#abrir-corona"); await espera(p, 400); await p.locator("textarea").first().fill("Cliente canceló el pedido");
+  await espera(p, 8000); const v = capas(p).last().getByRole("button", { name: "Volver" }); const a = await v.boundingBox();
+  await espera(p, 1800); const b = await v.boundingBox();
+  ok("can-82 cuando el saldo llega tarde y el botón cambia, «Volver» se queda en su lugar", !!a && !!b && Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2, JSON.stringify([a && [a.x, a.y], b && [b.x, b.y]]));
+});
+// [P2] bloqueada, sólo la causa y la salida; el pie según quién cancela
+await caso("can-83 bloqueada, sólo la causa", "", async p => {
+  await abrirOrden(p, "stock"); await espera(p, 400); const t = await enLaVentana(p);
+  ok("can-83 bloqueada por el inventario no promete deshacer ni dice a quién se avisa", /inventario/i.test(t) && !/deshacer/i.test(t) && !/Les avisamos/i.test(t), "«" + t.slice(0, 220) + "»");
+});
+await caso("can-84 a Lupita no la manda a un botón que no tiene", "rol=secretaria", async p => {
+  await abrir(p, PUERTAS[0]); await PUERTAS[0].capturar(p); await espera(p, 200);
+  await p.evaluate(() => window.__cambiar("orden", { invoice_folio: "F-160", invoice_type: "factura" })); await espera(p, 400);
+  const t = await enLaVentana(p);
+  ok("can-84 si llega el folio, a Lupita ni el renglón ni el pie la mandan a «Cancelar con su folio»", !/Cancelar con su folio/.test(t) && /Dirección/.test(t), "«" + t.slice(-200) + "»");
+});
+// [P2] lo definitivo en su renglón; la regla de lo timbrado, después
+await caso("can-85 la parte: lo definitivo en su renglón", "", async p => {
+  await abrir(p, PUERTAS.find(x => x.k === "parte")); await espera(p, 300);
+  const r = await capas(p).last().evaluate(el => [...el.querySelectorAll('[role="dialog"] ul li')].map(li => li.innerText.trim()));
+  ok("can-85 en la de la parte, «No se deshace» va en su renglón y lo primero es qué se cancela (no la regla de lo timbrado)",
+    r.some(x => /^No se deshace/.test(x)) && !!r[0] && !/^Si /.test(r[0]), JSON.stringify(r).slice(0, 300));
+});
+// [P3] el folio que se libera con la ventana abierta no deja renglones de la lectura vieja
+await caso("can-86 el folio que se libera", "", async p => {
+  await abrir(p, PUERTAS[1]); await espera(p, 700);
+  await p.evaluate(() => window.__cambiar("factura", { invoice_folio: null })); await espera(p, 400);
+  const t = await enLaVentana(p), bs = await botonesQueCancelan(p);
+  ok("can-86 si se libera el folio con la ventana abierta, lo dice y no quedan los renglones de la lectura vieja", /se liber/i.test(t) && !/no está pagada/i.test(t) && bs.length === 0, JSON.stringify(bs) + " · «" + t.slice(0, 200) + "»");
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

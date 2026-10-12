@@ -572,3 +572,6 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   OC se leen al abrir (`pf_price_drop_check`) y lo timbrado apaga el botón antes de escribir; de las partes, la factura agrupada y el
   plan matriz todavía no hay una lectura de «timbrada» por folio, y la ventana dice que la base no deja si alguna lo está (la base sí
   lo frena). Una lectura nueva en la base lo volvería cifra: decisión de Marcelo.
+- **En una ventana con cuerpo que se desplaza, el foco entra sin desplazar** (v10.84.75): `autoFocus` en un campo de abajo lo trae a la
+  vista y esconde el título y lo que está en juego (a 683×384 la ventana de cancelar abría pasada «Ya está facturada…»). Se enfoca con
+  `focus({preventScroll:true})` y el cuerpo abre arriba. Y lo que no debe moverse bajo el cursor (la salida segura) va en un lugar fijo.

@@ -6717,6 +6717,10 @@ function RevertOrderModal({order,options,onConfirm,onClose}){
 //   <body>: Tab iba a lo de atrás y Enter abría OTRA ventana de cancelar) y se dice «Cancelando…»; el foco abre en lo primero que hay que
 //   decidir (el motivo, o la opción del dinero) y en «Volver» sólo si está bloqueada (si se bloquea con ella abierta, ahí va); el diálogo
 //   y el botón apagado se describen (aria-describedby); el botón apagado ya no es gemelo de «Volver».
+// v10.84.75 (la tercera revisión independiente, 28/40) — el foco entra SIN desplazar el cuerpo (a 683×384, la laptop al 200 %, el
+//   foco en el motivo abría la ventana pasada el título y lo que cae: se cancelaba sin ver qué facturas caían); «Volver» va fijo a la
+//   izquierda (con el saldo que llegaba tarde, el botón destructivo crecía y quedaba bajo el cursor que estaba sobre «Volver»); y lo
+//   tardío que cambia la acción pone el escudo.
 const MOTIVO_MIN=5;
 const pesosMx=n=>"$"+Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
 const conIvaDe=(n,doc)=>doc==="factura"?Math.round(Number(n||0)*116)/100:Number(n||0);   // una factura lleva IVA; una remisión, no
@@ -6738,8 +6742,9 @@ function useEnvioDeCancelar(){
 }
 function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqueada,onClose,error,falta,ancho=500,accion,describedBy,children}){
   const [pregunta,setPregunta]=useState(null);
-  const panelRef=useRef(null), volverRef=useRef(null), pulsoEnFondo=useRef(false), antesDePregunta=useRef(null), errRef=useRef(null);
+  const panelRef=useRef(null), volverRef=useRef(null), cuerpoRef=useRef(null), pulsoEnFondo=useRef(false), antesDePregunta=useRef(null), errRef=useRef(null);
   const vivo=useRef(null); vivo.current={capturado,trabajando,onClose,pregunta};
+  useLayoutEffect(()=>{ if(cuerpoRef.current) cuerpoRef.current.scrollTop=0; },[]);   // v10.84.75 — abre desde arriba
   // un doble clic en lo que la abre no la cierra: el segundo clic cae en el fondo recién puesto (la primera revisión lo vio abrir y
   //   cerrar). Medio segundo después de abrir, el fondo no cierra; lo de adentro sí responde.
   const abierta=useRef(Date.now());
@@ -6775,7 +6780,7 @@ function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqu
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={tituloId} aria-describedby={describedBy} aria-busy={trabajando||undefined}
         onKeyDown={e=>{atraparTab(e);if(e.key==="Escape"&&!e.nativeEvent?.isComposing&&/^(INPUT|TEXTAREA)$/.test(e.target?.tagName||"")){e.preventDefault();pedirCerrar()}}}
         style={{background:C.bg,borderRadius:20,maxWidth:ancho,width:"100%",maxHeight:"calc(92vh - 16px)",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none",boxShadow:C.sh3}}>
-        <div style={{overflowY:"auto",padding:"22px 24px 16px"}}>
+        <div ref={cuerpoRef} style={{overflowY:"auto",padding:"22px 24px 16px"}}>
           <h3 id={tituloId} style={{display:"flex",alignItems:"center",gap:8,fontSize:F.title,fontWeight:700,margin:"0 0 4px",color:C.tx}}><XCircleIcon size={17} weight="bold" color={C.dn} style={{flexShrink:0}}/><span>{titulo}</span></h3>
           {subtitulo&&<p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{subtitulo}</p>}
           {children}
@@ -6783,8 +6788,8 @@ function VentanaDeCancelar({tituloId,titulo,subtitulo,capturado,trabajando,bloqu
         <div style={{padding:"10px 24px 18px",borderTop:"1px solid "+C.bd}}>
           {error&&<div ref={errRef} tabIndex={-1} role="alert" style={{display:"flex",gap:6,alignItems:"flex-start",background:C.dn+"10",borderRadius:8,padding:10,marginBottom:10,border:"0.5px solid "+C.dn+"40",fontSize:12,color:C.dnInk,lineHeight:1.45,outline:"none"}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:2}}/><span>{error}</span></div>}
           {(!error||renglon)&&<div id={tituloId+"-falta"} aria-live="polite" style={{minHeight:17,fontSize:12,color:tarda?C.wnInk:C.t2,fontWeight:tarda?600:400,lineHeight:1.4,margin:"0 0 8px"}}>{renglon}</div>}
-          <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"flex-end",flexWrap:"wrap"}}>
-            <button ref={volverRef} autoFocus={!!bloqueada} onClick={pedirCerrar} disabled={trabajando} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,cursor:trabajando?"wait":"pointer"}}>Volver</button>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button ref={volverRef} autoFocus={!!bloqueada} onClick={pedirCerrar} disabled={trabajando} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,cursor:trabajando?"wait":"pointer",marginRight:"auto",opacity:trabajando?.55:1}}>Volver</button>
             {accion}
           </div>
         </div>
@@ -6800,9 +6805,11 @@ function BotonQueCancela({listo,trabajando,onClick,describedBy,children}){
     {trabajando?<><HourglassIcon size={14} weight="bold"/>Cancelando…</>:<><XCircleIcon size={14} weight="bold"/>{children}</>}</button>;
 }
 function CampoMotivo({id,valor,onChange,trabajando,bloqueada,autoFocus,ejemplo}){
+  const ref=useRef(null);
+  useEffect(()=>{ if(autoFocus) ref.current?.focus({preventScroll:true}); },[]);   // v10.84.75 — sin desplazar el cuerpo (no autoFocus)
   return <div style={{marginTop:14}}>
     <label htmlFor={id} style={{display:"block",fontSize:12,fontWeight:600,color:C.tx,marginBottom:4}}>¿Por qué se cancela?</label>
-    <textarea id={id} autoFocus={autoFocus} value={valor} onChange={e=>onChange(e.target.value)} rows={2} maxLength={500} disabled={trabajando||bloqueada} placeholder={ejemplo} style={{...inp,outline:undefined,resize:"vertical",minHeight:56,lineHeight:1.4,opacity:bloqueada?.6:1}}/>
+    <textarea ref={ref} id={id} value={valor} onChange={e=>onChange(e.target.value)} rows={2} maxLength={500} disabled={trabajando||bloqueada} placeholder={ejemplo} style={{...inp,outline:undefined,resize:"vertical",minHeight:56,lineHeight:1.4,opacity:bloqueada?.6:1}}/>
   </div>;
 }
 // un hecho de lo que pasa al cancelar: neutro, aviso (tinta ámbar) o grave (tinta roja); el ícono lleva el color de semáforo
@@ -6849,13 +6856,14 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
   const [saldo,setSaldo]=useState({estado:"revisando"});
   const [vueltaSaldo,setVueltaSaldo]=useState(0);
   useEffect(()=>{
-    let vivo=true, llego=false;
+    let vivo=true, llego=false, tardo=false;
     if(!order?.id)return;
     setSaldo({estado:"revisando"});
-    const tope=setTimeout(()=>{if(vivo&&!llego)setSaldo({estado:"tarde"})},8000);
+    const tope=setTimeout(()=>{if(vivo&&!llego){tardo=true;setSaldo({estado:"tarde"})}},8000);
     (async()=>{
       let r; try{ r=await supabase.rpc("ordenes_saldo_consumido",{p_order_ids:[order.id]}); }catch(e){ r={error:e}; }
       if(!vivo)return; llego=true; clearTimeout(tope);
+      if(tardo)escudoDeClics(500);   // v10.84.75 — lo tardío puede cambiar el botón: el clic que ya venía no cae en él
       // un error no es cero: si no se pudo preguntar, no se afirma que no hay saldo
       setSaldo(prev=>r?.error?{estado:"fallo"}:{estado:"listo",monto:r?.data&&r.data[0]?Number(r.data[0].monto):0,tarde:prev.estado==="tarde"});
     })();
@@ -6900,26 +6908,34 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
   const bloqueada=!!(inventario||yaCancelada||conFolio||ocTimbrada);
   const motivoOk=reason.trim().length>=MOTIVO_MIN;
   const listo=motivoOk&&sabeSaldo&&sabeOc&&!bloqueada;
-  const falta=yaCancelada?"Ya está cancelada.":conFolio?"Con folio se cancela con «Cancelar con su folio».":ocTimbrada?"Primero se cancela el CFDI en CobranzaFlow.":inventario?"Primero se ajusta el inventario.":!sabeSaldo?"Revisando el saldo del cliente…":!sabeOc?"Revisando la factura de la OC…":!motivoOk?"Escribe por qué (mínimo 5 caracteres).":null;
+  const falta=yaCancelada?"Ya está cancelada.":conFolio?(role==="admin"&&onIrAConFolio?"Con folio se cancela con «Cancelar con su folio».":"Con folio, sólo Dirección puede cancelarla."):ocTimbrada?"Primero se cancela el CFDI en CobranzaFlow.":inventario?"Primero se ajusta el inventario.":!sabeSaldo?"Revisando el saldo del cliente…":!sabeOc?"Revisando la factura de la OC…":!motivoOk?"Escribe por qué (mínimo 5 caracteres).":null;
   const facturada=partes.length>0||conPlan||!!agrupada||!!folioDeLaOC;
-  const deshacer=(role==="admin"?"Si fue un error, puedes deshacerla":"Si fue un error, Dirección puede deshacerla")+" desde la ficha de la orden"+(archivo?", pero sin su archivo de producción: ése ya no regresa.":".");
+  const deshacer=(role==="admin"?"Si fue un error, puedes deshacerla":"Si fue un error, Dirección puede deshacerla")+" desde la ficha de la orden"+(archivo?" (sin su archivo).":".");
+  // v10.84.75 — UN desenlace para el botón y el cuerpo (la tercera revisión: con la factura de toda su OC, el cuerpo decía «se le resta»
+  //   y el botón «Cancelar la orden y sus facturas»)
+  const otrasFacturas=partes.length>0||!!agrupada||conPlan;
+  const etiqueta=otrasFacturas?(partes.length===1&&!agrupada&&!conPlan?"Cancelar la orden y su factura":"Cancelar la orden y sus facturas")
+    :folioDeLaOC?(ocD?.aplica?"Cancelar la orden y restarla de "+folioDeLaOC:"Cancelar la orden")
+    :devuelve?"Cancelar y regresar el saldo":"Cancelar la orden";
   const confirmar=()=>{ if(!listo)return; enviar(()=>onConfirm(reason.trim(),{saldo:devuelve?saldo.monto:0,facturas:[...partes.map(x=>x.invoice_folio),agrupada].filter(Boolean)}),"No se canceló "+(o.production_number||"la orden")); };
   const listaPartes=partes.map(x=>x.invoice_folio+" ("+pesosMx(conIvaDe(x.amount_portion,x.doc_type))+(x.doc_type==="factura"?" con IVA":"")+(pagoEnPalabras(x.payment_status)?", "+pagoEnPalabras(x.payment_status):"")+")");
   return <VentanaDeCancelar tituloId="dlg-cancelar-orden-titulo" titulo={"Cancelar la orden"+(o.production_number?" "+o.production_number:"")}
     subtitulo={[o.client,o.product_type,o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":""].filter(Boolean).join(" · ")}
     capturado={!!reason.trim()} trabajando={trabajando} bloqueada={bloqueada} onClose={onClose} error={error} falta={falta} describedBy="dlg-cancelar-orden-hechos"
-    accion={<BotonQueCancela listo={listo} trabajando={trabajando} describedBy="dlg-cancelar-orden-titulo-falta" onClick={confirmar}>{facturada&&!(folioDeLaOC&&ocD?.oc_compartida&&!partes.length&&!agrupada&&!conPlan)?"Cancelar la orden y sus facturas":devuelve?"Cancelar y regresar el saldo":"Cancelar la orden"}</BotonQueCancela>}>
+    accion={<BotonQueCancela listo={listo} trabajando={trabajando} describedBy="dlg-cancelar-orden-titulo-falta" onClick={confirmar}>{etiqueta}</BotonQueCancela>}>
     <ul id="dlg-cancelar-orden-hechos" style={listaDeHechos}>
       {yaCancelada&&<HechoDeCancelar tono="grave">Mientras tenías la ventana abierta, se canceló en otra sesión: ya no hay nada que cancelar aquí.</HechoDeCancelar>}
       {!yaCancelada&&conFolio&&<HechoDeCancelar tono="grave" icono={FileTextIcon}>Mientras tenías la ventana abierta, recibió el folio {o.invoice_folio} en otra sesión: ya no se cancela aquí. {role==="admin"&&onIrAConFolio?<>Se cancela con su folio, y lo que escribiste pasa a esa ventana:{enLinea(()=>onIrAConFolio(reason),"Cancelar con su folio")}</>:"Con folio, sólo Dirección puede cancelarla."}</HechoDeCancelar>}
       {inventario&&<HechoDeCancelar tono="grave" icono={PackageIcon}>Esta orden ya {inventario} inventario: primero se ajusta en Inventario → Ajustar, y después se cancela.</HechoDeCancelar>}
+      {ocTimbrada&&<HechoDeCancelar tono="grave" icono={FileTextIcon}>{folioDeLaOC}, la factura de toda su OC, está timbrada ante el SAT: esta orden no se puede cancelar desde aquí. Primero se cancela el CFDI en CobranzaFlow.</HechoDeCancelar>}
+      {!bloqueada&&<>
       {partes.length>0&&<HechoDeCancelar tono="grave" icono={FileTextIcon}>Ya está facturada por partes: al cancelarla se {partes.length===1?"cancela":"cancelan"} también en CobranzaFlow {listaPartes.join(" y ")}, y ya no se deshace desde PrintFlow.</HechoDeCancelar>}
       {agrupada&&<HechoDeCancelar tono="grave" icono={FileTextIcon}>Va en la factura agrupada {agrupada}: al cancelarla se cancela también esa factura y sus cobros en CobranzaFlow, y ya no se deshace desde PrintFlow.</HechoDeCancelar>}
       {conPlan&&<HechoDeCancelar tono="grave" icono={FileTextIcon}>Está en el plan matriz{o.purchase_order_id?" de "+o.purchase_order_id:""}: al cancelarla se cancelan también sus líneas, y ya no se deshace desde PrintFlow. Para sacar sólo esta orden de su factura: «Cancelar línea», en el plan de su OC.</HechoDeCancelar>}
       {folioDeLaOC&&(oc?.estado==="revisando"
         ?<HechoDeCancelar icono={HourglassIcon}>Revisando {folioDeLaOC}, la factura de toda su OC…</HechoDeCancelar>
         :ocD?.aplica?(ocTimbrada
-          ?<HechoDeCancelar tono="grave" icono={FileTextIcon}>{folioDeLaOC}, la factura de toda su OC, está timbrada ante el SAT: esta orden no se puede cancelar desde aquí. Primero se cancela el CFDI en CobranzaFlow.</HechoDeCancelar>
+          ?null
           :<HechoDeCancelar tono="aviso" icono={FileTextIcon}>Va en {folioDeLaOC}, la factura de toda su OC{ocD.monto_factura!=null?", por "+pesosMx(ocD.monto_factura)+" con IVA":""}{Number(ocD.cobrado)>0?" (cobrado "+pesosMx(ocD.cobrado)+")":""}: no se cancela; {ocD.recalculo!=null&&ocD.monto_factura!=null?"baja a "+pesosMx(ocD.recalculo)+" sin esta orden":"se le resta esta orden"}.</HechoDeCancelar>)
         :ocD?<HechoDeCancelar>En CobranzaFlow no hay una factura viva con el folio {folioDeLaOC}.</HechoDeCancelar>
         :<HechoDeCancelar tono="aviso">{oc?.estado==="tarde"?"CobranzaFlow no contestó al revisar "+folioDeLaOC:"No se pudo revisar "+folioDeLaOC}, la factura de toda su OC: si está timbrada, la base no deja cancelar esta orden.{reintentar(()=>setVueltaOc(v=>v+1),"revisar "+folioDeLaOC)}</HechoDeCancelar>)}
@@ -6927,13 +6943,16 @@ function CancelOrderModal({order,orders,role,actor,folioDeLaOC,onIrAConFolio,onC
       {partes.length>0&&<HechoDeCancelar>Para cancelar sólo una parte: «Cancelar la parte», en la lista de partes de la orden.</HechoDeCancelar>}
       <HechoDeCancelar minAlto={36} tono={devuelve||saldo.estado==="fallo"||saldo.estado==="tarde"?"aviso":undefined} icono={saldo.estado==="revisando"?HourglassIcon:devuelve?WalletIcon:undefined}>
         {saldo.estado==="revisando"?"Revisando si se pagó con el saldo a favor del cliente…"
-          :devuelve?<>{saldo.tarde?"Llegó la revisión que tardaba: se":"Se"} pagó con el saldo a favor del cliente: {pesosMx(saldo.monto)} regresan a su bolsa en CobranzaFlow, y ya no se podrá deshacer.</>
+          :devuelve?(saldo.tarde
+            ?<>Llegó la revisión que tardaba: se pagó con el saldo a favor; {pesosMx(saldo.monto)} regresan a su bolsa y ya no se podrá deshacer.</>
+            :<>Se pagó con el saldo a favor del cliente: {pesosMx(saldo.monto)} regresan a su bolsa en CobranzaFlow, y ya no se podrá deshacer.</>)
           :saldo.estado==="listo"?<>{saldo.tarde?"Llegó la revisión que tardaba: no":"No"} se pagó con saldo a favor.{facturada?"":" "+deshacer}</>
           :<>{saldo.estado==="tarde"?"CobranzaFlow no contestó":"No se pudo comprobar"} si se pagó con el saldo a favor; si fue así, ese saldo regresa a su bolsa y ya no se podrá deshacer.{reintentar(()=>setVueltaSaldo(v=>v+1),"revisar el saldo")}</>}
       </HechoDeCancelar>
       {fila&&<HechoDeCancelar icono={FactoryIcon}>{fila}</HechoDeCancelar>}
       {archivo&&<HechoDeCancelar icono={TrashIcon}>Se borra su archivo de producción ({archivo}); sus imágenes se quedan.</HechoDeCancelar>}
       {avisados.length>0&&<HechoDeCancelar>Les avisamos a {avisados.join(" y ")}, con el motivo.</HechoDeCancelar>}
+      </>}
     </ul>
     <CampoMotivo id="cancelar-orden-motivo" autoFocus={!bloqueada} valor={reason} onChange={setReason} trabajando={trabajando} bloqueada={bloqueada} ejemplo="El cliente canceló el pedido"/>
   </VentanaDeCancelar>;
@@ -7957,9 +7976,11 @@ function CancelarParteModal({order,parte,onConfirm,onClose}) {
   const can = !!alCancelar && motivoOk;
   const capturado = !!reason.trim() || !!alCancelar;
   const cancelaLaOrden = esLaUltima && alCancelar==="perder";
+  const primerRadio=useRef(null);
+  useEffect(()=>{ primerRadio.current?.focus({preventScroll:true}); },[]);   // v10.84.75 — sin desplazar el cuerpo
   const opcion = (valor,titulo,detalle,grave,primera) => <label style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 12px",borderRadius:10,cursor:"pointer",
       border:"1px solid "+(alCancelar===valor?C.ac:C.bd),background:alCancelar===valor?C.ac+"12":C.bg}}>
-      <input type="radio" name="al_cancelar_parte" autoFocus={!!primera} checked={alCancelar===valor} onChange={()=>{setAlCancelar(valor);setCambio("")}} disabled={trabajando} style={{marginTop:2,accentColor:C.ac}}/>
+      <input ref={primera?primerRadio:undefined} type="radio" name="al_cancelar_parte" checked={alCancelar===valor} onChange={()=>{setAlCancelar(valor);setCambio("")}} disabled={trabajando} style={{marginTop:2,accentColor:C.ac}}/>
       <span><span style={{fontSize:12,fontWeight:600,color:C.tx}}>{titulo}</span><br/><span style={{fontSize:12,color:grave?C.dnInk:C.t2,fontWeight:grave?600:400}}>{grave&&<WarningIcon size={11} weight="fill" color={C.dn} style={{verticalAlign:"-1px",marginRight:3}}/>}{detalle}</span></span>
     </label>;
   return <VentanaDeCancelar tituloId="dlg-cancelar-parte-titulo" ancho={520}
@@ -7969,8 +7990,9 @@ function CancelarParteModal({order,parte,onConfirm,onClose}) {
     falta={!alCancelar&&!motivoOk?"Elige qué pasa con ese importe y escribe por qué (mínimo 5 caracteres).":!alCancelar?"Elige qué pasa con ese importe.":!motivoOk?"Escribe por qué (mínimo 5 caracteres).":null}
     accion={<BotonQueCancela listo={can} trabajando={trabajando} describedBy="dlg-cancelar-parte-titulo-falta" onClick={()=>{ if(!can)return; enviar(()=>onConfirm({reason:reason.trim(),alCancelar}),"No se canceló la parte "+(parte?.invoice_folio||"")); }}>{cancelaLaOrden?"Cancelar la parte y la orden":"Cancelar la parte"}</BotonQueCancela>}>
     <ul id="dlg-cancelar-parte-hechos" style={{...listaDeHechos,marginBottom:14}}>
-      <HechoDeCancelar tono="aviso">Si {folio} ya está timbrada ante el SAT, o es de Alpha y se ligó después, aquí no se cancela: la base lo frena, y se cancela en CobranzaFlow (la parte se cierra sola).</HechoDeCancelar>
-      <HechoDeCancelar icono={FileTextIcon}>{folio} es una parte de {order?.production_number}: {pesosMx(monto)} de {pesosMx(precio)} sin IVA. {pagada?<>Ya está {pagada}: en CobranzaFlow queda en cero y ese dinero se revisa ahí, para devolverlo o dejarlo a favor del cliente.</>:"En CobranzaFlow queda en cero."} No se deshace desde PrintFlow.</HechoDeCancelar>
+      <HechoDeCancelar icono={FileTextIcon}>{folio} es una parte de {order?.production_number}: {pesosMx(monto)}{monto<precio?" de "+pesosMx(precio):""} sin IVA. {pagada?<>Ya está {pagada}: en CobranzaFlow queda en cero y ese dinero se revisa ahí, para devolverlo o dejarlo a favor del cliente.</>:"En CobranzaFlow queda en cero."}</HechoDeCancelar>
+      <HechoDeCancelar tono="grave">No se deshace desde PrintFlow.</HechoDeCancelar>
+      <HechoDeCancelar>Si {folio} ya está timbrada ante el SAT, o es de Alpha y se ligó después, aquí no se cancela: la base lo frena, y se cancela en CobranzaFlow (la parte se cierra sola).</HechoDeCancelar>
     </ul>
     {cambio&&<div role="status" style={{display:"flex",gap:6,alignItems:"flex-start",border:"1px solid "+C.wn+"60",borderRadius:8,padding:10,marginBottom:12,fontSize:12,color:C.wnInk,fontWeight:600,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:2}}/><span>{cambio}</span></div>}
     <div id="cp-destino" style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:6}}>Al cancelarse, ese importe:</div>
@@ -8756,7 +8778,8 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, orders, onConfi
       {cae&&!esCorona&&<HechoDeCancelar tono="aviso">{isLine?"Es la única línea que le queda a "+doc+": "+nombreDoc+" se cancela":mayus(doc)+" se cancela"} en CobranzaFlow, con saldo 0.{pagada?" Ya está "+pagada+": ese dinero se revisa ahí, para devolverlo o dejarlo a favor del cliente.":""}</HechoDeCancelar>}
       {esCorona&&<HechoDeCancelar tono="aviso" icono={WalletIcon}>Se pagó con saldo de Corona: {pesosMx(isLine?montoLinea:total)} regresan a la bolsa del cliente.</HechoDeCancelar>}
       {!esCorona&&<HechoDeCancelar tono="aviso">Si {doc} ya está timbrada ante el SAT, la base no deja {cae?"cancelarla":"cambiarle el importe"}: primero se cancela su CFDI en CobranzaFlow.</HechoDeCancelar>}
-      <HechoDeCancelar>{isLine ? "La orden "+pn(line?.order_id)+" no se cancela: si se queda sin factura, regresa a Salidas para volver a facturarse." : "Las órdenes no se cancelan: las que se queden sin factura regresan a Salidas."} No se deshace desde PrintFlow.</HechoDeCancelar>
+      <HechoDeCancelar>{isLine ? "La orden "+pn(line?.order_id)+" no se cancela: si se queda sin factura, regresa a Salidas para volver a facturarse." : "Las órdenes no se cancelan: las que se queden sin factura regresan a Salidas."}</HechoDeCancelar>
+      {!yaCancelado&&<HechoDeCancelar tono="grave">No se deshace desde PrintFlow.</HechoDeCancelar>}
     </ul>
     <CampoMotivo id="cancelar-matriz-motivo" autoFocus={!yaCancelado} valor={reason} onChange={setReason} trabajando={trabajando} bloqueada={yaCancelado} ejemplo={isLine?"El cliente devolvió 2,000 piezas":"El cliente canceló el pedido completo"}/>
   </VentanaDeCancelar>;
@@ -11100,15 +11123,20 @@ function CancelInvoicedModal({order,orders,actor,motivoInicial,onConfirm,onClose
   const [rev,setRev]=useState({estado:"revisando"});
   const [vuelta,setVuelta]=useState(0);
   const folio=order?.invoice_folio||"";
+  // v10.84.75 — si el folio cambia con la ventana abierta, se dice (y se vuelve a leer); si se libera, la lectura vieja se tira
+  const folioAntes=useRef(folio);
+  const [cambioFolio,setCambioFolio]=useState("");
+  useEffect(()=>{ if(folioAntes.current&&folio&&folioAntes.current!==folio)setCambioFolio("Cambió el folio mientras la tenías abierta: era "+folioAntes.current+"; ahora es "+folio+"."); folioAntes.current=folio; },[folio]);
   useEffect(()=>{
-    let vivo=true, llego=false;
-    if(!order?.id||!folio)return;
+    let vivo=true, llego=false, tardo=false;
+    if(!order?.id||!folio){setRev({estado:"sinfolio"});return}
     setRev({estado:"revisando"});
-    const tope=setTimeout(()=>{if(vivo&&!llego)setRev({estado:"tarde"})},8000);
+    const tope=setTimeout(()=>{if(vivo&&!llego){tardo=true;setRev({estado:"tarde"})}},8000);
     (async()=>{
       try{
         const [d,sal]=await Promise.all([db.checkPriceDrop(actor,order.id,null,null),supabase.rpc("ordenes_saldo_consumido",{p_order_ids:[order.id]})]);
         if(!vivo)return; llego=true; clearTimeout(tope);
+        if(tardo)escudoDeClics(500);
         setRev(prev=>({estado:"listo",d:d||{},saldo:sal?.error?null:(sal?.data&&sal.data[0]?Number(sal.data[0].monto):0),saldoFallo:!!sal?.error,tarde:prev.estado==="tarde"}));
       }catch(e){
         if(!vivo)return; llego=true; clearTimeout(tope);
@@ -11142,6 +11170,8 @@ function CancelInvoicedModal({order,orders,actor,motivoInicial,onConfirm,onClose
     <ul id="dlg-cancelar-folio-hechos" style={listaDeHechos}>
       {yaCancelada&&<HechoDeCancelar tono="grave">Mientras tenías la ventana abierta, se canceló en otra sesión: ya no hay nada que cancelar aquí.</HechoDeCancelar>}
       {!yaCancelada&&!folio&&<HechoDeCancelar tono="grave">Mientras tenías la ventana abierta, se liberó su folio: ya no se cancela aquí.</HechoDeCancelar>}
+      {cambioFolio&&folio&&!yaCancelada&&<HechoDeCancelar tono="aviso">{cambioFolio}</HechoDeCancelar>}
+      {!yaCancelada&&folio&&<>
       {folio&&!sinFactura&&<HechoDeCancelar icono={esRemision?ReceiptIcon:FileTextIcon}>{esRemision?"Remisión":"Factura"} {folio}{monto!=null?" por "+pesosMx(monto)+(esRemision?"":" con IVA"):""}{o.invoice_pre_assigned?"; es un folio anticipado (se asignó antes de entregar)":""}.</HechoDeCancelar>}
       {folio&&rev.estado==="revisando"&&<HechoDeCancelar icono={HourglassIcon}>Revisando {folio} en CobranzaFlow…</HechoDeCancelar>}
       {folio&&(rev.estado==="fallo"||rev.estado==="tarde")&&<HechoDeCancelar tono="aviso">{rev.estado==="tarde"?"CobranzaFlow no contestó en 8 s":"No se pudo revisar "+folio+" en CobranzaFlow"}. Si es sólo de esta orden, queda cancelada con saldo 0; si es de toda la OC, se le resta esta orden; si está timbrada, la base no deja cancelarla.{reintentar(()=>setVuelta(v=>v+1),"revisar "+folio)}</HechoDeCancelar>}
@@ -11154,9 +11184,13 @@ function CancelInvoicedModal({order,orders,actor,motivoInicial,onConfirm,onClose
         : <HechoDeCancelar>{folio} no está pagada{esRemision?"":" ni timbrada"}: en CobranzaFlow queda cancelada con saldo 0.</HechoDeCancelar>)}
       {saldoFavor>0&&<HechoDeCancelar tono="aviso" icono={WalletIcon}>Se pagó con el saldo a favor del cliente: {pesosMx(saldoFavor)} regresan a su bolsa.</HechoDeCancelar>}
       {rev.estado==="listo"&&rev.saldoFallo&&<HechoDeCancelar tono="aviso">No se pudo comprobar si se pagó con el saldo a favor; si fue así, ese saldo regresa a su bolsa.{reintentar(()=>setVuelta(v=>v+1),"revisar el saldo")}</HechoDeCancelar>}
-      {fila&&<HechoDeCancelar icono={FactoryIcon}>{fila}</HechoDeCancelar>}
+      {!timbrada&&fila&&<HechoDeCancelar icono={FactoryIcon}>{fila}</HechoDeCancelar>}
+      {!timbrada&&<>
       {archivo&&<HechoDeCancelar icono={TrashIcon}>Se borra su archivo de producción ({archivo}); sus imágenes se quedan.</HechoDeCancelar>}
-      <HechoDeCancelar>Les avisamos a Lupita y a Karla, con el motivo.{d?.aplica&&!timbrada&&!compartida?" Ya no se deshace desde PrintFlow.":""}</HechoDeCancelar>
+      <HechoDeCancelar>Les avisamos a Lupita y a Karla, con el motivo.</HechoDeCancelar>
+      {d?.aplica&&!compartida&&<HechoDeCancelar tono="grave">No se deshace desde PrintFlow.</HechoDeCancelar>}
+      </>}
+      </>}
     </ul>
     <CampoMotivo id="cancelar-folio-motivo" autoFocus={!bloqueada} valor={reason} onChange={setReason} trabajando={trabajando} bloqueada={bloqueada} ejemplo="El cliente canceló el pedido"/>
   </VentanaDeCancelar>;
