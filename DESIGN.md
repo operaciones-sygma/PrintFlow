@@ -597,3 +597,9 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   sobre `C.bg`, no sobre `C.sf` (4.47:1). Sobre un tinte de selección, el texto va en `C.tx`.
 - **Un buscador es un combobox** (v10.84.78, `ClientInput`): flechas, Enter y Esc, `aria-activedescendant`; elegir con el ratón no le
   quita el foco al campo.
+- **Una forma larga se acomoda al ancho que tiene, no al de la ventana** (v10.84.79, la forma de la orden): se mide su contenedor ANTES de
+  pintar; dos columnas sólo si cada renglón cabe con valores reales (medido campo por campo: el correo, el WhatsApp, la fecha), con un
+  margen para volver a una (la barra de desplazamiento no la hace brincar). Los dos acomodos son el MISMO árbol (sólo cambia el CSS):
+  pasar de uno a otro no vuelve a montar nada, y Tab recorre igual. Lo que se usa poco (medido) va en una sección cerrada que, cerrada,
+  dice lo que trae. Y el banco de pruebas mide dentro del contenedor y el menú de App, no en uno propio.
+- **Abajo de 900 px el menú lateral se pliega solo** (v10.84.79): abierto se comía un tercio de la pantalla a 683 px (la laptop al 200 %).

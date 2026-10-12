@@ -51,6 +51,13 @@ const montaje = linea('{view==="form"&&<div><h2', "el montaje de la forma");
 const montajeCliente = linea("{clientConfirmModal&&<ClientConfirmModal", "el montaje de la pregunta del cliente");
 const montajePrecio = linea("{priceDropModal&&<PriceDropModal", "el montaje de la pregunta del precio");
 const montajeToast = linea("{toast&&<Toast", "el montaje del Toast");
+// v10.84.79 — el contenedor de las vistas y el menú lateral, COPIADOS de App: con un contenedor propio el banco medía otra forma (la app
+// tenía un tope de 820 px para la forma que el banco no tenía: las dos columnas pasaban aquí y en la app no salían)
+const contenedor = linea('<div style={{boxSizing:"border-box",width:"100%",maxWidth:view==="board"', "el contenedor de las vistas");
+const menuAncho = /width:sbPlegado\?(\d+):(\d+),flexShrink:0,height:"100vh"/.exec(fuente);
+if (!menuAncho) throw new Error("no encuentro el ancho del menú lateral de App (width:sbPlegado?…:…)");
+const menuUmbral = /const sbPlegado=anchoVentana<(\d+)\?/.exec(fuente);
+if (!menuUmbral) throw new Error("no encuentro desde qué ancho de ventana App pliega el menú (const sbPlegado=anchoVentana<…)");
 
 // lo que usan los pedazos copiados: lo de App lo pone el banco; lo de módulo se extrae; lo global es del navegador
 const APP = new Set(["setOrders", "showToast", "reload", "setEditO", "setView", "user", "userLogin", "orders", "editO", "view", "clients",
@@ -72,7 +79,7 @@ function libres(codigo) {
   } });
   return [...fuera];
 }
-const sueltos = libres([addTL, create, update, navClick, preguntas, "return <>" + montaje + montajeCliente + montajePrecio + montajeToast + "</>;"].join("\n"));
+const sueltos = libres([addTL, create, update, navClick, preguntas, "return <>" + contenedor + montaje + "</div>" + montajeCliente + montajePrecio + montajeToast + "</>;"].join("\n"));
 const delModulo = sueltos.filter(n => !APP.has(n) && !REACT.has(n) && !GLOBALES.has(n));
 const RAICES = ["OrderForm", "ClientConfirmModal", "PriceDropModal", "Toast", ...delModulo];
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
@@ -294,16 +301,29 @@ ${navClick}
     // «Editar» de una orden (como el ✏️ de la ficha: App la abre con la orden que tiene, recién leída)
     window.__editar = (id, extra = {}) => { setOrders(BASE.map(x => ({ ...x }))); setEditO({ ...BASE.find(x => x.id === id), ...extra }); setView("form"); };
   }, []);
-  return <div style={{ background: C.canvas, minHeight: "100vh", padding: "16px 12px" }}>
-    <nav id="menu" style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-      {[["pipeline", "Dashboard"], ["form", "Nueva"], ["orders", "Todas"]].map(([id, t]) => <button key={id} id={"ir-" + id} title={t} onClick={() => navClick(id)}>{t}</button>)}
-    </nav>
-    {view !== "form" && <div id="fuera" data-vista={view} style={{ padding: 20 }}>Vista: {view}</div>}
-    ${montaje}
+  // el menú lateral como el de App (sus anchos y desde dónde se pliega solo); ?menu=plegado o window.__plegar(true) lo pliegan
+  const [anchoVentana, setAnchoVentana] = useState(() => innerWidth);
+  useEffect(() => { const f = () => setAnchoVentana(innerWidth); addEventListener("resize", f); return () => removeEventListener("resize", f); }, []);
+  const [plegadoPref, setPlegadoPref] = useState(Q.get("menu") === "plegado");
+  useEffect(() => { window.__plegar = v => setPlegadoPref(!!v); }, []);
+  const sbPlegado = anchoVentana < ${menuUmbral[1]} ? true : plegadoPref;
+  return <div style={{ display: "flex", background: C.canvas, minHeight: "100vh" }}>
+    <div id="lateral" style={{ width: sbPlegado ? ${menuAncho[1]} : ${menuAncho[2]}, flexShrink: 0, height: "100vh", position: "sticky", top: 0, overflow: "hidden", borderRight: "0.5px solid #ddd" }}>
+      <nav id="menu" style={{ display: "flex", flexDirection: "column", gap: 6, padding: 6 }}>
+        {[["pipeline", "Dashboard"], ["form", "Nueva"], ["orders", "Todas"]].map(([id, t]) => <button key={id} id={"ir-" + id} title={t} style={{ fontSize: 10, overflow: "hidden", whiteSpace: "nowrap" }} onClick={() => navClick(id)}>{t}</button>)}
+      </nav>
+    </div>
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <div id="barra" style={{ height: 57, flexShrink: 0, borderBottom: "0.5px solid #ddd" }}/>
+      ${contenedor}
+        {view !== "form" && <div id="fuera" data-vista={view} style={{ padding: 20 }}>Vista: {view}</div>}
+        ${montaje}
+        <pre id="log" style={{ fontSize: 10, color: "#666", maxHeight: 140, overflow: "auto" }}>{log.join("\\n")}</pre>
+      </div>
+    </div>
     ${montajeCliente}
     ${montajePrecio}
     ${montajeToast}
-    <pre id="log" style={{ fontSize: 10, color: "#666", maxHeight: 140, overflow: "auto" }}>{log.join("\\n")}</pre>
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Banco />);`,

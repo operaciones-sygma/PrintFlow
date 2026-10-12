@@ -68,6 +68,10 @@ const editar = async (p, id, extra) => { await p.evaluate(() => window.__ir("ord
   await p.evaluate(([i, x]) => window.__editar(i, x), [id, extra || {}]); await espera(p, 700); };
 // clic con el elemento al centro de la ventana: el pie fijo de la forma tapa lo que queda abajo (eso se prueba aparte, con Tab)
 const clic = async loc => { await loc.first().evaluate(e => e.scrollIntoView({ block: "center" })); await loc.first().click(); };
+// v10.84.79 — «Más de esta orden» (distribución, sin empaque, archivo de producción) empieza cerrado: se abre antes de usarlo
+const rect = (p, sel) => p.evaluate(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width }; }, sel);
+const pieTop = p => p.evaluate(() => { const f = document.querySelector("h2 + div"); const pie = f && [...f.querySelectorAll("div")].find(d => getComputedStyle(d).position === "sticky"); return pie ? pie.getBoundingClientRect().top : innerHeight; });
+const abrirMas = async p => { const b = p.getByRole("button", { name: /Más de esta orden/ }); if ((await b.count()) && (await b.first().getAttribute("aria-expanded")) !== "true") { await clic(b); await espera(p, 300); } };
 const editable = async loc => (await loc.count()) ? await loc.first().isEditable().catch(() => false) : false;
 
 // ── Guardar cuando la base falla: nada se pierde, nada se duplica, un solo mensaje y en palabras ──
@@ -160,7 +164,7 @@ const ARCHIVO = "https://x.supabase.co/storage/v1/object/public/order-files/OP-E
 const IMAGEN = "https://x.supabase.co/storage/v1/object/public/order-files/OP-ED/img-1-zzz.jpg";
 const conArchivo = p => p.evaluate(([a, i]) => { const o = window.__estado().base.find(x => x.id === "OP-ED"); o.file_url = a; o.file_name = "arte-final.pdf"; o.image_url = i; }, [ARCHIVO, IMAGEN]);
 await caso("ord-20 «Quitar» el archivo de producción al editar no lo borra del servidor, y se puede deshacer", "modo=editar&rol=admin", async p => {
-  await conArchivo(p); await editar(p, "OP-ED");
+  await conArchivo(p); await editar(p, "OP-ED"); await abrirMas(p);
   await clic(p.getByRole("button", { name: "Quitar", exact: true })); await espera(p, 400);
   const hayDeshacer = (await p.getByRole("button", { name: /Deshacer/ }).count()) > 0;
   if (hayDeshacer) { await clic(p.getByRole("button", { name: /Deshacer/ })); await espera(p, 300); }
@@ -329,7 +333,7 @@ await caso("ord-54 en una maquila facturada, la pregunta habla del precio al cli
     /Precio al cliente/.test(t) && /\$12,500\.00/.test(t) && /\$10,000\.00/.test(t) && /F-150/.test(t) && /\$14,500\.00/.test(t) && /\$11,600\.00/.test(t), `«${t.slice(0, 240)}»`);
 });
 await caso("ord-55 «Quitar» el archivo y guardar: la orden se queda sin él y el archivo sigue en el servidor (historial)", "modo=editar&rol=admin", async p => {
-  await conArchivo(p); await editar(p, "OP-ED");
+  await conArchivo(p); await editar(p, "OP-ED"); await abrirMas(p);
   await clic(p.getByRole("button", { name: "Quitar", exact: true })); await espera(p, 300);
   await guardar(p); await espera(p, 1000);
   const up = (await lineas(p, "update OP-ED ")).pop() || "", datos = up ? JSON.parse(up.replace(/^update OP-ED /, "")) : {};
@@ -338,7 +342,7 @@ await caso("ord-55 «Quitar» el archivo y guardar: la orden se queda sin él y 
     `update ${up ? "sí" : "no"} · file_url ${JSON.stringify(datos.file_url)} · storage remove ${JSON.stringify(borrados)}`);
 });
 await caso("ord-56 «Quitar» un archivo subido en esta misma captura sí lo limpia del servidor (y no ofrece deshacer)", "", async p => {
-  await p.locator('input[type="file"]:not([accept="image/*"])').first().setInputFiles({ name: "arte.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 prueba") }); await espera(p, 1500);
+  await abrirMas(p); await p.locator('input[type="file"]:not([accept="image/*"])').first().setInputFiles({ name: "arte.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 prueba") }); await espera(p, 1500);
   await clic(p.getByRole("button", { name: "Quitar", exact: true })); await espera(p, 500);
   const borrados = await lineas(p, "storage remove"), deshacer = await p.getByRole("button", { name: /Deshacer/ }).count();
   ok("ord-56 «Quitar» un archivo subido en esta misma captura sí lo limpia del servidor (y no ofrece deshacer)", borrados.length === 1 && /arte|new\//.test(borrados[0] || "") && deshacer === 0,
@@ -663,14 +667,14 @@ await caso("ord-121 nada de letra de 9 px, y lo que no es etiqueta de al menos 1
 await caso("ord-122 sin emoji ni jerga interna en la forma («white-label», «soft-delete», «pool», «Fase 2»)", "", async p => {
   await p.getByText("Maquila Completa").first().click(); await espera(p, 300);
   await p.getByText("Producción Interna").first().click(); await espera(p, 300);
-  await p.locator('input[type="checkbox"]').nth(1).check(); await espera(p, 200);
+  await abrirMas(p); await p.locator('input[type="checkbox"]').nth(1).check(); await espera(p, 200);
   const t = await forma(p).innerText();
   const emoji = t.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) || [];
   ok("ord-122 sin emoji ni jerga interna en la forma («white-label», «soft-delete», «pool», «Fase 2»)", emoji.length === 0 && !/white-label|soft-delete|pool compartido|Fase 2/i.test(t),
     `emoji ${[...new Set(emoji)].join(" ")} · jerga ${(t.match(/white-label|soft-delete|pool compartido|Fase 2/gi) || []).join(", ")}`);
 });
 await caso("ord-123 «Sin empaque de SYGMA» marcado no se pinta como error ni grita (role=alert)", "", async p => {
-  await p.locator('input[type="checkbox"]').nth(1).check(); await espera(p, 200);
+  await abrirMas(p); await p.locator('input[type="checkbox"]').nth(1).check(); await espera(p, 200);
   const r = await p.evaluate(() => {
     const t = [...document.querySelectorAll("div")].find(d => /^Sin empaque de SYGMA$/.test(d.textContent.trim()));
     const caja = t?.closest("label")?.parentElement;
@@ -774,7 +778,7 @@ await caso("ord-144 con una cantidad mal escrita, Replicar no la pisa: se queda 
 });
 await caso("ord-145 se lee también con todo encendido (sin empaque, distribución, cliente nuevo, errores de números)", "", async p => {
   await llenar(p, "Cliente (escribe para buscar)", "ZZ PRUEBA CLAUDE SA"); await p.getByPlaceholder("Cliente (escribe para buscar)").press("Tab"); await espera(p, 400);
-  await p.locator('input[type="checkbox"]').nth(0).check(); await p.locator('input[type="checkbox"]').nth(1).check();
+  await abrirMas(p); await p.locator('input[type="checkbox"]').nth(0).check(); await p.locator('input[type="checkbox"]').nth(1).check();
   await llenar(p, "Ejemplo · 1000", "-5"); await llenar(p, "$0.00", "1.555"); await llenar(p, "Ejemplo · 150", "mucho");
   await crear(p); await espera(p, 600);
   const r = await legibilidad(p);
@@ -817,6 +821,183 @@ await caso("ord-150 Esc en la lista de clientes la cierra y no pregunta nada ni 
   const cerrada = await p.locator('[role="listbox"]').count();
   ok("ord-150 Esc en la lista de clientes la cierra y no pregunta nada ni sale", abierta === 1 && cerrada === 0 && !(await hayPregunta(p)) && (await estado(p)).vista === "form", `abierta ${abierta} · después ${cerrada}`);
 });
+
+// ════ v10.84.79 — el reacomodo: lo esencial en la primera pantalla de la laptop, dos columnas en la grande, la chica sin rodeos ════
+// (Marcelo, 12-oct: «P1, P2 y reacomodo». Medido en 60 días: imagen 94 %, notas 56 %, placa 52 %, agente de compras 42 % se quedan a la
+//  vista; distribución 8 %, sin empaque 7 % y archivo de producción 1 % van a «Más de esta orden».)
+await caso("ord-160 a 1366×768 la primera pantalla ya trae cliente, tipo, cantidad y entrega", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), r = { cliente: await rect(p, "#ff-cliente-input"), tipo: await rect(p, "#ff-tipo"), cantidad: await rect(p, "#ff-cantidad"), entrega: await rect(p, "#ff-entrega") };
+  const fuera = Object.entries(r).filter(([, v]) => !v || v.bottom > top).map(([k, v]) => k + (v ? "@" + Math.round(v.top) : ""));
+  ok("ord-160 a 1366×768 la primera pantalla ya trae cliente, tipo, cantidad y entrega", fuera.length === 0, `pie en ${Math.round(top)} · fuera: ${fuera.join(", ") || "ninguno"}`);
+});
+await caso("ord-161 a 1366×768 el precio y el vendedor quedan a menos de pantalla y media", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const precio = await rect(p, "#ff-precio"), vend = await rect(p, "#ff-agent");
+  ok("ord-161 a 1366×768 el precio y el vendedor quedan a menos de pantalla y media", !!precio && !!vend && precio.top < 768 * 1.5 && vend.top < 768 * 1.5,
+    `precio @${precio && Math.round(precio.top)} · vendedor @${vend && Math.round(vend.top)} (antes 1861 y 1644)`);
+});
+await caso("ord-162 a 1920×1080 son dos columnas y todo lo esencial cabe sin desplazar", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), cli = await rect(p, "#ff-cliente-input"), papel = await rect(p, "#ff-papel"), precio = await rect(p, "#ff-precio"), vend = await rect(p, "#ff-agent");
+  const dos = !!cli && !!papel && papel.left >= cli.right - 2;
+  ok("ord-162 a 1920×1080 son dos columnas y todo lo esencial cabe sin desplazar", dos && !!precio && precio.bottom <= top && !!vend && vend.top < top,
+    `dos columnas ${dos} · precio @${precio && Math.round(precio.bottom)} · vendedor @${vend && Math.round(vend.top)} · pie ${Math.round(top)}`);
+}, { width: 1920, height: 1080 });
+await caso("ord-163 a 683×384 sin desplazar a lo ancho, el primer campo a la vista, el pie chico y los campos con ancho para escribir", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const r = await p.evaluate(() => ({ ancho: document.documentElement.scrollWidth, vista: innerWidth }));
+  const top = await pieTop(p), cli = await rect(p, "#ff-cliente-input"), wa = await rect(p, "#ff-whatsapp"), cant = await rect(p, "#ff-cantidad");
+  const pieAlto = 384 - top;
+  ok("ord-163 a 683×384 sin desplazar a lo ancho, el primer campo a la vista, el pie chico y los campos con ancho para escribir",
+    r.ancho <= r.vista + 1 && !!cli && cli.bottom <= top && pieAlto <= 384 * 0.25 && !!wa && wa.width >= 120 && !!cant && cant.width >= 120,
+    `ancho ${r.ancho}/${r.vista} · cliente @${cli && Math.round(cli.bottom)} · pie ${Math.round(pieAlto)} px · WhatsApp ${wa && Math.round(wa.width)} · cantidad ${cant && Math.round(cant.width)}`);
+}, { width: 683, height: 384 });
+await caso("ord-164 «Más de esta orden» empieza cerrado en una orden nueva y, cerrado, dice lo que trae marcado", "", async p => {
+  const b = p.getByRole("button", { name: /Más de esta orden/ });
+  const hay = (await b.count()) > 0, cerrado = hay && (await b.first().getAttribute("aria-expanded")) === "false";
+  const sinCasillas = (await p.locator('input[type="checkbox"]').count()) === 0;
+  if (hay) { await abrirMas(p); await p.locator('input[type="checkbox"]').nth(1).check(); await espera(p, 200); await clic(b); await espera(p, 300); }
+  const t = hay ? await b.first().innerText() : "";
+  ok("ord-164 «Más de esta orden» empieza cerrado en una orden nueva y, cerrado, dice lo que trae marcado", hay && cerrado && sinCasillas && /Sin empaque de SYGMA/.test(t) && !/distribución a varios lugares/.test(t),
+    `botón ${hay} · cerrado ${cerrado} · sin casillas a la vista ${sinCasillas} · «${t.replace(/\s+/g, " ")}»`);
+});
+await caso("ord-165 una orden con distribución abre «Más de esta orden» ya abierto", "modo=editar&rol=admin", async p => {
+  await p.evaluate(() => { const o = window.__estado().base.find(x => x.id === "OP-ED"); o.distribution = ["Sucursal Centro", "Sucursal Norte"]; });
+  await editar(p, "OP-ED");
+  const b = p.getByRole("button", { name: /Más de esta orden/ }), abierto = (await b.count()) && (await b.first().getAttribute("aria-expanded")) === "true";
+  ok("ord-165 una orden con distribución abre «Más de esta orden» ya abierto", !!abierto && (await p.getByPlaceholder(/Lugar y dirección/).count()) === 2, `abierto ${abierto}`);
+});
+await caso("ord-166 Pre-prensa ve el archivo de producción sin abrir nada", "modo=specs&rol=preprensa", async p => {
+  ok("ord-166 Pre-prensa ve el archivo de producción sin abrir nada", (await p.getByText(/Archivo de Producción/i).count()) > 0 && (await p.getByText(/Subir archivo/).count()) > 0, "");
+});
+await caso("ord-167 interna o maquila y la prioridad van juntas arriba, en un renglón", "", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const r = await p.evaluate(() => { const b = t => [...document.querySelectorAll("button")].find(x => x.textContent.includes(t))?.getBoundingClientRect(); const a = b("Producción Interna"), n = b("Normal"); return a && n ? { a: a.top, n: n.top, alto: a.height } : null; });
+  ok("ord-167 interna o maquila y la prioridad van juntas arriba, en un renglón", !!r && Math.abs(r.a - r.n) < 12 && r.alto <= 52, JSON.stringify(r));
+});
+
+// ── Vuelta 2 de v10.84.79: por donde no se diseñó ──
+await caso("ord-170 cerrado, «Más de esta orden» dice cuántos lugares lleva la distribución", "", async p => {
+  await abrirMas(p);
+  await p.locator('input[type="checkbox"]').nth(0).check(); await espera(p, 200);
+  await p.getByPlaceholder(/Lugar y dirección/).first().fill("Sucursal Centro");
+  await p.getByRole("button", { name: /Agregar lugar/ }).click(); await espera(p, 200);
+  await p.getByPlaceholder(/Lugar y dirección/).nth(1).fill("Sucursal Norte");
+  await clic(p.getByRole("button", { name: /Más de esta orden/ })); await espera(p, 300);
+  const t = await p.getByRole("button", { name: /Más de esta orden/ }).first().innerText();
+  ok("ord-170 cerrado, «Más de esta orden» dice cuántos lugares lleva la distribución", /2 lugares/.test(t), `«${t.replace(/\s+/g, " ")}»`);
+});
+await caso("ord-171 maquila a 1920: dos columnas y proveedor, costo y precio a la vista sin desplazar", "", async p => {
+  await p.getByText("Maquila Completa").first().click(); await espera(p, 400);
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), prov = await rect(p, "#ff-maq"), precio = await rect(p, "#ff-maq-precio"), notas = await rect(p, "#ff-notas");   // maquila no lleva especificaciones: las notas van a la derecha
+  const dos = !!prov && !!notas && notas.left >= prov.right - 2;
+  ok("ord-171 maquila a 1920: dos columnas y proveedor, costo y precio a la vista sin desplazar", dos && !!precio && precio.bottom <= top, `dos columnas ${dos} · proveedor @${prov && Math.round(prov.top)} · precio @${precio && Math.round(precio.bottom)} · pie ${Math.round(top)}`);
+}, { width: 1920, height: 1080 });
+await caso("ord-172 Pre-prensa a 1366: las especificaciones y el archivo a la vista", "modo=specs&rol=preprensa", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), papel = await rect(p, "#ff-papel");
+  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label")].find(x => /Subir archivo/.test(x.textContent)); return e ? e.getBoundingClientRect().top : null; });
+  ok("ord-172 Pre-prensa a 1366: las especificaciones y el archivo a la vista", !!papel && papel.bottom <= top && subir !== null && subir < 768 * 1.5, `papel @${papel && Math.round(papel.bottom)} · subir archivo @${subir && Math.round(subir)} · pie ${Math.round(top)}`);
+});
+await caso("ord-173 se lee también a 683×384 con maquila elegida (el renglón chico de arriba)", "", async p => {
+  await p.getByRole("button", { name: /^Maquila/ }).first().click(); await espera(p, 300);   // a 683 dice «Maquila» (v10.84.79, vuelta 3)
+  const r = await legibilidad(p);
+  ok("ord-173 se lee también a 683×384 con maquila elegida (el renglón chico de arriba)", r.malos.length === 0 && r.chicos.length === 0, `bajo AA ${r.malos.slice(0, 6).join(" | ")} · chicos ${r.chicos.slice(0, 6).join(" | ")}`);
+}, { width: 683, height: 384 });
+await caso("ord-174 a dos columnas, Tab va de la izquierda a la derecha sin regresarse", "", async p => {
+  await p.getByPlaceholder("Cliente (escribe para buscar)").focus();
+  const xs = [];
+  for (let i = 0; i < 60; i++) {
+    await p.keyboard.press("Tab"); await espera(p, 40);
+    const r = await p.evaluate(() => { const a = document.activeElement, f = document.querySelector("h2 + div"); if (!a || !f || !f.contains(a)) return null;
+      const pie = [...f.querySelectorAll("div")].find(d => getComputedStyle(d).position === "sticky"); if (pie && pie.contains(a)) return "pie"; return Math.round(a.getBoundingClientRect().left + scrollX); });
+    if (r === "pie") break; if (r !== null) xs.push(r);
+  }
+  const mitad = await p.evaluate(() => { const f = document.querySelector("h2 + div"); const r = f.getBoundingClientRect(); return r.left + r.width / 2; });
+  let cruces = 0; for (let i = 1; i < xs.length; i++) if (xs[i - 1] >= mitad && xs[i] < mitad) cruces++;
+  ok("ord-174 a dos columnas, Tab va de la izquierda a la derecha sin regresarse", xs.length > 10 && cruces === 0, `paradas ${xs.length} · regresos a la izquierda ${cruces}`);
+}, { width: 1920, height: 1080 });   // v10.84.79 (vuelta 3): a 1366 con el menú abierto ya es una columna
+
+// ── Vuelta 3 de v10.84.79: la app REAL tenía un tope de 820 px para la forma (VIEW_MAXW) que el banco no; las dos columnas pasaban aquí y
+//    allá nunca salían. Desde aquí el banco copia de App el menú lateral (222/64 px) y el contenedor. Y lo que esa medida enseñó. ──
+// lo que de verdad se escribe en cada campo (lo de todos los días, no lo extremo): si la caja lo corta, no se lee lo capturado
+const REALES = { "#ff-agente-compras": "Eva Martínez", "#ff-contacto": "compras@cosquim.com", "#ff-whatsapp": "55 1234 5678",
+  "#ff-rfc": "XAXX010101000", "#ff-tipo": "Etiquetas adhesivas", "#ff-cantidad": "250000", "#ff-entrega": "2026-10-20", "#ff-precio": "12500.50",
+  "#ff-papel": "Couché brillante", "#ff-gramaje": "150", "#ff-tintas-frente": "4 tintas CMYK", "#ff-tintas-vuelta": "1 tinta negro",
+  "#ff-ancho": "21.5", "#ff-alto": "27.9", "#ff-maq": "Impresos del Bajío", "#ff-maq-costo": "8500.00", "#ff-maq-precio": "12500.50" };
+async function cortados(p, reales = REALES) {
+  for (const [sel, v] of Object.entries(reales)) {
+    const l = p.locator(sel);
+    if (await l.count() && await l.first().isVisible() && await l.first().isEditable()) { await l.first().fill(v).catch(() => {}); await p.locator("h2").first().click().catch(() => {}); }
+  }
+  await espera(p, 300);
+  return p.evaluate(sels => {
+    const out = [];
+    // la fecha y la lada no avisan con scrollWidth: se comparan con su ancho natural (lo que piden para enseñarse completas)
+    const natural = e => { const real = e.offsetWidth, prev = e.getAttribute("style"); e.style.width = "auto"; e.style.minWidth = "0"; e.style.maxWidth = "none"; e.style.flex = "none";
+      const nat = e.offsetWidth; e.setAttribute("style", prev || ""); return { real, nat }; };
+    for (const sel of [...sels, 'select[aria-label="Lada"]']) {
+      const e = document.querySelector(sel); if (!e || !e.offsetParent) continue;
+      if (e.type === "date" || e.tagName === "SELECT") { const { real, nat } = natural(e); if (nat > real + 1) out.push(sel + " pide " + nat + " y tiene " + real); continue; }
+      if (e.scrollWidth > e.clientWidth + 1) out.push(sel + " «" + e.value + "» pide " + e.scrollWidth + " y tiene " + e.clientWidth);
+    }
+    return out;
+  }, Object.keys(reales));
+}
+const ANCHOS = [["ord-175", "1366 con el menú abierto", "", { width: 1366, height: 768 }], ["ord-176", "1366 con el menú plegado", "menu=plegado", { width: 1366, height: 768 }],
+  ["ord-177", "1920", "", { width: 1920, height: 1080 }], ["ord-178", "1093 (la laptop al 125 %)", "", { width: 1093, height: 615 }], ["ord-179", "683 (la laptop al 200 %)", "", { width: 683, height: 384 }]];
+for (const [id, que, q, vp] of ANCHOS) {
+  await caso(`${id} a ${que}, ningún campo corta lo que se escribe (WhatsApp, RFC, correo, la fecha, cantidad, precio)`, q, async p => {
+    const c = await cortados(p);
+    ok(`${id} a ${que}, ningún campo corta lo que se escribe (WhatsApp, RFC, correo, la fecha, cantidad, precio)`, c.length === 0, c.join(" · ") || "nada cortado");
+  }, vp);
+}
+await caso("ord-180 maquila a 1366: proveedor, costo y precio no cortan lo que se escribe", "", async p => {
+  await p.getByText("Maquila Completa").first().click(); await espera(p, 400);
+  const c = await cortados(p);
+  ok("ord-180 maquila a 1366: proveedor, costo y precio no cortan lo que se escribe", c.length === 0, c.join(" · ") || "nada cortado");
+});
+await caso("ord-181 plegar el menú a media captura (de una columna a dos) no se lleva el foco ni lo escrito", "", async p => {
+  const d = p.locator("#ff-descripcion");
+  await d.click(); await p.keyboard.type("Etiqueta");
+  const antes = await p.evaluate(() => { const e = document.getElementById("ff-descripcion"); e.__marca = 1; const c = document.getElementById("ff-cliente-input").getBoundingClientRect(), pa = document.getElementById("ff-papel").getBoundingClientRect(); return pa.left >= c.right - 2; });
+  await p.evaluate(() => window.__plegar(true)); await espera(p, 400);
+  await p.keyboard.type(" redonda");
+  const r = await p.evaluate(() => { const e = document.getElementById("ff-descripcion"); const c = document.getElementById("ff-cliente-input").getBoundingClientRect(), pa = document.getElementById("ff-papel").getBoundingClientRect();
+    return { dos: pa.left >= c.right - 2, mismo: e.__marca === 1, foco: document.activeElement?.id, valor: e.value }; });
+  ok("ord-181 plegar el menú a media captura (de una columna a dos) no se lleva el foco ni lo escrito", !antes && r.dos && r.mismo && r.foco === "ff-descripcion" && r.valor === "Etiqueta redonda",
+    `antes dos columnas ${antes} · después ${r.dos} · el mismo campo ${r.mismo} · foco ${r.foco} · «${r.valor}»`);
+}, { width: 1300, height: 768 });
+await caso("ord-182 en el borde de las dos columnas no brinca: para volver a una pide bajar de 1130", "", async p => {
+  const dos = () => p.evaluate(() => { const c = document.getElementById("ff-cliente-input").getBoundingClientRect(), pa = document.getElementById("ff-papel").getBoundingClientRect(); return pa.left >= c.right - 2; });
+  const pasos = [];
+  // el ancho de la forma = ventana − 222 (menú) − 32 (relleno): 1414 → 1160 · 1394 → 1140 · 1374 → 1120 · 1409 → 1155
+  for (const w of [1414, 1394, 1374, 1394, 1409]) { await p.setViewportSize({ width: w, height: 768 }); await espera(p, 300); pasos.push(w + ":" + ((await dos()) ? "dos" : "una")); }
+  ok("ord-182 en el borde de las dos columnas no brinca: para volver a una pide bajar de 1130", pasos.join(" ") === "1414:dos 1394:dos 1374:una 1394:una 1409:dos", pasos.join(" "));
+}, { width: 1414, height: 768 });
+await caso("ord-183 al abrir, la forma sale ya con su acomodo (no se pinta a dos columnas y salta a una)", "", async p => {
+  await p.evaluate(() => window.__ir("pipeline")); await espera(p, 300);
+  await p.evaluate(() => { window.__cuadros = []; const mira = () => { const f = document.querySelector(".pf-forma"); if (f) window.__cuadros.push(f.style.maxWidth); if (window.__cuadros.length < 30) requestAnimationFrame(mira); }; requestAnimationFrame(mira); });
+  await p.evaluate(() => window.__ir("form")); await espera(p, 900);
+  const vistos = [...new Set(await p.evaluate(() => window.__cuadros))];
+  ok("ord-183 al abrir, la forma sale ya con su acomodo (no se pinta a dos columnas y salta a una)", vistos.length === 1 && vistos[0] === "760px", vistos.join(" → "));
+});
+await caso("ord-184 Pre-prensa a 1920: las especificaciones a la izquierda y el archivo a la derecha, todo sin desplazar", "modo=specs&rol=preprensa", async p => {
+  await p.evaluate(() => scrollTo(0, 0)); await espera(p, 200);
+  const top = await pieTop(p), papel = await rect(p, "#ff-papel"), alto = await rect(p, "#ff-alto");
+  const subir = await p.evaluate(() => { const e = [...document.querySelectorAll("label")].find(x => /Subir archivo/.test(x.textContent)); return e ? (r => ({ left: r.left, bottom: r.bottom }))(e.getBoundingClientRect()) : null; });
+  ok("ord-184 Pre-prensa a 1920: las especificaciones a la izquierda y el archivo a la derecha, todo sin desplazar",
+    !!papel && !!alto && !!subir && alto.bottom <= top && subir.bottom <= top && subir.left > papel.right,
+    `papel @${papel && Math.round(papel.left)} · medida @${alto && Math.round(alto.bottom)} · subir archivo @${subir && Math.round(subir.left)},${subir && Math.round(subir.bottom)} · pie ${Math.round(top)}`);
+}, { width: 1920, height: 1080 });
+
+await caso("ord-185 en el borde (la forma más angosta que va a dos columnas, 1150 px) tampoco se corta lo que se escribe", "", async p => {
+  const dos = await p.evaluate(() => { const c = document.getElementById("ff-cliente-input").getBoundingClientRect(), pa = document.getElementById("ff-papel").getBoundingClientRect(); return pa.left >= c.right - 2; });
+  const c = await cortados(p);
+  ok("ord-185 en el borde (la forma más angosta que va a dos columnas, 1150 px) tampoco se corta lo que se escribe", dos && c.length === 0, `dos columnas ${dos} · ${c.join(" · ") || "nada cortado"}`);
+}, { width: 1404, height: 768 });   // 1404 − 222 (menú) − 32 (relleno) = 1150
 
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;

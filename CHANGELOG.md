@@ -12,6 +12,55 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.79 — La forma de la orden: lo esencial en la primera pantalla de la laptop, dos columnas en la grande — 12-oct-2026
+
+**Qué pasaba** (el reacomodo de la critique independiente del 12-oct, 22/40; Marcelo: «P1, P2 y reacomodo»):
+- **Lo esencial quedaba lejos.** A 1366×768 (la laptop) el tipo quedaba debajo del pie fijo, la cantidad y la entrega a 1,655 px, el
+  vendedor a 1,735 y el precio a 1,862: más de dos pantallas para lo que se captura siempre. Distribución (8 % de las órdenes en 60 días),
+  «sin empaque» (7 %) y el archivo de producción (1 %) iban antes que el precio; la imagen (94 %), las notas (56 %) y la placa (52 %) se
+  quedan a la vista.
+- **En la pantalla grande era la misma columna de 760 px.** A 1920 sobraba media pantalla y el precio seguía a 1,899 px; en maquila,
+  el precio al cliente a 1,445.
+- **A 683 px (la laptop al 200 %) el menú lateral abierto le dejaba a la forma 429 px**: el WhatsApp medía 28 px y el campo enfocado
+  quedaba debajo del pie (lo encontró el banco ya fiel; ver abajo).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- Arriba, en un renglón, interna o maquila y la prioridad (a 683, «Interna» / «Maquila» y sin la palabra «Prioridad», que el grupo le dice
+  al lector de pantalla). Tipo, cantidad y entrega juntos; el número de producción ya no es un campo (se asigna al guardar: lo dice el
+  título de «Producto», con el último). «Para producción» (placa, imágenes, notas) siempre a la vista; distribución, «sin empaque» y el
+  archivo de producción en «Más de esta orden», cerrado y diciendo lo que trae marcado (abierto si la orden ya trae algo de eso).
+  Pre-prensa ve su archivo sin abrir nada.
+- **Dos columnas desde 1150 px de forma**: cliente, producto, vendedor y precio a la izquierda (la más ancha, 1.3 a 1: sus renglones son
+  de tres campos); especificaciones, «Para producción» y «Más» a la derecha. En «Specs», desde 1040, las especificaciones a la izquierda y
+  el archivo a la derecha. Más angosta, la derecha va debajo de la izquierda en el mismo orden. 🔑 **Un solo árbol para los dos acomodos**
+  (sólo cambia el CSS): plegar el menú o partir la ventana no vuelve a montar nada (el foco, lo escrito a medias y lo que se sube se
+  quedan) y Tab recorre igual. El ancho del contenedor se mide antes de pintar (`useLayoutEffect`; con la ventana de primer dato salía un
+  instante a dos columnas y saltaba a una) y para volver a una columna pide bajar 20 px (la barra de desplazamiento no la hace brincar).
+- `VIEW_MAXW.form` 820 → 1212: con 820 la forma nunca pasaba de 788 px y las dos columnas no salían en la app.
+- El menú lateral se pliega solo con la ventana abajo de 900 px; su botón lo abre y lo cierra sin cambiar la preferencia guardada.
+- El renglón del contacto ya no va a tercios (el WhatsApp lleva la lada; el RFC son 13 letras).
+- **Compartido, con sus usos:** el pliegue del menú es de toda la app abajo de 900 px (es el mismo menú plegado que ya existía con su
+  botón). Se revisó en la forma y pasando por el Dashboard a 683; las demás pantallas a 683 se abrieron sin medirlas.
+- **El banco de la forma copia de App el contenedor de las vistas (con su tope) y el menú lateral (222/64 px y desde dónde se pliega)**
+  (`tests/banco/gen-orden.mjs`): con un contenedor propio medía otra forma. Si App cambia esos números el banco los copia; si no los
+  encuentra, para.
+
+**Cómo se probó**: tanda `orden` (114; eran 90). Vuelta 1, escrita antes del cambio: 8 casos (1366, 1920, 683, «Más de esta orden»,
+Pre-prensa, el renglón de arriba). Vuelta 2 (por donde no se diseñó: cerrado dice cuántos lugares, maquila a 1920, Pre-prensa a 1366, 683
+con maquila, Tab a dos columnas): encontró maquila a 1920 con el precio bajo el pie (la descripción larga pasó a la derecha). **Vuelta 3,
+con la app REAL** (`.banco-revisor-orden/`, la cuenta de pruebas, las escrituras cortadas): la forma medía 788 px en cualquier pantalla (el
+tope de 820 que el banco no tenía: las dos columnas pasaban en el banco y en la app nunca salían) y la primera pintura salía a dos columnas
+y saltaba. Con el banco ya fiel, 11 casos más: con valores reales ningún campo corta lo escrito a 1366 (menú abierto y plegado), 1920,
+1093, 683 y en el borde de 1150 (a dos columnas desde 1040, la izquierda cortaba el correo, el WhatsApp y la fecha: por eso 1150), maquila,
+plegar el menú a media captura sin perder el foco ni lo escrito, el borde que no brinca, la primera pintura y Pre-prensa a 1920. Contra
+v10.84.78 en el mismo banco fallan 17 de 114 (ord-141 entre ellas, de v10.84.78: a 683 con el menú abierto el campo enfocado quedaba bajo
+el pie). Sabotajes con un control sin defecto: 15 de 15 atrapados (cuatro después de corregir: ord-164 aceptaba el texto genérico de
+«Más», ord-171 no revisaba que fueran dos columnas, y dos sabotajes no rompían de verdad). La app real a 1366 (menú abierto y plegado),
+1920, 1536, 1093 y 683: el acomodo esperado, sin brincar al abrir, nada cortado, nada a lo ancho; a 683 el menú se pliega solo y su botón
+lo abre y lo cierra. Con el cambio: `orden` 114 de 114.
+
+**Para Marcelo:** nada que decidir aquí. Sigue la segunda revisión independiente de la forma (un agente; se pide antes, con su costo).
+
 ## v10.84.78 — La forma de la orden: lo capturado no se pierde ni cambia sin aviso, se usa con teclado y se lee — 12-oct-2026
 
 **Qué pasaba** (los P2 de la critique independiente del 12-oct, 22/40, y lo que el detector midió en la página real; decisión de
