@@ -71,13 +71,20 @@ const DATOS = {
              { id: "s4", position: 2, invoice_folio: "F-130", doc_type: "factura", amount_portion: 0, qty_portion: 0, cancelled_at: "2026-10-05T10:00:00Z" }] },
   // la orden ya facturada por partes, en manos de Dirección (la cancelación normal la deja pasar y el puente tumba sus facturas)
   facturada: { ...BASE, id: "o10", production_number: "P-0730", client: "KFC (PREMIUM RESTAURANT BRANDS)", price: 35000, stage: "salidas", has_splits: true,
-    splits: [{ id: "s5", position: 1, invoice_folio: "F-150", doc_type: "factura", amount_portion: 20000, qty_portion: 3000 },
+    splits: [{ id: "s5", position: 1, invoice_folio: "F-150", doc_type: "factura", amount_portion: 20000, qty_portion: 3000, payment_status: "paid" },
              { id: "s6", position: 2, invoice_folio: "F-151", doc_type: "factura", amount_portion: 15000, qty_portion: 2000 }] },
   stock: { ...BASE, id: "o11", production_number: "P-0733", client: "HAKUNA", price: 9000, stage: "packaging", stock_loaded: true, stock_role: "production" },
   cola: { ...BASE, id: "o12", production_number: "P-0735", client: "IMPRENTA LEON", price: 7000, stage: "in_production", current_machine: "off_gto", machine_queue_position: 0 },
   siguiente: { ...BASE, id: "o13", production_number: "P-0716", client: "CABLESERV", price: 4000, stage: "in_production", current_machine: "off_gto", machine_queue_position: 1 },
   archivo: { ...BASE, id: "o14", production_number: "P-0737", client: "PORTLAND STUDIO", price: 6000, stage: "ready",
     file_url: "https://x.supabase.co/storage/v1/object/public/order-files/o14/etiqueta-final.pdf", file_name: "etiqueta-final.pdf" },
+  // (segunda pasada) la orden sólo en el plan matriz, y la de una OC con folio compartido (las dos, en manos de Dirección)
+  matriz: { ...BASE, id: "o15", production_number: "P-0740", client: "TRANSPORTES CASTORES", price: 30000, stage: "salidas", has_matrix_lines: true, purchase_order_id: "OC-0881" },
+  ocfolio: { ...BASE, id: "o16", production_number: "P-0742", client: "GOBIERNO DEL ESTADO", price: 50000, stage: "salidas", purchase_order_id: "OC-0950" },
+  // la orden con folio anticipado que todavía corre en una máquina (Printmaster 52: en GTO ya corre la de «cola»), con su archivo
+  corriendo: { ...BASE, id: "o17", production_number: "P-0744", client: "CABLESERV", price: 21300, stage: "in_production", invoice_folio: "F-138", invoice_type: "factura",
+    invoice_pre_assigned: true, current_machine: "off_pm52", machine_queue_position: 0,
+    file_url: "https://x.supabase.co/storage/v1/object/public/order-files/o17/arte-final.pdf", file_name: "arte-final.pdf" },
   linea1: { ...BASE, id: "o8", production_number: "P-0720", client: "TRANSPORTES CASTORES", price: 60000, stage: "delivered", has_matrix_lines: true },
   linea2: { ...BASE, id: "o9", production_number: "P-0721", client: "TRANSPORTES CASTORES", price: 60000, stage: "delivered", has_matrix_lines: true },
 };
@@ -88,6 +95,8 @@ const GRUPO = { id: "g1", position: 1, folio: "F-140", label: "Factura 1", doc_t
 const GRUPO_ULTIMO = { id: "g2", position: 2, folio: "F-141", label: "Factura 2", doc_type: "factura", total_amount: 30000,
   lines: [{ id: "l3", order_id: "o8", qty_portion: 1500, amount_portion: 30000 }, { id: "l4", order_id: "o9", qty_portion: 1500, amount_portion: 25000, cancelled_at: "2026-10-05T10:00:00Z" }] };
 // lento=1: la base tarda 4 s al confirmar; lento=N (N > 1): N segundos (para ver qué dice la ventana cuando no contesta)
+// la factura del plan que ya está pagada
+const GRUPO_PAGADO = { ...GRUPO, id: "g3", payment_status: "paid" };
 const espera = () => dormir(LENTO ? (LENTO === 1 ? 4000 : LENTO * 1000) : 300);
 function Banco() {
   const [m, setM] = useState(null);
@@ -101,13 +110,14 @@ function Banco() {
   const cerrar = () => { anotar("cerrado"); setM(null); };
   // lo que hace App al confirmar cada una (src/App.jsx v10.84.73: cancelOrder, el montaje de CancelInvoicedModal, de CancelarParteModal y
   //   del plan matriz): lo que impide cancelar o la base rechaza VUELVE A LA VENTANA ({error}, o la parte lanza); el éxito cierra y avisa en verde
-  const alCancelarOrden = async reason => { anotar("cancelar-orden " + m.k + " " + JSON.stringify(reason));
+  const alCancelarOrden = async (reason, extra) => { anotar("cancelar-orden " + m.k + " " + JSON.stringify(reason));
     const o = vivas.current[m.k];
     if (o.invoice_folio) return { error: "Mientras tenías la ventana abierta, " + (o.production_number || "la orden") + " recibió el folio " + o.invoice_folio + " en otra sesión. " + (ROL === "admin" ? "Ciérrala y cancélala con «Cancelar con su folio», que se encarga de la factura." : "Con folio, sólo Dirección puede cancelarla.") };
     if (o.stock_loaded) return { error: "No se puede cancelar: esta orden ingresó +" + o.quantity + " al inventario. Primero ajusta el stock (Inventario → Ajustar) y luego cancela." };
     await espera();
     if (FALLA) return { error: "No se canceló " + (o.production_number || "la orden") + ": sin conexión. Lo que escribiste sigue aquí." };
-    setM(null); aviso((o.production_number || "La orden") + " cancelada", "success"); };
+    const quien = o.production_number || "La orden", mas = [extra?.saldo > 0 && "$" + fmtMx(extra.saldo) + " regresaron a la bolsa del cliente", extra?.facturas?.length && "en CobranzaFlow se cancelaron " + extra.facturas.join(", ")].filter(Boolean);
+    setM(null); aviso(quien + " cancelada" + (mas.length ? " · " + mas.join(" · ") : ""), "success"); };
   const alCancelarFacturada = async (reason, caso) => { anotar("cancelar-facturada " + m.k + " " + JSON.stringify(reason) + " " + JSON.stringify(caso || {})); await espera();
     const o = vivas.current[m.k];
     if (FALLA) return { error: "No se canceló " + o.production_number + ": sin conexión." };
@@ -141,14 +151,21 @@ function Banco() {
       {boton("abrir-linea", "linea", "Cancelar línea del plan matriz")}
       {boton("abrir-linea-ultima", "lineaUltima", "Cancelar la última línea de F-141")}
       {boton("abrir-grupo", "grupo", "Cancelar factura del plan matriz")}
+      {boton("abrir-grupo-pagado", "grupoPagado", "Cancelar factura del plan (pagada)")}
+      {boton("abrir-matriz", "matriz", "Cancelar orden del plan matriz (Dirección)")}
+      {boton("abrir-ocfolio", "ocfolio", "Cancelar orden de OC con folio F-200 (Dirección)")}
+      {boton("abrir-corriendo", "corriendo", "Cancelar con folio anticipado F-138 (corre en GTO)")}
     </div>
     <pre id="log" style={{ fontSize: 10, color: "#666", maxHeight: 120, overflow: "auto" }}>{log.join("\\n")}</pre>
-    {m && ["orden", "corona", "facturada", "stock", "cola", "archivo"].includes(m.k) && <CancelOrderModal key={m.k} order={o} orders={todas} role={ROL} onConfirm={alCancelarOrden} onClose={cerrar} />}
-    {m && (m.k === "factura" || m.k === "remision" || m.k === "anticipada") && <CancelInvoicedModal key={m.k} order={o} actor="admin" onConfirm={alCancelarFacturada} onClose={cerrar} />}
+    {m && !m.folio && ["orden", "corona", "facturada", "stock", "cola", "archivo", "matriz", "ocfolio"].includes(m.k) && <CancelOrderModal key={m.k} order={o} orders={todas} role={ROL} actor={ROL}
+      folioDeLaOC={m.k === "ocfolio" ? "F-200" : null} onIrAConFolio={reason => { anotar("ir-a-folio " + m.k + " " + JSON.stringify(reason)); setM({ k: m.k, folio: true, motivo: reason }); }}
+      onConfirm={alCancelarOrden} onClose={cerrar} />}
+    {m && (m.folio || m.k === "factura" || m.k === "remision" || m.k === "anticipada" || m.k === "corriendo") && <CancelInvoicedModal key={m.k + (m.folio ? "-folio" : "")} order={o} orders={todas} actor="admin" motivoInicial={m.motivo} onConfirm={alCancelarFacturada} onClose={cerrar} />}
     {m && (m.k === "partes" || m.k === "ultima") && <CancelarParteModal key={m.k} order={o} parte={o.splits.find(x => x.id === m.parte)} onConfirm={alCancelarParte} onClose={cerrar} />}
     {m && m.k === "linea" && <MatrixCancelConfirmModal kind="line" line={GRUPO.lines[0]} group={GRUPO} order={ordenes.linea1} oc={OC} orders={todas} onConfirm={alCancelarMatriz} onClose={cerrar} />}
     {m && m.k === "lineaUltima" && <MatrixCancelConfirmModal kind="line" line={GRUPO_ULTIMO.lines[0]} group={GRUPO_ULTIMO} order={ordenes.linea1} oc={OC} orders={todas} onConfirm={alCancelarMatriz} onClose={cerrar} />}
     {m && m.k === "grupo" && <MatrixCancelConfirmModal kind="group" group={GRUPO} oc={OC} orders={todas} onConfirm={alCancelarMatriz} onClose={cerrar} />}
+    {m && m.k === "grupoPagado" && <MatrixCancelConfirmModal kind="group" group={GRUPO_PAGADO} oc={OC} orders={todas} onConfirm={alCancelarMatriz} onClose={cerrar} />}
     {toast && <Toast key={toast.id} message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
   </div>;
 }

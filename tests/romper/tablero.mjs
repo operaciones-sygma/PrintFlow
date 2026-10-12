@@ -982,5 +982,23 @@ await caso("tab-118-vacio-de-verdad-si-lo-dice", "vista=produccion&caso=vacio", 
   const t = await loQueDice(p);
   ok("tab-118-vacio-de-verdad-si-lo-dice", /Tablero vacío/.test(t) && !/Leyendo el tablero/.test(t), `sin órdenes, con la lectura buena: ${/Tablero vacío/.test(t) ? "dice «Tablero vacío»" : "NO lo dice"}`);
 });
+// v10.84.74 (las puertas de cancelar, lo que abre la ventana): el «⋯» de la ficha decía «Cancelar con nota de crédito» (PrintFlow no
+//   emite ninguna) y sus opciones de peligro iban en el rojo y el ámbar de semáforo como TEXTO (4.3:1 y 2.6:1); el del detalle ya iba en
+//   tinta. Como Dirección, todas sus opciones pasan AA (4.5:1).
+await caso("tab-119-el-mas-de-la-ficha-en-tinta", "vista=fichas&rol=admin", async p => {
+  const mas = p.locator('button[title="Más acciones"]').first(); const hay = (await mas.count()) === 1;
+  if (hay) { await mas.click(); await espera(p, 300); }
+  const malos = await p.evaluate(() => {
+    const rgb = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const fondo = el => { for (let n = el; n; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor); if (c.length >= 3 && (c[3] === undefined || c[3] > 0.6)) return c; } return [255, 255, 255]; };
+    return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(el => { const a = lum(rgb(getComputedStyle(el).color)), b = lum(fondo(el));
+      return [el.textContent.trim(), (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)]; }).filter(([, r]) => r < 4.5).map(([t, r]) => t.slice(0, 30) + " " + r.toFixed(1) + ":1");
+  });
+  const nombres = await p.locator('[role="menu"] [role="menuitem"]').allTextContents();
+  ok("tab-119-el-mas-de-la-ficha-en-tinta", hay && nombres.length > 0 && malos.length === 0 && !nombres.some(x => /nota de cr[eé]dito/i.test(x)),
+    hay ? `${nombres.length} opciones · bajo AA: ${malos.join(" · ") || "ninguna"}` : "no hay «⋯» en la ficha");
+});
+
 await browser.close();
 for (const r of res) console.log(r);

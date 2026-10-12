@@ -12,6 +12,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.74 — Las puertas de cancelar, lo que dejó la segunda revisión: las cifras de lo facturado, el teclado que no se sale, la fila de la máquina — 12-oct-2026
+
+**Qué pasaba** (segunda revisión independiente, **27/40** con un P1, `.impeccable/critique/2026-10-12T10-51-20Z__src-app-jsx-cancelar.md`):
+- **[P1] Lo que la base sabe de las facturas sólo lo leía la del folio.** La de la orden, en manos de Dirección con una orden ya facturada,
+  decía «cancela también esas facturas y sus cobros» sin folios ni importes, con una sola factura decía «esas», y recomendaba «Cancelar la
+  parte» aun con la factura agrupada o el plan matriz, donde no hay partes; la de la parte preguntaba «¿Ya está timbrada…?» en una nota gris
+  al FINAL (se leía después de elegir y escribir); la del plan matriz prometía «baja de … a …» sin decir que una timbrada no cambia y decía
+  «Si tenía cobros» con la factura ya PAGADA.
+- **[P2] Mientras decía «Cancelando…», el teclado se salía:** al apagarse el botón el foco caía al `<body>`; con la base lenta, Tab iba a lo
+  de atrás y Enter abrió OTRA ventana de cancelar con la primera trabajando.
+- **[P2] El saldo a favor podía quedar sin saberse:** la respuesta que llegaba después de los 8 s se tiraba (y el botón ya estaba vivo); en
+  la del folio, una falla al leer el saldo no se decía.
+- **[P2] Lo que se dice no era parejo:** la del folio borraba el archivo y avisaba a Lupita y a Karla sin decirlo, y con folio anticipado y la
+  orden corriendo no mencionaba la máquina; y de verdad la dejaba colgada en ella: `cancel_invoiced_order` no toca la fila y el montaje
+  no la sacaba (la orden quedaba cancelada y en la fila). La de la orden ponía «puede deshacerla» junto a «se borra su archivo».
+- **[P2] La puerta equivocada no llevaba a la buena:** si a la de la orden le llegaba un folio, mandaba a «Cancelar con su folio», que en la
+  ficha del tablero se llamaba «Cancelar con nota de crédito», y al cerrar se perdía el motivo.
+- Lo menor: el «⋯» de la ficha en rojo y ámbar de semáforo (4.3:1 y 2.6:1); «Cancelar» de la línea del plan a 9 px y «Cancelar factura» a 10
+  px, «cancelar parte» a 10 px con 3×8 de relleno; «no hay la factura viva»; el campo vivo en las ventanas bloqueadas; el foco en «Volver»
+  aunque lo único obligatorio es el motivo; sin IVA y con IVA mezclados; «mínimo 5 letras» que cuenta cualquier carácter; los avisos de
+  éxito de Corona y de la facturada que no confirmaban el saldo ni las facturas.
+
+**Qué se cambió** (todo en `src/App.jsx`; **la base NO cambió**):
+- **La de la orden, con lo facturado en cifras:** cada parte con su importe con IVA y si está pagada; la factura agrupada y el plan matriz
+  dichos por su nombre (con el plan, «Cancelar línea» en el plan de su OC; «Cancelar la parte» sólo con partes); la factura de toda su OC se
+  lee al abrir (`pf_price_drop_check` con precio 0: en cuánto queda sin esta orden) y, si está timbrada, no deja. De las partes, la agrupada y
+  el plan todavía no hay en la base una lectura de «timbrada» por folio: la ventana dice que la base no deja si alguna lo está (lo frena el
+  puente, con su mensaje). Si le llega un folio, Dirección pasa a «Cancelar con su folio» con el motivo ya escrito. Deshacer dice «pero sin
+  su archivo». El aviso de éxito dice el saldo que regresó y las facturas que cayeron.
+- **La del folio:** dice el archivo, la fila de la máquina y a quién se avisa; App ahora SACA de la fila de su máquina a la orden con folio
+  anticipado que corría (la RPC de la fila, como `cancelOrder`, y se cierra su tiempo); la falla del saldo se dice con «Reintentar»; lo que
+  llega tarde se dice; si el folio cambia se vuelve a leer y si se libera se dice; «no hay una factura viva»; lo cobrado, sin jerga.
+- **La de la parte:** lo de «timbrada» arriba, antes de elegir; qué pasa en CobranzaFlow, si está pagada, que no se deshace; cliente y piezas.
+- **La del plan matriz:** si ya está pagada lo dice, lo timbrado como regla, los importes con IVA (el total con su «sin IVA» entre
+  paréntesis), que no se deshace, y va sobre el plan VIVO de su OC.
+- **El marco:** trabajando, el foco al panel y `aria-busy` («Cancelando… no cierres la ventana.»); el foco abre en el motivo (o en la
+  primera opción) y en «Volver» si está bloqueada; el campo se apaga si está bloqueada; `aria-describedby` en el diálogo y en el botón
+  apagado, que ya no es gemelo de «Volver»; «mínimo 5 caracteres».
+- **Las entradas:** el «⋯» de la ficha dice «Cancelar con su folio» y va en tinta (también Regresar, Devolver saldo y Borrar); los botones
+  del plan matriz y de la lista de partes a 11.5-12 px, en tinta, con su title sin «NC»; el aviso que frena a los demás ya no dice «con nota de crédito».
+
+**Cómo se probó** (tandas `cancelar` y `tablero`):
+- **Vuelta 1:** 15 casos nuevos (can-60 a can-74) y tab-119, escritos ANTES del arreglo: contra v10.84.73 **fallaban los 16**.
+- Con el arreglo fallaron 3: una por `ERR_NO_BUFFER_SPACE` (la red de Windows; pasa sola), y dos que eran de la prueba: `can-22` escribía en
+  el motivo de una factura timbrada, que ahora se apaga a propósito (`can-72` lo mide), y el banco tenía a la orden nueva «corriendo» en la
+  misma máquina y lugar que la de la fila, así que la ventana (con razón) decía que empezaba ésa; se movió a otra máquina. `can-24` buscaba
+  «discrepancia», que se cambió por lo que pasa con el dinero. **170 de 170** en `cancelar`, `partes` 65 de 65 (su banco trae el marco).
+- **Sabotajes** (con el control en verde, 17 casos): el foco que se sale trabajando, el saldo tardío que se tira, la factura de la OC
+  timbrada que no bloquea, el campo vivo bloqueada: **4 de 4 atrapados**.
+- **Sin probar:** que App saque de la fila a la orden con folio (el banco simula lo que hace App al confirmar; la RPC es la de `cancelOrder`).
+
+**Para Marcelo:** una lectura de sólo consulta en la base («¿está timbrado este folio y cuánto se cobró?», por folio) volvería cifra lo que
+hoy la de la orden facturada, la de la parte y la del plan matriz dicen como regla.
+
 ## v10.84.73 — Las puertas de cancelar: un solo marco, y cada una dice lo que hace — 12-oct-2026
 
 **Qué pasaba** (revisión independiente nueva, **18/40**, `.impeccable/critique/2026-10-12T09-00-23Z__src-app-jsx-cancelar.md`; segunda

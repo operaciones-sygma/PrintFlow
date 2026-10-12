@@ -15,7 +15,7 @@ const find = (pred, desc) => { const i = L.findIndex(pred); if (i < 0) throw new
 const line = (re, desc) => L[find(l => re.test(l), desc)];
 const fnBlock = name => { const s = find(l => l.startsWith("function " + name + "("), name); let e = s; while (L[++e] !== "}") { if (e > s + 2000) throw new Error("sin cierre " + name); } return L.slice(s, e + 1).join("\n"); };
 const partes = [
-  `import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";`,
+  `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
   `import { cuadrarPartes } from "../src/lib/cuadrarPartes.js";`,
   line(/^import \{ Broadcast as BroadcastIcon/, "íconos"),

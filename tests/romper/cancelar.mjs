@@ -240,7 +240,8 @@ await caso("can-21 sin «nota de crédito» en el nombre", "", async p => {
   ok("can-21 ni el título ni el botón prometen una nota de crédito (PrintFlow no emite ninguna)", !/nota de cr[eé]dito|\bNC\b/i.test(titulo + " " + b), "«" + titulo + "» · «" + b + "»");
 });
 await caso("can-22 timbrada", "fac=timbrada", async p => {
-  await abrir(p, PUERTAS[1]); await PUERTAS[1].capturar(p); await espera(p, 700); const t = await enLaVentana(p), bs = await botonesQueCancelan(p);
+  // (v10.84.74) con la factura timbrada el campo se apaga (can-72): escribir ya no se puede, y no hace falta para medir
+  await abrir(p, PUERTAS[1]); await PUERTAS[1].capturar(p).catch(() => {}); await espera(p, 700); const t = await enLaVentana(p), bs = await botonesQueCancelan(p);
   ok("can-22 con el CFDI timbrado no deja cancelar y dice que primero se cancela en CobranzaFlow", bs.length === 0 && /timbrad/i.test(t) && /CobranzaFlow/.test(t), JSON.stringify(bs) + " · «" + t.slice(0, 200) + "»");
 });
 await caso("can-23 compartida", "fac=compartida", async p => {
@@ -249,7 +250,8 @@ await caso("can-23 compartida", "fac=compartida", async p => {
 });
 await caso("can-24 cobrada", "fac=cobrada", async p => {
   await abrir(p, PUERTAS[1]); await espera(p, 700); const t = await enLaVentana(p);
-  ok("can-24 si ya tiene cobros, dice cuánto ($30,000.00) y que quedan como discrepancia", /30,000\.00/.test(t) && /discrepancia/i.test(t), "«" + t.slice(0, 220) + "»");
+  // (v10.84.74) «discrepancia» era jerga para quien suple: ahora dice qué se hace con ese dinero (devolverlo o dejarlo a favor)
+  ok("can-24 si ya tiene cobros, dice cuánto ($30,000.00) y qué pasa con ese dinero", /30,000\.00/.test(t) && /devolverlo o dejarlo a favor|discrepancia/i.test(t), "«" + t.slice(0, 220) + "»");
 });
 await caso("can-25 sin timbrar ni cobrar", "", async p => {
   await abrir(p, PUERTAS[1]); await espera(p, 700); const t = await enLaVentana(p);
@@ -371,6 +373,94 @@ await caso("can-50 la otra parte se cancela con la ventana abierta", "", async p
   await p.evaluate(() => { const o = window.__ordenes().partes; window.__cambiar("partes", { splits: o.splits.map(s => s.id === "s2" ? { ...s, cancelled_at: "2026-10-12T09:00:00Z" } : s) }); }); await espera(p, 400);
   const t = await enLaVentana(p), habil = await botonFinal(p).isEnabled();
   ok("can-50 si mientras está abierta la otra parte se cancela, lo dice y pide volver a elegir (antes de cancelar la orden entera)", /cambi/i.test(t) && !habil, "habilitado " + habil + " · «" + t.slice(0, 200) + "»");
+});
+
+// ───────────── la segunda revisión independiente (27/40, sobre v10.84.73)
+// [P2] mientras dice «Cancelando…», el teclado no se sale (con lento=4, Tab iba a lo de atrás y Enter abría OTRA ventana)
+await caso("can-60 el teclado mientras cancela", "lento=4", async p => {
+  await abrir(p, PUERTAS[0]); await PUERTAS[0].capturar(p); await espera(p, 200);
+  await botonFinal(p).click(); await espera(p, 300);
+  const abiertas0 = await cuenta(p, "abrir");
+  for (let i = 0; i < 3; i++) await p.keyboard.press("Tab");
+  await p.keyboard.press("Enter"); await espera(p, 400);
+  const dentro = await enVentana(p), t = await enLaVentana(p).catch(() => "");
+  ok("can-60 mientras cancela, el foco se queda en la ventana (Tab y Enter no abren otra) y dice «Cancelando»", dentro && (await cuenta(p, "abrir")) === abiertas0 && /cancelando/i.test(t),
+    "foco dentro " + dentro + " · ventanas abiertas " + (await cuenta(p, "abrir")) + " (antes " + abiertas0 + ")");
+});
+// [P2] el saldo que contesta tarde se dice y cambia el botón; en la del folio, la falla del saldo se dice
+await caso("can-61 el saldo que llega tarde", "saldo=corona&saldoMs=10000", async p => {
+  await p.click("#abrir-corona"); await espera(p, 11000);
+  const t = await enLaVentana(p), b = await botonFinal(p).innerText();
+  ok("can-61 si el saldo contesta después de los 8 s, la ventana lo dice ($45,200.00) y el botón cambia", /45,200\.00/.test(t) && /saldo/i.test(b), "botón «" + b + "» · «" + t.slice(0, 200) + "»");
+});
+await caso("can-62 el saldo que no se pudo leer, en la del folio", "saldo=falla", async p => {
+  await abrir(p, PUERTAS[1]); await espera(p, 700); const t = await enLaVentana(p);
+  ok("can-62 en la ventana del folio, si no se pudo comprobar el saldo a favor lo dice, con «Reintentar»", /no se pudo comprobar/i.test(t) && /saldo a favor/i.test(t) && /Reintentar/.test(t), "«" + t.slice(0, 260) + "»");
+});
+// [P2] lo que hace además de cancelar, también en la del folio; y deshacer no promete el archivo
+await caso("can-63 la del folio dice archivo, máquina y avisos", "", async p => {
+  await p.click("#abrir-corriendo"); await espera(p, 800); const t = await enLaVentana(p);
+  ok("can-63 la ventana del folio dice que se borra el archivo, que sale de la máquina y a quién se avisa", /arte-final\.pdf/.test(t) && /Printmaster 52/.test(t) && /Karla/.test(t), "«" + t.slice(0, 320) + "»");
+});
+await caso("can-64 deshacer sin el archivo", "", async p => {
+  await abrirOrden(p, "archivo"); await espera(p, 300); const t = await enLaVentana(p);
+  ok("can-64 con archivo, la promesa de deshacer dice que el archivo no regresa", /deshac/i.test(t) && /sin su archivo|archivo no regresa|el archivo ya no/i.test(t), "«" + t.slice(0, 260) + "»");
+});
+// [P2] la puerta equivocada lleva a la buena, con el motivo escrito
+await caso("can-65 de la orden a «Cancelar con su folio»", "rol=admin", async p => {
+  await abrir(p, PUERTAS[0]); await PUERTAS[0].capturar(p); await espera(p, 200);
+  await p.evaluate(() => window.__cambiar("orden", { invoice_folio: "F-160", invoice_type: "factura" })); await espera(p, 400);
+  const ir = capas(p).last().getByRole("button", { name: /Cancelar con su folio/ }); const hay = (await ir.count()) === 1;
+  if (hay) { await ir.click(); await espera(p, 800); }
+  const titulo = await capas(p).last().locator("h3").first().innerText().catch(() => ""), motivo = await p.locator("textarea").first().inputValue().catch(() => "");
+  ok("can-65 si a la de la orden le llega folio, Dirección pasa a «Cancelar con su folio» con el motivo ya escrito", hay && /F-160/.test(titulo) && motivo === "Cliente canceló el pedido",
+    "botón " + hay + " · «" + titulo + "» · motivo «" + motivo + "»");
+});
+// [P1] la orden ya facturada: cada factura con su importe; «Cancelar la parte» sólo con partes; la de la OC se lee
+await caso("can-66 cada factura que cae, con su importe", "rol=admin", async p => {
+  await abrirOrden(p, "facturada"); await espera(p, 300); const t = await enLaVentana(p);
+  ok("can-66 la orden facturada por partes dice cada factura con su importe con IVA ($23,200.00 y $17,400.00) y si ya está pagada", /23,200\.00/.test(t) && /17,400\.00/.test(t) && /pagada/i.test(t), "«" + t.slice(0, 320) + "»");
+});
+await caso("can-67 el plan matriz no manda a «Cancelar la parte»", "rol=admin", async p => {
+  await abrirOrden(p, "matriz"); await espera(p, 300); const t = await enLaVentana(p);
+  ok("can-67 con el plan matriz no recomienda «Cancelar la parte» (no hay partes) y dice dónde se quita la línea", !/Cancelar la parte/.test(t) && /plan/i.test(t) && /OC-0881/.test(t), "«" + t.slice(0, 260) + "»");
+});
+await caso("can-68 la factura de la OC, timbrada", "rol=admin&fac=timbrada", async p => {
+  await abrirOrden(p, "ocfolio"); await espera(p, 600);
+  await p.locator("textarea").first().fill("Cliente canceló el pedido").catch(() => {}); await espera(p, 200);
+  const t = await enLaVentana(p), bs = await botonesQueCancelan(p);
+  ok("can-68 si la factura de toda su OC (F-200) está timbrada, la de la orden lo dice al abrir y no deja", /F-200/.test(t) && /timbrad/i.test(t) && bs.length === 0, JSON.stringify(bs) + " · «" + t.slice(0, 220) + "»");
+});
+// [P1] la parte: lo timbrado, arriba
+await caso("can-69 la parte dice lo timbrado antes de elegir", "", async p => {
+  await abrir(p, PUERTAS.find(x => x.k === "parte")); await espera(p, 300);
+  const orden = await capas(p).last().evaluate(el => { const t = el.innerText; return [t.search(/timbrad/i), t.search(/Al cancelarse/i)]; });
+  ok("can-69 en la de la parte, lo de «timbrada» va ANTES de elegir qué pasa con el dinero", orden[0] >= 0 && orden[1] >= 0 && orden[0] < orden[1], JSON.stringify(orden));
+});
+// [P1] el plan matriz: la factura pagada
+await caso("can-70 la factura del plan ya pagada", "", async p => {
+  await abrirOrden(p, "grupo-pagado"); await espera(p, 300); const t = await enLaVentana(p);
+  ok("can-70 la factura del plan ya pagada lo dice (no «si tenía cobros») y dice lo timbrado", /pagada/i.test(t) && !/si ten[ií]a cobros/i.test(t) && /timbrad/i.test(t), "«" + t.slice(0, 300) + "»");
+});
+// [P3] lo menor que dejó la segunda
+await caso("can-71 sin factura viva, bien dicho", "fac=sinfactura", async p => {
+  await abrir(p, PUERTAS[1]); await espera(p, 700); const t = await enLaVentana(p);
+  ok("can-71 sin factura viva no dice «no hay la factura viva»", !/no hay la/i.test(t) && /no hay una factura viva/i.test(t), "«" + t.slice(0, 200) + "»");
+});
+await caso("can-72 bloqueada, el campo no se escribe", "fac=timbrada", async p => {
+  await abrir(p, PUERTAS[1]); await espera(p, 700);
+  const apagado = await p.locator("textarea").first().isDisabled(), foco = await p.evaluate(() => (document.activeElement?.textContent || document.activeElement?.tagName || "").trim().slice(0, 20));
+  ok("can-72 con la factura timbrada, el campo del motivo está apagado y el foco en «Volver»", apagado && /Volver/.test(foco), "apagado " + apagado + " · foco en «" + foco + "»");
+});
+await caso("can-73 el foco abre en el motivo", "", async p => {
+  await abrir(p, PUERTAS[0]);
+  const tag = await p.evaluate(() => document.activeElement?.tagName);
+  ok("can-73 en la de la orden el foco abre en el motivo (lo único que hay que escribir)", tag === "TEXTAREA", "foco en " + tag);
+});
+await caso("can-74 el aviso dice lo que regresó", "saldo=corona", async p => {
+  await abrirOrden(p, "corona"); await espera(p, 300); await p.locator("textarea").first().fill("Cliente canceló el pedido"); await espera(p, 200);
+  await botonFinal(p).click(); await espera(p, 900); const t = await texto(p);
+  ok("can-74 el aviso de éxito de la de Corona dice el saldo que regresó ($45,200.00)", /cancelada/i.test(t) && /45,200\.00/.test(t), "«" + t.slice(-160) + "»");
 });
 
 await browser.close();
