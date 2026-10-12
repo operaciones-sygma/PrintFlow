@@ -62,6 +62,12 @@ de salir y el mensaje de la cantidad 0), arreglados y con su caso. Sabotajes con
 `orden` 90 de 90. **Sin probar en banco:** los otros cuatro usos de `ClientInput` (se revisan en producción sin escribir) y el atajo N
 (App; su código lo revisa ord-147).
 
+**En producción** (12-oct, ~12:55): READY `dpl_4mBCBWBsDXFUYJwXXJx4D4AMQ8us` (commit `d08a1f1`), candado 1111 de 1111. Vuelta atrás:
+promover `dpl_3RM7998GgLVsCFmrMJgCtn1qQGWr` (el código de v10.84.77) o `git revert d08a1f1`. Revisado sin escribir contra
+produccion.sygma.mx (la cuenta de pruebas, las escrituras cortadas), 5 de 5: el cliente con flechas y Enter, «1.5» se ve con su porqué,
+«Cancelar» y el menú preguntan (y «Salir sin guardar» sale), y en «Nueva OC» el buscador compartido también responde al teclado.
+Sin revisar en producción: «Facturar a», «Mover orden» y «Unir clientes» (el mismo buscador; sólo se le agregó teclado).
+
 **Para Marcelo:** nada que decidir. Sigue v10.84.79, el reacomodo (lo esencial en la primera pantalla de la laptop).
 
 ## v10.84.77 — La forma de la orden: guardar no pierde ni duplica, la × no borra, y la orden facturada no deja tocar lo que no guarda — 12-oct-2026

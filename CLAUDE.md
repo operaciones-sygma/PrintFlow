@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1063 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1111 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,7 +171,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.77 (12-oct, 11:11; READY `dpl_BdXffMrLRY1xHDnwdxCmS2r2JdNJ`, commit `c65326d`; vuelta atrás: promover
+- **LIVE:** v10.84.78 (12-oct, ~12:55; READY `dpl_4mBCBWBsDXFUYJwXXJx4D4AMQ8us`, commit `d08a1f1`; vuelta atrás: promover
+  `dpl_3RM7998GgLVsCFmrMJgCtn1qQGWr` (el código de v10.84.77) o `git revert d08a1f1`; la base no cambió; 1111 pruebas). v10.84.78: **los P2
+  de la critique de OrderForm**: salir con algo capturado pregunta (decisión de Marcelo; 🔑 una forma larga se registra en `FORMA_ABIERTA` y
+  todo lo que la cambia pasa por `salirDeLaForma`), Replicar sólo llena lo vacío, los números se ven como se escribieron, teclado
+  (`ClientInput` es combobox: cinco pantallas), y AA medido texto por texto (🔑 `wnTx`/`okTx` para texto sobre el gris `C.sf`).
+  v10.84.77 (12-oct, 11:11; READY `dpl_BdXffMrLRY1xHDnwdxCmS2r2JdNJ`, commit `c65326d`; vuelta atrás: promover
   `dpl_E3uK64f6DW85YVkUQS2m3RJzfwZv` (el código de v10.84.76) o `git revert c65326d`; la base no cambió; 1063 pruebas). **La forma de la
   orden (OrderForm) en `/impeccable critique`: revisor independiente 22/40, 3 P1, los tres hechos en v10.84.77** (snapshot
   `.impeccable/critique/2026-10-12T16-15-36Z__src-app-jsx-orderform-formulario-orden-nueva.md`): guardar con la base que falla ya no
