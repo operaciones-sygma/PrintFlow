@@ -59,6 +59,15 @@ el pie). Sabotajes con un control sin defecto: 15 de 15 atrapados (cuatro despu�
 1920, 1536, 1093 y 683: el acomodo esperado, sin brincar al abrir, nada cortado, nada a lo ancho; a 683 el menú se pliega solo y su botón
 lo abre y lo cierra. Con el cambio: `orden` 114 de 114.
 
+**En producción** (12-oct, ~14:28): READY `dpl_Gq5TmDVv3Gm1SYxonyd7MyKdXiVU` (commit `11c0140`), candado 1135 de 1135 (24 nuevas). Una
+INESTABLE, `tablero/tab-117`: `ERR_NO_BUFFER_SPACE` (Windows sin espacio de sockets con las 18 tandas en paralelo); sola pasa 3 de 3, no es
+la app ni la prueba, revisada y marcada. Vuelta atrás: promover `dpl_4dmg5XSrao5DAovfBgzv1GskQwrT` (el código de v10.84.78) o
+`git revert 11c0140`. Revisado sin escribir contra produccion.sygma.mx (la cuenta de pruebas, las escrituras cortadas): la forma con
+`.banco-revisor-orden/medir-79b.mjs`, 7 de 7 (a 1366 con el menú abierto una columna y plegado dos; 1920 y 1536 dos; 1093 y 683 una; sin
+brincar al abrir, nada cortado con valores reales, nada a lo ancho; a 683 el menú plegado solo, y su botón lo abre y lo cierra), y
+`npm run recorrido` (8 roles, 94 pasos): nada truena. Sin revisar en producción: «Specs» de una orden de verdad (el banco lo cubre:
+ord-166, 172 y 184).
+
 **Para Marcelo:** nada que decidir aquí. Sigue la segunda revisión independiente de la forma (un agente; se pide antes, con su costo).
 
 ## v10.84.78 — La forma de la orden: lo capturado no se pierde ni cambia sin aviso, se usa con teclado y se lee — 12-oct-2026

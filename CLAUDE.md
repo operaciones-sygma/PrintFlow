@@ -102,7 +102,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1111 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1135 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Se activa una vez por copia: `git config core.hooksPath .githooks`.
@@ -171,7 +171,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.78 (12-oct, ~12:55; READY `dpl_4mBCBWBsDXFUYJwXXJx4D4AMQ8us`, commit `d08a1f1`; vuelta atrás: promover
+- **LIVE:** v10.84.79 (12-oct, ~14:28; READY `dpl_Gq5TmDVv3Gm1SYxonyd7MyKdXiVU`, commit `11c0140`; vuelta atrás: promover
+  `dpl_4dmg5XSrao5DAovfBgzv1GskQwrT` (el código de v10.84.78) o `git revert 11c0140`; la base no cambió; 1135 pruebas). v10.84.79: **el
+  reacomodo de OrderForm**: lo esencial en la primera pantalla de la laptop, dos columnas desde 1150 px de forma (1040 en «Specs»; 🔑 un
+  solo árbol para los dos acomodos, sólo cambia el CSS), «Más de esta orden» para lo que se usa poco, `VIEW_MAXW.form` 1212 (con 820 las
+  dos columnas nunca salían) y el menú lateral que se pliega solo abajo de 900 px. 🔑 **El banco de la forma copia de App el contenedor y
+  el menú lateral** (`gen-orden.mjs`): con uno propio medía otra pantalla. Sigue la segunda revisión independiente de la forma.
+  v10.84.78 (12-oct, ~12:55; READY `dpl_4mBCBWBsDXFUYJwXXJx4D4AMQ8us`, commit `d08a1f1`; vuelta atrás: promover
   `dpl_3RM7998GgLVsCFmrMJgCtn1qQGWr` (el código de v10.84.77) o `git revert d08a1f1`; la base no cambió; 1111 pruebas). v10.84.78: **los P2
   de la critique de OrderForm**: salir con algo capturado pregunta (decisión de Marcelo; 🔑 una forma larga se registra en `FORMA_ABIERTA` y
   todo lo que la cambia pasa por `salirDeLaForma`), Replicar sólo llena lo vacío, los números se ven como se escribieron, teclado
