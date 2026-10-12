@@ -40,6 +40,10 @@ Con el cambio: `cancelar` 185 de 185 y `partes` 65 de 65 (una corrección de la 
 también sale en un comentario). **Sin probar:** el aviso real (lo manda App; el banco lo imita) y el archivado contra la base (corre
 una vez al día en una sesión de Dirección).
 
+**En producción** (12-oct, 08:45): READY `dpl_B6BQ1X73ZZtfy3iMqjNN5uqhnnD7` (commit `04066e6`), candado 1021 de 1021. Vuelta atrás:
+promover `dpl_Cy75fdkUcn6WxypyzzyPEAvsZvAJ` (el código de v10.84.75) o `git revert 04066e6`. Revisado sin escribir: el código servido ya no
+trae «Se borra su archivo» ni «sin su archivo» y sí el aviso `por_facturar`; `ventanas-encima` contra produccion.sygma.mx, 3 de 3.
+
 ## v10.84.75 — Las puertas de cancelar, lo que dejó la tercera revisión (la que cierra): abren desde arriba y el botón dice lo mismo — 12-oct-2026
 
 **Qué pasaba** (tercera revisión independiente, **28/40** «Bueno», `.impeccable/critique/2026-10-12T11-43-51Z__src-app-jsx-cancelar.md`; la
