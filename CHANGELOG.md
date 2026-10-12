@@ -70,6 +70,14 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
   cuentas del mismo dato (el aviso calculaba su «cobrar», el botón el suyo): ahora una.
 - Las ventanas que también usan el selector de pagos: `oc` y `partes` completas, sin regresiones. **Sin probar:** la venta en bloque de
   Cuadra (`BulkSellModal`, usa el selector y no tiene banco).
+- **El candado**: el primer intento frenó por UNA prueba (`oc-46`, de la tanda de dinero `oc`, sin segunda oportunidad) que se cayó con
+  `net::ERR_NO_BUFFER_SPACE` (Windows sin búfer de sockets con las 16 tandas a la vez; la sesión de CobranzaFlow lo vio en esta PC el
+  9-oct). La tanda `oc` sola: 112 de 112. El segundo intento: **835 de 835** contra la base del 9-oct (la corrida doble), sin regresiones.
+
+**En producción** el 12-oct a las 02:34: READY `dpl_3nUz9Q9Hh9ywsVttkHwjgsXSYi8Y` (commit `8501145`). Vuelta atrás: `git revert 8501145` (el
+commit de docs ocupa el rollback de un clic; el código de v10.84.71 está en `dpl_AtcLJFbJe8EpTMjfUaaPWCSdvQdq`); la base no cambió.
+Revisado sin escribir: producción sirve `index-C6o0L4BG.js`, el mismo que compiló el candado; `tests/recorrido/ligar-anticipo.mjs` y
+`tests/recorrido/sesion.mjs` contra produccion.sygma.mx, todo BIEN.
 
 ## v10.84.71 — La sesión: nadie sale de todas las estaciones por un corte de red, y la que se cierra sola lleva a entrar diciendo por qué — 9-oct-2026
 
