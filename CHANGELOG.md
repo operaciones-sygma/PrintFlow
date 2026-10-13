@@ -69,6 +69,17 @@ La inestable del primer candado (`ctp-db-placas-unicas`, «fetch failed» de la 
 base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón: el botón ya no sale)
 y `BulkSellModal` (sin banco: el mismo arreglo, letra por letra, que los otros cuatro).
 
+**En producción** (13-oct, ~14:35): READY `dpl_qUGQFZxZo3yBzHstXydm1kPKyyTh` (commits `5976ef4`, `334abfc`, y las pruebas `826b08c` y `5301453`), candado
+1403 de 1403 al SEXTO intento, de a 2 tandas: el 1.º frenó por inv-29 (el bug de arriba) y una inestable de la red
+(`ctp-db-placas-unicas`); el 2.º, por la carga de otra sesión corriendo sus tandas al arranque (can-21b y det-04 no cargaron su página;
+solas pasan 3 de 3; det-04 y det-30 revisadas); el 3.º, por inv-29 otra vez (era la prueba); el 4.º, por un `ERR_NO_BUFFER_SPACE` al
+cargar det-97 (sola pasa 2 de 2); el 5.º, por ord-235 (era la prueba). La PC estaba al límite de memoria (97 de 99 GB comprometidos, 0.7
+GB libres; ~73 GB los retenía algo en segundo plano): Marcelo la reinicia después de esto. Vuelta atrás: promover `dpl_7y59AYsgagrsSG1gHa2c7oPrXYcn` (el código de
+v10.84.89) o `git revert 334abfc 5976ef4`; la base no cambió (la migración del candado de «Dividir» sigue sin aplicar). **Revisado contra
+producción** (`.banco-revisor-orden/medir-90.mjs`, cuenta `visor` como Karla, escrituras cortadas; P-0609 de OC-0929): Esc en el mismo
+instante del clic final ni pregunta ni cierra; el clic intentó UNA escritura (`assign_invoice`, cortada: nada se asignó) y el rechazo se
+dice dentro del diálogo; dos clics en el mismo instante, también una; sin errores de la app.
+
 ## v10.84.89 — Ligar una PARTE a una factura que ya existe: en el plan de la OC y antes de Salidas — 13-oct-2026
 
 **Qué pasaba** (Karla, 13-oct: *«que la OC funcione como lo hace facturar por partes, donde hay una opción que dice ya hay una

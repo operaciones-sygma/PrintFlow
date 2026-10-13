@@ -180,7 +180,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.89 (13-oct, ~12:05; READY `dpl_8JSJ1qNU1wUetDLuhkocx5NeHfwP`, commit `3c0fd92`; vuelta atrás: promover
+- **LIVE:** v10.84.90 (13-oct, ~14:35; READY `dpl_qUGQFZxZo3yBzHstXydm1kPKyyTh`, commits `5976ef4` y `334abfc` (+ pruebas `826b08c`, `5301453`); vuelta atrás: promover
+  `dpl_7y59AYsgagrsSG1gHa2c7oPrXYcn` (el código de v10.84.89) o `git revert 334abfc 5976ef4`; 1403 pruebas; el candado, de a 2 tandas si la PC va justa de memoria). v10.84.90: el folio anticipado y «Facturar por
+  partes», una u otra por orden (la que ya va por partes, en el plan o agrupada no ofrece «Asignar folio anticipado»); 🔑 **«ocupado»
+  desde el clic** en cinco diálogos de dinero (`InvoiceModal`, `PreInvoiceModal`, `DeliverOnlyModal`, `PriceCaptureModal`, `BulkSellModal`):
+  la ref la ponía un efecto después de pintar y dos clics en el mismo instante mandaban DOS asignaciones (lo vio el candado: inv-29 con la
+  máquina cargada). El candado del anticipo en «Dividir» (migración `v10.84.90_candado_del_anticipo_en_dividir.sql`) va ENSAYADO (9 casos)
+  y SIN APLICAR: el modo automático no dejó escribir en la base; falta el OK de Marcelo. Sigue: v10.84.91 (la categoría; su base, de noche).
+  v10.84.89 (13-oct, ~12:05; READY `dpl_8JSJ1qNU1wUetDLuhkocx5NeHfwP`, commit `3c0fd92`; vuelta atrás: promover
   `dpl_FxRPNKyZQ4eKceZQhkMzpcMsagj6` (el código de v10.84.88) o `git revert 3c0fd92`; 1390 pruebas). v10.84.89: 🔑 **ligar una PARTE a una
   factura que ya existe** (Karla: F-143 y F-155 de PORTLAND cubren, cada una, un pedazo de los 4 stickers de OC-0960): el plan matriz de la
   OC liga por columna («Ya tiene factura: ligarla», «Lo que falta»; la base: `oc_invoice_split_groups.ligada`, migración
