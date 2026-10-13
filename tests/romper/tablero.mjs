@@ -395,7 +395,8 @@ await caso("tab-45-la-que-corre-dice-corriendo", "vista=produccion", async p => 
   ok("tab-45-la-que-corre-dice-corriendo", /P-0591[^P]*Printmaster 74, corriendo/.test(t), `P-0591 vencida y corriendo en la PM74: «${(t.match(/P-0591[^P]*/) || ["(no está)"])[0].trim()}»`);
 });
 await caso("tab-46-reloj-de-hoy-sigue-en-horas", "vista=produccion", async p => {
-  await p.evaluate(() => window.__cambiar("P-0585", { machine_log: [{ machine: "vm_manual", started: new Date(Date.now() - 5 * 60000).toISOString() }] })); await espera(p, 600);
+  // v10.84.83 — hace 5 minutos, pero HOY: a las 00:01 eso es ayer y la app dice (bien) «desde ayer 23:56» (el candado del 13-oct falló así)
+  await p.evaluate(() => window.__cambiar("P-0585", { machine_log: [{ machine: "vm_manual", started: new Date(Math.max(Date.now() - 5 * 60000, new Date().setHours(0, 0, 0, 0))).toISOString() }] })); await espera(p, 600);
   const t = await textoFicha(p, "P-0585");
   ok("tab-46-reloj-de-hoy-sigue-en-horas", /\b\d+m\b/.test(t) && !/desde /.test(t), `P-0585 con 5 minutos en Empaque: «${(t.match(/desde [^·]*|\d+h \d+m|\b\d+m\b/) || ["(sin reloj)"])[0].trim()}»`);
 });

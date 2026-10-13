@@ -39,6 +39,9 @@ const VISTA = Q.get("vista") || "planta", CASO = Q.get("caso") || "normal", FALL
 const OC_VISTA = Q.get("oc") || "OC-0657", BUSCAR = Q.get("buscar") || "";
 // fechas relativas a hoy (la fecha LOCAL), para que «ayer» y «hoy» no cambien con la hora en que se corre
 const hace = h => new Date(Date.now() - h * 3600000).toISOString();
+// v10.84.83 — lo que empezó HOY hace h horas, sin pasar antes de la medianoche: «hace media hora» a las 00:09 es ayer, la app dice (bien)
+//   «desde ayer 23:39» y pla-07, que pide el reloj de hoy, fallaba entre las 00:00 y las 00:30 (el candado del 13-oct, 00:09)
+const deHoyHace = h => new Date(Math.max(Date.now() - h * 3600000, new Date().setHours(0, 0, 0, 0))).toISOString();
 const ayerA = (hh, mm) => { const x = new Date(); x.setDate(x.getDate() - 1); x.setHours(hh, mm, 0, 0); return x.toISOString(); };
 const haceDias = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() - d); x.setHours(hh, mm, 0, 0); return x.toISOString(); };
 const hoyA = (hh, mm) => { const x = new Date(); x.setHours(hh, mm, 0, 0); return x.getTime() > Date.now() ? hace(1) : x.toISOString(); };
@@ -74,7 +77,7 @@ const NORMAL = [
   enMaquina("P-0722", "off_pm52", 1, hace(6), { client: "IMPRENTA LEON", product_type: "Libretas", quantity: 60 }),
   enMaquina("P-0723", "dig_xerox252", 0, hace(2), { client: "CABLESERV", product_type: "Tarjetas de presentación", quantity: 500,
     snooze_reason: "Esperando material o insumo para continuar", snooze_stage: "in_production", snoozed_by: "produccion", snooze_kind: "material", snoozed_at: hace(1) }),
-  enEmpaque("P-0731", hace(0.5), { client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN PÚBLICA DEL ESTADO", product_type: "Reconocimientos con folio consecutivo y holograma", quantity: 1200 }),
+  enEmpaque("P-0731", deHoyHace(0.5), { client: "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN PÚBLICA DEL ESTADO", product_type: "Reconocimientos con folio consecutivo y holograma", quantity: 1200 }),
   // (vuelta 2) en producción sin máquina, sin cliente, sin producto y sin cantidad: datos a medias que sí existen
   en("P-0732", "in_production", hace(7), { client: null, product_type: null, product: null, quantity: 0, current_machine: null, machine_queue_position: null }),
   // todavía no llegan a máquina (sin botón)
