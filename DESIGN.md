@@ -651,3 +651,7 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   pantalla, y se compara contra un periodo del mismo largo, diciendo cuál. El dinero es lo ENTREGADO por su fecha de entrega
   (`precioVenta`). Los montos van en Geist Mono y en tinta; el color se queda para los estados (a tiempo / tarde). Un selector de periodo es
   un grupo de radios (una sola parada de Tab, flechas para moverse); unas pestañas, `tablist`/`tab`/`aria-selected`.
+- **Todo botón que mueve una orden pone el escudo** (v10.84.87, la critique de «Mis Pendientes»): una lista que se reacomoda al actuar
+  (la ficha sale, o cambia de botones) deja bajo el cursor otra cosa, y el segundo clic de un doble clic la mueve. `escudoDeClics` antes de
+  actuar, en el componente que pinta los botones (`StageFlowButtons`), no en cada pantalla. Y una lista sin una lectura buena no dice
+  «sin pendientes»: dice que está leyendo o que no pudo.

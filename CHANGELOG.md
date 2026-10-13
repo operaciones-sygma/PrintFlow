@@ -12,6 +12,47 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.87 — «Mis Pendientes»: el doble clic ya no mueve otra orden, y sin leer no dice «Sin pendientes» — 13-oct-2026
+
+**Qué pasaba** (la critique de «Mis Pendientes», revisor independiente, **17/40**; snapshot
+`.impeccable/critique/2026-10-13T12-33-38Z__src-app-jsx-mis-pendientes.md`; informe en `.banco-revisor-orden/revisor-pendientes/`):
+- **P0, medido en vivo:** un doble clic en «Validar Producción» de P-0633 validó también P-0632, que se saltó CTP (con las escrituras
+  cortadas: no se escribió nada; comprobado después en la base). La ficha que avanza sale de la lista, o cambia de botones, y el segundo clic
+  cae en lo que queda bajo el cursor: en el banco, «Empaque» y luego «Regresar» de la misma orden. Los botones de etapa de la ficha
+  (`StageFlowButtons`, los de Pendientes y del tablero) no ponían el escudo; el detalle sí, desde v10.84.54.
+- **P1:** con la base caída (o leyendo), la lista decía «¡Sin pendientes!» con la palomita verde, y el menú «Pendientes (0)»: la regla 12
+  (un error de lectura no es vacío). El menú, además, contaba lo en espera: Karla veía «Pendientes (25)» con 10 activas.
+- **P2:** guías que ya no eran ciertas: las series D-/R- (hoy F-/RS-, en cada ficha de Karla y en su pista), «borra el viejo» y «Borra
+  el documento anterior» a Noemí (el archivo se queda como historial desde el 12-oct), y a Germán «te pedirá cuántas placas» (se retiró en
+  v10.81.0) y «la lista izquierda».
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- `StageFlowButtons` pone `escudoDeClics(500)` antes de cada acción: el segundo clic de un doble clic no llega a nada, en las fichas de
+  Pendientes y del tablero.
+- Sin una lectura buena, Pendientes dice «Leyendo tus pendientes…» o «No se pudieron leer tus pendientes» (el aviso de arriba trae
+  «Reintentar»), sin palomita ni cifras; el menú dice «Pendientes» sin número. Con lectura, el número del menú son las activas (el mismo
+  del título), y el vacío dice «Sin pendientes» sin signos de exclamación.
+- Las guías y las pistas, con lo que de verdad pasa.
+
+**Cómo se probó:** **vuelta 1**, escrita antes del cambio: `tab-120` (el banco del tablero, la vista de fichas) contra v10.84.86 daba
+**dos acciones** con un doble clic en «Empaque» (avanzar y «Regresar»); `tests/recorrido/lectura-falla.mjs` (escenario B, la app real
+contra producción, que tenía v10.84.86) decía «Sin pendientes» y «Pendientes (0)» con la primera lectura caída. Con el cambio: una acción;
+y «No se pudieron leer tus pendientes», «Pendientes» sin número, «Reintentar» lo lee (3 de 3, en la compilada). **Vuelta 2**: dos Enter
+seguidos sobre el botón (`tab-121`): una acción (el foco sale del botón al avanzar; la prueba se queda). **Sabotaje**: sin el escudo,
+`tab-120` lo caza. La tanda del tablero, 133 de 133. **La app REAL compilada** (`.banco-revisor-orden/medir-87.mjs`, 2 entradas): el doble
+clic de Gerardo en «Validar Producción» intenta UNA escritura (cortada); el menú de Karla dice «Pendientes (10)», igual que su título.
+**Sin probar:** la ficha con «Deshacer», y que la ficha pregunte (ver abajo).
+
+**Para Marcelo (decisiones de la critique, no las tomé solo):**
+- **«Te toca» y «Espera a otro»** (el P1 de fondo): Noemí ve 3 pendientes que ella ya validó; Lupita, 3 de 4 que esperan a otros;
+  Gerardo, 19 de 22 que dicen «Arrastra… en el Tablero». La propuesta: partir la lista en lo que te toca (con una acción) y lo que espera a
+  otro (plegado), y lo en espera en una línea.
+- **Karla tiene dos colas** (Pendientes y «Folios», que es mejor): ¿Pendientes lleva a Folios?
+- **Germán no puede mandar a CTP sin arrastrar** (ni teclado ni tableta): ¿un botón «A CTP» en la ficha?
+- **Los colores de los botones de la ficha** (reprueban AA: «Asignar Folio y Entregar» 3.05:1) cambian también el tablero, que en v10.84.46
+  se dejó como estaba a propósito: ¿la ficha toma el criterio del detalle (una acción rellena en su tinta, las demás teñidas)?
+- **¿La ficha pregunta antes de «Cliente Aprobó» y «Pide Cambios»**, como el detalle (v10.84.55 decidió que los botones del tablero no)?
+
 ## v10.84.86 — Analytics: la venta de inventario se nombra por su folio, no por su uuid — 13-oct-2026
 
 **Qué pasaba** (lo encontró la revisión de v10.84.85 en producción, no el banco): al desplegar «Venta de inventario», sus órdenes salían

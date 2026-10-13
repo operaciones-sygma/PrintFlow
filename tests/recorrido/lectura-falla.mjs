@@ -110,6 +110,14 @@ try {
     const t = await texto(p), malo = ["Tablero vacío", "libres", "trabajando"].filter(x => t.includes(x));
     await p.screenshot({ path: path.join(OUT, "B1-primera-falla.png") });
     ok("B · la primera lectura falla: el tablero lo dice, no dice «vacío»", dice && malo.length === 0, (dice ? "dice «No se pudo leer el tablero»" : "NO lo dice") + (malo.length ? "; y dice " + malo.map(x => "«" + x + "»").join(", ") : ""));
+    // v10.84.87 — «Mis Pendientes» con la primera lectura caída: ni «Sin pendientes» con su palomita, ni «Pendientes (0)» en el menú
+    //   (critique de «Mis Pendientes», P1-A; la regla 12: un error de lectura no es vacío)
+    await ir(p, "Pendientes"); await p.waitForTimeout(800);
+    const tp = await texto(p), titulo = await p.evaluate(() => ([...document.querySelectorAll("button[title]")].find(x => /^Pendientes/.test(x.getAttribute("title") || ""))?.getAttribute("title")) || "");
+    await p.screenshot({ path: path.join(OUT, "B2-pendientes.png") });
+    ok("B · Pendientes sin leer no dice «Sin pendientes» ni cuenta 0", !/Sin pendientes/.test(tp) && /No se pudieron leer tus pendientes/.test(tp) && !/\(0\)/.test(titulo),
+      (/Sin pendientes/.test(tp) ? "dice «Sin pendientes»" : "no dice «Sin pendientes»") + "; " + (/No se pudieron leer tus pendientes/.test(tp) ? "dice que no se pudieron leer" : "NO dice que no se pudieron leer") + "; el menú dice «" + titulo + "»");
+    await ir(p, "Tablero");
     estado.rompe = null;
     const re = p.getByRole("button", { name: "Reintentar" }).first();
     if (await re.count()) { await re.click(); const n = await esperaFichas(p); ok("B · «Reintentar» lo lee", n > 0, n + " fichas"); }

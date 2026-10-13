@@ -1001,5 +1001,25 @@ await caso("tab-119-el-mas-de-la-ficha-en-tinta", "vista=fichas&rol=admin", asyn
     hay ? `${nombres.length} opciones · bajo AA: ${malos.join(" · ") || "ninguna"}` : "no hay «⋯» en la ficha");
 });
 
+// v10.84.87 — la ficha suelta (la de «Mis Pendientes»): el doble clic movía otra orden o la misma dos veces (critique de «Mis
+//   Pendientes», su P0, medido en vivo: P-0633 → P-0632). Aquí, al pasar a Empaque, la misma ficha pone «Enviar a Salidas» bajo el cursor.
+await caso("tab-120-ficha-doble-clic-una-sola-accion", "vista=fichas&rol=produccion", async p => {
+  const b = await botonDe(p, "P-0595", /Empaque/);
+  await b.dblclick(); await espera(p, 1200);
+  const acciones = (await log(p)).match(/accion:[a-z_]+ P-\d+[^\n]*/g) || [];
+  ok("tab-120-ficha-doble-clic-una-sola-accion", acciones.length === 1 && /accion:advance P-0595 packaging/.test(acciones[0]),
+    `doble clic en «Empaque» de la ficha de P-0595: ${acciones.length} acción(es) [${acciones.join(" | ")}] (debe ser una: el segundo clic no llega a nada)`);
+});
+
+// v10.84.87 — vuelta 2: lo mismo con el teclado. Enter dos veces seguidas en «Empaque» de la ficha: el foco se queda en el botón, que
+//   ahora dice «Enviar a Salidas» (o «Regresar»); el escudo es para el mouse.
+await caso("tab-121-ficha-doble-enter-una-sola-accion", "vista=fichas&rol=produccion", async p => {
+  const b = await botonDe(p, "P-0595", /Empaque/);
+  await b.focus(); await p.keyboard.press("Enter"); await p.keyboard.press("Enter"); await espera(p, 1200);
+  const acciones = (await log(p)).match(/accion:[a-z_]+ P-\d+[^\n]*/g) || [];
+  ok("tab-121-ficha-doble-enter-una-sola-accion", acciones.length === 1 && /accion:advance P-0595 packaging/.test(acciones[0]),
+    `Enter dos veces en «Empaque» de la ficha de P-0595: ${acciones.length} acción(es) [${acciones.join(" | ")}] (debe ser una)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
