@@ -69,6 +69,21 @@ categoría (el `GRANT UPDATE (categoria)`), ninguna OC cambia de total, y la tra
 lleva). Acuses: Almacén (sus dos vistas leen `orders` sin `o.*`; no escribe `orders`), el Cotizador (revisado su código: no toca `orders`;
 sin sesión abierta) y CobranzaFlow (visto bueno). Contra la base ya migrada, la tanda `categorias` 10 de 10.
 
+**En producción** (13-oct, ~17:57): READY `dpl_H9dAw2HPjr6KagmQQzAVyGUFmVMY` (commit `5c5df72`; la pantalla, `6bf0057` y `03ebdf1`),
+candado 1442 de 1442 a la primera (35 nuevas), de a 2 tandas, 23 min. Vuelta atrás: promover `dpl_DvkAFCUkdVXHDPbhvy3KgQdaJB4g` (el código
+de v10.84.92) o `git revert 03ebdf1 6bf0057`; la base se queda (esa pantalla corrió media hora contra la base migrada: no manda la
+categoría y el disparador la pone).
+
+**Revisado contra producción** (`.banco-revisor-orden/medir-91.mjs`, cuenta `visor`, el rol sólo en el navegador, escrituras cortadas):
+13 de 13. La forma (secretaria): «Categoría *» con las 13 de la lista; «ETIQUETAS ADHERIBLES» la sugiere (Etiquetas) con su nota; la
+elegida a mano no se pisa al cambiar el nombre; «Crear Orden» sin categoría dice «Falta la categoría» y no escribe; 1366 y 1920 sin
+desbordarse. El detalle de P-0621 dice «Libretas, cuadernos y agendas». Analytics (Dirección): «Ingreso por categoría» con los nombres de la
+lista, cada renglón abre sus órdenes, 1366 y 1920 sin desbordarse. Sin errores ni diálogos nativos. Dos fallas de la primera corrida eran
+de la revisión: la etiqueta va en mayúsculas por CSS, y como admin la app entra a «Torre» (P-0621 se busca en «Todas»). Lo único cortado:
+las alertas de estancadas que toda sesión de admin manda sola (`checkStale`), que no son de esta versión.
+**Para Marcelo:** P-0636 «ENGOMADOS MUNICIPIO» cayó en «Otro» (la regla de etiquetas no conoce «engomado»); Lupita la puede cambiar en la
+forma. Si quieres que la regla lo sepa, es un cambio a `src/lib/categorias.js` y a la función de la base (se ensaya).
+
 ## v10.84.92 — Quién paga, a la vista en el plan matriz (el caso Hotsson) — 13-oct-2026
 
 **Qué pasaba** (Marcelo, 13-oct, Karla con Genaro: las órdenes de Hotsson, varios productos, van en UNA OC que se factura en 7 facturas

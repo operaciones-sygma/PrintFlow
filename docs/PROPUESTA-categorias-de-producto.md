@@ -1,5 +1,9 @@
 # Propuesta: la categoría del trabajo (para Analytics)
 
+> **Estado (13-oct-2026, noche): APROBADA y en producción como v10.84.91.** Marcelo aprobó la lista y las recomendaciones (la categoría
+> obligatoria al capturar, con la sugerida puesta). La base se aplicó el 13-oct ~17:27 y la pantalla salió ~17:57 (ver el CHANGELOG). La
+> lista y sus reglas viven ahora en `src/lib/categorias.js`; lo de abajo es la propuesta tal como se aprobó (sus cifras, del 13-oct).
+
 **Para Marcelo · 13-oct-2026.** Lo decidiste el 12-oct («Categoría nueva aparte»): el campo de hoy («Tipo de producto», que en la
 práctica es el nombre del trabajo) se queda como está y se agrega una **categoría de lista cerrada** que alimenta las barras de Analytics;
 la historia se clasifica una vez; «stock» va aparte como canal; y se limpia «🔴 ATRASADA · » de las 37 importadas. **Antes de tocar la

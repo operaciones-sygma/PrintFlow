@@ -25,7 +25,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 
 - **Frontend:** React 18 + Vite, **un solo archivo** `src/App.jsx` (~20,000 líneas). Estilos inline con
   el objeto `C`; sin CSS externo ni Tailwind. Módulos aparte sólo cuando hay que probarlos con Node
-  (`src/lib/cuadrarPartes.js`).
+  (`src/lib/cuadrarPartes.js`; desde v10.84.91 `src/lib/categorias.js`: la lista de categorías y sus reglas, una sola vez para la
+  forma y para la base, que las recibe por `scripts/categorias-sql.mjs`).
 - **Hosting:** Vercel auto-deploy desde `main` → `print-flow-eosin.vercel.app`.
 - **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
   Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
@@ -180,7 +181,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.92 (13-oct, ~16:55; READY `dpl_FryCgzsXKSbpuDa3YS2MZUGR3Jbt`, commit `778865d`; vuelta atrás: promover
+- **LIVE:** v10.84.91 (13-oct, ~17:57; READY `dpl_H9dAw2HPjr6KagmQQzAVyGUFmVMY`, commit `5c5df72`, la pantalla en `6bf0057` y `03ebdf1`;
+  vuelta atrás: promover `dpl_DvkAFCUkdVXHDPbhvy3KgQdaJB4g` (el código de v10.84.92, que funciona con la base migrada) o `git revert 03ebdf1
+  6bf0057`; 1442 pruebas, de a 2 tandas). v10.84.91: 🔑 **la CATEGORÍA del trabajo** (`orders.categoria`, lista cerrada de 12 + «Otro» en
+  `src/lib/categorias.js`): la forma la sugiere por el nombre y la pide (obligatoria), Analytics da el ingreso por categoría (antes, 596
+  barras de nombres escritos a mano). La base (aplicada el 13-oct ~17:27 con el OK de Marcelo, ensayada: la transacción entera en menos de un
+  segundo): la columna con su CHECK, el disparador que la pone si llega vacía, 786 órdenes clasificadas, la venta de inventario sin categoría
+  (es un canal), y sin «🔴 ATRASADA · » en las 37 importadas; 🔥 `orders` da permiso de UPDATE por columna: una columna nueva que la app
+  escribe necesita su `GRANT UPDATE (columna) ON public.orders TO authenticated` (sin él, guardar y crear fallan). Tanda `categorias`.
+  v10.84.92 (13-oct, ~16:55; READY `dpl_FryCgzsXKSbpuDa3YS2MZUGR3Jbt`, commit `778865d`; vuelta atrás: promover
   `dpl_E7BfWiHuCgx57rkPTjo5bCScABjq` (el código de v10.84.90) o `git revert 778865d`; la base no cambió; 1407 pruebas, de a 2 tandas). v10.84.92:
   🔑 **quién paga, a la vista en el plan matriz** (el caso Hotsson de Karla y Genaro: una OC en 7 facturas a 7 razones sociales). Regla de
   Marcelo (13-oct): **el saldo se queda con el cliente que pidió el producto**; el CFDI a otra razón social del mismo cliente se elige en
