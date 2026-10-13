@@ -110,7 +110,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1292 pruebas, ~10 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1326 pruebas, ~10 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -180,7 +180,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.83 (13-oct, ~00:23; READY `dpl_2pvXX3Joymffkm5WeRA9qhcZSw8S`, commits `06e9183` y `80a53a2` (dos pruebas de reloj); vuelta
+- **LIVE:** v10.84.84 (13-oct, ~05:30; READY `dpl_CvSY87pmA6izxSqEhXvu4c8HfZeR`, commit `bd60203`; vuelta atrás: promover
+  `dpl_9JWkMHdRsad5UCkdjcAVyxdM19sv` (el código de v10.84.83) o `git revert bd60203`; la base no cambió; 1326 pruebas). v10.84.84: **Analytics
+  dice qué cuenta y de qué periodo** (los P1 de su critique): UN ingreso (lo entregado por su fecha de entrega, día de México,
+  `precioVenta`), un periodo para todas las pestañas con la comparación contra uno del mismo largo, cada cifra con su base, la utilización
+  contra los días hábiles del periodo y sin Empaque. Tanda nueva `analytics` (34, el reloj del navegador fijo). Lo hice en la noche del
+  13-oct (Marcelo: «sigue mejorando el app toda la noche con /impeccable critique»).
+  v10.84.83 (13-oct, ~00:23; READY `dpl_2pvXX3Joymffkm5WeRA9qhcZSw8S`, commits `06e9183` y `80a53a2` (dos pruebas de reloj); vuelta
   atrás: promover `dpl_fQFgBhcsCyvVMPfEB74b3DF7xGof` (el código de v10.84.82) o `git revert 06e9183`; la base no cambió; 1292 pruebas).
   v10.84.83: **«Archivos» sin borrado en masa** (el P1 de la critique de Analytics, revisor independiente 14/40; snapshot
   `.impeccable/critique/2026-10-13T05-07-59Z__src-app-jsx-analytics-productos-por-ingreso.md`): el archivo de impresión es el historial

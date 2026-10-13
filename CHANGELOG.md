@@ -64,6 +64,11 @@ promedio (Printmaster 52, 50 %), Empaque aparte (234 h), «a tiempo» 53 % con s
 **Para Marcelo:** nada que decidir aquí. Lo que sigue de la critique: el P0 (la categoría de los tipos de producto: te traigo la lista) y
 los P2 (bajar de una barra a sus órdenes).
 
+**En producción** (13-oct, ~05:30): READY `dpl_CvSY87pmA6izxSqEhXvu4c8HfZeR` (commit `bd60203`), candado 1326 de 1326 al primer intento
+(sin INESTABLES). Vuelta atrás: promover `dpl_9JWkMHdRsad5UCkdjcAVyxdM19sv` (el código de v10.84.83) o `git revert bd60203`. Revisado contra
+produccion.sygma.mx sin escribir (la cuenta de pruebas como Dirección, escrituras cortadas): `.banco-revisor-orden/medir-84.mjs` 10 de 10
+(octubre $503,092.83 y septiembre $2,077,705.83, iguales a la base) y el recorrido de Dirección (20 pasos): nada truena.
+
 ## v10.84.83 — «Archivos»: sin borrado en masa; el archivo de una orden se borra de uno en uno, diciendo cuál — 12-oct-2026
 
 **Qué pasaba** (la critique de Analytics, su P1: revisor independiente, 14/40; snapshot
