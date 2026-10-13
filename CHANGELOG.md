@@ -50,6 +50,11 @@ esa OC. 2) La OC → «Plan matriz»: las 7 facturas SIN «Facturar a tercero»,
 la razón social (si no existe, se da de alta con su RFC) → timbrar. Si alguna se hace antes, sin orden: en CobranzaFlow a cargo de
 INMOBILIARIA HOTSSON con su «CFDI a nombre de», y luego en el plan «Ya tiene factura: ligarla».
 
+**En producción** (13-oct, ~16:55): READY `dpl_FryCgzsXKSbpuDa3YS2MZUGR3Jbt` (commit `778865d`), candado 1407 de 1407 a la primera, de a 2
+tandas. Vuelta atrás: promover `dpl_E7BfWiHuCgx57rkPTjo5bCScABjq` (el código de v10.84.90) o `git revert 778865d`; la base no cambió.
+**Revisado contra producción** (`.banco-revisor-orden/medir-92.mjs`, cuenta `visor` como Karla, escrituras cortadas; el plan de OC-0960):
+la nota de quién paga, «Saldo: PORTLAND LEATHER» en cada factura, sin desbordarse a 1366, sin errores ni escrituras.
+
 ## v10.84.90 — El folio anticipado y «Facturar por partes», una u otra por orden; «ocupado» desde el clic en cinco diálogos de dinero (y el candado del anticipo en «Dividir», ensayado) — 13-oct-2026
 
 **Qué pasaba.** Desde v10.84.89 una orden se factura por partes antes de Salidas, y el botón «Asignar folio anticipado» seguía saliendo

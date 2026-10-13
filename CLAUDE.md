@@ -180,7 +180,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.90 (13-oct, ~14:35; READY `dpl_qUGQFZxZo3yBzHstXydm1kPKyyTh`, commits `5976ef4` y `334abfc` (+ pruebas `826b08c`, `5301453`); vuelta atrás: promover
+- **LIVE:** v10.84.92 (13-oct, ~16:55; READY `dpl_FryCgzsXKSbpuDa3YS2MZUGR3Jbt`, commit `778865d`; vuelta atrás: promover
+  `dpl_E7BfWiHuCgx57rkPTjo5bCScABjq` (el código de v10.84.90) o `git revert 778865d`; la base no cambió; 1407 pruebas, de a 2 tandas). v10.84.92:
+  🔑 **quién paga, a la vista en el plan matriz** (el caso Hotsson de Karla y Genaro: una OC en 7 facturas a 7 razones sociales). Regla de
+  Marcelo (13-oct): **el saldo se queda con el cliente que pidió el producto**; el CFDI a otra razón social del mismo cliente se elige en
+  CobranzaFlow (Por Timbrar → Datos → «CFDI a nombre de», `set_invoice_facturado_a`, la regla 23 de CobranzaFlow; Karla es CxC). «Facturar
+  a tercero» es lo único que cambia quién paga (la factura y su saldo nacen a cargo del tercero): el plan lo dice arriba, cada factura dice
+  «Saldo: …» y el botón «Paga: …». Ensayado contra producción con las órdenes de Hotsson: juntarlas en una OC NUEVA (a una OC «simple» no se
+  le mete otra orden), plan de 7 facturas a cargo del cliente, «CFDI a nombre de» y la factura urgente hecha antes ligada después: todo
+  funciona con la base de hoy. Sigue: v10.84.91 (la categoría; su base, de noche; rama `v10.84.91-categorias`).
+  v10.84.90 (13-oct, ~14:35; READY `dpl_qUGQFZxZo3yBzHstXydm1kPKyyTh`, commits `5976ef4` y `334abfc` (+ pruebas `826b08c`, `5301453`); vuelta atrás: promover
   `dpl_7y59AYsgagrsSG1gHa2c7oPrXYcn` (el código de v10.84.89) o `git revert 334abfc 5976ef4`; 1403 pruebas; el candado, de a 2 tandas si la PC va justa de memoria). v10.84.90: el folio anticipado y «Facturar por
   partes», una u otra por orden (la que ya va por partes, en el plan o agrupada no ofrece «Asignar folio anticipado»); 🔑 **«ocupado»
   desde el clic** en cinco diálogos de dinero (`InvoiceModal`, `PreInvoiceModal`, `DeliverOnlyModal`, `PriceCaptureModal`, `BulkSellModal`):
