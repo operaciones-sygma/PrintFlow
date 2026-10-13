@@ -312,6 +312,25 @@ await caso("pl-37 a 1366 la línea del saldo cabe en su columna (no empuja la ta
   ok("pl-37 a 1366 la línea del saldo cabe en su columna (no empuja la tabla)", !!m && m.dentro && m.alto <= 30, JSON.stringify(m));
 });
 
+// v10.84.92 — el caso Hotsson tal cual: siete facturas a 1366 (N facturas escrito en la casilla)
+await caso("pl-38 siete facturas a 1366 (el caso Hotsson): se ven, dicen su saldo, se llenan y se mandan las 7 sin tercero", "", async p => {
+  await abrir(p);
+  await p.locator('input[type="number"][max="10"]').first().fill("7"); await espera(p, 400);
+  const cols = await p.locator("thead th [data-saldo]").count();
+  const saldos = (await p.locator("thead th [data-saldo]").allInnerTexts()).map(t => t.replace(/\s+/g, " "));
+  const anchoPagina = await p.evaluate(() => document.documentElement.scrollWidth);
+  for (let i = 0; i < 6; i++) await piezas(p, i, [1000, 1000, 1000, 1000]);
+  await encabezado(p, 6).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 300);
+  const b = enviar(p); const textoBoton = await b.innerText().catch(() => "");
+  await b.scrollIntoViewIfNeeded().catch(() => {});
+  const habilitado = await b.isEnabled().catch(() => false);
+  if (habilitado) { await b.click(); await espera(p, 600); }
+  const g = (await planEnviado(p))?.groups || [];
+  ok("pl-38 siete facturas a 1366 (el caso Hotsson): se ven, dicen su saldo, se llenan y se mandan las 7 sin tercero",
+    cols === 7 && saldos.every(t => /Saldo: PORTLAND LEATHER/.test(t)) && anchoPagina <= 1366 && habilitado && g.length === 7 && g.every(x => x.bill_to === null),
+    `columnas ${cols} · saldos ${saldos.length} · ancho de la página ${anchoPagina} · botón «${textoBoton}» ${habilitado ? "habilitado" : "APAGADO"} · mandó ${g.length} (${g.map(x => x.bill_to === null ? "sin tercero" : "CON tercero").join(", ")}) · errores «${(await errores(p)).slice(0, 160)}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);
