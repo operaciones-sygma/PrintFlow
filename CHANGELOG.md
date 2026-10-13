@@ -12,6 +12,68 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.83 — «Archivos»: sin borrado en masa; el archivo de una orden se borra de uno en uno, diciendo cuál — 12-oct-2026
+
+**Qué pasaba** (la critique de Analytics, su P1: revisor independiente, 14/40; snapshot
+`.impeccable/critique/2026-10-13T05-07-59Z__src-app-jsx-analytics-productos-por-ingreso.md`):
+- **«Borrar Todos los Antiguos» seguía en «Archivos»** (Analytics de Dirección, y la pantalla «Archivos» de Pre-prensa y Germán: el mismo
+  `StorageTab`). Borraba el archivo de impresión de TODA orden creada hace más de 30 días, también las que seguían en producción, de un
+  clic y con un `confirm()` que no decía cuáles. El 12-oct (v10.84.76) Marcelo decidió que ese archivo se queda («así queda un historial»)
+  y se quitó el borrado automático, pero este botón no. Espacio no hace falta: el bucket pesa 117.8 MB de 100 GB (814 archivos; hoy 3
+  órdenes tienen archivo de impresión, las tres entregadas, y ninguna lo comparte con otra).
+- Lo de alrededor empujaba a lo mismo: «Archivos >30 días · elegibles para limpieza» en ámbar, «+30d» en cada renglón, una ventana después
+  de cada descarga («¿Ya descargaste el archivo? Bórralo para liberar espacio») y el aviso de lleno («limpia archivos antiguos»).
+- Borrar UNO (el bote de cada renglón y el del Top 5) preguntaba con `confirm()` («¿Borrar archivo de PORTLAND STUDIO?») sin la orden, su
+  etapa ni lo que se pierde, y avisaba con `alert()` (DESIGN.md no los deja). Los candados de «Limpiar Todos» (v10.80.11) salían en un
+  `alert()` DESPUÉS de picarle. El botón de descargar no tenía nombre para un lector de pantalla.
+
+**Qué se cambió** (`src/App.jsx`, sólo `StorageTab`; la base no cambió):
+- Fuera la limpieza de +30 días (`cleanup`, `oldFiles`), «Archivos >30 días», «Sin archivos antiguos», «+30d» y la ventana de después de
+  descargar. La tarjeta de los archivos de producción dice «se conservan como historial»; el aviso de lleno manda a lo que sí hay («borra
+  los huérfanos y revisa los archivos más pesados»).
+- Borrar UNO sigue siendo a propósito (como el «Borrar archivo» del detalle, que v10.84.76 dejó): la ventana de la app (`ConfirmModal`) dice
+  «¿Borrar el archivo de impresión de P-0612?», el cliente, la etapa, el archivo y su peso, y que es el historial («con él se repite el
+  trabajo»); la imagen dice «la imagen de referencia». Esc, «No, conservarlo» y el clic fuera no borran; el doble clic en «Sí» borra una
+  vez; con el teclado el foco cae en «No» y al cerrar regresa al bote.
+- Al confirmar se mira la orden VIVA: si cambió de archivo con la ventana abierta, no se borra nada y se dice. Y la orden se limpia sólo si
+  sigue apuntando a lo que se borró (`.eq(campo,url)`), por si el realtime no alcanzó a avisar. El error dice en qué paso fue: «No se borró
+  «x» (no tienes permiso): P-0612 lo conserva» o «Se borró «x» del servidor, pero P-0612 sigue apuntando a él… Vuelve a intentar».
+- Lo que pasó se dice con el aviso de la app (`Toast`, montado por el componente: un módulo no ve `showToast`), no con `alert()`: «Se borró
+  1 archivo huérfano.», «Se borró 1 de 2 archivos huérfanos; el otro no…», «No se borró ninguno…».
+- Los dos candados de «Limpiar Todos» (la lista de órdenes vacía; más de la mitad salen huérfanos) se ven junto al botón ANTES de picarle,
+  con el botón apagado. El botón, con AA (4.81:1; el ámbar de antes daba 2.63:1).
+- El archivo del Top 5 que usa una orden que no está cargada aquí lo dice en su renglón y su bote no borra (lo explica). Los botones dicen
+  qué archivo y de qué orden («Descargar «arte.pdf» de P-0612», «Borrar «arte.pdf» de P-0612»).
+- La lista del bucket se lee una vez por borrado (antes dos: dependía de `cleaned` y de `deleting`).
+
+**Cómo se probó** (la tanda `archivos-pantalla`, 12 → 39 casos; su banco, `gen-archivos.mjs`, ahora extrae con `extraer.mjs`: entra la
+ventana de la app y sirve igual contra el App.jsx de antes): **vuelta 1**, escrita antes del cambio, contra v10.84.82: de 24 casos fallaban 18
+(el botón masivo, los `confirm()`/`alert()` nativos, la ventana de después de descargar, los candados que se veían sólo al picarle, los
+botones sin nombre, el aviso de «antiguos»); los 6 que pasaban no borran nada. Cinco pruebas viejas cambiaron de forma con lo mismo afirmado
+(confirmar ahora es la ventana de la app y el aviso está en la pantalla, no en `alert()`), y la de la limpieza de +30 días
+(`ap-limpieza-30-dias-dice-lo-que-fallo`) se volvió `ap-sin-borrado-masivo`. Un supuesto mío en la prueba: el bote del archivo de una orden
+no cargada va `aria-disabled` y Playwright no le pica; se fuerza el clic (con el mouse sí se puede). **Vuelta 2**, 15 por donde no se diseñó
+(doble clic en el bote y en «Limpiar Todos», clic fuera, la orden que cambia de archivo con la ventana abierta, Esc a media borrada y otra
+ventana abierta después, la lista del bucket caída, 1920, teclado, plurales, el borrado a medias, la segunda imagen, la orden sin P-, el
+update condicionado): una falla de redacción («Se borraron 1 de 2… los demás no»), nada de fondo. **Sabotajes**: 11 (vuelve el botón masivo,
+sin la orden viva, terminar cierra cualquier ventana, el candado sólo al picarle, `confirm()` nativo, el ámbar de antes, sin el update
+condicionado, descargar propone borrar, la segunda imagen como la primera, Storage falla y se limpia la orden, la ventana sin etapa ni
+peso): las pruebas cazan los 11 y el control pasa entero. **Corrida doble** (las 39 contra v10.84.82 y v10.84.83, el mismo banco): 6 de 39 y
+39 de 39; ninguna regresión. **La app REAL compilada** (`.banco-revisor-orden/medir-83.mjs`, 2 entradas; la cuenta de pruebas, escrituras
+cortadas): como Dirección (Analytics › Archivos, con los datos completos) y como Pre-prensa («Archivos de Producción»), 6 de 6 cada una:
+sin borrado masivo ni «+30d», «se conservan como historial», «Descargar «Letrero No tocar - tabloide 11x17.pdf» de P-0612», y el bote abre
+«¿Borrar el archivo de impresión de P-0612?» con el cliente, «etapa «Entregada»» y el archivo; «No, conservarlo» cierra sin escribir. Ni
+`confirm()`/`alert()` ni errores de la app; 0 escrituras.
+**Sin probar:** borrar de verdad (la cuenta de pruebas no escribe ni lee el bucket: su medidor dice «No se pudo leer» y no salen el Top 5 ni
+los huérfanos).
+
+**Para Marcelo:**
+- El detalle de la orden todavía ofrece borrar el archivo de impresión después de cada descarga (a Pre-prensa, Germán y Dirección: «¿Ya
+  descargaste «x»? Bórralo del servidor para liberar espacio», de v10.54.10, cuando el espacio importaba). El 12-oct quedó como el borrado
+  «a propósito» y no lo toqué. Con el historial y 118 MB de 100 GB, ¿se quita también esa pregunta (el botón de borrar se queda)?
+- «Archivos» sigue dentro de Analytics; el revisor sugiere moverla a «Salud Operativa» o a su propia pantalla. Lo siguiente de la critique:
+  los tipos de producto (la categoría nueva; es cambio de base y se ensaya primero).
+
 ## v10.84.82 — La forma de la orden en una sola forma (sin «Sencillo / Avanzado»), y Replicar sin el precio de otra cantidad — 12-oct-2026
 
 **Qué pasaba** (las dos decisiones que dejó la tercera revisión independiente; Marcelo pidió primero un análisis a fondo de los modos):

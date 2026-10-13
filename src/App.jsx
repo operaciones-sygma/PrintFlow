@@ -15562,10 +15562,18 @@ function PreprensaBoard({orders,onDrop,onAction,onPlateRequired,maintenance=[],r
 
 // ─── STORAGE TAB ──────────────────────────────────
 function StorageTab({orders,onReload}) {
-  const [cleaning,setCleaning]=useState(false);const [cleaned,setCleaned]=useState(0);
   const [storageUsed,setStorageUsed]=useState(null);const [loadingSize,setLoadingSize]=useState(true);
   const [deleting,setDeleting]=useState(null);
-  const [downloadedOrder,setDownloadedOrder]=useState(null);
+  // v10.84.83 — EL ARCHIVO DE UNA ORDEN SE BORRA DE UNO EN UNO, DICIENDO CUÁL (critique de Analytics, su P1). El 12-oct Marcelo decidió
+  //   que el archivo de impresión se queda («así queda un historial»; v10.84.76 quitó el borrado automático), pero esta pantalla seguía
+  //   con «Borrar Todos los Antiguos»: TODA orden creada hace más de 30 días, también las que seguían en producción, de un clic y con un
+  //   confirm() que no decía cuáles. Se fue, con su «Archivos >30 días · elegibles para limpieza», la etiqueta «+30d» y la ventana que
+  //   después de cada descarga proponía «Bórralo para liberar espacio» (el bucket pesa 118 MB de 100 GB). Borrar UNO sigue siendo a
+  //   propósito, como en el detalle: la ventana de la app nombra la orden, su cliente, su etapa, el archivo y su peso, y lo que se
+  //   pierde; lo que pasó se dice con el aviso de la app (antes alert()). La ven Dirección (Analytics) y Pre-prensa y Germán («Archivos»).
+  const [pregunta,setPregunta]=useState(null);   // la ventana de confirmar abierta: {title,message,confirmLabel,cancelLabel,onConfirm}
+  const [aviso,setAviso]=useState(null);         // lo que pasó: {id,message,type}, con el Toast de la app
+  const ordersRef=useRef(orders);ordersRef.current=orders;   // la orden VIVA al confirmar: el realtime la pudo cambiar con la ventana abierta
   // v10.18.0 — Estados para Top archivos, Huérfanos y Breakdown
   const [topFiles,setTopFiles]=useState([]);
   const [orphans,setOrphans]=useState([]);
@@ -15576,10 +15584,8 @@ function StorageTab({orders,onReload}) {
   const [refreshKey,setRefreshKey]=useState(0);
   // Helper: formatear bytes a MB/KB
   const fmtBytes=(b)=>b>=1048576?(b/1048576).toFixed(1)+" MB":b>=1024?(b/1024).toFixed(0)+" KB":b+" B";
-  useEffect(()=>{if(!downloadedOrder)return;const h=e=>{if(e.key==="Escape")setDownloadedOrder(null)};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[downloadedOrder]);
   const maxStorage=102400; // 100GB in MB (Supabase Pro plan)
   const withFile=orders.filter(o=>o.file_url);
-  const oldFiles=withFile.filter(o=>{const d=new Date(o.created_at);return(Date.now()-d.getTime())>30*86400000});
 
   // v10.73.55 — Efecto 1 (COSTOSO, corre SOLO cuando cambian los archivos, NO cuando cambian las órdenes):
   //   lista el bucket UNA vez y en PARALELO por lotes. Antes hacía N storage.list() SECUENCIALES (uno por
@@ -15604,7 +15610,7 @@ function StorageTab({orders,onReload}) {
       if(alive)setLoadingSize(false);
     })();
     return ()=>{alive=false};
-  },[cleaned,deleting,refreshKey]);
+  },[refreshKey]);   // v10.84.83 — antes también [cleaned,deleting]: cada borrado leía la lista dos veces; ahora todo lo que borra sube refreshKey
   // v10.73.55 — Efecto 2 (BARATO, sin red): recalcula breakdown/huérfanos/top desde rawFiles + orders. Corre
   //   cuando cambian las órdenes (realtime) SIN re-listar el bucket → el "actualizarse" ya no cuesta nada.
   useEffect(()=>{
@@ -15637,79 +15643,105 @@ function StorageTab({orders,onReload}) {
   // v10.84.41 — supabase-js NO lanza: antes se contaba como borrado aunque Storage o la orden contestaran con error, y si
   //   el archivo no se borraba se quitaba igual la referencia de la orden (el archivo se quedaba huérfano). Ahora un error
   //   de Storage detiene ese archivo; si Storage no encontró el archivo (ya no estaba), sí se limpia la referencia.
-  const borrarArchivoDeOrden=async(o)=>{
-    const path=o.file_url.split("/order-files/")[1];
-    if(path){const {error:rmErr}=await supabase.storage.from("order-files").remove([decodeURIComponent(path)]);if(rmErr)throw rmErr;}
-    const {error:upErr}=await supabase.from("orders").update({file_url:null,file_name:null}).eq("id",o.id);
-    if(upErr)throw upErr;
+  // v10.84.83 — uno para los tres campos (el archivo de impresión y las dos imágenes; el Top 5 lo hacía aparte), y la orden se limpia
+  //   sólo si SIGUE apuntando a lo que se borró (`.eq(campo,url)`): si cambió de archivo mientras tanto, conserva el nuevo. El error dice
+  //   en qué paso fue: en Storage, la orden lo conserva; en la orden, el archivo ya no está y ella sigue apuntando a él.
+  const borrarDeOrden=async(o,campo)=>{
+    const url=o[campo],ruta=pathDeOrderFile(url);
+    if(ruta){const {error:rmErr}=await supabase.storage.from("order-files").remove([ruta]);if(rmErr)throw {donde:"storage",message:rmErr.message||String(rmErr)};}
+    const {error:upErr}=await supabase.from("orders").update(campo==="file_url"?{file_url:null,file_name:null}:{[campo]:null}).eq("id",o.id).eq(campo,url);
+    if(upErr)throw {donde:"orden",message:upErr.message||String(upErr)};
   };
-  const cleanup=async()=>{if(!confirm("¿Borrar archivos de órdenes con más de 30 días? ("+oldFiles.length+" archivos)\n\nEsta acción no se puede deshacer."))return;setCleaning(true);let c=0,f=0;for(const o of oldFiles){try{await borrarArchivoDeOrden(o);c++}catch(e){f++;console.error("[cleanup]",o.id,e)}}setCleaned(c);setCleaning(false);if(f>0)alert("Se borraron "+c+" de "+oldFiles.length+"; "+f+" no se pudieron borrar (ver la consola).");if(c>0&&onReload)onReload()};
-
-  const deleteOne=async(o)=>{if(!confirm("¿Borrar archivo de "+o.client+"?\n"+o.file_name))return;setDeleting(o.id);try{await borrarArchivoDeOrden(o);if(onReload)onReload()}catch(e){alert("Error al borrar: "+(e?.message||e))}setDeleting(null)};
+  const avisar=(message,type="success")=>setAviso({id:Date.now()+Math.random(),message,type});
+  // cierra la ventana sólo si sigue siendo ESA (con Esc se cierra mientras borra, y luego se pudo abrir otra)
+  const cerrar=esta=>setPregunta(p=>p===esta?null:p);
+  const nombreOrden=o=>o?.production_number||o?.id||"la orden";
+  const pesoDe=url=>{const r=pathDeOrderFile(url);const f=r&&(rawFiles||[]).find(x=>x.path===r);return f?fmtBytes(f.size):null};
+  // v10.84.83 — la ventana para borrar el archivo de impresión o una imagen de UNA orden: cuál, de quién, en qué etapa va, cuánto pesa,
+  //   y lo que se pierde. Al confirmar se mira la orden VIVA: si cambió de archivo con la ventana abierta, no se borra nada.
+  const preguntarBorrar=(o,campo,peso)=>{
+    const imagen=campo!=="file_url",num=nombreOrden(o),etapa=SM[o.stage]?.lt;
+    const archivo=(!imagen&&o.file_name)||(pathDeOrderFile(o[campo])||String(o[campo]||"")).split("/").pop()||"el archivo";
+    const esta={
+      title:imagen?"¿Borrar la imagen de "+num+"?":"¿Borrar el archivo de impresión de "+num+"?",
+      message:(o.client||"")+(etapa?" · etapa «"+etapa+"»":"")+"\n"+archivo+(peso?" · "+peso:"")+"\n\n"+(imagen
+        ?"Es la imagen de referencia de la orden: si la borras, la orden se queda sin ella. No se puede deshacer."
+        :"Se guarda como historial: con él se repite el trabajo. Si lo borras, la orden se queda sin archivo. No se puede deshacer."),
+      confirmLabel:imagen?"Sí, borrar la imagen":"Sí, borrar el archivo",cancelLabel:imagen?"No, conservarla":"No, conservarlo",
+      onConfirm:async()=>{
+        const viva=(ordersRef.current||[]).find(x=>x.id===o.id);
+        if(!viva||viva[campo]!==o[campo]){cerrar(esta);avisar(num+" cambió mientras se preguntaba: no se borró nada. Revísala y vuelve a intentar.","warning");return}
+        setDeleting(o.id);
+        try{await borrarDeOrden(o,campo);avisar("Se borró «"+archivo+"» de "+num+".");if(onReload)onReload()}
+        catch(e){avisar(e?.donde==="orden"
+          ?"Se borró «"+archivo+"» del servidor, pero "+num+" sigue apuntando a "+(imagen?"ella":"él")+" ("+errorEnPalabras(e)+"). Vuelve a intentar para quitárse"+(imagen?"la":"lo")+"."
+          :"No se borró «"+archivo+"» ("+errorEnPalabras(e)+"): "+num+(imagen?" la":" lo")+" conserva.","error")}
+        finally{setDeleting(null);cerrar(esta);setRefreshKey(k=>k+1)}
+      }};
+    setAviso(null);setPregunta(esta);
+  };
+  const deleteOne=o=>preguntarBorrar(o,"file_url",pesoDe(o.file_url));
 
   // v10.18.0 — Limpiar archivos huérfanos (sin referencia en orders.file_url ni orders.image_url)
-  const cleanupOrphans=async()=>{
-    if(orphans.length===0)return;
-    // v10.80.11 — CANDADO DE CORDURA. "Huerfano" se decide por RESTA: todo archivo del bucket que
-    // no aparezca en orders.file_url/image_url/image_url_2. Esa resta depende por completo de que
-    // `orders` haya cargado — y si la carga falla EN SILENCIO (o devuelve vacio), TODOS los archivos
-    // del bucket caen en la lista y este boton los borra. Son cientos de archivos, sin deshacer.
-    // Dos guardas sobre lo mismo: no confiar en una resta cuyo minuendo pudo no llegar.
-    if(!Array.isArray(orders)||orders.length===0){
-      alert("No se puede limpiar ahora: la lista de ordenes no cargo." + "\n\n" +
-        "Sin ella TODOS los archivos parecen huerfanos. Recarga la pantalla e intenta de nuevo.");
-      return;
-    }
-    const totalArchivos=(rawFiles||[]).length;
-    if(totalArchivos>0 && orphans.length > totalArchivos*0.5){
-      alert("Se detuvo por seguridad: "+orphans.length+" de "+totalArchivos+" archivos aparecen como huerfanos (mas de la mitad)." + "\n\n" +
-        "Eso casi siempre significa que la lista de ordenes cargo incompleta, no que sobren tantos archivos. Recarga y verifica antes de borrar nada.");
-      return;
-    }
-    const totalMB=(orphans.reduce((s,f)=>s+f.size,0)/1048576).toFixed(1);
-    if(!confirm("¿Borrar "+orphans.length+" archivo"+(orphans.length>1?"s":"")+" huérfano"+(orphans.length>1?"s":"")+"? ("+totalMB+" MB)\n\nEstos archivos no apuntan a ninguna orden y no son visibles desde la app. Esta acción no se puede deshacer."))return;
-    setCleaningOrphans(true);
-    let c=0;
-    for(const f of orphans){
-      // v10.84.41 — cuenta sólo lo que Storage dice que borró (sin permiso o sin archivo contesta 200 con la lista vacía)
-      try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(rm&&rm.length)c++;}catch(e){console.error("[cleanupOrphans]",f.path,e)}
-    }
-    setCleaningOrphans(false);
-    setRefreshKey(k=>k+1);
-    if(c>0){alert("✅ "+c+" archivo"+(c>1?"s":"")+" huérfano"+(c>1?"s":"")+" eliminado"+(c>1?"s":""));if(onReload)onReload()}
+  // v10.80.11 — CANDADO DE CORDURA. "Huerfano" se decide por RESTA: todo archivo del bucket que
+  // no aparezca en orders.file_url/image_url/image_url_2. Esa resta depende por completo de que
+  // `orders` haya cargado — y si la carga falla EN SILENCIO (o devuelve vacio), TODOS los archivos
+  // del bucket caen en la lista y este boton los borra. Son cientos de archivos, sin deshacer.
+  // Dos guardas sobre lo mismo: no confiar en una resta cuyo minuendo pudo no llegar.
+  // v10.84.83 — los dos candados se calculan al pintar y se ven junto al botón, ANTES de picarle (antes, un alert() después).
+  const candadoHuerfanos=(()=>{
+    if(!Array.isArray(orders)||orders.length===0)return "No se pueden limpiar ahora: la lista de órdenes no cargó, y sin ella todos los archivos parecen huérfanos. Recarga la pantalla.";
+    const total=(rawFiles||[]).length;
+    if(total>0&&orphans.length>total*0.5)return "Detenido por seguridad: "+orphans.length+" de "+total+" archivos salen huérfanos, más de la mitad. Casi siempre es que la lista de órdenes cargó incompleta, no que sobren tantos. Recarga y revisa antes de borrar.";
+    return null;
+  })();
+  const cleanupOrphans=()=>{
+    if(orphans.length===0||cleaningOrphans)return;
+    if(candadoHuerfanos){avisar(candadoHuerfanos,"warning");return}
+    const lista=orphans.slice(),n=lista.length,s=n>1?"s":"";   // lo que se pregunta es lo que se borra
+    const esta={
+      title:"¿Borrar "+n+" archivo"+s+" huérfano"+s+"?",
+      message:n+" archivo"+s+" huérfano"+s+" · "+fmtBytes(lista.reduce((t,f)=>t+f.size,0))+"\n\nNinguna orden "+(n>1?"los":"lo")+" usa: lo dice la base, archivo por archivo. No se puede deshacer.",
+      confirmLabel:n>1?"Sí, borrar los "+n:"Sí, borrarlo",cancelLabel:n>1?"No, dejarlos":"No, dejarlo",
+      onConfirm:async()=>{
+        setCleaningOrphans(true);
+        let c=0;
+        for(const f of lista){
+          // v10.84.41 — cuenta sólo lo que Storage dice que borró (sin permiso o sin archivo contesta 200 con la lista vacía)
+          try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(rm&&rm.length)c++;}catch(e){console.error("[cleanupOrphans]",f.path,e)}
+        }
+        setCleaningOrphans(false);cerrar(esta);setRefreshKey(k=>k+1);
+        if(c===n)avisar(n>1?"Se borraron "+n+" archivos huérfanos.":"Se borró 1 archivo huérfano.");
+        else if(c>0)avisar((c===1?"Se borró 1":"Se borraron "+c)+" de "+n+" archivos huérfanos; "+(n-c===1?"el otro no (Storage no lo borró: sin permiso, o ya no estaba).":"los otros "+(n-c)+" no (Storage no los borró: sin permiso, o ya no estaban)."),"warning");
+        else avisar("No se borró ninguno: Storage no "+(n>1?"los":"lo")+" borró (sin permiso, o ya no estaba"+(n>1?"n":"")+").","error");
+        if(c>0&&onReload)onReload();
+      }};
+    setAviso(null);setPregunta(esta);
   };
 
   // v10.18.0 — Borrar un archivo huérfano individual
-  const deleteOrphan=async(f)=>{
-    if(!confirm("¿Borrar archivo huérfano?\n"+f.path+" ("+fmtBytes(f.size)+")"))return;
-    try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(!rm||!rm.length)throw new Error("Storage no lo borró (ya no estaba, o falta permiso)");setRefreshKey(k=>k+1)}catch(e){alert("Error al borrar: "+(e?.message||e))}
+  const deleteOrphan=f=>{
+    const esta={
+      title:"¿Borrar este archivo huérfano?",
+      message:f.path+" · "+fmtBytes(f.size)+"\n\nNinguna orden lo usa. No se puede deshacer.",
+      confirmLabel:"Sí, borrarlo",cancelLabel:"No, dejarlo",
+      onConfirm:async()=>{
+        try{const {data:rm,error}=await supabase.storage.from("order-files").remove([f.path]);if(error)throw error;if(!rm||!rm.length)throw {sinBorrar:true};avisar("Se borró el archivo huérfano «"+f.name+"».")}
+        catch(e){avisar("No se borró «"+f.name+"»: "+(e?.sinBorrar?"Storage no lo borró (ya no estaba, o falta permiso)":errorEnPalabras(e))+".","error")}
+        finally{cerrar(esta);setRefreshKey(k=>k+1)}
+      }};
+    setAviso(null);setPregunta(esta);
   };
 
   // v10.18.0 — Borrar un archivo del Top 5 (puede ser archivo de producción, imagen o huérfano)
-  const deleteTopFile=async(f)=>{
-    if(f.isOrphan){return deleteOrphan(f)}
+  const deleteTopFile=f=>{
+    if(f.isOrphan)return deleteOrphan(f);
     // v10.84.41 — la base dice que una orden lo usa pero esa orden no está cargada aquí: borrarlo dejaría a la orden
     //   apuntando a un archivo que ya no existe, sin poder limpiar su referencia. No se ofrece.
-    if(!f.order){alert("Este archivo lo usa una orden que no está cargada en esta pantalla. Recarga antes de borrarlo.");return}
-    const label=f.isImage?"imagen":"archivo";
-    if(!confirm("¿Borrar "+label+" de "+(f.order?.client||"orden")+"?\n"+f.name+" ("+fmtBytes(f.size)+")"))return;
-    try{
-      const {error:rmErr}=await supabase.storage.from("order-files").remove([f.path]);
-      if(rmErr)throw rmErr;
-      if(f.order){
-        // v10.72.71 — al borrar una imagen del Top-5, distinguir image_url vs image_url_2 por el path (antes
-        // siempre nulaba image_url → si la borrada era la 2a imagen, dejaba image_url_2 colgando a un archivo borrado).
-        let upd;
-        if(f.isImage){
-          const pathOf=u=>{const s=(u||"").split("/order-files/")[1];return s?decodeURIComponent(s):null};
-          upd = pathOf(f.order.image_url_2)===f.path ? {image_url_2:null} : {image_url:null};
-        } else { upd={file_url:null,file_name:null}; }
-        const {error:upErr}=await supabase.from("orders").update(upd).eq("id",f.order.id);
-        if(upErr)throw upErr;
-      }
-      setRefreshKey(k=>k+1);
-      if(onReload)onReload();
-    }catch(e){alert("Error al borrar: "+(e.message||e))}
+    if(!f.order){avisar("Este archivo lo usa una orden que no está cargada en esta pantalla: recarga antes de borrarlo.","warning");return}
+    // v10.72.71 — al borrar una imagen del Top-5, distinguir image_url vs image_url_2 por el path (antes
+    // siempre nulaba image_url → si la borrada era la 2a imagen, dejaba image_url_2 colgando a un archivo borrado).
+    preguntarBorrar(f.order,!f.isImage?"file_url":pathDeOrderFile(f.order.image_url_2)===f.path?"image_url_2":"image_url",fmtBytes(f.size));
   };
 
   const Stat=({l,v,s:sub,c=C.tx})=><div style={{background:C.sf,borderRadius:12,padding:18,flex:"1 1 180px",minWidth:150}}><div style={{fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{l}</div><div style={{fontSize:24,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>{sub}</div>}</div>;
@@ -15729,7 +15761,7 @@ function StorageTab({orders,onReload}) {
         {listError?<button onClick={()=>setRefreshKey(k=>k+1)} style={{fontSize:10,fontWeight:700,color:C.ac,background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>Reintentar</button>:<span style={{fontSize:9,color:C.t3}}>{usedPct.toFixed(1)}% usado</span>}
         <span style={{fontSize:9,color:C.t3}}>{storageUsed!==null?(maxStorage-storageUsed>=1024?((maxStorage-storageUsed)/1024).toFixed(1)+" GB libres":(maxStorage-storageUsed).toFixed(1)+" MB libres"):"—"}</span>
       </div>
-      {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{usedPct>=90?<><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Almacenamiento casi lleno — limpia archivos antiguos</>:<><LightningIcon size={13} weight="fill" style={{flexShrink:0}}/>Más del 70% usado — considera limpiar archivos antiguos</>}</div>}
+      {usedPct>=70&&<div style={{marginTop:8,padding:"6px 10px",background:barColor+"10",border:"1px solid "+barColor+"30",borderRadius:8,fontSize:11,color:barColor,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>{usedPct>=90?<><WarningIcon size={13} weight="fill" style={{flexShrink:0}}/>Almacenamiento casi lleno: borra los huérfanos y revisa los archivos más pesados</>:<><LightningIcon size={13} weight="fill" style={{flexShrink:0}}/>Más del 70% usado: revisa los huérfanos y los archivos más pesados</>}</div>}
     </div>
 
     {/* v10.18.0 — Breakdown imágenes vs archivos */}
@@ -15737,7 +15769,7 @@ function StorageTab({orders,onReload}) {
       <div style={{flex:"1 1 200px",minWidth:180,background:C.ac+"08",border:"1px solid "+C.ac+"20",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.ac,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><FolderOpenIcon size={11} weight="bold"/>Archivos Producción</div>
         <div style={{fontSize:20,fontWeight:800,color:C.ac}}>{listError?"—":<>{breakdown.prod.count}<span style={{fontSize:12,fontWeight:600,marginLeft:6,color:C.t2}}>· {fmtBytes(breakdown.prod.bytes)}</span></>}</div>
-        <div style={{fontSize:9,color:C.t3,marginTop:2}}>PDF, AI, PSD para imprenta</div>
+        <div style={{fontSize:9,color:C.t3,marginTop:2}}>PDF, AI, PSD para imprenta · se conservan como historial</div>
       </div>
       <div style={{flex:"1 1 200px",minWidth:180,background:C.dsn+"08",border:"1px solid "+C.dsn+"20",borderRadius:12,padding:14}}>
         <div style={{display:"flex",alignItems:"center",gap:5,fontSize:9,color:C.dsn,fontWeight:700,textTransform:"uppercase",marginBottom:4}}><CameraIcon size={11} weight="bold"/>Imágenes Referencia</div>
@@ -15748,16 +15780,7 @@ function StorageTab({orders,onReload}) {
 
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FolderOpenIcon size={10} weight="bold"/>Total con Archivo</span>} v={withFile.length} s={orders.length+" órdenes totales"} c={C.ac}/>
-      <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><PackageIcon size={10} weight="bold"/>Archivos &gt;30 días</span>} v={oldFiles.length} s="elegibles para limpieza" c={oldFiles.length>0?C.wn:C.ok}/>
     </div>
-
-    {/* Bulk cleanup */}
-    {oldFiles.length>0&&<div style={{background:C.wn+"08",border:"1px solid "+C.wn+"25",borderRadius:14,padding:16,marginBottom:16}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:C.wn,marginBottom:8}}><TrashIcon size={13} weight="bold"/>Limpieza Masiva — Archivos +30 días</div>
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 12px"}}>Hay {oldFiles.length} archivo{oldFiles.length>1?"s":""} de órdenes con más de 30 días.</p>
-      <button onClick={cleanup} disabled={cleaning} style={{...bt(cleaning?C.bdSt:C.wn),cursor:cleaning?"wait":"pointer"}}>{cleaning?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:cleaned>0?<><CheckCircleIcon size={14} weight="bold"/>{cleaned} borrados</>:<><TrashIcon size={14} weight="bold"/>Borrar Todos los Antiguos ({oldFiles.length})</>}</button>
-    </div>}
-    {oldFiles.length===0&&<div style={{background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:14,padding:16,marginBottom:16,textAlign:"center"}}><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:14,fontWeight:700,color:C.ok}}><CheckCircleIcon size={15} weight="fill"/>Sin archivos antiguos</div><div style={{fontSize:11,color:C.t2,marginTop:4}}>Todos los archivos tienen menos de 30 días</div></div>}
 
     {/* v10.18.0 — Top 5 archivos más grandes */}
     {topFiles.length>0&&<div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
@@ -15767,13 +15790,14 @@ function StorageTab({orders,onReload}) {
       </div>
       {topFiles.map((f,i)=>{
         const age=Math.round((Date.now()-new Date(f.created_at).getTime())/86400000);
+        const ajena=!f.isOrphan&&!f.order;   // v10.84.83 — lo usa una orden que no está cargada aquí: no se borra desde esta pantalla
         return <div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<topFiles.length-1?"0.5px solid "+C.bd:"none"}}>
           <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8}}>
             <div style={{fontSize:18,fontWeight:800,color:C.t3,width:18,textAlign:"center"}}>{i+1}</div>
             <div style={{display:"flex",alignItems:"center"}}>{f.isOrphan?<PuzzlePieceIcon size={16} weight="bold" color={C.wn}/>:f.isImage?<CameraIcon size={16} weight="bold" color={C.dsn}/>:<FolderOpenIcon size={16} weight="bold" color={C.ac}/>}</div>
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:12,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                {f.isOrphan?<span style={{color:C.t3,fontStyle:"italic"}}>(huérfano)</span>:f.order?.client||"—"}
+                {f.isOrphan?<span style={{color:C.t3,fontStyle:"italic"}}>(huérfano)</span>:f.order?(f.order.client||"—"):<span style={{color:C.t3,fontStyle:"italic"}}>de una orden que no está cargada aquí</span>}
               </div>
               <div style={{fontSize:9,color:C.t3}}>{f.name} · {age} días{f.order?" · "+f.order.product_type:""}</div>
             </div>
@@ -15781,7 +15805,7 @@ function StorageTab({orders,onReload}) {
           <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
             <span style={{fontSize:11,fontWeight:700,color:C.tx,minWidth:60,textAlign:"right"}}>{fmtBytes(f.size)}</span>
             {f.isOrphan&&<span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>HUÉRFANO</span>}
-            <button onClick={()=>deleteTopFile(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30"}} title="Borrar"><TrashIcon size={14} weight="bold"/></button>
+            <button onClick={()=>deleteTopFile(f)} aria-disabled={ajena||undefined} aria-label={ajena?"No se puede borrar «"+f.name+"» desde aquí: lo usa una orden que no está cargada":"Borrar «"+f.name+"»"+(f.order?" de "+nombreOrden(f.order):" (huérfano)")} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",opacity:ajena?.45:1,cursor:ajena?"not-allowed":"pointer"}} title={ajena?"Lo usa una orden que no está cargada aquí":"Borrar"}><TrashIcon size={14} weight="bold"/></button>
           </div>
         </div>;
       })}
@@ -15795,14 +15819,16 @@ function StorageTab({orders,onReload}) {
           <div style={{fontSize:10,color:C.t2}}>{orphans.length} archivo{orphans.length>1?"s":""} sin referencia en BD · {fmtBytes(orphans.reduce((s,f)=>s+f.size,0))}</div>
           <div style={{fontSize:9,color:C.t3,marginTop:4,fontStyle:"italic"}}>Estos archivos están en Storage pero no apuntan a ninguna orden. Pueden borrarse de forma segura.</div>
         </div>
-        <button onClick={cleanupOrphans} disabled={cleaningOrphans} style={{...bt(cleaningOrphans?C.bdSt:C.wn),cursor:cleaningOrphans?"wait":"pointer"}}>{cleaningOrphans?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><TrashIcon size={14} weight="bold"/>Limpiar Todos ({orphans.length})</>}</button>
+        <button onClick={cleanupOrphans} disabled={cleaningOrphans||!!candadoHuerfanos} aria-describedby={candadoHuerfanos?"pf-candado-huerfanos":undefined} style={{...bt(cleaningOrphans||candadoHuerfanos?C.bdSt:tintaAA(C.wn,4.6)),cursor:cleaningOrphans?"wait":candadoHuerfanos?"not-allowed":"pointer"}}>{cleaningOrphans?<><HourglassIcon size={14} weight="bold"/>Limpiando...</>:<><TrashIcon size={14} weight="bold"/>Limpiar Todos ({orphans.length})</>}</button>
       </div>
+      {/* v10.84.83 — el candado de cordura se ve antes de picarle (antes, un alert() después) */}
+      {candadoHuerfanos&&<div id="pf-candado-huerfanos" style={{display:"flex",gap:6,alignItems:"flex-start",fontSize:11,fontWeight:600,color:C.dnInk,lineHeight:1.45,margin:"0 0 8px"}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:1}}/><span>{candadoHuerfanos}</span></div>}
       <div style={{maxHeight:200,overflowY:"auto",marginTop:8}}>
         {orphans.slice(0,20).map(f=><div key={f.path} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"0.5px solid "+C.bd,fontSize:10}}>
           <div style={{flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",color:C.t2}}>{f.path}</div>
           <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:8}}>
             <span style={{color:C.tx,fontWeight:600,minWidth:50,textAlign:"right"}}>{fmtBytes(f.size)}</span>
-            <button onClick={()=>deleteOrphan(f)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",padding:"2px 6px",fontSize:10}} title="Borrar"><TrashIcon size={13} weight="bold"/></button>
+            <button onClick={()=>deleteOrphan(f)} aria-label={"Borrar el huérfano «"+f.name+"»"} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",padding:"2px 6px",fontSize:10}} title="Borrar"><TrashIcon size={13} weight="bold"/></button>
           </div>
         </div>)}
         {orphans.length>20&&<div style={{fontSize:10,color:C.t3,textAlign:"center",padding:"8px 0",fontStyle:"italic"}}>+{orphans.length-20} más (usa "Limpiar Todos" para borrarlos)</div>}
@@ -15823,27 +15849,17 @@ function StorageTab({orders,onReload}) {
           </div>
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
-          {age>30&&<span style={{background:C.wn+"15",color:C.wn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>+30d</span>}
-          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} onClick={()=>setTimeout(()=>setDownloadedOrder(o),500)} style={{...bs(C.ios),textDecoration:"none"}}><DownloadSimpleIcon size={14} weight="bold"/></a>
-          <button onClick={()=>deleteOne(o)} disabled={isDel} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",cursor:isDel?"wait":"pointer"}} title="Borrar archivo"><TrashIcon size={14} weight="bold"/></button>
+          <a href={o.file_url} target="_blank" rel="noopener" download={o.file_name} {...propsArchivoFirmado(o)} aria-label={"Descargar «"+(o.file_name||"archivo")+"» de "+nombreOrden(o)} title="Descargar" style={{...bs(C.ios),textDecoration:"none"}}><DownloadSimpleIcon size={14} weight="bold"/></a>
+          <button onClick={()=>deleteOne(o)} disabled={isDel} aria-label={"Borrar «"+(o.file_name||"archivo")+"» de "+nombreOrden(o)} style={{...bs(C.sf,C.dn),border:"0.5px solid "+C.dn+"30",cursor:isDel?"wait":"pointer"}} title="Borrar archivo"><TrashIcon size={14} weight="bold"/></button>
         </div>
       </div>})}
       {withFile.length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.t3,fontSize:12}}>Sin archivos subidos aún</div>}
     </div>
 
-    {/* Post-download recommendation popup */}
-    {downloadedOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-      <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:400,width:"90%",textAlign:"center"}}>
-        <div style={{marginBottom:8}}><FloppyDiskIcon size={34} weight="bold" color={C.ac}/></div>
-        <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 8px"}}>¿Ya descargaste el archivo?</h3>
-        <p style={{fontSize:12,color:C.t2,margin:"0 0 6px"}}>{downloadedOrder.client} — {downloadedOrder.file_name}</p>
-        <p style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:C.wn,margin:"0 0 20px",fontWeight:500}}><LightbulbIcon size={13} weight="fill"/>Bórralo para liberar espacio en almacenamiento</p>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setDownloadedOrder(null)} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>No, conservar</button>
-          <button onClick={()=>{deleteOne(downloadedOrder);setDownloadedOrder(null)}} style={{...bt(C.dn),flex:1,justifyContent:"center"}}><TrashIcon size={14} weight="bold"/>Sí, borrar</button>
-        </div>
-      </div>
-    </div>}
+    {/* v10.84.83 — la ventana de borrar es la de la app (nombra lo que se borra; Esc y «No» no borran; el doble clic cuenta una vez) y lo
+         que pasó se dice con su aviso. Antes: confirm() y alert() del navegador, y una ventana después de cada descarga que proponía borrar. */}
+    {pregunta&&<ConfirmModal {...pregunta} confirmColor={C.dnInk} onClose={()=>setPregunta(null)}/>}
+    {aviso&&<Toast key={aviso.id} message={aviso.message} type={aviso.type} onDone={()=>setAviso(null)}/>}
   </div>;
 }
 

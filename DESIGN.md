@@ -639,3 +639,10 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **El cliente trae su identidad y no se le cambia en la forma** (v10.84.81): el RFC de un cliente elegido es el suyo (con candado y su
   porqué; si su ficha no tiene RFC, se puede poner); el cliente de «Agregar producto a OC-…» es el de la OC; y el nombre de uno que ya
   existe con OTRO RFC tecleado no se liga callado: se pone el suyo y se dice. Otro cliente es otra razón social.
+- **Lo que se decidió conservar no se ofrece borrar en masa** (v10.84.83, la critique de Analytics): el archivo de impresión es el
+  historial de la orden (Marcelo, 12-oct). Borrar UNO es a propósito: la ventana de la app nombra la orden, su cliente, su etapa, el
+  archivo y su peso, y lo que se pierde. Nada propone borrar después de descargar ni marca algo como «antiguo»; en masa sólo se limpia lo
+  que ninguna orden usa (los huérfanos), con sus candados a la vista ANTES de picarle y el botón apagado.
+- **Un componente de módulo avisa con el `Toast` de la app, no con `alert()`** (v10.84.83, `StorageTab`): no ve `showToast` (regla 13 del
+  CLAUDE.md), así que monta su propio `<Toast>` con su estado. Ni `confirm()` ni `alert()` del navegador: preguntan sin decir qué, no
+  siguen el diseño y una prueba no los puede leer como lee la pantalla.
