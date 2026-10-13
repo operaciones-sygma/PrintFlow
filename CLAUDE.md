@@ -110,7 +110,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1265 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1292 pruebas, ~10 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -180,7 +180,16 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.82 (12-oct, ~22:22; READY `dpl_6nNC2NSqt5b2Zus8USkVbBNYzSdK`, commit `68a6d85`; vuelta atrás: promover
+- **LIVE:** v10.84.83 (13-oct, ~00:23; READY `dpl_2pvXX3Joymffkm5WeRA9qhcZSw8S`, commits `06e9183` y `80a53a2` (dos pruebas de reloj); vuelta
+  atrás: promover `dpl_fQFgBhcsCyvVMPfEB74b3DF7xGof` (el código de v10.84.82) o `git revert 06e9183`; la base no cambió; 1292 pruebas).
+  v10.84.83: **«Archivos» sin borrado en masa** (el P1 de la critique de Analytics, revisor independiente 14/40; snapshot
+  `.impeccable/critique/2026-10-13T05-07-59Z__src-app-jsx-analytics-productos-por-ingreso.md`): el archivo de impresión es el historial
+  (decisión del 12-oct), así que borrar UNO abre la ventana de la app que dice cuál (orden, cliente, etapa, archivo, peso) y lo que pasa se
+  dice con el `Toast` (🔑 un componente de módulo monta el suyo; nunca `confirm()`/`alert()`). `StorageTab` lo ven Dirección (Analytics) y
+  Pre-prensa y Germán («Archivos»). **Sigue: los tipos de producto** (Marcelo, 12-oct: una categoría nueva aparte, de lista cerrada, que
+  alimenta Analytics; «Venta de inventario» como canal; quitar «🔴 ATRASADA · » de las 37 importadas; cambio de base, se ensaya primero).
+  Pendiente de Marcelo: ¿quitar también la pregunta del detalle de borrar el archivo después de descargarlo?
+  v10.84.82 (12-oct, ~22:22; READY `dpl_6nNC2NSqt5b2Zus8USkVbBNYzSdK`, commit `68a6d85`; vuelta atrás: promover
   `dpl_13xeMsi8WqBMdZvVY3bKR1LNcuiF` (el código de v10.84.81) o `git revert 68a6d85`; la base no cambió; 1265 pruebas). v10.84.82: **la forma
   de la orden en UNA sola forma** (Marcelo, 12-oct, la «A» de un análisis de 90 días: sin «Sencillo / Avanzado»; una descripción que crece; el
   orden de la hoja impresa con la imagen arriba de las especificaciones, que se pliegan con su resumen y empiezan abiertas) y **Replicar sin

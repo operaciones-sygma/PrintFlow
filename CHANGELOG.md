@@ -74,6 +74,16 @@ los huérfanos).
 - «Archivos» sigue dentro de Analytics; el revisor sugiere moverla a «Salud Operativa» o a su propia pantalla. Lo siguiente de la critique:
   los tipos de producto (la categoría nueva; es cambio de base y se ensaya primero).
 
+**En producción** (13-oct, ~00:23): READY `dpl_2pvXX3Joymffkm5WeRA9qhcZSw8S` (commits `06e9183` y `80a53a2`), candado 1292 de 1292 al
+segundo intento. El primero (00:00-00:10) frenó con dos pruebas de reloj que fallaban pasando la medianoche: `pla-07` y `tab-46` ponían el
+arranque «hace media hora» y «hace 5 minutos» restando a ahora y pedían el reloj de hoy; a esa hora eso es ayer y la app dice, bien,
+«desde ayer 23:39». Eran de la prueba: el arranque ya no pasa antes de las 00:00 de hoy (`80a53a2`; comprobado a las 00:12, sin el cambio
+`pla-07` falla y con él pasa). `tab-46` había salido INESTABLE y quedó revisada con esa causa. También frenó `ord-178` (tanda de dinero, sin
+segunda oportunidad): se cayó esperando la página mientras otra sesión corría tres tandas a la vez; sola pasa 2 de 2. Vuelta atrás:
+promover `dpl_fQFgBhcsCyvVMPfEB74b3DF7xGof` (el código de v10.84.82) o `git revert 06e9183`. Revisado contra produccion.sygma.mx sin
+escribir (la cuenta de pruebas, escrituras cortadas): `.banco-revisor-orden/medir-83.mjs` 12 de 12 (Dirección y Pre-prensa; las únicas
+escrituras, las dos de Dirección al entrar, ya conocidas) y `npm run recorrido` (8 roles, 94 pasos): nada truena.
+
 ## v10.84.82 — La forma de la orden en una sola forma (sin «Sencillo / Avanzado»), y Replicar sin el precio de otra cantidad — 12-oct-2026
 
 **Qué pasaba** (las dos decisiones que dejó la tercera revisión independiente; Marcelo pidió primero un análisis a fondo de los modos):
