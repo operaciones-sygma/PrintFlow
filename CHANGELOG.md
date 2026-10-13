@@ -12,6 +12,60 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.82 — La forma de la orden en una sola forma (sin «Sencillo / Avanzado»), y Replicar sin el precio de otra cantidad — 12-oct-2026
+
+**Qué pasaba** (las dos decisiones que dejó la tercera revisión independiente; Marcelo pidió primero un análisis a fondo de los modos):
+- **Los modos se leían al revés y no correspondían a cómo se captura.** «Sencillo» enseñaba 14 campos (papel, gramaje, tintas, Pantones,
+  medida, acabados) y una descripción chica; «Avanzado», una caja grande con un ejemplo de libro y los campos escondidos. Los nombres
+  hablaban del PRODUCTO (etiquetas o libros), no de la forma. En producción, 90 días (sin maquila ni las ventas de stock de Karla): Lupita
+  captura el 70 % de las órdenes y en el 50 % usa sólo campos, en el 32 % campos Y texto, en el 18 % sólo texto; Genaro escribe todo en
+  texto (91 %). El texto libre lleva cuatro cosas distintas: productos de varias partes (calendarios, blocks), listas (distribución por
+  sucursal, nombres de constancias, códigos), lo que los campos no dicen («impresión digital», medida extendida y final, «doblar en 3»,
+  «enfajillar cada 250») y la hoja del vendedor.
+- **Lo que «Avanzado» escondía se guardaba** (y la hoja impresa lo enseña: decide por los datos, no por el modo). En 90 días no hubo un solo
+  caso contradictorio (37 órdenes con texto largo y campos), pero el riesgo estaba.
+- **El bloque de campos (721 px) dejaba lo más usado lejos**: a 1366 con el menú abierto la imagen (94 % de las órdenes) estaba a 1,552 px,
+  casi tres pantallas abajo (la primera termina en 677).
+- **Replicar copiaba el precio total de otra cantidad** (P-0572, 1,000 pzas a $19,600, replicada sobre 777 dejaba $19,600).
+- Lo que nadie más lee: CobranzaFlow sólo usa la descripción (o la arma de los campos) en el detalle de los vales; el cotizador y Almacén,
+  nada. La base no cambia.
+
+**Qué se cambió** (`src/App.jsx`; Marcelo, 12-oct: la «A» del análisis, las especificaciones «siempre abiertas», «no copiar el precio»):
+- **Una sola forma**: sin «Modo de captura». Una descripción («Descripción del trabajo») siempre a la vista, que crece con lo escrito (de 3
+  renglones a unos 12, luego barra; `field-sizing: content`), con un ejemplo de los dos usos. Maquila conserva su «Descripción del trabajo».
+- **El orden de la hoja impresa**: la descripción, después «Para producción» (la imagen PRIMERO: 94 % contra 52 % de la placa; luego la
+  placa y las notas) y después las especificaciones. A 1366 la imagen pasó de 1,552 a 855 px; a 1920 y con el menú plegado, en la primera
+  pantalla.
+- **Las especificaciones se pliegan** como «Más de esta orden»: plegadas dicen lo que traen («Couché 150 g · frente 4 · vuelta 1 · Carta ·
+  Doblez», o «Sin especificaciones»), así que nada se guarda sin verse; empiezan ABIERTAS en cada orden. Ir a un campo con error que está
+  plegado las abre. En Pre-prensa su descripción de sólo lectura queda fuera del pliegue.
+- **El segundo clic de un doble clic** en un pliegue caía en lo que quedaba bajo el cursor al recorrerse la página (a 1920 con la forma
+  vacía, «Ya existe» de la placa): 350 ms después de plegar o abrir, un clic con `detail ≥ 2` fuera del botón no cuenta (un clic sencillo sí).
+- **Replicar con otra cantidad** ya no copia el precio (ni el costo y precio de maquila): lo dice el aviso y una nota bajo el precio que se
+  va al capturarlo, al igualar la cantidad o con «Deshacer». Con la misma cantidad, o vacía (se trae la suya), sí.
+- **`ClientInput`** (cinco pantallas): salir y volver al campo en menos de 200 ms ya no cierra la lista recién abierta (el temporizador viejo
+  la cerraba; la misma carrera que la lista del tipo en v10.84.81). Lo encontró la prueba de plegar.
+
+**Cómo se probó** (la tanda `orden-2`, 52 → 86 casos): **vuelta 1**, 17 casos nuevos contra v10.84.81: fallaban 12 (el selector, lo
+escondido, la imagen a 1,552 px, el orden, sin pliegue ni resumen, la descripción de 90 px con 8 renglones, Replicar con el precio de 1,000 pzas
+sobre 777 y el de la maquila); los 5 que pasaban son guardas (Pre-prensa, maquila, Replicar con la misma cantidad o vacía, 1920). Al arreglar,
+la prueba de plegar encontró una falla vieja de `ClientInput` (la lista del cliente se cerraba sola al volver al campo en menos de 200 ms) y la
+de editar una orden de puro texto, una llamada a `setAdvMode` que se me quedó (tronaba la forma). **Vuelta 2**, 10 por donde no se diseñó: tres
+fallas de fondo (un número malo dentro de las especificaciones plegadas no las abría; en Pre-prensa plegar escondía su descripción; y el doble
+clic: al plegarse la página se recorre y el segundo clic caía en lo de abajo, medido a 1920 con la forma vacía en «Ya existe» de la placa) y
+dos supuestos míos (un clic a coordenadas que caía en el pie fijo, y un escudo de puro tiempo que se tragaba clics buenos: ahora sólo
+`detail ≥ 2`). **Vuelta 3**, 6 sobre los arreglos: nada de fondo. **Sabotajes** (el escudo, abrir lo plegado al ir al error, la carrera de
+`ClientInput`): las pruebas cazan los 3. **Corrida doble** (las 239 de la forma contra v10.84.81 y contra v10.84.82, el mismo banco):
+v10.84.81 217 de 239 (las 22 que fallan son nuevas), v10.84.82 239 de 239: ninguna regresión. **La app REAL compilada**
+(`.banco-revisor-orden/medir-82.mjs`, 1 entrada, y `medir-81-oc.mjs`, 1; la cuenta de pruebas, escrituras cortadas): sin selector, el orden a
+1366 (la imagen a 855 px), la descripción que crece, el resumen al plegar, 1920, Replicar de un cliente de verdad (P-0628, 7,000 pzas, sobre 7:
+sin precio y con la nota) y «Crear OC» con el candado del RFC; sin errores (la única escritura, la copia de la imagen de Replicar, cortada a
+propósito). **Sin probar**: `ClientInput` en «Mover orden», «Fusionar clientes» y «Facturar a» (el cambio sólo actúa si el foco vuelve al
+campo en menos de 200 ms).
+
+**Para Marcelo:** nada que decidir. El análisis de los modos (los datos de 90 días) está en el CHANGELOG de arriba; si se quiere ver si la
+forma nueva cambia la captura, en un mes se puede medir lo mismo (cuántas órdenes llevan texto, campos o los dos).
+
 ## v10.84.81 — La forma de la orden: «P-… creada» siempre a la vista, el cliente con su identidad, y el teclado sin perderse — 12-oct-2026
 
 **Qué pasaba** (la TERCERA revisión independiente de la forma, 12-oct en la noche: **29/40**, cero P0, un P1 por confirmar y cuatro P2;

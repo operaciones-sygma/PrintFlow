@@ -1883,6 +1883,267 @@ await caso("ord-280 doble clic en «Crear Orden» con el nombre que ya existe y 
   ok("ord-280 doble clic en «Crear Orden» con el nombre que ya existe y OTRO RFC: ninguna orden, y queda el RFC del cliente", n.length === 0 && rfc === "CMM8601014G4", `nuevas ${JSON.stringify(n)} · RFC «${rfc}»`);
 });
 
+// ── v10.84.82: UNA sola forma (Marcelo, 12-oct, la «A» del análisis de los modos: en 90 días Lupita mezcla texto y campos en el 32 % de
+//    sus órdenes y el bloque de campos, 721 px, dejaba la imagen a 1,552 px a 1366) y Replicar sin el precio de otra cantidad ──
+const yDe = (p, que) => p.evaluate(que => {
+  const abs = el => el ? Math.round(el.getBoundingClientRect().top + scrollY) : null;
+  if (que === "descripcion") return abs(document.getElementById("ff-descripcion"));
+  if (que === "imagenes") return abs([...document.querySelectorAll(".pf-forma label")].find(l => /Imágenes/.test(l.textContent || "")));
+  if (que === "papel") return abs(document.getElementById("ff-papel"));
+  return null;
+}, que);
+const plegarEsp = p => p.getByRole("button", { name: /^Especificaciones/ });
+const tieneTexto = async (p, re) => re.test(await texto(p));
+await caso("ord-281 una sola forma: no se elige «Sencillo / Avanzado» antes de capturar", "", async p => {
+  const n = await p.getByRole("button", { name: /^(Sencillo|Avanzado)$/ }).count(), modo = await tieneTexto(p, /Modo de captura/i);
+  ok("ord-281 una sola forma: no se elige «Sencillo / Avanzado» antes de capturar", n === 0 && !modo, `botones de modo ${n} · «Modo de captura» ${modo}`);
+});
+await caso("ord-282 lo que se guarda se ve: lo capturado en especificaciones no se puede esconder sin que se diga (antes «Avanzado» lo escondía y se guardaba)", "", async p => {
+  await p.locator("#ff-papel").fill("Couché"); await p.locator("#ff-gramaje").fill("150"); await espera(p, 100);
+  // todo lo que la forma ofrece para esconder las especificaciones: el modo «Avanzado» (si lo hay) y plegar la sección (si se puede)
+  const av = p.getByRole("button", { name: /^Avanzado$/ });
+  if (await av.count()) { await av.first().click(); await espera(p, 200); }
+  const pl = plegarEsp(p);
+  if ((await pl.count()) && (await pl.first().getAttribute("aria-expanded")) === "true") { await pl.first().click(); await espera(p, 200); }
+  const r = await p.evaluate(() => ({ campo: !!document.getElementById("ff-papel"), dice: /Couché 150/.test(document.querySelector(".pf-forma").innerText) }));
+  ok("ord-282 lo que se guarda se ve: lo capturado en especificaciones no se puede esconder sin que se diga (antes «Avanzado» lo escondía y se guardaba)", r.campo || r.dice, JSON.stringify(r));
+});
+await caso("ord-283 a 1366 con el menú abierto la imagen queda a menos de 900 px (era 1,552: detrás de las especificaciones)", "", async p => {
+  const y = await yDe(p, "imagenes");
+  ok("ord-283 a 1366 con el menú abierto la imagen queda a menos de 900 px (era 1,552: detrás de las especificaciones)", y !== null && y < 900, `imágenes a ${y} px`);
+});
+await caso("ord-284 a 1366 el orden de la hoja impresa: descripción, después «Para producción» (la imagen) y luego las especificaciones", "", async p => {
+  const d = await yDe(p, "descripcion"), i = await yDe(p, "imagenes"), e = await yDe(p, "papel");
+  ok("ord-284 a 1366 el orden de la hoja impresa: descripción, después «Para producción» (la imagen) y luego las especificaciones", d !== null && i !== null && e !== null && d < i && i < e, `descripción ${d} · imágenes ${i} · papel ${e}`);
+});
+await caso("ord-285 a 1920 la imagen se sube sin desplazar: «Subir 1ra» arriba del pie", "", async p => {
+  const top = await pieTop(p), b = await p.evaluate(() => { const x = [...document.querySelectorAll(".pf-forma button")].find(e => /Subir 1ra/.test(e.textContent || "")); return x ? Math.round(x.getBoundingClientRect().bottom) : null; });
+  ok("ord-285 a 1920 la imagen se sube sin desplazar: «Subir 1ra» arriba del pie", b !== null && b <= top, `«Subir 1ra» termina en ${b} · el pie empieza en ${Math.round(top)}`);
+}, { width: 1920, height: 1080 });
+await caso("ord-286 las especificaciones empiezan ABIERTAS en cada orden nueva (también después de plegarlas y crear una)", "", async p => {
+  const t = plegarEsp(p), hay = (await t.count()) > 0;
+  const a1 = hay ? await t.first().getAttribute("aria-expanded") : null;
+  if (hay) { await t.first().click(); await espera(p, 150); }
+  await capturar(p); await crear(p); await espera(p, 1500);
+  const a2 = hay ? await plegarEsp(p).first().getAttribute("aria-expanded") : null, papel = await p.locator("#ff-papel").count();
+  ok("ord-286 las especificaciones empiezan ABIERTAS en cada orden nueva (también después de plegarlas y crear una)", hay && a1 === "true" && a2 === "true" && papel === 1,
+    `se pliegan ${hay} · al abrir ${a1} · después de crear ${a2} · papel a la vista ${papel === 1}`);
+});
+await caso("ord-287 plegadas, las especificaciones dicen lo que traen (y «Sin especificaciones» si no traen nada)", "", async p => {
+  const t = plegarEsp(p);
+  if (!(await t.count())) { ok("ord-287 plegadas, las especificaciones dicen lo que traen (y «Sin especificaciones» si no traen nada)", false, "no se pueden plegar"); return; }
+  await t.first().click(); await espera(p, 150);
+  const vacia = (await t.first().innerText()).replace(/\s+/g, " ");
+  await t.first().click(); await espera(p, 150);
+  await p.locator("#ff-papel").fill("Couché"); await p.locator("#ff-gramaje").fill("150");
+  await p.locator("#ff-tintas-frente").fill("4"); await p.locator("#ff-tintas-vuelta").fill("1");
+  await p.getByRole("button", { name: /Tamaño estándar/ }).click(); await espera(p, 100);
+  await p.getByRole("button", { name: /^Doblez$/ }).first().click(); await espera(p, 100);
+  await t.first().click(); await espera(p, 150);
+  const llena = (await t.first().innerText()).replace(/\s+/g, " ");
+  ok("ord-287 plegadas, las especificaciones dicen lo que traen (y «Sin especificaciones» si no traen nada)",
+    /Sin especificaciones/i.test(vacia) && /Couché 150 g/.test(llena) && /frente 4/i.test(llena) && /vuelta 1/i.test(llena) && /Carta/.test(llena) && /Doblez/.test(llena), `vacía «${vacia}» · llena «${llena}»`);
+});
+await caso("ord-288 la descripción crece con lo escrito (8 renglones sin barra) y no sin fin (30 renglones: tope y barra)", "", async p => {
+  const d = p.locator("#ff-descripcion");
+  await d.fill(Array.from({ length: 8 }, (_, i) => "Renglón " + (i + 1) + " de la descripción").join("\n")); await espera(p, 150);
+  const r8 = await d.evaluate(e => ({ alto: e.clientHeight, contenido: e.scrollHeight }));
+  await d.fill(Array.from({ length: 30 }, (_, i) => "Renglón " + (i + 1)).join("\n")); await espera(p, 150);
+  const r30 = await d.evaluate(e => ({ alto: e.clientHeight, contenido: e.scrollHeight }));
+  ok("ord-288 la descripción crece con lo escrito (8 renglones sin barra) y no sin fin (30 renglones: tope y barra)", r8.contenido <= r8.alto + 2 && r30.alto <= 360 && r30.contenido > r30.alto,
+    `8 renglones ${JSON.stringify(r8)} · 30 renglones ${JSON.stringify(r30)}`);
+});
+await caso("ord-289 editar una orden de texto largo y sin especificaciones (antes «Avanzado»): el texto completo a la vista, y guardar sin tocar no cambia nada", "modo=editar&rol=admin", async p => {
+  const largo = "CALENDARIOS 2027\nBASE\nMEDIDA EXT. 41 X 21\nCARTULINA SULFATADA 20 PTS.\nIMP. 4 X 0\n\nHOJAS\n13 HOJAS COUCHE 150 G\nIMP. 4 X 4\nENGARGOLADO";
+  await p.evaluate(t => { const o = window.__estado().base.find(x => x.id === "OP-ED"); Object.assign(o, { product: t, paper_type: null, paper_grammage: null, ink_front: null, width_cm: null, height_cm: null, finishes: null }); }, largo);
+  await editar(p, "OP-ED");
+  const d = await p.locator("#ff-descripcion").evaluate(e => ({ largo: e.value.length, alto: e.clientHeight, contenido: e.scrollHeight }));
+  await guardar(p); await espera(p, 900);
+  const a = await avisos(p), t = await texto(p), sin = a.some(x => /Sin cambios/i.test(x)) || /Sin cambios/i.test(t);
+  ok("ord-289 editar una orden de texto largo y sin especificaciones (antes «Avanzado»): el texto completo a la vista, y guardar sin tocar no cambia nada",
+    d.largo === largo.length && d.contenido <= d.alto + 2 && sin, `${JSON.stringify(d)} · «Sin cambios» ${sin}`);
+});
+await caso("ord-290 Pre-prensa («Editar Specs»): sus especificaciones editables y la descripción de sólo lectura (como antes)", "modo=specs&rol=preprensa", async p => {
+  const papel = await editable(p.locator("#ff-papel")), caja = await p.locator("#ff-descripcion").count(), dice = await tieneTexto(p, /Recetas Dr\. Eduardo Fuentes/);
+  ok("ord-290 Pre-prensa («Editar Specs»): sus especificaciones editables y la descripción de sólo lectura (como antes)", papel && caja === 0 && dice, `papel editable ${papel} · caja de descripción ${caja} · la descripción se lee ${dice}`);
+});
+await caso("ord-291 maquila: su «Descripción del trabajo» y sin especificaciones (como antes)", "", async p => {
+  await p.getByRole("button", { name: /^Maquila/ }).first().click(); await espera(p, 300);
+  const r = await p.evaluate(() => ({ caja: !!document.getElementById("ff-descripcion"), etiqueta: /Descripción del trabajo/i.test(document.querySelector(".pf-forma").innerText), papel: !!document.getElementById("ff-papel") }));
+  ok("ord-291 maquila: su «Descripción del trabajo» y sin especificaciones (como antes)", r.caja && r.etiqueta && !r.papel, JSON.stringify(r));
+});
+await caso("ord-292 Replicar una orden de 1,000 pzas sobre 777: NO copia el precio, y lo dice bajo Precio y en el aviso", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "777");
+  await replicar(p);
+  const precio = await p.locator("#ff-precio").inputValue(), cant = await p.getByPlaceholder("Ejemplo · 1000").first().inputValue();
+  const t = await texto(p), ultimo = (await avisos(p)).pop() || "";
+  ok("ord-292 Replicar una orden de 1,000 pzas sobre 777: NO copia el precio, y lo dice bajo Precio y en el aviso",
+    precio === "" && /^777$/.test(cant) && /No se copi[óo] el precio de P-0648/i.test(t) && /1,000/.test(t) && /precio/i.test(ultimo),
+    `precio «${precio}» · cantidad «${cant}» · la nota ${/No se copi[óo] el precio/i.test(t)} · aviso «${ultimo.slice(0, 140)}»`);
+});
+await caso("ord-293 Replicar con la cantidad vacía: trae la cantidad Y su precio (son de la misma orden)", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await replicar(p);
+  const cant = await p.getByPlaceholder("Ejemplo · 1000").first().inputValue(), precio = await p.locator("#ff-precio").inputValue();
+  ok("ord-293 Replicar con la cantidad vacía: trae la cantidad Y su precio (son de la misma orden)", /^1,?000$/.test(cant) && /^4,?200(\.00)?$/.test(precio), `cantidad «${cant}» · precio «${precio}»`);
+});
+await caso("ord-294 Replicar con la MISMA cantidad ya tecleada: copia el precio", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "1000"); await replicar(p);
+  const precio = await p.locator("#ff-precio").inputValue(), nota = await tieneTexto(p, /No se copi[óo] el precio/i);
+  ok("ord-294 Replicar con la MISMA cantidad ya tecleada: copia el precio", /^4,?200(\.00)?$/.test(precio) && !nota, `precio «${precio}» · nota ${nota}`);
+});
+await caso("ord-295 la nota «No se copió el precio» se va al capturar el precio, y con «Deshacer» del aviso", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "777"); await replicar(p);
+  const antes = await tieneTexto(p, /No se copi[óo] el precio/i);
+  await p.locator("#ff-precio").fill("3500"); await espera(p, 150);
+  const conPrecio = await tieneTexto(p, /No se copi[óo] el precio/i);
+  await p.locator("#ff-precio").fill(""); await espera(p, 150);
+  const des = p.getByRole("button", { name: /^Deshacer$/ }); if (await des.count()) { await des.last().click(); await espera(p, 300); }
+  const despues = await tieneTexto(p, /No se copi[óo] el precio/i);
+  ok("ord-295 la nota «No se copió el precio» se va al capturar el precio, y con «Deshacer» del aviso", antes && !conPrecio && !despues, `al replicar ${antes} · con precio ${conPrecio} · tras «Deshacer» ${despues}`);
+});
+await caso("ord-296 Replicar una maquila de otra cantidad: no copia el costo ni el precio de maquila (el proveedor sí)", "", async p => {
+  await p.evaluate(() => window.__estado().base.push({ id: "OP-MQ2", production_number: "P-0646", client: "COSQUIM", client_id: "c-cosquim", client_company: "COSQUIM", client_email: "compras@cosquim.mx",
+    order_type: "maquila", product_type: "Bolsas", product: "Bolsa kraft con asa", quantity: 1000, maq_provider: "Bolsas del Bajío", maq_cost: 5000, maq_price: 7000,
+    stage: "maq_sent", source: "internal", agent: "Manuel", created_by: "lupita", created_at: "2026-10-08T10:00:00Z" }));
+  await elegirCliente(p, "COSQUIM");
+  await p.getByRole("button", { name: /^Maquila/ }).first().click(); await espera(p, 300);
+  await llenar(p, "Ejemplo · 1000", "500");
+  await replicar(p, "P-0646");
+  const costo = await p.locator("#ff-maq-costo").inputValue(), precio = await p.locator("#ff-maq-precio").inputValue(), prov = await p.locator("#ff-maq").inputValue();
+  ok("ord-296 Replicar una maquila de otra cantidad: no copia el costo ni el precio de maquila (el proveedor sí)", costo === "" && precio === "" && /Bolsas del Baj/.test(prov),
+    `costo «${costo}» · precio «${precio}» · proveedor «${prov}»`);
+});
+await caso("ord-297 a 683×384 (una columna) el mismo orden: descripción, la imagen y luego las especificaciones", "", async p => {
+  const d = await yDe(p, "descripcion"), i = await yDe(p, "imagenes"), e = await yDe(p, "papel");
+  ok("ord-297 a 683×384 (una columna) el mismo orden: descripción, la imagen y luego las especificaciones", d !== null && i !== null && e !== null && d < i && i < e, `descripción ${d} · imágenes ${i} · papel ${e}`);
+}, { width: 683, height: 384 });
+
+// ── v10.84.82, segunda vuelta: por donde no se diseñó ──
+const espAbierta = async p => (await plegarEsp(p).first().getAttribute("aria-expanded").catch(() => null)) === "true";
+const plegar = async p => { if (await espAbierta(p)) { await clic(plegarEsp(p)); await espera(p, 150); } };
+await caso("ord-298 con las especificaciones plegadas, Replicar las trae: el resumen las dice y al abrir están en sus campos", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await plegar(p);
+  await replicar(p);
+  const resumen = (await plegarEsp(p).first().innerText()).replace(/\s+/g, " ");
+  await clic(plegarEsp(p)); await espera(p, 150);
+  const papel = await p.locator("#ff-papel").inputValue().catch(() => "");
+  ok("ord-298 con las especificaciones plegadas, Replicar las trae: el resumen las dice y al abrir están en sus campos", /Couché adhesivo/.test(resumen) && /5 × 4 cm/.test(resumen) && papel === "Couché adhesivo", `resumen «${resumen}» · papel «${papel}»`);
+});
+await caso("ord-299 plegar no quita nada: con las especificaciones plegadas, la orden se crea CON ellas", "", async p => {
+  await capturar(p);
+  await p.locator("#ff-papel").fill("Bond"); await p.locator("#ff-gramaje").fill("90"); await plegar(p);
+  await crear(p); await espera(p, 1500);
+  const o = await p.evaluate(fijas => window.__estado().base.filter(x => !fijas.includes(x.id)).map(x => ({ papel: x.paper_type, gramaje: x.paper_grammage })), FIJAS);
+  ok("ord-299 plegar no quita nada: con las especificaciones plegadas, la orden se crea CON ellas", o.length === 1 && o[0].papel === "Bond" && String(o[0].gramaje) === "90", JSON.stringify(o));
+});
+await caso("ord-300 un número malo dentro de las especificaciones plegadas: al crear se abren y el foco va a ese campo", "", async p => {
+  await capturar(p);
+  await p.locator("#ff-gramaje").fill("15o"); await plegar(p);
+  await crear(p); await espera(p, 700);
+  const r = await p.evaluate(() => ({ foco: document.activeElement?.id || document.activeElement?.tagName, abierta: !!document.getElementById("ff-gramaje") }));
+  ok("ord-300 un número malo dentro de las especificaciones plegadas: al crear se abren y el foco va a ese campo", r.abierta && r.foco === "ff-gramaje" && (await nuevas(p)).length === 0, JSON.stringify(r));
+});
+await caso("ord-301 con el teclado: Enter en «Especificaciones» la pliega y la abre, y el foco se queda en el botón", "", async p => {
+  const b = plegarEsp(p); await b.first().focus();
+  await p.keyboard.press("Enter"); await espera(p, 150); const a1 = await espAbierta(p), f1 = await quienTieneElFoco(p);
+  await p.keyboard.press("Enter"); await espera(p, 150); const a2 = await espAbierta(p), f2 = await quienTieneElFoco(p);
+  ok("ord-301 con el teclado: Enter en «Especificaciones» la pliega y la abre, y el foco se queda en el botón", !a1 && a2 && /^Especificaciones/.test(f1) && /^Especificaciones/.test(f2), `${a1}/${f1} → ${a2}/${f2}`);
+});
+// (la primera versión pedía «queda como estaba». Después: a 683 con el botón al 85 % de la pantalla «creaba la orden», pero ahí el botón queda
+//  DEBAJO del pie fijo y el primer clic ya caía en «Crear Orden»: error de la prueba, una persona ve el pie encima. Lo que sí pasa, medido: a
+//  1920 con la forma vacía y el botón al 30 %, al plegarse la página se recorre y el segundo clic cae en «Ya existe» de la placa)
+const placaElegida = p => p.evaluate(() => [...document.querySelectorAll(".pf-forma button[aria-pressed]")].filter(b => /Nueva CTP|Ya existe/.test(b.textContent || "") && b.getAttribute("aria-pressed") === "true").length);
+await caso("ord-302 a 1920 con la forma vacía, un doble clic en «Especificaciones» NO cambia la placa (el segundo clic caía en «Ya existe»)", "", async p => {
+  const t = plegarEsp(p).first();
+  await t.evaluate(e => { const r = e.getBoundingClientRect(); scrollTo({ top: scrollY + r.top - innerHeight * 0.3, behavior: "instant" }); }); await espera(p, 120);
+  const box = await t.boundingBox();
+  const debajo = await p.evaluate(([x, y]) => (document.elementFromPoint(x, y)?.closest("button")?.textContent || "").trim().slice(0, 30), [box.x + box.width / 2, box.y + box.height / 2]);
+  await p.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); await espera(p, 500);
+  const placa = await placaElegida(p);
+  ok("ord-302 a 1920 con la forma vacía, un doble clic en «Especificaciones» NO cambia la placa (el segundo clic caía en «Ya existe»)", /^Especificaciones/.test(debajo) && placa === 0, `bajo el cursor «${debajo}» · placa elegida ${placa}`);
+}, { width: 1920, height: 1080 });
+await caso("ord-308 el escudo es sólo para el segundo clic de un doble clic: un clic sencillo justo después de plegar SÍ cuenta", "", async p => {
+  await plegar(p);
+  await p.getByRole("button", { name: /Nueva CTP/ }).first().click();
+  const placa = await placaElegida(p);
+  ok("ord-308 el escudo es sólo para el segundo clic de un doble clic: un clic sencillo justo después de plegar SÍ cuenta", placa === 1, `placa elegida ${placa}`);
+});
+await caso("ord-303 Pre-prensa: la descripción se lee aunque las especificaciones estén plegadas", "modo=specs&rol=preprensa", async p => {
+  await plegar(p);
+  const dice = await tieneTexto(p, /Recetas Dr\. Eduardo Fuentes/), plegada = !(await espAbierta(p));
+  ok("ord-303 Pre-prensa: la descripción se lee aunque las especificaciones estén plegadas", plegada && dice, `plegadas ${plegada} · la descripción se lee ${dice}`);
+});
+await caso("ord-304 Replicar con otra cantidad y luego igualarla: la nota se va (el precio sigue vacío para capturarlo)", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "777"); await replicar(p);
+  const antes = await tieneTexto(p, /No se copi[óo] el precio/i);
+  await p.getByPlaceholder("Ejemplo · 1000").first().fill("1000"); await espera(p, 200);
+  const despues = await tieneTexto(p, /No se copi[óo] el precio/i), precio = await p.locator("#ff-precio").inputValue();
+  ok("ord-304 Replicar con otra cantidad y luego igualarla: la nota se va (el precio sigue vacío para capturarlo)", antes && !despues && precio === "", `nota ${antes} → ${despues} · precio «${precio}»`);
+});
+await caso("ord-305 Replicar con el precio YA escrito y otra cantidad: el precio se queda y no hay nota", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "777"); await p.locator("#ff-precio").fill("3100"); await espera(p, 100);
+  await replicar(p);
+  const precio = await p.locator("#ff-precio").inputValue(), nota = await tieneTexto(p, /No se copi[óo] el precio/i);
+  ok("ord-305 Replicar con el precio YA escrito y otra cantidad: el precio se queda y no hay nota", /^3,?100(\.00)?$/.test(precio) && !nota, `precio «${precio}» · nota ${nota}`);
+});
+await caso("ord-306 el resumen con medida en cm, un Pantone y un acabado escrito a mano: «5 × 4 cm», «1 Pantone», el acabado", "", async p => {
+  await p.locator("#ff-ancho").fill("5"); await p.locator("#ff-alto").fill("4");
+  await p.getByRole("button", { name: /^Otro\.\.\.$/ }).click(); await espera(p, 100);
+  await p.getByLabel("Otros acabados").fill("Hot stamping dorado"); await espera(p, 100);
+  const pf = p.getByLabel(/Pantones del frente/i).first();
+  if (await pf.count()) { await pf.fill("186 C"); await p.keyboard.press("Enter"); await espera(p, 600); }
+  await plegar(p);
+  const r = (await plegarEsp(p).first().innerText()).replace(/\s+/g, " ");
+  ok("ord-306 el resumen con medida en cm, un Pantone y un acabado escrito a mano: «5 × 4 cm», «1 Pantone», el acabado", /5 × 4 cm/.test(r) && /1 Pantone\b/.test(r) && /Hot stamping dorado/.test(r), `«${r}»`);
+});
+await caso("ord-307 a 683×384 «Especificaciones» y su resumen caben (nada se sale de la forma ni hay desplazamiento a los lados)", "", async p => {
+  await p.locator("#ff-papel").fill("Couché brillante de importación"); await p.locator("#ff-tintas-frente").fill("4 tintas CMYK más Pantone"); await plegar(p);
+  const r = await p.evaluate(() => { const b = [...document.querySelectorAll(".pf-forma button")].find(x => /^Especificaciones/.test(x.textContent || "")), f = document.querySelector(".pf-forma");
+    const rb = b.getBoundingClientRect(), rf = f.getBoundingClientRect(); return { boton: Math.round(rb.right), forma: Math.round(rf.right), lados: document.documentElement.scrollWidth > innerWidth + 1 }; });
+  ok("ord-307 a 683×384 «Especificaciones» y su resumen caben (nada se sale de la forma ni hay desplazamiento a los lados)", r.boton <= r.forma + 1 && !r.lados, JSON.stringify(r));
+}, { width: 683, height: 384 });
+
+// ── v10.84.82, tercera vuelta: las fallas EN los arreglos ──
+await caso("ord-309 «Más de esta orden» también: un doble clic al cerrarlo (1920, forma vacía) no cambia la placa ni las especificaciones", "", async p => {
+  const mas = p.getByRole("button", { name: /^Más de esta orden/ }).first();
+  await clic(mas); await espera(p, 400);
+  await mas.evaluate(e => { const r = e.getBoundingClientRect(); scrollTo({ top: scrollY + r.top - innerHeight * 0.3, behavior: "instant" }); }); await espera(p, 120);
+  const box = await mas.boundingBox(), esp0 = await espAbierta(p);
+  await p.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); await espera(p, 500);
+  const placa = await placaElegida(p), esp1 = await espAbierta(p);
+  ok("ord-309 «Más de esta orden» también: un doble clic al cerrarlo (1920, forma vacía) no cambia la placa ni las especificaciones", placa === 0 && esp0 === esp1, `placa ${placa} · especificaciones ${esp0} → ${esp1}`);
+}, { width: 1920, height: 1080 });
+await caso("ord-310 con las especificaciones plegadas y sin tipo: el foco va al tipo y las especificaciones se quedan plegadas (no se abren de más)", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "1000"); await plegar(p);
+  await crear(p); await espera(p, 600);
+  const foco = await quienTieneElFoco(p), plegada = !(await espAbierta(p));
+  ok("ord-310 con las especificaciones plegadas y sin tipo: el foco va al tipo y las especificaciones se quedan plegadas (no se abren de más)", foco === "ff-tipo" && plegada, `foco «${foco}» · plegadas ${plegada}`);
+});
+await caso("ord-311 un ancho que no es número con las especificaciones plegadas: se abren y el foco va al ancho", "", async p => {
+  await capturar(p); await p.locator("#ff-ancho").fill("cinco"); await plegar(p);
+  await crear(p); await espera(p, 700);
+  const foco = await quienTieneElFoco(p);
+  ok("ord-311 un ancho que no es número con las especificaciones plegadas: se abren y el foco va al ancho", foco === "ff-ancho" && (await nuevas(p)).length === 0, `foco «${foco}»`);
+});
+await caso("ord-312 editar otra orden después de plegar las especificaciones: empiezan abiertas (cada orden, abierta)", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED"); await plegar(p); const p1 = !(await espAbierta(p));
+  await editar(p, "OP-A1"); const a2 = await espAbierta(p);
+  ok("ord-312 editar otra orden después de plegar las especificaciones: empiezan abiertas (cada orden, abierta)", p1 && a2, `plegada en la primera ${p1} · abierta en la segunda ${a2}`);
+});
+await caso("ord-313 Replicar una maquila de otra cantidad: la nota bajo el precio de maquila lo dice (costo y precio de 1,000 pzas)", "", async p => {
+  await p.evaluate(() => window.__estado().base.push({ id: "OP-MQ2", production_number: "P-0646", client: "COSQUIM", client_id: "c-cosquim", client_company: "COSQUIM", client_email: "compras@cosquim.mx",
+    order_type: "maquila", product_type: "Bolsas", product: "Bolsa kraft con asa", quantity: 1000, maq_provider: "Bolsas del Bajío", maq_cost: 5000, maq_price: 7000,
+    stage: "maq_sent", source: "internal", agent: "Manuel", created_by: "lupita", created_at: "2026-10-08T10:00:00Z" }));
+  await elegirCliente(p, "COSQUIM"); await p.getByRole("button", { name: /^Maquila/ }).first().click(); await espera(p, 300);
+  await llenar(p, "Ejemplo · 1000", "500"); await replicar(p, "P-0646");
+  const t = await texto(p);
+  ok("ord-313 Replicar una maquila de otra cantidad: la nota bajo el precio de maquila lo dice (costo y precio de 1,000 pzas)", /No se copiaron el costo ni el precio de P-0646/.test(t) && /1,000 pzas/.test(t), (t.match(/No se copi[^.]*\.[^.]*\./) || ["sin nota"])[0]);
+});
+await caso("ord-314 a 1366 con el menú plegado (dos columnas): la imagen se sube en la primera pantalla", "menu=plegado", async p => {
+  const top = await pieTop(p), b = await p.evaluate(() => { const x = [...document.querySelectorAll(".pf-forma button")].find(e => /Subir 1ra/.test(e.textContent || "")); return x ? Math.round(x.getBoundingClientRect().bottom) : null; });
+  ok("ord-314 a 1366 con el menú plegado (dos columnas): la imagen se sube en la primera pantalla", b !== null && b <= top, `«Subir 1ra» termina en ${b} · el pie empieza en ${Math.round(top)}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

@@ -626,6 +626,16 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   cobrada, Replicar): con Esc el botón enfocado desaparecía y el foco caía a `<body>`. Sólo actúa si el foco quedó perdido. Un buscador
   dentro de un diálogo cierra con Esc cuando está vacío (y con algo escrito, lo borra): la regla de la app (Esc dentro de un campo no
   cierra, para no perder lo escrito) dejaba sin salida con teclado una ventana cuyo foco empieza en su búsqueda.
+- **Una forma, no modos** (v10.84.82, Marcelo: la «A» del análisis): «Sencillo / Avanzado» hablaban del PRODUCTO y se leían al revés, y
+  elegir antes de capturar no sirve a quien mezcla (Lupita, 32 % de sus órdenes con texto y campos). Una descripción que crece con lo escrito
+  (`field-sizing: content`, de 3 a ~12 renglones) y las especificaciones como sección que se pliega con su resumen y empieza abierta. El orden
+  es el de la hoja impresa: descripción, «Para producción» (la imagen primero) y especificaciones. Plegado dice lo que trae: nada se guarda sin
+  verse; ir a un campo con error que está plegado lo abre.
+- **Plegar recorre la página** (v10.84.82): el segundo clic de un doble clic cae en lo que quedó bajo el cursor (medido: «Ya existe» de la
+  placa). 350 ms después de plegar o abrir, un clic con `detail ≥ 2` fuera del botón no cuenta; un clic sencillo sí (un escudo de puro tiempo
+  se tragaba clics buenos).
+- **Replicar no copia dinero de otra cantidad** (v10.84.82): el precio (y el costo y precio de maquila) es de SU cantidad; con otra, se deja
+  vacío y se dice bajo el precio hasta que se captura.
 - **El cliente trae su identidad y no se le cambia en la forma** (v10.84.81): el RFC de un cliente elegido es el suyo (con candado y su
   porqué; si su ficha no tiene RFC, se puede poner); el cliente de «Agregar producto a OC-…» es el de la OC; y el nombre de uno que ya
   existe con OTRO RFC tecleado no se liga callado: se pone el suyo y se dice. Otro cliente es otra razón social.
