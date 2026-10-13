@@ -110,7 +110,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1345 pruebas, ~10 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1390 pruebas, ~13 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -180,7 +180,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.88 (13-oct, ~07:26; READY `dpl_2DcHS8KJ5WjPTDLFRiDp8P2Zv8dF`, commit `d685294`; vuelta atrás: promover
+- **LIVE:** v10.84.89 (13-oct, ~12:05; READY `dpl_8JSJ1qNU1wUetDLuhkocx5NeHfwP`, commit `3c0fd92`; vuelta atrás: promover
+  `dpl_FxRPNKyZQ4eKceZQhkMzpcMsagj6` (el código de v10.84.88) o `git revert 3c0fd92`; 1390 pruebas). v10.84.89: 🔑 **ligar una PARTE a una
+  factura que ya existe** (Karla: F-143 y F-155 de PORTLAND cubren, cada una, un pedazo de los 4 stickers de OC-0960): el plan matriz de la
+  OC liga por columna («Ya tiene factura: ligarla», «Lo que falta»; la base: `oc_invoice_split_groups.ligada`, migración
+  `v10_84_89_ligar_en_el_plan_de_la_oc`, revisada por CobranzaFlow y ensayada); 🔒 el candado del anticipo también en el plan; cancelar un
+  grupo ligado lo DESLIGA; «Asignar folio» de la OC avisa de las facturas sin orden; «Facturar por partes» abre antes de Salidas (folios
+  anticipados a fuerza) y la pregunta de anticipos del folio anticipado lleva ahí. Tanda nueva `plan`. Sigue: v10.84.90 (el candado del
+  anticipo en «Dividir»), v10.84.91 (la categoría del trabajo, aprobada; su base en la noche).
+  v10.84.88 (13-oct, ~07:26; READY `dpl_2DcHS8KJ5WjPTDLFRiDp8P2Zv8dF`, commit `d685294`; vuelta atrás: promover
   `dpl_Bdbt2wszqR2STA9tSGpNdxoVqBiX` (el código de v10.84.87) o `git revert d685294`; la base no cambió; 1345 pruebas). v10.84.88: sin chips
   que nunca cuentan en «Mis Pendientes» y las guías de Gerardo con sus botones (tanda nueva `chips`, sin navegador).
   v10.84.87 (13-oct, ~06:47; READY `dpl_4JxCji5vx6dnqnw8cWYfuihB4fWh`, commits `cc7baf0` (v10.84.86) y `8426846`; vuelta atrás:

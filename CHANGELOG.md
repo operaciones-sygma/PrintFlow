@@ -68,6 +68,16 @@ facturas sin orden: se prueba ese camino de falla). Se ligan en producción desd
 - **F-90 (P-0544)**: es $5,937.50 + IVA, la mitad de $11,875; la orden vale $12,000. Si es la primera parte, el resto queda en $6,062.50.
 - **F-140 (P-0631)**: «REMISION 0014 · 6 piezas a $310» cuadra con 6,000 piezas a $0.31 (el precio de P-0631): confirmar que es de ella.
 
+**En producción** (13-oct, ~12:05): READY `dpl_8JSJ1qNU1wUetDLuhkocx5NeHfwP` (commit `3c0fd92`), candado 1390 de 1390 al segundo intento:
+el primero frenó por un `net::ERR_NO_BUFFER_SPACE` de Windows al abrir la página de `folio/inv-68` (sola pasa; se repitió de a 4 tandas).
+Vuelta atrás: promover `dpl_FxRPNKyZQ4eKceZQhkMzpcMsagj6` (el código de v10.84.88) o `git revert 3c0fd92`; la migración de la base es
+compatible con la pantalla de antes (sin `ligar`, el plan hace lo de siempre, más el candado del anticipo). Revisado contra
+produccion.sygma.mx sin escribir (`.banco-revisor-orden/medir-89.mjs`, como Karla con la cuenta `visor`, OC-0960): «Asignar folio» dice
+«No se pudo revisar si PORTLAND LEATHER tiene facturas hechas sin orden» (la base no le da a `visor` las facturas sin orden, y se dice);
+el plan ofrece «Ya tiene factura: ligarla» en las dos facturas, el tipo sin la serie de Alpha, y al escribir F-143 dice que no pudo
+leerlas, con «Reintentar», y no deja enviar. Sin errores; la única «escritura» que el arnés cortó era `traslado_preview_oc`, una lectura
+(STABLE) que no tenía en su lista.
+
 ## v10.84.88 — «Mis Pendientes»: sin chips que nunca cuentan, y las guías de Gerardo con sus botones — 13-oct-2026
 
 **Qué pasaba** (más de la critique de «Mis Pendientes», 17/40): chips que nunca podían contar nada de la lista de su rol, siempre en 0
