@@ -39,6 +39,9 @@ const TANDAS = [
   // «Archivos»: la lista y los huérfanos que decide la base (sin banco), y los botones que borran (con banco)
   { nombre: "archivos", romper: "tests/romper/archivos.mjs" },
   { nombre: "archivos-pantalla", gen: "tests/banco/gen-archivos.mjs", romper: "tests/romper/archivos-pantalla.mjs", puerto: 5197 },
+  // Analytics: cada cifra con su periodo y su base, un solo ingreso (lo entregado, por su fecha de entrega), la tendencia que dibuja (v10.84.84);
+  //   el reloj del navegador va fijo en el 13-oct-2026 con la hora de México
+  { nombre: "analytics", gen: "tests/banco/gen-analytics.mjs", romper: "tests/romper/analytics.mjs", puerto: 5191 },
   // el tablero: el Kanban de Producción, el de Germán y las fichas (v10.84.56); el banco extrae lo que necesita (extraer.mjs)
   { nombre: "tablero", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/tablero.mjs", puerto: 5194 },
   // «En la planta» de Karla y el aviso de la OC que no se puede foliar entera: pasar a Salidas lo que ya está listo (v10.84.67)
@@ -161,7 +164,7 @@ const inicio = performance.now();
 //   todavía pasaba, sin holgura. Empiezan las más largas (minutos aproximados), para que la última no arranque tarde; las que no tienen
 //   banco corren todas de una vez. El tope de 12 minutos sigue siendo por tanda, desde que ésa empieza.
 const PARALELO = Math.max(1, Number(process.env.PROBAR_PARALELO || 7));
-const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2 };
+const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2, analytics: 2 };
 async function deATope(lista, n, fn) {
   const res = new Array(lista.length);
   const cola = lista.map((t, k) => k).sort((a, b) => (MINUTOS[lista[b].nombre] || 1) - (MINUTOS[lista[a].nombre] || 1));

@@ -12,6 +12,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.84 — Analytics dice qué cuenta y de qué periodo: un solo ingreso, el periodo a la vista y la comparación justa — 13-oct-2026
+
+**Qué pasaba** (los P1 de la critique de Analytics, 14/40; medido con las órdenes del banco nuevo y en producción):
+- **Cuatro definiciones de «ingreso» en una pantalla.** «Ingresos Totales» era lo entregado desde siempre (con «18 órdenes» que contaba
+  también las canceladas y las que siguen en producción); las barras por producto y el «Top 10 por Facturación» sumaban TODO, con lo
+  cancelado y lo que sigue en producción (en el banco, Etiquetas $74,000 con una cancelada de $50,000; en producción, $800,555 más que
+  «Ingresos Totales»); y «Mes actual» era lo CREADO en el mes y entregado. Ninguna cifra decía de qué periodo era.
+- **«Mes actual ↓87 %»** (en producción, el día 12) comparaba lo creado en 12 días contra un mes completo. Lo entregado del 1 al 13 de
+  octubre es $503,092.83 contra $570,058.82 del 1 al 13 de septiembre: baja 12 %.
+- El mes salía en **UTC**: lo entregado después de las 18:00 del último día contaba en el mes siguiente.
+- **La tendencia no dibujaba** (alturas en % dentro de una columna sin alto: seis rayas de 4 px).
+- **Máquinas:** la utilización contaba los días hábiles desde una orden importada del 1-ene-2024 (727 días; la operación en PrintFlow
+  empezó el 14-may-2026) y salía de 0 a 6 %; **Empaque**, que mide lo que una orden espera antes de salir, contaba como máquina (3,009 h, el
+  41 % de las horas).
+- **«A tiempo»** dejaba fuera, sin decirlo, las entregadas sin fecha compromiso (431 de 925); «Días promedio» lo subía una orden
+  importada de 2024; la merma decía «0» en ámbar sin un solo registro.
+
+**Qué se cambió** (`src/App.jsx`, sólo `Analytics`; la base no cambió):
+- **UN ingreso:** lo entregado, por su fecha de entrega (día de México), la maquila por su precio de maquila (`precioVenta`). Lo cancelado y
+  lo que sigue en producción ya no suman en ningún lado.
+- **Un periodo** para Financiero, Máquinas, Eficiencia y Clientes (este mes, mes pasado, últimos 90 días, este año, todo), con el rango
+  escrito («1-13 oct»; «desde 20 may 2026» con «Todo») y la comparación contra uno del mismo largo («↓ 12 % contra 1-13 sep ($570,058.82),
+  los mismos días del mes pasado»; si antes no hubo entregas, «no hay con qué comparar»). Es un grupo de radios: flechas, Inicio y Fin.
+- **Cada cifra con su base:** «75 entregadas · 1-13 oct», «por orden entregada», «9 días hábiles × 9 h = 81 h por máquina», «10 de 19 con
+  fecha compromiso · 56 sin fecha», «la mediana de 75 órdenes», «sin registros de merma».
+- **«Entregado por mes» dibuja** (los últimos 6 meses, por mes de entrega; el de hoy dice «al 13»).
+- **Productos y clientes del periodo**, con lo escrito distinto junto («ETIQUETAS» y «Etiquetas»; «Cervecería Modelo » y «CERVECERIA
+  MODELO»), «stock» como «Venta de inventario» y sin el prefijo «🔴 ATRASADA ·»; las 8 primeras y «Otros», un solo color, el monto a menos
+  de 800 px de su nombre (antes 1,331 a 1920).
+- **Máquinas:** la utilización contra los días hábiles del periodo desde el primer registro de máquina; Empaque aparte, con sus horas; las
+  tarjetas son botones (teclado); cambiar de periodo con una máquina abierta en la que no trabajó dice que no tiene tiempos (antes la
+  pestaña quedaba en blanco: lo encontró la vuelta 2).
+- Los días de la captura a la entrega, en **mediana**. Las pestañas con su semántica (`tablist`/`tab`/`aria-selected`); los montos en Geist
+  Mono y en tinta (antes cuatro colores de semáforo sin significado); sin medallas (la «2» daba 1.82:1).
+
+**Cómo se probó** (tanda nueva `analytics`, 34; banco `tests/banco/gen-analytics.mjs` con `extraer.mjs` y órdenes de fechas fijas; el
+reloj del navegador fijo en el 13-oct-2026 12:00 con la zona horaria de México): **vuelta 1**, escrita antes del cambio, contra v10.84.83:
+fallaban las 17 (lo que el código de antes decía con esos datos está arriba). **Vuelta 2**, 12 por donde no se diseñó (sin órdenes, sin
+máquinas, fin y principio de mes, marzo contra febrero, la entrega de anoche, flechas, doble clic, 1366, 90 días): una falla de fondo (el
+detalle de una máquina quedaba en blanco al cambiar de periodo) y dos de redacción («1-1 nov», y «los mismos días» en todos los
+periodos). **Vuelta 3**, 5 sobre los arreglos (el detalle entre periodos, Archivos sin periodo, el 1 de enero, una entrega que llega con la
+pantalla abierta, un tipo vacío): nada de fondo. **Sabotajes**: 11 (el ingreso por fecha de captura, los días en UTC, contra el mes
+completo, la utilización desde 2024, Empaque como máquina, la tendencia en %, lo escrito distinto aparte, el detalle en blanco, «1-1», «a
+tiempo» sin base, «Todo» con lo cancelado): las pruebas cazan los 11 y el control pasa entero. **Corrida doble** (las 34 contra v10.84.83 y
+v10.84.84): 1 de 34 (el ancho a 1366) y 34 de 34. **La app REAL compilada** (`.banco-revisor-orden/medir-84.mjs`, 1 entrada, contra la base
+por SQL): «Este mes» $503,092.83 = la base (75), «Mes pasado» $2,077,705.83 = la base (203), la tendencia dibuja, la utilización 23 %
+promedio (Printmaster 52, 50 %), Empaque aparte (234 h), «a tiempo» 53 % con su base, 1920 sin desbordarse, sin errores ni escrituras.
+**Sin probar:** un lector de pantalla real. «Archivos» no cambió (su tanda sigue igual).
+
+**Para Marcelo:** nada que decidir aquí. Lo que sigue de la critique: el P0 (la categoría de los tipos de producto: te traigo la lista) y
+los P2 (bajar de una barra a sus órdenes).
+
 ## v10.84.83 — «Archivos»: sin borrado en masa; el archivo de una orden se borra de uno en uno, diciendo cuál — 12-oct-2026
 
 **Qué pasaba** (la critique de Analytics, su P1: revisor independiente, 14/40; snapshot

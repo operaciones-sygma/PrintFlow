@@ -646,3 +646,8 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
 - **Un componente de módulo avisa con el `Toast` de la app, no con `alert()`** (v10.84.83, `StorageTab`): no ve `showToast` (regla 13 del
   CLAUDE.md), así que monta su propio `<Toast>` con su estado. Ni `confirm()` ni `alert()` del navegador: preguntan sin decir qué, no
   siguen el diseño y una prueba no los puede leer como lee la pantalla.
+- **Una cifra dice qué cuenta y de cuándo** (v10.84.84, Analytics): cada número lleva su base en una línea («75 entregadas · 1-13 oct»,
+  «9 días hábiles × 9 h = 81 h por máquina», «10 de 19 con fecha compromiso · 56 sin fecha»), el periodo se elige arriba y vale para toda la
+  pantalla, y se compara contra un periodo del mismo largo, diciendo cuál. El dinero es lo ENTREGADO por su fecha de entrega
+  (`precioVenta`). Los montos van en Geist Mono y en tinta; el color se queda para los estados (a tiempo / tarde). Un selector de periodo es
+  un grupo de radios (una sola parada de Tab, flechas para moverse); unas pestañas, `tablist`/`tab`/`aria-selected`.

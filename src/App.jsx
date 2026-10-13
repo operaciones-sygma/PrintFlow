@@ -16197,169 +16197,223 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
 }
 
 // ─── ANALYTICS ─────────────────────────────────────
+// ─── v10.84.84 — ANALYTICS DICE QUÉ CUENTA Y DE QUÉ PERIODO ─────────────────────────────────────────────────────────────────────
+// La critique de Analytics (revisor independiente, 14/40) encontró cifras que engañan: cuatro definiciones de «ingreso» en una pantalla
+// (lo entregado arriba; TODO, con lo cancelado y lo que sigue en producción, en las barras y en los clientes; lo CREADO en el mes en «Mes
+// actual»), ninguna decía de qué periodo era, «Mes actual ↓87 %» comparaba 12 días contra un mes completo, la utilización de máquinas
+// contaba los días hábiles desde una orden importada de 2024 (salía 6 veces abajo) y sumaba Empaque (que mide espera), «a tiempo» dejaba
+// fuera 431 entregadas sin decirlo, la tendencia no dibujaba (alturas en % sin alto de referencia) y el mes salía en UTC (lo entregado
+// después de las 18:00 del último día contaba en el mes siguiente). Ahora: UN ingreso (lo entregado, por su fecha de entrega; la maquila
+// por su precio de maquila, `precioVenta`), un periodo para todas las pestañas, cada cifra con su base, y la comparación contra un
+// periodo del mismo largo. Los días son LOCALES (la hora de México de la PC). Un rango va de `a` a `b`, los dos incluidos.
+const MESES_CORTOS=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const diaLocal=f=>{if(!f)return null;const d=f instanceof Date?f:new Date(f);return isNaN(d.getTime())?null:new Date(d.getFullYear(),d.getMonth(),d.getDate())};
+const masDias=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+const enRango=(d,r)=>!!d&&!!r&&(!r.a||d>=r.a)&&d<=r.b;
+// «1-13 oct», «16 jul-13 oct», «1 ene-13 oct 2025»
+const textoRango=(a,b,conAnio)=>{const an=conAnio?" "+b.getFullYear():"";if(a.getTime()===b.getTime())return a.getDate()+" "+MESES_CORTOS[a.getMonth()]+an;if(a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth())return a.getDate()+"-"+b.getDate()+" "+MESES_CORTOS[b.getMonth()]+an;return a.getDate()+" "+MESES_CORTOS[a.getMonth()]+(a.getFullYear()!==b.getFullYear()?" "+a.getFullYear():"")+"-"+b.getDate()+" "+MESES_CORTOS[b.getMonth()]+an};
+const PERIODOS_ANALYTICS=[{id:"mes",l:"Este mes"},{id:"mesPasado",l:"Mes pasado"},{id:"90",l:"Últimos 90 días"},{id:"anio",l:"Este año"},{id:"todo",l:"Todo"}];
+// el periodo (a..b) y el de antes del mismo largo (ca..cb; null en «Todo», que empieza en la primera entrega)
+const rangosDePeriodo=(id,hoy)=>{
+  const h=diaLocal(hoy),Y=h.getFullYear(),Mo=h.getMonth(),D=h.getDate(),dias=(y,m)=>new Date(y,m+1,0).getDate();
+  if(id==="mesPasado")return {a:new Date(Y,Mo-1,1),b:new Date(Y,Mo,0),ca:new Date(Y,Mo-2,1),cb:new Date(Y,Mo-1,0)};
+  if(id==="90"){const a=masDias(h,-89);return {a,b:h,ca:masDias(a,-90),cb:masDias(a,-1)}}
+  if(id==="anio")return {a:new Date(Y,0,1),b:h,ca:new Date(Y-1,0,1),cb:new Date(Y-1,Mo,Math.min(D,dias(Y-1,Mo)))};
+  if(id==="todo")return {a:null,b:h,ca:null,cb:null};
+  return {a:new Date(Y,Mo,1),b:h,ca:new Date(Y,Mo-1,1),cb:new Date(Y,Mo-1,Math.min(D,dias(Y,Mo-1)))};   // «Este mes»: contra los mismos días del anterior
+};
+// lo mismo escrito distinto («Cervecería Modelo » y «CERVECERIA MODELO»; «ETIQUETAS» y «Etiquetas») cuenta junto
+const claveTexto=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim().toUpperCase();
+// el tipo como se lee: sin el prefijo de las 37 importadas atrasadas (v10.72.55); «stock» es la venta de inventario de Cuadra (un canal)
+const nombreDeTipo=t=>{const s=String(t||"").replace("🔴 ATRASADA · ","").trim();return /^stock$/i.test(s)?"Venta de inventario":(s||"Sin tipo")};
+// agrupa por la clave y se queda con la escritura que más dinero trae
+const agruparPorNombre=(lista,nombre)=>{const g=new Map();lista.forEach(o=>{const n=nombre(o),k=claveTexto(n),v=precioVenta(o);const x=g.get(k)||{n:0,monto:0,variantes:new Map()};x.n++;x.monto+=v;x.variantes.set(n,(x.variantes.get(n)||0)+v);g.set(k,x)});return [...g.values()].map(x=>({nombre:[...x.variantes.entries()].sort((p,q)=>q[1]-p[1])[0][0],n:x.n,monto:x.monto})).sort((p,q)=>q.monto-p.monto||p.nombre.localeCompare(q.nombre))};
+const entregadaEl=o=>diaLocal(o.delivered_at||o.deliveredAt);
+const EMPAQUE_ID="vm_manual";   // mide lo que una orden espera antes de salir, no trabajo de una máquina: fuera de la utilización
+const fmtCorto=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",notation:"compact",maximumFractionDigits:1}).format(n||0);
+const enPlural=(n,uno,varios)=>n+" "+(n===1?uno:varios);
 function Analytics({orders,onReload}) {
   const [selMachine,setSelMachine]=useState(null);const [tab,setTab]=useState("finance");
-  const del=orders.filter(o=>o.stage.includes("delivered"));
-  const delInt=del.filter(o=>o.order_type!=="maquila");
-  const delMaq=del.filter(o=>o.order_type==="maquila");
-  const intOrders=orders.filter(o=>o.order_type!=="maquila");
-  const maqOrders=orders.filter(o=>o.order_type==="maquila");
-  const tR=delInt.reduce((s,o)=>s+(parseFloat(o.price)||0),0);
-  const mR=delMaq.reduce((s,o)=>s+(parseFloat(o.maq_price)||0),0);
+  const [per,setPer]=useState("mes");
+  const hoy=new Date();
+  // ── el periodo ──
+  const entregadas=orders.filter(o=>String(o.stage||"").includes("delivered")&&entregadaEl(o));
+  const primeraEntrega=entregadas.reduce((m,o)=>{const d=entregadaEl(o);return !m||d<m?d:m},null);
+  const R=rangosDePeriodo(per,hoy);
+  const rango={a:R.a||primeraEntrega,b:R.b};
+  const txtRango=!rango.a?"sin entregas todavía":per==="todo"?"desde "+rango.a.getDate()+" "+MESES_CORTOS[rango.a.getMonth()]+" "+rango.a.getFullYear():textoRango(rango.a,rango.b,false);
+  const del=entregadas.filter(o=>enRango(entregadaEl(o),rango));
+  const delInt=del.filter(o=>o.order_type!=="maquila"),delMaq=del.filter(o=>o.order_type==="maquila");
+  const tR=delInt.reduce((s,o)=>s+precioVenta(o),0);
+  const mR=delMaq.reduce((s,o)=>s+precioVenta(o),0);
   const mC=delMaq.reduce((s,o)=>s+(parseFloat(o.maq_cost)||0),0);
   const totalRev=tR+mR;
-  const avgTicket=del.length>0?del.reduce((s,o)=>s+(precioVenta(o)),0)/del.length:0;
+  const avgTicket=del.length>0?totalRev/del.length:0;
+  // ── contra el periodo de antes, del mismo largo ──
+  const comp=R.ca?{a:R.ca,b:R.cb}:null;
+  const prevRev=comp?entregadas.filter(o=>enRango(entregadaEl(o),comp)).reduce((s,o)=>s+precioVenta(o),0):0;
+  const txtComp=comp?textoRango(comp.a,comp.b,per==="anio"):"";
+  const cambio=comp&&prevRev>0?Math.round(((totalRev-prevRev)/prevRev)*100):null;
+  const contraQue={mes:"los mismos días del mes pasado",mesPasado:"el mes anterior","90":"los 90 días anteriores",anio:"el mismo tramo del año pasado"}[per]||"";
+  // ── lo entregado por mes (los últimos 6, por mes de entrega LOCAL; el de hoy, en curso) ──
+  const claveMes=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+  const meses=[];for(let i=5;i>=0;i--){const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1);meses.push({k:claveMes(d),d,monto:0,n:0})}
+  entregadas.forEach(o=>{const m=meses.find(x=>x.k===claveMes(entregadaEl(o)));if(m){m.monto+=precioVenta(o);m.n++}});
+  const maxMes=Math.max(1,...meses.map(m=>m.monto)),mesHoy=claveMes(hoy);
+  // ── productos del periodo: las 8 primeras y «Otros» ──
+  const tipos=agruparPorNombre(del,o=>nombreDeTipo(o.product_type));
+  const tiposTop=tipos.slice(0,8),tiposOtros=tipos.slice(8);
+  const maxTipo=tipos[0]?.monto||1;
 
-  // Monthly revenue trend (only delivered orders count as revenue)
-  const byMonth={};orders.forEach(o=>{const d=o.created_at?o.created_at.slice(0,7):"";if(!d)return;if(!byMonth[d])byMonth[d]={rev:0,cnt:0,del:0};byMonth[d].cnt++;if(o.stage.includes("delivered")){byMonth[d].rev+=(precioVenta(o));byMonth[d].del++}});
-  const months=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).slice(-6);
-  const maxMR=Math.max(...months.map(([,d])=>d.rev),1);
-  // v10.34.4 fix #4 — mes calendario real (antes -30d cae en mismo mes para días 28-31)
-  const curM=new Date().toISOString().slice(0,7);
-  const _prev=new Date();_prev.setDate(1);_prev.setMonth(_prev.getMonth()-1);
-  const prevM=_prev.toISOString().slice(0,7);
-  const curRev=byMonth[curM]?.rev||0;const prevRev=byMonth[prevM]?.rev||0;
-  const revChange=prevRev>0?Math.round(((curRev-prevRev)/prevRev)*100):0;
-
-  // Machine stats with revenue calculation
-  // Work schedule: 9hrs/day (9am-7pm minus 1hr lunch), 5 days/week (Mon-Fri)
+  // ── máquinas: las horas del periodo, contra los días hábiles del periodo desde que hay registros ──
+  // Turno: 9 h al día (9 a 19 menos la comida), de lunes a viernes.
   const WORK_HRS_DAY=9;
-  const countWorkDays=(from,to)=>{let d=new Date(from);d.setHours(0,0,0,0);const end=new Date(to);end.setHours(0,0,0,0);let count=0;while(d<=end){const dow=d.getDay();if(dow>=1&&dow<=5)count++;d.setDate(d.getDate()+1)}return count};
-  const firstOrder=orders.length>0?orders.reduce((m,o)=>o.created_at<m?o.created_at:m,orders[0].created_at):null;
-  const workDays=firstOrder?countWorkDays(firstOrder,new Date()):0;
+  const countWorkDays=(from,to)=>{let d=diaLocal(from),count=0;const end=diaLocal(to);while(d<=end){const dow=d.getDay();if(dow>=1&&dow<=5)count++;d=masDias(d,1)}return count};
+  const registros=[];orders.forEach(o=>(o.machine_log||[]).forEach(e=>{const d=diaLocal(e.started);if(d&&e.minutes>0)registros.push({o,e,d})}));
+  const primerRegistro=registros.reduce((m,x)=>!m||x.d<m?x.d:m,null);
+  const desdeMaq=primerRegistro?(R.a&&R.a>primerRegistro?R.a:primerRegistro):null;
+  const rangoMaq=desdeMaq&&desdeMaq<=rango.b?{a:desdeMaq,b:rango.b}:null;
+  const workDays=rangoMaq?countWorkDays(rangoMaq.a,rangoMaq.b):0;
   const availHrsPerMachine=workDays*WORK_HRS_DAY;
+  const enPer=rangoMaq?registros.filter(x=>enRango(x.d,rangoMaq)):[];
+  const empaqueMin=enPer.filter(x=>x.e.machine===EMPAQUE_ID).reduce((s,x)=>s+x.e.minutes,0);
+  const byM={};
+  enPer.filter(x=>x.e.machine!==EMPAQUE_ID).forEach(({o,e})=>{if(!byM[e.machine])byM[e.machine]={j:0,m:0,rev:0,types:{},orders:[]};const b=byM[e.machine],t=nombreDeTipo(o.product_type);b.j++;b.m+=e.minutes;b.types[t]=(b.types[t]||0)+1;b.orders.push({id:o.production_number||o.id,client:o.client,type:t,min:e.minutes,price:del.includes(o)?precioVenta(o):0})});
+  // el ingreso de cada máquina: lo entregado en el periodo, repartido por los minutos que cada orden pasó en cada máquina (sin Empaque)
+  del.forEach(o=>{const ls=(o.machine_log||[]).filter(e=>e.minutes>0&&e.machine!==EMPAQUE_ID);const tot=ls.reduce((s,e)=>s+e.minutes,0);if(!tot)return;ls.forEach(e=>{if(byM[e.machine])byM[e.machine].rev+=precioVenta(o)*(e.minutes/tot)})});
+  const mStats=Object.entries(byM).map(([mid,d])=>{const m=MACHINES.find(x=>x.id===mid);const hrs=d.m/60;const util=availHrsPerMachine>0?Math.round((hrs/availHrsPerMachine)*100):0;return{mid,m,j:d.j,t:d.m,hrs,a:Math.round(d.m/d.j),rev:d.rev,mxnHr:availHrsPerMachine>0?d.rev/availHrsPerMachine:0,mxnHrWork:hrs>0?d.rev/hrs:0,util,types:d.types,orders:d.orders}}).filter(x=>x.m).sort((a,b)=>b.rev-a.rev||b.t-a.t);
+  const horasTxt=rangoMaq?enPlural(workDays,"día hábil","días hábiles")+" × "+WORK_HRS_DAY+" h = "+availHrsPerMachine+" h por máquina"+(R.a&&R.a<primerRegistro?" (desde el primer registro, "+primerRegistro.getDate()+" "+MESES_CORTOS[primerRegistro.getMonth()]+")":""):"sin registros de máquina en el periodo";
 
-  const byM={};orders.forEach(o=>{const isDel=o.stage?.includes("delivered");const price=isDel?(precioVenta(o)):0;const totalMin=(o.machine_log||[]).reduce((s,e)=>s+(e.minutes||0),0);(o.machine_log||[]).forEach(e=>{if(!e.minutes)return;if(!byM[e.machine])byM[e.machine]={j:0,m:0,rev:0,types:{},orders:[]};byM[e.machine].j++;byM[e.machine].m+=e.minutes;if(totalMin>0)byM[e.machine].rev+=price*(e.minutes/totalMin);byM[e.machine].types[o.product_type]=(byM[e.machine].types[o.product_type]||0)+1;byM[e.machine].orders.push({id:o.id,client:o.client,type:o.product_type,min:e.minutes,price})})});
-  const mStats=Object.entries(byM).map(([mid,d])=>{const m=MACHINES.find(x=>x.id===mid);const hrs=d.m/60;const util=availHrsPerMachine>0?Math.round((hrs/availHrsPerMachine)*100):0;const mxnHrReal=availHrsPerMachine>0?d.rev/availHrsPerMachine:0;const mxnHrWork=hrs>0?d.rev/hrs:0;return{mid,m,j:d.j,t:d.m,hrs,a:Math.round(d.m/d.j),rev:d.rev,mxnHr:mxnHrReal,mxnHrWork,util,types:d.types,orders:d.orders}}).filter(x=>x.m).sort((a,b)=>b.rev-a.rev);
+  // ── eficiencia del periodo ──
+  const conFecha=del.filter(o=>o.due_date);
+  const onTime=conFecha.filter(o=>new Date(o.delivered_at||o.deliveredAt)<=new Date(o.due_date+"T23:59:59")).length;
+  const late=conFecha.length-onTime,sinFecha=del.length-conFecha.length;
+  const onTimePct=conFecha.length>0?Math.round((onTime/conFecha.length)*100):null;
+  const merma=orders.flatMap(o=>(o.waste_log||[]).filter(w=>enRango(diaLocal(w.date),rango)));
+  const totalWastePl=merma.reduce((s,w)=>s+(w.pliegos||0),0),totalWastePz=merma.reduce((s,w)=>s+(w.qty||0),0);
+  // la MEDIANA de la captura a la entrega: una orden importada de 2024 y entregada en 2026 subía el promedio a meses
+  const dias=del.filter(o=>o.created_at).map(o=>Math.max(0,Math.round((new Date(o.delivered_at||o.deliveredAt)-new Date(o.created_at))/86400000))).sort((a,b)=>a-b);
+  const medianaDias=dias.length?(dias.length%2?dias[(dias.length-1)/2]:Math.round((dias[dias.length/2-1]+dias[dias.length/2])/2)):null;
+  const colorPct=p=>p===null?C.t2:p>=80?C.okInk:p>=60?C.wnInk:C.dnInk;
 
-  // Product type stats
-  const byType={};orders.forEach(o=>{const p=o.product_type;if(!byType[p])byType[p]={cnt:0,rev:0};byType[p].cnt++;byType[p].rev+=(precioVenta(o))});
-  const sT=Object.entries(byType).sort((a,b)=>b[1].rev-a[1].rev);const mxT=sT[0]?.[1]?.rev||1;
+  // ── clientes del periodo ──
+  const clientes=agruparPorNombre(del.filter(o=>o.client),o=>String(o.client).trim());
+  const topClients=clientes.slice(0,10);
 
-  // Top clients
-  const byClient={};orders.forEach(o=>{const c=o.client;if(!c)return;if(!byClient[c])byClient[c]={cnt:0,rev:0,last:o.created_at};byClient[c].cnt++;byClient[c].rev+=(precioVenta(o));if(o.created_at>byClient[c].last)byClient[c].last=o.created_at});
-  const topClients=Object.entries(byClient).sort((a,b)=>b[1].rev-a[1].rev).slice(0,10);
-
-  // Efficiency metrics
-  const onTime=del.filter(o=>o.due_date&&(o.delivered_at||o.deliveredAt)&&new Date(o.delivered_at||o.deliveredAt)<=new Date(o.due_date+"T23:59:59")).length;
-  const late=del.filter(o=>o.due_date&&(o.delivered_at||o.deliveredAt)&&new Date(o.delivered_at||o.deliveredAt)>new Date(o.due_date+"T23:59:59")).length;
-  const onTimePct=(onTime+late)>0?Math.round((onTime/(onTime+late))*100):del.length>0?100:0;
-  const totalWastePl=orders.reduce((s,o)=>(o.waste_log||[]).reduce((ss,w)=>ss+(w.pliegos||0),s),0);
-  const totalWastePz=orders.reduce((s,o)=>(o.waste_log||[]).reduce((ss,w)=>ss+(w.qty||0),s),0);
-  const avgProdTime=del.filter(o=>(o.delivered_at||o.deliveredAt)&&o.created_at).map(o=>Math.round((new Date(o.delivered_at||o.deliveredAt)-new Date(o.created_at))/86400000));
-  const avgDays=avgProdTime.length>0?Math.round(avgProdTime.reduce((s,d)=>s+d,0)/avgProdTime.length):0;
-
-  const cls=["#546e7a",C.live,"#ff3b30",C.amb,C.fac,C.maqin,C.emp,C.ios];
   const tc={preprensa:C.ctp,offset:C.ac,digital:C.dig,acabados:C.maq};
-  const Stat=({l,v,s:sub,c=C.tx,big})=><div style={{background:C.sf,borderRadius:12,padding:big?18:14,flex:big?"1 1 180px":"1 1 130px",minWidth:big?150:120}}><div style={{fontSize:9,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>{l}</div><div style={{fontSize:big?24:18,fontWeight:800,color:c}}>{v}</div>{sub&&<div style={{fontSize:9,color:C.t3,marginTop:1}}>{sub}</div>}</div>;
+  // v10.84.84 — cada cifra con su base (`s`), en tinta: el monto no es un estado (antes cuatro colores de semáforo sin significado)
+  const Stat=({id,l,v,s:sub,c=C.tx,big})=><div data-cifra={id} style={{background:C.sf,borderRadius:12,padding:big?18:14,flex:big?"1 1 180px":"1 1 130px",minWidth:big?150:120}}><div style={{fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",letterSpacing:.3,marginBottom:3}}>{l}</div><div data-valor style={{fontSize:big?24:18,fontWeight:700,color:c,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums"}}>{v}</div>{sub&&<div style={{fontSize:11,color:C.t2,marginTop:2}}>{sub}</div>}</div>;
+  const etq=(Icon,txt)=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><Icon size={10} weight="bold"/>{txt}</span>;
 
   const selM=selMachine?mStats.find(x=>x.mid===selMachine):null;
+  const TABS=[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}];
+  // v10.84.84 — el periodo es un grupo de radios: flechas para moverse, una sola parada de Tab (la marcada)
+  const teclaPeriodo=e=>{const i=PERIODOS_ANALYTICS.findIndex(x=>x.id===per);let j=null;if(e.key==="ArrowRight"||e.key==="ArrowDown")j=(i+1)%PERIODOS_ANALYTICS.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")j=(i-1+PERIODOS_ANALYTICS.length)%PERIODOS_ANALYTICS.length;else if(e.key==="Home")j=0;else if(e.key==="End")j=PERIODOS_ANALYTICS.length-1;if(j===null)return;e.preventDefault();setPer(PERIODOS_ANALYTICS[j].id);const b=e.currentTarget.querySelectorAll('[role="radio"]')[j];b&&b.focus()};
 
   return <div>
-    {/* Tab navigation */}
-    <DualScroll style={{display:"flex",gap:4,marginBottom:16}}>
-      {[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}].map(t=>
-        <button key={t.id} onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{display:"inline-flex",alignItems:"center",gap:6,background:tab===t.id?C.ac:C.sf,color:tab===t.id?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}>{(()=>{const TI=t.ic;return <TI size={13} weight="bold"/>})()}{t.l}</button>
-      )}
-    </DualScroll>
+    {/* v10.84.84 — pestañas con su semántica (antes botones sueltos: un lector de pantalla no sabía cuál estaba abierta) */}
+    <div role="tablist" aria-label="Secciones de Analytics" style={{display:"flex",gap:4,marginBottom:12,flexWrap:"wrap"}}>
+      {TABS.map(t=>{const TI=t.ic,sel=tab===t.id;return <button key={t.id} role="tab" aria-selected={sel} id={"an-tab-"+t.id} aria-controls="an-panel" onClick={()=>{setTab(t.id);setSelMachine(null)}} style={{display:"inline-flex",alignItems:"center",gap:6,background:sel?C.ac:C.sf,color:sel?"#fff":C.t2,border:"none",padding:"8px 16px",borderRadius:10,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'Geist',sans-serif",whiteSpace:"nowrap"}}><TI size={13} weight="bold"/>{t.l}</button>})}
+    </div>
+    {/* v10.84.84 — el periodo vale para todas las pestañas (menos Archivos) y se dice cuál es */}
+    {tab!=="storage"&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
+      <div role="radiogroup" aria-label="Periodo" onKeyDown={teclaPeriodo} style={{display:"inline-flex",gap:2,background:C.sf,borderRadius:10,padding:3}}>
+        {PERIODOS_ANALYTICS.map(x=>{const sel=per===x.id;return <button key={x.id} role="radio" aria-checked={sel} tabIndex={sel?0:-1} onClick={()=>setPer(x.id)} style={{border:"none",borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:sel?C.bg:"transparent",color:sel?C.tx:C.t2,boxShadow:sel?"0 1px 2px rgba(26,26,31,.08)":"none"}}>{x.l}</button>})}
+      </div>
+      <span data-rango style={{fontSize:13,color:C.tx,fontWeight:600}}>{txtRango}</span>
+      <span style={{fontSize:11,color:C.t2}}>Ingreso es lo entregado en el periodo, por su fecha de entrega.</span>
+    </div>}
 
+    <div id="an-panel" role="tabpanel" aria-labelledby={"an-tab-"+tab}>
     {/* ══ FINANCIERO ══ */}
     {tab==="finance"&&<div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>Ingresos Totales</span>} v={fmt(totalRev)} s={orders.length+" órdenes"} c={C.ok} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FactoryIcon size={10} weight="bold"/>Producción Interna</span>} v={fmt(tR)} s={intOrders.length+" órdenes"} c={C.ac} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TruckIcon size={10} weight="bold"/>Maquila</span>} v={fmt(mR)} s={"Ganancia: "+fmt(mR-mC)+" ("+(mR>0?Math.round(((mR-mC)/mR)*100):0)+"% s/venta)"} c={C.maq} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><TicketIcon size={10} weight="bold"/>Ticket Promedio</span>} v={fmt(avgTicket)} s={del.length+" entregadas"} c={C.fac} big/>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <Stat id="ingresos" l={etq(CurrencyDollarIcon,"Ingresos")} v={fmt(totalRev)} s={enPlural(del.length,"entregada","entregadas")+" · "+txtRango} big/>
+        <Stat id="interna" l={etq(FactoryIcon,"Producción interna")} v={fmt(tR)} s={enPlural(delInt.length,"entregada","entregadas")} big/>
+        <Stat id="maquila" l={etq(TruckIcon,"Maquila")} v={fmt(mR)} s={mR>0?"Ganancia "+fmt(mR-mC)+" ("+Math.round(((mR-mC)/mR)*100)+" % de la venta)":"sin maquila entregada"} big/>
+        <Stat id="ticket" l={etq(TicketIcon,"Ticket promedio")} v={del.length?fmt(avgTicket):"—"} s="por orden entregada" big/>
       </div>
+      {comp&&<div data-cifra="comparacion" style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.t2,marginBottom:16}}>
+        {cambio!==null?<><span style={{display:"inline-flex",alignItems:"center",gap:3,fontWeight:700,color:cambio>=0?C.okInk:C.dnInk}}>{cambio>=0?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}{Math.abs(cambio)} %</span><span>contra {txtComp} ({fmt(prevRev)}), {contraQue}</span></>:<span>Sin entregas en {txtComp}: no hay con qué comparar.</span>}
+      </div>}
+      {!comp&&<div style={{marginBottom:16}}/>}
 
-      {/* Mes actual vs anterior */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
-        <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CalendarDotsIcon size={11} weight="bold"/>Mes Actual</div>
-          <div style={{fontSize:28,fontWeight:800,color:C.ok}}>{fmt(curRev)}</div>
-          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:revChange>=0?C.ok:C.dn,fontWeight:600,marginTop:4}}>{revChange>=0?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}{Math.abs(revChange)}% vs mes anterior</div>
-          <div style={{fontSize:10,color:C.t3,marginTop:2}}>{byMonth[curM]?.cnt||0} órdenes · {byMonth[curM]?.del||0} entregadas</div>
-        </div>
-        <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:6}}><CalendarDotsIcon size={11} weight="bold"/>Mes Anterior</div>
-          <div style={{fontSize:28,fontWeight:800,color:C.t2}}>{fmt(prevRev)}</div>
-          <div style={{fontSize:10,color:C.t3,marginTop:4}}>{byMonth[prevM]?.cnt||0} órdenes · {byMonth[prevM]?.del||0} entregadas</div>
-        </div>
-      </div>
-
-      {/* Revenue trend */}
-      {months.length>1&&<div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrendUpIcon size={13} weight="bold"/>Tendencia Mensual</div>
-        <div style={{display:"flex",alignItems:"flex-end",gap:8,height:120}}>
-          {months.map(([m,d])=>{const h=Math.max((d.rev/maxMR)*100,4);const isCur=m===curM;return <div key={m} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-            <div style={{fontSize:9,fontWeight:700,color:isCur?C.ok:C.t2}}>{fmt(d.rev).replace("MXN","").trim()}</div>
-            <div style={{width:"100%",height:h+"%",background:isCur?C.ok:C.ac+"60",borderRadius:6,minHeight:4,transition:"height .5s"}}/>
-            <div style={{fontSize:10,color:C.t3,fontWeight:600}}>{m.slice(5)}/{m.slice(2,4)}</div>
+      {/* Lo entregado por mes: v10.84.84 — dibuja (antes alturas en % dentro de una columna sin alto: seis rayas de 4 px) */}
+      <div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrendUpIcon size={13} weight="bold"/>Entregado por mes</div>
+        <div style={{display:"flex",alignItems:"flex-end",gap:8,height:140}}>
+          {meses.map(m=>{const alto=Math.round((m.monto/maxMes)*100),cur=m.k===mesHoy;return <div key={m.k} style={{flex:1,height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+            <div style={{fontSize:10,fontWeight:600,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>{m.monto?fmtCorto(m.monto):"—"}</div>
+            <div data-mes={m.k} data-monto={m.monto} title={MESES_CORTOS[m.d.getMonth()]+" "+m.d.getFullYear()+": "+fmt(m.monto)+" · "+enPlural(m.n,"entregada","entregadas")} style={{width:"100%",height:alto,minHeight:m.monto?2:0,background:cur?C.ac:C.ac+"66",borderRadius:6}}/>
+            <div style={{fontSize:10,color:C.t2,fontWeight:600,whiteSpace:"nowrap"}}>{MESES_CORTOS[m.d.getMonth()]}{cur?" (al "+hoy.getDate()+")":""}</div>
           </div>})}
         </div>
-      </div>}
+      </div>
 
-      {/* Products by revenue */}
-      <div style={{background:C.sf,borderRadius:14,padding:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Productos por Ingreso</div>
-        {sT.map(([t,d],i)=><div key={t} style={{marginBottom:8}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:12}}>{t}</span><span style={{fontSize:11,color:C.t2}}>{fmt(d.rev)} · {d.cnt} órdenes</span></div>
-          <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((d.rev/mxT)*100)+"%",height:"100%",background:cls[i%cls.length],borderRadius:3}}/></div>
+      {/* Productos del periodo: v10.84.84 — sólo lo entregado, las 8 primeras y «Otros», un color, lo escrito distinto junto */}
+      <div data-productos style={{background:C.sf,borderRadius:14,padding:16,maxWidth:760}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Productos por ingreso</div>
+        {tipos.length===0&&<div style={{fontSize:12,color:C.t2,padding:"8px 0"}}>Sin entregas en el periodo.</div>}
+        {[...tiposTop.map(x=>({...x,clave:x.nombre})),...(tiposOtros.length?[{clave:"otros",nombre:"Otros ("+enPlural(tiposOtros.length,"tipo","tipos")+")",n:tiposOtros.length,ordenes:tiposOtros.reduce((s,x)=>s+x.n,0),monto:tiposOtros.reduce((s,x)=>s+x.monto,0)}]:[])].map(x=><div key={x.clave} data-producto={x.clave} data-monto={x.monto} data-n={x.n} style={{marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:3}}>
+            <span data-nombre style={{fontSize:12,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:x.clave==="otros"?C.t2:C.tx}}>{x.nombre}</span>
+            <span data-monto-txt style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",color:C.tx,fontWeight:600}}>{fmt(x.monto)}</span> · {x.clave==="otros"?enPlural(x.ordenes,"orden","órdenes"):enPlural(x.n,"orden","órdenes")}</span>
+          </div>
+          <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((x.monto/maxTipo)*100)+"%",height:"100%",background:x.clave==="otros"?C.bdSt:C.ac+"99",borderRadius:3}}/></div>
         </div>)}
       </div>
     </div>}
 
     {/* ══ MÁQUINAS ══ */}
     {tab==="machines"&&<div>
-      {!selMachine?<>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClockIcon size={10} weight="bold"/>Horas Trabajadas</span>} v={fmtM(mStats.reduce((s,x)=>s+x.t,0))} s={availHrsPerMachine>0?("de "+availHrsPerMachine+"h disponibles · "+workDays+" días"):""} c={C.ios} big/>
-          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>MXN/Hora Real</span>} v={fmt(availHrsPerMachine>0?mStats.reduce((s,x)=>s+x.rev,0)/availHrsPerMachine:0)} s="ingresos ÷ horas disponibles" c={C.ok} big/>
-          <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ChartBarIcon size={10} weight="bold"/>Utilización Prom.</span>} v={mStats.length>0?Math.round(mStats.reduce((s,x)=>s+x.util,0)/mStats.length)+"%":"—"} s="horas trabajadas ÷ disponibles" c={C.ac} big/>
+      {!selM?<>
+        {selMachine&&<div style={{fontSize:12,color:C.t2,marginBottom:10}}>{(MACHINES.find(x=>x.id===selMachine)?.name)||"Esa máquina"} no tiene tiempos en este periodo.</div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+          <Stat id="horas" l={etq(ClockIcon,"Horas trabajadas")} v={fmtM(mStats.reduce((s,x)=>s+x.t,0))} s={"en "+enPlural(mStats.length,"máquina","máquinas")+" · sin Empaque"} big/>
+          <Stat id="mxnhora" l={etq(CurrencyDollarIcon,"MXN por hora de turno")} v={fmt(availHrsPerMachine>0?mStats.reduce((s,x)=>s+x.rev,0)/availHrsPerMachine:0)} s="lo entregado que pasó por máquina ÷ las horas del turno" big/>
+          <Stat id="utilizacion" l={etq(ChartBarIcon,"Utilización promedio")} v={mStats.length>0?Math.round(mStats.reduce((s,x)=>s+x.util,0)/mStats.length)+" %":"—"} s={horasTxt} big/>
         </div>
-        <div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>Click en una máquina para ver detalle</div>
+        {empaqueMin>0&&<div data-cifra="empaque" style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.t2,marginBottom:14}}><PackageIcon size={13} weight="bold"/><span>Empaque: {fmtM(empaqueMin)} en el periodo. No cuenta en la utilización: mide lo que una orden espera antes de salir.</span></div>}
+        {mStats.length>0&&<div style={{fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}>Elige una máquina para ver su detalle</div>}
         {["preprensa","offset","digital","acabados"].map(type=>{const ms=mStats.filter(x=>x.m?.type===type);if(!ms.length)return null;
           return <div key={type} style={{marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:tc[type],textTransform:"uppercase",marginBottom:8}}>{type==="preprensa"?<><DiscIcon size={12} weight="bold"/>Pre-prensa</>:type==="offset"?<><GearIcon size={12} weight="bold"/>Offset</>:type==="digital"?<><PrinterIcon size={12} weight="bold"/>Digital</>:<><WrenchIcon size={12} weight="bold"/>Acabados</>}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
-              {ms.map(x=><div key={x.mid} onClick={()=>setSelMachine(x.mid)} style={{background:C.sf,borderRadius:12,padding:14,cursor:"pointer",border:"0.5px solid "+C.bd,transition:"all .2s"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+              {/* v10.84.84 — botón (antes un div con clic: sin teclado) */}
+              {ms.map(x=><button key={x.mid} data-maquina={x.mid} onClick={()=>setSelMachine(x.mid)} style={{background:C.sf,borderRadius:12,padding:14,cursor:"pointer",border:"0.5px solid "+C.bd,textAlign:"left",fontFamily:"inherit",color:C.tx}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <div style={{fontSize:13,fontWeight:700}}>{x.m.name}</div>
-                  <div style={{background:tc[type]+"15",color:tc[type],padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:600}}>{x.m.sub}</div>
+                  <div style={{background:tc[type]+"15",color:C.t2,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600}}>{x.m.sub}</div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <div><div style={{fontSize:10,color:C.t3,textTransform:"uppercase"}}>MXN/Hr Real</div><div style={{fontSize:15,fontWeight:800,color:C.ok}}>{fmt(x.mxnHr)}</div></div>
-                  <div><div style={{fontSize:10,color:C.t3,textTransform:"uppercase"}}>Utilización</div><div style={{fontSize:15,fontWeight:800,color:x.util>=60?C.ok:x.util>=30?C.wn:C.dn}}>{x.util}%</div></div>
-                  <div><div style={{fontSize:10,color:C.t3,textTransform:"uppercase"}}>Hrs Trabajadas</div><div style={{fontSize:13,fontWeight:700,color:C.ios}}>{fmtM(x.t)}</div></div>
-                  <div><div style={{fontSize:10,color:C.t3,textTransform:"uppercase"}}>Ingreso</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(x.rev)}</div></div>
+                  <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Utilización</div><div style={{fontSize:15,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{x.util} %</div></div>
+                  <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Horas</div><div style={{fontSize:15,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{fmtM(x.t)}</div></div>
+                  <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Ingreso</div><div style={{fontSize:13,fontWeight:600,fontFamily:"'Geist Mono',monospace"}}>{fmt(x.rev)}</div></div>
+                  <div><div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Por hora disp.</div><div style={{fontSize:13,fontWeight:600,fontFamily:"'Geist Mono',monospace"}}>{fmt(x.mxnHr)}</div></div>
                 </div>
-                <div style={{background:C.bg,borderRadius:3,height:4,overflow:"hidden",marginTop:8}}><div style={{width:Math.min(x.util,100)+"%",height:"100%",background:x.util>=60?C.ok:x.util>=30?C.wn:C.dn,borderRadius:3}}/></div>
-              </div>)}
+                <div style={{background:C.bg,borderRadius:3,height:4,overflow:"hidden",marginTop:8}}><div style={{width:Math.min(x.util,100)+"%",height:"100%",background:C.ac+"99",borderRadius:3}}/></div>
+              </button>)}
             </div>
           </div>})}
-        {mStats.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin datos de máquinas</div><div style={{fontSize:12,marginTop:4}}>Los tiempos se registran al mover órdenes en el Tablero</div></div>}
-      </>:selM&&<div>
+        {mStats.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><FactoryIcon size={46} color={C.ph}/><div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin tiempos de máquina en el periodo</div><div style={{fontSize:12,marginTop:4}}>Los tiempos se registran al mover órdenes en el Tablero</div></div>}
+      </>:<div>
         {/* Machine detail view */}
         <button onClick={()=>setSelMachine(null)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,marginBottom:14}}><CaretLeftIcon size={14} weight="bold"/>Volver a todas</button>
         <div style={{background:C.sf,borderRadius:16,padding:20,marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div><div style={{fontSize:22,fontWeight:800}}>{selM.m.name}</div><div style={{fontSize:12,color:tc[selM.m.type],fontWeight:600}}>{selM.m.type.charAt(0).toUpperCase()+selM.m.type.slice(1)} · {selM.m.sub}</div></div>
-            <div style={{background:tc[selM.m.type]+"15",color:tc[selM.m.type],padding:"8px 16px",borderRadius:12,textAlign:"center"}}><div style={{fontSize:20,fontWeight:800}}>{fmt(selM.mxnHr)}<span style={{fontSize:10,fontWeight:600}}>/hr real</span></div><div style={{fontSize:10,fontWeight:600,marginTop:2}}>Utilización: {selM.util}%</div></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:12,flexWrap:"wrap"}}>
+            <div><div style={{fontSize:22,fontWeight:800}}>{selM.m.name}</div><div style={{fontSize:12,color:C.t2,fontWeight:600}}>{selM.m.type.charAt(0).toUpperCase()+selM.m.type.slice(1)} · {selM.m.sub} · {txtRango}</div></div>
+            <div style={{background:C.bg,padding:"8px 16px",borderRadius:12,textAlign:"center"}}><div style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{selM.util} %</div><div style={{fontSize:10,fontWeight:600,color:C.t2,marginTop:2}}>de {availHrsPerMachine} h disponibles</div></div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
-            <div style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t3,textTransform:"uppercase",marginBottom:2}}>Ingresos</div><div style={{fontSize:18,fontWeight:800,color:C.ok}}>{fmt(selM.rev)}</div></div>
-            <div style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t3,textTransform:"uppercase",marginBottom:2}}>Hrs Trabajadas</div><div style={{fontSize:18,fontWeight:800,color:C.ios}}>{selM.hrs.toFixed(1)}h</div></div>
-            <div style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t3,textTransform:"uppercase",marginBottom:2}}>Trabajos</div><div style={{fontSize:18,fontWeight:800,color:C.ac}}>{selM.j}</div></div>
-            <div style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t3,textTransform:"uppercase",marginBottom:2}}>Promedio</div><div style={{fontSize:18,fontWeight:800,color:C.fac}}>{fmtM(selM.a)}</div></div>
-            <div style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t3,textTransform:"uppercase",marginBottom:2}}>MXN/Hr Activa</div><div style={{fontSize:18,fontWeight:800,color:C.wn}}>{fmt(selM.mxnHrWork)}</div></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10,marginBottom:16}}>
+            {[["Ingreso",fmt(selM.rev)],["Horas",selM.hrs.toFixed(1)+" h"],["Trabajos",selM.j],["Promedio",fmtM(selM.a)],["Por hora trabajada",fmt(selM.mxnHrWork)]].map(([l,v])=><div key={l} style={{background:C.bg,borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:10,color:C.t2,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:18,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{v}</div></div>)}
           </div>
 
           {/* Products for this machine */}
           <div style={{marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}><ChartBarIcon size={12} weight="bold"/>Productos en esta máquina</div>
-            {Object.entries(selM.types).sort((a,b)=>b[1]-a[1]).map(([t,c],i)=>{const mx2=Object.values(selM.types).reduce((a,b)=>Math.max(a,b),1);return <div key={t} style={{marginBottom:6}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:11}}>{t}</span><span style={{fontSize:10,color:C.t2}}>{c} ({Math.round(c/selM.j*100)}%)</span></div>
-              <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:((c/mx2)*100)+"%",height:"100%",background:cls[i%cls.length],borderRadius:3}}/></div>
+            {Object.entries(selM.types).sort((a,b)=>b[1]-a[1]).map(([t,c])=>{const mx2=Object.values(selM.types).reduce((a,b)=>Math.max(a,b),1);return <div key={t} style={{marginBottom:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:11}}>{t}</span><span style={{fontSize:10,color:C.t2}}>{c} ({Math.round(c/selM.j*100)} %)</span></div>
+              <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden"}}><div style={{width:((c/mx2)*100)+"%",height:"100%",background:C.ac+"99",borderRadius:3}}/></div>
             </div>})}
           </div>
 
@@ -16367,8 +16421,8 @@ function Analytics({orders,onReload}) {
           <div>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:8}}><ListBulletsIcon size={12} weight="bold"/>Últimos trabajos ({Math.min(selM.orders.length,10)})</div>
             {selM.orders.slice(-10).reverse().map((job,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:i<9?"0.5px solid "+C.bd:"none"}}>
-              <div><div style={{fontSize:12,fontWeight:600}}>{job.client}</div><div style={{fontSize:9,color:C.t3}}>{job.type} · {job.id}</div></div>
-              <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:C.ios}}>{fmtM(job.min)}</div>{job.price>0&&<div style={{fontSize:9,color:C.ok}}>{fmt(job.price)}</div>}</div>
+              <div><div style={{fontSize:12,fontWeight:600}}>{job.client}</div><div style={{fontSize:10,color:C.t2}}>{job.type} · {job.id}</div></div>
+              <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{fmtM(job.min)}</div>{job.price>0&&<div style={{fontSize:10,color:C.t2,fontFamily:"'Geist Mono',monospace"}}>{fmt(job.price)}</div>}</div>
             </div>)}
           </div>
         </div>
@@ -16378,42 +16432,44 @@ function Analytics({orders,onReload}) {
     {/* ══ EFICIENCIA ══ */}
     {tab==="efficiency"&&<div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CheckCircleIcon size={10} weight="bold"/>Entregas a Tiempo</span>} v={onTimePct+"%"} s={onTime+" de "+(onTime+late)} c={onTimePct>=80?C.ok:onTimePct>=60?C.wn:C.dn} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ClockIcon size={10} weight="bold"/>Días Promedio</span>} v={avgDays+"d"} s="creación → entrega" c={C.ios} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><FileTextIcon size={10} weight="bold"/>Merma Pliegos</span>} v={totalWastePl} s="total acumulado" c={C.wn} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><PackageIcon size={10} weight="bold"/>Merma Piezas</span>} v={totalWastePz} s="total acumulado" c={C.wn} big/>
+        <Stat id="atiempo" l={etq(CheckCircleIcon,"Entregas a tiempo")} v={onTimePct===null?"—":onTimePct+" %"} c={colorPct(onTimePct)} s={conFecha.length?onTime+" de "+conFecha.length+" con fecha compromiso"+(sinFecha?" · "+sinFecha+" sin fecha":""):"ninguna con fecha compromiso"+(sinFecha?" ("+sinFecha+" sin fecha)":"")} big/>
+        <Stat id="dias" l={etq(ClockIcon,"Días de la captura a la entrega")} v={medianaDias===null?"—":medianaDias+" d"} s={dias.length?"la mediana de "+enPlural(dias.length,"orden","órdenes"):"sin entregas"} big/>
+        <Stat id="merma-pliegos" l={etq(FileTextIcon,"Merma de pliegos")} v={merma.length?totalWastePl.toLocaleString("es-MX"):"—"} c={merma.length?C.tx:C.t2} s={merma.length?enPlural(merma.length,"registro","registros"):"sin registros de merma"} big/>
+        <Stat id="merma-piezas" l={etq(PackageIcon,"Merma de piezas")} v={merma.length?totalWastePz.toLocaleString("es-MX"):"—"} c={merma.length?C.tx:C.t2} s={merma.length?enPlural(merma.length,"registro","registros"):"sin registros de merma"} big/>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14}}>
         {/* On-time visual */}
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><CalendarDotsIcon size={13} weight="bold"/>Puntualidad de Entregas</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><CalendarDotsIcon size={13} weight="bold"/>Puntualidad de entregas</div>
+          {onTimePct===null?<div style={{fontSize:12,color:C.t2,padding:"20px 0",textAlign:"center"}}>Ninguna entrega del periodo tiene fecha compromiso.</div>:<>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",marginBottom:12}}>
             <div style={{position:"relative",width:120,height:120}}>
-              <svg viewBox="0 0 36 36" style={{width:120,height:120,transform:"rotate(-90deg)"}}>
+              <svg viewBox="0 0 36 36" style={{width:120,height:120,transform:"rotate(-90deg)"}} aria-hidden="true">
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke={C.bd} strokeWidth="3"/>
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke={onTimePct>=80?C.ok:onTimePct>=60?C.wn:C.dn} strokeWidth="3" strokeDasharray={onTimePct+" "+(100-onTimePct)} strokeLinecap="round"/>
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke={colorPct(onTimePct)} strokeWidth="3" strokeDasharray={onTimePct+" "+(100-onTimePct)} strokeLinecap="round"/>
               </svg>
               <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
-                <div style={{fontSize:24,fontWeight:800,color:onTimePct>=80?C.ok:onTimePct>=60?C.wn:C.dn}}>{onTimePct}%</div>
-                <div style={{fontSize:10,color:C.t3}}>a tiempo</div>
+                <div style={{fontSize:24,fontWeight:700,color:colorPct(onTimePct),fontFamily:"'Geist Mono',monospace"}}>{onTimePct} %</div>
+                <div style={{fontSize:10,color:C.t2}}>a tiempo</div>
               </div>
             </div>
           </div>
-          <div style={{display:"flex",justifyContent:"center",gap:16,fontSize:11}}>
-            <span style={{color:C.ok,display:"inline-flex",alignItems:"center",gap:4}}><CheckCircleIcon size={11} weight="fill"/>{onTime} a tiempo</span>
-            <span style={{color:C.dn,display:"inline-flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>{late} retrasadas</span>
-          </div>
+          <div style={{display:"flex",justifyContent:"center",gap:16,fontSize:11,flexWrap:"wrap"}}>
+            <span style={{color:C.okInk,display:"inline-flex",alignItems:"center",gap:4}}><CheckCircleIcon size={11} weight="fill"/>{onTime} a tiempo</span>
+            <span style={{color:C.dnInk,display:"inline-flex",alignItems:"center",gap:4}}><WarningIcon size={11} weight="fill"/>{late} tarde</span>
+            {sinFecha>0&&<span style={{color:C.t2,display:"inline-flex",alignItems:"center",gap:4}}>{sinFecha} sin fecha compromiso (no cuentan)</span>}
+          </div></>}
         </div>
 
-        {/* Stale orders */}
+        {/* Stale orders: lo de AHORA, no del periodo */}
         <div style={{background:C.sf,borderRadius:14,padding:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><WarningIcon size={13} weight="fill"/>Órdenes Estancadas</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><WarningIcon size={13} weight="fill"/>Órdenes estancadas ahora</div>
           {orders.filter(o=>getStale(o)).map(o=>{const s=getStale(o);return <div key={o.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"0.5px solid "+C.bd}}>
-            <div><div style={{fontSize:11,fontWeight:600}}>{o.client}</div><div style={{fontSize:9,color:C.t3}}><StageLbl stage={o.stage} size={9}/> · {o.product_type}</div></div>
-            <span style={{background:(s.lv==="critical"?C.dn:C.wn)+"15",color:s.lv==="critical"?C.dn:C.wn,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:700,alignSelf:"center"}}>{s.lb}</span>
+            <div><div style={{fontSize:11,fontWeight:600}}>{o.client}</div><div style={{fontSize:10,color:C.t2}}><StageLbl stage={o.stage} size={9}/> · {nombreDeTipo(o.product_type)}</div></div>
+            <span style={{background:(s.lv==="critical"?C.dn:C.wn)+"15",color:s.lv==="critical"?C.dnInk:C.wnInk,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,alignSelf:"center"}}>{s.lb}</span>
           </div>})}
-          {orders.filter(o=>getStale(o)).length===0&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 0",color:C.ok,fontSize:12}}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
+          {orders.filter(o=>getStale(o)).length===0&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"20px 0",color:C.okInk,fontSize:12}}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
         </div>
       </div>
     </div>}
@@ -16421,29 +16477,31 @@ function Analytics({orders,onReload}) {
     {/* ══ CLIENTES ══ */}
     {tab==="clients"&&<div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UsersIcon size={10} weight="bold"/>Clientes Únicos</span>} v={Object.keys(byClient).length} c={C.ac} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><CurrencyDollarIcon size={10} weight="bold"/>Ingreso/Cliente</span>} v={fmt(totalRev/(Object.keys(byClient).length||1))} c={C.ok} big/>
-        <Stat l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><ListBulletsIcon size={10} weight="bold"/>Órdenes/Cliente</span>} v={(orders.length/(Object.keys(byClient).length||1)).toFixed(1)} c={C.fac} big/>
+        <Stat id="clientes" l={etq(UsersIcon,"Clientes con entregas")} v={clientes.length} s={txtRango} big/>
+        <Stat id="ingreso-cliente" l={etq(CurrencyDollarIcon,"Ingreso por cliente")} v={clientes.length?fmt(totalRev/clientes.length):"—"} s="lo entregado ÷ los clientes" big/>
+        <Stat id="ordenes-cliente" l={etq(ListBulletsIcon,"Órdenes por cliente")} v={clientes.length?(del.length/clientes.length).toFixed(1):"—"} s="entregadas ÷ los clientes" big/>
       </div>
 
-      <div style={{background:C.sf,borderRadius:14,padding:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrophyIcon size={13} weight="bold"/>Top 10 Clientes por Facturación</div>
-        {topClients.map(([name,d],i)=>{const mxC=topClients[0]?.[1]?.rev||1;return <div key={name} style={{marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:24,height:24,borderRadius:"50%",background:i<3?[C.wn,"#c0c0c0","#cd7f32"][i]:C.sf,color:i<3?"#fff":C.t2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>{i+1}</div>
-              <div><div style={{fontSize:13,fontWeight:600}}>{name}</div><div style={{fontSize:9,color:C.t3}}>{d.cnt} órdenes · última: {fD(d.last)}</div></div>
+      <div style={{background:C.sf,borderRadius:14,padding:16,maxWidth:760}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrophyIcon size={13} weight="bold"/>Los que más dejaron · {txtRango}</div>
+        {topClients.map((x,i)=>{const mxC=topClients[0]?.monto||1;return <div key={x.nombre} data-cliente={x.nombre} data-monto={x.monto} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:3}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+              {/* v10.84.84 — sin medallas (la «2» en plata daba 1.82:1): el lugar en número, en tinta */}
+              <div style={{width:24,height:24,borderRadius:"50%",background:C.bg,color:C.t2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{i+1}</div>
+              <div style={{minWidth:0}}><div style={{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.nombre}</div><div style={{fontSize:10,color:C.t2}}>{enPlural(x.n,"orden entregada","órdenes entregadas")}</div></div>
             </div>
-            <div style={{fontSize:14,fontWeight:800,color:C.ok}}>{fmt(d.rev)}</div>
+            <div style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(x.monto)}</div>
           </div>
-          <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden",marginLeft:32}}><div style={{width:((d.rev/mxC)*100)+"%",height:"100%",background:i<3?C.ok:C.ac+"80",borderRadius:3}}/></div>
+          <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden",marginLeft:32}}><div style={{width:((x.monto/mxC)*100)+"%",height:"100%",background:C.ac+"99",borderRadius:3}}/></div>
         </div>})}
-        {topClients.length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.t3,fontSize:12}}>Sin datos de clientes aún</div>}
+        {topClients.length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.t2,fontSize:12}}>Sin entregas en el periodo.</div>}
       </div>
     </div>}
 
     {/* ══ ARCHIVOS ══ */}
     {tab==="storage"&&<StorageTab orders={orders} onReload={onReload}/>}
+    </div>
   </div>;
 }
 
