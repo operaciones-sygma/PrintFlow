@@ -155,8 +155,23 @@ async function tanda(t, { solo = null, intento = 1 } = {}) {
 }
 
 const inicio = performance.now();
-console.log("probar: " + elegidas.map(t => t.nombre).join(" + ") + " (en paralelo)…");
-const corridas = await Promise.all(elegidas.map(t => tanda(t)));
+// v10.84.81 — las tandas CON banco (vite + navegador) van de a lo más PARALELO a la vez (PROBAR_PARALELO, 7): con 11 juntas Windows se
+//   quedaba sin puertos (net::ERR_NO_BUFFER_SPACE: cada caso abre una página que le pide 10-20 archivos al banco) y el candado frenó dos
+//   veces seguidas el 12-oct por pruebas que no habían fallado (folio/inv-58 y detalle/det-134, las dos sin segunda oportunidad). Con 10
+//   todavía pasaba, sin holgura. Empiezan las más largas (minutos aproximados), para que la última no arranque tarde; las que no tienen
+//   banco corren todas de una vez. El tope de 12 minutos sigue siendo por tanda, desde que ésa empieza.
+const PARALELO = Math.max(1, Number(process.env.PROBAR_PARALELO || 7));
+const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2 };
+async function deATope(lista, n, fn) {
+  const res = new Array(lista.length);
+  const cola = lista.map((t, k) => k).sort((a, b) => (MINUTOS[lista[b].nombre] || 1) - (MINUTOS[lista[a].nombre] || 1));
+  await Promise.all(Array.from({ length: Math.min(n, cola.length) }, async () => { while (cola.length) { const k = cola.shift(); res[k] = await fn(lista[k]); } }));
+  return res;
+}
+const conBanco = elegidas.filter(t => t.gen), sinBanco = elegidas.filter(t => !t.gen);
+console.log("probar: " + elegidas.map(t => t.nombre).join(" + ") + " (en paralelo; las " + conBanco.length + " con banco, de a " + PARALELO + ")…");
+const [deBanco, deLasOtras] = await Promise.all([deATope(conBanco, PARALELO, t => tanda(t)), Promise.all(sinBanco.map(t => tanda(t)))]);
+const corridas = elegidas.map(t => t.gen ? deBanco[conBanco.indexOf(t)] : deLasOtras[sinBanco.indexOf(t)]);
 
 // La segunda oportunidad: cada tanda repite, una vez y a la vez que las otras, sólo lo que le falló (las de dinero, nada).
 // PROBAR_FINGIR_FALLA=id1,id2 hace que esas pruebas cuenten como FALLA en el primer intento (con PROBAR_FINGIR_SIEMPRE=1, también en el

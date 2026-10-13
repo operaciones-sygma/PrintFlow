@@ -7,10 +7,14 @@ antes de cada subida corren **todas**. La regla completa vive en el CLAUDE.md gl
 ## Cómo se corre
 
 ```
-npm run probar                 # todas las tandas, en paralelo (~2 min)
+npm run probar                 # todas las tandas, en paralelo (~8 min; las que tienen banco, de a 7)
 node scripts/probar.mjs --solo folio
 node scripts/probar.mjs --base # si TODO pasa, guarda estos resultados como la base de la próxima comparación
 ```
+
+Las tandas **con banco** (vite + navegador) corren de a lo más 7 a la vez (`PROBAR_PARALELO`), empezando por las más largas; las demás,
+todas juntas. Con 11 tandas con banco al mismo tiempo Windows se quedaba sin puertos (`net::ERR_NO_BUFFER_SPACE`: cada caso abre una
+página que le pide 10-20 archivos al banco) y el candado frenaba por pruebas que no habían fallado (v10.84.81, dos veces seguidas).
 
 Cada prueba se compara con la última corrida en verde (`.git/probar-base.json`, local de cada copia, fuera de git):
 
