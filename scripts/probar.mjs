@@ -42,6 +42,8 @@ const TANDAS = [
   // Analytics: cada cifra con su periodo y su base, un solo ingreso (lo entregado, por su fecha de entrega), la tendencia que dibuja (v10.84.84);
   //   el reloj del navegador va fijo en el 13-oct-2026 con la hora de México
   { nombre: "analytics", gen: "tests/banco/gen-analytics.mjs", romper: "tests/romper/analytics.mjs", puerto: 5191 },
+  // sin banco: los chips de «Mis Pendientes» (ninguno que nunca pueda contar) y las guías de las fichas (v10.84.88)
+  { nombre: "chips", romper: "tests/romper/chips.mjs" },
   // el tablero: el Kanban de Producción, el de Germán y las fichas (v10.84.56); el banco extrae lo que necesita (extraer.mjs)
   { nombre: "tablero", gen: "tests/banco/gen-tablero.mjs", romper: "tests/romper/tablero.mjs", puerto: 5194 },
   // «En la planta» de Karla y el aviso de la OC que no se puede foliar entera: pasar a Salidas lo que ya está listo (v10.84.67)

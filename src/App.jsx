@@ -1119,7 +1119,7 @@ function getTaskFilters(role){
     {key:"packaging",Icon:PackageIcon,label:"Empaque pendiente",color:C.emp,predicate:o=>o.stage==="packaging"},
   ];
   if(role==="preprensa")return[...base,
-    {key:"drafts",Icon:NotePencilIcon,label:"Drafts",color:"#aeaeb2",predicate:o=>o.stage==="draft"},
+    {key:"drafts",Icon:NotePencilIcon,label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"},   // v10.84.88 — antes «Drafts»
     {key:"design",Icon:PaletteIcon,label:"En diseño",color:C.dsn,predicate:o=>o.stage==="design"},
     {key:"waiting_client",Icon:UserIcon,label:"Esperando cliente",color:C.dsn,predicate:o=>o.stage==="proof_client"},
   ];
@@ -1127,7 +1127,7 @@ function getTaskFilters(role){
   if(role==="german")return[...base,
     {key:"proof_printing",Icon:PrinterIcon,label:"Imprimir prueba",color:C.fac,predicate:o=>o.stage==="proof_printing"},
     {key:"ctp",Icon:WrenchIcon,label:"CTP pendiente",color:C.ctp,predicate:o=>o.stage==="ctp"},
-    {key:"placas",Icon:CheckCircleIcon,label:"Placas listas",color:C.live,predicate:o=>o.stage==="placas_listas"},
+    // v10.84.88 — sin «Placas listas»: la lista de Germán sólo trae «Imprimir prueba» y CTP (myTasks), así que siempre contaba 0
   ];
   // v10.43.19 — Secretaria (Lupita): captura + esperar cliente + salida
   // v10.54.8 — agregado 🚚 Maquilas (pedido de Marcelo): todas las maquila activas
@@ -1136,14 +1136,11 @@ function getTaskFilters(role){
     {key:"drafts",Icon:NotePencilIcon,label:"Borradores",color:"#aeaeb2",predicate:o=>o.stage==="draft"||o.stage==="maq_created"},
     {key:"maquilas",Icon:TruckIcon,label:"Maquilas",color:C.maq,predicate:o=>o.order_type==="maquila"&&!o.stage.includes("cancelled")&&!o.stage.includes("delivered")&&!o.stage.includes("stocked")},
     {key:"proof_client",Icon:TargetIcon,label:"Prueba cliente",color:C.dsn,predicate:o=>o.stage==="proof_client"},
-    {key:"salidas",Icon:ExportIcon,label:"En salida",color:C.sal,predicate:o=>o.stage==="salidas"},
+    // v10.84.88 — sin «En salida»: la lista de Lupita y del vendedor (myTasks) no trae Salidas, así que siempre contaba 0
   ];
-  // v10.43.19 — Vendedor: por estado agrupado de sus órdenes
-  if(role==="vendedor")return[...base,
-    {key:"design_zone",Icon:PaletteIcon,label:"En diseño",color:C.dsn,predicate:o=>["design","proof_printing","proof_client","ctp","placas_listas"].includes(o.stage)},
-    {key:"production_zone",Icon:GearIcon,label:"En producción",color:C.amb,predicate:o=>["ready","in_production"].includes(o.stage)},
-    {key:"delivery_zone",Icon:ExportIcon,label:"Lista entrega",color:C.sal,predicate:o=>["packaging","salidas"].includes(o.stage)},
-  ];
+  // v10.84.88 — la rama del vendedor (En diseño / En producción / Lista entrega) nunca corría (isSec lo atrapa arriba) y además su lista
+  //   sólo trae borradores, prueba con el cliente y maquila: dos de sus tres chips serían 0 siempre. Se quitó; el vendedor ve los de
+  //   Lupita, que corresponden a su lista. Si su lista debe traer sus órdenes en producción y por entregar, es decisión de Marcelo.
   if(role==="admin")return[...base,
     {key:"maquila_ext",Icon:TruckIcon,label:"Maquila externa",color:C.maq,predicate:o=>["maquila_out","maq_sent","maq_in_progress","maquila_in"].includes(o.stage)},
     {key:"proof_client",Icon:TargetIcon,label:"Esperando cliente",color:C.dsn,predicate:o=>o.stage==="proof_client"},
@@ -2862,7 +2859,7 @@ const SkelRows=({n=5})=><div style={{display:"flex",flexDirection:"column",gap:6
 // Unifica el patrón ya existente en varias vistas. tone "positive" = estado sano (icono verde fill).
 const EmptyState=({icon:Ic,title,hint,action,tone="neutral"})=>{const pos=tone==="positive";return <div style={{textAlign:"center",padding:"40px 20px"}}>{Ic&&<div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Ic size={46} weight={pos?"fill":"regular"} color={pos?C.ok:C.ph}/></div>}<div style={{fontSize:15,fontWeight:700,color:C.tx}}>{title}</div>{hint&&<div style={{fontSize:12,color:C.t2,marginTop:4,maxWidth:330,marginLeft:"auto",marginRight:"auto",lineHeight:1.45}}>{hint}</div>}{action&&<button onClick={action.onClick} style={{...bt(C.sf,C.t2),marginTop:14,border:"0.5px solid "+C.bd}}>{action.icon&&<action.icon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>}{action.label}</button>}</div>;};
 
-const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Arrastra a otra máquina, Empaque o Maquila en el Tablero",packaging:"Arrastra a Salidas o Maquila en el Tablero",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento y sube tu archivo preparado para la prueba de color (el anterior se queda como historial)",design:"Prepara los archivos y sube el archivo listo (el anterior se queda como historial). Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna el folio fiscal (F- factura, RS- remisión) y marca entregada",maq_received:"Asigna el folio fiscal (F- factura, RS- remisión) y marca entregada"}};
+const GUIDES={produccion:{draft:"Revisa las specs y valida. Pre-prensa también debe validar",ready:"Arrastra al Tablero para asignar máquina",in_production:"Al terminar, pásala a Empaque o a Maquila; para cambiarla de máquina, arrástrala en el Tablero",packaging:"Cuando esté empacada, envíala a Salidas (o a Maquila)",maquila_out:"Orden en maquila externa. Marca como recibida cuando regrese",maquila_in:"Arrastra a máquina de acabados, Empaque o Maquila en el Tablero",placas_listas:"Recoge las placas de Germán y asigna a máquina"},preprensa:{draft:"Revisa y edita las specs si es necesario. Valida cuando estén correctas. Descarga el documento y sube tu archivo preparado para la prueba de color (el anterior se queda como historial)",design:"Prepara los archivos y sube el archivo listo (el anterior se queda como historial). Envía a Prueba de Color para que Germán imprima",proof_client:"Esperando aprobación del cliente. Si rechaza: haz click en ❌ Pide Cambios, luego sube el archivo corregido en Diseño y envía a nueva prueba"},german:{proof_printing:"Descarga el documento enviado por Noemí e imprime la prueba de color en el Epson P7570",ctp:"Arrastra a CTP y Procesadora en tu Tablero"},secretaria:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},vendedor:{proof_client:"Marca si el cliente aprobó o rechazó la prueba de color",maq_created:"Envía al proveedor",maq_sent:"Da seguimiento al proveedor",maq_in_progress:"Proveedor trabajando. Da seguimiento por teléfono o WhatsApp",maq_received:"Trabajo recibido del proveedor. Karla asignará folio fiscal y entregará",salidas:"Karla asignará folio fiscal y marcará entregada"},karla:{salidas:"Asigna el folio fiscal (F- factura, RS- remisión) y marca entregada",maq_received:"Asigna el folio fiscal (F- factura, RS- remisión) y marca entregada"}};
 
 // ─── TOAST NOTIFICATION ───────────────────────────
 // v10.76.6 — los toasts ahora usan iconos Phosphor (no emojis). Muchos mensajes traían su propio emoji líder

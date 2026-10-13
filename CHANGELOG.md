@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.88 — «Mis Pendientes»: sin chips que nunca cuentan, y las guías de Gerardo con sus botones — 13-oct-2026
+
+**Qué pasaba** (más de la critique de «Mis Pendientes», 17/40): chips que nunca podían contar nada de la lista de su rol, siempre en 0
+(«En salida» de Lupita y del vendedor: su lista no trae Salidas; «Placas listas» de Germán: la suya sólo trae la prueba y CTP); el chip
+«Drafts» en inglés (Noemí); y las guías de Gerardo mandaban a arrastrar en el Tablero lo que la ficha ya trae en botones («Arrastra a
+Salidas o Maquila en el Tablero» encima de «Enviar a Salidas»). El revisor vio además que la rama de chips del vendedor nunca corría
+(`isSec` lo atrapa antes).
+
+**Qué se cambió** (`src/App.jsx`, `getTaskFilters` y `GUIDES`; la base no cambió): fuera los chips muertos; «Borradores» en lugar de
+«Drafts»; las guías de Gerardo dicen lo que hacen sus botones («Al terminar, pásala a Empaque o a Maquila; para cambiarla de máquina,
+arrástrala en el Tablero»; «Cuando esté empacada, envíala a Salidas (o a Maquila)»). La rama del vendedor se quitó: sus chips (En diseño,
+En producción, Lista entrega) no corresponden a su lista, que sólo trae borradores, prueba con el cliente y maquila; ve los de Lupita, que
+sí. **Para Marcelo:** si la lista del vendedor debe traer sus órdenes en producción y por entregar («¿ya salió mi orden?»), es decisión
+tuya (es el P1 de «Te toca / Espera a otro»).
+
+**Cómo se probó** (tanda nueva `chips`, 6, sin navegador: extrae `getTaskFilters` y `GUIDES` con `extraer.mjs` y los evalúa en Node):
+**vuelta 1**, escrita antes contra v10.84.87: fallaban 3 (los chips del vendedor, «Drafts», las guías de Gerardo). **Vuelta 2**: mi primer
+arreglo ponía al vendedor sus propios chips, y la vuelta encontró que dos de los tres serían 0 siempre (su lista no trae producción ni
+entregas); el supuesto de la prueba estaba mal y se cambió por «ningún chip muerto»: contra v10.84.87 encuentra los tres (Placas listas,
+En salida ×2); con el cambio, 6 de 6. También un supuesto mío en esa prueba (la orden de mentira no hacía contar «Retrasos» ni
+«Estancadas», que no dependen de la etapa: se revisan sólo los de etapa).
+
 ## v10.84.87 — «Mis Pendientes»: el doble clic ya no mueve otra orden, y sin leer no dice «Sin pendientes» — 13-oct-2026
 
 **Qué pasaba** (la critique de «Mis Pendientes», revisor independiente, **17/40**; snapshot
