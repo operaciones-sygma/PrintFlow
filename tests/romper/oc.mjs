@@ -885,6 +885,38 @@ await caso("oc-112-reintentar-y-la-nota-va-adentro", "emisor=falla1", async p =>
   ok("oc-112-reintentar-y-la-nota-va-adentro", antes === null && !!caja && /asigna el sistema/.test(caja) && veces === 1, `mientras no se sabe: vista previa ${antes === null ? "oculta" : "VISIBLE"}; tras «Reintentar»: ${caja && /asigna el sistema/.test(caja) ? "la nota va dentro" : "la nota NO va dentro"} (${veces} vez/veces)`);
 });
 
+// ───────────── v10.84.89 — las facturas sin orden del cliente (Karla, 13-oct: F-143 y F-155, cada una un pedazo de OC-0960).
+// Vuelta 1: escritas ANTES del cambio, contra v10.84.88.
+await caso("oc-113-sin-orden-de-otro-importe", "sinorden=1", async p => {
+  const t = await texto(p);
+  const dice = /tiene 2 facturas hechas sin orden/.test(t) && /F-143/.test(t) && /3,066\.78/.test(t) && /F-155/.test(t) && /plan matriz/i.test(t);
+  const btn = p.getByRole("button", { name: /Ir al plan matriz/ });
+  let lleva = false;
+  if (await btn.count()) { await btn.click(); await espera(p, 400); lleva = (await log(p)).includes("abrir-plan"); }
+  ok("oc-113-sin-orden-de-otro-importe", dice && lleva, `aviso ${dice} · lleva al plan ${lleva} · ${t.replace(/\s+/g, " ").slice(0, 160)}`);
+});
+await caso("oc-114-sin-orden-no-se-pudo-saber", "sinorden=falla", async p => {
+  const t1 = await texto(p);
+  const dice = /No se pudo revisar si .* tiene facturas hechas sin orden/.test(t1);
+  await p.getByRole("button", { name: "Reintentar" }).first().click().catch(() => {}); await espera(p, 600);
+  const t2 = await texto(p);
+  ok("oc-114-sin-orden-no-se-pudo-saber", dice && /F-143/.test(t2), `${dice} · después ${/F-143/.test(t2)}`);
+});
+await caso("oc-115-sin-orden-del-importe-exacto", "sinorden=cuadra", async p => {
+  const t = await texto(p);
+  ok("oc-115-sin-orden-del-importe-exacto", !/hechas? sin orden/.test(t) && !/No se pudo revisar/.test(t), "la del importe exacto la atiende la base al confirmar: aquí no se avisa");
+});
+await caso("oc-116-sin-facturas-sin-orden", "", async p => {
+  const t = await texto(p);
+  ok("oc-116-sin-facturas-sin-orden", !/hechas? sin orden/.test(t) && !/No se pudo revisar/.test(t));
+});
+await caso("oc-117-sin-camino-al-plan", "sinorden=1&plan=no", async p => {
+  ok("oc-117-sin-camino-al-plan", /tiene 2 facturas hechas sin orden/.test(await texto(p)) && await p.getByRole("button", { name: /Ir al plan matriz/ }).count() === 0);
+});
+await caso("oc-118-pre-asignar-tambien", "sinorden=1&pre=1", async p => {
+  ok("oc-118-pre-asignar-tambien", /tiene 2 facturas hechas sin orden/.test(await texto(p)));
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

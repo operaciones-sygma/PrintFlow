@@ -443,6 +443,62 @@ await caso("spl-38 la nota del redondeo cabe a 1366", "hakuna=1", async p => {
   ok("spl-38 a 1366 la nota del redondeo se lee completa, dentro de la pantalla", !!r && r.izq >= 0 && r.der <= r.vista && r.alto < 120, JSON.stringify(r));
 });
 
+// ───────────── v10.84.89 — «Facturar por partes» ANTES de Salidas (Karla: F-90 de P-0544 y F-140 de P-0631, anticipos hechos sin
+// orden: se liga el anticipo como la primera parte y el resto queda por facturar; la base ya lo aceptaba pre-asignado, la pantalla
+// sólo abría en Salidas). Vuelta 1: escritas ANTES del cambio, contra v10.84.88.
+await caso("spl-40 antes de Salidas: anticipados a fuerza", "etapa=in_production", async p => {
+  await split(p);
+  const cb = p.getByRole("checkbox");
+  const visible = await cb.count() > 0 && await cb.first().isVisible();
+  const marcado = visible && await cb.first().isChecked();
+  const fijo = visible && await cb.first().isDisabled();
+  const dice = await ve(p, /todavía no llega a Salidas/);
+  ok("spl-40 antes de Salidas la ventana sale ya en folios anticipados (sin poder quitarlo) y dice por qué", visible && marcado && fijo && dice, `visible ${visible} · marcado ${marcado} · fijo ${fijo} · dice ${dice}`);
+});
+await caso("spl-41 antes de Salidas: ligar el anticipo y el resto después", "etapa=in_production&folioexiste=0", async p => {
+  await split(p);
+  await p.getByRole("button", { name: "Ya tiene factura: ligarla" }).first().click(); await espera(p);
+  await p.getByLabel("Folio de la parte 1").fill("F-90");
+  await p.getByLabel("Cantidad de la parte 1").fill("2000"); await espera(p, 150);
+  await p.getByRole("button", { name: /El resto, después/ }).click(); await espera(p, 300);
+  const faltaRazon = /por qué se anticipan/.test(await faltas(p));
+  await p.locator("#split-razon-anticipo").fill("Anticipo del 50% ya facturado en F-90"); await espera(p);
+  await crearBtn(p).click(); await espera(p, 500);
+  const lg = (await log(p)).split("\n").find(l => l.startsWith("split:intento")) || "";
+  const j = lg ? JSON.parse(lg.slice("split:intento ".length)) : null;
+  const pl = j?.payload || [];
+  ok("spl-41 antes de Salidas: F-90 ligada como primera parte (anticipada, con su razón) y el resto por facturar",
+    faltaRazon && pl.length === 2 && pl[0].folio === "F-90" && pl[0].pre_assigned === true && /Anticipo/.test(pl[0].reason || "")
+    && pl[1].doc_type === "por_facturar" && pl[1].pre_assigned === false && j?.opts?.allowLink === true,
+    `pide razón ${faltaRazon} · ${JSON.stringify(pl).slice(0, 220)} · ${JSON.stringify(j?.opts)}`);
+});
+await caso("spl-42 en Salidas sigue igual", "", async p => {
+  await split(p);
+  const enlace = await p.getByRole("button", { name: /Folios anticipados/ }).count();
+  ok("spl-42 en Salidas los folios anticipados siguen detrás de su enlace y sin marcar", enlace === 1 && await p.getByRole("checkbox").count() === 0);
+});
+
+// ───────────── vuelta 2: por donde no se diseñó
+await caso("spl-43 antes de Salidas: Esc sin tocar nada", "etapa=in_production", async p => {
+  await split(p); await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("spl-43 antes de Salidas, Esc sin haber capturado nada cierra sin preguntar (lo anticipado viene puesto, no es captura)", (await cuenta(p, "split:cerrado")) === 1);
+});
+await caso("spl-44 la tercera salida de la pregunta", "", async p => {
+  await p.click("#abrir-conf-extra"); await espera(p, 300);
+  const extra = p.getByRole("button", { name: "Facturar por partes y ligar F-90" });
+  const hay = await extra.count() === 1;
+  await extra.dblclick().catch(() => {}); await espera(p, 400);
+  const veces = await cuenta(p, "conf:extra");
+  await p.click("#abrir-conf-extra"); await espera(p, 300); await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("spl-44 la pregunta de anticipos ofrece «Facturar por partes y ligar F-90»: un clic (aunque sea doble) lo hace una vez, y Esc no lo hace",
+    hay && veces === 1 && (await cuenta(p, "conf:extra")) === 1 && (await cuenta(p, "conf:asignar")) === 0, `hay ${hay} · veces ${veces}`);
+});
+await caso("spl-45 antes de Salidas a 1366: se lee la razón", "etapa=in_production", async p => {
+  await split(p);
+  const r = await p.locator("#split-razon-anticipo").boundingBox().catch(() => null);
+  ok("spl-45 antes de Salidas, la razón (obligatoria) está a la vista sin buscarla detrás de un enlace", !!r && await p.locator("#split-razon-anticipo").isVisible());
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

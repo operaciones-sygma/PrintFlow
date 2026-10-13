@@ -7,6 +7,7 @@
 //   adelantado F-130 ($18,268.35, 20,000 pzas) y F-131 ($13,701.27, 15,000 pzas), cada una UN centavo arriba de la orden porque
 //   el CFDI calcula precio unitario (6 decimales) × cantidad. «1»: todo por facturar; «resto»: F-130 ya ligada con el dinero de
 //   la orden (quedan $11,811.43); «restoviejo»: F-130 ligada con el de su CFDI, como antes (quedan $11,811.42).
+//   etapa=in_production (v10.84.89): la orden todavía no llega a Salidas (F-90 de P-0544: se liga el anticipo como primera parte)
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -48,6 +49,8 @@ const db = {
   getNextFolioSuggestion: async t => t === "factura" ? "D-6001" : "R-900",
 };`,
   fnBlock("ConfirmModal"), fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"),
+  // v10.84.89: antes de Salidas la ventana dice dónde va la orden (el App.jsx de antes no la usa aquí, pero ya existía)
+  ...(L.some(l => l.startsWith("const LUGAR_DE_ETAPA=")) ? [line(/^const LUGAR_DE_ETAPA=/, "LUGAR_DE_ETAPA")] : []),
   // v10.84.73: la ventana de la parte va en el marco común de las puertas de cancelar (con su escudo y el error en palabras); en las
   //   versiones de antes no existe y se omite (la corrida contra HEAD sigue armando el banco)
   ...(L.some(l => l.startsWith("function VentanaDeCancelar(")) ? [
@@ -58,7 +61,7 @@ const db = {
   `const RESTO = UNAPIEZA ? { id: "s2", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 1, amount_portion: 11.38, cancelled_at: null }
   : { id: "s2", position: 2, doc_type: "por_facturar", invoice_folio: null, qty_portion: 3000, amount_portion: 34140, cancelled_at: null };
 const ORDER = { id: "o1", production_number: "P-0531", client: "PORTLAND STUDIO", product: "Etiquetas colgantes", quantity: 5000, price: 56900,
-  order_type: "normal", created_by: HIST ? "import-historico" : "secretaria", client_id: "c1", stage: "salidas",
+  order_type: "normal", created_by: HIST ? "import-historico" : "secretaria", client_id: "c1", stage: Q.get("etapa") || "salidas",
   splits: [{ id: "s1", position: 1, doc_type: "factura", invoice_folio: "F-44", qty_portion: 2000, amount_portion: 22760, cancelled_at: null }, RESTO] };
 const ORDER_ULTIMA = { ...ORDER, splits: [{ id: "s9", position: 1, doc_type: "factura", invoice_folio: "F-120", qty_portion: 5000, amount_portion: 56900, cancelled_at: null }] };
 const RESTO_H = HAKUNA === "1" ? { id: "h2", position: 1, doc_type: "por_facturar", invoice_folio: null, qty_portion: 35000, amount_portion: 27560, cancelled_at: null }
@@ -77,6 +80,10 @@ function Banco() {
     <button id="abrir-split" onClick={() => setM("split")}>split</button>
     <button id="abrir-cancel" onClick={() => setM("cancel")}>cancel</button>
     <button id="abrir-cancel-ultima" onClick={() => setM("cancelUltima")}>cancelUltima</button>
+    {/* v10.84.89 — la ventana de confirmar con su tercera salida (la pregunta de anticipos lleva a «Facturar por partes») */}
+    <button id="abrir-conf-extra" onClick={() => setConf({ zIndex: 1100, title: "Este cliente tiene una factura por adelantado sin ligar", message: "Ya tiene F-90 por $6,887.50.",
+      confirmLabel: "Asignar el folio de todos modos", confirmColor: C.wn, onConfirm: async () => { setConf(null); L("conf:asignar"); },
+      extra: { label: "Facturar por partes y ligar F-90", onClick: () => { setConf(null); L("conf:extra"); } } })}>confExtra</button>
     <pre id="log">{log.join("\\n")}</pre>
     {m === "sig" && <FacturarSiguienteParteModal order={O} resto={R} onClose={() => { L("sig:cerrado"); setM(null); }} onConfirm={async p => { L("sig:confirm " + JSON.stringify(p)); await new Promise(r => setTimeout(r, 150)); falla(); }} />}
     {m === "split" && <SplitInvoiceModal order={{ ...O, splits: [] }} user="karla" userLogin="karla" onClose={() => { L("split:cerrado"); setM(null); }}

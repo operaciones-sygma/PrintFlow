@@ -12,6 +12,62 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.89 — Ligar una PARTE a una factura que ya existe: en el plan de la OC y antes de Salidas — 13-oct-2026
+
+**Qué pasaba** (Karla, 13-oct: *«que la OC funcione como lo hace facturar por partes, donde hay una opción que dice ya hay una
+factura, ligarla, y le da la opción de escribir el folio»*; Marcelo: *«empieza. La F155 y F143»*). F-143 ($3,066.78, 6-oct) y F-155
+($43,333.22, 13-oct), de PORTLAND LEATHER, se hicieron sin orden en CobranzaFlow, y según sus conceptos timbrados cubren, cada una, un
+PEDAZO de los cuatro stickers de OC-0960 (P-0592 a P-0595, 80,000 piezas cada uno): F-143 lleva 4,380 + 3,528 + 7,395 + 5,520 piezas
+y F-155 el resto. Es justo el «plan matriz» de la OC (N facturas × M órdenes, con porciones), pero el plan sólo sabía crear facturas:
+rechazaba todo folio que ya existiera en cobranza, y su puente siempre creaba una. Por otro lado, F-90 (P-0544, en producción) y F-140
+(P-0631, en diseño) son anticipos de una orden que todavía no llega a Salidas, y «Facturar por partes» sólo abría en Salidas (la base
+ya lo aceptaba anticipado).
+
+**Qué se cambió en la base** (migración `v10_84_89_ligar_en_el_plan_de_la_oc`, copia en `docs/migrations/`; revisada por CobranzaFlow,
+ensayada con el plan real de OC-0960 como sesión de Karla y 13 casos, con los acuses de Almacén y del Cotizador; registradas sus
+definiciones vivas): `oc_invoice_split_groups.ligada`; el plan liga una factura que ya existe por columna (`ligar`), con los candados
+del ligado (viva, del cliente de la OC, sin ligar, por el importe del grupo con IVA ±$0.02, con el emisor no por encima del contador;
+sin tercero, sólo factura o remisión, no para Corona) y sin crear otra ni gastar folio; el grupo nace con el estado de pago de su
+factura. 🔒 **El candado del anticipo que esta puerta no tenía** (el de `assign_folio_to_oc` desde F-111/F-115): una factura NUEVA del
+plan por justo el importe de una sin orden del cliente se frena. Cancelar un grupo ligado lo DESLIGA (vuelve a «Facturas esperando
+orden»), no lo cancela; a un grupo ligado no se le quita un renglón (tampoco cancelando una orden que va en él: el mensaje nombra el
+CFDI para que `sync_cancellation_to_cobranza` no lo degrade, lo que encontró el ensayo). El cobro de la factura ligada pinta su grupo
+(`cobranza.sync_badge_pago_plan_matriz`, con el texto de CobranzaFlow). CobranzaFlow agregó las invariantes 78, 79 y 80.
+
+**Qué se cambió en la pantalla** (`src/App.jsx`):
+- **El plan matriz** (`OCSplitMatrixModal`): cada factura ofrece **«Ya tiene factura: ligarla»** con su folio (como en «Facturar por
+  partes»): lee las facturas sin orden del cliente al abrir y, al escribir el folio, dice cuál es (importe, fecha, timbrada, por cobrar),
+  pone su tipo y la compara con lo capturado («CUADRA con F-143» o lo que falta, ±$0.02 como la base); sin escribirlo, enseña las que
+  hay para elegirlas con un clic. «Lo que falta» llena una factura con las piezas que ninguna otra tiene (la segunda de OC-0960 en un
+  clic). El candado del anticipo dicho antes de enviar, con su «Ligar F-… a la factura N». Lo de cada celda va exacto (piezas × precio).
+  El tipo sin la serie de Alpha («Factura D-»); el borrador conserva la ligada; el botón dice lo que hace («Ligar 2 facturas»).
+- **La vista del plan**: «LIGADA · ya existía», PAGADA (decía `pagada` y el estado es `paid`: nunca salía), sin «Cancelar» por renglón
+  en la ligada, y «Desligar factura»; su ventana dice que se desliga, no que se cancela.
+- **«Asignar folio» de la OC**: si el cliente tiene facturas sin orden de otro importe, lo dice y lleva al plan matriz («Ir al plan
+  matriz»); si no se pudo revisar, también lo dice.
+- **«Facturar por partes» antes de Salidas**: abre en cualquier etapa que no sea final, con los folios anticipados puestos (y la razón
+  a la vista): el anticipo se liga como la primera parte y el resto, «después». La pregunta de anticipos del folio anticipado ya no dice
+  «espera a Salidas»: ofrece **«Facturar por partes y ligar F-90»** (una tercera salida opcional de `ConfirmModal`).
+
+**Cómo se probó** (vueltas): **vuelta 1**, escritas antes del cambio contra v10.84.88: la tanda nueva `plan` fallaba 25 de 27; las 6
+nuevas de `oc`, 4 (las otras 2 afirman que no se avisa cuando no toca); las 3 nuevas de `partes`, 2. Con el cambio: `plan` 33 de 33,
+`oc` 118 de 118, `partes` 71 de 71. Dos fallas de la vuelta 1 eran de la prueba: la fecha se escribe «06-oct» en toda la app, y al
+soltar la ligada la prueba capturaba justo las piezas de F-143 como nueva (lo que el candado frena). **Vuelta 2** (por donde no se
+diseñó: el candado en la segunda columna, tercero y luego ligar, las sugerencias, la que ya liga otra no se ofrece, sin facturas sin
+orden, 1920, Esc antes de Salidas, la tercera salida con doble clic y Esc): encontró un error MÍO en la prueba (el patrón de «N errores»
+no veía «1 error»). **Sabotajes**: 8 de 9 cazados; el que no (quitar el ref del doble clic) no es hueco: el estado «guardando» ya lo
+evita (React repinta entre los dos clics), el ref queda de respaldo. **La base**: el ensayo (S0 a S12, ver arriba) y la revisión de
+CobranzaFlow (revisar-plpgsql: 497 funciones sin errores).
+**Sin probar**: la app real con la sesión de Karla leyendo F-143 y F-155 (la cuenta de pruebas es `visor` y la base no le da las
+facturas sin orden: se prueba ese camino de falla). Se ligan en producción desde la pantalla.
+
+**Para Karla / Marcelo:**
+- **OC-0960**: OC → «Plan matriz» → factura 1 «Ya tiene factura: ligarla» → F-143 → 4,380 (P-0592), 3,528 (P-0593), 7,395 (P-0594),
+  5,520 (P-0595) → «CUADRA con F-143»; factura 2 «Ya tiene factura: ligarla» → F-155 → «Lo que falta» → «Ligar 2 facturas». Las cuatro
+  órdenes quedan entregadas con F-143 y F-155, sin folios nuevos.
+- **F-90 (P-0544)**: es $5,937.50 + IVA, la mitad de $11,875; la orden vale $12,000. Si es la primera parte, el resto queda en $6,062.50.
+- **F-140 (P-0631)**: «REMISION 0014 · 6 piezas a $310» cuadra con 6,000 piezas a $0.31 (el precio de P-0631): confirmar que es de ella.
+
 ## v10.84.88 — «Mis Pendientes»: sin chips que nunca cuentan, y las guías de Gerardo con sus botones — 13-oct-2026
 
 **Qué pasaba** (más de la critique de «Mis Pendientes», 17/40): chips que nunca podían contar nada de la lista de su rol, siempre en 0

@@ -5,6 +5,8 @@
 // Variantes por URL: emisor=off|falla|falla1|falla2 · cliente=corona|cuadra|saldo · pre=1 (pre-asignar) · traslado=no|falla ·
 //   ordenes=N (pendientes, por defecto 5) · facturadas=N (ya con folio, por defecto 2) · falla=1 (la base rechaza al confirmar) ·
 //   lento=1 (el saldo del cliente y el traslado tardan 2.5 s) · lento=colgado · emisor=colgado (nunca contestan)
+//   v10.84.89: sinorden=1 (el cliente tiene dos facturas sin orden de otro importe, como F-143 y F-155) · sinorden=cuadra (una justo
+//   del importe de la OC: ésa la atiende la base al confirmar) · sinorden=falla (la primera lectura falla) · plan=no (sin camino al plan)
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -41,7 +43,8 @@ const N_PEND = Number(Q.get("ordenes") || 5), N_FACT = Number(Q.get("facturadas"
 const LENTO = Q.get("lento") === "1", COLGADO = Q.get("lento") === "colgado";
 // colgado: nunca contestan (la red que se queda pensando): la ventana no puede quedarse esperando para siempre
 const tarda = () => COLGADO ? new Promise(() => {}) : new Promise(r => setTimeout(r, LENTO ? 2500 : 0));
-let emisorLlamadas = 0;
+let emisorLlamadas = 0, sinOrdenLecturas = 0;
+const SINORDEN = Q.get("sinorden") || "";
 const db = {
   // falla: nunca se sabe · falla1: la primera consulta falla y la segunda sí contesta (para «Reintentar») · falla2: las dos
   //   primeras fallan (al pasar a Dividir se vuelve a consultar: así «Reintentar» se prueba en Dividir)
@@ -50,6 +53,16 @@ const db = {
   getClientBillingInfo: async () => (await tarda(), CLIENTE === "corona") ? { billing_mode: "anticipo", current_balance: 30000 }
     : CLIENTE === "cuadra" ? { billing_mode: "stock", current_balance: 0, stock_pool_id: "pool1" }
     : { billing_mode: "normal", current_balance: CLIENTE === "saldo" ? 5000 : 0 },
+  // v10.84.89 — las facturas sin orden del cliente (list_linkable_invoices_for_oc; monto_cuadra: contra la OC entera)
+  listLinkableInvoicesForOC: async () => {
+    sinOrdenLecturas++;
+    if (SINORDEN === "falla" && sinOrdenLecturas === 1) throw new Error("timeout");
+    if (SINORDEN === "cuadra") return [{ doc_number: "F-150", doc_type: "factura", amount: 111627.38, dias_sin_orden: 2, monto_cuadra: true }];
+    if (SINORDEN === "1" || SINORDEN === "falla") return [
+      { doc_number: "F-143", doc_type: "factura", amount: 3066.78, dias_sin_orden: 7, monto_cuadra: false },
+      { doc_number: "F-155", doc_type: "factura", amount: 43333.22, dias_sin_orden: 0, monto_cuadra: false }];
+    return [];
+  },
   trasladoPreviewOC: async () => {
     await tarda();
     if (CLIENTE !== "cuadra") return { aplica: false };
@@ -83,7 +96,8 @@ function Banco() {
   return <div style={{ padding: 20, fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
     <button id="abrir-oc" onClick={() => setAbierto(true)}>abrir folio por OC</button>
     <pre id="log">{log.join("\\n")}</pre>
-    {abierto && <AssignOCFolioModal oc={OC} ocOrders={ORDERS} preAssignedMode={PRE} onConfirmSimple={confirma("simple")} onConfirmSplit={confirma("split")} onClose={() => { anota("cerrado"); setAbierto(false); }} />}
+    {abierto && <AssignOCFolioModal oc={OC} ocOrders={ORDERS} preAssignedMode={PRE} onConfirmSimple={confirma("simple")} onConfirmSplit={confirma("split")} onClose={() => { anota("cerrado"); setAbierto(false); }}
+      onAbrirPlan={Q.get("plan") === "no" ? null : () => { anota("abrir-plan"); setAbierto(false); }} />}
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Banco />);`,

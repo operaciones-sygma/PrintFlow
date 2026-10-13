@@ -27,6 +27,9 @@ const TANDAS = [
   { nombre: "partes", gen: "tests/banco/gen-partes.mjs", romper: "tests/romper/partes.mjs", puerto: 5199 },
   { nombre: "folio", gen: "tests/banco/gen-folio.mjs", romper: "tests/romper/folio.mjs", puerto: 5198 },
   { nombre: "oc", gen: "tests/banco/gen-oc.mjs", romper: "tests/romper/oc.mjs", puerto: 5195 },
+  // el plan matriz de la OC (N facturas × M órdenes, con porciones) y ligar en él las facturas que ya existen (v10.84.89: Karla, F-143 y
+  //   F-155 de OC-0960); el banco extrae la ventana, su vista y la de cancelar con extraer.mjs, con la base simulada
+  { nombre: "plan", gen: "tests/banco/gen-plan.mjs", romper: "tests/romper/plan.mjs", puerto: 5190 },
   { nombre: "detalle", gen: "tests/banco/gen-detalle.mjs", romper: "tests/romper/detalle.mjs", puerto: 5196 },
   // sin banco: revisa el código y la base (sólo lectura) para que el contador del CTP no vuelva a inflarse (v10.81.4-6)
   { nombre: "ctp", romper: "tests/romper/ctp.mjs" },
@@ -77,7 +80,7 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
-const TANDAS_DE_DINERO = ["folio", "oc", "partes", "cancelar", "orden", "orden-2"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada: sin segunda oportunidad
+const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
@@ -166,7 +169,7 @@ const inicio = performance.now();
 //   todavía pasaba, sin holgura. Empiezan las más largas (minutos aproximados), para que la última no arranque tarde; las que no tienen
 //   banco corren todas de una vez. El tope de 12 minutos sigue siendo por tanda, desde que ésa empieza.
 const PARALELO = Math.max(1, Number(process.env.PROBAR_PARALELO || 7));
-const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2, analytics: 2 };
+const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, plan: 3, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2, analytics: 2 };
 async function deATope(lista, n, fn) {
   const res = new Array(lista.length);
   const cola = lista.map((t, k) => k).sort((a, b) => (MINUTOS[lista[b].nombre] || 1) - (MINUTOS[lista[a].nombre] || 1));
