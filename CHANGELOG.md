@@ -36,7 +36,8 @@ la captura de precio. Ahora la ref se pone en el mismo clic y nadie entra dos ve
 (folio anticipado), `DeliverOnlyModal` (confirmar entrega), `PriceCaptureModal` (capturar precio y «Sin precio, continuar») y
 `BulkSellModal` (venta de inventario en bloque).
 
-**La base: ensayada, NO aplicada.** La migración `docs/migrations/v10.84.90_candado_del_anticipo_en_dividir.sql` (revisada por
+**La base: ensayada y APLICADA** (13-oct, ~15:52, con el OK de Marcelo: `schema_migrations` 20261013215154 y su definición viva
+20261013215155; vuelta atrás: `docs/migrations/v10.84.90_vuelta_atras.sql`). La migración `docs/migrations/v10.84.90_candado_del_anticipo_en_dividir.sql` (revisada por
 CobranzaFlow) pone en «Dividir» el mismo candado que las otras dos puertas, con el mismo predicado (sin orden, sin ligar, viva, del
 cliente del grupo o del que lo absorbió, del mismo tipo, ±$0.02) y sólo con el emisor prendido. Ensayo contra producción (todo dentro de
 una transacción que termina en RAISE; OC-0960 de PORTLAND por «Dividir» como sesión de Karla; F-143 de $3,066.78 sin ligar): **frena** un
@@ -45,8 +46,8 @@ pedazos, en el plan matriz…)» sin mover el contador (158 → 158) ni dejar gr
 remisión sin orden contra una factura del mismo importe con IVA y su espejo (los dos casos que pidió CobranzaFlow), el emisor apagado
 (también pedido), a 3 centavos (a 2 frena) y contra una ya ligada (F-44); al final nada quedó cambiado. Dos fallas del ensayo fueron
 del montaje, no del candado: apagar el emisor pide apagar antes el timbrado (el interlock F1) y un folio transcrito de F-990001 lo frena
-el guardia del salto del contador. Huella nueva de la función: `4466d84d6f7d032fad24c4943dbd6792`. **Falta aplicarla**: el modo
-automático de esta sesión no dejó escribir en la base de producción; se aplica con el OK de Marcelo (con `aplicar90`, que la registra en
+el guardia del salto del contador. Huella nueva de la función: `4466d84d6f7d032fad24c4943dbd6792`, la misma en producción tras aplicarla (con el candado una vez). El
+modo automático de esta sesión no dejó aplicarla sin el OK explícito de Marcelo; con él se aplicó con `aplicar90` (la registra en
 `schema_migrations` y deja su definición viva).
 
 **Cómo se probó** (vueltas): **vuelta 1**, `tests/romper/anticipos.mjs` ant-10 y ant-11 escritas antes del arreglo: contra v10.84.89,
@@ -75,7 +76,7 @@ y `BulkSellModal` (sin banco: el mismo arreglo, letra por letra, que los otros c
 solas pasan 3 de 3; det-04 y det-30 revisadas); el 3.º, por inv-29 otra vez (era la prueba); el 4.º, por un `ERR_NO_BUFFER_SPACE` al
 cargar det-97 (sola pasa 2 de 2); el 5.º, por ord-235 (era la prueba). La PC estaba al límite de memoria (97 de 99 GB comprometidos, 0.7
 GB libres; ~73 GB los retenía algo en segundo plano): Marcelo la reinicia después de esto. Vuelta atrás: promover `dpl_7y59AYsgagrsSG1gHa2c7oPrXYcn` (el código de
-v10.84.89) o `git revert 334abfc 5976ef4`; la base no cambió (la migración del candado de «Dividir» sigue sin aplicar). **Revisado contra
+v10.84.89) o `git revert 334abfc 5976ef4`; la migración del candado de «Dividir» se aplicó después (~15:52, ver «La base» arriba). **Revisado contra
 producción** (`.banco-revisor-orden/medir-90.mjs`, cuenta `visor` como Karla, escrituras cortadas; P-0609 de OC-0929): Esc en el mismo
 instante del clic final ni pregunta ni cierra; el clic intentó UNA escritura (`assign_invoice`, cortada: nada se asignó) y el rechazo se
 dice dentro del diálogo; dos clics en el mismo instante, también una; sin errores de la app.
