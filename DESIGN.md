@@ -615,3 +615,17 @@ Notificación efímera abajo-centro, fondo del color semántico (éxito/error/av
   primero, y el resumen del pie lleva a cada uno; con poco alto, cuántos y «ir a …».
 - **Subir un archivo es un botón** (v10.84.80): un `<input type=file>` escondido dentro de una etiqueta no se alcanza con Tab; el botón lo
   abre (`ref.click()`). Y un placeholder se lee (Gris Tenue, 4.6:1; el gris global #c7c7cc daba 1.65:1).
+- **Lo que confirma algo no depende de una animación** (v10.84.81, el P1 de la tercera revisión): la app tiene `html{scroll-behavior:smooth}`,
+  y con él todo desplazamiento «auto» se anima, también el que hace `focus()`. Una animación se puede cortar: «P-… creada» quedó una vez
+  fuera de la pantalla con la forma ya vacía. Lo que confirma o restaura (el renglón de la orden creada, regresar a «Todas» donde estaba) va
+  de golpe (`scrollTo({…, behavior:"instant"})`) y después el foco con `preventScroll`, antes de pintar (`useLayoutEffect`).
+- **Un estilo en línea le gana a la regla del foco** (v10.84.81): `inp` trae `outline:none`; un botón que lo reusa (los de subir imagen y
+  archivo) se quedaba sin anillo. Ese botón lleva `outline:undefined`. La fecha enseña el foco con `:focus-within`: su calendario es una
+  parte interna del campo y con `:focus-visible` esa parada no se veía.
+- **Al cerrarse un diálogo, el foco regresa a donde estaba** (v10.84.81, `useDevolverFoco`: `ConfirmModal`, «¿ya existe?», la factura
+  cobrada, Replicar): con Esc el botón enfocado desaparecía y el foco caía a `<body>`. Sólo actúa si el foco quedó perdido. Un buscador
+  dentro de un diálogo cierra con Esc cuando está vacío (y con algo escrito, lo borra): la regla de la app (Esc dentro de un campo no
+  cierra, para no perder lo escrito) dejaba sin salida con teclado una ventana cuyo foco empieza en su búsqueda.
+- **El cliente trae su identidad y no se le cambia en la forma** (v10.84.81): el RFC de un cliente elegido es el suyo (con candado y su
+  porqué; si su ficha no tiene RFC, se puede poner); el cliente de «Agregar producto a OC-…» es el de la OC; y el nombre de uno que ya
+  existe con OTRO RFC tecleado no se liga callado: se pone el suyo y se dice. Otro cliente es otra razón social.

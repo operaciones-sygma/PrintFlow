@@ -23,6 +23,8 @@ const partes = [
   line(/^const inp=/, "inp"), line(/^const lbl=/, "lbl"), line(/^const bt=/, "bt"), line(/^const bs=/, "bs"),
   line(/^const escStack=/, "escStack"), line(/^if\(typeof document!=="undefined"&&!escStack\._bound\)/, "escStack bind"),
   fnBlock("useEscClose"),
+  // v10.84.81 — ConfirmModal regresa el foco a donde estaba al cerrarse (useDevolverFoco); el código anterior no lo tiene
+  ...(L.some(l => l.startsWith("function useDevolverFoco(")) ? [fnBlock("useDevolverFoco")] : []),
   // desde v10.84.33: la trampa del Tab (no existe en versiones anteriores: se omite si no está)
   ...(L.some(l => l.startsWith("const FOCOS_DIALOGO=")) ? [line(/^const FOCOS_DIALOGO=/, "FOCOS_DIALOGO"), fnBlock("atraparTab")] : []),
   `const Q = new URLSearchParams(location.search);

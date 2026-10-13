@@ -58,7 +58,10 @@ const TANDAS = [
   { nombre: "cancelar", gen: "tests/banco/gen-cancelar.mjs", romper: "tests/romper/cancelar.mjs", puerto: 5187 },
   // la forma de la orden, crear y editar (v10.84.77, la critique independiente del 12-oct): el banco extrae OrderForm y COPIA de
   // App.jsx lo que hace al guardar (create, update), con la base simulada
-  { nombre: "orden", gen: "tests/banco/gen-orden.mjs", romper: "tests/romper/orden.mjs", puerto: 5188 },
+  { nombre: "orden", gen: "tests/banco/gen-orden.mjs", romper: "tests/romper/orden.mjs", puerto: 5188, env: { ORDEN_PARTE: "1" } },
+  // v10.84.81 — la misma forma, partida en dos: con la tercera revisión `orden` pasó de 153 a 205 casos y no cabía con holgura en los
+  //   12 minutos de una tanda. `orden` corre los de antes (ord-01 a ord-228, igual que en la base guardada) y `orden-2` desde ord-229.
+  { nombre: "orden-2", gen: "tests/banco/gen-orden.mjs", romper: "tests/romper/orden.mjs", puerto: 5189, env: { ORDEN_PARTE: "2" } },
   // las reglas de los hooks de React en App.jsx, leídas del código (v10.84.80: tres hooks de App después de sus «return» tempranos
   // tumbaban la app al entrar, «React error #310», y ningún banco lo veía: montan los componentes sin esos «return»)
   { nombre: "hooks", romper: "tests/romper/hooks.mjs" },
@@ -69,7 +72,7 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
-const TANDAS_DE_DINERO = ["folio", "oc", "partes", "cancelar", "orden"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada: sin segunda oportunidad
+const TANDAS_DE_DINERO = ["folio", "oc", "partes", "cancelar", "orden", "orden-2"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 
@@ -119,7 +122,7 @@ async function calentar(puerto) {
 
 // `solo`: la expresión de los casos a repetir (la segunda oportunidad); las tandas que no la entienden corren completas
 async function tanda(t, { solo = null, intento = 1 } = {}) {
-  const env = { PROBAR_INTENTO: String(intento), ...(solo ? { SOLO: solo } : {}) };
+  const env = { PROBAR_INTENTO: String(intento), ...(t.env || {}), ...(solo ? { SOLO: solo } : {}) };   // v10.84.81: `env` de la tanda (ORDEN_PARTE)
   if (!t.gen) {   // tanda sin banco (sin vite ni navegador): se corre tal cual
     const r = await correrNode(path.join(RAIZ, t.romper), [], env);
     return { t, salida: r.salida, codigo: r.codigo };

@@ -98,10 +98,15 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 19b. 🔥 **Los hooks de un componente van ANTES de cualquier `return` temprano** (en App: `if(!authChecked)` y `if(!user)`). En v10.84.80
     tres hooks de App después de ellos tumbaban la app entera al entrar («React error #310») y ningún banco lo veía (montan sin esos
     `return`). La tanda `hooks` (`tests/romper/hooks.mjs`) lo vigila en todos los componentes, y sólo la app real lo enseña.
+19c. 🔥 **La app tiene `html{scroll-behavior:smooth}`**: todo `scrollTo`/`scrollIntoView`/`focus()` sin `behavior` se ANIMA, y una animación
+    se puede cortar (v10.84.81: «P-… creada» quedó fuera de la pantalla con la forma ya vacía). Lo que confirma algo o restaura una posición va
+    con `behavior:"instant"` y luego `focus({preventScroll:true})`, en `useLayoutEffect`. Un banco que mida posiciones COPIA el estilo global
+    de App (`gen-orden.mjs`; sin él daba 0 de 8 lo que en la app salía), y la prueba mide donde QUEDA (espera a que la página se quede quieta).
 
 ### Proceso
 20. **Edits quirúrgicos** (`str_replace` con anclas únicas; en Python `assert s.count(a)==1`). Nunca
-    rewrites de `App.jsx`.
+    rewrites de `App.jsx`. Y el ancla llega al FIN de su renglón (con el salto) cuando se agrega algo después: una que es prefijo cuenta 1
+    y empalma a media línea (v10.84.81: un comentario perdió su «s» y quedó una `s` suelta después de un efecto; otro cambió de renglón).
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.

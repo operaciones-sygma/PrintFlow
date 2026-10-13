@@ -61,6 +61,13 @@ const contenedor = linea('<div style={{boxSizing:"border-box",width:"100%",maxWi
 // v10.84.80 — la forma regresa a donde se abrió (la vista de origen y su desplazamiento) y el atajo N: copiados de App si los tiene
 const origenForma = L.some(l => l.startsWith("  // v10.84.80 — la forma regresa a donde se abrió")) ? pedazo("  // v10.84.80 — la forma regresa a donde se abrió", "  const volverDeLaForma=", "la vista de origen de la forma") : "";
 const atajos = L.some(l => l.startsWith("  // v10.65.1 — atajos de teclado")) ? pedazo("  // v10.65.1 — atajos de teclado", "  }, [user]);", "los atajos de teclado de App") : "";
+// v10.84.81 — el estilo global de App (el desplazamiento suave, el foco visible, la entrada de los diálogos), COPIADO: sin él el banco no
+// veía que «P-… creada» podía quedar fuera de la pantalla en la app (el foco la traía con una animación que se puede cortar)
+const iEstilo = L.findIndex((l, i) => l.trim() === "<style>{`" && (L[i - 1] || "").includes("<link href={FNT}"));
+if (iEstilo < 0) throw new Error("no encuentro el estilo global de App (<style>{` después de <link href={FNT}>)");
+let fEstilo = iEstilo; while (!L[fEstilo].trim().startsWith("`}</style>")) { if (++fEstilo > iEstilo + 200) throw new Error("sin cierre: el estilo global de App"); }
+const estiloApp = L.slice(iEstilo, fEstilo + 1).join("\n");
+if (/\$\{/.test(estiloApp)) throw new Error("el estilo global de App ahora usa ${…}: el banco lo copia tal cual y no sabría de dónde sale");
 const menuAncho = /width:sbPlegado\?(\d+):(\d+),flexShrink:0,height:"100vh"/.exec(fuente);
 if (!menuAncho) throw new Error("no encuentro el ancho del menú lateral de App (width:sbPlegado?…:…)");
 const menuUmbral = /const sbPlegado=anchoVentana<(\d+)\?/.exec(fuente);
@@ -118,6 +125,8 @@ const CLIENTES = [
   { id: "c-modelo", name: "CERVECERIA MODELO DE MEXICO", rfc: "CMM8601014G4", email: "eva@modelo.mx", whatsapp: "", billing_mode: "normal", dias_credito: 30, aliases: ["CORONA"] },
   // v10.84.80 — el parecido de «¿Quisiste decir…?», completo como lo da el buscador (la pregunta sólo trae id, nombre y RFC)
   { id: "c-papeleria", name: "PAPELERIA DEL BAJIO", rfc: "PBA040404IJ4", email: "ventas@papeleriabajio.mx", whatsapp: "4775556677", billing_mode: "normal", dias_credito: 0, aliases: [] },
+  // v10.84.81 — un cliente sin RFC en su ficha: su RFC se puede poner en la orden (el candado es para el RFC que el cliente ya tiene)
+  { id: "c-sinrfc", name: "IMPRENTA SIN RFC", rfc: "", email: "hola@imprentasinrfc.mx", whatsapp: "4770001122", billing_mode: "normal", dias_credito: 0, aliases: [] },
 ];
 const VENDEDOR_DE = { "c-cuadra": [{ username: "pepechuy", display_name: "Pepe Chuy" }], "c-cosquim": [{ username: "manuel", display_name: "Manuel" }] };
 const CONTACTO_DE = { "c-portland": { last_email: "pedidos@portland.mx", last_phone: "", last_lada: "+52", last_rfc: "PLE020202CD2", last_company: "PORTLAND LEATHER" } };
@@ -326,6 +335,7 @@ ${atajos}
   useEffect(() => { window.__plegar = v => setPlegadoPref(!!v); }, []);
   const sbPlegado = anchoVentana < ${menuUmbral[1]} ? true : plegadoPref;
   return <div style={{ display: "flex", background: C.canvas, minHeight: "100vh" }}>
+${estiloApp}
     <div id="lateral" style={{ width: sbPlegado ? ${menuAncho[1]} : ${menuAncho[2]}, flexShrink: 0, height: "100vh", position: "sticky", top: 0, overflow: "hidden", borderRight: "0.5px solid #ddd" }}>
       <nav id="menu" style={{ display: "flex", flexDirection: "column", gap: 6, padding: 6 }}>
         {[["pipeline", "Dashboard"], ["form", "Nueva"], ["orders", "Todas"]].map(([id, t]) => <button key={id} id={"ir-" + id} title={t} style={{ fontSize: 10, overflow: "hidden", whiteSpace: "nowrap" }} onClick={() => navClick(id)}>{t}</button>)}

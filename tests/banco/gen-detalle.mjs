@@ -31,6 +31,8 @@ const partes = [
   line(/^const fmt=/, "fmt"), line(/^const fD=/, "fD"), line(/^const fDT=/, "fDT"), line(/^const parseDate=/, "parseDate"),
   line(/^const escStack=/, "escStack"), line(/^if\(typeof document!=="undefined"&&!escStack\._bound\)/, "escStack bind"),
   fnBlock("useEscClose"),
+  // v10.84.81 — ConfirmModal regresa el foco a donde estaba al cerrarse (useDevolverFoco); el código anterior no lo tiene
+  ...(L.some(l => l.startsWith("function useDevolverFoco(")) ? [fnBlock("useDevolverFoco")] : []),
   ...opcional(L.some(l => l.startsWith("const FOCOS_DIALOGO=")), () => line(/^const FOCOS_DIALOGO=/, "FOCOS_DIALOGO")),
   ...opcional(L.some(l => l.startsWith("function atraparTab(")), () => fnBlock("atraparTab")),
   ...opcional(L.some(l => l.startsWith("function ConfirmModal(")), () => fnBlock("ConfirmModal")),

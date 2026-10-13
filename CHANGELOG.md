@@ -12,6 +12,71 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.81 — La forma de la orden: «P-… creada» siempre a la vista, el cliente con su identidad, y el teclado sin perderse — 12-oct-2026
+
+**Qué pasaba** (la TERCERA revisión independiente de la forma, 12-oct en la noche: **29/40**, cero P0, un P1 por confirmar y cuatro P2;
+snapshot `.impeccable/critique/2026-10-13T00-29-48Z__src-app-jsx-orderform-formulario-orden-nueva.md`; las independientes van 22 → 28 → 29):
+- **[P1] «P-… creada» quedó una vez fuera de la pantalla** en producción (1366, Ctrl+Enter desde la descripción: la forma vacía y el
+  renglón en y=−91). Quien no ve que se creó la vuelve a capturar. El banco daba 0 de 8 porque no tenía el estilo global de App: con
+  `html{scroll-behavior:smooth}` el foco trae al renglón con una ANIMACIÓN que se puede cortar; en el banco el renglón aparecía a −392 px y
+  sólo la animación lo traía 700 ms después.
+- **El cliente todavía se mezclaba por otro lado**: con el nombre idéntico la forma elegía al cliente sola, pero su RFC seguía abierto (la
+  orden salía con el cliente y un RFC ajeno); si la base reconocía el nombre (`exact_match`), se ligaba callado con el RFC tecleado; y en
+  «Agregar producto a OC-0900» se podía cambiar el cliente (en el banco se guardó COSQUIM dentro de una OC de GOBIERNO DEL ESTADO).
+- **El teclado se perdía**: «Subir 1ra/2da» y «Subir archivo» (mío, de v10.84.80) y el calendario de la fecha no enseñaban el foco; Esc en
+  «¿Salir sin guardar?», «¿ya existe?» y la factura cobrada dejaba el foco en `<body>`; Replicar no se cerraba con Esc (el foco empieza en
+  su búsqueda); y al ir a un faltante, la lista de tipos se abría sola encima del resumen del pie.
+- **A 683×384 «Esta factura ya está cobrada» abría desplazada** al fondo (el foco en «Volver a la forma»), sin su título ni sus cifras.
+- De sus observaciones: la imagen que no subía decía «upstream connect error…» en un aviso de 7 s; a los 8 s la revisión de la factura
+  decía «No se pudo leer» cuando sólo tardó; el rechazo del pie se quedaba aunque ya se corrigiera; «Captura el precio sin IVA» bajo un
+  precio con candado; «-500» sin `aria-invalid`; «no mueve la comisión» siempre al editar una facturada; el vendedor sugerido sin decirlo;
+  el foco en «Nueva» del menú al abrir; una serie de maquilas regresaba a «Interna»; «Email o WhatsApp *» junto a «WhatsApp o email *»;
+  «sus notas no se copia»; una raya en «Sin coincidencias en lista — …»; «Ctrl+Enter crea la orden» bajo «Agregar a OC-0900»; «% Ganancia»
+  en #fff; y en el banco, la ayuda del bloque de Cuadra a 4.45:1 y el RFC vacío con candado a 4.19:1.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **(P1) El renglón «creada» se ve en cuanto sale**: en `useLayoutEffect` (antes de pintar) la página sube al principio DE GOLPE
+  (`behavior:"instant"`) y el renglón se enfoca con `preventScroll`. Igual regresar a una vista («Todas» donde estaba) ya no se anima.
+- **El cliente con su identidad**: el RFC de un cliente elegido tiene candado y su porqué («Es el RFC de … en CobranzaFlow. Si es otro
+  cliente, cambia la razón social»; si su ficha no tiene RFC, se puede poner), en la forma y en «Crear OC»; `resolverClienteNuevo` trae al
+  cliente completo también con `exact_match` y las dos puertas comparan su RFC (`rfcChoca`): distinto, se pone el suyo y se dice (no se
+  crea); sin RFC, se completa con el suyo, y la orden lleva SU nombre (no la variante tecleada). El cliente de «Agregar producto a OC-…»
+  es el de la OC, con candado y su porqué.
+- **El teclado**: `outline:undefined` en los botones de subir (el `outline:none` de `inp` tapaba el anillo); la fecha con `:focus-within`;
+  `useDevolverFoco` en `ConfirmModal`, «¿ya existe?», la factura cobrada y Replicar (el foco regresa a donde estaba si se perdió); Esc en
+  la búsqueda de Replicar borra y, vacía, cierra; al guardar, si el foco se perdió (el botón se desactiva mientras revisa), regresa a
+  «Guardar»; ir a un faltante enfoca el tipo sin abrir su lista; una orden nueva abre con el foco en el cliente.
+- **La factura cobrada a 683**: el foco en «Volver a la forma» sin desplazar; abre arriba.
+- **Lo demás**: la imagen que no sube lo dice en la forma, en palabras y sin borrarse (sin conexión / sin permiso / no la aceptó); «tardó
+  más de 8 s» cuando sólo tardó; el rechazo del pie se quita al cambiar lo capturado; sin «Captura el precio…» con el precio bloqueado;
+  `aria-invalid` en los números con error; «no mueve la comisión» sólo si se cambia el vendedor; «Sugerido: el vendedor de …»; una
+  maquila deja la forma en maquila; «Correo» en vez de «Email»; «sus notas no se copian»; dos puntos en vez de raya; «Ctrl+Enter agrega
+  el producto a OC-…»; `C.bg` en vez de #fff; el bloque de Cuadra tiñe sobre `C.bg` (5.1:1) y el placeholder de un campo con candado en
+  Gris Medio (4.6:1, «Sin RFC»).
+
+**Cómo se probó** (la tanda `orden`, 153 → 205 casos, ahora en dos: `orden` y `orden-2`): **vuelta 1**, 28 casos nuevos contra
+v10.84.80: fallaban 27 (la lista de bugs), con dos supuestos míos corregidos (un cliente nuevo pide RFC; y el nombre idéntico que la forma
+elige sola, que resultó ser el caso del revisor: su RFC seguía abierto). Con el estilo global de App en el banco, cuatro de las de antes
+cambiaron: ord-52 (ahora dice «tardó») y ord-110 (la forma abre con el foco en el cliente) por los arreglos; ord-111 y 141 medían a media
+animación (ahora, donde QUEDA el campo). **Vuelta 2**, 15 por donde no se diseñó (1920 con dos columnas, dos Ctrl+Enter, la pregunta desde
+el menú, soltar el RFC, un cliente sin RFC, Crear otra vez tras el aviso, Esc con búsqueda, el rechazo que se repite, Tab en el tipo, el
+sugerido que cambia de cliente, editar sin robar el foco, la revisión que falla, la imagen al crear, el correo de la OC, doble clic en la OC):
+una falla de fondo, de antes (con Mayús+Tab y Tab en menos de 200 ms la lista del tipo se abría y la cerraba el temporizador viejo).
+**Vuelta 3**, 8 sobre los arreglos: nada de fondo (un supuesto mío: el botón se llama «Producción Interna»). **Corrida doble** (las 205
+contra v10.84.80 y contra v10.84.81, el mismo banco): v10.84.80 163 de 205 (fallan la 52 y 41 de las 52 nuevas; las otras 11 son guardas
+de lo que no debía cambiar), v10.84.81 205 de 205: ninguna regresión. **La app REAL compilada** (`.banco-revisor-orden/medir-81.mjs`, 2
+entradas, y `medir-81-oc.mjs`, 1; la cuenta de pruebas, escrituras cortadas o simuladas): «P-9999 creada» a la vista en cuanto sale a 1366 y
+a 683, el foco en el cliente al abrir, el anillo en «Subir 1ra» y en las cuatro paradas de la fecha, el RFC de un cliente real (GODI) con
+candado en la forma y en «Crear OC» (y suelto con otro nombre), Esc en «¿Salir sin guardar?» con el foco de vuelta, sin errores ni
+escrituras. Los bancos que copian por nombre (`detalle`, `folio`, `oc`, `partes`, `cliente`) generan con `useDevolverFoco`. **Sin probar**:
+los otros 11 usos de `ConfirmModal` (el cambio sólo actúa si el foco se perdió) y, en «Crear OC», un nombre que la base reconoce con otro
+RFC (ningún banco monta `CreateOCModal`; es la misma lógica que la forma, probada ahí).
+
+**Para Marcelo:** dos decisiones de la tercera revisión, para v10.84.82: (1) los modos «Sencillo / Avanzado» (que lo escondido se guarde)
+y el orden (lo más usado, la imagen, a 934 px en la laptop): recomendado un solo modo, las especificaciones plegadas con su resumen y
+«Para producción» junto al precio; (2) Replicar con otra cantidad: recomendado no copiar el precio y decirlo bajo Precio. Con esta tercera
+pasada la forma queda CERRADA (la regla: 35 sin P1 o 3 pasadas).
+
 ## v10.84.80 — La forma de la orden: el cliente no se mezcla, se queda para capturar otra, y sirve con teclado — 12-oct-2026
 
 **Qué pasaba** (la segunda revisión independiente de la forma, 12-oct en la tarde: 28/40, un P1 y cuatro P2; snapshot

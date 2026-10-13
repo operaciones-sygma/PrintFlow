@@ -26,6 +26,8 @@ const partes = [
   line(/^const inp=/, "inp"), line(/^const lbl=/, "lbl"), line(/^const bt=/, "bt"), line(/^const bs=/, "bs"),
   line(/^const escStack=/, "escStack"), line(/^if\(typeof document!=="undefined"&&!escStack\._bound\)/, "escStack bind"),
   fnBlock("useEscClose"),
+  // v10.84.81 — los diálogos regresan el foco a donde estaba al cerrarse (ClientConfirmModal lo llama); el código anterior no lo tiene
+  hay("useDevolverFoco") ? fnBlock("useDevolverFoco") : "",
   ...(L.some(l => l.startsWith("const FOCOS_DIALOGO=")) ? [line(/^const FOCOS_DIALOGO=/, "FOCOS_DIALOGO"), fnBlock("atraparTab")] : []),
   `const Q = new URLSearchParams(location.search);
 const RESOLVE = Q.get("resolve") || "fuerte", CREAR = Q.get("crear") || "ok", OC = Q.get("oc") === "1", LARGO = Q.get("largo") === "1";
