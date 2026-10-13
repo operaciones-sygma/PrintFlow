@@ -2,7 +2,7 @@
 // con sus dependencias reales (tokens, estilos, escStack, ConfirmModal) y la base simulada.
 // Uso: node gen-banco.mjs <App.jsx> <dirSalida>
 // Variantes por URL (?a=1&b=2): emisor=off · historica=1 · corona=1 · saldo=1 · unapieza=1 · candidatas=0 ·
-//   falla=1 (la base responde con error) · folioexiste=0 (el split crea sin preguntar por folios en cobranza)
+//   falla=1 (la base responde con error) · guarda=lento («Facturar siguiente parte» tarda 3 s) · folioexiste=0 (el split crea sin preguntar por folios en cobranza)
 //   hakuna=1|resto|restoviejo (v10.84.66): P-0571 de RESTAURANTES HAKUNA, 35,000 piezas por $27,560, con las facturas por
 //   adelantado F-130 ($18,268.35, 20,000 pzas) y F-131 ($13,701.27, 15,000 pzas), cada una UN centavo arriba de la orden porque
 //   el CFDI calcula precio unitario (6 decimales) × cantidad. «1»: todo por facturar; «resto»: F-130 ya ligada con el dinero de
@@ -32,6 +32,9 @@ const partes = [
 const EMISOR = Q.get("emisor") !== "off", HIST = Q.get("historica") === "1", CORONA = Q.get("corona") === "1";
 const SALDO = Q.get("saldo") === "1", UNAPIEZA = Q.get("unapieza") === "1", SINCAND = Q.get("candidatas") === "0";
 const FALLA = Q.get("falla") === "1", FOLIOEXISTE = Q.get("folioexiste") !== "0";
+// v10.84.90 — guarda=lento: «Facturar siguiente parte» tarda 3 s en guardar (no 150 ms): «mientras guarda» es mientras guarda aunque la
+//   máquina vaya lenta (lo mismo que inv-29: con el candado cargado el Esc llegaba ya terminado y aquí el diálogo sigue abierto)
+const GUARDA_LENTO = Q.get("guarda") === "lento";
 const HAKUNA = Q.get("hakuna") || "";
 const db = {
   getFolioEmitterEnabled: async () => EMISOR,
@@ -85,7 +88,7 @@ function Banco() {
       confirmLabel: "Asignar el folio de todos modos", confirmColor: C.wn, onConfirm: async () => { setConf(null); L("conf:asignar"); },
       extra: { label: "Facturar por partes y ligar F-90", onClick: () => { setConf(null); L("conf:extra"); } } })}>confExtra</button>
     <pre id="log">{log.join("\\n")}</pre>
-    {m === "sig" && <FacturarSiguienteParteModal order={O} resto={R} onClose={() => { L("sig:cerrado"); setM(null); }} onConfirm={async p => { L("sig:confirm " + JSON.stringify(p)); await new Promise(r => setTimeout(r, 150)); falla(); }} />}
+    {m === "sig" && <FacturarSiguienteParteModal order={O} resto={R} onClose={() => { L("sig:cerrado"); setM(null); }} onConfirm={async p => { L("sig:confirm " + JSON.stringify(p)); await new Promise(r => setTimeout(r, GUARDA_LENTO ? 3000 : 150)); falla(); }} />}
     {m === "split" && <SplitInvoiceModal order={{ ...O, splits: [] }} user="karla" userLogin="karla" onClose={() => { L("split:cerrado"); setM(null); }}
       onConfirm={async (payload, opts) => { L("split:intento " + JSON.stringify({ payload, opts })); await new Promise(r => setTimeout(r, 150)); if (FALLA) { L("toast:error"); return; }
         if (FOLIOEXISTE) setConf({ zIndex: 1100, title: "Folio ya existe en cobranza", message: "Uno o más de estos folios ya están registrados en cobranza.", confirmLabel: "Sí, ligar los que ya existen", confirmColor: C.fac, onConfirm: async () => { setConf(null); L("split:ligar"); } });

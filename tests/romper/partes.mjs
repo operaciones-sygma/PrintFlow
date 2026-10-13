@@ -90,7 +90,8 @@ await caso("sig-18 histórica con emisor apagado", "historica=1&emisor=off", asy
   const ph = await p.locator("#sp-folio").getAttribute("placeholder");
   ok("sig-18 histórica con emisor apagado: pide el folio de Alpha", /D-/.test(ph || "") && /Alpha/.test(ph || ""), "placeholder=" + ph);
 });
-await caso("sig-19 Esc mientras guarda", "", async p => {
+// (v10.84.90) con guarda=lento: con 150 ms, un Esc tardío (máquina cargada) llega ya terminado y el banco deja el diálogo abierto
+await caso("sig-19 Esc mientras guarda", "guarda=lento", async p => {
   await sig(p); await facturarBtn(p).click(); await p.keyboard.press("Escape"); await espera(p, 500);
   ok("sig-19 Esc mientras guarda no cierra a medias", (await cuenta(p, "sig:confirm")) === 1 && (await cuenta(p, "sig:cerrado")) === 0);
 });

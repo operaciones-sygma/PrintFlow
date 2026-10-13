@@ -56,6 +56,10 @@ sin regresiones. **«Ocupado» desde el clic**: el banco de folio monta también
 del arreglo) 8 de 8 fallaban (inv-129 y 130, pre-13 y 14, ent-01 y 02, prc-01 y 02: preguntaba, cerraba o mandaba dos veces); con el
 arreglo, 8 de 8; vuelta 2 (al fallar la base se reintenta y Esc vuelve a preguntar; al terminar, Esc cierra: inv-131, pre-15, ent-03),
 3 de 3; sabotajes: quitar la ref de `InvoiceModal` lo cazan inv-129 y 130, quitar el candado de reentrada de la entrega lo caza ent-02.
+**inv-29 era también la prueba**: en el tercer candado volvió a fallar ya con el arreglo. El banco «guardaba» en 150 ms y después deja
+el diálogo abierto (la app lo cierra al terminar): con la máquina cargada el Esc de la prueba llegaba ya terminado de guardar, y entonces
+preguntar «¿Cerrar sin asignar?» es lo correcto (reproducido con 300 ms entre el clic y el Esc). Ahora inv-29 guarda lento (`guarda=lento`,
+3 s) y pasa también con esos 300 ms; sig-19 (partes) tenía el mismo supuesto y va igual. oc-42 no: ahí el banco cierra al terminar.
 La inestable del primer candado (`ctp-db-placas-unicas`, «fetch failed» de la API con 4 tandas) sola pasa: era la red, revisada. La
 base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón: el botón ya no sale)
 y `BulkSellModal` (sin banco: el mismo arreglo, letra por letra, que los otros cuatro).

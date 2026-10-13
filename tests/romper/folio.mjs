@@ -223,10 +223,12 @@ await caso("inv-28 Esc dentro de un campo", "", async p => {
   await p.getByLabel("Monto del pago 1").click(); await p.keyboard.press("Escape"); await espera(p);
   ok("inv-28 Esc con el cursor en un campo no cierra ni pregunta", await dlgInv(p).isVisible() && (await p.getByRole("dialog", { name: /Cerrar sin asignar/ }).count()) === 0);
 });
-await caso("inv-29 Esc y clic fuera mientras guarda", "", async p => {
+// (v10.84.90) con guarda=lento: con 150 ms, en el candado cargado el Esc llegaba ya terminado de guardar y preguntar era lo correcto
+await caso("inv-29 Esc y clic fuera mientras guarda", "guarda=lento", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p);
   await final(p).click(); await p.keyboard.press("Escape"); await p.mouse.click(8, 8); await espera(p, 500);
-  ok("inv-29 mientras guarda, ni Esc ni el clic fuera cierran ni preguntan", (await cuenta(p, "inv:cerrado")) === 0 && (await p.getByRole("dialog", { name: /Cerrar sin asignar/ }).count()) === 0);
+  ok("inv-29 mientras guarda, ni Esc ni el clic fuera cierran ni preguntan", (await cuenta(p, "inv:cerrado")) === 0 && (await p.getByRole("dialog", { name: /Cerrar sin asignar/ }).count()) === 0,
+    "cerrado " + await cuenta(p, "inv:cerrado") + " · pregunta " + await p.getByRole("dialog", { name: /Cerrar sin asignar/ }).count() + " · asignaciones " + await cuenta(p, "inv:confirm"));
 });
 await caso("inv-30 remisión en la vista previa", "", async p => {
   await inv(p); await tipo(p, "Remisión").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p);

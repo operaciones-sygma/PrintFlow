@@ -3,7 +3,7 @@
 // BillToSection y StageLbl van simulados (arrastran el buscador de clientes y el mapa de etapas; aquí no se cambiaron).
 // Uso: node gen-banco-folio.mjs <App.jsx> <dirSalida>
 // Variantes por URL: emisor=off|falla|falla1 (falla una vez y luego sí) · cliente=corona|cuadra|saldo (saldo=N, el monto; 5000) · precio0=1 · maquila=1 ·
-//   incompleto=1 (a la orden le falta el tipo de producto) · lenta=1 (el cliente tarda 10 s, más que el tope de 8) · falla=1 (la base rechaza)
+//   incompleto=1 (a la orden le falta el tipo de producto) · lenta=1 (el cliente tarda 10 s, más que el tope de 8) · falla=1 (la base rechaza) · guarda=lento (asignar tarda 3 s)
 import fs from "node:fs";
 import path from "node:path";
 const [, , srcPath, outDir] = process.argv;
@@ -33,6 +33,9 @@ const partes = [
 const EMISOR = Q.get("emisor") || "on", CLIENTE = Q.get("cliente") || "normal";
 const PRECIO0 = Q.get("precio0") === "1", MAQUILA = Q.get("maquila") === "1", INCOMPLETO = Q.get("incompleto") === "1";
 const LENTA = Q.get("lenta") === "1", FALLA = Q.get("falla") === "1";
+// v10.84.90 — guarda=lento: asignar tarda 3 s (no 150 ms): «mientras guarda» es mientras guarda aunque la máquina vaya lenta (inv-29 fallaba
+//   con el candado cargado porque su Esc llegaba DESPUÉS de los 150 ms, ya terminado, y entonces preguntar es lo correcto)
+const GUARDA_LENTO = Q.get("guarda") === "lento";
 // (v10.84.70) facturas hechas por adelantado y sin orden, como las da list_linkable_invoices_for_order:
 //   anticipo=mismo (una del mismo importe) · otro (de otro importe) · ambos · falla (no se pudieron leer) · falla1 (falla una vez)
 //   adelantada=1: al abrir no hay ninguna, y al confirmar la base dice que se emitió una mientras se capturaba
@@ -73,7 +76,7 @@ function Banco() {
   const [log, setLog] = useState([]);
   const L = t => setLog(l => [...l, t]);
   // (v10.84.70) lo que la base rechaza vuelve al diálogo como { error } (App ya no lo manda a un aviso que se borra)
-  const confirma = pref => async (...a) => { L(pref + ":confirm " + JSON.stringify(a)); await new Promise(r => setTimeout(r, 150));
+  const confirma = pref => async (...a) => { L(pref + ":confirm " + JSON.stringify(a)); await new Promise(r => setTimeout(r, GUARDA_LENTO ? 3000 : 150));
     if (ADELANTADA && pref === "inv") { L("toast:error"); return { error: "Mientras capturabas se registró F-9135 por adelantado, por el mismo importe.", codigo: "adelantada" }; }
     if (FALLA) { L("toast:error"); return { error: "No se asignó el folio: sin conexión. Lo capturado sigue aquí para reintentar." }; } };
   const ligar = async (c, info) => { L("inv:ligar " + c.doc_number + " " + JSON.stringify(info || {})); await new Promise(r => setTimeout(r, 150));
