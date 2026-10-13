@@ -9676,6 +9676,13 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
         Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
       </p>
+      {/* v10.84.92 — QUIÉN PAGA (Marcelo, 13-oct, el caso Hotsson: «el saldo se queda con el cliente que pidió el producto»): cada
+          factura del plan queda a cargo del cliente de la orden; «Facturar a tercero» es lo único que lo cambia (ése paga). El CFDI a
+          otra razón social del mismo cliente, sin cambiar quién paga, se elige en CobranzaFlow (la regla 23 de CobranzaFlow) */}
+      {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:"-6px 0 14px",padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5}}>
+        <b>El saldo de cada factura queda a cargo de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero.
+        {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos).
+      </div>}
 
       {/* HEADER de contexto OC + MARCADOR EN VIVO
           v10.58.46 B1b (pedido de Marcelo): el monto de la OC "baja" en vivo conforme
@@ -9841,9 +9848,17 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         title="Dirigir esta factura/remisión a una razón social distinta del cliente productor"
                         style={{...inp,padding:"4px 8px",fontSize:10,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
                           ...((g.bill_to && !g.bill_to.incomplete) ? {borderColor:C.fac,color:C.fac,fontWeight:700} : (g.bill_to && g.bill_to.incomplete) ? {borderColor:C.dn,color:C.dn} : {color:C.t2})}}>
-                        <UsersIcon size={10} weight="bold"/>{(g.bill_to && !g.bill_to.incomplete) ? ("→ "+(g.bill_to.name||"Tercero")) : (g.bill_to && g.bill_to.incomplete) ? "Tercero incompleto" : "+ Facturar a tercero"}
+                        <UsersIcon size={10} weight="bold"/>{(g.bill_to && !g.bill_to.incomplete) ? ("Paga: "+(g.bill_to.name||"el tercero")) : (g.bill_to && g.bill_to.incomplete) ? "Tercero incompleto" : "+ Facturar a tercero"}
                       </button>
                     )}
+                    {/* v10.84.92 — a cargo de quién queda esta factura (su saldo), a la vista: el cliente de la orden, o el tercero que paga */}
+                    {g.doc_type !== "corona_saldo" && (() => {
+                      const tercero = !g.ligar && g.bill_to && !g.bill_to.incomplete ? g.bill_to : null;
+                      const quien = tercero ? (tercero.name || "el tercero") : (oc?.client || "el cliente de la orden");
+                      return <div data-saldo={i} title={tercero ? "La paga el tercero: su cobranza, su estado de cuenta y su portal" : "La paga el cliente de la orden (quien pidió el trabajo)"}
+                        style={{fontSize:10,color:C.t2,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        Saldo: <b style={{color:C.tx}}>{quien}</b>{tercero ? " (tercero)" : ""}</div>;
+                    })()}
                     {!g.ligar && <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,cursor:"pointer"}}>
                       <input type="checkbox" checked={g.pre_assigned}
                         onChange={e=>updateGroup(i, {pre_assigned: e.target.checked})}

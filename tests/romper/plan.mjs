@@ -278,6 +278,40 @@ await caso("pv-07 renglón de la ligada", "cancelar=linea", async p => {
   ok("pv-07 un renglón de la factura ligada no se cancela: lo dice y no deja", /ya exist|ligad/i.test(t) && desactivado, t.slice(0, 220));
 });
 
+// ── v10.84.92 — QUIÉN PAGA, a la vista (Marcelo, 13-oct, el caso Hotsson: «el saldo se queda con el cliente que pidió el producto, y que
+//   la UI lo deje claro»). El CFDI a otra razón social del mismo cliente se elige en CobranzaFlow («CFDI a nombre de»); «Facturar a
+//   tercero» es lo único que cambia quién paga. Vuelta 1: escritas ANTES del cambio.
+const textoDe = async loc => ((await loc.first().innerText({ timeout: 1500 }).catch(() => "")) || "").replace(/\s+/g, " ");
+await caso("pl-34 el plan dice a cargo de quién queda el saldo y cómo sacar el CFDI a otra razón social", "", async p => {
+  await abrir(p);
+  const nota = await textoDe(p.locator("[data-quien-paga]"));
+  ok("pl-34 el plan dice a cargo de quién queda el saldo y cómo sacar el CFDI a otra razón social",
+    /saldo/i.test(nota) && /PORTLAND LEATHER/.test(nota) && /CFDI a nombre de/.test(nota) && /Facturar a tercero/.test(nota), `«${nota.slice(0, 240)}»`);
+});
+await caso("pl-35 cada factura dice «Saldo: el cliente»; con tercero, el tercero (y el botón «Paga: …»)", "", async p => {
+  await abrir(p);
+  const s0 = await textoDe(encabezado(p, 0).locator("[data-saldo]"));
+  await encabezado(p, 0).getByRole("button", { name: /Facturar a tercero/ }).click(); await espera(p, 200);
+  await p.click("#tercero-listo"); await p.getByRole("button", { name: "Guardar tercero" }).click(); await espera(p, 200);
+  const s0b = await textoDe(encabezado(p, 0).locator("[data-saldo]"));
+  const boton = await encabezado(p, 0).getByRole("button", { name: /Paga: TERCERO SA/ }).count();
+  const s1 = await textoDe(encabezado(p, 1).locator("[data-saldo]"));
+  ok("pl-35 cada factura dice «Saldo: el cliente»; con tercero, el tercero (y el botón «Paga: …»)",
+    /Saldo: PORTLAND LEATHER/.test(s0) && /Saldo: TERCERO SA/.test(s0b) && /tercero/i.test(s0b) && boton === 1 && /Saldo: PORTLAND LEATHER/.test(s1),
+    `antes «${s0}» · con tercero «${s0b}» · botón «Paga:» ${boton} · la otra «${s1}»`);
+});
+await caso("pl-36 la factura ligada también dice a cargo de quién queda", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await espera(p, 300);
+  const s = await textoDe(encabezado(p, 0).locator("[data-saldo]"));
+  ok("pl-36 la factura ligada también dice a cargo de quién queda", /Saldo: PORTLAND LEATHER/.test(s), `«${s}»`);
+});
+await caso("pl-37 a 1366 la línea del saldo cabe en su columna (no empuja la tabla)", "", async p => {
+  await abrir(p);
+  const m = await p.evaluate(() => { const e = document.querySelector("thead th [data-saldo]"); if (!e) return null; const th = e.closest("th").getBoundingClientRect(), r = e.getBoundingClientRect();
+    return { dentro: r.left >= th.left - 1 && r.right <= th.right + 1, alto: Math.round(r.height) }; });
+  ok("pl-37 a 1366 la línea del saldo cabe en su columna (no empuja la tabla)", !!m && m.dentro && m.alto <= 30, JSON.stringify(m));
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

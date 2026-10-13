@@ -12,6 +12,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.92 — Quién paga, a la vista en el plan matriz (el caso Hotsson) — 13-oct-2026
+
+**Qué pasaba** (Marcelo, 13-oct, Karla con Genaro: las órdenes de Hotsson, varios productos, van en UNA OC que se factura en 7 facturas
+con el reparto de los productos, cada una a otra razón social; y si por la prisa las facturas se hacen antes, sin orden, se ligan después.
+*«Sobre todo, el saldo se queda con el cliente que pidió el producto… y que esto la UI lo deje claro»*). Los dos caminos ya existían y
+funcionan con el saldo en el cliente (ensayado contra producción, abajo): las facturas del plan quedan a cargo del cliente de la orden, y
+a nombre de quién sale cada CFDI lo elige quien timbra en CobranzaFlow (Por Timbrar → Datos → «CFDI a nombre de»: la regla 23 de
+CobranzaFlow, «quien pidió el trabajo es quien paga; el CFDI puede salir a otra razón social del mismo grupo»; Karla es CxC). Pero el plan
+no decía a cargo de quién queda cada factura, y su «Facturar a tercero», que SÍ cambia quién paga (la factura y su saldo nacen a cargo del
+tercero), se prestaba a usarse justo para esto.
+
+**Qué se cambió** (sólo pantalla, `OCSplitMatrixModal`): arriba del plan, *«El saldo de cada factura queda a cargo de [cliente], quien
+pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero. ¿Una factura debe salir a nombre de otra razón
+social de [cliente] sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos)»*;
+en cada factura, **«Saldo: [cliente]»** (o «Saldo: [tercero] (tercero)»), también en la que se liga; el botón del tercero dice
+**«Paga: [tercero]»** (decía «→ [tercero]»). La ventana del tercero (`BillToSection`) ya lo decía desde v10.84.9.
+
+**El ensayo del caso, contra producción** (todo dentro de una transacción que termina en RAISE; sin cambiar ninguna función): las dos
+órdenes (P-0621 agendas, P-0623 calendarios) estaban cada una en una OC «simple», y a una simple no se le mete otra orden («No se puede
+mover hacia OC simple (A2)»): se juntan en una OC NUEVA («Mover a otra OC» → crear una; las simples se quitan solas al quedar vacías).
+Caso 1: el plan de 7 facturas (94 agendas y 61 calendarios a cada una; 60 a la última) creó F-160 a F-166 **a cargo de INMOBILIARIA
+HOTSSON**; Karla (CxC en CobranzaFlow) puso «CFDI a nombre de» a dos razones sociales nuevas y el saldo siguió en Inmobiliaria Hotsson
+(CobranzaFlow agrupó las tres). Caso 2: una factura hecha antes, sin orden, a cargo de Inmobiliaria Hotsson y con «CFDI a nombre de» otra
+razón social: el plan la ofrece y la liga; el saldo, igual. Tres corridas del ensayo fueron del montaje (dar de alta una razón social
+pide sesión; la OC simple; un texto que se volvía NULL). Los huecos que dejan los ensayos en `ref_cobro` (identidad: no se deshace) no
+importan (CobranzaFlow: número interno, sin uso; y nunca regresar la secuencia: la invariante 15).
+Un intento anterior de esta versión («ligar la factura de otra razón social a nombre de ella») se descartó: mandaba el saldo al tercero.
+
+**Cómo se probó**: `tests/romper/plan.mjs` pl-34 a pl-37 (la nota, el saldo de cada factura con y sin tercero, la ligada, y que la línea
+quepa a 1366), escritas antes del cambio: 4 de 4 fallaban; con el cambio, 4 de 4, y la tanda `plan` 37 de 37. Sabotaje (la línea del
+saldo sin el tercero): lo caza pl-35.
+
+**Para Karla (Hotsson, hoy):** 1) P-0621 → «Mover a otra OC» → crear una OC nueva de INMOBILIARIA HOTSSON; P-0623 → «Mover a otra OC» →
+esa OC. 2) La OC → «Plan matriz»: las 7 facturas SIN «Facturar a tercero», con las piezas de agendas y calendarios de cada hotel
+(anticipadas, con su razón: las órdenes siguen en producción). 3) CobranzaFlow → Por Timbrar → cada factura → Datos → «CFDI a nombre de»
+la razón social (si no existe, se da de alta con su RFC) → timbrar. Si alguna se hace antes, sin orden: en CobranzaFlow a cargo de
+INMOBILIARIA HOTSSON con su «CFDI a nombre de», y luego en el plan «Ya tiene factura: ligarla».
+
 ## v10.84.90 — El folio anticipado y «Facturar por partes», una u otra por orden; «ocupado» desde el clic en cinco diálogos de dinero (y el candado del anticipo en «Dividir», ensayado) — 13-oct-2026
 
 **Qué pasaba.** Desde v10.84.89 una orden se factura por partes antes de Salidas, y el botón «Asignar folio anticipado» seguía saliendo
