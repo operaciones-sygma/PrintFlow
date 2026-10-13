@@ -60,6 +60,11 @@ arreglo, 8 de 8; vuelta 2 (al fallar la base se reintenta y Esc vuelve a pregunt
 el diálogo abierto (la app lo cierra al terminar): con la máquina cargada el Esc de la prueba llegaba ya terminado de guardar, y entonces
 preguntar «¿Cerrar sin asignar?» es lo correcto (reproducido con 300 ms entre el clic y el Esc). Ahora inv-29 guarda lento (`guarda=lento`,
 3 s) y pasa también con esos 300 ms; sig-19 (partes) tenía el mismo supuesto y va igual. oc-42 no: ahí el banco cierra al terminar.
+Y **ord-235** (orden-2), en el quinto: pulsaba Esc a 1 s fijo de «Guardar»; con la máquina cargada la pregunta «Esta factura ya está
+cobrada» acababa de pintarse y aún no registraba su Esc (lo hace en un efecto, un instante después), y el foco seguía adentro. Ahora
+espera a que la pregunta esté lista (el foco ya adentro) y a que se cierre antes de mirar el foco; sola pasa 3 de 3. La máquina estaba al
+límite de memoria (97 de 99 GB comprometidos, 0.7 GB libres): las pruebas de tiempo fallaban una distinta cada vez; el último candado
+corrió de a 2 tandas.
 La inestable del primer candado (`ctp-db-placas-unicas`, «fetch failed» de la API con 4 tandas) sola pasa: era la red, revisada. La
 base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón: el botón ya no sale)
 y `BulkSellModal` (sin banco: el mismo arreglo, letra por letra, que los otros cuatro).

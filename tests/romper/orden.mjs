@@ -1501,9 +1501,15 @@ await caso("ord-235 Esc en «Esta factura ya está cobrada» regresa el foco a �
   await editar(p, "OP-FA");
   await p.locator("#ff-precio").fill("1978");
   const b = p.getByRole("button", { name: /^Guardar$/ });
-  await b.first().focus(); await p.keyboard.press("Enter"); await espera(p, 1000);
-  const pregunto = (await p.getByRole("dialog", { name: /ya está cobrada/ }).count()) > 0;
-  await p.keyboard.press("Escape"); await espera(p, 400);
+  await b.first().focus(); await p.keyboard.press("Enter");
+  // (v10.84.90) espera a que la pregunta esté LISTA (el foco ya adentro: sus efectos corrieron, también el que registra su Esc), y a que se
+  //   cierre antes de mirar el foco. Con 1 s fijo, en el candado cargado el Esc llegaba con la pregunta recién pintada (una persona no
+  //   reacciona en ese instante) y el foco seguía adentro, en «Volver a la forma»
+  const dlg = p.getByRole("dialog", { name: /ya está cobrada/ });
+  const pregunto = await dlg.waitFor({ timeout: 5000 }).then(() => true, () => false);
+  if (pregunto) await p.waitForFunction(() => { const d = [...document.querySelectorAll('[role="dialog"]')].pop(); return !!d && d.contains(document.activeElement); }, null, { timeout: 5000 }).catch(() => {});
+  await p.keyboard.press("Escape");
+  await dlg.waitFor({ state: "detached", timeout: 5000 }).catch(() => {}); await espera(p, 300);
   const foco = await quienTieneElFoco(p);
   ok("ord-235 Esc en «Esta factura ya está cobrada» regresa el foco a «Guardar»", pregunto && /^Guardar$/.test(foco), `preguntó ${pregunto} · foco «${foco}»`);
 });
