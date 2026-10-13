@@ -110,7 +110,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1231 pruebas, ~6 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1265 pruebas, ~6 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -180,13 +180,19 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.81 (12-oct, ~20:10; READY `dpl_6eqAswERNucuxWEVXCn5tSJoqqvE`, commits `e472807` y `f6fb96d` (el candado); vuelta atrás: promover
+- **LIVE:** v10.84.82 (12-oct, ~22:22; READY `dpl_6nNC2NSqt5b2Zus8USkVbBNYzSdK`, commit `68a6d85`; vuelta atrás: promover
+  `dpl_13xeMsi8WqBMdZvVY3bKR1LNcuiF` (el código de v10.84.81) o `git revert 68a6d85`; la base no cambió; 1265 pruebas). v10.84.82: **la forma
+  de la orden en UNA sola forma** (Marcelo, 12-oct, la «A» de un análisis de 90 días: sin «Sencillo / Avanzado»; una descripción que crece; el
+  orden de la hoja impresa con la imagen arriba de las especificaciones, que se pliegan con su resumen y empiezan abiertas) y **Replicar sin
+  el precio de otra cantidad**. 🔑 Plegar recorre la página: el segundo clic de un doble clic (`detail ≥ 2`) no cuenta 350 ms. `ClientInput`
+  ya no cierra su lista al volver al campo en menos de 200 ms.
+  v10.84.81 (12-oct, ~20:10; READY `dpl_6eqAswERNucuxWEVXCn5tSJoqqvE`, commits `e472807` y `f6fb96d` (el candado); vuelta atrás: promover
   `dpl_CyKMYt7Y56LrpyYWc7RpT5dZRhBp` (el código de v10.84.80) o `git revert e472807`; la base no cambió; 1231 pruebas). v10.84.81: **la
   TERCERA revisión independiente de OrderForm (29/40): la forma queda CERRADA por las 3 pasadas (22 → 28 → 29)**. Su P1: «P-… creada» quedaba
   fuera de la pantalla porque el foco la traía con el desplazamiento suave de la app (regla 19c: lo que confirma va con `behavior:"instant"`).
   El cliente con su identidad (el RFC del elegido con candado en las dos puertas, el nombre que ya existe con otro RFC no se liga callado, el
   cliente de la OC), el teclado (`useDevolverFoco`) y los menores. La tanda `orden` va en dos (`orden` + `orden-2`) y su banco copia el
-  estilo global de App. Pendientes de Marcelo: los modos Sencillo/Avanzado y el orden, y el precio de Replicar con otra cantidad.
+  estilo global de App. Pendientes de Marcelo: los modos Sencillo/Avanzado y el orden, y el precio de Replicar con otra cantidad (hechos en v10.84.82).
   v10.84.80 (12-oct, ~17:30; READY `dpl_GdFpLzQB6rdB8LQvMoJrLQaiKt4W`, commit `b2f826b`; vuelta atrás: promover
   `dpl_6JsC58NzJ3dxqno6vVAcSPuN8zn7` (el código de v10.84.79) o `git revert b2f826b`; la base no cambió; 1179 pruebas). v10.84.80: **la
   segunda revisión independiente de OrderForm (28/40, un P1 y cuatro P2)**: el cliente no se mezcla (🔑 en «¿ya existe?» elegir pone al

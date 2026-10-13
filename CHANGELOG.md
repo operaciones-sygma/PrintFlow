@@ -66,6 +66,13 @@ campo en menos de 200 ms).
 **Para Marcelo:** nada que decidir. El análisis de los modos (los datos de 90 días) está en el CHANGELOG de arriba; si se quiere ver si la
 forma nueva cambia la captura, en un mes se puede medir lo mismo (cuántas órdenes llevan texto, campos o los dos).
 
+**En producción** (12-oct, ~22:22): READY `dpl_6nNC2NSqt5b2Zus8USkVbBNYzSdK` (commit `68a6d85`), candado 1265 de 1265 al primer intento (con
+las tandas de banco de a 7, sin INESTABLES). Vuelta atrás: promover `dpl_13xeMsi8WqBMdZvVY3bKR1LNcuiF` (el código de v10.84.81) o
+`git revert 68a6d85`. Revisado contra produccion.sygma.mx sin escribir (la cuenta de pruebas, escrituras cortadas): el código servido trae la
+forma nueva; `.banco-revisor-orden/medir-82.mjs` 7 de 7 (sin selector, la imagen a 855 px a 1366 y en la primera pantalla a 1920, la descripción
+que crece, el resumen al plegar, Replicar de P-0628 sobre 7 pzas sin el precio y con la nota) y `medir-81-oc.mjs` 3 de 3; `npm run recorrido`
+(8 roles, 94 pasos): nada truena.
+
 ## v10.84.81 — La forma de la orden: «P-… creada» siempre a la vista, el cliente con su identidad, y el teclado sin perderse — 12-oct-2026
 
 **Qué pasaba** (la TERCERA revisión independiente de la forma, 12-oct en la noche: **29/40**, cero P0, un P1 por confirmar y cuatro P2;
