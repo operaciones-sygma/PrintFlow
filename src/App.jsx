@@ -16227,7 +16227,7 @@ const claveTexto=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replac
 // el tipo como se lee: sin el prefijo de las 37 importadas atrasadas (v10.72.55); «stock» es la venta de inventario de Cuadra (un canal)
 const nombreDeTipo=t=>{const s=String(t||"").replace("🔴 ATRASADA · ","").trim();return /^stock$/i.test(s)?"Venta de inventario":(s||"Sin tipo")};
 // agrupa por la clave y se queda con la escritura que más dinero trae
-const agruparPorNombre=(lista,nombre)=>{const g=new Map();lista.forEach(o=>{const n=nombre(o),k=claveTexto(n),v=precioVenta(o);const x=g.get(k)||{n:0,monto:0,variantes:new Map()};x.n++;x.monto+=v;x.variantes.set(n,(x.variantes.get(n)||0)+v);g.set(k,x)});return [...g.values()].map(x=>({nombre:[...x.variantes.entries()].sort((p,q)=>q[1]-p[1])[0][0],n:x.n,monto:x.monto})).sort((p,q)=>q.monto-p.monto||p.nombre.localeCompare(q.nombre))};
+const agruparPorNombre=(lista,nombre)=>{const g=new Map();lista.forEach(o=>{const n=nombre(o),k=claveTexto(n),v=precioVenta(o);const x=g.get(k)||{n:0,monto:0,variantes:new Map(),ordenes:[]};x.n++;x.monto+=v;x.ordenes.push(o);x.variantes.set(n,(x.variantes.get(n)||0)+v);g.set(k,x)});return [...g.values()].map(x=>({nombre:[...x.variantes.entries()].sort((p,q)=>q[1]-p[1])[0][0],n:x.n,monto:x.monto,ordenes:x.ordenes})).sort((p,q)=>q.monto-p.monto||p.nombre.localeCompare(q.nombre))};
 const entregadaEl=o=>diaLocal(o.delivered_at||o.deliveredAt);
 const EMPAQUE_ID="vm_manual";   // mide lo que una orden espera antes de salir, no trabajo de una máquina: fuera de la utilización
 const fmtCorto=n=>new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",notation:"compact",maximumFractionDigits:1}).format(n||0);
@@ -16235,6 +16235,7 @@ const enPlural=(n,uno,varios)=>n+" "+(n===1?uno:varios);
 function Analytics({orders,onReload}) {
   const [selMachine,setSelMachine]=useState(null);const [tab,setTab]=useState("finance");
   const [per,setPer]=useState("mes");
+  const [abierto,setAbierto]=useState(null);   // v10.84.85 — el renglón de productos («p:…») o de clientes («c:…») que enseña sus órdenes
   const hoy=new Date();
   // ── el periodo ──
   const entregadas=orders.filter(o=>String(o.stage||"").includes("delivered")&&entregadaEl(o));
@@ -16306,6 +16307,15 @@ function Analytics({orders,onReload}) {
   const etq=(Icon,txt)=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><Icon size={10} weight="bold"/>{txt}</span>;
 
   const selM=selMachine?mStats.find(x=>x.mid===selMachine):null;
+  // v10.84.85 — BAJAR DE UNA BARRA A SUS ÓRDENES (el P2 de la critique: «nada lleva a sus órdenes»): el renglón es un botón que
+  //   despliega ahí mismo sus órdenes del periodo, las de más dinero primero (folio, cliente o tipo, fecha de entrega, monto); «Otros»,
+  //   sus tipos. Uno a la vez; cambiar de periodo enseña las del periodo nuevo.
+  // el segundo clic de un doble clic no cuenta (abría y volvía a cerrar: la vuelta 2); Enter y Espacio llegan con detail 0
+  const alternar=(k,e)=>{if(e&&e.detail>=2)return;setAbierto(a=>a===k?null:k)};
+  const btnRenglon={display:"block",width:"100%",background:"transparent",border:"none",padding:"2px 0",textAlign:"left",cursor:"pointer",fontFamily:"inherit",color:"inherit"};
+  const renglonDesplegado={display:"flex",gap:10,justifyContent:"space-between",fontSize:11,padding:"3px 0",borderTop:"0.5px solid "+C.bd};
+  const listaOrdenes=(os,conTipo)=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{os.slice().sort((a,b)=>precioVenta(b)-precioVenta(a)).slice(0,20).map(o=><div key={o.id} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{o.production_number||o.id}</span> · {conTipo?nombreDeTipo(o.product_type):o.client}{o.order_type==="maquila"?" · maquila":""} · {fD(o.delivered_at||o.deliveredAt)}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(precioVenta(o))}</span></div>)}{os.length>20&&<div style={{fontSize:10,color:C.t2,paddingTop:4}}>y {os.length-20} más</div>}</div>;
+  const listaTipos=ts=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{ts.map(x=><div key={x.nombre} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.nombre} · {enPlural(x.n,"orden","órdenes")}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(x.monto)}</span></div>)}</div>;
   const TABS=[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}];
   // v10.84.84 — el periodo es un grupo de radios: flechas para moverse, una sola parada de Tab (la marcada)
   const teclaPeriodo=e=>{const i=PERIODOS_ANALYTICS.findIndex(x=>x.id===per);let j=null;if(e.key==="ArrowRight"||e.key==="ArrowDown")j=(i+1)%PERIODOS_ANALYTICS.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")j=(i-1+PERIODOS_ANALYTICS.length)%PERIODOS_ANALYTICS.length;else if(e.key==="Home")j=0;else if(e.key==="End")j=PERIODOS_ANALYTICS.length-1;if(j===null)return;e.preventDefault();setPer(PERIODOS_ANALYTICS[j].id);const b=e.currentTarget.querySelectorAll('[role="radio"]')[j];b&&b.focus()};
@@ -16355,11 +16365,14 @@ function Analytics({orders,onReload}) {
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Productos por ingreso</div>
         {tipos.length===0&&<div style={{fontSize:12,color:C.t2,padding:"8px 0"}}>Sin entregas en el periodo.</div>}
         {[...tiposTop.map(x=>({...x,clave:x.nombre})),...(tiposOtros.length?[{clave:"otros",nombre:"Otros ("+enPlural(tiposOtros.length,"tipo","tipos")+")",n:tiposOtros.length,ordenes:tiposOtros.reduce((s,x)=>s+x.n,0),monto:tiposOtros.reduce((s,x)=>s+x.monto,0)}]:[])].map(x=><div key={x.clave} data-producto={x.clave} data-monto={x.monto} data-n={x.n} style={{marginBottom:8}}>
+          <button onClick={e=>alternar("p:"+x.clave,e)} aria-expanded={abierto==="p:"+x.clave} style={btnRenglon}>
           <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:3}}>
             <span data-nombre style={{fontSize:12,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:x.clave==="otros"?C.t2:C.tx}}>{x.nombre}</span>
             <span data-monto-txt style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",color:C.tx,fontWeight:600}}>{fmt(x.monto)}</span> · {x.clave==="otros"?enPlural(x.ordenes,"orden","órdenes"):enPlural(x.n,"orden","órdenes")}</span>
           </div>
           <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((x.monto/maxTipo)*100)+"%",height:"100%",background:x.clave==="otros"?C.bdSt:C.ac+"99",borderRadius:3}}/></div>
+          </button>
+          {abierto==="p:"+x.clave&&(x.clave==="otros"?listaTipos(tiposOtros):listaOrdenes(x.ordenes,false))}
         </div>)}
       </div>
     </div>}
@@ -16485,6 +16498,7 @@ function Analytics({orders,onReload}) {
       <div style={{background:C.sf,borderRadius:14,padding:16,maxWidth:760}}>
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:12}}><TrophyIcon size={13} weight="bold"/>Los que más dejaron · {txtRango}</div>
         {topClients.map((x,i)=>{const mxC=topClients[0]?.monto||1;return <div key={x.nombre} data-cliente={x.nombre} data-monto={x.monto} style={{marginBottom:10}}>
+          <button onClick={e=>alternar("c:"+x.nombre,e)} aria-expanded={abierto==="c:"+x.nombre} style={btnRenglon}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:3}}>
             <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
               {/* v10.84.84 — sin medallas (la «2» en plata daba 1.82:1): el lugar en número, en tinta */}
@@ -16494,6 +16508,8 @@ function Analytics({orders,onReload}) {
             <div style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(x.monto)}</div>
           </div>
           <div style={{background:C.bg,borderRadius:3,height:5,overflow:"hidden",marginLeft:32}}><div style={{width:((x.monto/mxC)*100)+"%",height:"100%",background:C.ac+"99",borderRadius:3}}/></div>
+          </button>
+          {abierto==="c:"+x.nombre&&<div style={{marginLeft:32}}>{listaOrdenes(x.ordenes,true)}</div>}
         </div>})}
         {topClients.length===0&&<div style={{textAlign:"center",padding:"20px 0",color:C.t2,fontSize:12}}>Sin entregas en el periodo.</div>}
       </div>

@@ -12,6 +12,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.85 — Analytics: de una barra a sus órdenes — 13-oct-2026
+
+**Qué pasaba** (un P2 de la critique de Analytics: «nada lleva a sus órdenes»): las barras de productos y de clientes decían cuánto y
+cuántas, pero no cuáles; para saber qué órdenes eran había que buscarlas una por una en «Todas».
+
+**Qué se cambió** (`src/App.jsx`, sólo `Analytics`; la base no cambió): cada renglón de «Productos por ingreso» y de «Los que más dejaron»
+es un botón (`aria-expanded`) que despliega ahí mismo sus órdenes del periodo, las de más dinero primero: folio, cliente (o el tipo, en
+clientes), «maquila» si lo es, fecha de entrega y monto; con más de 20, «y N más». «Otros» despliega sus tipos. Uno abierto a la vez;
+cambiar de periodo enseña las del periodo nuevo. El segundo clic de un doble clic no lo cierra (Enter y Espacio sí lo alternan).
+
+**Cómo se probó** (tanda `analytics`, 34 → 44): **vuelta 1**, escrita antes del cambio contra v10.84.84: fallaban las 5 (abrir un
+producto y cerrarlo, «Otros» con sus tipos, un cliente con Enter, uno a la vez, el periodo que cambia lo abierto). **Vuelta 2**, 5 por donde
+no se diseñó: el doble clic abría y volvía a cerrar (arreglado: el segundo clic no cuenta) y un supuesto mío en la prueba (el cliente del
+nombre largo no entraba en los 10 primeros con $100: el banco le pone $9,000); más de 20 órdenes, Espacio, «Otros» que desaparece al cambiar
+de periodo y 1366 con un nombre larguísimo, bien. **Sabotajes**: 2 (sin el escudo del doble clic; la lista con órdenes de fuera del periodo),
+atrapados; el control pasa entero. **Corrida doble**: v10.84.84 34 de 44 (las 10 nuevas), v10.84.85 44 de 44.
+
 ## v10.84.84 — Analytics dice qué cuenta y de qué periodo: un solo ingreso, el periodo a la vista y la comparación justa — 13-oct-2026
 
 **Qué pasaba** (los P1 de la critique de Analytics, 14/40; medido con las órdenes del banco nuevo y en producción):

@@ -2,7 +2,7 @@
 // La prueba fija el reloj del navegador (13-oct-2026 12:00, hora de México) y su zona horaria (America/Mexico_City): así las cifras se
 // pueden comprobar contra cuentas hechas a mano (v10.84.84, los P1 de la critique de Analytics: qué cuenta cada cifra y de qué periodo).
 // Uso: node gen-analytics.mjs <App.jsx> <dirSalida>
-// Variantes por URL (modo=): normal · vacio (ninguna orden) · sinmaquinas (nadie ha registrado máquina) · sintipo (una entregada sin tipo)
+// Variantes por URL (modo=): normal · vacio (ninguna orden) · sinmaquinas (nadie ha registrado máquina) · sintipo (una entregada sin tipo) · muchas (25 etiquetas más en octubre)
 // window.__agregarEntrega(): llega una entrega de hoy ($1,000, Etiquetas), como la manda el realtime con la pantalla abierta.
 import fs from "node:fs";
 import path from "node:path";
@@ -72,6 +72,9 @@ const TODAS = [
   ORDEN("oY", "P-0111", { client: "FARMACIAS", product_type: "POP", price: 30000, stage: "in_production", created_at: "2026-10-06T09:00:00-06:00",
     machine_log: SIN_MAQ ? [] : [{ machine: "off_pm52", started: "2026-10-07T09:00:00-06:00", ended: null, minutes: null }] }),
 ];
+// muchas: 25 etiquetas más entregadas en octubre (el renglón enseña 20 y «y 5 más»), una con un cliente de nombre larguísimo
+if (M.has("muchas")) for (let i = 0; i < 25; i++) TODAS.push(ORDEN("oM" + i, "P-02" + String(i).padStart(2, "0"), { client: i === 0 ? "CLIENTE CON UN NOMBRE MUY PERO MUY LARGO QUE NO CABE EN EL RENGLÓN DE LA LISTA, SOCIEDAD ANÓNIMA DE CAPITAL VARIABLE" : "VARIOS M" + i,
+  product_type: "Etiquetas", price: i === 0 ? 9000 : 100 + i, created_at: "2026-10-01T09:00:00-06:00", delivered_at: "2026-10-0" + (1 + (i % 9)) + "T12:00:00-06:00" }));
 if (M.has("sintipo")) TODAS.push(ORDEN("oN", "P-0106", { client: "SIN NOMBRE", product_type: "", price: 1500, created_at: "2026-10-05T09:00:00-06:00", delivered_at: "2026-10-06T12:00:00-06:00" }));
 const ORDERS = M.has("vacio") ? [] : TODAS;`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,

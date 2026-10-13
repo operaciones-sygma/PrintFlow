@@ -264,6 +264,82 @@ await caso("an-v3-05-tipo-vacio", "modo=sintipo", async p => {
   ok("an-v3-05-tipo-vacio", !!fila && fila.monto === 1500 && fila.n === 1 && !/undefined|null/.test(t), `una entregada sin tipo: ${fila ? "sale como «Sin tipo» con " + fila.monto : "NO sale"}`);
 });
 
+// ── v10.84.85 — bajar de una barra a sus órdenes (el P2 de la critique: «nada lleva a sus órdenes»); escritas ANTES del cambio ──
+const desplegado = async (p, sel) => (await p.locator(sel).locator("[data-ordenes]").first().innerText({ timeout: 1500 }).catch(() => "")).replace(/\s+/g, " ");
+await caso("an-20-producto-abre-sus-ordenes", "", async p => {
+  const fila = p.locator('[data-producto="Etiquetas"]');
+  const boton = fila.getByRole("button").first();
+  await boton.click(); await espera(p);
+  const abierto = await boton.getAttribute("aria-expanded"), t = await desplegado(p, '[data-producto="Etiquetas"]');
+  await boton.click(); await espera(p);
+  const cerrado = await boton.getAttribute("aria-expanded"), t2 = await desplegado(p, '[data-producto="Etiquetas"]');
+  ok("an-20-producto-abre-sus-ordenes", abierto === "true" && /P-0101/.test(t) && /P-0102/.test(t) && t.includes($(10000)) && t.includes($(5000)) && cerrado === "false" && t2 === "",
+    `«Etiquetas» al picarle: aria-expanded ${abierto}, enseña «${t.slice(0, 160)}» (P-0101 ${$(10000)} y P-0102 ${$(5000)}); otra vez: ${cerrado}, ${t2 ? "SIGUE abierta" : "se cierra"}`);
+});
+await caso("an-21-otros-abre-sus-tipos", "", async p => {
+  await periodo(p, "Todo");
+  const boton = p.locator('[data-producto="otros"]').getByRole("button").first();
+  await boton.click(); await espera(p);
+  const t = await desplegado(p, '[data-producto="otros"]');
+  const tipos = ["Calendarios", "Libretas", "Cajas", "Volantes", "Gafetes", "Sellos"].filter(x => t.includes(x)).length;
+  ok("an-21-otros-abre-sus-tipos", tipos === 4 && t.includes($(500)), `«Otros» enseña «${t.slice(0, 160)}» (sus 4 tipos de ${$(500)})`);
+});
+await caso("an-22-cliente-abre-sus-ordenes", "", async p => {
+  await pestaña(p, "Clientes");
+  const boton = p.locator('[data-cliente="CERVECERIA MODELO"]').getByRole("button").first();
+  await boton.press("Enter"); await espera(p);
+  const t = await desplegado(p, '[data-cliente="CERVECERIA MODELO"]');
+  ok("an-22-cliente-abre-sus-ordenes", /P-0101/.test(t) && /P-0102/.test(t) && !/P-0110/.test(t) && /Etiquetas/i.test(t),
+    `CERVECERIA MODELO con Enter enseña «${t.slice(0, 170)}» (sus dos entregadas de octubre, con su tipo; sin la cancelada P-0110)`);
+});
+await caso("an-23-uno-abierto-a-la-vez", "", async p => {
+  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="Libros"]').getByRole("button").first().click(); await espera(p);
+  const abiertos = await p.locator('[data-producto] [data-ordenes]').count();
+  const libros = await desplegado(p, '[data-producto="Libros"]');
+  ok("an-23-uno-abierto-a-la-vez", abiertos === 1 && /P-0103/.test(libros) && /maquila/i.test(libros), `abiertos a la vez: ${abiertos}; «Libros» enseña «${libros.slice(0, 120)}» (P-0103, de maquila)`);
+});
+await caso("an-24-el-periodo-cambia-lo-abierto", "", async p => {
+  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  await periodo(p, "Mes pasado");
+  const t = await desplegado(p, '[data-producto="Etiquetas"]');
+  ok("an-24-el-periodo-cambia-lo-abierto", t === "" || (/P-0091/.test(t) && !/P-0101/.test(t)), `«Etiquetas» abierta y cambiar a septiembre: «${t.slice(0, 120)}» (o se cierra, o enseña las de septiembre: P-0091)`);
+});
+
+// ── v10.84.85 — vuelta 2 del despliegue: por donde no se diseñó ──
+await caso("an-25-veinte-y-los-demas", "modo=muchas", async p => {
+  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  const n = await p.locator('[data-producto="Etiquetas"] [data-ordenes] > div').count();
+  const t = await desplegado(p, '[data-producto="Etiquetas"]');
+  ok("an-25-veinte-y-los-demas", /y 7 más/.test(t) && n === 21, `«Etiquetas» con 27 entregadas: ${n} renglones (20 y «y 7 más»): «${t.slice(-60)}»`);
+});
+await caso("an-26-doble-clic-abre", "", async p => {
+  const b = p.locator('[data-producto="Etiquetas"]').getByRole("button").first();
+  await b.dblclick(); await espera(p);
+  ok("an-26-doble-clic-abre", (await b.getAttribute("aria-expanded")) === "true", `doble clic en «Etiquetas»: aria-expanded ${await b.getAttribute("aria-expanded")} (debe quedar abierta: el segundo clic no la cierra)`);
+});
+await caso("an-27-espacio-abre", "", async p => {
+  const b = p.locator('[data-producto="Libros"]').getByRole("button").first();
+  await b.focus(); await p.keyboard.press("Space"); await espera(p);
+  ok("an-27-espacio-abre", (await b.getAttribute("aria-expanded")) === "true", `Espacio en «Libros»: ${await b.getAttribute("aria-expanded")}`);
+});
+await caso("an-28-otros-que-desaparece", "", async p => {
+  await periodo(p, "Todo");
+  await p.locator('[data-producto="otros"]').getByRole("button").first().click(); await espera(p);
+  await periodo(p, "Este mes");
+  const abiertos = await p.locator("[data-ordenes]").count(), filas = await p.locator("[data-producto]").count();
+  ok("an-28-otros-que-desaparece", abiertos === 0 && filas === 4, `«Otros» abierto y volver a octubre (sin «Otros»): ${abiertos} desplegados, ${filas} renglones`);
+});
+await caso("an-29-nombre-largo-a-1366", "modo=muchas", async p => {
+  await pestaña(p, "Clientes");
+  const fila = p.locator("[data-cliente]").filter({ hasText: "MUY PERO MUY LARGO" }).first();
+  await fila.getByRole("button").first().click(); await espera(p);
+  await pestaña(p, "Financiero");
+  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+  ok("an-29-nombre-largo-a-1366", ancho <= 1366, `a 1366 con un cliente de nombre larguísimo desplegado: ancho ${ancho}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
