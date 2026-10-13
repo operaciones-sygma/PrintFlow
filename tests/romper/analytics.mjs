@@ -340,6 +340,14 @@ await caso("an-29-nombre-largo-a-1366", "modo=muchas", async p => {
   ok("an-29-nombre-largo-a-1366", ancho <= 1366, `a 1366 con un cliente de nombre larguísimo desplegado: ancho ${ancho}`);
 });
 
+// ── v10.84.86 — lo que encontró la revisión en producción: la venta de inventario sin P-… salía con su uuid ──
+await caso("an-30-venta-sin-folio-se-nombra", "modo=stocksinfolio", async p => {
+  await p.locator('[data-producto="Venta de inventario"]').getByRole("button").first().click(); await espera(p);
+  const t = await desplegado(p, '[data-producto="Venta de inventario"]');
+  ok("an-30-venta-sin-folio-se-nombra", /F-153/.test(t) && /OC-0948/.test(t) && !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(t),
+    `«Venta de inventario» desplegada: «${t.slice(0, 160)}» (la venta sin P-… se nombra por su folio fiscal y su OC, nunca por su uuid)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

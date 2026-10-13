@@ -12,6 +12,18 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.86 — Analytics: la venta de inventario se nombra por su folio, no por su uuid — 13-oct-2026
+
+**Qué pasaba** (lo encontró la revisión de v10.84.85 en producción, no el banco): al desplegar «Venta de inventario», sus órdenes salían
+con su id, que en esas ventas es un uuid («fcad0f48-a7d2-…»): de las 204 ventas de inventario, 161 no tienen P-… (medido el 13-oct). Todas
+traen su folio fiscal y su OC. El banco tenía una venta de inventario con P-…, por eso no lo vio.
+
+**Qué se cambió** (`src/App.jsx`, `Analytics`): `folioDe(o)` nombra cada orden por su P-…, y si no tiene, por su folio fiscal y su OC
+(«F-153 · OC-0948»); nunca por el id. Lo usan la lista desplegada y los «Últimos trabajos» de una máquina.
+
+**Cómo se probó** (tanda `analytics`, 44 → 45; el banco trae ahora una venta de inventario como las de producción, `modo=stocksinfolio`):
+contra v10.84.85 la prueba nueva falla con el uuid a la vista; con el cambio, 45 de 45.
+
 ## v10.84.85 — Analytics: de una barra a sus órdenes — 13-oct-2026
 
 **Qué pasaba** (un P2 de la critique de Analytics: «nada lleva a sus órdenes»): las barras de productos y de clientes decían cuánto y
@@ -28,6 +40,11 @@ no se diseñó: el doble clic abría y volvía a cerrar (arreglado: el segundo c
 nombre largo no entraba en los 10 primeros con $100: el banco le pone $9,000); más de 20 órdenes, Espacio, «Otros» que desaparece al cambiar
 de periodo y 1366 con un nombre larguísimo, bien. **Sabotajes**: 2 (sin el escudo del doble clic; la lista con órdenes de fuera del periodo),
 atrapados; el control pasa entero. **Corrida doble**: v10.84.84 34 de 44 (las 10 nuevas), v10.84.85 44 de 44.
+
+**En producción** (13-oct, ~06:10): READY `dpl_utDqiGqNHEeHLXoFLzx484DTxwBf` (commit `ad37e49`), candado 1336 de 1336 al primer intento.
+Vuelta atrás: promover `dpl_5vTU5XKWavBBzobAEsGHRm4UiaLa` (el código de v10.84.84) o `git revert ad37e49`. Revisado contra
+produccion.sygma.mx sin escribir (`.banco-revisor-orden/medir-84.mjs`, 1 entrada): 10 de 11. El que falló es real: al desplegar «Venta de
+inventario» salían uuids (v10.84.86).
 
 ## v10.84.84 — Analytics dice qué cuenta y de qué periodo: un solo ingreso, el periodo a la vista y la comparación justa — 13-oct-2026
 
