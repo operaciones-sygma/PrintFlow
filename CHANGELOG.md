@@ -58,10 +58,16 @@ app real contra la base ya migrada (va con el despliegue de la noche).
 **Para Marcelo / Lupita:** al capturar, la categoría sale puesta por el nombre del trabajo («La sugiere el nombre del trabajo; si no es,
 cámbiala»); si el nombre es nuevo, hay que elegirla. En Analytics, «Ingreso por categoría» reemplaza a «Productos por ingreso».
 
-**En producción: PENDIENTE.** La pantalla está en la rama `v10.84.91-categorias` (sin subir: sin la columna en la base, guardar fallaría).
-Falta, de noche y con el OK de Marcelo (la 91 y la 91b toman un candado exclusivo sobre `orders` unos segundos): el ensayo (C1 a C9, con
-C8 «como Karla, editar y crear con categoría» y C9 «qué OC cambian de total»), los acuses de Almacén y del Cotizador, aplicar la 91 y luego
-la 91b, sus definiciones vivas; después, la rama a `main` con su candado (ya con la tanda `categorias`).
+**La base, APLICADA** (13-oct, ~17:27, con el OK de Marcelo: `v10_84_91_categorias` 20261013232735, su definición viva 20261013232736
+—`categoria_sugerida`, `categoria_por_omision`, `log_order_field_changes`— y, aparte, `v10_84_91b_sin_atrasada` 20261013232737). Antes,
+el ensayo (la 91 y la 91b en una transacción que termina en RAISE): 786 órdenes clasificadas (las vivas: formas 221, etiquetas 184,
+folletos 108, papelería 68, POP 52, lonas 37, cuponeras 33, otro 27, libros 17, invitaciones 17, libretas 7, empaques 7, calendarios 3;
+sin categoría sólo las 200 ventas de inventario), las 37 «ATRASADA» limpias sin marcarlas «editadas después de facturar» (3 ya lo estaban)
+y su antes en el log y en el audit, el CHECK que frena una inventada, el disparador que sugiere sin pisar una puesta, Karla guarda y crea con
+categoría (el `GRANT UPDATE (categoria)`), ninguna OC cambia de total, y la transacción entera en 0.47-0.59 s (el candado exclusivo de
+`orders` dura menos de un segundo: se aplicó de tarde). Una falla del ensayo fue de la prueba (C7 concatenaba un campo que ese audit no
+lleva). Acuses: Almacén (sus dos vistas leen `orders` sin `o.*`; no escribe `orders`), el Cotizador (revisado su código: no toca `orders`;
+sin sesión abierta) y CobranzaFlow (visto bueno). Contra la base ya migrada, la tanda `categorias` 10 de 10.
 
 ## v10.84.92 — Quién paga, a la vista en el plan matriz (el caso Hotsson) — 13-oct-2026
 
