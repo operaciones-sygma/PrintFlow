@@ -5884,7 +5884,8 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     && !mixedPools && !mixedClientsNoPool && !mixedPooledAndNonPooled && validPayments;
 
   const submit = async()=>{
-    if (!canSubmit) return;
+    if (!canSubmit || busyRef.current) return;
+    busyRef.current = true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
     setBusy(true);
     try {
       // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
@@ -5911,6 +5912,7 @@ function BulkSellModal({products, userLogin, onSuccess, onClose, showToast}) {
     } catch(e) {
       showToast("❌ "+(e?.message||"error desconocido"), "error");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -7780,11 +7782,12 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
         <button onClick={async()=>{
           // v10.49.2 fix#4 — try/finally resetea busy si onCapture lanza (red, RLS, etc.)
-          if(!validPrice||busy)return;
+          if(!validPrice||busy||busyRef.current)return;
+          busyRef.current=true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
           setBusy(true);
           try{await onCapture(numPrice)}
           catch(e){console.error("[PriceCaptureModal onCapture]:",e)}
-          finally{setBusy(false)}
+          finally{busyRef.current=false;setBusy(false)}
         }}
           disabled={!validPrice||busy}
           style={{...bt(C.ok),flex:2,justifyContent:"center",opacity:(!validPrice||busy)?0.5:1,cursor:(!validPrice||busy)?"not-allowed":"pointer"}}>
@@ -7794,11 +7797,12 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 
       <div style={{marginTop:14,paddingTop:14,borderTop:"0.5px solid "+C.bd}}>
         <button onClick={async()=>{
-          if(busy)return;
+          if(busy||busyRef.current)return;
+          busyRef.current=true;
           setBusy(true);
           try{await onSkip()}
           catch(e){console.error("[PriceCaptureModal onSkip]:",e)}
-          finally{setBusy(false)}
+          finally{busyRef.current=false;setBusy(false)}
         }} disabled={busy} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:"1px dashed "+C.t3,background:"transparent",color:C.t2,cursor:busy?"not-allowed":"pointer",fontSize:12,fontFamily:"'Geist',sans-serif"}}>
           <FastForwardIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Sin precio, continuar a asignar folio <span style={{fontSize:10,opacity:0.7}}>(precio se agregará después)</span>
         </button>
@@ -10331,6 +10335,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   //   Si mientras se capturaba se emitió una por adelantado del mismo importe, se vuelve a leer y se ofrece ligarla.
   const tratar=r=>{ if(!r||!r.error)return; setErr(r.error); if(r.codigo==="adelantada"){setConfirming(false);setEmitirOtro(false);setCandKey(k=>k+1)} };
   const handleConfirm=async()=>{
+    if(busyRef.current)return;busyRef.current=true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
     setBusy(true);setErr("");
     try{
       // v10.84.70 (segunda revisión) — lo capturado viaja como «sin cobrar»: App lo anota en la orden y lo dice al terminar
@@ -10381,7 +10386,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
       console.error("[InvoiceModal] confirmar:",e);
       setErr("No se pudo terminar ("+(e?.message||"error desconocido")+"). Lo capturado sigue aquí.");
     }finally{
-      setBusy(false);
+      busyRef.current=false;setBusy(false);
     }
   };
 
@@ -11011,6 +11016,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   };
 
   const handleConfirm=async()=>{
+    if(busyRef.current)return;busyRef.current=true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
     setBusy(true);setErr("");
     try{
       // v10.57.0 — Multi-pay refs si paid/partial
@@ -11023,7 +11029,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null,billTo);
       }
     }finally{
-      setBusy(false);
+      busyRef.current=false;setBusy(false);
     }
   };
 
@@ -11210,8 +11216,10 @@ function DeliverOnlyModal({order, onConfirm, onClose}) {
   const remaining = totalDisplay - paymentAmount;
 
   const handleConfirm = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;   // v10.84.90 — ocupado DESDE EL CLIC (la ref, no el efecto: Esc en el hueco preguntaba o cerraba mientras guardaba; folio/inv-29)
     setBusy(true);
-    try { await onConfirm(); } finally { setBusy(false); }
+    try { await onConfirm(); } finally { busyRef.current = false; setBusy(false); }
   };
 
   // v10.58.15 — role=dialog para accessibility

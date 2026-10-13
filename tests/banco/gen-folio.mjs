@@ -63,6 +63,8 @@ function BillToSection({ onChange }) { return <div style={{ padding: 8, fontSize
 const StageLbl = ({ stage }) => <b>{stage}</b>;`,
   fnBlock("ConfirmModal"), fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"),
   fnBlock("MultiPaymentPicker"), fnBlock("InvoiceModal"), fnBlock("PreInvoiceModal"),
+  // v10.84.90 — «Confirmar entrega» y «Capturar precio» (el mismo «ocupado desde el clic» que asignar el folio)
+  fnBlock("DeliverOnlyModal"), fnBlock("PriceCaptureModal"),
   `const ORDER = { id: "o1", production_number: "P-0600", client: "PORTLAND STUDIO", client_id: "c1", product_type: INCOMPLETO ? "" : "Etiquetas",
   product: "Etiquetas colgantes", quantity: 5000, price: PRECIO0 ? 0 : (MAQUILA ? null : 56900), maq_price: MAQUILA ? 12000 : null,
   order_type: MAQUILA ? "maquila" : "normal", stage: "salidas", source: "admin", created_by: "secretaria" };
@@ -79,10 +81,16 @@ function Banco() {
   return <div style={{ padding: 20, fontFamily: "'Geist',sans-serif", background: C.canvas, minHeight: "100vh" }}>
     <button id="abrir-inv" onClick={() => setM("inv")}>inv</button>
     <button id="abrir-pre" onClick={() => setM("pre")}>pre</button>
+    <button id="abrir-ent" onClick={() => setM("ent")}>ent</button>
+    <button id="abrir-precio" onClick={() => setM("precio")}>precio</button>
     <pre id="log">{log.join("\\n")}</pre>
     {m === "inv" && <InvoiceModal order={ORDER} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }} />}
+    {m === "ent" && <DeliverOnlyModal order={{ ...ORDER, invoice_folio: "F-9001", invoice_type: "factura" }} onConfirm={async () => { L("ent:confirm"); await new Promise(r => setTimeout(r, 150)); }}
+      onClose={() => { L("ent:cerrado"); setM(null); }} />}
+    {m === "precio" && <PriceCaptureModal order={ORDER} onCapture={async v => { L("precio:captura " + v); await new Promise(r => setTimeout(r, 150)); }}
+      onSkip={async () => { L("precio:omitir"); await new Promise(r => setTimeout(r, 150)); }} onClose={() => { L("precio:cerrado"); setM(null); }} />}
   </div>;
 }
 createRoot(document.getElementById("root")).render(<Banco />);`,

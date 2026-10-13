@@ -1026,6 +1026,83 @@ await caso("inv-128 tras quitar el pago 1, el foco sigue en la ventana", "", asy
   ok("inv-128 al quitar el pago 1, el foco va al método del pago que queda", f.radio && f.grupo === "Pago 1", JSON.stringify(f));
 });
 
+// ── v10.84.90 — OCUPADO DESDE EL CLIC (el candado vio inv-29 fallar con la máquina cargada: la ref de «ocupado» la ponía un efecto,
+//   DESPUÉS de pintar). Aquí el clic y la tecla (o dos clics) van en el MISMO instante, antes de que React vuelva a pintar: es el hueco,
+//   sin depender de la carga. Vuelta 1: escritas ANTES del arreglo.
+const enElMismoInstante = (loc, que) => loc.evaluate((b, q) => { b.click();
+  if (q === "esc") document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); else b.click(); }, que);
+const preguntaCerrar = p => p.getByRole("dialog", { name: /Cerrar sin/ }).count();
+async function hastaLaVistaPrevia(p) { await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p); }
+async function preHastaConfirmar(p) { await pre(p); await p.getByRole("button", { name: "Factura", exact: true }).click(); await espera(p);
+  await p.getByLabel("Cliente paga adelantado").check(); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p); }
+await caso("inv-129 Esc en el mismo instante del clic en «Asignar»", "", async p => {
+  await hastaLaVistaPrevia(p); await enElMismoInstante(final(p), "esc"); await espera(p, 600);
+  const cerr = await cuenta(p, "inv:cerrado"), preg = await preguntaCerrar(p), conf = await cuenta(p, "inv:confirm");
+  ok("inv-129 Esc en el mismo instante del clic en «Asignar»: ni pregunta ni cierra, y asigna una vez", cerr === 0 && preg === 0 && conf === 1, `cerrado ${cerr} · pregunta ${preg} · asignaciones ${conf}`);
+});
+await caso("inv-130 dos clics en el mismo instante en «Asignar»", "", async p => {
+  await hastaLaVistaPrevia(p); await enElMismoInstante(final(p), "dos"); await espera(p, 600);
+  ok("inv-130 dos clics en el mismo instante en «Asignar»: una sola asignación", (await cuenta(p, "inv:confirm")) === 1, "asignaciones " + await cuenta(p, "inv:confirm"));
+});
+await caso("pre-13 Esc en el mismo instante del clic en «Confirmar folio»", "", async p => {
+  await preHastaConfirmar(p); await enElMismoInstante(p.getByRole("button", { name: "Confirmar folio" }), "esc"); await espera(p, 600);
+  const cerr = await cuenta(p, "pre:cerrado"), preg = await preguntaCerrar(p), conf = await cuenta(p, "pre:confirm");
+  ok("pre-13 folio anticipado: Esc en el mismo instante del clic en «Confirmar folio»: ni pregunta ni cierra", cerr === 0 && preg === 0 && conf === 1, `cerrado ${cerr} · pregunta ${preg} · veces ${conf}`);
+});
+await caso("pre-14 dos clics en el mismo instante en «Confirmar folio»", "", async p => {
+  await preHastaConfirmar(p); await enElMismoInstante(p.getByRole("button", { name: "Confirmar folio" }), "dos"); await espera(p, 600);
+  ok("pre-14 folio anticipado: dos clics en el mismo instante: una sola vez", (await cuenta(p, "pre:confirm")) === 1, "veces " + await cuenta(p, "pre:confirm"));
+});
+await caso("ent-01 «Confirmar Entrega»: Esc en el mismo instante no cierra mientras entrega", "", async p => {
+  await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
+  await enElMismoInstante(p.getByRole("button", { name: /Confirmar Entrega/ }), "esc"); await espera(p, 600);
+  const cerr = await cuenta(p, "ent:cerrado"), conf = await cuenta(p, "ent:confirm");
+  ok("ent-01 «Confirmar Entrega»: Esc en el mismo instante no cierra mientras entrega", cerr === 0 && conf === 1, `cerrado ${cerr} · entregas ${conf}`);
+});
+await caso("ent-02 «Confirmar Entrega»: dos clics en el mismo instante, una entrega", "", async p => {
+  await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
+  await enElMismoInstante(p.getByRole("button", { name: /Confirmar Entrega/ }), "dos"); await espera(p, 600);
+  ok("ent-02 «Confirmar Entrega»: dos clics en el mismo instante, una entrega", (await cuenta(p, "ent:confirm")) === 1, "entregas " + await cuenta(p, "ent:confirm"));
+});
+await caso("prc-01 «Capturar precio»: Esc en el mismo instante no cierra; dos clics, una captura", "", async p => {
+  await p.click("#abrir-precio"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
+  await p.getByPlaceholder("0.00").fill("1500"); await espera(p, 150);
+  await enElMismoInstante(p.getByRole("button", { name: /Capturar y continuar/ }), "esc"); await espera(p, 600);
+  const cerr = await cuenta(p, "precio:cerrado"), cap = await cuenta(p, "precio:captura");
+  await enElMismoInstante(p.getByRole("button", { name: /Capturar y continuar/ }), "dos"); await espera(p, 600);
+  const cap2 = await cuenta(p, "precio:captura") - cap;
+  ok("prc-01 «Capturar precio»: Esc en el mismo instante no cierra; dos clics, una captura", cerr === 0 && cap === 1 && cap2 === 1, `cerrado ${cerr} · capturas ${cap} · con dos clics ${cap2}`);
+});
+await caso("prc-02 «Sin precio, continuar»: dos clics en el mismo instante, una vez", "", async p => {
+  await p.click("#abrir-precio"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
+  await enElMismoInstante(p.getByRole("button", { name: /Sin precio, continuar/ }), "dos"); await espera(p, 600);
+  ok("prc-02 «Sin precio, continuar»: dos clics en el mismo instante, una vez", (await cuenta(p, "precio:omitir")) === 1, "veces " + await cuenta(p, "precio:omitir"));
+});
+
+// vuelta 2 (por donde no se diseñó): «ocupado» se suelta al terminar, también si la base falla: se reintenta y Esc vuelve a preguntar
+await caso("inv-131 la base rechaza: se puede reintentar y Esc vuelve a preguntar", "falla=1", async p => {
+  await hastaLaVistaPrevia(p); await final(p).click(); await espera(p, 600);
+  const err = await ve(p, /No se asignó el folio/);
+  await final(p).click(); await espera(p, 600);
+  const veces = await cuenta(p, "inv:confirm");
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const preg = await preguntaCerrar(p);
+  ok("inv-131 la base rechaza: se puede reintentar y Esc vuelve a preguntar (no se queda «ocupado»)", err && veces === 2 && preg === 1, `error a la vista ${err} · intentos ${veces} · Esc pregunta ${preg}`);
+});
+await caso("pre-15 folio anticipado: la base rechaza; se reintenta", "falla=1", async p => {
+  await preHastaConfirmar(p); await p.getByRole("button", { name: "Confirmar folio" }).click(); await espera(p, 600);
+  const b = p.getByRole("button", { name: "Confirmar folio" }), hay = (await b.count()) > 0 && await b.isEnabled();
+  if (hay) { await b.click(); await espera(p, 600); }
+  ok("pre-15 folio anticipado: la base rechaza; se reintenta (no se queda «ocupado»)", hay && (await cuenta(p, "pre:confirm")) === 2, `botón habilitado ${hay} · intentos ${await cuenta(p, "pre:confirm")}`);
+});
+await caso("ent-03 «Confirmar Entrega»: al terminar, Esc cierra (no se queda «ocupado»)", "", async p => {
+  await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
+  await p.getByRole("button", { name: /Confirmar Entrega/ }).click(); await espera(p, 600);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("ent-03 «Confirmar Entrega»: al terminar, Esc cierra (no se queda «ocupado»)", (await cuenta(p, "ent:confirm")) === 1 && (await cuenta(p, "ent:cerrado")) === 1,
+    `entregas ${await cuenta(p, "ent:confirm")} · cerrado ${await cuenta(p, "ent:cerrado")}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

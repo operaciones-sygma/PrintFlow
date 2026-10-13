@@ -12,7 +12,7 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
-## v10.84.90 — El folio anticipado y «Facturar por partes», una u otra por orden (y el candado del anticipo en «Dividir», ensayado) — 13-oct-2026
+## v10.84.90 — El folio anticipado y «Facturar por partes», una u otra por orden; «ocupado» desde el clic en cinco diálogos de dinero (y el candado del anticipo en «Dividir», ensayado) — 13-oct-2026
 
 **Qué pasaba.** Desde v10.84.89 una orden se factura por partes antes de Salidas, y el botón «Asignar folio anticipado» seguía saliendo
 en la ficha y en el detalle de una orden ya facturada por partes (o en el plan matriz de su OC, o agrupada): la base lo rechazaba
@@ -26,6 +26,15 @@ el plan matriz desde v10.84.89.
 patas (regla 17): por partes, plan matriz, agrupada, y la que no se sabe si está facturada. Detrás del botón, `handleAction` dice lo
 mismo en palabras si la acción llega por otra puerta (folio anticipado y «Facturar por partes»): «P-… ya está facturada por partes: lo
 que falta se factura con «Facturar siguiente parte»» (o «en el plan matriz de su OC», o «en la factura agrupada F-…»).
+
+**Lo que encontró el candado: «ocupado» llegaba tarde** (`folio/inv-29` falló con 4 tandas en paralelo; sola pasaba, y en una prueba
+de dinero «si falla a veces, eso es el bug»). Cinco diálogos marcaban su `busyRef` con un `useEffect`, o sea DESPUÉS de pintar: entre el
+clic en «Asignar» y ese repintado, Esc preguntaba «¿Cerrar sin asignar?» mientras se guardaba (en «Confirmar Entrega» y «Capturar
+precio», CERRABA el diálogo a media operación) y un segundo clic volvía a entrar. Con el clic y la tecla en el mismo instante (antes de
+que React repinte) se reproduce siempre: **dos clics en «Asignar» mandaban DOS asignaciones**, igual el folio anticipado, la entrega y
+la captura de precio. Ahora la ref se pone en el mismo clic y nadie entra dos veces: `InvoiceModal` (asignar folio), `PreInvoiceModal`
+(folio anticipado), `DeliverOnlyModal` (confirmar entrega), `PriceCaptureModal` (capturar precio y «Sin precio, continuar») y
+`BulkSellModal` (venta de inventario en bloque).
 
 **La base: ensayada, NO aplicada.** La migración `docs/migrations/v10.84.90_candado_del_anticipo_en_dividir.sql` (revisada por
 CobranzaFlow) pone en «Dividir» el mismo candado que las otras dos puertas, con el mismo predicado (sin orden, sin ligar, viva, del
@@ -43,8 +52,13 @@ automático de esta sesión no dejó escribir en la base de producción; se apli
 **Cómo se probó** (vueltas): **vuelta 1**, `tests/romper/anticipos.mjs` ant-10 y ant-11 escritas antes del arreglo: contra v10.84.89,
 ant-11 fallaba (ofrecía el folio anticipado en los cuatro casos: por partes, plan matriz, agrupada y sin saberlo) y ant-10 pasaba (el
 botón sigue para una orden en producción sin facturar, y no en Salidas ni con folio). **Corrida doble**: antes 10 de 11, ahora 11 de 11,
-sin regresiones. La base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón:
-el botón ya no sale).
+sin regresiones. **«Ocupado» desde el clic**: el banco de folio monta también «Confirmar entrega» y «Capturar precio»; vuelta 1 (antes
+del arreglo) 8 de 8 fallaban (inv-129 y 130, pre-13 y 14, ent-01 y 02, prc-01 y 02: preguntaba, cerraba o mandaba dos veces); con el
+arreglo, 8 de 8; vuelta 2 (al fallar la base se reintenta y Esc vuelve a preguntar; al terminar, Esc cierra: inv-131, pre-15, ent-03),
+3 de 3; sabotajes: quitar la ref de `InvoiceModal` lo cazan inv-129 y 130, quitar el candado de reentrada de la entrega lo caza ent-02.
+La inestable del primer candado (`ctp-db-placas-unicas`, «fetch failed» de la API con 4 tandas) sola pasa: era la red, revisada. La
+base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón: el botón ya no sale)
+y `BulkSellModal` (sin banco: el mismo arreglo, letra por letra, que los otros cuatro).
 
 ## v10.84.89 — Ligar una PARTE a una factura que ya existe: en el plan de la OC y antes de Salidas — 13-oct-2026
 
