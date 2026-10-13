@@ -110,7 +110,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1339 pruebas, ~10 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1345 pruebas, ~10 min en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -180,7 +180,10 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.87 (13-oct, ~06:47; READY `dpl_4JxCji5vx6dnqnw8cWYfuihB4fWh`, commits `cc7baf0` (v10.84.86) y `8426846`; vuelta atrás:
+- **LIVE:** v10.84.88 (13-oct, ~07:26; READY `dpl_2DcHS8KJ5WjPTDLFRiDp8P2Zv8dF`, commit `d685294`; vuelta atrás: promover
+  `dpl_Bdbt2wszqR2STA9tSGpNdxoVqBiX` (el código de v10.84.87) o `git revert d685294`; la base no cambió; 1345 pruebas). v10.84.88: sin chips
+  que nunca cuentan en «Mis Pendientes» y las guías de Gerardo con sus botones (tanda nueva `chips`, sin navegador).
+  v10.84.87 (13-oct, ~06:47; READY `dpl_4JxCji5vx6dnqnw8cWYfuihB4fWh`, commits `cc7baf0` (v10.84.86) y `8426846`; vuelta atrás:
   promover `dpl_utDqiGqNHEeHLXoFLzx484DTxwBf` (el código de v10.84.85) o `git revert 8426846 cc7baf0`; la base no cambió; 1339 pruebas).
   v10.84.87: **«Mis Pendientes»** (su critique, revisor independiente **17/40**, snapshot `.impeccable/critique/2026-10-13T12-33-38Z__…`):
   🔑 `StageFlowButtons` pone `escudoDeClics` antes de cada acción (en vivo, un doble clic en «Validar Producción» de P-0633 validó también

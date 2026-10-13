@@ -34,6 +34,10 @@ entregas); el supuesto de la prueba estaba mal y se cambió por «ningún chip m
 En salida ×2); con el cambio, 6 de 6. También un supuesto mío en esa prueba (la orden de mentira no hacía contar «Retrasos» ni
 «Estancadas», que no dependen de la etapa: se revisan sólo los de etapa).
 
+**En producción** (13-oct, ~07:26): READY `dpl_2DcHS8KJ5WjPTDLFRiDp8P2Zv8dF` (commit `d685294`), candado 1345 de 1345 al primer intento.
+Vuelta atrás: promover `dpl_Bdbt2wszqR2STA9tSGpNdxoVqBiX` (el código de v10.84.87) o `git revert d685294`. Revisado contra
+produccion.sygma.mx sin escribir: el código servido trae las guías nuevas, y `npm run recorrido` (8 roles): nada truena.
+
 ## v10.84.87 — «Mis Pendientes»: el doble clic ya no mueve otra orden, y sin leer no dice «Sin pendientes» — 13-oct-2026
 
 **Qué pasaba** (la critique de «Mis Pendientes», revisor independiente, **17/40**; snapshot
