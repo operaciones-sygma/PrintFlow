@@ -77,6 +77,9 @@ y el orden (lo más usado, la imagen, a 934 px en la laptop): recomendado un sol
 «Para producción» junto al precio; (2) Replicar con otra cantidad: recomendado no copiar el precio y decirlo bajo Precio. Con esta tercera
 pasada la forma queda CERRADA (la regla: 35 sin P1 o 3 pasadas).
 
+**En producción** (12-oct, ~20:10): READY `dpl_6eqAswERNucuxWEVXCn5tSJoqqvE` (commits `e472807` y `f6fb96d`, éste sólo el candado), candado 1231 de 1231. Antes, dos intentos frenaron por `net::ERR_NO_BUFFER_SPACE` con las 20 tandas a la vez (folio/inv-58 y detalle/det-134, sin segunda oportunidad; solas pasan: folio 143 de 143): desde `f6fb96d` las tandas con banco van de a 7. En el tercero, una INESTABLE por lo mismo (`tablero/tab-67`), revisada y marcada. Vuelta atrás:
+promover `dpl_CyKMYt7Y56LrpyYWc7RpT5dZRhBp` (el código de v10.84.80) o `git revert e472807`. Revisado contra produccion.sygma.mx sin escribir (la cuenta de pruebas; escrituras cortadas, o simuladas sin salir a la red): `.banco-revisor-orden/medir-81.mjs` 8 de 8 y `medir-81-oc.mjs` 3 de 3 (el renglón «P-9999 creada» a la vista en cuanto sale a 1366 y a 683, el foco en el cliente, el anillo en «Subir 1ra» y en la fecha, el RFC de GODI con candado en la forma y en «Crear OC», Esc en «¿Salir sin guardar?»), y `npm run recorrido` (8 roles, 94 pasos): nada truena.
+
 ## v10.84.80 — La forma de la orden: el cliente no se mezcla, se queda para capturar otra, y sirve con teclado — 12-oct-2026
 
 **Qué pasaba** (la segunda revisión independiente de la forma, 12-oct en la tarde: 28/40, un P1 y cuatro P2; snapshot
