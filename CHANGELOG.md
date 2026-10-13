@@ -53,6 +53,12 @@ clic de Gerardo en «Validar Producción» intenta UNA escritura (cortada); el m
   se dejó como estaba a propósito: ¿la ficha toma el criterio del detalle (una acción rellena en su tinta, las demás teñidas)?
 - **¿La ficha pregunta antes de «Cliente Aprobó» y «Pide Cambios»**, como el detalle (v10.84.55 decidió que los botones del tablero no)?
 
+**En producción** (13-oct, ~06:47, con v10.84.86): READY `dpl_4JxCji5vx6dnqnw8cWYfuihB4fWh` (commits `cc7baf0` y `8426846`), candado
+1339 de 1339 al primer intento. Vuelta atrás: promover `dpl_utDqiGqNHEeHLXoFLzx484DTxwBf` (el código de v10.84.85) o
+`git revert 8426846 cc7baf0`. Revisado contra produccion.sygma.mx sin escribir: `medir-87` 4 de 4 (el doble clic de Gerardo intenta una
+escritura; el menú de Karla, 10 como su título), `lectura-falla` B 3 de 3, y `medir-84` 11 de 11 («Venta de inventario» desplegada por
+su folio: «F-153 · OC-0948»).
+
 ## v10.84.86 — Analytics: la venta de inventario se nombra por su folio, no por su uuid — 13-oct-2026
 
 **Qué pasaba** (lo encontró la revisión de v10.84.85 en producción, no el banco): al desplegar «Venta de inventario», sus órdenes salían
