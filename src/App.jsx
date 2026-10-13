@@ -14411,7 +14411,10 @@ function EsperaGroupBatchBtn({count,onReactivate}){
 //   juegos de acciones»). «Liberar folio cancelado» se queda en el detalle: necesita preguntarle a la base orden por orden.
 function accionesDelDetalle(o,role){
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
-  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!o.return_covered_by_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received";
+  // v10.84.90 — las otras tres patas (regla 17): una orden ya facturada por partes (desde v10.84.89 también antes de Salidas), en el plan
+  //   matriz o agrupada, o sin saber si lo está, no ofrece el folio anticipado (la base lo rechazaba; el botón salía igual)
+  const canPreInvoice=(role==="karla"||role==="admin")&&!o.invoice_folio&&!o.return_covered_by_folio&&!isFinal&&o.stage!=="salidas"&&o.stage!=="maq_received"
+    &&!o.has_splits&&!o.has_matrix_lines&&!o.grouped_invoice_folio&&!o.fiscal_desconocido;
   const canDevolverSaldo=(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled");
   const canDeshacerCancelacion=role==="admin"&&o.stage?.includes("cancelled")&&!!o.cancelled_at;
   return {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:!!canDeshacerCancelacion};
@@ -21908,6 +21911,8 @@ export default function PrintFlow() {
       // Gate: alineado con assign_invoice_splits backend (admin/karla only)
       if(user!=="admin"&&user!=="karla"){showToast("❌ Solo admin o Karla pueden facturar por partes.","error");return}
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado.","error");return}
+      // v10.84.90 — las otras tres patas (la base también lo frena: «ya tiene splits asignados activos»), en palabras
+      if(o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio){showToast("❌ "+(o.production_number||"Esta orden")+" ya está facturada "+(o.has_splits?"por partes: lo que falta se factura con «Facturar siguiente parte»":o.has_matrix_lines?"en el plan matriz de su OC":"en la factura agrupada "+o.grouped_invoice_folio)+".","error");return}
       if(o.return_covered_by_folio){showToast("❌ Re-trabajo cubierto por "+o.return_covered_by_folio+" — entrégalo con 'Entregar (cubierta)', no se factura por partes (evita doble cobro).","error");return}
       // v10.84.89 — antes de Salidas también (F-90 de P-0544, F-140 de P-0631): la ventana va en folios anticipados y la orden se
       //   entrega en Salidas; assign_invoice_splits lo acepta pre-asignado en toda etapa que no sea final. Antes: «Solo en salidas».
@@ -21976,6 +21981,8 @@ export default function PrintFlow() {
       // v10.58.5 — Gate via ACTION_ROLES (antes era check inline string-comparado).
       if(!canExecuteAction("pre_invoice",o,user,userLogin)){showToast(actionDeniedToast("pre_invoice",o,user,userLogin),"error");return}
       if(o.invoice_folio){showToast("❌ Esta orden ya tiene folio "+o.invoice_folio+" asignado","error");return}
+      // v10.84.90 — las otras tres patas: el folio anticipado es para la orden ENTERA; la que ya se factura por partes sigue por partes
+      if(o.has_splits||o.has_matrix_lines||o.grouped_invoice_folio){showToast("❌ "+(o.production_number||"Esta orden")+" ya está facturada "+(o.has_splits?"por partes: lo que falta se factura con «Facturar siguiente parte»":o.has_matrix_lines?"en el plan matriz de su OC":"en la factura agrupada "+o.grouped_invoice_folio)+".","error");return}
       if(o.return_covered_by_folio){showToast("❌ Re-trabajo cubierto por "+o.return_covered_by_folio+" — no se le asigna folio (evita doble cobro). Usa 'Entregar (cubierta)'.","error");return}
       const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
       if(isFinal){showToast("❌ No se puede facturar anticipado en stage final: "+o.stage,"error");return}

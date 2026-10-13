@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.90 — El folio anticipado y «Facturar por partes», una u otra por orden (y el candado del anticipo en «Dividir», ensayado) — 13-oct-2026
+
+**Qué pasaba.** Desde v10.84.89 una orden se factura por partes antes de Salidas, y el botón «Asignar folio anticipado» seguía saliendo
+en la ficha y en el detalle de una orden ya facturada por partes (o en el plan matriz de su OC, o agrupada): la base lo rechazaba
+(«ya tiene splits asignados activos») después de que Karla llenara la ventana. Son una u otra por orden: el folio anticipado es para la
+orden ENTERA; la que ya va por partes sigue con «Facturar siguiente parte». Aparte, la revisión de CobranzaFlow del 13-oct encontró la
+otra puerta de la OC sin el candado del anticipo: «Asignar folio» → «Dividir» (`assign_folios_split_oc`) acuñaba un documento nuevo por
+justo el importe de una factura hecha sin orden del mismo cliente (dos CFDI por el mismo trabajo); «Simple» lo tiene desde F-111/F-115 y
+el plan matriz desde v10.84.89.
+
+**Qué se cambió en la pantalla** (`src/App.jsx`): `canPreInvoice` (la misma definición para la ficha y el detalle) cuenta las otras tres
+patas (regla 17): por partes, plan matriz, agrupada, y la que no se sabe si está facturada. Detrás del botón, `handleAction` dice lo
+mismo en palabras si la acción llega por otra puerta (folio anticipado y «Facturar por partes»): «P-… ya está facturada por partes: lo
+que falta se factura con «Facturar siguiente parte»» (o «en el plan matriz de su OC», o «en la factura agrupada F-…»).
+
+**La base: ensayada, NO aplicada.** La migración `docs/migrations/v10.84.90_candado_del_anticipo_en_dividir.sql` (revisada por
+CobranzaFlow) pone en «Dividir» el mismo candado que las otras dos puertas, con el mismo predicado (sin orden, sin ligar, viva, del
+cliente del grupo o del que lo absorbió, del mismo tipo, ±$0.02) y sólo con el emisor prendido. Ensayo contra producción (todo dentro de
+una transacción que termina en RAISE; OC-0960 de PORTLAND por «Dividir» como sesión de Karla; F-143 de $3,066.78 sin ligar): **frena** un
+grupo de justo $3,066.78 con «este cliente ya tiene F-143 hecha sin orden… lígala (la OC entera, con «Asignar folio» → «Simple»; por
+pedazos, en el plan matriz…)» sin mover el contador (158 → 158) ni dejar grupos; **pasa** Dividir sin coincidencia (F-159 y F-160), una
+remisión sin orden contra una factura del mismo importe con IVA y su espejo (los dos casos que pidió CobranzaFlow), el emisor apagado
+(también pedido), a 3 centavos (a 2 frena) y contra una ya ligada (F-44); al final nada quedó cambiado. Dos fallas del ensayo fueron
+del montaje, no del candado: apagar el emisor pide apagar antes el timbrado (el interlock F1) y un folio transcrito de F-990001 lo frena
+el guardia del salto del contador. Huella nueva de la función: `4466d84d6f7d032fad24c4943dbd6792`. **Falta aplicarla**: el modo
+automático de esta sesión no dejó escribir en la base de producción; se aplica con el OK de Marcelo (con `aplicar90`, que la registra en
+`schema_migrations` y deja su definición viva).
+
+**Cómo se probó** (vueltas): **vuelta 1**, `tests/romper/anticipos.mjs` ant-10 y ant-11 escritas antes del arreglo: contra v10.84.89,
+ant-11 fallaba (ofrecía el folio anticipado en los cuatro casos: por partes, plan matriz, agrupada y sin saberlo) y ant-10 pasaba (el
+botón sigue para una orden en producción sin facturar, y no en Salidas ni con folio). **Corrida doble**: antes 10 de 11, ahora 11 de 11,
+sin regresiones. La base: el ensayo de arriba (9 casos). **Sin prueba propia**: los avisos de `handleAction` (la red detrás del botón:
+el botón ya no sale).
+
 ## v10.84.89 — Ligar una PARTE a una factura que ya existe: en el plan de la OC y antes de Salidas — 13-oct-2026
 
 **Qué pasaba** (Karla, 13-oct: *«que la OC funcione como lo hace facturar por partes, donde hay una opción que dice ya hay una

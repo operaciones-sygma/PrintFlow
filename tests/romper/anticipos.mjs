@@ -38,6 +38,21 @@ ok("ant-08", anticiposQuePreguntar([], "factura").length === 0 && anticiposQuePr
 const dos = [c("F-135", "factura", 8630.4, true), c("F-136", "factura", 8630.4, true)];
 ok("ant-09", facturaDelMismoImporte(dos, "factura")?.doc_number === "F-135", "con dos del mismo importe, la primera (la base las da con la más vieja primero)", String(facturaDelMismoImporte(dos, "factura")?.doc_number));
 
+// ── v10.84.89 — el folio anticipado y «Facturar por partes» antes de Salidas son UNA u OTRA por orden: una orden ya facturada por
+// partes (o en el plan matriz, o agrupada) no ofrece «Asignar folio anticipado» (la base lo rechaza; el botón no debe salir). Se extrae
+// accionesDelDetalle viva (la misma definición que la ficha y el detalle). Vuelta 1: escritas ANTES del arreglo.
+{
+  const { codigo: cod2 } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), ["accionesDelDetalle"]);
+  const { accionesDelDetalle } = new Function(cod2 + "\nreturn { accionesDelDetalle };")();
+  const orden = extra => ({ stage: "in_production", invoice_folio: null, return_covered_by_folio: null, ...extra });
+  const ofrece = o => !!accionesDelDetalle(o, "karla").folioAnticipado;
+  ok("ant-10", ofrece(orden({})) && !ofrece(orden({ stage: "salidas" })) && !ofrece(orden({ invoice_folio: "F-136" })),
+    "el folio anticipado sigue para una orden en producción sin facturar (y no en Salidas ni con folio)", "");
+  const ya = [["por partes", { has_splits: true }], ["en el plan matriz", { has_matrix_lines: true }], ["agrupada", { grouped_invoice_folio: "F-99" }], ["sin saber si está facturada", { fiscal_desconocido: true }]]
+    .filter(([, x]) => ofrece(orden(x))).map(([n]) => n);
+  ok("ant-11", ya.length === 0, "una orden ya facturada por partes, en el plan matriz o agrupada (o sin saberlo) no ofrece «Asignar folio anticipado»", "lo ofrece: " + ya.join(", "));
+}
+
 for (const r of res) console.log(r);
 const mal = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nanticipos: ${res.length - mal} pasan, ${mal} fallan`);
