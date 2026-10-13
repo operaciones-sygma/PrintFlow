@@ -12,6 +12,57 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.91 — La CATEGORÍA del trabajo: de lista cerrada, sugerida por el nombre, obligatoria al capturar; Analytics por categoría — 13-oct-2026
+
+**Qué pasaba** (la critique de Analytics del 12-oct y Marcelo, 12/13-oct: *«Archivos, luego los tipos»*, *«Categoría nueva aparte»*,
+*«si apruebo la lista, apruebo tus recomendaciones»*: obligatoria al capturar, con la sugerencia puesta). «Productos por ingreso» agrupaba
+por el nombre escrito a mano: 596 nombres distintos para 779 órdenes vivas, «Etiquetas», «ETIQUETAS» y «ETIQUETA PLG» eran tres barras,
+y las 8 primeras más «Otros» escondían casi todo. 37 órdenes importadas traían «🔴 ATRASADA · » pegado al nombre y a la descripción.
+
+**La regla, una sola vez** (`src/lib/categorias.js`): 12 categorías + «Otro» con su nombre para la pantalla y las reglas por palabra
+entera (con acentos, en mayúsculas o minúsculas, en orden de prioridad). La base genera su función de las MISMAS reglas
+(`scripts/categorias-sql.mjs`; `scripts/categorias-migracion.mjs` escribe la migración). La venta de inventario («stock») no lleva
+categoría: es un canal, va aparte.
+
+**La base** (`docs/migrations/v10.84.91_categorias.sql` y, aparte y corta, `v10.84.91b_sin_atrasada.sql`; las genera
+`scripts/categorias-migracion.mjs`): `orders.categoria` con su CHECK (las 13 de la lista o nada) y **`GRANT UPDATE (categoria)` a la app**
+(la app edita `orders` columna por columna; sin ese permiso, en cuanto la pantalla mandara la categoría fallaría TODA edición de una orden
+y también crearla: lo encontró la revisión antes del ensayo); `categoria_sugerida` (generada de las mismas reglas: hoy dicen lo mismo
+para los 596 nombres); lo que llega sin categoría por otras puertas toma la sugerida (disparador, nunca pisa una puesta); la historia,
+una vez (754 de 779 vivas se clasifican solas, 96.8 %; las demás «otro»); el log de cambios la registra desde ahí. La 91b quita
+«🔴 ATRASADA · » de las 37 importadas sin marcarlas «editadas después de facturar». Revisado antes del ensayo: ningún disparador de
+`orders` la mira (ni «post-factura», ni «reimprimir», ni inmutabilidad, ni vendedor); el relleno sólo recalcula el total de cada OC
+(hoy una distinta: OC-0456, 0.00 contra 0.00001).
+
+**La pantalla** (`src/App.jsx`):
+- **La forma**: «Categoría *» bajo el tipo. Mientras nadie la elija, la sugiere el nombre del trabajo («La sugiere el nombre del trabajo;
+  si no es, cámbiala»); elegida a mano o traída por «Replicar», el nombre ya no la mueve («Deshacer» la regresa). Un nombre que ninguna
+  regla reconoce la deja por elegir: «Falta la categoría» y el foco va a ella. Al editar, la que coincide con la de su nombre sólo se
+  mueve si el nombre cambia. La venta de inventario no la pide; «Editar Specs» (Pre-prensa) y producción no la ven ni se mueve sola.
+  «Falta el tipo» quedó junto al tipo (con la categoría debajo, el aviso caía bajo ella). Vacía se guarda NULL (la base no acepta «»).
+- **El detalle**: «Categoría» con su nombre («Venta de inventario», «Sin clasificar»); el historial de cambios dice los nombres.
+- **Analytics**: «Ingreso por categoría»: todas las del periodo, por monto; la venta de inventario y «Sin clasificar» en gris y al final;
+  cada una abre sus órdenes con el nombre del trabajo y su cliente. La barra llena es la mayor de todas (la de inventario podía salirse).
+
+**Cómo se probó** (vueltas): **vuelta 1**, escritas antes del cambio contra v10.84.90: Analytics 17 de 48 fallaban (las de categoría;
+pasaban las de cifras y periodos), la forma 16 de 18 (pasan las que cuidan que «Editar Specs» y Producción no la vean), el detalle 4 de 4;
+`categorias` pasa sus 5 de reglas y falla las 5 de la base (no existe hasta la migración). **Vuelta 2**, con el cambio, las 10 tandas que
+toca (orden, orden-2, detalle, analytics, archivos, archivos-pantalla, cancelar, plan, planta, tablero): 927 de 932; las 5 eran fallas de
+verdad: **«Agregar producto a OC» ya no creaba** (ord-202, 237 y 272: el efecto que re-inicia la forma con lo de la OC corría después de la
+sugerencia y la borraba, y la forma la pedía; ord-328 lo dijo) y la venta de inventario se guardaba con «» (ord-319: ahora NULL desde el
+create de App). Con los arreglos, orden y orden-2 256 de 256. **Sabotajes**, 5 de 5 cazados (sin la sugerida en la OC, no obligatoria, la
+elegida que se mueve, el inventario fuera de su lugar en Analytics, el detalle sin ella). `cat-08` se acotó a la historia (una orden nueva
+de otra puerta con un nombre desconocido se queda «Sin clasificar» a propósito: contada, frenaba todas las subidas). **Sin probar**: la
+app real contra la base ya migrada (va con el despliegue de la noche).
+
+**Para Marcelo / Lupita:** al capturar, la categoría sale puesta por el nombre del trabajo («La sugiere el nombre del trabajo; si no es,
+cámbiala»); si el nombre es nuevo, hay que elegirla. En Analytics, «Ingreso por categoría» reemplaza a «Productos por ingreso».
+
+**En producción: PENDIENTE.** La pantalla está en la rama `v10.84.91-categorias` (sin subir: sin la columna en la base, guardar fallaría).
+Falta, de noche y con el OK de Marcelo (la 91 y la 91b toman un candado exclusivo sobre `orders` unos segundos): el ensayo (C1 a C9, con
+C8 «como Karla, editar y crear con categoría» y C9 «qué OC cambian de total»), los acuses de Almacén y del Cotizador, aplicar la 91 y luego
+la 91b, sus definiciones vivas; después, la rama a `main` con su candado (ya con la tanda `categorias`).
+
 ## v10.84.92 — Quién paga, a la vista en el plan matriz (el caso Hotsson) — 13-oct-2026
 
 **Qué pasaba** (Marcelo, 13-oct, Karla con Genaro: las órdenes de Hotsson, varios productos, van en UNA OC que se factura en 7 facturas

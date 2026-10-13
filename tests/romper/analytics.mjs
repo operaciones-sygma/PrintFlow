@@ -71,20 +71,27 @@ await caso("an-05-la-tendencia-dibuja", "", async p => {
   const bien = sep.monto === 30000 && oct.monto === 28000 && ago.monto === 3000 && sep.alto >= 80 && Math.abs(oct.alto / sep.alto - 28 / 30) < 0.06 && ago.alto < sep.alto * 0.2;
   ok("an-05-la-tendencia-dibuja", bien, `barras: ${JSON.stringify(barras)} (septiembre ${$(30000)} la más alta, ≥ 80 px; octubre al 93 % de ella; agosto chiquita)`);
 });
+// v10.84.91 — por CATEGORÍA (vuelta 1: escritas antes del cambio): las del periodo con su nombre de la lista (no lo escrito a mano), la
+// venta de inventario aparte, sin canceladas ni en producción
 await caso("an-06-productos-del-periodo-y-limpios", "", async p => {
   const filas = await p.locator("[data-producto]").evaluateAll(fs => fs.map(f => ({ t: f.getAttribute("data-producto"), monto: Number(f.getAttribute("data-monto")), n: Number(f.getAttribute("data-n")) })));
   const txt = (await p.locator("[data-productos]").first().innerText()).replace(/\s+/g, " ");
-  const et = filas.find(f => /^etiquetas$/i.test(f.t)) || {};
-  const bien = filas.length === 4 && et.monto === 15000 && et.n === 2 && filas.some(f => f.t === "Venta de inventario" && f.monto === 3000) && filas.some(f => f.t === "FOLLETO AHORRO" && f.monto === 2000)
-    && !/stock|ATRASADA|POP/.test(txt) && !txt.includes($(50000)) && !txt.includes($(30000));
-  ok("an-06-productos-del-periodo-y-limpios", bien, `filas ${JSON.stringify(filas)}; dice «${txt.slice(0, 220)}»`);
+  const de = k => filas.find(f => f.t === k) || {};
+  const bien = filas.length === 4 && de("etiquetas").monto === 15000 && de("etiquetas").n === 2 && de("libros").monto === 8000 && de("inventario").monto === 3000
+    && de("folletos").monto === 2000 && /Ingreso por categoría/i.test(txt) && /Etiquetas y stickers/.test(txt) && /Libros, revistas y manuales/.test(txt)
+    && /Venta de inventario/.test(txt) && /Folletos, trípticos y volantes/.test(txt) && !/stock|ATRASADA|FOLLETO AHORRO|ETIQUETAS\b/.test(txt)
+    && !txt.includes($(50000)) && !txt.includes($(30000));
+  ok("an-06-productos-del-periodo-y-limpios", bien, `filas ${JSON.stringify(filas)}; dice «${txt.slice(0, 260)}»`);
 });
 await caso("an-07-ocho-y-otros", "", async p => {
   await periodo(p, "Todo");
   const filas = await p.locator("[data-producto]").evaluateAll(fs => fs.map(f => ({ t: f.getAttribute("data-producto"), monto: Number(f.getAttribute("data-monto")), n: Number(f.getAttribute("data-n")) })));
-  const otros = filas.find(f => f.t === "otros");
-  ok("an-07-ocho-y-otros", filas.length === 9 && !!otros && otros.monto === 2000 && otros.n === 4 && filas[0].t === "Etiquetas" && filas[0].monto === 29000,
-    `con «Todo»: ${filas.length} filas (deben ser 8 y «Otros»: 4 tipos, ${$(2000)}); la primera ${JSON.stringify(filas[0])} (Etiquetas, ${$(29000)})`);
+  const de = k => filas.find(f => f.t === k) || {};
+  // con «Todo»: etiquetas $29,000 (5), POP $20,000, libros $8,000, folletos $6,500 (3: Folletos, el atrasado y Volantes), inventario $3,000,
+  //   y cinco de $500 (Calendarios, Libretas, Cajas → empaques, Gafetes → papelería, Sellos → otro): 10 renglones, sin «Otros»
+  ok("an-07-ocho-y-otros", filas.length === 10 && !de("otros").t && filas[0].t === "etiquetas" && filas[0].monto === 29000 && de("folletos").monto === 6500 && de("folletos").n === 3
+    && de("otro").monto === 500 && de("papeleria").monto === 500 && de("empaques").monto === 500,
+    `con «Todo»: ${filas.length} renglones ${JSON.stringify(filas.map(f => f.t + ":" + f.monto))}`);
 });
 await caso("an-08-maquinas-con-su-base", "", async p => {
   await pestaña(p, "Máquinas");
@@ -255,34 +262,33 @@ await caso("an-v3-03-anio-nuevo", "", async p => {
 await caso("an-v3-04-llega-una-entrega", "", async p => {
   await p.evaluate(() => window.__agregarEntrega()); await espera(p, 300);
   const ing = await cifra(p, "ingresos");
-  const et = await p.locator('[data-producto="Etiquetas"]').evaluate(f => Number(f.getAttribute("data-monto")));
+  const et = await p.locator('[data-producto="etiquetas"]').evaluate(f => Number(f.getAttribute("data-monto")));
   ok("an-v3-04-llega-una-entrega", ing.includes($(29000)) && /6 entregadas/.test(ing) && et === 16000, `con la pantalla abierta llega una entrega de hoy: ingresos «${ing}» (${$(29000)}, 6), Etiquetas ${et} (16000)`);
 });
 await caso("an-v3-05-tipo-vacio", "modo=sintipo", async p => {
-  const fila = await p.locator('[data-producto="Sin tipo"]').evaluate(f => ({ monto: Number(f.getAttribute("data-monto")), n: Number(f.getAttribute("data-n")) })).catch(() => null);
+  const fila = await p.locator('[data-producto="sin"]').evaluate(f => ({ monto: Number(f.getAttribute("data-monto")), n: Number(f.getAttribute("data-n")) })).catch(() => null);
   const t = await cuerpo(p);
-  ok("an-v3-05-tipo-vacio", !!fila && fila.monto === 1500 && fila.n === 1 && !/undefined|null/.test(t), `una entregada sin tipo: ${fila ? "sale como «Sin tipo» con " + fila.monto : "NO sale"}`);
+  ok("an-v3-05-tipo-vacio", !!fila && fila.monto === 1500 && fila.n === 1 && !/undefined|null/.test(t), `una entregada sin nombre (y sin categoría): ${fila ? "sale como «Sin clasificar» con " + fila.monto : "NO sale"}`);
 });
 
 // ── v10.84.85 — bajar de una barra a sus órdenes (el P2 de la critique: «nada lleva a sus órdenes»); escritas ANTES del cambio ──
 const desplegado = async (p, sel) => (await p.locator(sel).locator("[data-ordenes]").first().innerText({ timeout: 1500 }).catch(() => "")).replace(/\s+/g, " ");
 await caso("an-20-producto-abre-sus-ordenes", "", async p => {
-  const fila = p.locator('[data-producto="Etiquetas"]');
+  const fila = p.locator('[data-producto="etiquetas"]');
   const boton = fila.getByRole("button").first();
   await boton.click(); await espera(p);
-  const abierto = await boton.getAttribute("aria-expanded"), t = await desplegado(p, '[data-producto="Etiquetas"]');
+  const abierto = await boton.getAttribute("aria-expanded"), t = await desplegado(p, '[data-producto="etiquetas"]');
   await boton.click(); await espera(p);
-  const cerrado = await boton.getAttribute("aria-expanded"), t2 = await desplegado(p, '[data-producto="Etiquetas"]');
+  const cerrado = await boton.getAttribute("aria-expanded"), t2 = await desplegado(p, '[data-producto="etiquetas"]');
   ok("an-20-producto-abre-sus-ordenes", abierto === "true" && /P-0101/.test(t) && /P-0102/.test(t) && t.includes($(10000)) && t.includes($(5000)) && cerrado === "false" && t2 === "",
     `«Etiquetas» al picarle: aria-expanded ${abierto}, enseña «${t.slice(0, 160)}» (P-0101 ${$(10000)} y P-0102 ${$(5000)}); otra vez: ${cerrado}, ${t2 ? "SIGUE abierta" : "se cierra"}`);
 });
 await caso("an-21-otros-abre-sus-tipos", "", async p => {
   await periodo(p, "Todo");
-  const boton = p.locator('[data-producto="otros"]').getByRole("button").first();
+  const boton = p.locator('[data-producto="otro"]').getByRole("button").first();
   await boton.click(); await espera(p);
-  const t = await desplegado(p, '[data-producto="otros"]');
-  const tipos = ["Calendarios", "Libretas", "Cajas", "Volantes", "Gafetes", "Sellos"].filter(x => t.includes(x)).length;
-  ok("an-21-otros-abre-sus-tipos", tipos === 4 && t.includes($(500)), `«Otros» enseña «${t.slice(0, 160)}» (sus 4 tipos de ${$(500)})`);
+  const t = await desplegado(p, '[data-producto="otro"]');
+  ok("an-21-otros-abre-sus-tipos", /P-0085/.test(t) && /Sellos/.test(t) && t.includes($(500)), `«Otro» enseña «${t.slice(0, 160)}» (P-0085, Sellos, ${$(500)}: con el nombre de cada trabajo)`);
 });
 await caso("an-22-cliente-abre-sus-ordenes", "", async p => {
   await pestaña(p, "Clientes");
@@ -293,59 +299,80 @@ await caso("an-22-cliente-abre-sus-ordenes", "", async p => {
     `CERVECERIA MODELO con Enter enseña «${t.slice(0, 170)}» (sus dos entregadas de octubre, con su tipo; sin la cancelada P-0110)`);
 });
 await caso("an-23-uno-abierto-a-la-vez", "", async p => {
-  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
-  await p.locator('[data-producto="Libros"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="etiquetas"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="libros"]').getByRole("button").first().click(); await espera(p);
   const abiertos = await p.locator('[data-producto] [data-ordenes]').count();
-  const libros = await desplegado(p, '[data-producto="Libros"]');
+  const libros = await desplegado(p, '[data-producto="libros"]');
   ok("an-23-uno-abierto-a-la-vez", abiertos === 1 && /P-0103/.test(libros) && /maquila/i.test(libros), `abiertos a la vez: ${abiertos}; «Libros» enseña «${libros.slice(0, 120)}» (P-0103, de maquila)`);
 });
 await caso("an-24-el-periodo-cambia-lo-abierto", "", async p => {
-  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="etiquetas"]').getByRole("button").first().click(); await espera(p);
   await periodo(p, "Mes pasado");
-  const t = await desplegado(p, '[data-producto="Etiquetas"]');
+  const t = await desplegado(p, '[data-producto="etiquetas"]');
   ok("an-24-el-periodo-cambia-lo-abierto", t === "" || (/P-0091/.test(t) && !/P-0101/.test(t)), `«Etiquetas» abierta y cambiar a septiembre: «${t.slice(0, 120)}» (o se cierra, o enseña las de septiembre: P-0091)`);
 });
 
 // ── v10.84.85 — vuelta 2 del despliegue: por donde no se diseñó ──
 await caso("an-25-veinte-y-los-demas", "modo=muchas", async p => {
-  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
-  const n = await p.locator('[data-producto="Etiquetas"] [data-ordenes] > div').count();
-  const t = await desplegado(p, '[data-producto="Etiquetas"]');
+  await p.locator('[data-producto="etiquetas"]').getByRole("button").first().click(); await espera(p);
+  const n = await p.locator('[data-producto="etiquetas"] [data-ordenes] > div').count();
+  const t = await desplegado(p, '[data-producto="etiquetas"]');
   ok("an-25-veinte-y-los-demas", /y 7 más/.test(t) && n === 21, `«Etiquetas» con 27 entregadas: ${n} renglones (20 y «y 7 más»): «${t.slice(-60)}»`);
 });
 await caso("an-26-doble-clic-abre", "", async p => {
-  const b = p.locator('[data-producto="Etiquetas"]').getByRole("button").first();
+  const b = p.locator('[data-producto="etiquetas"]').getByRole("button").first();
   await b.dblclick(); await espera(p);
   ok("an-26-doble-clic-abre", (await b.getAttribute("aria-expanded")) === "true", `doble clic en «Etiquetas»: aria-expanded ${await b.getAttribute("aria-expanded")} (debe quedar abierta: el segundo clic no la cierra)`);
 });
 await caso("an-27-espacio-abre", "", async p => {
-  const b = p.locator('[data-producto="Libros"]').getByRole("button").first();
+  const b = p.locator('[data-producto="libros"]').getByRole("button").first();
   await b.focus(); await p.keyboard.press("Space"); await espera(p);
   ok("an-27-espacio-abre", (await b.getAttribute("aria-expanded")) === "true", `Espacio en «Libros»: ${await b.getAttribute("aria-expanded")}`);
 });
 await caso("an-28-otros-que-desaparece", "", async p => {
   await periodo(p, "Todo");
-  await p.locator('[data-producto="otros"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="otro"]').getByRole("button").first().click(); await espera(p);
   await periodo(p, "Este mes");
   const abiertos = await p.locator("[data-ordenes]").count(), filas = await p.locator("[data-producto]").count();
-  ok("an-28-otros-que-desaparece", abiertos === 0 && filas === 4, `«Otros» abierto y volver a octubre (sin «Otros»): ${abiertos} desplegados, ${filas} renglones`);
+  ok("an-28-otros-que-desaparece", abiertos === 0 && filas === 4, `«Otro» abierto y volver a octubre (sin «Otro»): ${abiertos} desplegados, ${filas} renglones`);
 });
 await caso("an-29-nombre-largo-a-1366", "modo=muchas", async p => {
   await pestaña(p, "Clientes");
   const fila = p.locator("[data-cliente]").filter({ hasText: "MUY PERO MUY LARGO" }).first();
   await fila.getByRole("button").first().click(); await espera(p);
   await pestaña(p, "Financiero");
-  await p.locator('[data-producto="Etiquetas"]').getByRole("button").first().click(); await espera(p);
+  await p.locator('[data-producto="etiquetas"]').getByRole("button").first().click(); await espera(p);
   const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
   ok("an-29-nombre-largo-a-1366", ancho <= 1366, `a 1366 con un cliente de nombre larguísimo desplegado: ancho ${ancho}`);
 });
 
 // ── v10.84.86 — lo que encontró la revisión en producción: la venta de inventario sin P-… salía con su uuid ──
 await caso("an-30-venta-sin-folio-se-nombra", "modo=stocksinfolio", async p => {
-  await p.locator('[data-producto="Venta de inventario"]').getByRole("button").first().click(); await espera(p);
-  const t = await desplegado(p, '[data-producto="Venta de inventario"]');
+  await p.locator('[data-producto="inventario"]').getByRole("button").first().click(); await espera(p);
+  const t = await desplegado(p, '[data-producto="inventario"]');
   ok("an-30-venta-sin-folio-se-nombra", /F-153/.test(t) && /OC-0948/.test(t) && !/[0-9a-f]{8}-[0-9a-f]{4}-/.test(t),
     `«Venta de inventario» desplegada: «${t.slice(0, 160)}» (la venta sin P-… se nombra por su folio fiscal y su OC, nunca por su uuid)`);
+});
+
+// ── v10.84.91 — por categoría, por donde no se diseñó ──
+await caso("an-31-la-categoria-abre-con-sus-nombres", "", async p => {
+  await p.locator('[data-producto="etiquetas"]').getByRole("button").first().click(); await espera(p);
+  const t = await desplegado(p, '[data-producto="etiquetas"]');
+  ok("an-31-la-categoria-abre-con-sus-nombres", /P-0101/.test(t) && /P-0102/.test(t) && /Etiquetas/.test(t) && /ETIQUETAS/.test(t) && /CERVECERIA MODELO/i.test(t),
+    `«Etiquetas y stickers» desplegada: «${t.slice(0, 200)}» (cada orden con el nombre de su trabajo, así se ve qué cayó en la categoría, y su cliente)`);
+});
+await caso("an-32-sin-clasificar-y-el-inventario-al-final", "modo=sintipo", async p => {
+  const filas = await p.locator("[data-producto]").evaluateAll(fs => fs.map(f => f.getAttribute("data-producto")));
+  const txt = (await p.locator('[data-producto="sin"]').innerText().catch(() => "")).replace(/\s+/g, " ");
+  ok("an-32-sin-clasificar-y-el-inventario-al-final", filas.join(",") === "etiquetas,libros,folletos,inventario,sin" && /Sin clasificar/.test(txt) && txt.includes($(1500)),
+    `renglones ${filas.join(",")} (las categorías por monto; luego la venta de inventario, que es un canal, y «Sin clasificar») · «${txt}»`);
+});
+await caso("an-33-la-barra-mas-larga-cabe", "modo=inventariogrande", async p => {
+  const barras = await p.locator("[data-producto]").evaluateAll(fs => fs.map(f => { const b = f.querySelector("button > div:last-child > div"), caja = b && b.parentElement;
+    return { k: f.getAttribute("data-producto"), pct: b && caja ? Math.round(b.getBoundingClientRect().width / caja.getBoundingClientRect().width * 100) : -1 }; }));
+  const de = k => barras.find(x => x.k === k) || {};
+  ok("an-33-la-barra-mas-larga-cabe", barras.length > 0 && barras.every(x => x.pct >= 0 && x.pct <= 100) && de("inventario").pct === 100 && de("etiquetas").pct < 20 && barras[barras.length - 1].k === "inventario",
+    `con ${$(103000)} de inventario (al final): barras ${JSON.stringify(barras)} (ninguna pasa del 100 %; la de inventario llena, la de etiquetas al 15 %)`);
 });
 
 await browser.close();

@@ -2,11 +2,11 @@
 // La prueba fija el reloj del navegador (13-oct-2026 12:00, hora de México) y su zona horaria (America/Mexico_City): así las cifras se
 // pueden comprobar contra cuentas hechas a mano (v10.84.84, los P1 de la critique de Analytics: qué cuenta cada cifra y de qué periodo).
 // Uso: node gen-analytics.mjs <App.jsx> <dirSalida>
-// Variantes por URL (modo=): normal · vacio (ninguna orden) · sinmaquinas (nadie ha registrado máquina) · sintipo (una entregada sin tipo) · muchas (25 etiquetas más en octubre) · stocksinfolio (una venta de inventario sin P-…)
+// Variantes por URL (modo=): normal · vacio (ninguna orden) · sinmaquinas (nadie ha registrado máquina) · sintipo (una entregada sin tipo) · muchas (25 etiquetas más en octubre) · stocksinfolio (una venta de inventario sin P-…) · inventariogrande (una venta de inventario de $100,000 en octubre)
 // window.__agregarEntrega(): llega una entrega de hoy ($1,000, Etiquetas), como la manda el realtime con la pantalla abierta.
 import fs from "node:fs";
 import path from "node:path";
-import { extraer } from "./extraer.mjs";
+import { extraer, importacionesDeLib } from "./extraer.mjs";
 const [, , srcPath, outDir] = process.argv;
 const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
@@ -17,6 +17,10 @@ const partes = [
   `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
   iconos,
+  ...importacionesDeLib(fuente),
+  // v10.84.91 — la categoría de cada orden como la deja la base (la sugerida; «otro» si ninguna regla la reconoce; sin categoría la venta de
+  //   inventario y la que no tiene nombre). Con un espacio de nombres: el App.jsx de antes no la importa (la corrida doble)
+  `import * as CATS from "../src/lib/categorias.js";`,
   `// ── lo que toca la base o Storage, simulado (${simuladosUsados.join(", ")}) ──
 const Q = new URLSearchParams(location.search);
 const M = new Set((Q.get("modo") || "normal").split(","));
@@ -33,9 +37,10 @@ const supabase = {
   from: t => ({ update: v => ({ eq: async () => { anota("update: " + t + " " + JSON.stringify(v)); return { error: null }; } }) }),
 };
 // Las órdenes (hora de México, -06:00). Las cuentas que las pruebas esperan están en tests/romper/analytics.mjs.
-const ORDEN = (id, pn, o) => ({ id, production_number: pn, client: "CLIENTE", product_type: "Etiquetas", order_type: "internal", price: 0,
+const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
+const ORDEN = (id, pn, o) => { const x = { id, production_number: pn, client: "CLIENTE", product_type: "Etiquetas", order_type: "internal", price: 0,
   stage: "delivered", created_at: "2026-09-01T10:00:00-06:00", delivered_at: null, due_date: null, machine_log: [], waste_log: [],
-  timeline: [], comments: [], ...o });
+  timeline: [], comments: [], ...o }; if (!("categoria" in o)) x.categoria = categoriaDe(x.product_type); return x; };
 const SIN_MAQ = M.has("sinmaquinas");
 const ml = (machine, started, minutes) => SIN_MAQ ? [] : [{ machine, started, ended: started, minutes }];
 const TODAS = [
@@ -78,6 +83,9 @@ if (M.has("muchas")) for (let i = 0; i < 25; i++) TODAS.push(ORDEN("oM" + i, "P-
 // stocksinfolio: una venta de inventario como las de producción (161 de 204 no tienen P-…): su id es un uuid, trae folio fiscal y OC
 if (M.has("stocksinfolio")) TODAS.push(ORDEN("fcad0f48-a7d2-484a-9b3d-a7766df98042", null, { client: "CUADRA", product_type: "stock", price: 1000,
   invoice_folio: "F-153", purchase_order_id: "OC-0948", created_at: "2026-10-08T09:00:00-06:00", delivered_at: "2026-10-09T12:00:00-06:00" }));
+// inventariogrande: una venta de inventario de $100,000 en octubre, más grande que cualquier categoría (va al final y su barra no se sale)
+if (M.has("inventariogrande")) TODAS.push(ORDEN("oI", "P-0107", { client: "CUADRA", product_type: "stock", price: 100000, created_at: "2026-10-05T09:00:00-06:00",
+  delivered_at: "2026-10-07T12:00:00-06:00" }));
 if (M.has("sintipo")) TODAS.push(ORDEN("oN", "P-0106", { client: "SIN NOMBRE", product_type: "", price: 1500, created_at: "2026-10-05T09:00:00-06:00", delivered_at: "2026-10-06T12:00:00-06:00" }));
 const ORDERS = M.has("vacio") ? [] : TODAS;`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,

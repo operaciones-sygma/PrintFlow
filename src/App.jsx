@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
+import { CATEGORIAS, categoriaSugerida, nombreDeCategoria, esVentaDeInventario } from "./lib/categorias.js"; // v10.84.91 — la categoría del trabajo (las reglas, una vez: la forma sugiere y la base genera su SQL de ellas)
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
 // v10.81.7 — CTP contador: cierre de los P3 restantes del scan (wf wzsz8pawt). Se retiró código muerto
 //   (aCh/aGr/live/agg + prop `plates`, residuo del cálculo por plate_log previo a v10.81.0; el m² del ciclo
@@ -1265,7 +1266,7 @@ const isSec=r=>r==="secretaria"||r==="vendedor";
 // v10.19.0 — Helpers para notificaciones detalladas de edit
 // ============================================================
 // Campos que disparan notificación cuando cambian (con su label legible)
-const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente de compras (cliente)",client_rfc:"RFC",product_type:"Producto",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta",distribution:"Distribución",sin_empaque_sygma:"Sin empaque SYGMA"};
+const TRACKED_EDIT_FIELDS={order_type:"Tipo de orden",priority:"Prioridad",production_number:"Folio P-XXXX",client:"Cliente",client_company:"Empresa",client_agent:"Agente de compras (cliente)",client_rfc:"RFC",product_type:"Producto",categoria:"Categoría",quantity:"Cantidad",paper_type:"Papel",paper_grammage:"Gramaje",width_cm:"Ancho (cm)",height_cm:"Alto (cm)",standard_size:"Tamaño estándar",colors:"Tintas",ink_front:"Tintas frente",ink_back:"Tintas vuelta",finishes:"Acabados",notes:"Notas",price:"Precio",estimated_hours:"Horas estimadas",due_date:"Fecha entrega",agent:"Vendedor",file_url:"Archivo adjunto",maq_provider:"Maquilador",maq_cost:"Costo maquila",maq_price:"Precio maquila",pantone_front:"Pantones frente",pantone_back:"Pantones vuelta",distribution:"Distribución",sin_empaque_sygma:"Sin empaque SYGMA"};
 
 // Detecta cambios entre el orden antes y después del edit. Solo considera campos en TRACKED_EDIT_FIELDS.
 // v10.58.43 #12: comparar por CONTENIDO — los arrays (pantones) se comparaban por
@@ -1312,6 +1313,7 @@ function fmtEditValue(field,v){
   }
   if(field==="sin_empaque_sygma")return v?"Sí (empaque sin logo SYGMA)":"No";
   if(v==null||v==="")return"(vacío)";
+  if(field==="categoria")return nombreDeCategoria(v)||v;   // v10.84.91 — el nombre, no el código
   if(field==="due_date")return fD(v);
   if(field==="price"||field==="maq_cost"||field==="maq_price")return fmt(Number(v));
   if(field==="file_url")return v?"(archivo cargado)":"(sin archivo)";
@@ -1546,8 +1548,9 @@ const db = {
   async saveOrder(o) {
     const { timeline, comments, waste_log, machine_log, notes_log, ...row } = o;
     // Whitelist of known DB columns to prevent silent PostgREST rejections
-    const dbCols=["id","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded","distribution","sin_empaque_sygma"];
+    const dbCols=["id","categoria","order_type","stage","priority","production_number","agent","client_agent","client","client_id","client_company","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","maquila_provider","maquila_phone","maquila_email","validated_by_production","validated_by_preprensa","file_url","file_name","current_machine","proof_approved","delivered_at","created_at","created_by","source","web_order_ref","cart_folio","mp_payment_id","web_print_method","delivery_calculated_at","invoice_type","invoice_folio","invoiced_at","invoiced_by","invoice_pre_assigned","invoice_reason","has_post_invoice_edits","cancellation_reason","cancelled_at","cancelled_by","nc_emitted","purchase_order_id","plate_status","image_url","image_url_2","pantone_front","pantone_back","machine_queue_position","payment_status","payment_method","payment_amount","bank_reference","stock_role","client_product_id","stock_loaded","distribution","sin_empaque_sygma"];
     const dbRow={};dbCols.forEach(k=>{if(k in row)dbRow[k]=row[k]});
+    if("categoria" in dbRow)dbRow.categoria=dbRow.categoria||null;   // v10.84.91 — sin categoría (la venta de inventario) va NULL, no ""
     if(o.deliveredAt)dbRow.delivered_at=o.deliveredAt;
     if("created_by" in dbRow)dbRow.created_by_uid=AUTH_UID; // v10.73.47 doble-escritura F1
     const {error}=await supabase.from("orders").upsert(dbRow);
@@ -3122,6 +3125,7 @@ function OrderChangeHistory({orderId}) {
     if(field==="price"||field==="maq_cost"||field==="maq_price"){const n=Number(v);return isNaN(n)?v:fmt(n);}
     if(field==="due_date")return fD(v);
     if(field==="standard_size")return ssLabel(v)||v;
+    if(field==="categoria")return nombreDeCategoria(v)||v;   // v10.84.91
     if(typeof v==="string"&&v.length>50)return v.substring(0,50)+"…";
     return String(v);
   };
@@ -4734,7 +4738,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           (trae su propio rótulo) */}
       {o.client_id&&<ClientAliasManager clientId={o.client_id} role={role} userLogin={userLogin}/>}
       <Seccion>Producto</Seccion>
-      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
+      <Row l="Descripción" v={o.product}/><Row l="Tipo" v={o.product_type}/><Row l="Categoría" v={esVentaDeInventario(o.product_type)?"Venta de inventario":(nombreDeCategoria(o.categoria)||"Sin clasificar")}/><Row l="Cantidad" v={o.quantity?Number(o.quantity).toLocaleString("es-MX")+" pzas":null}/><Row l="Creada" v={o.created_at?fDT(o.created_at)+(o.created_by?" por "+(o.created_by==="secretaria"?"Lupita":o.created_by):""):null}/><Row l="Entrega" v={o.due_date?fD(o.due_date)+(o.delivery_calculated_at?" · calculada":""):null}/>
       {o.agent&&<Row l={<span style={{display:"inline-flex",alignItems:"center",gap:4}}><UserIcon size={11} weight="bold"/>Vendedor</span>} v={o.agent}/>}
       {role==="admin"&&<Row l="ID interno" v={<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:C.t2}}>{o.id}</span>}/>}
       {!isMaq&&(o.paper_type||o.ink_front||o.width_cm||o.standard_size||o.finishes)&&<><Seccion>Especificaciones</Seccion><Row l="Papel" v={o.paper_type}/><Row l="Gramaje" v={o.paper_grammage?o.paper_grammage+" grs":null}/><Row l="Medidas" v={o.standard_size?ssLabel(o.standard_size):(o.width_cm?o.width_cm+"×"+o.height_cm+" cm":null)}/><Row l="Tintas Frente" v={o.ink_front}/><Row l="Tintas Vuelta" v={o.ink_back}/>{Array.isArray(o.pantone_front)&&o.pantone_front.length>0&&<Row l="Pantones Frente" v={<PantoneChips codes={o.pantone_front} role={role}/>}/>}{Array.isArray(o.pantone_back)&&o.pantone_back.length>0&&<Row l="Pantones Vuelta" v={<PantoneChips codes={o.pantone_back} role={role}/>}/>}<Row l="Acabados" v={o.finishes}/></>}
@@ -6226,7 +6230,7 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
     let alive=true;
     (async()=>{
       try{
-        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, distribution, created_at, invoice_folio").order("created_at",{ascending:false}).limit(100);
+        let q=supabase.from("orders").select("id, production_number, client, client_id, product, product_type, quantity, paper_type, paper_grammage, width_cm, height_cm, standard_size, colors, ink_front, ink_back, finishes, price, maq_price, maq_cost, maq_provider, estimated_hours, image_url, image_url_2, image, file_url, file_name, stage, stock_role, client_product_id, notes, pantone_front, pantone_back, distribution, created_at, invoice_folio, categoria").order("created_at",{ascending:false}).limit(100);
         if(clientId)q=q.eq("client_id",clientId);
         else if(clientName?.trim()){
           // v10.45.1 FIX: escapar comodines % _ \ en LIKE para evitar matches inesperados con nombres tipo "ABC%Corp"
@@ -12291,7 +12295,7 @@ async function copyStorageImage(srcUrl,keyPrefix){
 const FORMA_ABIERTA={preguntar:null,altoPie:0,nueva:false,enfocar:null};
 function salirDeLaForma(seguir){return !!FORMA_ABIERTA.preguntar&&FORMA_ABIERTA.preguntar(seguir)===true}
 function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast,actor,folioDeLaOC}) {
-  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false};
+  const empty={order_type:"interna",priority:"normal",production_number:"",client:"",client_id:null,client_company:"",client_agent:"",client_email:"",client_phone:"",client_lada:"+52",client_rfc:"",product:"",product_type:"",quantity:"",paper_type:"",paper_grammage:"",width_cm:"",height_cm:"",standard_size:"",colors:"",ink_front:"",ink_back:"",finishes:"",notes:"",price:"",estimated_hours:"",due_date:"",maq_provider:"",maq_cost:"",maq_price:"",agent:"",plate_status:"",image_url:null,image_url_2:null,image:null,pantone_front:[],pantone_back:[],billing_mode:"normal",stock_role:null,client_product_id:null,stock_loaded:false,distribution:null,sin_empaque_sygma:false,categoria:""};
   const [f,setF]=useState(editOrder?{...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))}:empty);const [saving,setSaving]=useState(false);const [showOtroFinish,setShowOtroFinish]=useState(false);const [showMoreFin,setShowMoreFin]=useState(false);const [tried,setTried]=useState(false);const [prodTypeOpen,setProdTypeOpen]=useState(false);const [prodTypeHl,setProdTypeHl]=useState(0);const [imgUploading,setImgUploading]=useState(false); // v10.34.2 + v10.34.4 fix #2 (imgUploading)
   // v10.42.0 — Stock: catálogo del cliente Cuadra (carga al seleccionar cliente con billing_mode=stock)
   const [stockProducts,setStockProducts]=useState([]);
@@ -12322,6 +12326,18 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.34.2 — normaliza para comparación accent-insensitive: "Dípticos" → "dipticos"
   const normForSearch=str=>(str||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  // v10.84.91 — LA CATEGORÍA (Marcelo, 13-oct: obligatoria, con la sugerencia puesta). Mientras nadie la elija, la sugiere el nombre del
+  //   trabajo (src/lib/categorias.js, las mismas reglas de la base); elegida a mano (o traída por «Replicar»), el nombre ya no la mueve.
+  //   Al editar, la que coincide con la sugerida de su nombre (o el «otro» del relleno) cuenta como no elegida y sólo se mueve si el
+  //   nombre cambia (con el nombre de antes, vuelve la de antes). «Agregar Producto a OC» es nueva (el tipo que hereda la sugiere). En
+  //   «Editar Specs» y para producción no se ve: ahí no se mueve sola.
+  const editaUnaOrden=!!editOrder?.id&&!editOrder?._fromOC;   // como `editando` (más abajo; aquí todavía no existe)
+  const [categoriaTocada,setCategoriaTocada]=useState(()=>editaUnaOrden&&!!editOrder.categoria&&editOrder.categoria!==(categoriaSugerida(editOrder.product_type)||"otro"));
+  useEffect(()=>{
+    if(categoriaTocada||specsOnly||hideC)return;
+    const sug=editaUnaOrden&&f.product_type===editOrder.product_type?(editOrder.categoria||""):(categoriaSugerida(f.product_type)||"");
+    setF(p=>(p.categoria||"")===sug?p:{...p,categoria:sug});
+  },[f.product_type,categoriaTocada]);
   // v10.59.5 — texto CRUDO del acabado "Otro": el input se controla con este estado (sin .trim()
   // por tecla). Antes el value se derivaba de f.finishes con trim → cada espacio se borraba al
   // instante y Lupita no podía escribir "Hot stamping". f.finishes guarda la versión normalizada.
@@ -12352,7 +12368,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const [replicateOpen,setReplicateOpen]=useState(false);
   // v10.84.78 — cada «Replicar» o «Deshacer» cambia la versión: la copia de la imagen que llegue tarde no pisa lo que ya se deshizo
   const replicaVerRef=useRef(0);
-  const ETQ_REPLICA={product:"la descripción",product_type:"el tipo",quantity:"la cantidad",paper_type:"el papel",paper_grammage:"el gramaje",width_cm:"el ancho",height_cm:"el alto",standard_size:"el tamaño",colors:"las tintas",ink_front:"las tintas del frente",ink_back:"las tintas de la vuelta",finishes:"los acabados",price:"el precio",estimated_hours:"las horas",maq_provider:"el proveedor",maq_cost:"el costo",maq_price:"el precio al cliente",pantone_front:"los Pantones del frente",pantone_back:"los Pantones de la vuelta",notes:"las notas",distribution:"la distribución"};
+  const ETQ_REPLICA={product:"la descripción",product_type:"el tipo",categoria:"la categoría",quantity:"la cantidad",paper_type:"el papel",paper_grammage:"el gramaje",width_cm:"el ancho",height_cm:"el alto",standard_size:"el tamaño",colors:"las tintas",ink_front:"las tintas del frente",ink_back:"las tintas de la vuelta",finishes:"los acabados",price:"el precio",estimated_hours:"las horas",maq_provider:"el proveedor",maq_cost:"el costo",maq_price:"el precio al cliente",pantone_front:"los Pantones del frente",pantone_back:"los Pantones de la vuelta",notes:"las notas",distribution:"la distribución"};
   const applyReplicate=(src)=>{
     if(imgUploading)return; // v10.73.24 — no re-entrar mientras una copia de imagen está en vuelo (evita mezclar arte/specs de dos fuentes y apagar el gate antes de tiempo)
     // Replica specs del producto. NO toca: cliente, production_number, due_date, stage, image actual, billing_mode.
@@ -12363,14 +12379,15 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // una imagen en el form, NO se pisa (preserva la intención del fix v10.64.1 contra clobber silencioso del arte).
     // v10.84.80 — sin «notes» ni «distribution» (Marcelo, 12-oct: specs, Pantones e imagen): son de ESA orden. Replicar trajo «YA AUTORIZO
     //   PRUEBA DE COLOR» de un trabajo del 30-sep a una orden nueva (segunda revisión independiente).
-    const replicaFields=["product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
+    const replicaFields=["product","product_type","categoria","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","price","estimated_hours","maq_provider","maq_cost","maq_price","pantone_front","pantone_back"]; // v10.72.24 — "sin_empaque_sygma" NO se replica: es condición logística de ESA orden (white-label), debe ser decisión explícita por orden
     // v10.84.78 — (critique del 12-oct) sólo LLENA lo vacío: lo que ya se escribió se queda (pisaba la cantidad 250 con 1000 y el precio,
     //   con sólo «Datos replicados»), el aviso dice qué dejó como estaba y trae «Deshacer». Se calcula sobre la forma de ahora: dentro
     //   del setF, `skuOmitted` (v10.46.10) llegaba tarde al aviso y nunca salía.
     const vacio=v=>v===null||v===undefined||v===""||(Array.isArray(v)&&v.length===0);
-    const antes={f,customFinish,showOtroFinish,blocksRaw,folioRaw,textos};
+    const antes={f,customFinish,showOtroFinish,blocksRaw,folioRaw,textos,categoriaTocada};
     const next={...f},llenos=[],dejados=[];
     replicaFields.forEach(k=>{const v=src[k];if(vacio(v))return;if(vacio(f[k])&&!(k in textos&&String(textos[k]).trim()!=="")){next[k]=v;llenos.push(k)}else if(!mismoValor(f[k],v))dejados.push(ETQ_REPLICA[k]||k)});
+    if(llenos.includes("categoria"))setCategoriaTocada(true);   // v10.84.91 — la categoría replicada es una elección: el nombre ya no la mueve
     // v10.84.82 — (tercera revisión) el precio es de SU cantidad: si la de esta orden es otra, ni el precio ni el costo y precio de maquila se
     //   copian (P-0572, 1,000 pzas a $19,600, replicada sobre 777 dejaba $19,600) y se dice bajo el precio. Con la misma cantidad, o vacía
     //   (se trae la suya), sí. Marcelo, 12-oct: «no copiar el precio».
@@ -12424,7 +12441,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.84.81 — concuerda: «sus notas no se copian», «su distribución no se copia» (con sólo notas decía «no se copia»)
     const plural=deEsaOrden.length>1||/^sus /.test(deEsaOrden[0]||"");
     if(deEsaOrden.length)dichos.push(listaY(deEsaOrden)+(plural?" no se copian (son":" no se copia (es")+" de esa orden)");
-    showToast?.(dichos.join(" · "),"success",{label:"Deshacer",onClick:()=>{replicaVerRef.current++;setF(antes.f);setPrecioNoCopiado(null);setCustomFinish(antes.customFinish);setShowOtroFinish(antes.showOtroFinish);setBlocksRaw(antes.blocksRaw);setFolioRaw(antes.folioRaw);setTextos(antes.textos)}});
+    showToast?.(dichos.join(" · "),"success",{label:"Deshacer",onClick:()=>{replicaVerRef.current++;setF(antes.f);setPrecioNoCopiado(null);setCustomFinish(antes.customFinish);setShowOtroFinish(antes.showOtroFinish);setBlocksRaw(antes.blocksRaw);setFolioRaw(antes.folioRaw);setTextos(antes.textos);setCategoriaTocada(antes.categoriaTocada)}});
   };
   // v10.58.22: agregada karla. Marcelo pidió que Karla pueda editar precio de órdenes
   // sin precio (era admin/secretaria/vendedor; karla queda incluida con mismo poder de edición).
@@ -12581,6 +12598,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     const m=[];
     if(!f.client?.trim())m.push("Razón social");
     if(!f.product_type?.trim()||f.product_type==="Otro")m.push("Tipo de Producto");
+    if(!specsOnly&&!hideC&&!f.categoria&&!esVentaDeInventario(f.product_type))m.push("Categoría");   // v10.84.91 — obligatoria (la venta de inventario no lleva: es un canal)
     if(f.order_type==="maquila"&&!f.maq_provider?.trim())m.push("Proveedor (Maquila)");
     if(!hideC&&!specsOnly&&editOrder?.created_by!=="import-historico"&&!f.client_email?.trim()&&!f.client_phone?.trim())m.push("Contacto (correo o WhatsApp)");
     // v10.59.0 — cliente NUEVO (sin client_id) requiere RFC obligatorio (decisión de Marcelo)
@@ -12599,7 +12617,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
     // v10.84.78 — un número tecleado que no es válido frena (se ve tal cual, con su porqué)
     numMalos.forEach(k=>m.push(NUMEROS[k].etq+" (revisa el número)"));
     return m;
-  },[f.client,f.client_id,f.product_type,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,f.quantity,f.agent,canP,hideC,specsOnly,editOrder,numMalos.join("|")]);
+  },[f.client,f.client_id,f.product_type,f.categoria,f.order_type,f.maq_provider,f.client_email,f.client_phone,f.client_rfc,f.quantity,f.agent,canP,hideC,specsOnly,editOrder,numMalos.join("|")]);
   const canSubmit=missing.length===0&&!imgUploading; // v10.34.4 fix #2 — bloquear submit mientras imagen sube
   // v10.84.80 — el borde del faltante en su tinta (al 38 % daba 1.7:1) y `falta(etq)` para nombrarlo en su campo (aria-invalid + «Falta…»)
   const errBorder=k=>tried&&!k?"1.5px solid "+C.dnInk:"none";
@@ -12652,7 +12670,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   const agentTouchedRef=useRef(false);
   // v10.28.2 — dep por id (no referencia) para no resetear cambios en progreso si editOrder cambia referencia (e.g. realtime). _fromOC marca el caso de "Agregar producto" que sí requiere re-init aunque no haya id.
   useEffect(()=>{agentTouchedRef.current=false;/* v10.74.2/.3 — al reabrir/re-inicializar el form arranca de cero: lo que traiga el campo no es una elección manual de esta captura */
-    if(editOrder){const nueva={...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))};setF(nueva);inicialRef.current=nueva;setTextos({});setMasAbierto(!!(Array.isArray(editOrder.distribution)||editOrder.sin_empaque_sygma||editOrder.file_url));/* v10.84.78 — la foto de «lo capturado» */const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));setBlocksRaw(finGetDetail(editOrder.finishes,"Blocks"));setFolioRaw(finGetDetail(editOrder.finishes,"Folio"));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes); v10.71.6 — y los buffers crudos de Blocks/Folio *//* v10.84.82 — ya no hay modo «Avanzado» que prender para una orden de puro texto: la descripción crece sola; cada orden empieza con las especificaciones abiertas */setEspAbierta(true);setPrecioNoCopiado(null)}},[editOrder?.id,editOrder?._fromOC]);
+    if(editOrder){const nueva={...empty,...Object.fromEntries(Object.entries(editOrder).map(([k,v])=>[k,v===null&&typeof empty[k]==="string"?"":v]))};if(!editaUnaOrden&&!nueva.categoria&&!specsOnly&&!hideC)nueva.categoria=categoriaSugerida(nueva.product_type)||"";/* v10.84.91 — la nueva (de una OC) con su sugerida desde el arranque */setF(nueva);inicialRef.current=nueva;setTextos({});setMasAbierto(!!(Array.isArray(editOrder.distribution)||editOrder.sin_empaque_sygma||editOrder.file_url));/* v10.84.78 — la foto de «lo capturado» */const fins=(editOrder.finishes||"").split(",").map(s=>s.trim()).filter(Boolean);const customFins=fins.filter(x=>!FINISHES.includes(finBase(x))&&x!=="Otro");setShowOtroFinish(customFins.length>0);setCustomFinish(customFins.join(", "));setBlocksRaw(finGetDetail(editOrder.finishes,"Blocks"));setFolioRaw(finGetDetail(editOrder.finishes,"Folio"));/* v10.59.6 — re-sync customFinish junto a showOtroFinish (evita acabado stale/cruzado entre órdenes); v10.71.6 — y los buffers crudos de Blocks/Folio *//* v10.84.82 — ya no hay modo «Avanzado» que prender para una orden de puro texto: la descripción crece sola; cada orden empieza con las especificaciones abiertas */setEspAbierta(true);setPrecioNoCopiado(null)}},[editOrder?.id,editOrder?._fromOC]);
   // v10.64.0 — corte híbrido: ya no se pre-llena el folio en el form. Lo asigna el RPC atómico
   // al guardar (serie 100% consecutiva). El form solo muestra "Asignado automáticamente".
   // v10.64.0 — corte híbrido: el folio de producción ya NO es editable por nadie. Es 100%
@@ -12692,7 +12710,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.84.80 — ir a un faltante (el primero al intentar crear, o el que se apriete en el resumen del pie): el foco y la vista en su campo
   const irAFaltante=(etq,reintento)=>{
     const root=formRef.current;if(!root)return;
-    const MAP={"Razón social":"ff-client","Tipo de Producto":"ff-tipo","Proveedor (Maquila)":"ff-maq","Contacto (correo o WhatsApp)":"ff-contacto","RFC (razón social nueva)":"ff-rfc","Cantidad":"ff-cantidad","Nuestro vendedor":"ff-agent"};
+    const MAP={"Razón social":"ff-client","Tipo de Producto":"ff-tipo","Proveedor (Maquila)":"ff-maq","Contacto (correo o WhatsApp)":"ff-contacto","RFC (razón social nueva)":"ff-rfc","Cantidad":"ff-cantidad","Nuestro vendedor":"ff-agent","Categoría":"ff-categoria"};
     const num=Object.values(NUMEROS).find(n=>etq===n.etq+" (revisa el número)");   // v10.84.78
     const id=etq?(MAP[etq]||num?.id):null;
     const el=id?root.querySelector("#"+id):null;
@@ -12950,7 +12968,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   </>;
   const bTipoCantidadEntrega=<>
     {/* v10.84.79 — Tipo, Cantidad y Entrega en un renglón: lo primero que se sabe de un trabajo, junto (Cantidad estaba a 1,600 px) */}
-    <div style={{display:"grid",gridTemplateColumns:specsOnly||angosta?"1fr":"minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req br={!specsOnly&&!angosta} para="ff-tipo" falta={falta("Tipo de Producto")?"Falta el tipo":null}>
+    <div style={{display:"grid",gridTemplateColumns:specsOnly||angosta?"1fr":"minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"0.5px solid "+C.bd}}><FC label="Tipo" req br={!specsOnly&&!angosta} para="ff-tipo">
       {/* v10.34.2 — Combobox typeahead con keyboard nav, accent-insensitive, focus en "Otro", normalize casing onBlur */}
       {(()=>{
         const isOtro=f.product_type==="Otro";
@@ -13012,6 +13030,22 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
           </div>}
         </div>;
       })()}
+      {falta("Tipo de Producto")&&<div id="ff-tipo-falta" style={{marginTop:5,fontSize:F.body,fontWeight:600,color:C.dnInk,lineHeight:1.4}}>Falta el tipo</div>}
+      {/* v10.84.91 — la categoría, para Analytics: la sugiere el nombre; se confirma o se cambia. La venta de inventario no lleva (es un canal) */}
+      {!specsOnly&&!hideC&&!esVentaDeInventario(f.product_type)&&<div style={{marginTop:12}}>
+        <label htmlFor="ff-categoria" style={lbl}>Categoría<span style={{color:C.ac}}> *</span></label>
+        <div style={{position:"relative"}}>
+          <select id="ff-categoria" value={f.categoria||""} onChange={e=>{setCategoriaTocada(true);s("categoria",e.target.value)}}
+            aria-invalid={falta("Categoría")||undefined} aria-describedby={falta("Categoría")?"ff-categoria-falta":(!categoriaTocada&&f.categoria?"ff-categoria-nota":undefined)}
+            style={{...inp,paddingRight:32,border:errBorder(!!f.categoria),cursor:"pointer"}}>
+            <option value="">Elige la categoría</option>
+            {CATEGORIAS.map(c=><option key={c.codigo} value={c.codigo}>{c.nombre}</option>)}
+          </select>
+          <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:F.meta,color:C.t3,pointerEvents:"none"}}><CaretDownIcon size={11}/></span>
+        </div>
+        {!categoriaTocada&&f.categoria&&<div id="ff-categoria-nota" style={{marginTop:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}>La sugiere el nombre del trabajo; si no es, cámbiala.</div>}
+        {falta("Categoría")&&<div id="ff-categoria-falta" style={{marginTop:5,fontSize:F.body,fontWeight:600,color:C.dnInk,lineHeight:1.4}}>Falta la categoría</div>}
+      </div>}
     </FC>{!specsOnly&&<><FC label="Cantidad" req br para="ff-cantidad" falta={falta("Cantidad")?"Falta la cantidad":null}><input id="ff-cantidad" aria-invalid={falta("Cantidad")||undefined} style={{...inp,border:errBorder(!!editOrder||Number(f.quantity)>0),...(candadoCantidad?{background:C.sf,color:C.t2,cursor:"not-allowed"}:{})}} inputMode="numeric" value={valorNum("quantity")} onChange={e=>!candadoCantidad&&teclear("quantity",e.target.value)} aria-describedby={[numMalos.includes("quantity")?"err-quantity":null,falta("Cantidad")?"ff-cantidad-falta":null].filter(Boolean).join(" ")||undefined} readOnly={candadoCantidad} disabled={candadoCantidad} placeholder="Ejemplo · 1000"/>{errNum("quantity")}{candadoCantidad&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,color:C.t2,lineHeight:1.4}}><LockIcon size={11} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>Ya cargó {Number(editOrder.quantity||0).toLocaleString("es-MX")} pzas al inventario: la cantidad se ajusta en Inventario.</span></div>}</FC><FC label={<span style={{display:"inline-flex",alignItems:"center",gap:5}}><CalendarDotsIcon size={12} weight="bold"/>Entrega</span>} rec para="ff-entrega"><input id="ff-entrega" style={inp} type="date" value={f.due_date} onChange={e=>s("due_date",e.target.value)}/>{f.due_date&&f.due_date<hoyISO&&<div style={{marginTop:5,display:"flex",alignItems:"flex-start",gap:5,fontSize:F.body,fontWeight:600,color:C.wnTx,lineHeight:1.4}}><WarningIcon size={11} weight="fill" style={{flexShrink:0,marginTop:1}}/><span>Esa fecha ya pasó ({new Date(f.due_date+"T12:00:00").toLocaleDateString("es-MX",{day:"numeric",month:"short",year:"numeric"})}).</span></div>}<button type="button" onClick={()=>{const sugg=calcDeliveryDate(new Date(),null,f.finishes);s("due_date",sugg)}} style={{marginTop:4,padding:"4px 8px",borderRadius:6,border:"none",background:C.acL,color:C.ac,cursor:"pointer",fontSize:F.body,fontWeight:600,fontFamily:"'Geist',sans-serif"}} title="Sugiere fecha basada en reglas: Offset 8d + acabados 3d (días hábiles)"><ClockIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Sugerir fecha</button></FC></>}</div>
   </>;
   const bDescripcion=<>
@@ -16445,10 +16479,16 @@ function Analytics({orders,onReload}) {
   const meses=[];for(let i=5;i>=0;i--){const d=new Date(hoy.getFullYear(),hoy.getMonth()-i,1);meses.push({k:claveMes(d),d,monto:0,n:0})}
   entregadas.forEach(o=>{const m=meses.find(x=>x.k===claveMes(entregadaEl(o)));if(m){m.monto+=precioVenta(o);m.n++}});
   const maxMes=Math.max(1,...meses.map(m=>m.monto)),mesHoy=claveMes(hoy);
-  // ── productos del periodo: las 8 primeras y «Otros» ──
-  const tipos=agruparPorNombre(del,o=>nombreDeTipo(o.product_type));
-  const tiposTop=tipos.slice(0,8),tiposOtros=tipos.slice(8);
-  const maxTipo=tipos[0]?.monto||1;
+  // ── v10.84.91 — el ingreso del periodo por CATEGORÍA (lista cerrada; antes cada nombre escrito a mano era un «producto»: 596 barras, y
+  //   «Etiquetas», «ETIQUETAS» y «ETIQUETA PLG» eran tres). Las categorías por monto; al final la venta de inventario (un canal) y
+  //   «Sin clasificar», a la vista para que se corrija. La barra llena es la más grande de TODAS (la de inventario puede ser la mayor y
+  //   va al final: con la primera de base se salía de su riel) ──
+  const catDe=o=>esVentaDeInventario(o.product_type)?"inventario":(o.categoria||"sin");
+  const nombreCat=k=>k==="inventario"?"Venta de inventario":k==="sin"?"Sin clasificar":(nombreDeCategoria(k)||k);
+  const porCat=new Map();del.forEach(o=>{const k=catDe(o),x=porCat.get(k)||{clave:k,nombre:nombreCat(k),n:0,monto:0,ordenes:[]};x.n++;x.monto+=precioVenta(o);x.ordenes.push(o);porCat.set(k,x)});
+  const rangoCat=k=>k==="sin"?2:k==="inventario"?1:0;
+  const categorias=[...porCat.values()].sort((p,q)=>rangoCat(p.clave)-rangoCat(q.clave)||q.monto-p.monto||p.nombre.localeCompare(q.nombre));
+  const maxCat=Math.max(0,...categorias.map(x=>x.monto))||1;
 
   // ── máquinas: las horas del periodo, contra los días hábiles del periodo desde que hay registros ──
   // Turno: 9 h al día (9 a 19 menos la comida), de lunes a viernes.
@@ -16498,8 +16538,7 @@ function Analytics({orders,onReload}) {
   const alternar=(k,e)=>{if(e&&e.detail>=2)return;setAbierto(a=>a===k?null:k)};
   const btnRenglon={display:"block",width:"100%",background:"transparent",border:"none",padding:"2px 0",textAlign:"left",cursor:"pointer",fontFamily:"inherit",color:"inherit"};
   const renglonDesplegado={display:"flex",gap:10,justifyContent:"space-between",fontSize:11,padding:"3px 0",borderTop:"0.5px solid "+C.bd};
-  const listaOrdenes=(os,conTipo)=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{os.slice().sort((a,b)=>precioVenta(b)-precioVenta(a)).slice(0,20).map(o=><div key={o.id} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{folioDe(o)}</span> · {conTipo?nombreDeTipo(o.product_type):o.client}{o.order_type==="maquila"?" · maquila":""} · {fD(o.delivered_at||o.deliveredAt)}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(precioVenta(o))}</span></div>)}{os.length>20&&<div style={{fontSize:10,color:C.t2,paddingTop:4}}>y {os.length-20} más</div>}</div>;
-  const listaTipos=ts=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{ts.map(x=><div key={x.nombre} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.nombre} · {enPlural(x.n,"orden","órdenes")}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(x.monto)}</span></div>)}</div>;
+  const listaOrdenes=(os,conTipo)=><div data-ordenes style={{margin:"6px 0 4px",padding:"4px 10px",background:C.bg,borderRadius:8}}>{os.slice().sort((a,b)=>precioVenta(b)-precioVenta(a)).slice(0,20).map(o=><div key={o.id} style={renglonDesplegado}><span style={{minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{folioDe(o)}</span> · {conTipo==="ambos"?[nombreDeTipo(o.product_type),String(o.client||"").trim()].filter(Boolean).join(" · "):conTipo?nombreDeTipo(o.product_type):o.client}{o.order_type==="maquila"?" · maquila":""} · {fD(o.delivered_at||o.deliveredAt)}</span><span style={{fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fmt(precioVenta(o))}</span></div>)}{os.length>20&&<div style={{fontSize:10,color:C.t2,paddingTop:4}}>y {os.length-20} más</div>}</div>;
   const TABS=[{id:"finance",ic:CurrencyDollarIcon,l:"Financiero"},{id:"machines",ic:FactoryIcon,l:"Máquinas"},{id:"efficiency",ic:ChartBarIcon,l:"Eficiencia"},{id:"clients",ic:UsersIcon,l:"Clientes"},{id:"storage",ic:FolderOpenIcon,l:"Archivos"}];
   // v10.84.84 — el periodo es un grupo de radios: flechas para moverse, una sola parada de Tab (la marcada)
   const teclaPeriodo=e=>{const i=PERIODOS_ANALYTICS.findIndex(x=>x.id===per);let j=null;if(e.key==="ArrowRight"||e.key==="ArrowDown")j=(i+1)%PERIODOS_ANALYTICS.length;else if(e.key==="ArrowLeft"||e.key==="ArrowUp")j=(i-1+PERIODOS_ANALYTICS.length)%PERIODOS_ANALYTICS.length;else if(e.key==="Home")j=0;else if(e.key==="End")j=PERIODOS_ANALYTICS.length-1;if(j===null)return;e.preventDefault();setPer(PERIODOS_ANALYTICS[j].id);const b=e.currentTarget.querySelectorAll('[role="radio"]')[j];b&&b.focus()};
@@ -16544,20 +16583,21 @@ function Analytics({orders,onReload}) {
         </div>
       </div>
 
-      {/* Productos del periodo: v10.84.84 — sólo lo entregado, las 8 primeras y «Otros», un color, lo escrito distinto junto */}
+      {/* v10.84.91 — el ingreso por CATEGORÍA (lista cerrada): todas las del periodo; cada una abre sus órdenes con el nombre de cada
+          trabajo y su cliente (así se ve qué cayó en cada una); «Sin clasificar» y la venta de inventario (un canal), en gris y al final */}
       <div data-productos style={{background:C.sf,borderRadius:14,padding:16,maxWidth:760}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Productos por ingreso</div>
-        {tipos.length===0&&<div style={{fontSize:12,color:C.t2,padding:"8px 0"}}>Sin entregas en el periodo.</div>}
-        {[...tiposTop.map(x=>({...x,clave:x.nombre})),...(tiposOtros.length?[{clave:"otros",nombre:"Otros ("+enPlural(tiposOtros.length,"tipo","tipos")+")",n:tiposOtros.length,ordenes:tiposOtros.reduce((s,x)=>s+x.n,0),monto:tiposOtros.reduce((s,x)=>s+x.monto,0)}]:[])].map(x=><div key={x.clave} data-producto={x.clave} data-monto={x.monto} data-n={x.n} style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase",marginBottom:10}}><ChartBarIcon size={13} weight="bold"/>Ingreso por categoría</div>
+        {categorias.length===0&&<div style={{fontSize:12,color:C.t2,padding:"8px 0"}}>Sin entregas en el periodo.</div>}
+        {categorias.map(x=>{const gris=rangoCat(x.clave)>0;return <div key={x.clave} data-producto={x.clave} data-monto={x.monto} data-n={x.n} style={{marginBottom:8}}>
           <button onClick={e=>alternar("p:"+x.clave,e)} aria-expanded={abierto==="p:"+x.clave} style={btnRenglon}>
           <div style={{display:"flex",justifyContent:"space-between",gap:12,marginBottom:3}}>
-            <span data-nombre style={{fontSize:12,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:x.clave==="otros"?C.t2:C.tx}}>{x.nombre}</span>
-            <span data-monto-txt style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",color:C.tx,fontWeight:600}}>{fmt(x.monto)}</span> · {x.clave==="otros"?enPlural(x.ordenes,"orden","órdenes"):enPlural(x.n,"orden","órdenes")}</span>
+            <span data-nombre style={{fontSize:12,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:gris?C.t2:C.tx}}>{x.nombre}</span>
+            <span data-monto-txt style={{fontSize:11,color:C.t2,whiteSpace:"nowrap"}}><span style={{fontFamily:"'Geist Mono',monospace",color:C.tx,fontWeight:600}}>{fmt(x.monto)}</span> · {enPlural(x.n,"orden","órdenes")}</span>
           </div>
-          <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((x.monto/maxTipo)*100)+"%",height:"100%",background:x.clave==="otros"?C.bdSt:C.ac+"99",borderRadius:3}}/></div>
+          <div style={{background:C.bg,borderRadius:3,height:6,overflow:"hidden"}}><div style={{width:((x.monto/maxCat)*100)+"%",height:"100%",background:gris?C.bdSt:C.ac+"99",borderRadius:3}}/></div>
           </button>
-          {abierto==="p:"+x.clave&&(x.clave==="otros"?listaTipos(tiposOtros):listaOrdenes(x.ordenes,false))}
-        </div>)}
+          {abierto==="p:"+x.clave&&listaOrdenes(x.ordenes,"ambos")}
+        </div>})}
       </div>
     </div>}
 
@@ -20239,7 +20279,7 @@ export default function PrintFlow() {
       }catch(e){console.warn("[create] upsertClient falló (no bloqueante):",e?.message)}
     }
     const {_clienteNuevo,...fOrden}=f;   // v10.84.77 — lo que la forma le dice a App (el cliente que dio de alta), no una columna
-    const newOrder={...fOrden,client_id:resolvedClientId,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
+    const newOrder={...fOrden,client_id:resolvedClientId,id:gid(),stage:isMaq?"maq_created":"draft",priority:f.priority||"normal",production_number:assignedPN,created_at:new Date().toISOString(),created_by:userLogin||user,source:"internal",categoria:f.categoria||null,validated_by_production:false,validated_by_preprensa:false,price:toNum(f.price,parseFloat),quantity:toNum(f.quantity,v=>parseInt(v,10)),estimated_hours:toNum(f.estimated_hours,parseFloat),maq_cost:toNum(f.maq_cost,parseFloat),maq_price:toNum(f.maq_price,parseFloat),paper_grammage:toNum(f.paper_grammage,v=>parseInt(v,10)),width_cm:f.standard_size?null:toNum(f.width_cm,parseFloat),height_cm:f.standard_size?null:toNum(f.height_cm,parseFloat),standard_size:toStr(f.standard_size),due_date:toStr(f.due_date),machine_log:[],waste_log:[],comments:[],notes_log:[],current_machine:null,proof_approved:null,timeline:[{action:"📋 Orden creada",date:new Date().toISOString(),by:user,color:C.ac}]};
     setOrders(p=>[newOrder,...p]);
     try{
       await db.saveOrder(newOrder);
@@ -20688,8 +20728,9 @@ export default function PrintFlow() {
   const update=useCallback(async f=>{
     // Only update form-editable fields — never overwrite stage, validation, machine state
     // 🔒 v10.64.0 — NO re-agregar "production_number": el folio es inmutable (corte híbrido).
-    const editableFields=["order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back","distribution","sin_empaque_sygma"];
+    const editableFields=["categoria","order_type","priority","client","client_id","client_company","client_agent","client_email","client_phone","client_lada","client_rfc","product","product_type","quantity","paper_type","paper_grammage","width_cm","height_cm","standard_size","colors","ink_front","ink_back","finishes","notes","price","estimated_hours","due_date","maq_provider","maq_cost","maq_price","agent","file_url","file_name","plate_status","image_url","image_url_2","pantone_front","pantone_back","distribution","sin_empaque_sygma"];
     const safeUpdate={};editableFields.forEach(k=>{if(k in f)safeUpdate[k]=f[k]});
+    if("categoria" in safeUpdate)safeUpdate.categoria=safeUpdate.categoria||null;   // v10.84.91 — "" va NULL (la base no acepta "")
     // v10.58.26: defense-in-depth — si la orden original tenía folio pre-asignado y el actor
     // NO es admin, quitar price/maq_price del payload aunque el frontend los haya enviado.
     // Previene cambio de precio vía DevTools cuando se está en modo edit limitado.

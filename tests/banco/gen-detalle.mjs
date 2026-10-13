@@ -10,6 +10,7 @@
 //   archivo: la base contesta con error) · falla=alias (la base rechaza agregar un nombre interno) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
 import fs from "node:fs";
 import path from "node:path";
+import { importacionesDeLib } from "./extraer.mjs";
 const [, , srcPath, outDir] = process.argv;
 const L = fs.readFileSync(srcPath, "utf8").replace(/\r\n/g, "\n").split("\n");
 const find = (pred, desc) => { const i = L.findIndex(pred); if (i < 0) throw new Error("no encuentro " + desc); return i; };
@@ -25,6 +26,8 @@ const partes = [
   `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
   line(/^import \{ Broadcast as BroadcastIcon/, "íconos"),
+  ...importacionesDeLib(L.join("\n")),   // v10.84.91 — lo que App importa de ./lib/ (las categorías)
+  `import * as CATS from "../src/lib/categorias.js";`,
   line(/^const C=\{/, "C"), line(/^const F=\{/, "F"),
   line(/^const inp=/, "inp"), line(/^const lbl=/, "lbl"), line(/^const bt=/, "bt"), line(/^const bs=/, "bs"),
   ...["lumHex", "tintaAA", "tenueAA"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
@@ -87,7 +90,9 @@ const db = { orderFolioIsCancelled: async () => CASO === "foliocancelado",
   getOrderChangeLog: async () => { vecesHistorial++; anotar("db:getOrderChangeLog");
     if (FALLA === "historial" || (FALLA === "historial1" && vecesHistorial === 1)) throw new Error("getOrderChangeLog: 503 Service Unavailable");
     return [{ field: "price", field_label: "Precio", value_before: 5200, value_after: 5649, stage_at_change: "salidas", changed_by: "karla", changed_at: "2026-09-30T18:00:00Z" },
-            { field: "due_date", field_label: "Fecha de entrega", value_before: "2026-09-27", value_after: "2026-09-29", stage_at_change: "draft", changed_by: "secretaria", changed_at: "2026-09-25T17:00:00Z" }]; } };
+            { field: "due_date", field_label: "Fecha de entrega", value_before: "2026-09-27", value_after: "2026-09-29", stage_at_change: "draft", changed_by: "secretaria", changed_at: "2026-09-25T17:00:00Z" },
+            // v10.84.91 — historial=cat: un cambio de categoría, como lo anota la base (el código, no el nombre)
+            ...(Q.get("historial") === "cat" ? [{ field: "categoria", field_label: "Categoría", value_before: "otro", value_after: "formas", stage_at_change: "design", changed_by: "secretaria", changed_at: "2026-09-26T10:00:00Z" }] : [])]; } };
 const propsArchivoFirmado = () => ({});
 const firmarOrderFile = async src => src;
 const IMG = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#dfe6ee"/><text x="300" y="400" font-size="48" text-anchor="middle" fill="#4a6572">ARTE</text></svg>');
@@ -145,6 +150,14 @@ const CASOS = {
     returned_from_order_id: "OP-X", return_covered_by_folio: "F-101", bill_to_client_id: "c9", bill_to_name: "PREMIUM RESTAURANT BRANDS", bill_to_rfc: "PRB0101011A1",
     sin_empaque_sygma: true, current_machine: "off_pm74", machine_queue_position: 0, machine_log: [{ machine: "off_pm74", started: "2026-10-06T15:00:00Z" }] },
 };
+// v10.84.91 — la categoría de cada caso como la deja la base (la sugerida; «otro» si ninguna regla la reconoce; sin ella el inventario) y
+//   dos casos: inventario (tipo «stock», sin categoría: es un canal) y sinclasificar (un nombre nuevo que ninguna regla reconoce: la base
+//   la deja vacía)
+CASOS.inventario = { ...BASE, production_number: "P-0656", client: "CUADRA BOOTS", stage: "delivered", product_type: "stock", product: "Caja bota alta", categoria: null,
+  invoice_folio: "F-153", invoice_type: "factura", delivered_at: "2026-10-09T18:00:00Z" };
+CASOS.sinclasificar = { ...BASE, production_number: "P-0655", stage: "design", product_type: "SELLOS DE GOMA", categoria: null };
+const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
+Object.values(CASOS).forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 // etapa=… cambia la etapa del caso (para barrer etapas y roles); cliente=… cambia el nombre del cliente
 const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage: Q.get("etapa"), order_type: Q.get("etapa").startsWith("maq_") ? "maquila" : (CASOS[CASO] || CASOS.factura).order_type } : {}),
   ...(Q.get("cliente") ? { client: Q.get("cliente") } : {}), ...(Q.get("sinentrega") ? { due_date: null } : {}),

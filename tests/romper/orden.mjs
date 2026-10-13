@@ -2150,6 +2150,138 @@ await caso("ord-314 a 1366 con el menú plegado (dos columnas): la imagen se sub
   ok("ord-314 a 1366 con el menú plegado (dos columnas): la imagen se sube en la primera pantalla", b !== null && b <= top, `«Subir 1ra» termina en ${b} · el pie empieza en ${Math.round(top)}`);
 });
 
+// ── v10.84.91 — LA CATEGORÍA (Marcelo, 13-oct: obligatoria, con la sugerencia puesta). Vuelta 1: escritas ANTES del cambio ──
+const categoria = p => p.locator("select#ff-categoria").inputValue({ timeout: 1500 }).catch(() => null);
+const notaSugerida = async p => (await p.locator("#ff-categoria-nota").count()) > 0;
+const tipo = async (p, t) => { await llenar(p, "Escribe o busca un tipo...", t); await p.keyboard.press("Escape"); await espera(p, 250); };
+const elegirCategoria = async (p, c) => { await p.locator("select#ff-categoria").selectOption(c, { timeout: 1500 }); await espera(p, 200); };
+const ultimoGuardado = async p => { const sv = (await lineas(p, "saveOrder ")).pop(); return sv ? JSON.parse(sv.replace(/^saveOrder /, "")) : null; };
+const ultimoUpdate = async (p, id) => { const up = (await lineas(p, "update " + id + " ")).pop(); return up ? JSON.parse(up.replace("update " + id + " ", "")) : null; };
+const enLaBase = (p, id) => p.evaluate(i => { const o = window.__estado().base.find(x => x.id === i); return o ? o.categoria : "(no está)"; }, id);
+const cambiarEnLaBase = (p, id, x) => p.evaluate(([i, v]) => Object.assign(window.__estado().base.find(o => o.id === i), v), [id, x]);
+await caso("ord-315 el tipo «Etiquetas» pone la categoría «Etiquetas y stickers», dice que es sugerida y se crea con ella", "", async p => {
+  await capturar(p);
+  const c = await categoria(p), nota = await notaSugerida(p);
+  await crear(p); await espera(p, 1300);
+  const g = await ultimoGuardado(p);
+  ok("ord-315 el tipo «Etiquetas» pone la categoría «Etiquetas y stickers», dice que es sugerida y se crea con ella", c === "etiquetas" && nota && g?.categoria === "etiquetas",
+    `categoría «${c}» · nota de sugerida ${nota} · guardada ${g ? JSON.stringify(g.categoria) : "NO se guardó"}`);
+});
+await caso("ord-316 un tipo que ninguna regla conoce: la categoría queda por elegir, no deja crear, lo dice y lleva a ella; con «Otro» se crea", "", async p => {
+  await capturar(p); await tipo(p, "Sellos de goma");
+  const c = await categoria(p);
+  await crear(p); await espera(p, 800);
+  const frena = (await cuenta(p, "saveOrder ")) === 0, t = await texto(p), foco = await quienTieneElFoco(p);
+  await elegirCategoria(p, "otro"); await crear(p); await espera(p, 1300);
+  const g = await ultimoGuardado(p);
+  ok("ord-316 un tipo que ninguna regla conoce: la categoría queda por elegir, no deja crear, lo dice y lleva a ella; con «Otro» se crea",
+    c === "" && frena && /Falta la categoría/.test(t) && foco === "ff-categoria" && g?.categoria === "otro",
+    `categoría «${c}» · frena ${frena} · dice «Falta la categoría» ${/Falta la categoría/.test(t)} · foco «${foco}» · guardada ${g ? JSON.stringify(g.categoria) : "NO"}`);
+});
+await caso("ord-317 elegida a mano, cambiar el tipo ya no la mueve (y deja de decir que es sugerida)", "", async p => {
+  await capturar(p); await elegirCategoria(p, "pop"); await tipo(p, "Libros");
+  const c = await categoria(p), nota = await notaSugerida(p);
+  ok("ord-317 elegida a mano, cambiar el tipo ya no la mueve (y deja de decir que es sugerida)", c === "pop" && !nota, `categoría «${c}» (debe seguir «pop») · nota ${nota}`);
+});
+await caso("ord-318 sin tocarla, sigue al tipo: Etiquetas → Libros → un nombre que no conoce (queda por elegir: no se queda la de antes)", "", async p => {
+  await capturar(p); const c1 = await categoria(p);
+  await tipo(p, "Libros"); const c2 = await categoria(p);
+  await tipo(p, "Sellos de goma"); const c3 = await categoria(p);
+  ok("ord-318 sin tocarla, sigue al tipo: Etiquetas → Libros → un nombre que no conoce (queda por elegir: no se queda la de antes)", c1 === "etiquetas" && c2 === "libros" && c3 === "",
+    `«${c1}» → «${c2}» → «${c3}»`);
+});
+await caso("ord-319 la venta de inventario (tipo «stock») no lleva categoría: no sale la lista, no la pide y se guarda sin ella (null, no «»)", "", async p => {
+  await capturar(p); await tipo(p, "stock");
+  const hay = await p.locator("select#ff-categoria").count();
+  await crear(p); await espera(p, 1300);
+  const g = await ultimoGuardado(p);
+  ok("ord-319 la venta de inventario (tipo «stock») no lleva categoría: no sale la lista, no la pide y se guarda sin ella (null, no «»)", hay === 0 && !!g && g.categoria === null,
+    `lista ${hay} · guardada ${g ? JSON.stringify(g.categoria) : "NO se guardó"}`);
+});
+await caso("ord-320 editar: la categoría que tiene, puesta; abrir y salir sin tocar nada no pregunta", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED"); const c = await categoria(p);
+  await p.getByRole("button", { name: /^Cancelar$/ }).click(); await espera(p, 400);
+  const pregunta1 = await hayPregunta(p), vista = (await estado(p)).vista;
+  ok("ord-320 editar: la categoría que tiene, puesta; abrir y salir sin tocar nada no pregunta", c === "formas" && !pregunta1 && vista !== "form",
+    `categoría «${c}» (Recetarios → formas) · pregunta al salir ${pregunta1} · vista ${vista}`);
+});
+await caso("ord-321 editar y cambiar la categoría: se guarda la nueva (el código de la lista)", "modo=editar&rol=admin", async p => {
+  await editar(p, "OP-ED"); await elegirCategoria(p, "libros");
+  await guardar(p); await espera(p, 1500);
+  const u = await ultimoUpdate(p, "OP-ED"), base = await enLaBase(p, "OP-ED");
+  ok("ord-321 editar y cambiar la categoría: se guarda la nueva (el código de la lista)", u?.categoria === "libros" && base === "libros", `update ${u ? JSON.stringify(u.categoria) : "NO hubo"} · en la base «${base}»`);
+});
+await caso("ord-322 «Editar Specs» (Pre-prensa): no sale la categoría y guardar no la cambia aunque cambie el tipo", "modo=specs&rol=preprensa", async p => {
+  const hay = await p.locator("select#ff-categoria").count();
+  await tipo(p, "Libros"); await guardar(p); await espera(p, 1500);
+  const u = await ultimoUpdate(p, "OP-ED"), base = await enLaBase(p, "OP-ED");
+  ok("ord-322 «Editar Specs» (Pre-prensa): no sale la categoría y guardar no la cambia aunque cambie el tipo", hay === 0 && !!u && (u.categoria === undefined || u.categoria === "formas") && base === "formas",
+    `lista ${hay} · update ${u ? JSON.stringify(u.categoria) : "NO hubo"} · en la base «${base}»`);
+});
+await caso("ord-323 Replicar trae la categoría de la orden de antes (aunque no sea la que sugiere su nombre) y el tipo ya no la mueve", "", async p => {
+  await cambiarEnLaBase(p, "OP-A2", { categoria: "pop" });
+  await elegirCliente(p, "COSQUIM"); await replicar(p, "P-0649");
+  const t1 = await valor(p, "Escribe o busca un tipo..."), c1 = await categoria(p), nota = await notaSugerida(p);
+  await tipo(p, "Libros"); const c2 = await categoria(p);
+  ok("ord-323 Replicar trae la categoría de la orden de antes (aunque no sea la que sugiere su nombre) y el tipo ya no la mueve", t1 === "Cintillos" && c1 === "pop" && !nota && c2 === "pop",
+    `tipo «${t1}» · categoría «${c1}» · nota ${nota} · tras cambiar el tipo «${c2}»`);
+});
+await caso("ord-324 «Deshacer» de Replicar regresa la categoría y vuelve a seguir al tipo", "", async p => {
+  await cambiarEnLaBase(p, "OP-A2", { categoria: "pop" });
+  await elegirCliente(p, "COSQUIM"); await replicar(p, "P-0649");
+  const hay = (await p.getByRole("button", { name: /Deshacer/ }).count()) > 0;
+  if (hay) { await clic(p.getByRole("button", { name: /Deshacer/ })); await espera(p, 400); }
+  const c1 = await categoria(p);
+  await tipo(p, "Libros"); const c2 = await categoria(p);
+  ok("ord-324 «Deshacer» de Replicar regresa la categoría y vuelve a seguir al tipo", hay && c1 === "" && c2 === "libros", `Deshacer ${hay} · después «${c1}» · con «Libros» «${c2}»`);
+});
+await caso("ord-325 «Falta el tipo» sale junto al tipo, arriba de la categoría", "", async p => {
+  await elegirCliente(p, "COSQUIM"); await llenar(p, "Ejemplo · 1000", "1000"); await p.locator("textarea").first().fill("Algo"); await crear(p); await espera(p, 700);
+  const tipoR = await rect(p, "#ff-tipo"), falta = await rect(p, "#ff-tipo-falta"), cat = await rect(p, "#ff-categoria");
+  const bien = !!tipoR && !!falta && !!cat && falta.top >= tipoR.bottom - 1 && falta.top - tipoR.bottom < 30 && falta.bottom <= cat.top;
+  ok("ord-325 «Falta el tipo» sale junto al tipo, arriba de la categoría", bien, `tipo ${JSON.stringify(tipoR)} · aviso ${JSON.stringify(falta)} · categoría ${JSON.stringify(cat)}`);
+});
+for (const [w, h] of [[1366, 768], [1920, 1080]]) {
+  await caso("ord-326 a " + w + ": la categoría mide lo que el tipo y la página no se desborda", "", async p => {
+    await capturar(p);
+    const tipoR = await rect(p, "#ff-tipo"), cat = await rect(p, "#ff-categoria"), ancho = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    const bien = !!tipoR && !!cat && Math.abs(cat.left - tipoR.left) <= 1 && Math.abs(cat.right - tipoR.right) <= 1 && ancho <= 0;
+    ok("ord-326 a " + w + ": la categoría mide lo que el tipo y la página no se desborda", bien, `tipo ${JSON.stringify(tipoR)} · categoría ${JSON.stringify(cat)} · desborde ${ancho}`);
+  }, { width: w, height: h });
+}
+await caso("ord-327 una maquila también lleva su categoría (la de su nombre)", "modo=maquila&rol=admin", async p => {
+  const c = await categoria(p);
+  ok("ord-327 una maquila también lleva su categoría (la de su nombre)", c === "calendarios", `P-0647 «Calendarios»: categoría «${c}»`);
+});
+await caso("ord-328 «Agregar Producto a OC»: la categoría sale sugerida por el tipo que trae la OC", "modo=oc&rol=admin", async p => {
+  const c = await categoria(p), nota = await notaSugerida(p);
+  ok("ord-328 «Agregar Producto a OC»: la categoría sale sugerida por el tipo que trae la OC", c === "papeleria" && nota, `«Folders»: categoría «${c}» · nota ${nota}`);
+});
+await caso("ord-329 si la base falla al crear, la categoría elegida sigue elegida", "guardar=falla", async p => {
+  await capturar(p); await elegirCategoria(p, "pop"); await crear(p); await espera(p, 1500);
+  const c = await categoria(p), n = (await nuevas(p)).length;
+  ok("ord-329 si la base falla al crear, la categoría elegida sigue elegida", c === "pop" && n === 0, `categoría «${c}» · órdenes nuevas ${n}`);
+});
+await caso("ord-330 editar una orden sin categoría (un nombre que no se reconoce): pide elegirla antes de guardar; con ella, guarda", "modo=editar&rol=admin", async p => {
+  await cambiarEnLaBase(p, "OP-ED", { categoria: null, product_type: "Sellos de goma" });
+  await editar(p, "OP-ED"); const c = await categoria(p);
+  await p.locator("textarea").first().fill("Recetas · con otra nota"); await guardar(p); await espera(p, 900);
+  const frena = (await cuenta(p, "update OP-ED ")) === 0, t = await texto(p);
+  await elegirCategoria(p, "otro"); await guardar(p); await espera(p, 1500);
+  const u = await ultimoUpdate(p, "OP-ED");
+  ok("ord-330 editar una orden sin categoría (un nombre que no se reconoce): pide elegirla antes de guardar; con ella, guarda", c === "" && frena && /Falta la categoría/.test(t) && u?.categoria === "otro",
+    `categoría «${c}» · frena ${frena} · lo dice ${/Falta la categoría/.test(t)} · update ${u ? JSON.stringify(u.categoria) : "NO hubo"}`);
+});
+await caso("ord-331 Producción edita una orden sin categoría: no la ve ni se la pide (no es suya), y no se mueve sola", "modo=editar&rol=produccion", async p => {
+  await cambiarEnLaBase(p, "OP-ED", { categoria: null });
+  await editar(p, "OP-ED"); const hay = await p.locator("select#ff-categoria").count();
+  if (await editable(p.getByPlaceholder("Escribe o busca un tipo..."))) await tipo(p, "Libros");
+  await p.locator("textarea").first().fill("Recetas · revisado por producción"); await guardar(p); await espera(p, 1500);
+  const u = await ultimoUpdate(p, "OP-ED"), t = await texto(p);
+  ok("ord-331 Producción edita una orden sin categoría: no la ve ni se la pide (no es suya), y no se mueve sola", hay === 0 && !/Falta la categoría/.test(t) && !!u && (u.categoria === undefined || u.categoria === null),
+    `lista ${hay} · la pide ${/Falta la categoría/.test(t)} · update ${u ? JSON.stringify(u.categoria) : "NO hubo"}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

@@ -11,7 +11,7 @@
 // window.__cambiar(id, {…}) cambia una orden con la pantalla abierta (como el tiempo real) · window.__ordenes() las devuelve.
 import fs from "node:fs";
 import path from "node:path";
-import { extraer } from "./extraer.mjs";
+import { extraer, importacionesDeLib } from "./extraer.mjs";
 const [, , srcPath, outDir] = process.argv;
 const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
@@ -24,6 +24,7 @@ const partes = [
   `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
   iconos,
+  ...importacionesDeLib(fuente),   // v10.84.91 — lo que App importa de ./lib/ (las categorías, cuadrarPartes)
   `// ── lo que toca la base o Storage, simulado (${simuladosUsados.join(", ") || "nada"}) ──
 const bitacora = [];
 const anotar = t => { bitacora.push(t); window.dispatchEvent(new Event("bitacora")); };

@@ -11,6 +11,12 @@ const require = createRequire(import.meta.url);
 const { parse } = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
 
+// v10.84.91 — lo que App importa de sus módulos propios (./lib/…: cuadrarPartes, las categorías), con la ruta desde el banco
+// (.banco-x/banco.jsx → ../src/lib/…): un componente extraído que use esos nombres los encuentra (extraer no junta importaciones).
+export const importacionesDeLib = fuente => fuente.replace(/\r\n/g, "\n").split("\n")
+  .filter(l => /^import \{[^}]*\} from "\.\/lib\/[^"]+";/.test(l))
+  .map(l => l.replace(/;.*$/, ";").replace('"./lib/', '"../src/lib/'));
+
 export function extraer(fuente, raices, { simulados = [] } = {}) {
   const src = fuente.replace(/\r\n/g, "\n");
   const ast = parse(src, { sourceType: "module", plugins: ["jsx"], errorRecovery: false });

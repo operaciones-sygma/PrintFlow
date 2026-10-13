@@ -1105,6 +1105,29 @@ for (const [q, quien] of [["caso=salidas&rol=karla", "Karla con la orden ya en S
     const t = hay ? await p.getByRole("menu").innerText() : "";
     ok("det-162-pasar-a-salidas-no-para-" + q.replace(/[^a-z]+/g, "-"), !/Ya está lista: pasar a Salidas/.test(t), (/Ya está lista: pasar a Salidas/.test(t) ? "LO OFRECE a " : "no se le ofrece a ") + quien);
   });
+// ── v10.84.91 — la categoría del trabajo en el detalle (vuelta 1: escritas antes del cambio) ──
+const valorDe = (p, etq) => dlg(p).evaluate((d, e) => { const dt = [...d.querySelectorAll("dt")].find(x => x.textContent.trim().toLowerCase() === e.toLowerCase());
+  return dt && dt.nextElementSibling ? dt.nextElementSibling.textContent.trim() : null; }, etq);
+await caso("det-168-la-categoria-con-su-nombre", "caso=factura", async p => {
+  const v = await valorDe(p, "Categoría");
+  ok("det-168-la-categoria-con-su-nombre", v === "Formas, talonarios y formatos", `«Categoría» dice «${v}» («Formatos»: el nombre de la lista, no el código)`);
+});
+await caso("det-169-la-venta-de-inventario-lo-dice", "caso=inventario", async p => {
+  const v = await valorDe(p, "Categoría");
+  ok("det-169-la-venta-de-inventario-lo-dice", v === "Venta de inventario", `una venta de inventario: «Categoría» dice «${v}» (no lleva: es un canal)`);
+});
+await caso("det-170-sin-clasificar-a-la-vista", "caso=sinclasificar&rol=secretaria", async p => {
+  const v = await valorDe(p, "Categoría");
+  ok("det-170-sin-clasificar-a-la-vista", v === "Sin clasificar", `un nombre que ninguna regla conoce: «Categoría» dice «${v}» (a la vista, para corregirla)`);
+});
+await caso("det-171-el-historial-nombra-la-categoria", "caso=factura&rol=admin&historial=cat", async p => {
+  await dlg(p).getByRole("button", { name: /Historial de cambios/ }).click(); await espera(p, 400);
+  const t = (await textoDlg(p)).replace(/\s+/g, " ");
+  const tramo = (t.match(/Categor[ií]a.{0,120}/) || [""])[0];
+  ok("det-171-el-historial-nombra-la-categoria", /Otro/.test(tramo) && /Formas, talonarios y formatos/.test(tramo) && !/\bformas\b/.test(tramo),
+    `el historial: «${tramo.slice(0, 120)}» (los nombres de la lista, no «otro → formas»)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

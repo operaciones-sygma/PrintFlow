@@ -21,7 +21,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { extraer } from "./extraer.mjs";
+import { extraer, importacionesDeLib } from "./extraer.mjs";
 const require = createRequire(import.meta.url);
 const { parse } = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
@@ -105,6 +105,8 @@ const partes = [
   `import React, { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";`,
   `import { createRoot } from "react-dom/client";`,
   iconos,
+  ...importacionesDeLib(fuente),   // v10.84.91 — lo que App importa de ./lib/ (las categorías, cuadrarPartes)
+  `import * as CATS from "../src/lib/categorias.js";`,
   `// ── la base, simulada (${simuladosUsados.join(", ") || "nada"}) ──
 const Q = new URLSearchParams(location.search);
 const ROL = Q.get("rol") || "secretaria", MODO = Q.get("modo") || "nueva";
@@ -174,10 +176,14 @@ const BASE = [
 // como las de verdad (968 vivas, 12-oct): todas traen su prioridad y su lada (la forma las llena; sin ellas, «Guardar» sin tocar nada
 //   parecería un cambio)
 BASE.forEach(o => { o.priority = o.priority || "normal"; o.client_lada = o.client_lada || "+52"; });
+// v10.84.91 — y su categoría, como la deja la base (la sugerida por su nombre; «otro» si ninguna regla lo reconoce; la venta de inventario
+//   sin ella). Con un espacio de nombres: el App.jsx de antes no la importa (la corrida doble)
+const categoriaDe = t => CATS.categoriaSugerida(t) ?? (String(t || "").trim() && !CATS.esVentaDeInventario(t) ? "otro" : null);
+BASE.forEach(o => { if (!("categoria" in o)) o.categoria = categoriaDe(o.product_type); });
 const PURCHASE_ORDERS = [{ id: "OC-0950", client: "GOBIERNO DEL ESTADO", shared_invoice_folio: "F-200" }, { id: "OC-0900", client: "GOBIERNO DEL ESTADO", shared_invoice_folio: null }];
 const OC = { id: "OC-0900", client: "GOBIERNO DEL ESTADO", client_id: "c-gob", client_email: "compras@guanajuato.gob.mx", client_rfc: "GEG850101AB1", vendedor: "Manuel", delivery_date: "2026-10-30" };
 const RESUMEN = ["id", "production_number", "order_type", "stage", "priority", "client", "client_id", "client_email", "client_phone", "client_rfc", "client_agent", "product_type", "product",
-  "quantity", "agent", "price", "maq_provider", "maq_cost", "maq_price", "due_date", "finishes", "distribution", "sin_empaque_sygma", "purchase_order_id", "plate_status", "image_url", "image_url_2", "file_url", "notes"];
+  "quantity", "agent", "price", "maq_provider", "maq_cost", "maq_price", "due_date", "finishes", "distribution", "sin_empaque_sygma", "purchase_order_id", "plate_status", "image_url", "image_url_2", "file_url", "notes", "categoria"];
 const resumen = o => Object.fromEntries(RESUMEN.filter(k => k in o).map(k => [k, o[k]]));
 function consulta(tabla) {
   const q = { tabla, filtros: [], accion: "select", valores: null };
