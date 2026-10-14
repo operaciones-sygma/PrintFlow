@@ -40,7 +40,7 @@ de 125, `hooks`, build y alcance.
 puede casar de más; lo frena el cuadre (±$0.02 contra la factura, en la pantalla y en la base). Endurecerlo (que la palabra sea del título o del
 tipo) sería otra versión.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~13:35; READY `dpl_Hd4jAUTKWjKy7ReWat5WuqMCaZbf` (commit `b08afa1`). Vuelta atrás: promover `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh` (el código de v10.84.108) o `git revert b08afa1`; la base no cambió. Candado: 1666 de 1666 a la primera, de a 1 tanda (47 min), ya con la PC reiniciada: la fuga de memoria de esos días era el controlador de la gráfica integrada AMD (cada navegador de Playwright le dejaba memoria retenida; CobranzaFlow la desactivó en Windows y Marcelo reinició a las 12:42). Revisado en producción sin escribir (`.banco-revisor-orden/medir-109.mjs`, la cuenta de pruebas con el rol de Karla), 3 de 3: el código servido trae la regla nueva (`endsWith("S")`: 0 en v10.84.108, 1 en ésta); el plan de OC-0966 abre y arma 11 facturas; sin errores, sin diálogos nativos y sin escrituras. «Traer sus piezas» no se puede apretar con esa cuenta (es visor: la base no le deja leer las facturas sin orden); con los conceptos timbrados de verdad de las 11 lo prueba la tanda `proponer` (pp-14 a pp-16).
 
 ## v10.84.108 — El plan matriz dice a nombre de quién salió cada factura y quién la paga — 14-oct-2026
 

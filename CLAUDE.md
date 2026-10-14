@@ -183,7 +183,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.108 (14-oct, ~12:03; READY `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh`, commit `29c1318`; vuelta atrás: promover
+- **LIVE:** v10.84.109 (14-oct, ~13:35; READY `dpl_Hd4jAUTKWjKy7ReWat5WuqMCaZbf`, commit `b08afa1`; vuelta atrás: promover
+  `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh` (el código de v10.84.108) o `git revert b08afa1`; la base no cambió; candado 1666 de 1666). v10.84.109: **«Traer sus
+  piezas de su CFDI» casa también el singular con el plural y por el tipo de la orden** (`src/lib/proponerPiezas.js`, `descripcionDeOrden`: Hotsson, las
+  11 facturas de OC-0966 sin teclear piezas). 🔥 **La fuga de memoria de la PC** (13 y 14-oct: los candados fallaban al azar) **era el controlador de la
+  gráfica integrada AMD**: cada navegador de Playwright le dejaba memoria retenida; CobranzaFlow la desactivó en Windows el 14-oct (la NVIDIA no se tocó)
+  y se reinició. Si vuelve a crecer el comprometido sin dueño, revisar que la AMD siga desactivada.
+  v10.84.108 (14-oct, ~12:03; READY `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh`, commit `29c1318`; vuelta atrás: promover
   `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK` (el código de v10.84.107) o `git revert 29c1318`; candado 1655 de 1655). v10.84.108: **el plan matriz dice a nombre
   de quién salió cada factura y quién la paga** (`public.a_nombre_de_quien`: sólo admin, karla y secretaria; el vendedor ni la pide). Hotsson: CobranzaFlow
   ya pasó a Hotsson el saldo de las 6 (con el OK de Marcelo) y el plan de OC-0966 ofrece las 11 ($132,355.87); v10.84.109 hace que «Traer sus piezas
