@@ -48,6 +48,10 @@ ok("ch-05-guias-sin-lo-retirado", falsas.length === 0, `guías con series D-/R-,
 const contradice = ["in_production", "packaging"].filter(st => /Arrastra a (Salidas|otra máquina, Empaque)/.test(GUIDES.produccion?.[st] || ""));
 ok("ch-06-guia-de-gerardo-con-los-botones", contradice.length === 0, `guías de Gerardo que mandan a arrastrar lo que tiene botón: [${contradice.map(st => st + ": «" + GUIDES.produccion[st] + "»").join(" · ") || "ninguna"}]`);
 
+// v10.84.94 — la guía de Germán en CTP no lo manda a arrastrar: su ficha y su tablero ya traen «A CTP», «A Procesadora» y «Placas Listas»
+//   (lo encontró la vuelta 2 de v10.84.94: los botones salían debajo de «Arrastra a CTP y Procesadora en tu Tablero»)
+ok("ch-14-guia-de-german-con-sus-botones", !/^Arrastra/.test(GUIDES.german?.ctp || "") && /CTP/.test(GUIDES.german?.ctp || ""), `la guía de Germán en CTP: «${GUIDES.german?.ctp}»`);
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nchips: ${res.length - fallan} pasan, ${fallan} fallan`);

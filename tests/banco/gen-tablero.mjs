@@ -80,7 +80,9 @@ const NORMAL = [
 ];
 const LLENO = [...NORMAL, ...Array.from({ length: 9 }, (_, i) => enMaquina("P-07" + String(i).padStart(2, "0"), "off_pm74", 3 + i, { client: "CLIENTE EN COLA " + (i + 1) })),
   ...Array.from({ length: 14 }, (_, i) => orden("P-08" + String(i).padStart(2, "0"), { stage: "ready", due_date: dia(i - 3), client: "CLIENTE EN LISTA " + (i + 1) }))];
-const ORDENES = CASO === "vacio" ? [] : CASO === "lleno" ? LLENO : NORMAL;
+// v10.84.94 — «ctp2»: dos órdenes esperando CTP (la segunda sube al lugar de la primera cuando ésta se va: el doble clic de Germán)
+const CTP2 = [...NORMAL, orden("P-0598", { stage: "ctp", client: "CERVECERIA MODELO", product_type: "Etiquetas", quantity: 250 })];
+const ORDENES = CASO === "vacio" ? [] : CASO === "lleno" ? LLENO : CASO === "ctp2" ? CTP2 : NORMAL;
 // una máquina en mantenimiento: el registro como lo carga App y MAINT_DOWN como lo llena (useMemo de maintKey)
 const MANT = CASO === "mantenimiento" ? [{ id: "m1", machine_id: "off_pm52", started_at: hace(3), ended_at: null, notes: "Rodillo dañado", started_by: "produccion" }] : [];
 // mant=<máquina>: además, esa máquina en mantenimiento (p. ej. una libre: mant=off_gto; v10.84.62)

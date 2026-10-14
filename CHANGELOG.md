@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.94 — Germán manda a CTP sin arrastrar, y la ficha con una sola acción rellena — 13-oct-2026
+
+**Qué pasaba** (dos recomendaciones más de la critique de «Mis Pendientes», 17/40, aprobadas por Marcelo el 13-oct):
+- **Germán sólo podía mandar a CTP y a la Procesadora arrastrando** (sin teclado ni tableta): en 30 días arrastró 114 órdenes, 55 a CTP
+  y 59 a la Procesadora. Su ficha en «Mis Pendientes» sólo ofrecía «Regresar» y le decía «Arrastra… en el Tablero». Y en su tablero, los
+  botones de la orden activa («Placas Listas», sacarla de la máquina, subir de la fila) no tenían el escudo del doble clic: la que avanza
+  sale y la siguiente sube a su lugar, con su mismo botón bajo el cursor (el P0 de la critique, aquí).
+- **La ficha, una pared de colores que reprueba AA:** todos sus botones rellenos con el color crudo («Asignar Folio y Entregar» 3.05:1,
+  «Enviar a Maquila» 2.85, «Recibimos el Trabajo» 2.54), y «Regresar» como un botón más, a veces el primero. El detalle ya usaba otro
+  criterio desde v10.84.46.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- El tablero de Germán: la orden que espera trae «A CTP»; la activa de CTP, «A Procesadora»; la de la Procesadora, «Placas Listas» (ya
+  estaba). Con la máquina en mantenimiento, el botón sale apagado y dice por qué. Todo lo que mueve la orden activa, con el escudo.
+- Su ficha (Mis Pendientes, «Todas», la OC): los mismos botones en lugar de «Arrastra… en el Tablero»; la que espera turno dentro de una
+  máquina dice su turno. Desde la ficha, la app frena si la máquina está en mantenimiento (`assignMachine` no frena las de preprensa).
+- La ficha: la primera acción que avanza, rellena en su tinta; las demás, teñidas; editar, teñido siempre; la maquila sin precio o sin
+  costo, «Recibimos el Trabajo» apagado y gris con lo que falta (como el detalle). «Regresar» sale de la fila y vive en el «⋯» de la
+  ficha para todos los que pueden (antes, ahí sólo para admin). El botón de la merma: teñido, con su nombre («Registrar merma») para el
+  lector de pantalla y letra de 11 px (era naranja relleno con un «+» blanco de 9 px).
+- Las guías de Germán (la de su ficha, su pista de primera vez, el subtítulo de su tablero y el de «Órdenes para CTP») ya no lo mandan
+  sólo a arrastrar: dicen que hay botones.
+
+**Cómo se probó** (vueltas): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.93: fallaban 19. En la tanda `tablero`
+(banco): tab-122 a tab-126 (el tablero de Germán sin «A CTP» ni «A Procesadora»; con el teclado; el doble clic con dos esperando, caso nuevo
+`ctp2`; CTP en mantenimiento), tab-127 a tab-130 (su ficha y la de admin decían «Arrastra… en el Tablero»), tab-131 rol por rol (varias
+rellenas y bajo AA: «Asignar Folio y Entregar» 3.05:1, «Enviar a Maquila» 2.85, «Empaque» 4.13, «Regresar» 3.68), tab-132 y tab-133
+(«Regresar» en la fila y no en el «⋯»), tab-134 (la maquila incompleta no decía qué falta) y tab-136 (la merma: naranja relleno, «+» de
+9 px, sin nombre). Con la app entera (`sesion`): ses-48 (la ficha de Germán sin «A CTP»; la app no frenaba el mantenimiento) y ses-49 (su
+tablero, el doble clic). **Vuelta 2**, con el cambio: la tanda del tablero completa encontró 3 fallas del propio arreglo, de fondo: la
+ficha de Germán traía sus botones DEBAJO de la guía «Arrastra a CTP y Procesadora en tu Tablero» (`GUIDES`). Se corrigió la guía, y con
+ella la pista de primera vez, el subtítulo de su tablero y el de «Órdenes para CTP»; queda ch-14 en la tanda `chips`. **Vuelta 3**, por
+donde no se diseñó: tab-137 (con el dedo, en la tableta), tab-138 (a 1920) y ses-55 (la base contesta con error al mover la orden: lo
+dice y no canta «asignada»). Pasan tab-137 y tab-138. ses-55 falló por la prueba: buscaba «No se pudo» o «error», y la app dice «P-0599 no pasó a la CTP: la base no lo aceptó» (corregida; pasa). det-69 y det-70 marcaron «errores de consola» por `ERR_NETWORK_CHANGED` y `ERR_NAME_NOT_RESOLVED`: la red de la PC parpadeó; repetidas, pasan limpias. Sin fallas de fondo: no hubo vuelta 4. Completas con el cambio: `tablero` 152, `detalle` 184, `chips` 7, `sesion` 49. **Cambiaron a propósito (2):** det-57 y det-66 afirmaban, en el detalle de una orden en CTP, la guía «Arrastra…» (y con admin, que Ctrl+Enter imprimía): ahora son det-57-german-en-ctp-trae-su-boton y det-66-admin-en-ctp-ctrl-enter-a-ctp («A CTP» es la acción del rol, también con Ctrl+Enter). **Sin probar con datos reales:** hoy no hay órdenes en CTP en producción; lo cubren el banco y la app entera.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.93 — Karla con una sola cola, y descargar el archivo ya no propone borrarlo — 13-oct-2026
 
 **Qué pasaba** (dos de las recomendaciones de la critique de «Mis Pendientes», 17/40, que Marcelo aprobó el 13-oct con «sigamos con lo

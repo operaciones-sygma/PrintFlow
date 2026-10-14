@@ -53,6 +53,7 @@ const USUARIOS = () => ({
   gerardo: { uid: "00000000-0000-4000-8000-00000000000b", pass: "buena", role: "produccion", display_name: "Gerardo" },
   bodega: { uid: "00000000-0000-4000-8000-00000000000c", pass: "buena", role: "almacen", display_name: "Bodega" },
   lupita: { uid: "00000000-0000-4000-8000-00000000000d", pass: "buena", role: "secretaria", display_name: "Lupita" },
+  german: { uid: "00000000-0000-4000-8000-00000000000e", pass: "buena", role: "german", display_name: "Germán" },
 });
 function simulada() {
   return {
@@ -67,6 +68,7 @@ function simulada() {
     salir: "ok",       // ok | red                         (POST /auth/v1/logout: con «red», la salida se anota y no llega)
     alPedirPerfil: null,   // async (page) => {}: corre ANTES de contestar get_user_session (para cerrar la sesión a media entrada)
     filas: {},         // v10.84.93 — { tabla: [filas] | "falla" }: lo que contesta la base al leer esa tabla (por omisión, nada)
+    rpcFalla: null,    // v10.84.94 — el nombre de una RPC que contesta 500 (la base que falla al escribir)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -166,6 +168,7 @@ async function rutear(ctx, s) {
         const pag = filas.slice(desde, desde + cuantas);
         return J(200, pag, { "content-range": pag.length ? desde + "-" + (desde + pag.length - 1) + "/" + filas.length : "*/" + filas.length });
       }
+      if (s.rpcFalla && ruta === "/rest/v1/rpc/" + s.rpcFalla) return J(500, { code: "XX000", message: "falla de prueba en " + s.rpcFalla });
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -835,6 +838,61 @@ for (const [n, quien, tablero] of [["ses-43-gerardo-sus-pendientes-siguen", "ger
       `${quien}: el menú ${JSON.stringify(menu)}; «Pendientes» abre «${v}» (como antes); Ctrl+K «${tablero ? "tablero" : "nueva"}» abre «${v2}»`);
   });
 }
+
+// ════════════════════════ Germán sin arrastrar (v10.84.94) ════════════════════════
+// Con la app entera: lo que el banco del tablero no ve porque lo hace App. El botón de la ficha («A CTP») llama a la app, y la app frena
+// si CTP está en mantenimiento (el tablero lo frena al soltar; `assignMachine` no frena las máquinas de preprensa). Y en su tablero, un
+// doble clic en «A CTP» manda UNA vez (con dos esperando, la segunda sube al lugar de la primera). Vuelta 1: escritas antes del cambio.
+const ORDENES_GERMAN = () => [
+  ordenK("P-0599", { stage: "ctp", client: "IMPRENTA LEON", product_type: "Volantes", categoria: "folletos" }),
+  ordenK("P-0598", { stage: "ctp", client: "CERVECERIA MODELO", product_type: "Etiquetas", categoria: "etiquetas", created_at: haceH(130) }),
+];
+const escrituras = (s, t0) => s.peticiones.filter(x => x.t >= t0 && x.m !== "GET" && x.m !== "HEAD" && x.ruta !== "/rest/v1/rpc/get_user_session"
+  && x.ruta !== "/rest/v1/rpc/log_wakeup_ack" && x.ruta !== "/rest/v1/notifications").map(x => x.m + " " + x.ruta);
+await caso("ses-48-german-a-ctp-en-mantenimiento-no-manda", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_GERMAN(), maintenance_log: [{ id: "m-ctp", machine_id: "pp_ctp", started_at: haceH(1), ended_at: null, notes: "Cambio de lámpara", started_by: "german" }] };
+  await abrirYEntrar(p, s, "german");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(700);
+  const ficha = p.locator('[role="button"][aria-label^="Orden P-0599"]').first();
+  const b = ficha.getByRole("button", { name: /^A CTP/ });
+  const hay = await b.count();
+  const t0 = Date.now();
+  if (hay) { await b.first().click(); await p.waitForTimeout(1200); }
+  const esc = escrituras(s, t0), t = await texto(p);
+  ok("ses-48-german-a-ctp-en-mantenimiento-no-manda", hay === 1 && esc.length === 0 && /CTP está en mantenimiento/.test(t),
+    `la ficha de P-0599 ${hay ? "trae «A CTP»" : "NO trae «A CTP»"}; con CTP en mantenimiento: ${esc.length ? "SE MANDÓ (" + esc.join(", ") + ")" : "no se mandó"}`
+    + `; ${/CTP está en mantenimiento/.test(t) ? "lo dice" : "NO dice por qué"}`);
+});
+// vuelta 3: la base contesta con error al mover la orden: la app lo dice y no canta «asignada»
+await caso("ses-55-german-a-ctp-la-base-falla", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_GERMAN() }; s.rpcFalla = "move_order_in_queue";
+  await abrirYEntrar(p, s, "german");
+  await esperarMenu(p, /^Tablero/); await despertar(p);
+  await p.locator('button[title="Tablero"]').first().click(); await p.waitForTimeout(900);
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  if (hay) { await b.click(); await p.waitForTimeout(1800); }
+  const t = await texto(p);
+  // (lo que dice la app: «❌ P-0599 no pasó a la CTP: … El tablero se vuelve a leer de la base.»; el éxito: «… ya corre en la CTP» o «→ CTP, 2º en
+  //  la fila». Corregida en la vuelta 3 de v10.84.94: buscaba «No se pudo» o «error», que la app no dice)
+  const mal = /no pasó a la CTP/.test(t), canta = /ya corre en la CTP|→ CTP, \d+º en la fila/.test(t);
+  ok("ses-55-german-a-ctp-la-base-falla", hay > 0 && mal && !canta,
+    `con la base fallando, «A CTP»: ${mal ? "lo dice («" + (t.match(/[^.]*no pasó a la CTP[^.]*/) || [""])[0].trim().slice(0, 100) + "»)" : "NO dice que falló"}${canta ? " y CANTA que se asignó" : ""}`);
+});
+await caso("ses-49-german-doble-clic-a-ctp-una-vez", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_GERMAN() };
+  await abrirYEntrar(p, s, "german");
+  await esperarMenu(p, /^Tablero/); await despertar(p);
+  await p.locator('button[title="Tablero"]').first().click(); await p.waitForTimeout(900);
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  const t0 = Date.now();
+  if (hay) { await b.dblclick(); await p.waitForTimeout(1500); }
+  const mov = s.peticiones.filter(x => x.t >= t0 && x.ruta === "/rest/v1/rpc/move_order_in_queue").length;
+  ok("ses-49-german-doble-clic-a-ctp-una-vez", hay > 0 && mov === 1,
+    `el tablero de Germán ${hay ? "trae «A CTP»" : "NO trae «A CTP»"}; doble clic: ${mov} envío(s) a la cola de CTP`);
+});
 
 await browser.close();
 await servidor.close();

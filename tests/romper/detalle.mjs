@@ -320,10 +320,15 @@ await caso("det-56-nombre-interno-se-guarda", "caso=factura&rol=admin", async p 
 });
 
 // ── Cuarta pasada (35/40, mirando los roles de piso) ─────────────────────────────────────────────────────────────────────
-await caso("det-57-guia-sin-botones", "caso=salidas&etapa=ctp&rol=german", async p => {
-  // (corregida en la vuelta 2: buscaba la guía del admin, «Arrastra a CTP en el Tablero Germán»; la de Germán es otra)
-  const vis = await guiaVisible(p, /Arrastra esta orden a CTP y Procesadora/);
-  ok("det-57-guia-sin-botones", vis, "Germán en CTP (sin botón): la guía de qué sigue " + (vis ? "se ve" : "NO se ve"));
+// (v10.84.94: Germán en CTP ya no tiene sólo la guía «Arrastra esta orden a CTP y Procesadora»: trae «A CTP». Antes era
+//  det-57-guia-sin-botones, que afirmaba la guía; cambió a propósito con los botones de Germán)
+await caso("det-57-german-en-ctp-trae-su-boton", "caso=salidas&etapa=ctp&rol=german", async p => {
+  const b = dlg(p).getByRole("button", { name: /^A CTP/ });
+  const hay = await b.count(), guia = await guiaVisible(p, /Arrastra esta orden a CTP y Procesadora/);
+  if (hay) { await b.first().click(); await espera(p, 400); }
+  const l = await log(p);
+  ok("det-57-german-en-ctp-trae-su-boton", hay === 1 && !guia && /asignar_maquina/.test(l) && /pp_ctp/.test(l),
+    `Germán en CTP: ${hay ? "trae «A CTP»" : "NO trae «A CTP»"}${guia ? "; todavía dice «Arrastra…»" : ""}; el registro: ${l.trim().split(/\r?\n/).slice(-1)[0] || "(nada)"}`);
 });
 await caso("det-58-sin-cliente-vacio", "caso=factura&rol=produccion", async p => {
   const vacio = await dlg(p).evaluate(d => { const r = [...d.querySelectorAll("div")].find(x => x.textContent.trim() === "Cliente" && x.children.length <= 1);
@@ -369,11 +374,13 @@ await caso("det-65-encabezado-sin-hueco", "caso=salidas&rol=produccion&sinentreg
 
 // ── Cuarta pasada, vuelta 3: por donde NO se diseñó (el atajo y la guía en los casos raros) ──────────────────────────────
 const primeraAccion = l => (l.match(/accion:\S+|imprimir/) || ["nada"])[0];
-await caso("det-66-guia-y-atajo-sin-botones", "caso=salidas&etapa=ctp&rol=admin", async p => {
-  const vis = await guiaVisible(p, /Arrastra a CTP en el Tablero/);
+// (v10.84.94: admin en CTP sin máquina ya no tiene sólo la guía «Arrastra a CTP en el Tablero»: «A CTP» es la acción y Ctrl+Enter la hace,
+//  como en cualquier etapa del detalle. Antes era det-66-guia-y-atajo-sin-botones, que afirmaba la guía e «Imprimir»)
+await caso("det-66-admin-en-ctp-ctrl-enter-a-ctp", "caso=salidas&etapa=ctp&rol=admin", async p => {
+  const guia = await guiaVisible(p, /Arrastra a CTP en el Tablero/);
   await p.keyboard.press("Control+Enter"); await espera(p, 300);
   const l = await log(p);
-  ok("det-66-guia-y-atajo-sin-botones", vis && /imprimir/.test(l) && !/accion:/.test(l), `admin en CTP sin máquina: la guía ${vis ? "se ve" : "NO se ve"}; Ctrl+Enter hace: ${primeraAccion(l)}`);
+  ok("det-66-admin-en-ctp-ctrl-enter-a-ctp", !guia && /asignar_maquina/.test(l) && !/imprimir/.test(l), `admin en CTP sin máquina: ${guia ? "todavía dice «Arrastra…»; " : ""}Ctrl+Enter hace: ${primeraAccion(l)}`);
 });
 await caso("det-67-ctrl-enter-con-mas-abierto", "caso=salidas&rol=karla", async p => {
   const hay = await abrirMas(p);

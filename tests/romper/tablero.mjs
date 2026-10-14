@@ -1021,5 +1021,156 @@ await caso("tab-121-ficha-doble-enter-una-sola-accion", "vista=fichas&rol=produc
     `Enter dos veces en «Empaque» de la ficha de P-0595: ${acciones.length} acción(es) [${acciones.join(" | ")}] (debe ser una)`);
 });
 
+// ── v10.84.94 — Germán manda a CTP y a la Procesadora SIN ARRASTRAR (la critique de «Mis Pendientes»: mandar a CTP era sólo arrastrar,
+//   sin teclado ni tableta; en 30 días Germán arrastró 114 órdenes, 55 a CTP y 59 a la Procesadora). Lo que DEBE pasar: en su tablero, la
+//   orden que espera trae «A CTP», la que está en CTP «A Procesadora» y la de la Procesadora «Placas Listas» (ya estaba); en su ficha
+//   (Mis Pendientes), lo mismo en lugar de «Arrastra… en el Tablero». Un clic, una acción: también con doble clic y con Enter; y con la
+//   máquina en mantenimiento, el botón apagado diciendo por qué. Vuelta 1: escritas antes del cambio ──
+const fichaPn = (p, pn) => p.locator('[role="button"][aria-label^="Orden ' + pn + '"]').first();
+const envios = l => l.match(/drop:[^\n]*/g) || [];
+await caso("tab-122-german-a-ctp-sin-arrastrar", "vista=german&rol=german", async p => {
+  const b = p.locator("[draggable=true]", { hasText: "P-0599" }).getByRole("button", { name: /^A CTP/ });
+  const hay = await b.count();
+  if (hay) { await b.first().click(); await espera(p, 500); }
+  const l = await log(p);
+  ok("tab-122-german-a-ctp-sin-arrastrar", hay === 1 && envios(l).length === 1 && /drop:P-0599 → pp_ctp/.test(l) && !/accion:detail/.test(l),
+    `P-0599 esperando CTP: ${hay ? "trae «A CTP»" : "NO trae «A CTP» (sólo se arrastra)"}; el registro: ${l.trim().split("\n").slice(-2).join(" | ") || "(nada)"}`);
+});
+await caso("tab-123-german-a-procesadora-sin-arrastrar", "vista=german&rol=german", async p => {
+  const b = p.getByRole("button", { name: /^A Procesadora/ });
+  const n = await b.count();
+  if (n) { await b.first().click(); await espera(p, 500); }
+  const l = await log(p);
+  ok("tab-123-german-a-procesadora-sin-arrastrar", n === 1 && envios(l).length === 1 && /drop:P-0610 → pp_proc/.test(l) && !/accion:detail/.test(l),
+    `P-0610 en CTP: ${n ? "trae «A Procesadora»" : "NO trae «A Procesadora»"}; el registro: ${l.trim().split("\n").slice(-2).join(" | ") || "(nada)"}`);
+});
+await caso("tab-124-german-con-el-teclado", "vista=german&rol=german", async p => {
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  if (hay) { await b.focus(); await p.keyboard.press("Enter"); await espera(p, 500); }
+  const l = await log(p);
+  ok("tab-124-german-con-el-teclado", hay > 0 && envios(l).length === 1 && /drop:P-0599 → pp_ctp/.test(l), `con el teclado (foco y Enter): ${envios(l).join(" | ") || "nada"}`);
+});
+await caso("tab-125-german-doble-clic-una-sola", "vista=german&rol=german&caso=ctp2", async p => {
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  if (hay) { await b.dblclick(); await espera(p, 900); }
+  const l = await log(p);
+  ok("tab-125-german-doble-clic-una-sola", hay > 0 && envios(l).length === 1, `doble clic en «A CTP» con dos esperando: ${envios(l).length} envíos (${envios(l).join(" | ") || "ninguno"})`);
+});
+await caso("tab-126-german-ctp-en-mantenimiento", "vista=german&rol=german&mant=pp_ctp", async p => {
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  const apagado = hay ? await b.isDisabled() : false;
+  const porque = hay ? ((await b.getAttribute("title")) || "") : "";
+  if (hay) await b.click({ force: true, timeout: 1500 }).catch(() => {});
+  await espera(p, 400);
+  const l = await log(p);
+  ok("tab-126-german-ctp-en-mantenimiento", hay > 0 && apagado && /mantenimiento/i.test(porque) && envios(l).length === 0,
+    `CTP en mantenimiento: «A CTP» ${hay ? (apagado ? "apagado" : "PRENDIDO") : "no está"} («${porque}»); envíos: ${envios(l).length}`);
+});
+for (const [n, pn, re, accion] of [["tab-127-german-ficha-a-ctp", "P-0599", /^A CTP/, /accion:asignar_maquina P-0599 pp_ctp/],
+  ["tab-128-german-ficha-a-procesadora", "P-0610", /^A Procesadora/, /accion:asignar_maquina P-0610 pp_proc/],
+  ["tab-129-german-ficha-placas-listas", "P-0611", /^Placas Listas/, /accion:advance P-0611 placas_listas/]]) {
+  await caso(n, "vista=fichas&rol=german", async p => {
+    const f = fichaPn(p, pn);
+    const t = ((await f.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+    const b = f.getByRole("button", { name: re });
+    const hay = await b.count();
+    if (hay) { await b.first().click(); await espera(p, 400); }
+    const l = await log(p);
+    ok(n, hay === 1 && accion.test(l) && !/Arrastra/.test(t) && !/accion:detail/.test(l),
+      `la ficha de ${pn} (Germán): ${hay ? "trae «" + re.source.replace(/[\^\\]/g, "") + "»" : "NO trae el botón"}${/Arrastra/.test(t) ? "; dice «" + (t.match(/Arrastra[^.]*/) || [""])[0].slice(0, 70) + "»" : ""}; el registro: ${l.trim().split("\n").slice(-1)[0] || "(nada)"}`);
+  });
+}
+await caso("tab-130-admin-ficha-a-ctp", "vista=fichas&rol=admin", async p => {
+  const t1 = ((await fichaPn(p, "P-0599").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const t2 = ((await fichaPn(p, "P-0610").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("tab-130-admin-ficha-a-ctp", /A CTP/.test(t1) && /A Procesadora/.test(t2) && !/Arrastra/.test(t1 + t2),
+    `admin: P-0599 ${/A CTP/.test(t1) ? "trae «A CTP»" : "NO trae «A CTP»"}, P-0610 ${/A Procesadora/.test(t2) ? "trae «A Procesadora»" : "NO trae «A Procesadora»"}${/Arrastra/.test(t1 + t2) ? "; todavía dice «Arrastra…»" : ""}`);
+});
+
+// vuelta 3 (por donde no se diseñó): con el dedo, en la tableta (la critique: «sin teclado ni tableta»), y a 1920
+await caso("tab-137-german-a-ctp-con-el-dedo", "vista=german&rol=german", async p => {
+  const b = p.getByRole("button", { name: /^A CTP/ }).first();
+  const hay = await b.count();
+  if (hay) { await b.tap(); await espera(p, 600); }
+  const l = await log(p);
+  ok("tab-137-german-a-ctp-con-el-dedo", hay > 0 && envios(l).length === 1 && /drop:P-0599 → pp_ctp/.test(l), `en la tableta, un toque en «A CTP»: ${envios(l).join(" | ") || "nada"}`);
+}, { width: 1024, height: 768 }, { hasTouch: true, isMobile: true });
+await caso("tab-138-german-a-1920", "vista=german&rol=german", async p => {
+  const d = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+  const vis = await p.getByRole("button", { name: /^A CTP/ }).first().isVisible().catch(() => false), vis2 = await p.getByRole("button", { name: /^A Procesadora/ }).first().isVisible().catch(() => false);
+  ok("tab-138-german-a-1920", d.sw <= d.cw + 1 && vis && vis2, `a 1920: ancho ${d.sw} contra ${d.cw}; «A CTP» ${vis ? "a la vista" : "NO se ve"}, «A Procesadora» ${vis2 ? "a la vista" : "NO se ve"}`);
+}, { width: 1920, height: 1080 });
+
+// ── v10.84.94 — los botones de la ficha: UNA acción rellena en su tinta (pasa AA) y las demás teñidas, como el detalle desde v10.84.46;
+//   «Regresar» al «⋯» de la ficha (la critique: «Asignar Folio y Entregar» 3.05:1, «Enviar a Maquila» 2.85, «Recibimos el Trabajo»
+//   2.54; del 24 al 45 % de los textos bajo AA según el rol, y «Regresar» iba primero en varias). Vuelta 1 ──
+// los botones de etapa de cada ficha (fuera del grupo «Acciones de la orden»): su texto, si van rellenos (fondo oscuro) y su contraste
+const botonesDeEtapa = p => p.evaluate(() => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  return [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].map(f => {
+    const pn = f.getAttribute("aria-label").split(",")[0].replace("Orden ", "");
+    // la fila de los botones de etapa: los hijos directos de la fila de acciones (la que trae el grupo «Acciones de la orden»)
+    const fila = f.querySelector('[role="group"][aria-label="Acciones de la orden"]')?.parentElement;
+    const bots = (fila ? [...fila.children] : []).filter(b => b.tagName === "BUTTON" && b.offsetParent && b.textContent.trim() && !b.disabled)
+      .map(b => { const bg = fondo(b), lb = lum(bg), lt = lum(nums(getComputedStyle(b).color)); return { t: b.textContent.trim().slice(0, 30), relleno: lb < 0.4, cr: +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2) }; });
+    return { pn, bots };
+  }).filter(x => x.bots.length);
+});
+for (const rol of ["produccion", "karla", "german", "admin"]) {
+  await caso("tab-131-ficha-una-rellena-y-aa-" + rol, "vista=fichas&rol=" + rol, async p => {
+    const fs = await botonesDeEtapa(p);
+    const variasRellenas = fs.filter(f => f.bots.filter(b => b.relleno).length > 1).map(f => f.pn + ": " + f.bots.filter(b => b.relleno).map(b => b.t).join(" + "));
+    const bajoAA = fs.flatMap(f => f.bots.filter(b => b.cr < 4.5).map(b => f.pn + " «" + b.t + "» " + b.cr + ":1"));
+    ok("tab-131-ficha-una-rellena-y-aa-" + rol, fs.length > 0 && variasRellenas.length === 0 && bajoAA.length === 0,
+      `${rol}, ${fs.length} fichas con botones: ${variasRellenas.length ? "con VARIAS rellenas: " + variasRellenas.slice(0, 3).join(" · ") : "una rellena a lo más"}; ${bajoAA.length ? "bajo AA: " + bajoAA.slice(0, 4).join(" · ") : "todos ≥ 4.5:1"}`);
+  });
+}
+// el botón de la merma (Gerardo, en máquina): tiene nombre para el lector de pantalla, va teñido y se lee (antes: naranja relleno, «+»
+//   blanco de 9 px, sin nombre)
+await caso("tab-136-ficha-merma-con-nombre-y-legible", "vista=fichas&rol=produccion", async p => {
+  const b = fichaPn(p, "P-0591").getByRole("button", { name: "Registrar merma" });
+  const hay = await b.count();
+  const m = hay ? await b.first().evaluate(e => { const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, bb]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bb); };
+    let capas = []; for (let x = e; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, bb, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), bb * a + c[2] * (1 - a)]; }
+    const lb = lum(c), lt = lum(nums(getComputedStyle(e).color));
+    return { cr: +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2), px: parseFloat(getComputedStyle(e).fontSize), relleno: lb < 0.4 }; }) : null;
+  ok("tab-136-ficha-merma-con-nombre-y-legible", hay === 1 && m.cr >= 4.5 && m.px >= 11 && !m.relleno,
+    hay ? `«Registrar merma»: contraste ${m.cr}:1, letra de ${m.px} px, ${m.relleno ? "RELLENO" : "teñido"}` : "el botón de la merma no tiene nombre («Registrar merma») para el lector de pantalla");
+});
+// la maquila sin precio ni costo: «Recibimos el Trabajo» apagado y gris, con su porqué; no relleno como si fuera LA acción
+await caso("tab-134-ficha-maquila-incompleta-apagada", "vista=fichas&rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("P-0603", { stage: "maq_in_progress", order_type: "maquila", maq_price: 0, maq_cost: 0 })); await espera(p, 500);
+  const f = fichaPn(p, "P-0603");
+  const b = f.getByRole("button", { name: /Recibimos el Trabajo/ });
+  const hay = await b.count();
+  const apagado = hay ? await b.first().isDisabled() : false;
+  const fondo = hay ? await b.first().evaluate(e => getComputedStyle(e).backgroundColor) : "";
+  const oscuro = (() => { const v = (fondo.match(/[\d.]+/g) || []).map(Number); if (v.length < 3) return false; const l = (0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]) / 255; return (v.length < 4 || v[3] > 0.5) && l < 0.6; })();
+  const t = ((await f.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("tab-134-ficha-maquila-incompleta-apagada", hay === 1 && apagado && !oscuro && /Falta el precio al cliente y el costo del proveedor/.test(t),
+    `P-0603 sin precio ni costo: «Recibimos el Trabajo» ${hay ? (apagado ? "apagado" : "PRENDIDO") : "no está"}, ${oscuro ? "RELLENO (" + fondo + ")" : "gris"}; ${/Falta el precio/.test(t) ? "dice qué falta" : "NO dice qué falta"}`);
+});
+for (const [n, rol, pn] of [["tab-132-regresar-en-el-menu-produccion", "produccion", "P-0591"], ["tab-133-regresar-en-el-menu-german", "german", "P-0610"]]) {
+  await caso(n, "vista=fichas&rol=" + rol, async p => {
+    const f = fichaPn(p, pn);
+    const enFila = await f.getByRole("button", { name: /^Regresar$/ }).count();
+    await f.getByRole("button", { name: "Más acciones" }).click().catch(() => {}); await espera(p, 300);
+    const item = p.getByRole("menuitem", { name: /Regresar a etapa anterior/ });
+    const hay = await item.count();
+    if (hay) { await item.first().click(); await espera(p, 400); }
+    const l = await log(p);
+    ok(n, enFila === 0 && hay === 1 && new RegExp("accion:revert " + pn).test(l),
+      `${pn} (${rol}): «Regresar» ${enFila ? "SIGUE en la fila de botones" : "fuera de la fila"}; en «⋯» ${hay ? "está" : "NO está"}; el registro: ${l.trim().split("\n").slice(-1)[0] || "(nada)"}`);
+  });
+}
+
 await browser.close();
 for (const r of res) console.log(r);
