@@ -113,11 +113,12 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1676 pruebas, ~48 min de a 1 tanda en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1676 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
-    `net::ERR_NO_BUFFER_SPACE` frenaba el candado sin que la app fallara, v10.84.81). Se activa una vez por copia: `git config core.hooksPath .githooks`.
+    `net::ERR_NO_BUFFER_SPACE` frenaba el candado sin que la app fallara, v10.84.81); en la PC de casa, desde el 14-oct, `PROBAR_PARALELO=2` (las
+    primeras cargas de cada banco esperan hasta 30 s: con 6, una tanda de dinero se cayó mientras otra compilaba). Se activa una vez por copia: `git config core.hooksPath .githooks`.
     **Nunca `--no-verify`.** Cada bug que se encuentra deja su prueba en `tests/romper/` (Marcelo, 5-oct-2026).
     🔑 **La segunda oportunidad** (8-oct, la misma de CobranzaFlow, el Cotizador y Almacén; Marcelo: «sí es una mejora, aplica la
     misma metodología para todos los proyectos»): lo que falla se repite UNA vez (sólo sus casos, con `SOLO`); lo que vuelve a fallar
@@ -183,7 +184,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.110 (14-oct, ~15:15; READY `dpl_FXahvNDBa46jhhNYPVuEBPxU1wbo`, commit `e3c6ccb`; vuelta atrás: promover
+- **LIVE:** v10.84.111 (14-oct, ~16:38; READY `dpl_34uiRk7jQcV31LH2MUvEK31fioBV`, commits `79138a3` y `56edbf9`; vuelta atrás: promover
+  `dpl_44WaAaTqwZC6tuSfyBRqgjHbjAZq` (el código de v10.84.110) o `git revert 56edbf9 79138a3`; la base no cambió; candado 1676 de 1676, de a 2 tandas en 25 min).
+  v10.84.111: **el redondeo hacia arriba de una orden repartida en muchas facturas lo absorbe una factura** (una nueva o una ligada que siga cuadrando;
+  si ninguna puede, frena como la base); un solo cálculo (`montos`) para el cuadre, el tope, la vista previa y lo que se manda. Hotsson quedó ligado
+  por Karla a las 15:26 (OC-0966, las 11). `npm run recorrido` ya conoce las lecturas del plan matriz.
+  v10.84.110 (14-oct, ~15:15; READY `dpl_FXahvNDBa46jhhNYPVuEBPxU1wbo`, commit `e3c6ccb`; vuelta atrás: promover
   `dpl_6EPzTnsoKZtykcRu9CQeCgNAXyeZ` (el código de v10.84.109) o `git revert e3c6ccb`; la base no cambió; candado 1670 de 1670). v10.84.110: **el plan
   matriz ya no dice «pasa del total de la orden» por centavos de redondeo** (Karla no podía ligar las 11 de Hotsson: «P-0621: $80,370.04»): el tope por
   orden, el «Asignado» y el «Por asignar» suman lo mismo que se manda a la base (`lineaSinIva`, exacto por piezas), y con todas las piezas asignadas los
