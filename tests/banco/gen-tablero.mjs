@@ -16,7 +16,8 @@ const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
-const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard", "WasteModal", "MaqModal", "Toast"];   // (las ventanas de merma y maquila, v10.84.59; el aviso de App, v10.84.64)
+const RAICES = ["Kanban", "DragCard", "MaquilaTracker", "PreprensaBoard", "OCard", "WasteModal", "MaqModal", "Toast",
+  ...(fuente.includes("function queTeToca(") ? ["queTeToca"] : [])];   // v10.84.95 — la regla de «Te toca», para compararla con cada ficha   // (las ventanas de merma y maquila, v10.84.59; el aviso de App, v10.84.64)
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
 const { codigo, simuladosUsados } = extraer(fuente, RAICES, { simulados: SIMULADOS });
 const partes = [
@@ -100,7 +101,8 @@ function Banco() {
   const [, refresca] = useState(0);
   useEffect(() => { const f = () => refresca(x => x + 1); window.addEventListener("bitacora", f); return () => window.removeEventListener("bitacora", f); }, []);
   const ref = useRef(ordenes); ref.current = ordenes;
-  useEffect(() => { window.__cambiar = (id, p) => setOrdenes(os => os.map(o => o.id === id || o.production_number === id ? { ...o, ...p } : o)); window.__ordenes = () => ref.current; }, []);
+  useEffect(() => { window.__cambiar = (id, p) => setOrdenes(os => os.map(o => o.id === id || o.production_number === id ? { ...o, ...p } : o)); window.__ordenes = () => ref.current;
+    window.__queTeToca = typeof queTeToca === "function" ? queTeToca : null; }, []);
   // mover una orden; si deja una máquina, la fila de esa máquina sube un lugar (lo que hace moveOrderInQueue en la base: la
   //   siguiente queda ACTIVA en el mismo lugar de la pantalla, y ahí es donde cae el segundo clic de un doble clic)
   const mover = (id, f) => setOrdenes(os => { const o = os.find(x => x.id === id); if (!o) return os;

@@ -1172,5 +1172,30 @@ for (const [n, rol, pn] of [["tab-132-regresar-en-el-menu-produccion", "producci
   });
 }
 
+// ── v10.84.95 — «Te toca» (queTeToca) dice lo mismo que la ficha: la ficha le da al rol una acción que avanza ⇔ la regla dice «toca».
+//   La regla repite las condiciones de `canAct` y de StageFlowButtons; si una cambia sin la otra, aquí se ve (ficha por ficha, rol por
+//   rol; las pausadas no cuentan: van aparte). Editar no avanza. Vuelta 1 ──
+for (const rol of ["produccion", "preprensa", "german", "secretaria", "vendedor", "karla"]) {
+  await caso("tab-135-la-regla-y-la-ficha-" + rol, "vista=fichas&rol=" + rol, async p => {
+    const r = await p.evaluate(rol => {
+      if (typeof window.__queTeToca !== "function") return null;
+      const malos = []; let n = 0;
+      for (const o of window.__ordenes()) {
+        if (o.snooze_reason) continue;
+        const ficha = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.getAttribute("aria-label").startsWith("Orden " + (o.production_number || o.id) + ","));
+        if (!ficha) continue;
+        n++;
+        const fila = ficha.querySelector('[role="group"][aria-label="Acciones de la orden"]')?.parentElement;
+        const bots = fila ? [...fila.children].filter(e => e.tagName === "BUTTON" && !e.disabled && !/^(Specs y archivo|Revisar y Editar)$/.test(e.textContent.trim())) : [];
+        const dice = window.__queTeToca(o, rol, rol);
+        if ((bots.length > 0) !== (dice === "toca")) malos.push((o.production_number || o.id) + " (" + o.stage + "): la ficha " + (bots.length ? "da «" + bots.map(b => b.textContent.trim()).join("», «") + "»" : "no da nada") + " y la regla dice «" + dice + "»");
+      }
+      return { n, malos };
+    }, rol);
+    ok("tab-135-la-regla-y-la-ficha-" + rol, !!r && r.n > 0 && r.malos.length === 0,
+      r ? `${rol}, ${r.n} fichas: ${r.malos.length ? r.malos.slice(0, 3).join(" · ") : "la regla dice lo mismo que cada ficha"}` : "no existe la regla de «Te toca» (la lista no distingue qué le toca a cada quien)");
+  });
+}
+
 await browser.close();
 for (const r of res) console.log(r);

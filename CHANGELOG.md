@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.95 — «Mis Pendientes» dice qué te toca: «Te toca», «Espera a otro» y el vendedor ve dónde van las suyas — 13-oct-2026
+
+**Qué pasaba** (el P1 de fondo de la critique de «Mis Pendientes», 17/40, y la lista del vendedor; Marcelo los aprobó el 13-oct): la lista
+enseñaba todo lo de las etapas del rol, no lo que esa persona tiene que hacer. Noemí veía 3 que ella ya validó (esperan a Gerardo); Lupita,
+3 de 4 que esperan a Producción y Pre-prensa; Gerardo, 19 de 22 que sólo se mueven en el Tablero; lo pausado ocupaba más que lo activo
+(15 fichas completas de Karla); y Genaro, que sólo crea órdenes (unas 8 al mes), no veía en qué iban. El número del menú contaba todo eso.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- La regla, una vez (`queTeToca`): «toca» si la ficha le da al rol, ahí mismo, una acción que avanza (las mismas condiciones de `canAct`
+  de la ficha y de sus botones); «tablero» si sólo se mueve en el Tablero (asignar máquina); «espera» lo demás.
+- La lista: fichas sólo para lo que te toca (las estancadas, arriba); **«Espera a otro»** plegado, un renglón por orden (folio, cliente,
+  dónde va, con quién —en un borrador, quién falta de validar—, desde cuándo, «estancada» si lo está, y «Recordar» con las mismas reglas
+  que el «⋯» de la ficha); **«En el Tablero»**, una línea con «Ir al Tablero»; lo **pausado**, una línea («N en pausa · la más antigua, de
+  hace X días») que lleva a «En espera». El renglón de arriba dice cuántas te tocan, cuántas esperan a otro, en el Tablero y en pausa.
+- El número del menú: lo que te toca.
+- El vendedor ve TODO lo suyo en curso: lo que le toca (la prueba con el cliente, sus maquilas) y, en «Espera a otro», dónde va lo demás.
+  (Su vista «En espera» ahora también trae las suyas pausadas en otras etapas, por ejemplo detenidas por material.)
+
+**Cómo se probó** (cuatro vueltas, el tope): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.94: fallaban 23. En
+`chips` (en Node), ch-07 a ch-13: la regla no existía. En `tablero`, tab-135 en seis roles: la regla contra los botones de cada ficha. En
+`sesion` (la app entera): ses-50 (Noemí: «Pendientes (3)», con la que ya validó como ficha), ses-51 (Gerardo: lo «Listo» como ficha, sin la
+línea del Tablero), ses-52 (Genaro no veía la suya en máquina), ses-53 (lo pausado, con ficha completa), ses-54 (sin «Recordar»), ses-56 y
+ses-56b (los renglones a 1366 y a 1920 con un cliente de 114 letras), ses-57 y ses-59 (con la lectura caída o leyendo, el renglón de arriba
+decía «0 pendientes»: la regla 12, desde antes de esta versión) y ses-58 (admin «Ver como Noemí»). **Vuelta 2**, con el cambio: `chips` 14,
+`tablero` 158 (la regla dice lo mismo que cada ficha, rol por rol) y `sesion` 54, sin fallas. **Vuelta 3**, por donde no se diseñó: las dos
+pantallas con el nombre larguísimo y el modo «Ver como rol» pasan; ses-57 encontró que el renglón de arriba decía «0 te tocan» con la
+lectura caída (antes, «0 pendientes»): ahora dice «Sin cifras mientras no se lea de la base» o «Leyendo de la base…». **Vuelta 4**: ses-59
+(la primera lectura lenta) falló primero por la prueba (el retraso es por página y la app pide dos; esperaba 15 s): corregida, pasa. ses-57
+y ses-59 se afinaron para no aceptar ninguna cifra en ese renglón (buscando «te toca» no veían el «0 pendientes» viejo). La tanda `sesion`
+aprende `s.retraso` (la base que tarda en contestar una tabla). **Sin probar:** que una orden pase de «Espera a otro» a «Te toca» con la
+lista abierta cuando el otro la valida (el tiempo real), y Genaro con datos reales en producción (la cuenta `visor` no tiene órdenes suyas).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.94 — Germán manda a CTP sin arrastrar, y la ficha con una sola acción rellena — 13-oct-2026
 
 **Qué pasaba** (dos recomendaciones más de la critique de «Mis Pendientes», 17/40, aprobadas por Marcelo el 13-oct):

@@ -54,6 +54,9 @@ const USUARIOS = () => ({
   bodega: { uid: "00000000-0000-4000-8000-00000000000c", pass: "buena", role: "almacen", display_name: "Bodega" },
   lupita: { uid: "00000000-0000-4000-8000-00000000000d", pass: "buena", role: "secretaria", display_name: "Lupita" },
   german: { uid: "00000000-0000-4000-8000-00000000000e", pass: "buena", role: "german", display_name: "Germán" },
+  noemi: { uid: "00000000-0000-4000-8000-00000000000f", pass: "buena", role: "preprensa", display_name: "Noemí" },
+  genaro: { uid: "00000000-0000-4000-8000-000000000010", pass: "buena", role: "vendedor", display_name: "Genaro" },
+  marcelo: { uid: "00000000-0000-4000-8000-000000000011", pass: "buena", role: "admin", display_name: "Marcelo" },
 });
 function simulada() {
   return {
@@ -69,6 +72,7 @@ function simulada() {
     alPedirPerfil: null,   // async (page) => {}: corre ANTES de contestar get_user_session (para cerrar la sesión a media entrada)
     filas: {},         // v10.84.93 — { tabla: [filas] | "falla" }: lo que contesta la base al leer esa tabla (por omisión, nada)
     rpcFalla: null,    // v10.84.94 — el nombre de una RPC que contesta 500 (la base que falla al escribir)
+    retraso: {},       // v10.84.95 — { tabla: ms }: la base tarda en contestar esa tabla (la primera lectura lenta)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -161,6 +165,7 @@ async function rutear(ctx, s) {
       if (quien !== "usuario") return J(401, { code: "42501", message: "permission denied for table " + ruta.split("/").pop(), details: null, hint: null });
       if (m === "GET" || m === "HEAD") {
         const tabla = ruta.slice("/rest/v1/".length), filas = s.filas[tabla];
+        if (s.retraso[tabla]) await new Promise(r => setTimeout(r, s.retraso[tabla]));
         if (filas === "falla") return J(503, { message: "upstream connect error (prueba)" });
         if (!filas) return J(200, [], { "content-range": "*/0" });
         // por páginas, como PostgREST (la app pide de 1,000 en 1,000 hasta que una página llega vacía)
@@ -892,6 +897,138 @@ await caso("ses-49-german-doble-clic-a-ctp-una-vez", async ({ p, s }) => {
   const mov = s.peticiones.filter(x => x.t >= t0 && x.ruta === "/rest/v1/rpc/move_order_in_queue").length;
   ok("ses-49-german-doble-clic-a-ctp-una-vez", hay > 0 && mov === 1,
     `el tablero de Germán ${hay ? "trae «A CTP»" : "NO trae «A CTP»"}; doble clic: ${mov} envío(s) a la cola de CTP`);
+});
+
+// ════════════════════════ «Te toca» y «Espera a otro» (v10.84.95) ════════════════════════
+// La critique de «Mis Pendientes» (P1-B): la lista enseñaba lo de las etapas del rol, no lo que cada quien tiene que hacer. Lo que DEBE
+// pasar: fichas sólo para lo que te toca; lo que espera a otro, plegado, un renglón por orden (dónde va, con quién, desde cuándo,
+// «Recordar»); lo que se mueve en el Tablero, una línea; lo pausado, una línea que lleva a «En espera»; el menú cuenta lo que te toca; y
+// el vendedor ve dónde van las suyas. Vuelta 1: escritas antes del cambio.
+const fichasEnLaVista = p => p.evaluate(() => [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].map(x => x.getAttribute("aria-label").split(",")[0].replace("Orden ", "")));
+const renglonesEspera = p => p.evaluate(() => [...document.querySelectorAll("[data-espera]")].map(x => x.getAttribute("data-espera") + " · " + x.innerText.replace(/\s+/g, " ")));
+const abrirPendientes = async p => { await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(800); };
+await caso("ses-50-noemi-lo-que-ya-valido-espera-a-otro", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0905", { stage: "draft", validated_by_preprensa: true }), ordenK("P-0906", { stage: "draft" }), ordenK("P-0907", { stage: "design" })] };
+  await abrirYEntrar(p, s, "noemi");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await abrirPendientes(p);
+  const fichas = await fichasEnLaVista(p);
+  await p.locator("[data-espera-a-otro] summary").first().click().catch(() => {}); await p.waitForTimeout(300);
+  const espera = await renglonesEspera(p);
+  ok("ses-50-noemi-lo-que-ya-valido-espera-a-otro", menu.includes("Pendientes (2)") && fichas.includes("P-0906") && fichas.includes("P-0907") && !fichas.includes("P-0905")
+    && espera.length === 1 && /^P-0905/.test(espera[0]) && /Gerardo/.test(espera[0]),
+    `Noemí: el menú ${JSON.stringify(menu)}; fichas [${fichas.join(", ")}]; espera a otro: ${JSON.stringify(espera)}`);
+});
+await caso("ses-51-gerardo-lo-del-tablero-en-una-linea", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0908", { stage: "ready" }), ordenK("P-0909", { stage: "ready", created_at: haceH(100) }), ordenK("P-0910", { stage: "packaging" })] };
+  await abrirYEntrar(p, s, "gerardo");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await abrirPendientes(p);
+  const fichas = await fichasEnLaVista(p);
+  const linea = ((await p.locator("[data-en-tablero]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  await p.locator("[data-en-tablero]").getByRole("button", { name: /Ir al Tablero/ }).click().catch(() => {}); await p.waitForTimeout(800);
+  const v = await tituloDeLaVista(p);
+  ok("ses-51-gerardo-lo-del-tablero-en-una-linea", menu.includes("Pendientes (1)") && JSON.stringify(fichas) === '["P-0910"]' && /\b2\b.*Tablero/.test(linea) && /Tablero de Producción/.test(v),
+    `Gerardo: el menú ${JSON.stringify(menu)}; fichas [${fichas.join(", ")}]; la línea: «${linea}»; «Ir al Tablero» abre «${v}»`);
+});
+await caso("ses-52-genaro-ve-donde-van-las-suyas", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),
+    ordenK("P-0912", { stage: "proof_client", created_by: "genaro", agent: "Genaro" }), ordenK("P-0913", { stage: "maq_sent", order_type: "maquila", created_by: "lupita", agent: "Manuel" })] };
+  await abrirYEntrar(p, s, "genaro");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await abrirPendientes(p);
+  const fichas = await fichasEnLaVista(p);
+  await p.locator("[data-espera-a-otro] summary").first().click().catch(() => {}); await p.waitForTimeout(300);
+  const espera = await renglonesEspera(p);
+  ok("ses-52-genaro-ve-donde-van-las-suyas", menu.includes("Pendientes (1)") && JSON.stringify(fichas) === '["P-0912"]' && espera.length === 1 && /^P-0911/.test(espera[0]) && /Gerardo/.test(espera[0]),
+    `Genaro: el menú ${JSON.stringify(menu)}; fichas [${fichas.join(", ")}]; espera a otro: ${JSON.stringify(espera)} (P-0913 no es suya)`);
+});
+await caso("ses-53-lo-pausado-en-una-linea", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0914", { stage: "proof_client" }), ordenK("P-0915", { stage: "proof_client", snooze_reason: "Esperando que el cliente responda", snooze_stage: "proof_client", snooze_kind: "cliente", snoozed_by: "secretaria", snoozed_at: haceH(24 * 9) }),
+    ordenK("P-0916", { stage: "maq_sent", order_type: "maquila", snooze_reason: "Esperando material", snooze_stage: "maq_sent", snooze_kind: "material", snoozed_by: "secretaria", snoozed_at: haceH(30) })] };
+  await abrirYEntrar(p, s, "lupita");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await abrirPendientes(p);
+  const fichas = await fichasEnLaVista(p);
+  const linea = ((await p.locator("[data-en-pausa]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  await p.locator("[data-en-pausa]").getByRole("button", { name: /En espera/ }).click().catch(() => {}); await p.waitForTimeout(800);
+  const v = await tituloDeLaVista(p);
+  ok("ses-53-lo-pausado-en-una-linea", JSON.stringify(fichas) === '["P-0914"]' && /\b2\b en pausa/.test(linea) && /9 días/.test(linea) && /En espera/.test(v),
+    `Lupita: fichas [${fichas.join(", ")}] (las pausadas, sin ficha); la línea: «${linea}»; el botón abre «${v}»`);
+});
+// vuelta 3, por donde no se diseñó: las dos pantallas de Marcelo con un cliente de nombre larguísimo, la base que falla al leer, y el
+// modo alterno de la pantalla (admin «Ver como rol»)
+const LARGO = "GOBIERNO DEL ESTADO DE GUANAJUATO, SECRETARÍA DE EDUCACIÓN PÚBLICA DEL ESTADO, DIRECCIÓN GENERAL DE ADMINISTRACIÓN";
+for (const [n, vp] of [["ses-56-noemi-espera-a-otro-a-1366", { width: 1366, height: 768 }], ["ses-56b-noemi-espera-a-otro-a-1920", { width: 1920, height: 1080 }]]) {
+  await caso(n, async ({ p, s }) => {
+    s.filas = { orders: [ordenK("P-0905", { stage: "draft", validated_by_preprensa: true, client: LARGO }), ordenK("P-0906", { stage: "draft", client: LARGO })] };
+    await abrirYEntrar(p, s, "noemi");
+    await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+    await abrirPendientes(p);
+    await p.locator("[data-espera-a-otro] summary").first().click().catch(() => {}); await p.waitForTimeout(300);
+    const m = await p.evaluate(() => { const r = document.querySelector('[data-espera="P-0905"]'); const b = r && r.getBoundingClientRect();
+      return { ancho: document.documentElement.scrollWidth, vp: document.documentElement.clientWidth, renglon: b ? Math.round(b.right) : null, alto: b ? Math.round(b.height) : null }; });
+    ok(n, m.renglon != null && m.ancho <= m.vp + 1 && m.renglon <= m.vp && m.alto <= 90,
+      `a ${vp.width}: ancho ${m.ancho} de ${m.vp}; el renglón de P-0905 (cliente de ${LARGO.length} letras) termina en ${m.renglon} y mide ${m.alto} px de alto`);
+  }, { viewport: vp });
+}
+await caso("ses-57-pendientes-sin-lectura-sin-grupos", async ({ p, s }) => {
+  s.filas = { orders: "falla" };
+  await abrirYEntrar(p, s, "noemi");
+  const fallo = await esperarFalla(p); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await abrirPendientes(p);
+  const t = await texto(p), grupos = await p.locator("[data-espera-a-otro], [data-en-tablero], [data-en-pausa]").count();
+  // el renglón bajo «Mis Pendientes», sin cifras (decía «0 pendientes» desde antes de v10.84.95, y con ella «0 te tocan»)
+  const sub = ((await p.locator("h2 + p").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("ses-57-pendientes-sin-lectura-sin-grupos", fallo && menu.includes("Pendientes") && grupos === 0 && /No se pudieron leer tus pendientes/.test(t) && !/\d/.test(sub),
+    `con la lectura caída: el menú ${JSON.stringify(menu)}; ${grupos} grupos a la vista; ${/No se pudieron leer tus pendientes/.test(t) ? "dice que no pudo leer" : "NO dice que no pudo leer"}; el renglón de arriba: «${sub}»`);
+});
+await caso("ses-58-admin-ver-como-noemi", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0905", { stage: "draft", validated_by_preprensa: true }), ordenK("P-0906", { stage: "draft" }), ordenK("P-0907", { stage: "design" })] };
+  await abrirYEntrar(p, s, "marcelo");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await abrirPendientes(p);
+  const todas = await fichasEnLaVista(p);
+  await p.getByRole("button", { name: "Noemí", exact: true }).first().click(); await p.waitForTimeout(600);
+  const comoNoemi = await fichasEnLaVista(p);
+  await p.locator("[data-espera-a-otro] summary").first().click().catch(() => {}); await p.waitForTimeout(300);
+  const espera = await renglonesEspera(p);
+  ok("ses-58-admin-ver-como-noemi", todas.length === 3 && JSON.stringify([...comoNoemi].sort()) === '["P-0906","P-0907"]' && espera.length === 1 && /^P-0905/.test(espera[0]),
+    `admin: fichas [${todas.join(", ")}]; como Noemí: [${comoNoemi.join(", ")}] y espera a otro ${JSON.stringify(espera)}`);
+});
+// vuelta 4: la primera lectura tarda: mientras, «Leyendo de la base…» sin cifras ni grupos; ya leído, las cifras
+await caso("ses-59-pendientes-leyendo-sin-cifras", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0905", { stage: "draft", validated_by_preprensa: true }), ordenK("P-0906", { stage: "draft" })] }; s.retraso = { orders: 4000 };   // (por página: la app pide dos, la segunda vacía)
+  await abrirYEntrar(p, s, "noemi");
+  await abrirPendientes(p);
+  const t1 = await texto(p), grupos = await p.locator("[data-espera-a-otro], [data-en-tablero], [data-en-pausa]").count();
+  const sub1 = ((await p.locator("h2 + p").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const leido = await p.waitForFunction(() => [...document.querySelectorAll("button[title]")].some(b => /^Pendientes \(\d+\)$/.test(b.title)), null, { timeout: 40000, polling: 200 })
+    .then(() => true, () => false);
+  await despertar(p);
+  const t2 = await texto(p);
+  ok("ses-59-pendientes-leyendo-sin-cifras", /Leyendo/.test(t1) && !/\d/.test(sub1) && grupos === 0 && leido && /1 te toca/.test(t2),
+    `leyendo: ${/Leyendo/.test(t1) ? "lo dice" : "NO dice que está leyendo"}; el renglón de arriba: «${sub1}», ${grupos} grupos; ya leído: ${(t2.match(/\d+ te tocan?[^·]*(· [^·]+)?/) || ["(sin cifras)"])[0].slice(0, 60)}`);
+});
+// «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
+await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),
+    ordenK("P-0918", { stage: "draft", created_by: "genaro", agent: "Genaro" })] };
+  await abrirYEntrar(p, s, "genaro");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await abrirPendientes(p);
+  await p.locator("[data-espera-a-otro] summary").first().click().catch(() => {}); await p.waitForTimeout(300);
+  const b = p.locator('[data-espera="P-0911"]').getByRole("button", { name: /Recordar/ });
+  const hay = await b.count(), enBorrador = await p.locator('[data-espera="P-0918"]').getByRole("button", { name: /Recordar/ }).count();
+  const t0 = Date.now();
+  if (hay) { await b.first().click(); await p.waitForTimeout(1200); }
+  const avisos = s.peticiones.filter(x => x.t >= t0 && x.m === "POST" && x.ruta === "/rest/v1/notifications").length;
+  ok("ses-54-recordar-desde-espera-a-otro", hay === 1 && enBorrador === 0 && avisos >= 1,
+    `P-0911 en máquina (con Gerardo): ${hay ? "trae «Recordar»" : "NO trae «Recordar»"}; el borrador P-0918: ${enBorrador ? "TRAE «Recordar»" : "sin «Recordar» (como su ficha)"}; avisos mandados: ${avisos}`);
 });
 
 await browser.close();
