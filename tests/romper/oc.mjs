@@ -2,6 +2,7 @@
 // una FALLA es un bug. Las cifras salen del banco: 5 órdenes pendientes con subtotal $96,230.50 (con IVA $111,627.38),
 // 2 ya facturadas (F-120, F-121). Uso: node oc.mjs <dir-capturas> [puerto=5195]
 import { chromium } from "playwright";
+import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5195);
 fs.mkdirSync(OUT, { recursive: true });
@@ -13,7 +14,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [], nativos = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !deFuera(m)) errs.push("console: " + m.text()); });
   page.on("dialog", async d => { nativos.push(d.type() + ": " + d.message().slice(0, 80)); await d.dismiss().catch(() => {}); });
   page.nativos = nativos;
   try {
@@ -934,6 +935,12 @@ await caso("oc-117-sin-camino-al-plan", "sinorden=1&plan=no", async p => {
 });
 await caso("oc-118-pre-asignar-tambien", "sinorden=1&pre=1", async p => {
   ok("oc-118-pre-asignar-tambien", /tiene 2 facturas hechas sin orden/.test(await texto(p)));
+});
+// v10.84.104 — la pasada 2 (P2-1): un botón, un nombre. El aviso de «Asignar folio» de la OC citaba «Ya tiene factura: ligarla» (el de
+// «Facturar por partes»); en el plan matriz ese botón se llama «Ya existe». Vuelta 1: antes.
+await caso("oc-119-el-aviso-nombra-el-boton-del-plan", "sinorden=1", async p => {
+  const t = (await texto(p)).replace(/\s+/g, " ");
+  ok("oc-119-el-aviso-nombra-el-boton-del-plan", /«Ya existe»/.test(t) && !/Ya tiene factura: ligarla/.test(t), `«${(t.match(/en el plan matriz[^.]*\./) || [""])[0]}»`);
 });
 
 await browser.close();

@@ -3795,7 +3795,10 @@ function PriceDropModal({open,info,onResolve}) {
 // 🆕 v10.72.87 — "Facturar a un tercero": el destinatario fiscal/cobranza puede diferir del cliente de la orden.
 // Reusa ClientInput (búsqueda inteligente nombre/RFC/alias) + alta de razón social nueva. Avisa al padre vía onChange:
 //   null (apagado) | {incomplete:true} (encendido sin completar) | {client_id,name,rfc} | {name,rfc,email,whatsapp,isNew}
-function BillToSection({invoiceType, onChange, accent=C.ac}){
+// v10.84.104 (pasada 2, P1-2) — «(razón social distinta a la de la orden)» describía justo el caso Hotsson, donde esto NO se usa (paga quien
+//   pidió y sólo cambia la razón social del CFDI); la explicación salía hasta marcar la casilla y mandaba a «pedírselo a Dirección», cuando
+//   «CFDI a nombre de» ya está en CobranzaFlow (v3.7.726, Por Timbrar → Datos) y lo hace Karla. `cliente`: quien pidió el trabajo.
+function BillToSection({invoiceType, onChange, accent=C.ac, cliente=""}){
   const LBL={fontSize:11,fontWeight:600,color:C.t2,display:"block",marginBottom:3};
   const [on,setOn]=useState(false);
   const [picked,setPicked]=useState(null);
@@ -3832,8 +3835,9 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
     <div style={{padding:"12px 20px",borderBottom:"0.5px solid "+C.bd}}>
       <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
         <input type="checkbox" checked={on} onChange={e=>{setOn(e.target.checked); if(!e.target.checked) reset();}} style={{width:16,height:16,accentColor:accent,cursor:"pointer"}}/>
-        <span style={{fontSize:12.5,fontWeight:700,color:C.tx,display:"inline-flex",alignItems:"center",gap:6}}><UsersIcon size={13} weight="bold" color={accent}/>Facturar a un tercero <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>(razón social distinta a la de la orden)</span></span>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.tx,display:"inline-flex",alignItems:"center",gap:6}}><UsersIcon size={13} weight="bold" color={accent}/>Facturar a un tercero <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>(otra empresa paga esta factura)</span></span>
       </label>
+      {!on&&<div data-tercero-no-es style={{fontSize:11,color:C.t2,marginTop:5,paddingLeft:24,lineHeight:1.45}}>¿Paga {cliente||"el cliente de la orden"} y sólo quiere el CFDI a otra de sus razones sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de».</div>}
       {on&&<div style={{marginTop:10}}>
         {/* v10.84.9 (Marcelo, 18-sep) — que quede claro QUIÉN PAGA antes de escoger a nadie. Este botón hace
             al tercero el cliente de cobranza (paga, estado de cuenta, portal); si no existe se da de alta. El otro
@@ -3842,7 +3846,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
         <div style={{marginBottom:10,background:accent+"0e",border:"1px solid "+accent+"40",borderRadius:10,padding:"9px 12px",fontSize:11,color:C.tx,lineHeight:1.5}}>
           <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}><UsersIcon size={12} weight="bold" color={accent}/>El tercero es quien paga</div>
           <div>La factura o remisión, <b>su cobranza, el estado de cuenta y el portal</b> quedan a nombre del tercero (si no existe, se da de alta como cliente). El cliente de la orden sigue sólo en producción.</div>
-          <div style={{marginTop:4,color:C.t2}}>Si <b>quien pidió el trabajo es quien va a pagar</b> y sólo quiere el CFDI a otra razón social (por ejemplo, Poder Judicial pagando y el CFDI a la Congregación), <b>no uses esto</b>: eso se registra en CobranzaFlow como «CFDI a nombre de» (pídelo a Dirección mientras llega a Por Timbrar). Nunca cambiando el RFC de un cliente.</div>
+          <div style={{marginTop:4,color:C.t2}}>Si <b>paga {cliente||"quien pidió el trabajo"}</b> y sólo quiere el CFDI a otra de sus razones sociales, <b>no uses esto</b>: deja la factura sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos). Nunca cambiando el RFC de un cliente.</div>
         </div>
         {!picked&&<>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
@@ -3869,6 +3873,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac}){
           <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{picked.name}</div>{picked.rfc?<div style={{fontSize:10.5,color:C.t2}}>{picked.rfc}</div>:<div style={{fontSize:10.5,fontWeight:700,color:isFactura?C.dn:C.t2}}>{isFactura?"Sin RFC — requerido para factura":"sin RFC"}</div>}</div>
           <button type="button" onClick={()=>{setPicked(null);setQ("");}} style={{...bs(C.sf,C.t2),fontSize:10.5,padding:"4px 9px",border:"1px solid "+C.bd}}><XIcon size={11} weight="bold"/>Cambiar</button>
         </div>}
+        {picked&&<div style={{fontSize:12,fontWeight:700,color:C.tx,marginTop:6}}>Paga: {picked.name}{cliente?<span style={{fontWeight:500,color:C.t2}}> · ya no {cliente}</span>:null}</div>}
         <div style={{fontSize:10.5,color:C.t2,marginTop:8,lineHeight:1.4}}>Al foliar, la factura/remisión, la cobranza, el estado de cuenta y el portal quedan a nombre de este tercero (él paga); la producción sigue a nombre del cliente de la orden.</div>
       </div>}
     </div>
@@ -9012,7 +9017,8 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
 // v10.84.100 — el rechazo de la base, en las palabras del plan («Grupo 2» es «Factura 2»; la red caída, dicha como tal)
 const enPalabrasPlan = m => { const s = String(m||"").trim(); if(!s) return "no dijo por qué.";
   if(/Failed to fetch|NetworkError|network|fetch failed|timeout/i.test(s)) return "no hubo conexión con la base. Revisa la red y vuelve a intentar.";
-  return s.replace(/\bGrupo (\d+)/g, (x, n) => "Factura " + n); };
+  // v10.84.104 — el candado del anticipo de la base (v10.84.89) nombra el botón de «Facturar por partes»; en el plan se llama «Ya existe»
+  return s.replace(/\bGrupo (\d+)/g, (x, n) => "Factura " + n).replace(/«Ya tiene factura: ligarla»/g, "«Ya existe»"); };
 function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin}) {
   // Órdenes elegibles para el plan
   const eligibleOrders = useMemo(() =>
@@ -10093,12 +10099,13 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                   <td key={gi} style={{padding:"8px",borderLeft:"0.5px solid "+C.bd,textAlign:"right",
                     background: hasTarget ? (cuadra ? C.live+"10" : C.amb+"12") : undefined}}>
                     <div style={{fontSize:12,fontWeight:800,color:colAmt>0?C.tx:C.t3}}>
-                      ${fmtMx(colAmt)} <span style={{fontSize:9,fontWeight:600,color:C.t2}}>{ivaTag}</span>
+                      ${fmtMx(colAmt)} <span style={{fontSize:10,fontWeight:600,color:C.t2}}>{ivaTag}</span>
                     </div>
-                    <div style={{fontSize:9,color:C.t2}}>{colQty.toLocaleString("es-MX")} pzas</div>
+                    <div style={{fontSize:10.5,color:C.t2}}>{colQty.toLocaleString("es-MX")} pzas</div>
+                    {/* v10.84.104 (pasada 2, P2-2) — lo que tranquiliza, legible: iba en 9 px y a 4.27:1 sobre su tinte */}
                     {hasTarget && (cuadra
-                      ? <div style={{fontSize:9,fontWeight:800,color:C.okInk}}>CUADRA{fLig?" con "+fLig.doc_number:""} <CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginLeft:1}}/></div>
-                      : <div style={{fontSize:9,fontWeight:700,color:C.wnInk}}>{diff>0?"sobran":"faltan"} ${fmtMx(Math.abs(diff))}{fLig?" para "+fLig.doc_number:""}</div>)}
+                      ? <div style={{fontSize:12,fontWeight:800,color:C.okTx}}>CUADRA{fLig?" con "+fLig.doc_number:""} <CheckIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginLeft:1}}/></div>
+                      : <div style={{fontSize:11.5,fontWeight:700,color:C.wnTx}}>{diff>0?"sobran":"faltan"} ${fmtMx(Math.abs(diff))}{fLig?" para "+fLig.doc_number:""}</div>)}
                   </td>
                 );
               })}
@@ -10158,7 +10165,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>Elige otro abajo y pulsa Guardar para cambiarlo · Cancelar lo conserva · Quitar lo elimina.</div>
               </div>
             )}
-            <BillToSection invoiceType={groups[billToEditGroup].doc_type==="factura"?"factura":"remision"} onChange={setBillToDraft} accent={C.fac}/>
+            <BillToSection invoiceType={groups[billToEditGroup].doc_type==="factura"?"factura":"remision"} onChange={setBillToDraft} accent={C.fac} cliente={oc?.client}/>
             <div style={{display:"flex",gap:8,padding:"12px 20px",borderTop:"0.5px solid "+C.bd}}>
               {groups[billToEditGroup].bill_to && <button type="button" onClick={()=>{updateGroup(billToEditGroup,{bill_to:null}); setBillToEditGroup(null);}} style={{...bs(C.sf,C.dn),fontSize:11.5,border:"0.5px solid "+C.bd}}><XIcon size={12} weight="bold"/>Quitar</button>}
               <div style={{flex:1}}/>
@@ -10175,17 +10182,18 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           const ords = eligibleOrders.filter(o => Number(g.lines[o.id]?.qty||0) > 0).map(o => o.production_number + ": " + Number(g.lines[o.id].qty).toLocaleString("es-MX") + " pzas");
           const quien = g.ligar ? (oc?.client||"el cliente") : (g.bill_to && !g.bill_to.incomplete ? (g.bill_to.name||"el tercero") + " (tercero)" : (oc?.client||"el cliente"));
           return {titulo: tipo(g) + " " + (i+1) + (g.label ? " · " + g.label : "") + " · " + (g.ligar ? "liga " + folioNorm(g.folio) : (g.pre_assigned || forzada(g)) ? "nueva, anticipada" : "nueva"),
-            sub: "A cargo de " + quien + " · " + ords.join(" · "),
+            sub: <>A cargo de {quien}{ords.map((x, k) => <span key={k}> · <span style={{whiteSpace:"nowrap"}}>{x}</span></span>)}</>,   // v10.84.104: cada orden entera
             monto: "$" + fmtMx(conIvaDe(totalSinIvaDe(g), g.doc_type)) + (g.doc_type === "factura" ? " c/IVA" : "")};
         });
         const total = Math.round(groups.reduce((s2, g) => s2 + conIvaDe(totalSinIvaDe(g), g.doc_type), 0) * 100) / 100;
         const todasFactura = groups.every(g => g.doc_type === "factura");
         const entregan = eligibleOrders.filter(o => enSalidas(o) && groups.some(g => !((g.pre_assigned || forzada(g)) && !g.ligar) && Number(g.lines[o.id]?.qty||0) > 0)).map(o => o.production_number);
         const seQuedan = enLaPlanta.filter(o => groups.some(g => Number(g.lines[o.id]?.qty||0) > 0)).map(o => o.production_number);
+        const enteros = xs => xs.map((x, k) => <span key={x}>{k ? ", " : ""}<span style={{whiteSpace:"nowrap"}}>{x}</span></span>);   // v10.84.104: sin partir «P-» / «0593»
         return <ConfirmModal zIndex={1300} title={"¿" + textoEnviar + "?"}
           detalle={{filas, total: {titulo: todasFactura ? "Total con IVA" : "Total (facturas con IVA, lo demás sin IVA)", monto: "$" + fmtMx(total)}}}
-          message={(entregan.length ? entregan.join(", ") + (entregan.length === 1 ? " pasa a entregada." : " pasan a entregadas.") : "Ninguna orden pasa a entregada.")
-            + (seQuedan.length ? " " + seQuedan.join(", ") + (seQuedan.length === 1 ? " se queda donde va: se entrega" : " se quedan donde van: se entregan") + " al llegar a Salidas." : "")}
+          message={<>{entregan.length ? <>{enteros(entregan)}{entregan.length === 1 ? " pasa a entregada." : " pasan a entregadas."}</> : "Ninguna orden pasa a entregada."}
+            {seQuedan.length ? <> {enteros(seQuedan)}{seQuedan.length === 1 ? " se queda donde va: se entrega" : " se quedan donde van: se entregan"} al llegar a Salidas.</> : null}</>}
           confirmLabel={textoEnviar} confirmColor={tintaAA(C.fac,5)} cancelLabel="Volver al plan"
           onConfirm={async () => { await handleSubmit(); setVistaPrevia(false); }} onClose={() => setVistaPrevia(false)}/>;
       })()}
@@ -10364,6 +10372,11 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   },[order?.id,candKey]);
   const facturaPorLigar=Array.isArray(cands)?(cands.find(c=>c&&c.monto_cuadra&&(c.doc_type==="factura"||c.doc_type==="remision"))||null):null;
   const otrasSinLigar=Array.isArray(cands)?cands.filter(c=>c&&!c.monto_cuadra&&(c.doc_type==="factura"||c.doc_type==="remision")):[];
+  // v10.84.104 (pasada 2, P1-1) — por cuáles se pregunta al «Continuar»: las del mismo tipo, con la regla del folio anticipado
+  //   (anticiposQuePreguntar). Una vez por ventana y por tipo (la firma), salvo que cambien las facturas.
+  const aPreguntar=anticiposQuePreguntar(Array.isArray(cands)?cands:[],type);
+  const firmaAnticipos=type+":"+aPreguntar.map(c=>c.doc_number).join(",");
+  const anticiposVistosRef=useRef("");
   const [emitirOtro,setEmitirOtro]=useState(false);   // «No es de este trabajo»: se ve el camino normal (la base sigue frenando el mismo importe)
   const ligando=!!facturaPorLigar&&!emitirOtro&&!!onLigar;
   const conEfectivo=(paymentStatus==="paid"||paymentStatus==="partial")&&paymentRefs.some(r=>r.method==="efectivo");
@@ -10473,6 +10486,26 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     if(ligando){if(faltaReconocer)return;escudoDeClics(500);setErr("");setConfirming(true);return}
     if(!folioValid||!paymentValid)return;   // el botón ya está apagado en esos casos (el alert nativo de aquí era inalcanzable)
     if(cands===undefined||(cands===null&&!revisoSinOrden)||bloqueaMismo)return;   // v10.84.70 — revisando, o la base lo rechazaría; v10.84.96 — sin la lectura (con o sin efectivo), hasta que Karla revise
+    // v10.84.104 (pasada 2 de la critique, P1-1) — con facturas del cliente hechas sin orden de OTRO importe, «Continuar» PREGUNTA, como el
+    //   folio anticipado (preguntarPorAnticipos): antes era un aviso gris arriba y un renglón al final, y un clic foliaba P-0595 sola aunque
+    //   F-143 y F-155 ya la cubrían (la base sólo frena una del MISMO importe). En una orden de una OC de varias, la salida es la OC (su
+    //   plan matriz); en una suelta, «Facturar por partes» y ligarla. Una vez por ventana (`anticiposVistosRef`).
+    if(!isNoFolio&&!isStockLoad&&aPreguntar.length>0&&anticiposVistosRef.current!==firmaAnticipos){
+      const deOC=!!(ocDeLaOrden&&ocDeLaOrden.n>=2), una=aPreguntar.length===1;
+      const lista=aPreguntar.slice(0,3).map(c=>c.doc_number+" por "+fmtD(c.amount)).join(", ")+(aPreguntar.length>3?" y "+(aPreguntar.length-3)+" más":"");
+      escudoDeClics(500);
+      preguntar({title:deOC?"¿Foliar "+(order?.production_number||"esta orden")+" sola?":"Este cliente tiene "+(una?"una factura":"facturas")+" sin orden",
+        message:(order?.client||"El cliente")+" tiene "+lista+(una?", hecha":", hechas")+" sin orden y de otro importe."
+          +(deOC
+            ? "\n\nSi "+(una?"es":"son")+" de "+ocDeLaOrden.id+", se liga"+(una?"":"n")+" en su plan matriz con las piezas de cada orden, y esta orden no lleva folio nuevo: foliarla sola se la cobraría dos veces."
+            : "\n\nSi es un anticipo de este trabajo, un folio por el trabajo completo se lo cobraría dos veces: factura por partes y liga "+aPreguntar[0].doc_number+" como la primera parte.")
+          +"\n\nSi no "+(una?"tiene":"tienen")+" que ver con este trabajo, sigue.",
+        confirmLabel:deOC?"Foliar sólo esta orden":"Asignar el folio de todos modos",confirmColor:C.wnInk,cancelLabel:"Volver",
+        extra:deOC?(onIrALaOC?{label:"Ir a "+ocDeLaOrden.id,onClick:()=>{setPregunta(null);onIrALaOC(ocDeLaOrden.id)}}:null)
+          :(onFacturarPorPartes?{label:"Facturar por partes y ligar "+aPreguntar[0].doc_number,onClick:()=>{setPregunta(null);irAPartes()}}:null),
+        onConfirm:()=>{setPregunta(null);anticiposVistosRef.current=firmaAnticipos;handleProceed()}});
+      return;
+    }
     // v10.84.34 — la pregunta del folio menor, con ConfirmModal (antes confirm del navegador)
     if(folioIsLower&&!warnLow){
       preguntar({title:"¿Usar un folio menor al último?",
@@ -10740,6 +10773,11 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
           <div><b>{facturaPorLigar.doc_number}</b> ({fmtD(facturaPorLigar.amount)}) sigue sin ligar. Mientras siga así, la base no deja emitir otra {docPalabra(facturaPorLigar)} por {fmtD(facturaPorLigar.amount)} a este cliente. Si {facturaPorLigar.doc_number} es de otro trabajo, hay que ligarla a su orden en CobranzaFlow (CxC o Dirección) y después regresar aquí.</div>
           {onLigar&&<button onClick={()=>{escudoDeClics(500);setEmitirOtro(false)}} style={{...botonClaro,marginTop:8}}><LinkIcon size={13} weight="bold"/>Ligar {facturaPorLigar.doc_number} a esta orden</button>}
         </div>)}
+    {/* v10.84.104 (pasada 2, P1-1) — una orden de una OC de varias lo dice aunque el cliente no tenga facturas sin orden */}
+    {ocDeLaOrden&&ocDeLaOrden.n>=2&&!facturaPorLigar&&otrasSinLigar.length===0&&<div role="note" data-oc-de-la-orden style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,color:C.tx,marginBottom:12,padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.45}}>
+      <span style={{flex:"1 1 260px"}}>Es una de las {ocDeLaOrden.n} órdenes de <b>{ocDeLaOrden.id}</b>: lo normal es foliar la OC completa.</span>
+      {onIrALaOC&&<button onClick={()=>{escudoDeClics(500);onIrALaOC(ocDeLaOrden.id)}} style={{...bt(C.bg,C.tx),border:"0.5px solid "+C.bdSt,fontSize:12,padding:"6px 12px"}}><ShoppingCartIcon size={13} weight="bold"/>Ir a {ocDeLaOrden.id}</button>}
+    </div>}
     {!facturaPorLigar&&otrasSinLigar.length>0&&<div role="status" style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.tx,lineHeight:1.5}}>
       <div style={{fontWeight:700,marginBottom:4}}>El cliente tiene {otrasSinLigar.length===1?"una factura hecha por adelantado":otrasSinLigar.length+" facturas hechas por adelantado"} y sin orden</div>
       <ul style={{margin:"0 0 6px",paddingLeft:18}}>{otrasSinLigar.slice(0,3).map(c=><li key={c.doc_number}><b>{c.doc_number}</b> por <span style={{fontFamily:"'Geist Mono',monospace"}}>{fmtD(c.amount)}</span>, {haceDias(c.dias_sin_orden)}{motivoDe(c)?" · «"+motivoDe(c)+"»":""}</li>)}{otrasSinLigar.length>3&&<li>y {otrasSinLigar.length-3} más</li>}</ul>
@@ -10871,7 +10909,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
         </>)}
         {/* v10.73.40 — amarre: saldo a favor del cliente (no-Corona) al asignar folio. v10.84.72: junto al pago (la otra columna) */}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto). v10.84.70: con el documento */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={C.ac}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:8,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={C.ac} cliente={order?.client}/></div>}
         </div>
         <div>
         {/* v10.84.70 (segunda revisión) — el pago se captura en cuanto hay tipo, aunque se esté consultando quién pone el folio (se
@@ -11007,7 +11045,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
               </>;
             })()}
           </div>
-          {(()=>{const sinLigar=otrasSinLigar.filter(c=>c.doc_type===type);return sinLigar.length>0&&<div style={{fontSize:11.5,color:C.wnInk,marginBottom:12,lineHeight:1.45}}>{sinLigar.map(c=>c.doc_number+" ("+fmtD(c.amount)+")").join(", ")} se queda{sinLigar.length===1?"":"n"} sin ligar: si era un anticipo de este trabajo, regresa y factura por partes.</div>})()}
+          {(()=>{const sinLigar=otrasSinLigar.filter(c=>c.doc_type===type), deOC=!!(ocDeLaOrden&&ocDeLaOrden.n>=2), una=sinLigar.length===1;return sinLigar.length>0&&<div style={{fontSize:11.5,color:C.wnInk,marginBottom:12,lineHeight:1.45}}>{sinLigar.map(c=>c.doc_number+" ("+fmtD(c.amount)+")").join(", ")} se queda{una?"":"n"} sin ligar: {deOC?"si "+(una?"es":"son")+" de "+ocDeLaOrden.id+", se liga"+(una?"":"n")+" en su plan matriz, no aquí.":"si era un anticipo de este trabajo, regresa y factura por partes."}</div>})()}
           {/* v10.84.70 (segunda revisión) — sin precio, lo que pasa después (lo decía sólo el aviso al terminar) */}
           {sinPrecio&&<div style={{fontSize:12,color:C.wnInk,marginBottom:12,lineHeight:1.45}}>Sin precio, CobranzaFlow no la ve hasta que se capture el precio de la orden.</div>}
           <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>La orden quedará marcada como <strong style={{color:C.okInk}}>Entregada</strong> automáticamente. Esta acción no se puede deshacer.</p>
@@ -11353,7 +11391,7 @@ function PreInvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onFactur
           {reasonValid&&<MultiPaymentPicker status={paymentStatus} refs={paymentRefs} orderTotal={orderBaseAmount} invoiceType={type} onChange={(s,r)=>{setPaymentStatus(s);setPaymentRefs(r||[])}}/>}
         </>}
         {/* 🆕 v10.72.87 — Facturar a un tercero (solo factura/remisión, cliente no-Corona, no re-trabajo cubierto) */}
-        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={colorTipo}/></div>}
+        {(type==="factura"||type==="remision")&&!isCorona&&!order?.return_covered_by_folio&&!order?.oc_invoice_group_id&&order?.source!=="web"&&!order?.mp_payment_id&&<div style={{marginTop:10,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection key={type} invoiceType={type} onChange={setBillTo} accent={colorTipo} cliente={order?.client}/></div>}
       </> : <>
         {/* v10.84.34 — la vista previa dice CUÁNTO y a QUIÉN (antes: «🔢 Folio automático» y nada de importe) */}
         <div style={{background:(type==="factura"?C.fac:C.live)+"10",borderRadius:14,padding:16,marginBottom:12,textAlign:"center",border:"1px solid "+(type==="factura"?C.fac:C.live)+"40"}}>
@@ -13568,7 +13606,7 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} disabled={saving} style={{...bt(C.sf,C.t2),fontSize:12,padding:"8px 14px",border:"0.5px solid "+C.bd}}>Cancelar</button>
           <button onClick={handleConfirm} disabled={saving||selectedIds.size===0} style={{...bt(selectedIds.size>0?C.ac:C.bdSt),fontSize:12,padding:"8px 14px",cursor:saving||selectedIds.size===0?"default":"pointer",opacity:saving?.6:1}}>
-            {saving ? "Moviendo..." : <><PackageIcon size={13} weight="bold"/>Agregar {selectedIds.size>0?selectedIds.size+" ":""}orden{selectedIds.size!==1?"es":""}</>}
+            {saving ? "Moviendo..." : <><PackageIcon size={13} weight="bold"/>Agregar {selectedIds.size>0?selectedIds.size+" ":""}{selectedIds.size===1?"orden":"órdenes"}</>}
           </button>
         </div>
       </div>
@@ -14383,7 +14421,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
           return <div role="status" style={{background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:12,color:C.tx,lineHeight:1.5}}>
             <div style={{fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0}}/>{oc?.client||"El cliente"} tiene {otras.length===1?"una factura hecha":otras.length+" facturas hechas"} sin orden</div>
             <ul style={{margin:"0 0 6px",paddingLeft:18}}>{otras.slice(0,4).map(c=><li key={c.doc_number}><b style={{fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</b> por <span style={{fontFamily:"'Geist Mono',monospace"}}>${fmtMx(c.amount)}</span>, {dias(c.dias_sin_orden)}</li>)}{otras.length>4&&<li>y {otras.length-4} más</li>}</ul>
-            <div>Si {otras.length===1?"es":"son"} de esta OC, no emitas otra: en el plan matriz cada factura se liga con «Ya tiene factura: ligarla» y lleva sus piezas de cada producto.</div>
+            <div>Si {otras.length===1?"es":"son"} de esta OC, no emitas otra: en el plan matriz cada factura se liga con «Ya existe» y lleva sus piezas de cada producto.</div>
             {onAbrirPlan && <button type="button" onClick={()=>{ if(savingRef.current) return; escudoDeClics(500); onAbrirPlan(); }} style={{...bt(C.sf,C.tx),marginTop:8,border:"0.5px solid "+C.bd,fontSize:12}}><ChartBarIcon size={13} weight="bold"/>Ir al plan matriz</button>}
           </div>; })()}
         {/* v10.51.0 — Simple / Dividir */}
@@ -14430,7 +14468,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
           </div>}
 
           {/* 🆕 Fase 2 — Facturar TODA la OC a un tercero (solo una para toda la OC = 1 CFDI = 1 RFC) */}
-          {mode==="shared" && !isCorona && !ocHasPerOrderBillTo && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection invoiceType={invoiceType} onChange={b=>{ setBillTo(b); if(b) marca(); }} accent={colorTipo}/></div>}
+          {mode==="shared" && !isCorona && !ocHasPerOrderBillTo && <div style={{marginBottom:14,border:"1px solid "+C.bd,borderRadius:12,overflow:"visible"}}><BillToSection invoiceType={invoiceType} onChange={b=>{ setBillTo(b); if(b) marca(); }} accent={colorTipo} cliente={oc?.client}/></div>}
           {mode==="shared" && !isCorona && ocHasPerOrderBillTo && <div style={{marginBottom:14,padding:"9px 12px",background:C.amb+"12",border:"1px solid "+C.amb+"40",borderRadius:10,fontSize:11,color:"#9a3412",fontWeight:600,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill"/>Hay productos de esta OC con su propio «Facturar a un tercero»: quítalo primero para facturar toda la OC a un tercero.</div>}
         </>}
 
@@ -22910,7 +22948,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div role="img" aria-label={lectura.fallo?"No se pudo leer de la base":connected===null?"Conectando":connected?"En tiempo real":"Reconectando"} title={lectura.fallo?"No se pudo leer de la base":connected===null?"Conectando...":connected?"En tiempo real":"Reconectando..."} style={{width:7,height:7,borderRadius:"50%",background:lectura.fallo?C.amb:connected===null?C.amb:connected?C.ok:C.dn,flexShrink:0,...(sbPlegado?{position:"absolute",top:13,left:38,boxShadow:"0 0 0 1.5px "+C.card}:{marginLeft:"auto"})}}/>
         </div>
         <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"6px 9px 12px",display:"flex",flexDirection:"column",gap:2}}>
-          {NAV_SECTIONS.map(([g,label],si)=>{const items=navs.filter(n=>n.g===g);if(!items.length)return null;return <div key={g} style={{display:"flex",flexDirection:"column",gap:2}}>{sbPlegado?(si>0&&<div style={{height:1,background:C.bd,margin:"7px 10px 5px"}}/>):<div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 11px",margin:si===0?"2px 0 4px":"14px 0 4px"}}>{label}</div>}{items.map(n=>{const Ic=NAV_ICON[n.ic||n.id]||SquaresFourIcon;const active=view===n.id&&!(n.id==="form"&&editO?.id);return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbPlegado?"10px 0":"9px 11px",justifyContent:sbPlegado?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbPlegado&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbPlegado&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{n.l}</span>}</button>})}</div>;})}
+          {NAV_SECTIONS.map(([g,label],si)=>{const items=navs.filter(n=>n.g===g);if(!items.length)return null;return <div key={g} style={{display:"flex",flexDirection:"column",gap:2}}>{sbPlegado?(si>0&&<div style={{height:1,background:C.bd,margin:"7px 10px 5px"}}/>):<div style={{fontSize:9,fontWeight:700,color:C.t3,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 11px",margin:si===0?"2px 0 4px":"14px 0 4px"}}>{label}</div>}{items.map(n=>{const Ic=NAV_ICON[n.ic||n.id]||SquaresFourIcon;const active=view===n.id&&!(n.id==="form"&&editO?.id);return <button key={n.id} onClick={()=>navClick(n.id)} title={n.l} style={{display:"flex",alignItems:"center",gap:11,padding:sbPlegado?"10px 0":"9px 11px",justifyContent:sbPlegado?"center":"flex-start",borderRadius:9,border:"none",background:active?C.acL:"transparent",color:active?C.ac:C.t2,cursor:"pointer",fontFamily:"'Geist',sans-serif",fontSize:12.5,fontWeight:active?700:500,width:"100%",textAlign:"left",transition:"background .12s,color .12s",position:"relative"}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=C.bd+"45";e.currentTarget.style.color=C.tx}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.t2}}}>{active&&!sbPlegado&&<div style={{position:"absolute",left:0,top:7,bottom:7,width:3,borderRadius:"0 3px 3px 0",background:C.ac}}/>}<Ic size={18} weight={active?"fill":"regular"} style={{flexShrink:0}}/>{!sbPlegado&&<span style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",paddingBlock:3,marginBlock:-3}}>{n.l}</span>}</button>})}</div>;})}
         </div>
         <div style={{borderTop:"0.5px solid "+C.bd,padding:"8px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
           {!sbPlegado&&<div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}><div style={{width:27,height:27,borderRadius:8,background:(rC[user]||C.ac)+"1a",color:rC[user]||C.ac,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}}>{(userName||rL[user]||"?").charAt(0).toUpperCase()}</div><div style={{minWidth:0}}><div style={{fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{userName||rL[user]}</div><div style={{fontSize:9.5,color:C.t3}}>{rL[user]}</div></div></div>}

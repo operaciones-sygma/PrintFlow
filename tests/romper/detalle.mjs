@@ -3,6 +3,7 @@
 // Los datos salen del banco (tests/banco/gen-detalle.mjs), copiados de órdenes reales (P-0554, P-0571, P-0580, P-0607…).
 // Uso: node detalle.mjs <dir-capturas> [puerto=5196]
 import { chromium } from "playwright";
+import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5196);
 fs.mkdirSync(OUT, { recursive: true });
@@ -15,7 +16,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [], popups = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !deFuera(m)) errs.push("console: " + m.text()); });
   page.on("popup", async pp => { popups.push(pp.url()); await pp.close().catch(() => {}); });
   page.on("dialog", async d => { errs.push("diálogo del navegador: " + d.message().slice(0, 60)); await d.dismiss().catch(() => {}); });
   page.popups = popups;

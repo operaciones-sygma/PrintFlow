@@ -3,6 +3,7 @@
 // clientes que PrintFlow dio de alta, 36 terminaron fusionados por duplicados. Cada caso afirma lo que DEBERÍA pasar: una FALLA es un bug.
 // Uso: node cliente.mjs <dir-capturas> [puerto=5192]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
+import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5192);
 fs.mkdirSync(OUT, { recursive: true });
@@ -15,7 +16,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !deFuera(m)) errs.push("console: " + m.text()); });
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);

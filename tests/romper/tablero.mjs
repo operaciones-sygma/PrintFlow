@@ -4,6 +4,7 @@
 // Los datos salen del banco (tests/banco/gen-tablero.mjs), con órdenes y clientes como los de producción.
 // Uso: node tablero.mjs <dir-capturas> [puerto=5194]   ·   SOLO=<regex> corre sólo los casos que coinciden (sabotajes)
 import { chromium } from "playwright";
+import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5194);
 fs.mkdirSync(OUT, { recursive: true });
@@ -16,7 +17,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }, 
   const page = await browser.newPage({ viewport, ...extra });
   const errs = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !deFuera(m)) errs.push("console: " + m.text()); });
   page.on("dialog", async d => { errs.push("diálogo del navegador: " + d.message().slice(0, 60)); await d.dismiss().catch(() => {}); });
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);

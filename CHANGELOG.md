@@ -12,6 +12,58 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.104 — Lo que mueve dinero pregunta igual en las dos puertas; «Facturar a un tercero» dice quién paga y cuál es el otro camino — 14-oct-2026
+
+**Qué pasaba.** La pasada 2 de la critique del flujo de facturas de Karla (14-oct, revisor independiente con producción, el banco del plan y el
+código de CobranzaFlow; **25/40**, sube de 21; ningún P0; informe en `.banco-revisor-orden/revisor-facturas-2/informe.md`) dejó cuatro P1. Esta
+versión atiende dos y lo barato de sus P2:
+- **P1-1, riesgo de cobrar dos veces.** En «Asignar folio y entregar», si el cliente tenía facturas hechas sin orden de OTRO importe, la ventana
+  sólo ponía un aviso gris arriba y un renglón al final; un clic foliaba P-0595 sola aunque F-143 y F-155 ya la cubrían (la base sólo frena
+  una del MISMO importe). El folio anticipado, en cambio, sí preguntaba. Y la orden de una OC sin facturas sin orden ni mencionaba su OC.
+- **P1-2, Hotsson.** «Facturar a un tercero (razón social distinta a la de la orden)» describía justo el caso donde NO se usa (paga quien
+  pidió y sólo cambia la razón social del CFDI). La explicación salía hasta marcar la casilla, y decía «pídelo a Dirección mientras llega a Por
+  Timbrar», cuando «CFDI a nombre de» ya está en CobranzaFlow (v3.7.726, Por Timbrar → Datos) y lo hace Karla.
+- **P2-1:** el aviso de «Asignar folio» de la OC y el rechazo de la base dentro del plan citaban «Ya tiene factura: ligarla» (el botón de
+  «Facturar por partes»); en el plan ese botón se llama «Ya existe». **P2-2:** «CUADRA con F-143», lo que tranquiliza, iba en 9 px a 4.27:1.
+- Y lo que vi en las capturas de la guía: «Agregar 2 ordenes» sin acento; el menú lateral recortaba el acento de la «Ó» («Ordenes de Compra»);
+  y la vista previa del plan partía «P-0593» en dos renglones.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **«Continuar» pregunta** cuando el cliente tiene facturas sin orden de otro importe y del mismo tipo (la regla del folio anticipado,
+  `anticiposQuePreguntar`), una vez por ventana. En una orden suelta: «Asignar el folio de todos modos», «Facturar por partes y ligar F-…» o
+  «Volver». En una orden de una OC de varias: «¿Foliar P-0595 sola?» con «Ir a OC-0960», «Foliar sólo esta orden» o «Volver»; y el renglón del
+  final manda al plan de la OC, no a «factura por partes».
+- **La orden de una OC lo dice siempre**: «Es una de las 4 órdenes de OC-0960: lo normal es foliar la OC completa», con «Ir a OC-0960».
+- **«Facturar a un tercero (otra empresa paga esta factura)»**, y antes de marcarla: «¿Paga HOTSSON y sólo quiere el CFDI a otra de sus razones
+  sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de»». Al elegir: «Paga: X · ya no HOTSSON». En sus cuatro
+  puertas (el plan, «Asignar folio y entregar», el folio anticipado y la OC), con el nombre del cliente (`BillToSection` recibe `cliente`).
+- «Ya existe» en el aviso de la OC y en el rechazo de la base (`enPalabrasPlan`); «CUADRA con F-…» a 12 px en `C.okTx`, lo que falta en
+  `C.wnTx`; «Agregar 2 órdenes»; la etiqueta del menú con espacio para el acento; cada número de orden entero en la vista previa del plan.
+- **Las pruebas no dependen de la red** (`tests/consola.mjs`, `deFuera`): los bancos y la app traen la letra de Google Fonts, y cuando la red de
+  la PC parpadeaba Chrome escribía «Failed to load resource: net::ERR_NETWORK_CHANGED» y nueve tandas lo contaban como error de la app (así
+  frenaron dos candados de la 103). Lo que no carga de 127.0.0.1 sigue contando.
+
+**Lo que queda de la pasada 2** (sigue en la próxima): P1-3, el plan a 1366 enseña 1 o 2 de 4 órdenes (las notas, la barra y el pie de «Faltan»
+crecen); P1-4, la razón social de cada factura no viaja a Por Timbrar (la mitad de CobranzaFlow ya está anotada en su
+`docs/UI-NUEVA-PARA-IMPECCABLE.md`, commit `e1feffb`; hacer viajar la etiqueta es cambio de base y se habla antes); P2-3 (importes sin «sin IVA»),
+P2-4 (Esc con el foco en una casilla), P2-5 (el lector de pantalla: diez «Asignar Folio y Entregar» iguales, celdas «0 pzas»), P2-6 (el folio
+anticipado escondido) y P2-7 (palabras de programador).
+
+**Para Marcelo:** que el plan pregunte si el tercero elegido es del mismo grupo que el cliente necesita el grupo en `search_clients_typeahead`
+(cambio de base). Por ahora la ventana dice quién paga y el otro camino.
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, escritas antes del cambio y corridas contra v10.84.103: fallaban 12 (inv-135 a inv-139, oc-119,
+pl-87, pl-89, ses-82 a ses-85); inv-140 y pl-88 pasaban (inv-140 vigila que una remisión no pregunte por una factura; pl-88, medido en el banco,
+no reproducía el corte). **Vuelta 2**: pasan, menos pl-88, que con una regla más estricta (que cada número no PUEDA partirse) encontró la otra
+frase de la vista previa («P-0592, P-0593… pasan a entregadas»): arreglada. inv-138 tenía un patrón que cortaba la frase en el punto de
+«$2,157.60» (era de la prueba; se corrigió y se dice). inv-44 cambió a propósito: «Continuar» ahora pregunta y la prueba contesta «de todos
+modos». **Vuelta 3**, por donde no se diseñó: doble clic en «Asignar el folio de todos modos» (no emite), las dos preguntas seguidas (la de las
+facturas sin orden y la del folio menor), el aviso dentro de la ventana del tercero del plan, e «Ir a OC-0960» desde una orden de la OC: pasan
+las 4. `folio` 172, `plan` 93, `oc` 121, `sesion` 88 y `partes` 74, todo en verde; pl-48 cayó una vez por `ERR_NO_BUFFER_SPACE` y sola pasa 3
+de 3. `probar-alcance` y el build, limpios.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.103 — Lo menor de la pasada 1: Karla entra a su cola, las OC de un solo producto a la vista, «Nueva OC» no se pierde, el botón dice lo que emite; y mover órdenes a una OC con la regla de la base — 14-oct-2026
 
 **Qué pasaba.** Lo menor que dejó la pasada 1 de la critique del flujo de facturas de Karla (13-oct):

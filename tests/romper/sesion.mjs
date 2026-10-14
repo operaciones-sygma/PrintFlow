@@ -1350,6 +1350,91 @@ await caso("ses-81-el-vendedor-no-mueve-ordenes-a-su-oc", async ({ p, s }) => {
   const enLaOC = /Productos \(4\)/.test(await texto(p)), agregar = await p.getByRole("button", { name: /Agregar Producto Existente/ }).count();
   ok("ses-81-el-vendedor-no-mueve-ordenes-a-su-oc", enLaOC && agregar === 0, `Genaro en OC-0960 (la suya): ${enLaOC ? "abre" : "NO abre"} · «Agregar Producto Existente» ${agregar} (la base sólo deja a Dirección, Lupita y Karla)`);
 });
+// v10.84.104 — la pasada 2 (P1-2): «Facturar a un tercero (razón social distinta a la de la orden)» describía justo el caso Hotsson, donde NO se
+// usa (paga quien pidió y sólo cambia la razón social del CFDI); la explicación salía hasta marcar la casilla y decía «pídelo a Dirección
+// mientras llega a Por Timbrar», pero «CFDI a nombre de» ya está en CobranzaFlow (v3.7.726: Por Timbrar → Datos) y lo hace Karla.
+// Y lo menor que vi en las capturas de la guía: «Agregar 2 ordenes» sin acento, y el menú que recorta el acento de «Órdenes». Vuelta 1: antes.
+const abrirAsignarP0631 = async (p, s) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_order: [], get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(800);
+  await p.getByRole("button", { name: /Asignar Folio y Entregar/ }).nth(4).click(); await p.waitForTimeout(1500);
+  const dlg = p.getByRole("dialog", { name: /Asignar folio/i });
+  await dlg.getByRole("button", { name: /^Factura(\s|$)/ }).first().click(); await p.waitForTimeout(500);
+  return dlg;
+};
+await caso("ses-82-el-tercero-dice-donde-esta-cfdi-a-nombre-de", async ({ p, s }) => {
+  const dlg = await abrirAsignarP0631(p, s);
+  await dlg.getByLabel(/Facturar a un tercero/).check(); await p.waitForTimeout(400);
+  const t = ((await dlg.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const dice = /Por Timbrar → Datos/.test(t), viejo = /pídelo a Dirección|mientras llega a Por Timbrar/.test(t);
+  ok("ses-82-el-tercero-dice-donde-esta-cfdi-a-nombre-de", dice && !viejo, `dice dónde está («Por Timbrar → Datos»): ${dice} · el texto viejo («pídelo a Dirección…»): ${viejo}`);
+});
+await caso("ses-83-el-tercero-dice-quien-paga-antes-de-marcar", async ({ p, s }) => {
+  const dlg = await abrirAsignarP0631(p, s);
+  const etiqueta = ((await dlg.getByLabel(/Facturar a un tercero/).evaluate(el => el.closest("label")?.innerText || "").catch(() => "")) || "").replace(/\s+/g, " ");
+  const t = ((await dlg.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const engana = /razón social distinta a la de la orden/.test(etiqueta), dicePaga = /otra empresa paga/i.test(etiqueta);
+  const alternativa = /CFDI a nombre de/.test(t) && /Por Timbrar/.test(t);
+  ok("ses-83-el-tercero-dice-quien-paga-antes-de-marcar", !engana && dicePaga && alternativa,
+    `la casilla: «${etiqueta.slice(0, 90)}» · antes de marcar dice el otro camino («CFDI a nombre de» en Por Timbrar): ${alternativa}`);
+});
+const HOTSSON_NUEVA = () => {
+  const f = PORTLAND();
+  const h = (pn, x) => ordenK(pn, { client: "INMOBILIARIA HOTSSON", client_company: "INMOBILIARIA HOTSSON", client_id: "c3", stage: "in_production", ...x });
+  f.orders.push(h("P-0621", { purchase_order_id: "OC-0944", price: 80370, quantity: 658 }), h("P-0623", { purchase_order_id: "OC-0949", price: 33730, quantity: 426 }));
+  const oc = (id, x) => ({ id, client: "INMOBILIARIA HOTSSON", client_id: "c3", is_web_oc: false, created_by: "secretaria", vendedor: "Genaro", ...x });
+  f.purchase_orders.push(oc("OC-0944", { status: "in_progress", total: 80370, is_simple_oc: true, created_at: haceH(300) }),
+    oc("OC-0949", { status: "in_progress", total: 33730, is_simple_oc: true, created_at: haceH(290) }),
+    oc("OC-0970", { status: "open", total: 0, is_simple_oc: false, created_at: haceH(1), created_by: "karla" }));
+  return f;
+};
+await caso("ses-84-agregar-dice-ordenes-con-acento", async ({ p, s }) => {
+  s.filas = HOTSSON_NUEVA(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(900);
+  await p.getByText("OC-0970", { exact: false }).first().click(); await p.waitForTimeout(1200);
+  await p.getByRole("button", { name: /Agregar Producto Existente/ }).first().click(); await p.waitForTimeout(600);
+  const d = p.getByRole("dialog", { name: "Agregar Producto Existente" });
+  const boton = async () => ((await d.getByRole("button", { name: /^Agregar \d+ (orden|órden)/ }).innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+  await d.getByText("P-0621", { exact: false }).first().click(); await p.waitForTimeout(200); const uno = await boton();
+  await d.getByText("P-0623", { exact: false }).first().click(); await p.waitForTimeout(200); const dos = await boton();
+  ok("ses-84-agregar-dice-ordenes-con-acento", uno === "Agregar 1 orden" && dos === "Agregar 2 órdenes", `con una: «${uno}» · con dos: «${dos}»`);
+});
+await caso("ses-85-el-menu-no-recorta-acentos", async ({ p, s }) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Órdenes de Compra/); await despertar(p); await p.mouse.move(700, 400); await p.waitForTimeout(300);
+  const b = p.locator('button[title^="Órdenes de Compra"]').first();
+  const antes = await b.screenshot();
+  await b.evaluate(el => { const sp = el.querySelector("span"); if (sp) sp.style.overflow = "visible"; });
+  const despues = await b.screenshot();
+  const igual = Buffer.compare(antes, despues) === 0;
+  ok("ses-85-el-menu-no-recorta-acentos", igual, igual ? "la etiqueta se ve igual sin recortar" : "la etiqueta recorta algo arriba (el acento de la «Ó» de «Órdenes»)");
+});
+// vuelta 3 (v10.84.104): el aviso en la ventana del tercero del PLAN (donde Karla haría lo de Hotsson), y «Ir a OC-0960» desde una orden de la OC
+// sin facturas sin orden (la ventana ya lo dice siempre)
+await caso("ses-86-el-plan-avisa-antes-de-elegir-tercero", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [], get_folio_emitter_enabled: true };
+  await abrirOC(p, "karla", s);
+  await p.getByRole("button", { name: /^Plan matriz$/ }).first().click(); await p.waitForTimeout(1500);
+  await p.getByRole("button", { name: /Facturar a tercero/ }).first().click(); await p.waitForTimeout(600);
+  const d = p.getByRole("dialog", { name: /a cargo de un tercero/ });
+  const t = ((await d.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("ses-86-el-plan-avisa-antes-de-elegir-tercero", /¿Paga PORTLAND LEATHER y sólo quiere el CFDI a otra de sus razones sociales\?/.test(t) && /Por Timbrar → Datos/.test(t), `«${t.slice(0, 260)}»`);
+});
+await caso("ses-87-la-orden-de-la-oc-lleva-a-su-oc", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_order: [], list_linkable_invoices_for_oc: [], get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(800);
+  await p.getByRole("button", { name: /Asignar Folio y Entregar/ }).first().click(); await p.waitForTimeout(1500);
+  const dlg = p.getByRole("dialog", { name: /Asignar folio/i });
+  const nota = ((await dlg.locator("[data-oc-de-la-orden]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  await dlg.getByRole("button", { name: /Ir a OC-0960/ }).click().catch(() => {}); await p.waitForTimeout(1500);
+  const enLaOC = /Productos \(4\)/.test(await texto(p)), cerrada = (await dlg.count()) === 0;
+  ok("ses-87-la-orden-de-la-oc-lleva-a-su-oc", /una de las 4 órdenes de OC-0960/.test(nota) && cerrada && enLaOC, `la nota: «${nota}» · la ventana se cierra ${cerrada} · abre OC-0960 ${enLaOC}`);
+});
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),

@@ -4,7 +4,7 @@
 // OC-0960 de PORTLAND LEATHER (P-0592 a P-0595, 80,000 stickers cada uno) y sus facturas hechas sin orden, F-143 y F-155, que cubren
 // cada una un pedazo de los cuatro (según sus conceptos timbrados).
 // Uso: node gen-plan.mjs <App.jsx> <dirSalida>
-// Variantes por URL: emisor=off · ligables=vacio|falla|lento|colgado (las facturas sin orden del cliente) · conf=falla (la base
+// Variantes por URL: emisor=off · ligables=vacio|falla|lento|colgado (las facturas sin orden del cliente) · conf=falla|candado (la base
 //   rechaza el plan: la ventana se queda con lo capturado) · confirmar=no (los window.confirm de la ventana contestan «no») ·
 //   vista=1 (la vista del plan ya creado, con una factura ligada y pagada y otra creada por el plan) · rol=karla (sin botones de
 //   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
@@ -28,7 +28,7 @@ const partes = [
   ...importacionesDeLib(fuente),   // v10.84.91 — lo que App importa de ./lib/ (las categorías, cuadrarPartes)
   `// ── lo que toca la base, simulado (${simuladosUsados.join(", ")}) ──
 const Q = new URLSearchParams(location.search);
-const EMISOR = Q.get("emisor") !== "off", LIGABLES = Q.get("ligables") || "normal", CONF_FALLA = Q.get("conf") === "falla";
+const EMISOR = Q.get("emisor") !== "off", LIGABLES = Q.get("ligables") || "normal", CONF_FALLA = Q.get("conf") === "falla", CONF_CANDADO = Q.get("conf") === "candado";
 const registro = [];
 const anota = t => { registro.push(t); const el = document.getElementById("log"); if (el) el.textContent = registro.join("\\n"); };
 window.confirm = m => { anota("confirm: " + String(m).split("\\n")[0]); return Q.get("confirmar") !== "no"; };
@@ -115,7 +115,9 @@ function Banco() {
       onCancelGroup={g => { anota("cancelar-factura " + g.id); setCancelar({ kind: "group", group: g }); }} busy={false}/>}
     {abierto && <OCSplitMatrixModal oc={OC} ocOrders={ORDERS} user="karla" userLogin="karla"
       onConfirm={async plan => { anota("plan:confirm " + JSON.stringify(plan)); await new Promise(r => setTimeout(r, 150));
-        if (CONF_FALLA) { anota("rechazo"); throw new Error("Grupo 1: F-143 ya está ligada a OP-OTRA: no se re-liga"); }   // (v10.84.100: App lanza; antes avisaba abajo)
+        if (CONF_FALLA) { anota("rechazo"); throw new Error("Grupo 1: F-143 ya está ligada a OP-OTRA: no se re-liga"); }
+    // v10.84.104 — el candado del anticipo de la base, con su texto de verdad (migración v10.84.89, renglón 140)
+    if (CONF_CANDADO) { anota("rechazo"); throw new Error("Grupo 1: este cliente ya tiene F-143 hecha sin orden, por $3066.78, que es justo el importe de esta factura del plan. Márcala «Ya tiene factura: ligarla» en vez de emitir un folio nuevo, o se le cobraría dos veces el mismo trabajo."); }   // (v10.84.100: App lanza; antes avisaba abajo)
         setAbierto(false); return { groups_count: plan.groups.length, linked_folios: plan.groups.filter(g => g.ligar).map(g => g.folio) }; }}
       onClose={() => { anota("cerrado"); setAbierto(false); }}/>}
     {cancelar && <MatrixCancelConfirmModal kind={cancelar.kind} line={cancelar.line} group={cancelar.group} order={cancelar.order} oc={OC} orders={ORDERS}

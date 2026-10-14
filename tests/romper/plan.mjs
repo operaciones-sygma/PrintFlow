@@ -803,6 +803,43 @@ await caso("pl-86 traer en una y «Lo que falta» en la otra a 1366", "", async 
     (await celda(p, 0, 1).inputValue().catch(() => "")) === "75620", `columna 2, P-0592: «${await celda(p, 0, 1).inputValue().catch(() => "")}»`);
 });
 
+// v10.84.104 — la pasada 2 (P2-2 y P2-1): lo que tranquiliza, legible («CUADRA con F-143» iba en 9 px a 4.27:1); la vista previa no parte
+// «P-0593» en dos renglones; y el rechazo de la base nombra el botón que el plan sí tiene («Ya existe»). Vuelta 1: antes.
+const contraste = loc => loc.evaluate(el => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+  let k = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; k = [r * a + k[0] * (1 - a), g * a + k[1] * (1 - a), b * a + k[2] * (1 - a)]; }
+  const lb = lum(k), lt = lum(nums(getComputedStyle(el).color).slice(0, 3));
+  return { px: parseFloat(getComputedStyle(el).fontSize), cr: +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2) };
+}).catch(() => null);
+await caso("pl-87 «CUADRA con F-143» se lee", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 500);
+  const m = await contraste(suma(p, 0).getByText(/CUADRA/).first());
+  ok("pl-87 «CUADRA con F-143» a 12 px o más y con AA (4.5:1) sobre su fondo", !!m && m.px >= 12 && m.cr >= 4.5, JSON.stringify(m));
+});
+await caso("pl-88 la vista previa no parte «P-0593»", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await ligar(p, 1, "F-155"); await traer(p, 1).click().catch(() => {}); await espera(p, 400);
+  await botonEnviar(p).click(); await espera(p, 500);
+  const partidos = await vista(p).evaluate(d => {
+    const out = []; const w = document.createTreeWalker(d, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) { const re = /P-\d{4}/g; let m; while ((m = re.exec(n.data))) { const r = document.createRange(); r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+      const partido = new Set([...r.getClientRects()].map(x => Math.round(x.top))).size > 1;
+      const entero = getComputedStyle(n.parentElement).whiteSpace === "nowrap";   // (en la app real, a 1366, se partía «P-» / «0593»)
+      if (partido || !entero) out.push(m[0] + (partido ? " (partido)" : " (se puede partir)")); } }
+    return out;
+  }).catch(e => ["(no se pudo medir: " + e.message.split("\n")[0] + ")"]);
+  ok("pl-88 en la vista previa ningún número de orden se parte en dos renglones (ni puede partirse)", partidos.length === 0, partidos.length ? partidos.join(", ") : "");
+});
+await caso("pl-89 el rechazo nombra el botón del plan", "conf=candado", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 1000, 1000, 1000]); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await enviar(p).click().catch(() => {}); await espera(p, 600);
+  const t = ((await p.locator("[data-plan-rechazo]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-89 el rechazo de la base nombra el botón del plan («Ya existe») y la factura por su número («Factura 1»), no «Ya tiene factura: ligarla»",
+    /«Ya existe»/.test(t) && /Factura 1/.test(t) && !/Ya tiene factura: ligarla/.test(t), `«${t.slice(0, 220)}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

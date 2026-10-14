@@ -69,6 +69,8 @@ const StageLbl = ({ stage }) => <b>{stage}</b>;`,
   fnBlock("MultiPaymentPicker"),
   // v10.84.96 — el aviso de «no pude revisar las facturas sin orden» (si el App.jsx lo trae)
   ...(L.some(l => l.startsWith("function SinRevisionSinOrden(")) ? [fnBlock("SinRevisionSinOrden")] : []),
+  // v10.84.104 — «Continuar» pregunta por las facturas sin orden de otro importe con la regla del folio anticipado
+  ...(L.some(l => l.startsWith("function anticiposQuePreguntar(")) ? [fnBlock("anticiposQuePreguntar")] : []),
   fnBlock("InvoiceModal"), fnBlock("PreInvoiceModal"),
   // v10.84.90 — «Confirmar entrega» y «Capturar precio» (el mismo «ocupado desde el clic» que asignar el folio)
   fnBlock("DeliverOnlyModal"), fnBlock("PriceCaptureModal"),

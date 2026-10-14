@@ -1,6 +1,7 @@
 // Tratar de ROMPER «Asignar folio» (InvoiceModal, PreInvoiceModal, MultiPaymentPicker) en el banco de folio. Cada caso afirma lo
 // que DEBERÍA pasar: una FALLA es un bug. Uso: node romper-folio.mjs <dir-capturas> [puerto=5199]
 import { chromium } from "playwright";
+import { deFuera } from "../consola.mjs";   // (un recurso de fuera que no cargó no es error de la app)
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5199);
 fs.mkdirSync(OUT, { recursive: true });
@@ -13,7 +14,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error") errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !deFuera(m)) errs.push("console: " + m.text()); });
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
@@ -406,6 +407,8 @@ await caso("inv-43 anticipo de otro importe", "anticipo=otro", async p => {
 await caso("inv-44 de otro importe, la factura completa sigue", "anticipo=otro", async p => {
   await inv(p); await espera(p, 400); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
   await continuar(p).click(); await espera(p, 700);
+  // (v10.84.104: «Continuar» pregunta antes por F-9140; aquí se contesta «de todos modos»)
+  await p.getByRole("button", { name: /Asignar el folio de todos modos/ }).click().catch(() => {}); await espera(p, 600);
   const prev = await ve(p, /F-9140/) && await ve(p, /sin ligar/);
   await final(p).click(); await espera(p, 600);
   ok("inv-44 con una de otro importe se puede emitir la completa; la vista previa dice que F-9140 se queda sin ligar y no se pregunta otra vez", prev && (await cuenta(p, "inv:confirm")) === 1);
@@ -1166,6 +1169,89 @@ await caso("prc-02 «Sin precio, continuar»: dos clics en el mismo instante, un
 });
 
 // vuelta 2 (por donde no se diseñó): «ocupado» se suelta al terminar, también si la base falla: se reintenta y Esc vuelve a preguntar
+// v10.84.104 — la pasada 2 de la critique (P1-1): con facturas del cliente hechas sin orden de OTRO importe, «Continuar» pregunta, como el
+// folio anticipado (antes: un aviso gris arriba y un renglón al final; un clic foliaba P-0595 sola aunque F-143 y F-155 ya la cubrían). En una
+// orden de una OC de varias, la salida es la OC; y aunque no haya facturas sin orden, la ventana dice de qué OC es. Vuelta 1: antes.
+const preguntaAnt = p => p.getByRole("dialog", { name: /factura.* sin (orden|ligar)|sola\?$/ });
+await caso("inv-135 orden suelta con una de otro importe: «Continuar» pregunta", "anticipo=otro", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  const q = preguntaAnt(p), hay = await q.count();
+  const salidas = hay ? (await q.getByRole("button").allInnerTexts()).map(x => x.replace(/\s+/g, " ").trim()) : [];
+  const vistaAntes = await final(p).count();
+  if (hay) { await q.getByRole("button", { name: /Asignar el folio de todos modos/ }).click(); await espera(p, 500); }
+  const vistaDespues = await final(p).count();
+  if (vistaDespues) { await dlgInv(p).getByRole("button", { name: /Atrás/ }).click(); await espera(p, 300); await continuar(p).click(); await espera(p, 500); }
+  const otraVez = await preguntaAnt(p).count(), vistaFinal = await final(p).count();
+  ok("inv-135 orden suelta con F-9140 sin orden de otro importe: «Continuar» pregunta (asignar de todos modos, o facturar por partes y ligarla) antes de la vista previa, y una sola vez",
+    hay === 1 && vistaAntes === 0 && salidas.some(x => /Asignar el folio de todos modos/.test(x)) && salidas.some(x => /Facturar por partes y ligar F-9140/.test(x)) && vistaDespues === 1 && otraVez === 0 && vistaFinal === 1,
+    `pregunta ${hay} · botones ${JSON.stringify(salidas)} · vista previa antes ${vistaAntes}, después ${vistaDespues} · al regresar: pregunta ${otraVez}, vista previa ${vistaFinal}`);
+});
+await caso("inv-136 orden de una OC con una de otro importe: pregunta con la salida a la OC", "anticipo=otro&oc=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  const q = preguntaAnt(p), hay = await q.count();
+  const titulo = hay ? ((await q.locator("h3").first().innerText().catch(() => "")) || "") : "";
+  const ir = hay ? await q.getByRole("button", { name: /Ir a OC-0960/ }).count() : 0;
+  const sola = hay ? await q.getByRole("button", { name: /Foliar sólo esta orden/ }).count() : 0;
+  if (ir) { await q.getByRole("button", { name: /Ir a OC-0960/ }).click(); await espera(p, 400); }
+  ok("inv-136 una orden de OC-0960 con F-9140 sin orden: «Continuar» pregunta «¿Foliar … sola?» con «Ir a OC-0960» y «Foliar sólo esta orden»; «Ir a» lleva a la OC",
+    hay === 1 && /sola\?/.test(titulo) && ir === 1 && sola === 1 && (await cuenta(p, "inv:oc OC-0960")) === 1, `pregunta ${hay} «${titulo}» · «Ir a» ${ir} · «Foliar sólo esta orden» ${sola} · lleva ${await cuenta(p, "inv:oc OC-0960")}`);
+});
+await caso("inv-137 orden de una OC sin facturas sin orden: dice de qué OC es", "oc=1", async p => {
+  await inv(p); await espera(p, 400);
+  const dice = await ve(p, /una de las 4 órdenes de OC-0960/);
+  const hay = await dlgInv(p).getByRole("button", { name: /Ir a OC-0960/ }).count();
+  await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p); await continuar(p).click(); await espera(p, 500);
+  const pregunta = await preguntaAnt(p).count(), vista = await final(p).count();
+  ok("inv-137 una orden de OC-0960 sin facturas sin orden: la ventana dice que es una de las 4 órdenes de OC-0960, con «Ir a OC-0960», y «Continuar» no pregunta",
+    dice && hay === 1 && pregunta === 0 && vista === 1, `dice ${dice} · «Ir a» ${hay} · pregunta ${pregunta} · vista previa ${vista}`);
+});
+await caso("inv-138 la vista previa de una orden de OC manda al plan, no a «factura por partes»", "anticipo=otro&oc=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  await preguntaAnt(p).getByRole("button", { name: /Foliar sólo esta orden/ }).click().catch(() => {}); await espera(p, 500);
+  const t = ((await dlgInv(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const frase = (t.match(/se queda.? sin ligar:[^.]*\./) || [""])[0];   // (desde «se queda»: el punto de «$2,157.60» cortaba la frase)
+  ok("inv-138 en la vista previa de una orden de OC-0960, F-9140 sin ligar dice que se liga en el plan de la OC (no «factura por partes»)",
+    /plan/i.test(frase) && !/factura por partes/i.test(frase), `«${frase}»`);
+});
+await caso("inv-139 doble clic en «Continuar» con la pregunta: una pregunta", "anticipo=otro", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).dblclick(); await espera(p, 500);
+  const n = await preguntaAnt(p).count();
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const quedan = await preguntaAnt(p).count(), vista = await final(p).count(), sigue = await dlgInv(p).count();
+  ok("inv-139 doble clic en «Continuar»: una sola pregunta; Esc la cierra y deja la ventana en el primer paso (sin vista previa)",
+    n === 1 && quedan === 0 && vista === 0 && sigue === 1, `preguntas ${n} · tras Esc: ${quedan} · vista previa ${vista} · la ventana ${sigue}`);
+});
+await caso("inv-140 una remisión con una factura sin orden: no pregunta por ella", "anticipo=otro", async p => {
+  await inv(p); await tipo(p, "Remisión").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  ok("inv-140 con F-9140 (una factura) sin orden, una remisión no pregunta por ella (como el folio anticipado: por las del mismo tipo)",
+    (await preguntaAnt(p).count()) === 0 && (await final(p).count()) === 1);
+});
+// vuelta 3 (v10.84.104), por donde no se diseñó: el doble clic en la respuesta, y las dos preguntas seguidas (la de las facturas sin orden y
+// la del folio menor, con el emisor apagado)
+await caso("inv-141 doble clic en «Asignar el folio de todos modos»", "anticipo=otro", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  await preguntaAnt(p).getByRole("button", { name: /Asignar el folio de todos modos/ }).dblclick().catch(() => {}); await espera(p, 700);
+  const vista = await final(p).count(), emitio = await cuenta(p, "inv:confirm");
+  ok("inv-141 doble clic en «Asignar el folio de todos modos»: llega a la vista previa y no emite (el segundo clic no cae en «Emitir»)", vista === 1 && emitio === 0, `vista previa ${vista} · emitidas ${emitio}`);
+});
+await caso("inv-142 las dos preguntas seguidas: facturas sin orden y folio menor", "anticipo=otro&emisor=off", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p);
+  await p.locator("#invoice-folio").fill("F-100"); await pagoNo(p).click(); await espera(p);
+  await continuar(p).click(); await espera(p, 500);
+  const primera = await preguntaAnt(p).count();
+  await preguntaAnt(p).getByRole("button", { name: /Asignar el folio de todos modos/ }).click().catch(() => {}); await espera(p, 500);
+  const segunda = await p.getByRole("dialog", { name: /folio menor al último/ }).count();
+  await p.getByRole("button", { name: "Usar F-100" }).click().catch(() => {}); await espera(p, 500);
+  const llega = await ve(p, /Folio F-100/);
+  ok("inv-142 con F-9140 sin orden y un folio menor: pregunta por F-9140, luego por el folio menor, y llega a la vista previa con F-100",
+    primera === 1 && segunda === 1 && llega, `primera ${primera} · segunda ${segunda} · vista previa con F-100 ${llega}`);
+});
 await caso("inv-131 la base rechaza: se puede reintentar y Esc vuelve a preguntar", "falla=1", async p => {
   await hastaLaVistaPrevia(p); await final(p).click(); await espera(p, 600);
   const err = await ve(p, /No se asignó el folio/);
