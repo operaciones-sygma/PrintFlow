@@ -12,6 +12,23 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.107 — El plan matriz deja hasta 30 facturas por OC (eran 10) — 14-oct-2026
+
+**Qué pasaba.** Marcelo (14-oct): «en OC sólo nos deja hacer un máximo de 10 facturas por OC; el caso de Inmobiliaria Hotsson nos piden 11 por una
+OC». Karla ya había juntado P-0621 y P-0623 en OC-0966 esa mañana y no podía armar su plan. El tope de 10 estaba sólo en la pantalla del plan matriz
+(`setGroupsCountSafe` ignoraba más de 10 y el campo tenía `max="10"`): `assign_oc_invoice_split_plan` no tiene tope (sólo rechaza un plan vacío).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió): hasta **30** facturas por plan (`MAX_FACTURAS_PLAN`; el tope queda para que un número tecleado
+de más no arme cientos de columnas). Con más de 30, no se arman y dice «Hasta 30 facturas por plan.». El campo se llama «Cuántas facturas» para el lector
+de pantalla. Con 4 facturas o más las columnas miden 230 px y la matriz se desliza a lo ancho con la columna de órdenes fija (v10.84.105).
+
+**Cómo se probó** (tres vueltas, banco del plan). **Vuelta 1**, contra v10.84.106: pl-105 (11 facturas y las 11 a la base) y pl-106 (con 31, «Hasta 30»)
+fallaban («columnas 2»: el 11 se ignoraba). **Vuelta 2**: pasan; seis pruebas viejas buscaban el campo por su `max='10'` y ahora lo buscan por su nombre
+(supuesto de la forma, se dice). **Vuelta 3**, por donde no se diseñó: el borrador con 11 vuelve con las 11 y lo capturado en la 11; justo 30 se arman
+sin desbordar la página; bajar de 11 a 2 con algo en la 11 pregunta antes de quitar: pasan las 3. `plan` 115 de 115.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.106 — Crear con facturas sin orden pregunta por ellas en las tres puertas; y lo barato que quedaba de la pasada 2 — 14-oct-2026
 
 **Qué pasaba.** La pasada 3 de la critique del flujo de facturas de Karla (14-oct, otro revisor independiente con producción y el banco del plan;
@@ -59,7 +76,7 @@ factura» (emite una vez), Esc en la casilla «Ya revisé en CobranzaFlow» con 
 fuera): pasan; las dos primeras corridas de oc-126 e inv-144 tenían supuestos míos (la razón de la pre-asignación sin escribir; tomar el tipo como
 algo capturado) y se corrigieron. `oc` 126, `plan` 110, `folio` 175, `sesion` 91, todo en verde. `probar-alcance` y el build, limpios.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~09:57; READY `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5` (commit `2e0623b`). Vuelta atrás: promover `dpl_CM9wLhaU6QuNLXEFNoNDabb7txxm` (el código de v10.84.105) o `git revert 2e0623b`; la base no cambió. Candado: 1642 de 1642 a la primera, de a 1 tanda (47 min). Revisado en producción sin escribir (`.banco-revisor-orden/medir-106.mjs`, la cuenta de pruebas con el rol de Karla), 6 de 6: cada «Asignar Folio y Entregar» de la cola dice su orden y su cliente; los importes de la cola dicen «sin IVA»; OC-0966 «Total sin IVA $114,100.00»; su plan nombra cada celda («Piezas de P-0621 en la factura 1»); Esc con el foco en la casilla del tercero cierra esa ventana; sin errores, sin diálogos nativos y sin escrituras. (Se midió en OC-0966 porque esa mañana Karla ya había ligado F-143 y F-155 en el plan de OC-0960 —la OC quedó completa a las 09:44, sus 4 órdenes entregadas, sin folios nuevos— y había juntado P-0621 y P-0623 de Hotsson en OC-0966 a las 09:46.) La pregunta de crear con facturas sin orden no se ve con esa cuenta (no las lee: 403); la cubren los bancos.
 
 ## v10.84.105 — El plan matriz a 1366 deja ver lo que se captura — 14-oct-2026
 

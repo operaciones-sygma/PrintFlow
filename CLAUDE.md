@@ -183,7 +183,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.105 (14-oct, ~07:58; READY `dpl_Gz888dBAaQyYizDymG3xpsocf2MT`, commit `6a046ca`; vuelta atrás: promover
+- **LIVE:** v10.84.106 (14-oct, ~09:57; READY `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5`, commit `2e0623b`; vuelta atrás: promover
+  `dpl_CM9wLhaU6QuNLXEFNoNDabb7txxm` (el código de v10.84.105) o `git revert 2e0623b`; la base no cambió; candado 1642 de 1642). v10.84.106, la pasada 3 de
+  la critique (23/40): 🔑 **crear con facturas sin orden pregunta por ellas en las tres puertas** («Asignar folio» de la OC con «Ligarlas en el plan
+  matriz» de principal; la vista previa del plan «… de todos modos»); Esc en casillas y celdas; el lector de pantalla con la orden en cada botón y
+  celda; «sin IVA». Esa mañana Karla ya ligó F-143 y F-155 en el plan de OC-0960 (completa, sin folios nuevos) y juntó Hotsson en OC-0966.
+  v10.84.105 (14-oct, ~07:58; READY `dpl_Gz888dBAaQyYizDymG3xpsocf2MT`, commit `6a046ca`; vuelta atrás: promover
   `dpl_8XXWMSznHyYZkxSnNFXvZuE5Eoxu` (el código de v10.84.104) o `git revert 6a046ca`; la base no cambió; candado 1624 de 1624). v10.84.105: **el plan
   matriz a 1366 deja ver lo que se captura** (3 de 4 órdenes en el banco con dos facturas, con las piezas traídas, con 6 y antes de Salidas; la nota
   de quién paga y lo que falta en un renglón; con 4 facturas o más, columnas de 230 px que se deslizan con la columna de órdenes fija).

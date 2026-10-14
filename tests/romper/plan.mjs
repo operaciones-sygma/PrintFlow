@@ -40,6 +40,7 @@ const ligar = async (p, i, folio) => {
   await encabezado(p, i).getByRole("button", { name: /^(Ya tiene factura: ligarla|Ya existe)$/ }).click(); await espera(p, 150);   // (v10.84.100: «Ya existe»)
   if (folio != null) { await p.getByLabel(`Folio de la factura ${i + 1} que ya existe`).fill(folio); await espera(p, 200); }
 };
+const cuantas = p => p.locator('input[type=number][aria-label="Cuántas facturas"], input[type=number][max="10"]').first();   // (v10.84.107: el campo con su nombre)
 const piezas = async (p, i, qs) => { for (let f = 0; f < qs.length; f++) { await celda(p, f, i).fill(String(qs[f])); } await espera(p, 200); };
 const F143 = [4380, 3528, 7395, 5520], F155 = [75620, 76472, 72605, 74480];
 // (v10.84.100: el botón dice «Revisar: crear…» y abre la vista previa; click y dblclick confirman en ella si sale, así sirven a las dos versiones)
@@ -211,7 +212,7 @@ await caso("pl-18 el borrador conserva la ligada", "", async p => {
 await caso("pl-19 la sugerencia no se cuela", "emisor=off", async p => {
   await abrir(p); await ligar(p, 0, null);
   const v1 = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "?");
-  await p.locator("input[type=number][max='10']").fill("3"); await espera(p, 300);
+  await cuantas(p).fill("3"); await espera(p, 300);
   const v2 = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "?");
   ok("pl-19 el folio sugerido del contador no se cuela en el de ligar (ni al cambiar cuántas facturas)", v1 === "" && v2 === "", `«${v1}» → «${v2}»`);
 });
@@ -349,7 +350,7 @@ await caso("pl-37 a 1366 la línea del saldo cabe en su columna (no empuja la ta
 // v10.84.92 — el caso Hotsson tal cual: siete facturas a 1366 (N facturas escrito en la casilla)
 await caso("pl-38 siete facturas a 1366 (el caso Hotsson): se ven, dicen su saldo, se llenan y se mandan las 7 sin tercero", "", async p => {
   await abrir(p);
-  await p.locator('input[type="number"][max="10"]').first().fill("7"); await espera(p, 400);
+  await cuantas(p).fill("7"); await espera(p, 400);
   const cols = await p.locator("thead th [data-saldo]").count();
   const saldos = (await p.locator("thead th [data-saldo]").allInnerTexts()).map(t => t.replace(/\s+/g, " "));
   const anchoPagina = await p.evaluate(() => document.documentElement.scrollWidth);
@@ -439,11 +440,11 @@ await caso("pl-47 el Tab no se sale del plan", "", async p => {
 });
 await caso("pl-48 bajar el número de facturas con datos: pregunta la app", "", async p => {
   await abrir(p); await piezas(p, 1, [1000, 1000]);
-  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  await cuantas(p).fill("1"); await espera(p, 300);
   const q = p.getByRole("dialog", { name: /¿Quitar la factura 2\?/ }), hay = await q.count(), dice = hay ? ((await q.innerText()) || "").replace(/\s+/g, " ") : "";
   if (hay) { await q.getByRole("button", { name: "Dejarla" }).click(); await espera(p, 300); }
   const cols1 = await p.locator("thead th [data-saldo]").count();
-  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  await cuantas(p).fill("1"); await espera(p, 300);
   await p.getByRole("dialog", { name: /¿Quitar la factura 2\?/ }).getByRole("button", { name: "Quitar la factura" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
   const cols2 = await p.locator("thead th [data-saldo]").count();
   ok("pl-48 bajar a 1 con datos en la 2: pregunta la app y dice qué se va (2 de 4 órdenes); «Dejarla» la deja, «Quitar la factura» la quita",
@@ -663,7 +664,7 @@ await caso("pl-73 remisión y factura en la vista previa", "", async p => {
 });
 await caso("pl-74 muchas cosas por resolver: el botón sigue a la vista", "", async p => {
   await abrir(p);
-  await p.locator("input[type=number][max='10']").fill("7"); await espera(p, 300);
+  await cuantas(p).fill("7"); await espera(p, 300);
   for (let i = 0; i < 7; i++) await piezas(p, i, [90000, 90000, 90000, 90000]);
   const r = await p.evaluate(() => { const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
     const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
@@ -697,7 +698,7 @@ await caso("pl-68 la factura que la lleva va anticipada", "planta=1", async p =>
 });
 await caso("pl-69 la vista previa dice quién se queda", "planta=1", async p => {
   await abrir(p); await encabezado(p, 0).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
-  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  await cuantas(p).fill("1"); await espera(p, 300);
   await p.getByRole("dialog", { name: /¿Quitar/ }).getByRole("button", { name: /^Quitar/ }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 200);
   await p.locator("[data-plan-anticipadas] input").fill("pago adelantado").catch(() => {}); await espera(p, 200);
   await botonEnviar(p).click(); await espera(p, 400);
@@ -907,7 +908,7 @@ await caso("pl-97 con una sola cosa por resolver, se lee entera", "", async p =>
   ok("pl-97 con una sola cosa por resolver, se lee entera (sin cortar) y sin «Ver las N»", !!r && r.cortado === false && !r.boton, JSON.stringify(r));
 });
 await caso("pl-98 siete facturas: la matriz se desliza y la columna de órdenes se queda", "", async p => {
-  await abrir(p); await p.locator("input[type=number][max='10']").fill("7"); await espera(p, 400);
+  await abrir(p); await cuantas(p).fill("7"); await espera(p, 400);
   const r = await p.evaluate(async () => {
     const m = document.querySelector("[data-plan-matriz]"); m.scrollLeft = m.scrollWidth; await new Promise(x => setTimeout(x, 300));
     const td = document.querySelector("tbody tr td"), b = td.getBoundingClientRect(), el = document.elementFromPoint(b.left + 10, b.top + b.height / 2);
@@ -973,6 +974,42 @@ await caso("pl-104 ligadas las dos, sin aviso", "", async p => {
   await botonEnviar(p).click(); await espera(p, 500);
   const t = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
   ok("pl-104 con F-143 y F-155 ligadas no hay aviso ni «de todos modos»", !/de todos modos|que este plan no liga/.test(t), `«${t.slice(0, 160)}»`);
+});
+
+// v10.84.107 — Hotsson pide 11 facturas por una OC y el plan dejaba 10 como máximo (sólo la pantalla: la base no tiene tope). Vuelta 1: antes.
+await caso("pl-105 once facturas", "", async p => {
+  await abrir(p); await cuantas(p).fill("11"); await espera(p, 500);
+  const columnas = await p.locator("thead th").count() - 1;
+  for (let i = 0; i < columnas; i++) await celda(p, 0, i).fill("1000");
+  await espera(p, 300);
+  await enviar(p).click().catch(() => {}); await espera(p, 800);
+  const g = (await planEnviado(p))?.groups || [];
+  ok("pl-105 el plan deja poner 11 facturas y manda las 11 a la base", columnas === 11 && g.length === 11, `columnas ${columnas} · mandadas ${g.length}`);
+});
+await caso("pl-106 más de 30 no", "", async p => {
+  await abrir(p); await cuantas(p).fill("31"); await espera(p, 400);
+  const columnas = await p.locator("thead th").count() - 1, dice = /Hasta 30 facturas/.test((await p.locator("body").textContent()) || "");
+  ok("pl-106 con 31 el plan no arma 31 columnas y dice «Hasta 30 facturas…»", columnas < 31 && dice, `columnas ${columnas} · lo dice ${dice}`);
+});
+
+// vuelta 3 (v10.84.107), por donde no se diseñó: el borrador con 11, justo 30, y bajar de 11 a 2 con algo capturado en la 11
+await caso("pl-107 el borrador con 11 facturas vuelve con las 11", "", async p => {
+  await abrir(p); await cuantas(p).fill("11"); await espera(p, 400); await celda(p, 0, 10).fill("1000"); await espera(p, 900);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 400);
+  const columnas = await p.locator("thead th").count() - 1, q = await celda(p, 0, 10).inputValue().catch(() => "");
+  ok("pl-107 al retomar el borrador de 11 facturas vuelven las 11 con lo capturado en la 11", columnas === 11 && q === "1000", `columnas ${columnas} · la 11 «${q}»`);
+});
+await caso("pl-108 justo 30 sí", "", async p => {
+  await abrir(p); await cuantas(p).fill("30"); await espera(p, 600);
+  const columnas = await p.locator("thead th").count() - 1, ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+  ok("pl-108 con 30 facturas arma las 30 y la página no se desborda (la matriz se desliza)", columnas === 30 && ancho <= 1366, `columnas ${columnas} · ancho ${ancho}`);
+});
+await caso("pl-109 bajar de 11 a 2 con datos en la 11 pregunta", "", async p => {
+  await abrir(p); await cuantas(p).fill("11"); await espera(p, 400); await celda(p, 0, 10).fill("1000"); await espera(p, 200);
+  await p.getByRole("button", { name: "2", exact: true }).first().click(); await espera(p, 400);
+  const q = await p.getByRole("dialog", { name: /¿Quitar/ }).count(), columnas = await p.locator("thead th").count() - 1;
+  ok("pl-109 bajar de 11 a 2 con algo capturado en la 11 pregunta antes de quitar (y no quita todavía)", q === 1 && columnas === 11, `pregunta ${q} · columnas ${columnas}`);
 });
 
 for (const r of res) console.log(r);

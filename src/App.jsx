@@ -9019,6 +9019,7 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
 // - "📑 Facturar por partes" (1 orden → N facturas, modal SplitInvoiceModal)
 // - "🔀 Dividir folios" del modal OC (N órdenes enteras → N folios, sin porciones)
 // v10.84.100 — el rechazo de la base, en las palabras del plan («Grupo 2» es «Factura 2»; la red caída, dicha como tal)
+const MAX_FACTURAS_PLAN = 30;   // v10.84.107 — facturas por plan matriz (eran 10; la base no tiene tope)
 const enPalabrasPlan = m => { const s = String(m||"").trim(); if(!s) return "no dijo por qué.";
   if(/Failed to fetch|NetworkError|network|fetch failed|timeout/i.test(s)) return "no hubo conexión con la base. Revisa la red y vuelve a intentar.";
   // v10.84.104 — el candado del anticipo de la base (v10.84.89) nombra el botón de «Facturar por partes»; en el plan se llama «Ya existe»
@@ -9148,6 +9149,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [errorBase, setErrorBase] = useState("");                // v10.84.100 — el rechazo de la base, dentro del plan
   const [verCFDI, setVerCFDI] = useState(false);                  // v10.84.105 — la nota de quién paga en un renglón; el CFDI a otra razón social, al pedirlo
   const [verFaltas, setVerFaltas] = useState(false);              // v10.84.105 — lo que falta en un renglón; todo, con «Ver las N»
+  const [avisoMaximo, setAvisoMaximo] = useState(false);          // v10.84.107 — se tecleó más de MAX_FACTURAS_PLAN
   const [propuesta, setPropuesta] = useState({});                // v10.84.102 — {[columna]: {estado, folio, n, r, tasas, antes}}: las piezas traídas de su CFDI
   const borradorRef = useRef(null);                              // (el mismo, para el autoguardado: sin decidir, no se pisa)
   const guardarBorrador = () => { try { if(hasCapture && !borradorRef.current) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()})); } catch(e) {} };
@@ -9488,8 +9490,12 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   };
 
   // Cambiar N groups
+  // v10.84.107 — hasta 30 facturas por plan (eran 10, y sólo aquí: la base no tiene tope). Hotsson pide 11 por una OC (Marcelo, 14-oct). El tope
+  //   queda para que un número tecleado de más no arme cientos de columnas; con 4 o más, la matriz se desliza a lo ancho (v10.84.105).
   const setGroupsCountSafe = (n) => {
-    if(!Number.isFinite(n) || n < 1 || n > 10) return;
+    if(Number.isFinite(n) && n > MAX_FACTURAS_PLAN) { setAvisoMaximo(true); return; }
+    setAvisoMaximo(false);
+    if(!Number.isFinite(n) || n < 1) return;
     // v10.84.98 — con datos en las que se van, pregunta la app y dice cuáles (antes, un confirm() del navegador DENTRO del setGroups)
     if(n < groups.length && groups.slice(n).some(g => (g.folio||"").trim() || Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0))) { setPreguntaQuitar(n); return; }
     setGroups(prev => {
@@ -9876,9 +9882,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             {n}
           </button>
         ))}
-        <input type="number" min="1" max="10" value={groups.length}
+        <input type="number" min="1" max={MAX_FACTURAS_PLAN} value={groups.length} aria-label="Cuántas facturas"
           onChange={e=>{const v=e.target.value;if(v==="")return;setGroupsCountSafe(parseInt(v,10))}}
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
+        {avisoMaximo && <span role="status" style={{fontSize:11,color:C.wnInk,fontWeight:600}}>Hasta {MAX_FACTURAS_PLAN} facturas por plan.</span>}
         {/* F1 (v10.84.100: en el renglón, sin caja aparte) */}
         {folioAuto && <span style={{fontSize:11,color:C.t2,marginLeft:"auto"}}>Los folios los pone el sistema al crear, uno por factura.</span>}
       </div>
