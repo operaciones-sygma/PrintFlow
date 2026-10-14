@@ -35,8 +35,11 @@ versión atiende dos y lo barato de sus P2:
   final manda al plan de la OC, no a «factura por partes».
 - **La orden de una OC lo dice siempre**: «Es una de las 4 órdenes de OC-0960: lo normal es foliar la OC completa», con «Ir a OC-0960».
 - **«Facturar a un tercero (otra empresa paga esta factura)»**, y antes de marcarla: «¿Paga HOTSSON y sólo quiere el CFDI a otra de sus razones
-  sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de»». Al elegir: «Paga: X · ya no HOTSSON». En sus cuatro
-  puertas (el plan, «Asignar folio y entregar», el folio anticipado y la OC), con el nombre del cliente (`BillToSection` recibe `cliente`).
+  sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de» → Cambiar. Ahí no escribas en «Razón social»: cambiaría
+  los datos de HOTSSON para todas sus facturas». Al elegir: «Paga: X · ya no HOTSSON». En sus cuatro puertas (el plan, «Asignar folio y
+  entregar», el folio anticipado y la OC), con el nombre del cliente (`BillToSection` recibe `cliente`). Lo de «Razón social» lo señaló
+  CobranzaFlow: el foco de «Datos» cae ahí (a propósito desde su v3.7.727, para que teclear no dispare el selector), y mandar a Karla a «Datos»
+  sin decirlo le ponía más tráfico al error fácil. La nota de quién paga del plan lo dice igual.
 - «Ya existe» en el aviso de la OC y en el rechazo de la base (`enPalabrasPlan`); «CUADRA con F-…» a 12 px en `C.okTx`, lo que falta en
   `C.wnTx`; «Agregar 2 órdenes»; la etiqueta del menú con espacio para el acento; cada número de orden entero en la vista previa del plan.
 - **Las pruebas no dependen de la red** (`tests/consola.mjs`, `deFuera`): los bancos y la app traen la letra de Google Fonts, y cuando la red de
@@ -59,7 +62,7 @@ frase de la vista previa («P-0592, P-0593… pasan a entregadas»): arreglada. 
 «$2,157.60» (era de la prueba; se corrigió y se dice). inv-44 cambió a propósito: «Continuar» ahora pregunta y la prueba contesta «de todos
 modos». **Vuelta 3**, por donde no se diseñó: doble clic en «Asignar el folio de todos modos» (no emite), las dos preguntas seguidas (la de las
 facturas sin orden y la del folio menor), el aviso dentro de la ventana del tercero del plan, e «Ir a OC-0960» desde una orden de la OC: pasan
-las 4. `folio` 172, `plan` 93, `oc` 121, `sesion` 88 y `partes` 74, todo en verde; pl-48 cayó una vez por `ERR_NO_BUFFER_SPACE` y sola pasa 3
+las 4. Y la advertencia de «Razón social»: ses-83 y ses-86 la piden; fallaron antes del texto y pasan después. `folio` 172, `plan` 93, `oc` 121, `sesion` 88 y `partes` 74, todo en verde; pl-48 cayó una vez por `ERR_NO_BUFFER_SPACE` y sola pasa 3
 de 3. `probar-alcance` y el build, limpios.
 
 **En producción:** (se llena al subir)

@@ -1376,8 +1376,10 @@ await caso("ses-83-el-tercero-dice-quien-paga-antes-de-marcar", async ({ p, s })
   const t = ((await dlg.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
   const engana = /razón social distinta a la de la orden/.test(etiqueta), dicePaga = /otra empresa paga/i.test(etiqueta);
   const alternativa = /CFDI a nombre de/.test(t) && /Por Timbrar/.test(t);
-  ok("ses-83-el-tercero-dice-quien-paga-antes-de-marcar", !engana && dicePaga && alternativa,
-    `la casilla: «${etiqueta.slice(0, 90)}» · antes de marcar dice el otro camino («CFDI a nombre de» en Por Timbrar): ${alternativa}`);
+  // (y que ahí no se escribe en «Razón social»: el foco de «Datos» cae ahí y cambia la ficha del cliente — lo señaló CobranzaFlow)
+  const cuidado = /no escribas en «Razón social»/.test(t);
+  ok("ses-83-el-tercero-dice-quien-paga-antes-de-marcar", !engana && dicePaga && alternativa && cuidado,
+    `la casilla: «${etiqueta.slice(0, 90)}» · antes de marcar dice el otro camino («CFDI a nombre de» en Por Timbrar): ${alternativa} · que no se escriba en «Razón social»: ${cuidado}`);
 });
 const HOTSSON_NUEVA = () => {
   const f = PORTLAND();
@@ -1422,7 +1424,7 @@ await caso("ses-86-el-plan-avisa-antes-de-elegir-tercero", async ({ p, s }) => {
   await p.getByRole("button", { name: /Facturar a tercero/ }).first().click(); await p.waitForTimeout(600);
   const d = p.getByRole("dialog", { name: /a cargo de un tercero/ });
   const t = ((await d.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
-  ok("ses-86-el-plan-avisa-antes-de-elegir-tercero", /¿Paga PORTLAND LEATHER y sólo quiere el CFDI a otra de sus razones sociales\?/.test(t) && /Por Timbrar → Datos/.test(t), `«${t.slice(0, 260)}»`);
+  ok("ses-86-el-plan-avisa-antes-de-elegir-tercero", /¿Paga PORTLAND LEATHER y sólo quiere el CFDI a otra de sus razones sociales\?/.test(t) && /Por Timbrar → Datos/.test(t) && /no escribas en «Razón social»/.test(t), `«${t.slice(0, 300)}»`);
 });
 await caso("ses-87-la-orden-de-la-oc-lleva-a-su-oc", async ({ p, s }) => {
   s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_order: [], list_linkable_invoices_for_oc: [], get_folio_emitter_enabled: true };

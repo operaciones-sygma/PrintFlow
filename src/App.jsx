@@ -3837,7 +3837,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac, cliente=""}){
         <input type="checkbox" checked={on} onChange={e=>{setOn(e.target.checked); if(!e.target.checked) reset();}} style={{width:16,height:16,accentColor:accent,cursor:"pointer"}}/>
         <span style={{fontSize:12.5,fontWeight:700,color:C.tx,display:"inline-flex",alignItems:"center",gap:6}}><UsersIcon size={13} weight="bold" color={accent}/>Facturar a un tercero <span style={{fontSize:10.5,fontWeight:500,color:C.t2}}>(otra empresa paga esta factura)</span></span>
       </label>
-      {!on&&<div data-tercero-no-es style={{fontSize:11,color:C.t2,marginTop:5,paddingLeft:24,lineHeight:1.45}}>¿Paga {cliente||"el cliente de la orden"} y sólo quiere el CFDI a otra de sus razones sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de».</div>}
+      {!on&&<div data-tercero-no-es style={{fontSize:11,color:C.t2,marginTop:5,paddingLeft:24,lineHeight:1.45}}>¿Paga {cliente||"el cliente de la orden"} y sólo quiere el CFDI a otra de sus razones sociales? No marques esto: en CobranzaFlow, Por Timbrar → Datos → «CFDI a nombre de» → Cambiar. Ahí no escribas en «Razón social»: cambiaría los datos de {cliente||"ese cliente"} para todas sus facturas.</div>}
       {on&&<div style={{marginTop:10}}>
         {/* v10.84.9 (Marcelo, 18-sep) — que quede claro QUIÉN PAGA antes de escoger a nadie. Este botón hace
             al tercero el cliente de cobranza (paga, estado de cuenta, portal); si no existe se da de alta. El otro
@@ -3846,7 +3846,7 @@ function BillToSection({invoiceType, onChange, accent=C.ac, cliente=""}){
         <div style={{marginBottom:10,background:accent+"0e",border:"1px solid "+accent+"40",borderRadius:10,padding:"9px 12px",fontSize:11,color:C.tx,lineHeight:1.5}}>
           <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}><UsersIcon size={12} weight="bold" color={accent}/>El tercero es quien paga</div>
           <div>La factura o remisión, <b>su cobranza, el estado de cuenta y el portal</b> quedan a nombre del tercero (si no existe, se da de alta como cliente). El cliente de la orden sigue sólo en producción.</div>
-          <div style={{marginTop:4,color:C.t2}}>Si <b>paga {cliente||"quien pidió el trabajo"}</b> y sólo quiere el CFDI a otra de sus razones sociales, <b>no uses esto</b>: deja la factura sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos). Nunca cambiando el RFC de un cliente.</div>
+          <div style={{marginTop:4,color:C.t2}}>Si <b>paga {cliente||"quien pidió el trabajo"}</b> y sólo quiere el CFDI a otra de sus razones sociales, <b>no uses esto</b>: deja la factura sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos → Cambiar; no escribas en «Razón social»). Nunca cambiando el RFC de un cliente.</div>
         </div>
         {!picked&&<>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
@@ -9831,7 +9831,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       </div>}
         {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:0,padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5,maxWidth:"110ch"}}>
         <b>El saldo de cada factura queda a cargo de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero.
-        {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos).
+        {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos → Cambiar; no escribas en «Razón social», que cambia los datos de {oc?.client||"este cliente"}).
       </div>}
 
 
