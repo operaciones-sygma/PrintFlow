@@ -183,7 +183,18 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.96 (13-oct, ~23:02; READY `dpl_D8Tv1KgD2HhKhkbhfb3RJqWgjyvC`, commit `60bb12b`; vuelta atrás: promover
+- **LIVE:** v10.84.101 (14-oct, ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS`, commits `f603594` a `d6ad8e0` (v10.84.97 a v10.84.101, subidas
+  juntas); vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert`; la base no cambió con estas cinco; candado
+  1562 de 1562). Lo que dejó la pasada 1 de la critique del flujo de facturas de Karla: v10.84.97 **las puertas saben de su OC** (la ficha «OC-0960 ·
+  4 órdenes», la OC dice qué facturas sin orden la suman, la orden de una OC lleva a la OC); v10.84.98 🔑 **el plan matriz, una ventana de la app**
+  (sin `confirm()`/`alert()`, Esc por el escStack, Tab adentro, el borrador se ofrece dentro); v10.84.99 **el dinero con AA** en la cola y la barra
+  de la OC (una acción rellena, `tenueAA` el resto) y `medidaCm` (sin «3×nullcm»); v10.84.100 **el plan se deja ver y confirmar** (todo el alto y
+  ancho, vista previa antes de crear, el rechazo de la base dentro, «Nueva / Ya existe», Ctrl+Enter); v10.84.101 **el plan antes de Salidas** (la
+  factura nueva que lleva órdenes que no han llegado va anticipada a fuerza; el encabezado de cada columna compacto). 🔥 Un `bs()` mide 40 px de alto
+  (táctil): en una tabla densa se le pone `minHeight:28`. **La base:** `public.conceptos_para_ligar_en_oc` (14-oct ~00:45, OK de Marcelo, revisada
+  por CobranzaFlow, ensayada 10 de 10; sólo lee; `docs/migrations/v10.84.102_conceptos_para_ligar_en_oc.sql`) para proponer las piezas de una
+  factura sin orden desde su CFDI: la pantalla va en v10.84.102.
+  v10.84.96 (13-oct, ~23:02; READY `dpl_D8Tv1KgD2HhKhkbhfb3RJqWgjyvC`, commit `60bb12b`; vuelta atrás: promover
   `dpl_9yBjkbL2cYCnpnneFFAhUmWEnpva` (el código de v10.84.95) o `git revert 60bb12b`; la base no cambió; candado 1505 de 1505, de a 2 tandas).
   v10.84.96: 🔑 **un error de lectura no es permiso** (la pasada 1 de la critique del flujo de facturas de Karla, revisor independiente
   21/40, snapshot `.impeccable/critique/2026-10-14T03-21-10Z__…`): sin la lectura de las facturas que el cliente tiene hechas sin orden

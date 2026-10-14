@@ -47,7 +47,7 @@ OC; `sesion` ses-60 a ses-69. **Vuelta 3**, por donde no se diseñó: las cuatro
 factura que deja de llevar a P-0595 (pl-76, deja de ser anticipada): pasan. **Cambió a propósito:** ses-64 (de la 97) afirmaba que el plan
 no abría antes de Salidas. `plan` 80, `folio` 164.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS` (commits `f603594` v10.84.97, `b068be0` v10.84.98, `600d5ee` v10.84.99, `ea34784` v10.84.100 y `d6ad8e0` v10.84.101, subidas juntas). Vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert` del commit; la base no cambió con estas cinco. Candado: 1562 de 1562 (57 nuevas), de a 2 tandas, 24 min, al segundo intento: el primero (sólo 97 y 98) frenó por `folio/inv-43` (`ERR_NO_BUFFER_SPACE` en el WebSocket del banco; sus revisiones pasaban; sola, 3 de 3) y en el segundo salió una INESTABLE, `detalle/det-156` (lo mismo al abrir el banco; sola 3 de 3; revisada). La revisión en producción no puede ver el plan antes de Salidas (las 4 órdenes de OC-0960 ya están en Salidas): lo cubren el banco y la tanda `sesion`.
 
 ## v10.84.100 — El plan matriz se deja ver y confirmar: todo el alto, vista previa, el rechazo dentro y «Nueva / Ya existe» — 13-oct-2026
 
@@ -83,7 +83,7 @@ una factura en la vista previa (el total lo dice), y 7 facturas con 9 cosas por 
 desbordarse): pasan las 4. **Cambiaron a propósito:** los ayudantes de la tanda (`ligar` con «Ya existe», `enviar` que confirma en la
 vista previa, `errores` con el título nuevo) y pl-01, pl-04, pl-12, pl-21 y pl-58 (los nombres nuevos). `plan` 74.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS` (commits `f603594` v10.84.97, `b068be0` v10.84.98, `600d5ee` v10.84.99, `ea34784` v10.84.100 y `d6ad8e0` v10.84.101, subidas juntas). Vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert` del commit; la base no cambió con estas cinco. Candado: 1562 de 1562 (57 nuevas), de a 2 tandas, 24 min, al segundo intento: el primero (sólo 97 y 98) frenó por `folio/inv-43` (`ERR_NO_BUFFER_SPACE` en el WebSocket del banco; sus revisiones pasaban; sola, 3 de 3) y en el segundo salió una INESTABLE, `detalle/det-156` (lo mismo al abrir el banco; sola 3 de 3; revisada). Revisado en producción sin escribir (`medir-97.mjs`): el plan a 1366, sin cifra grande (la letra más grande, 13 px), con «Revisar…» a la vista y 1346 px de ancho.
 
 ## v10.84.99 — El dinero con AA en la cola de Karla y en la barra de la OC, y la medida sin «3×nullcm» — 13-oct-2026
 
@@ -114,7 +114,7 @@ el botón 6.18, la vencida 6.35, «Faltan» 4.93, la cuenta 5.91; en la OC, un r
 **Vuelta 3**, lo compartido en cada uso: la medida en los pedidos web, un carrito y uno suelto (ses-72), pasa; el banco del detalle arma
 con el ayudante nuevo. `sesion` 73, `plan` 60.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS` (commits `f603594` v10.84.97, `b068be0` v10.84.98, `600d5ee` v10.84.99, `ea34784` v10.84.100 y `d6ad8e0` v10.84.101, subidas juntas). Vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert` del commit; la base no cambió con estas cinco. Candado: 1562 de 1562 (57 nuevas), de a 2 tandas, 24 min, al segundo intento: el primero (sólo 97 y 98) frenó por `folio/inv-43` (`ERR_NO_BUFFER_SPACE` en el WebSocket del banco; sus revisiones pasaban; sola, 3 de 3) y en el segundo salió una INESTABLE, `detalle/det-156` (lo mismo al abrir el banco; sola 3 de 3; revisada). Revisado en producción sin escribir (`medir-97.mjs`): la barra de la OC con una acción rellena y sin degradado (4.57 a 5.65); «Asignar Folio y Entregar» 6.18. **Encontrado ahí:** dos importes de «En Maquila», al pie de la vista de Karla, seguían en verde a 3.0:1 (el banco no tenía maquilas); van en v10.84.102 con los demás importes en verde de la app.
 
 ## v10.84.98 — El plan matriz, una ventana de la app: sin preguntas del navegador, Esc y Tab adentro, el borrador se ofrece — 13-oct-2026
 
@@ -152,7 +152,7 @@ defecto); pl-18 ahora pulsa «Retomarlo». **Sigue en la lista** (pasada 1): la 
 palabras, todo el alto y ancho, las sugerencias sin cortar en 4, «Nueva / Ya existe» por columna; el AA de la cola y de la barra de la
 OC; y el plan antes de Salidas con folios anticipados.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS` (commits `f603594` v10.84.97, `b068be0` v10.84.98, `600d5ee` v10.84.99, `ea34784` v10.84.100 y `d6ad8e0` v10.84.101, subidas juntas). Vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert` del commit; la base no cambió con estas cinco. Candado: 1562 de 1562 (57 nuevas), de a 2 tandas, 24 min, al segundo intento: el primero (sólo 97 y 98) frenó por `folio/inv-43` (`ERR_NO_BUFFER_SPACE` en el WebSocket del banco; sus revisiones pasaban; sola, 3 de 3) y en el segundo salió una INESTABLE, `detalle/det-156` (lo mismo al abrir el banco; sola 3 de 3; revisada). Revisado en producción sin escribir (`medir-97.mjs`): el plan de OC-0960 es diálogo (`aria-modal`); Esc sin captura lo cierra sin preguntar; con una celda capturada, Esc pregunta la app («¿Cerrar el plan de OC-0960? Llevas 1 celda capturada…»); «Seguir capturando» se queda con ella y «Cancelar» → «Cerrar el plan» cierra; sin diálogos del navegador ni escrituras.
 
 ## v10.84.97 — Las puertas saben de su OC: la ficha dice «OC-0960 · 4 órdenes» y la OC dice que F-143 y F-155 la suman — 13-oct-2026
 
@@ -188,7 +188,7 @@ el doble clic en «Ir a OC-0960» (inv-134): pasan las 8. Completas: `folio` 163
 de una orden de una OC de varias sigue ofreciendo «Facturar por partes y ligar» (el plan de la OC aún pide todo en Salidas: es el punto
 del plan matriz antes de Salidas, que sigue en la lista).
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS` (commits `f603594` v10.84.97, `b068be0` v10.84.98, `600d5ee` v10.84.99, `ea34784` v10.84.100 y `d6ad8e0` v10.84.101, subidas juntas). Vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert` del commit; la base no cambió con estas cinco. Candado: 1562 de 1562 (57 nuevas), de a 2 tandas, 24 min, al segundo intento: el primero (sólo 97 y 98) frenó por `folio/inv-43` (`ERR_NO_BUFFER_SPACE` en el WebSocket del banco; sus revisiones pasaban; sola, 3 de 3) y en el segundo salió una INESTABLE, `detalle/det-156` (lo mismo al abrir el banco; sola 3 de 3; revisada). Revisado en producción sin escribir (`.banco-revisor-orden/medir-97.mjs`, la cuenta de pruebas con el rol de Karla): las 4 fichas de OC-0960 dicen «OC-0960 · 4 órdenes», sin el cliente repetido; P-0631 (OC de una) sin marca; la marca abre la OC sin abrir la orden; la OC dice «No pude revisar…» con «Reintentar» (la cuenta de pruebas recibe 403 en esa lectura).
 
 ## v10.84.96 — Un error de lectura no es permiso: sin revisar las facturas sin orden, no se emite — 13-oct-2026
 
