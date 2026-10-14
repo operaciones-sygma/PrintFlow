@@ -8995,6 +8995,10 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
 // NO confundir con:
 // - "📑 Facturar por partes" (1 orden → N facturas, modal SplitInvoiceModal)
 // - "🔀 Dividir folios" del modal OC (N órdenes enteras → N folios, sin porciones)
+// v10.84.100 — el rechazo de la base, en las palabras del plan («Grupo 2» es «Factura 2»; la red caída, dicha como tal)
+const enPalabrasPlan = m => { const s = String(m||"").trim(); if(!s) return "no dijo por qué.";
+  if(/Failed to fetch|NetworkError|network|fetch failed|timeout/i.test(s)) return "no hubo conexión con la base. Revisa la red y vuelve a intentar.";
+  return s.replace(/\bGrupo (\d+)/g, (x, n) => "Factura " + n); };
 function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin}) {
   // Órdenes elegibles para el plan
   const eligibleOrders = useMemo(() =>
@@ -9109,6 +9113,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [preguntaQuitar, setPreguntaQuitar] = useState(null);   // a cuántas facturas se quiere bajar (con datos en las que se van)
   const [avisoRepartir, setAvisoRepartir] = useState(null);      // {i, texto}: «Repartir» no pudo (antes, alert())
   const [borrador, setBorrador] = useState(null);                // el de antes, mientras se ofrece: {d, mins, celdas, perdidas}
+  const [vistaPrevia, setVistaPrevia] = useState(false);         // v10.84.100 — antes de crear o ligar, lo que va a pasar
+  const [errorBase, setErrorBase] = useState("");                // v10.84.100 — el rechazo de la base, dentro del plan
   const borradorRef = useRef(null);                              // (el mismo, para el autoguardado: sin decidir, no se pisa)
   const guardarBorrador = () => { try { if(hasCapture && !borradorRef.current) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()})); } catch(e) {} };
   const safeClose = useCallback(() => {
@@ -9203,7 +9209,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     if(a && a.isConnected && (!document.activeElement || document.activeElement === document.body)) { try { a.focus({preventScroll:true}); } catch(e) {} }
   }, [billToEditGroup]);
   // el Tab del plan: no con una ventana encima (la pregunta o el tercero atrapan el suyo)
-  const tabDelPlan = e => { if(e.defaultPrevented || preguntaCerrar || preguntaQuitar !== null || billToEditGroup !== null) return; atraparTab(e); };
+  const tabDelPlan = e => { if(e.defaultPrevented || preguntaCerrar || preguntaQuitar !== null || billToEditGroup !== null || vistaPrevia) return;
+    // v10.84.100 — Ctrl+Enter (⌘+Enter) desde cualquier celda: «Revisar…», la vista previa (la critique: el plan no tenía atajo)
+    if(e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if(canSubmit && !enviandoRef.current && !borrador) { setErrorBase(""); setVistaPrevia(true); } return; }
+    atraparTab(e); };
 
   // Cargar Corona info + folios sugeridos
   useEffect(() => {
@@ -9520,9 +9529,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         if(Math.abs(amountSinIva - expected) > tol) {
           // Mensaje según modo de captura
           if(captureMode === "amount") {
-            errors.push(`${o.production_number} factura ${groups.indexOf(g)+1}: qty ${cell.qty} y monto $${fmtMx(cell.amountConIva)} no son proporcionales (drift por redondeo > 1%)`);
+            errors.push(`${o.production_number}, factura ${groups.indexOf(g)+1}: ${Number(cell.qty).toLocaleString("es-MX")} piezas y $${fmtMx(cell.amountConIva)} no cuadran (más de 1% por el redondeo): corrige uno de los dos`);
           } else {
-            errors.push(`${o.production_number} factura ${groups.indexOf(g)+1}: monto $${fmtMx(amountSinIva)} no coincide con qty ${cell.qty} × $${fmtMx(punit)}/pza`);
+            errors.push(`${o.production_number}, factura ${groups.indexOf(g)+1}: $${fmtMx(amountSinIva)} no son ${Number(cell.qty).toLocaleString("es-MX")} piezas a $${fmtMx(punit)}`);
           }
         }
       }
@@ -9538,21 +9547,21 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       const ex = existingByOrder[o.id] || {qty:0, amount:0};
       const availQty = t.totalQty - ex.qty;
       if(t.qtySum > availQty + driftTolerance) {
-        errors.push(`${o.production_number}: ${t.qtySum} pzas capturadas pero solo ${availQty} disponibles${ex.qty>0?` (${ex.qty} ya en otro plan)`:""}`);
+        errors.push(`${o.production_number}: ${t.qtySum.toLocaleString("es-MX")} piezas en el plan y sólo quedan ${availQty.toLocaleString("es-MX")}${ex.qty>0?` (${ex.qty.toLocaleString("es-MX")} ya están en otro plan)`:""}`);
       } else if(t.qtySum > availQty) {
         // v10.58.42 Fix #17: el exceso de redondeo se clampa al enviar, pero solo si hay
         // de dónde reducir (celdas con qty ≥ 2). Si no alcanza, el RPC rechazaría tras
         // el verde y Karla perdería la captura — error aquí, antes de enviar.
         const clampable = groups.reduce((s,g)=>{const q=Number(g.lines[o.id]?.qty||0);return s+(q>1?q-1:0)},0);
         if((t.qtySum - availQty) > clampable) {
-          errors.push(`${o.production_number}: ${t.qtySum} pzas en ${groups.length} facturas no caben en ${availQty} disponibles. Quita esta orden de alguna factura o captura por cantidad.`);
+          errors.push(`${o.production_number}: ${t.qtySum.toLocaleString("es-MX")} piezas en ${groups.length} facturas no caben en las ${availQty.toLocaleString("es-MX")} que quedan: quítala de alguna factura o captura por piezas`);
         }
       }
       // v10.58.42 Fix #11: CAP de dinero — montos del plan + previos jamás exceden el total
       // de la orden (espejo del cap duro del RPC; sin esto una captura en modo monto podía
       // sobrefacturar en silencio).
       if(ex.amount + t.amountSumSinIva > t.totalAmount + 0.01) {
-        errors.push(`${o.production_number}: montos $${fmtMx(t.amountSumSinIva)}${ex.amount>0?` + $${fmtMx(ex.amount)} previos`:""} exceden el total de la orden $${fmtMx(t.totalAmount)} (sin IVA)`);
+        errors.push(`${o.production_number}: $${fmtMx(t.amountSumSinIva)}${ex.amount>0?` más $${fmtMx(ex.amount)} de otro plan`:""} pasa del total de la orden ($${fmtMx(t.totalAmount)} sin IVA)`);
       }
     }
     // v10.58.42 Fix #6: espejo de la validación PER-ORDEN del RPC (antes el modal solo
@@ -9566,7 +9575,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       const expected = Math.round(t.totalAmount * t.qtySum / t.totalQty * 100) / 100;
       const tol = Math.max(0.5, t.amountSumSinIva * 0.01, 2 * punit * linesCount);
       if(Math.abs(t.amountSumSinIva - expected) > tol) {
-        errors.push(`${o.production_number}: suma de montos $${fmtMx(t.amountSumSinIva)} inconsistente con ${t.qtySum} pzas (esperado ~$${fmtMx(expected)}). Revisa los montos de esa fila.`);
+        errors.push(`${o.production_number}: $${fmtMx(t.amountSumSinIva)} no corresponde a ${t.qtySum.toLocaleString("es-MX")} piezas (serían unos $${fmtMx(expected)}): revisa esa fila`);
       }
     }
     // v10.58.39 FIX HIGH #7: detectar líneas con amountConIva>0 pero qty=0 (pérdida silenciosa
@@ -9576,7 +9585,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       groups.forEach((g, gi) => {
         const cell = g.lines[o.id];
         if(cell && Number(cell.amountConIva||0) > 0 && Number(cell.qty||0) === 0) {
-          errors.push(`${o.production_number} factura ${gi+1}: monto $${fmtMx(cell.amountConIva)} pero qty derivada = 0 (monto < precio unitario). Aumenta el monto o usa modo cantidad.`);
+          errors.push(`${o.production_number}, factura ${gi+1}: $${fmtMx(cell.amountConIva)} no alcanza ni para una pieza: sube el monto o captura por piezas`);
         }
       });
     }
@@ -9584,7 +9593,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     const folioSet = new Set();
     groups.forEach((g, i) => {
       const hasAnyCell = Object.values(g.lines).some(c => Number(c.qty||0) > 0);
-      if(!hasAnyCell) errors.push(`Factura ${i+1}: sin líneas con cantidad`);
+      if(!hasAnyCell) errors.push(`Factura ${i+1}: todavía sin piezas`);
       // v10.84.89 — la que LIGA: los candados de la base (assign_oc_invoice_split_plan), dichos antes de enviar
       if(g.ligar) {
         const fol = folioNorm(g.folio), f = facturaDe(g);
@@ -9610,33 +9619,33 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       }
       // F1: en modo emisor los folios nacen del counter → no se validan client-side (van vacíos)
       if(g.doc_type !== "corona_saldo" && !folioAuto && !g.ligar) {
-        if(!folioRegex.test((g.folio||"").toUpperCase())) errors.push(`Factura ${i+1}: folio inválido`);
+        if(!folioRegex.test((g.folio||"").toUpperCase())) errors.push(`Factura ${i+1}: el folio no es válido`);
         else {
           const fu = g.folio.toUpperCase();
-          if(folioSet.has(fu)) errors.push(`Factura ${i+1}: folio ${fu} duplicado en plan`);
+          if(folioSet.has(fu)) errors.push(`Factura ${i+1}: el folio ${fu} está dos veces en el plan`);
           folioSet.add(fu);
           const prefix = g.doc_type === "factura" ? "D-" : "R-";
-          if(!fu.startsWith(prefix)) errors.push(`Factura ${i+1}: folio ${fu} no matchea tipo ${g.doc_type}`);
+          if(!fu.startsWith(prefix)) errors.push(`Factura ${i+1}: ${fu} no es folio de ${g.doc_type === "factura" ? "factura" : "remisión"}`);
         }
       }
       if(g.doc_type === "corona_saldo" && !isCorona) {
-        errors.push(`Factura ${i+1}: corona_saldo requiere cliente Corona (este NO lo es)`);
+        errors.push(`Factura ${i+1}: «Saldo Corona» es sólo para clientes Corona`);
       }
       if(g.pre_assigned && (g.reason||"").trim().length < 3) {
-        errors.push(`Factura ${i+1}: razón requerida para pre-asignación (mín 3 chars)`);
+        errors.push(`Factura ${i+1}: falta por qué se anticipa (3 letras o más)`);
       }
       if(g.doc_type !== "corona_saldo" && g.bill_to) {
         // Re-derivar la completitud contra el doc_type ACTUAL (no confiar en el snapshot): un tercero sin RFC
         // capturado en remisión y luego cambiado a factura debe marcar error (espejo del guard del RPC).
         const btNoRfc = g.doc_type === "factura" && !(g.bill_to.rfc && String(g.bill_to.rfc).trim());
         if(g.bill_to.incomplete || btNoRfc) {
-          errors.push(`Factura ${i+1}: el tercero requiere RFC para factura (o completa los datos)`);
+          errors.push(`Factura ${i+1}: al tercero le falta el RFC (lo pide una factura)`);
         }
       }
     });
     // Saldo Corona
     if(coronaTotal > 0 && coronaTotal > coronaBalance) {
-      errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
+      errors.push(`El saldo Corona no alcanza: se necesitan $${fmtMx(coronaTotal)} y hay $${fmtMx(coronaBalance)}`);
     }
     return errors;
   }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder, folioAuto, ligables, revisoSinOrdenPlan]);
@@ -9690,6 +9699,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       // v10.58.46 A3: plan creado → limpiar el borrador (si onConfirm falla devuelve
       // null/lanza y el borrador se conserva para reintentar)
       if(result) { try { localStorage.removeItem(draftKey); } catch(e) {} }
+    } catch(e) {
+      // v10.84.100 — dentro del plan y en palabras, con lo capturado intacto (antes, 7 s en el aviso de abajo, crudo)
+      setErrorBase(enPalabrasPlan(e?.message));
     } finally {
       setSaving(false);
       enviandoRef.current = false;
@@ -9714,14 +9726,33 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     </div>;
   }
 
+  // v10.84.100 — lo asignado contra lo disponible (sin IVA, la unidad de la OC), en un renglón del encabezado
+  const marcador = (() => {
+    let pAvail = 0, pAssigned = 0;
+    for(const o of eligibleOrders) { const tt = orderTotals[o.id]; const ex = existingByOrder[o.id] || {qty:0, amount:0}; pAvail += Math.max(0, (tt?.totalAmount||0) - ex.amount); pAssigned += (tt?.amountSumSinIva||0); }
+    pAvail = Math.round(pAvail*100)/100; pAssigned = Math.round(pAssigned*100)/100;
+    const pRemaining = Math.round((pAvail - pAssigned)*100)/100, pOver = pRemaining < -0.01, pFull = !pOver && Math.abs(pRemaining) <= 0.01 && pAssigned > 0;
+    const pPct = pAvail > 0 ? Math.min(100, (pAssigned/pAvail)*100) : 0;
+    return <div data-plan-marcador style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,fontSize:12.5,color:C.t2,fontVariantNumeric:"tabular-nums",flexWrap:"wrap"}}>
+      <span>Asignado <b style={{color:C.tx}}>${fmtMx(pAssigned)}</b> de ${fmtMx(pAvail)} <span style={{fontSize:11}}>sin IVA</span> · <b style={{color:pOver?C.dnInk:pFull?C.okInk:C.tx}}>{pOver ? "se pasa por $" + fmtMx(-pRemaining) : pFull ? "completo" : "faltan $" + fmtMx(pRemaining)}</b></span>
+      <span aria-hidden="true" style={{width:110,height:6,background:C.sf,borderRadius:4,overflow:"hidden",border:"0.5px solid "+C.bd}}><span style={{display:"block",height:"100%",width:"100%",background:pOver?C.dn:pFull?C.ok:C.fac,transformOrigin:"left",transform:"scaleX("+(pPct/100)+")",transition:"transform 0.25s cubic-bezier(.22,1,.36,1)"}}/></span>
+    </div>;
+  })();
   return <div onClick={()=>safeClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
-    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="plan-matriz-titulo" onKeyDown={tabDelPlan} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto",outline:"none"}}>
-      <h3 id="plan-matriz-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.fac,display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación · {oc?.id}</h3>
-      <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
-        Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
-      </p>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="plan-matriz-titulo" onKeyDown={tabDelPlan} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,maxWidth:1840,width:"100%",height:"95vh",display:"flex",flexDirection:"column",overflow:"hidden",outline:"none"}}>
+      {/* v10.84.100 — CON TODO EL ALTO Y EL ANCHO (la critique del 13-oct, P1 «no se deja ver ni confirmar»: a 1366 se veía 1 de 4 órdenes y
+          el botón quedaba bajo el borde; el plan no pasaba de 1300 px a 1920). El encabezado en un renglón; la matriz con el alto que sobra
+          y su propio scroll; un pie fijo con lo que falta, en palabras, y el botón siempre a la vista. */}
+      <div data-plan-encabezado style={{flexShrink:0,padding:"14px 20px 10px",borderBottom:"0.5px solid "+C.bd}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:"4px 12px",flexWrap:"wrap"}}>
+          <h3 id="plan-matriz-titulo" style={{fontSize:16,fontWeight:700,margin:0,color:tintaAA(C.fac,5),display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación · {oc?.id}</h3>
+          <span style={{fontSize:12.5,color:C.t2}}>{oc?.client} · {eligibleOrders.length} {eligibleOrders.length === 1 ? "orden" : "órdenes"}</span>
+          {!borrador && marcador}
+        </div>
+        <p style={{fontSize:11.5,color:C.t2,margin:"4px 0 0",maxWidth:"75ch",lineHeight:1.45}}>Varias facturas para esta OC, cada una con piezas de varias órdenes (por sucursal, evento, lote…). Lo que no factures hoy queda para otro plan.</p>
+      </div>
       {/* v10.84.98 — el plan sin terminar de la vez pasada: se elige aquí (antes, un confirm() del navegador al abrir) */}
-      {borrador ? <div data-borrador role="group" aria-labelledby="plan-borrador-titulo" style={{background:C.sf,borderRadius:12,padding:"16px 18px",margin:"4px 0 6px",maxWidth:640}}>
+      {borrador ? <div data-borrador role="group" aria-labelledby="plan-borrador-titulo" style={{background:C.sf,borderRadius:12,padding:"16px 18px",margin:"16px 20px",maxWidth:640}}>
         <div id="plan-borrador-titulo" style={{fontSize:14,fontWeight:700,color:C.tx}}>Tienes un plan sin terminar de {oc?.id||"esta OC"}</div>
         <div style={{fontSize:12.5,color:C.t2,marginTop:4,lineHeight:1.5}}>
           De hace {borrador.mins < 60 ? "~" + borrador.mins + " min" : borrador.mins < 60 * 48 ? "~" + Math.round(borrador.mins / 60) + " h" : Math.round(borrador.mins / 1440) + " días"}: {borrador.d.groups.length} {borrador.d.groups.length === 1 ? "factura" : "facturas"}{borrador.celdas > 0 ? ", " + borrador.celdas + " " + (borrador.celdas === 1 ? "celda capturada" : "celdas capturadas") : ""}.
@@ -9734,106 +9765,40 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           <button type="button" onClick={onClose} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,fontSize:12.5,marginLeft:"auto"}}>Cerrar</button>
         </div>
       </div> : <>
+      <div data-plan-cuerpo style={{flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:10,padding:"10px 20px",overflowY:"auto"}}>
       {/* v10.84.92 — QUIÉN PAGA (Marcelo, 13-oct, el caso Hotsson: «el saldo se queda con el cliente que pidió el producto»): cada
           factura del plan queda a cargo del cliente de la orden; «Facturar a tercero» es lo único que lo cambia (ése paga). El CFDI a
           otra razón social del mismo cliente, sin cambiar quién paga, se elige en CobranzaFlow (la regla 23 de CobranzaFlow) */}
       {ligables === null && groups.some(g => !g.ligar && (g.doc_type === "factura" || g.doc_type === "remision")) && <SinRevisionSinOrden cliente={oc?.client} onReintentar={()=>setLecturaLig(n=>n+1)} revisado={revisoSinOrdenPlan} onRevisado={setRevisoSinOrdenPlan} que="crear facturas nuevas"/>}
-        {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:"-6px 0 14px",padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5}}>
+        {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:0,padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5,maxWidth:"110ch"}}>
         <b>El saldo de cada factura queda a cargo de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero.
         {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos).
       </div>}
 
-      {/* HEADER de contexto OC + MARCADOR EN VIVO
-          v10.58.46 B1b (pedido de Marcelo): el monto de la OC "baja" en vivo conforme
-          se asigna — número grande de POR ASIGNAR + barra de progreso + alerta de
-          rebase. Sticky para que no se pierda al hacer scroll. Todo en s/IVA (la
-          unidad de la OC); el cuadre c/IVA contra la hoja del cliente vive en la
-          fila SUMA de cada columna. (Reemplaza el "Plan total con IVA" que mezclaba
-          unidades ficticias para remisión/corona.) */}
-      {(() => {
-        let pAvail = 0, pAssigned = 0;
-        for(const o of eligibleOrders) {
-          const t = orderTotals[o.id];
-          const ex = existingByOrder[o.id] || {qty:0, amount:0};
-          pAvail += Math.max(0, (t?.totalAmount||0) - ex.amount);
-          pAssigned += (t?.amountSumSinIva||0);
-        }
-        pAvail = Math.round(pAvail*100)/100;
-        pAssigned = Math.round(pAssigned*100)/100;
-        const pRemaining = Math.round((pAvail - pAssigned)*100)/100;
-        const pOver = pRemaining < -0.01;
-        const pFull = !pOver && Math.abs(pRemaining) <= 0.01 && pAssigned > 0;
-        const pPct = pAvail > 0 ? Math.min(100, (pAssigned/pAvail)*100) : 0;
-        const heroColor = pOver ? C.dn : (pFull ? C.ok : (pAssigned > 0 ? C.fac : C.t2));
-        const barColor = pOver ? C.dn : (pFull ? C.ok : C.fac);
-        return <div style={{background:C.sf,borderRadius:12,padding:12,marginBottom:14,position:"sticky",top:0,zIndex:5,boxShadow:"0 2px 8px rgba(0,0,0,0.06)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{oc?.client}</div>
-            <div style={{fontSize:10,color:C.t2,marginTop:2}}>{eligibleOrders.length} órdenes elegibles</div>
-            {isCorona && <div style={{display:"inline-block",marginTop:6,padding:"2px 8px",background:C.emr+"15",border:"1px solid "+C.emr+"40",borderRadius:6,fontSize:10,color:C.emr,fontWeight:700}}>
-              <DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:3}}/>Cliente Corona · saldo: ${fmtMx(coronaBalance)} (sin IVA)
-            </div>}
-          </div>
-          <div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Disponible OC (s/IVA)</div>
-              <div style={{fontSize:16,fontWeight:700,color:C.t2}}>${fmtMx(pAvail)}</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Asignado</div>
-              <div style={{fontSize:16,fontWeight:700,color:pAssigned>0?C.fac:C.t3}}>${fmtMx(pAssigned)}</div>
-            </div>
-            <div style={{textAlign:"right",minWidth:150}}>
-              <div style={{fontSize:9,color:heroColor,textTransform:"uppercase",fontWeight:700}}>
-                {pOver ? <><WarningIcon size={9} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>REBASADO POR</> : (pFull ? <><CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>COMPLETO</> : "POR ASIGNAR")}
-              </div>
-              <div style={{fontSize:24,fontWeight:900,color:heroColor,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>
-                ${fmtMx(pOver ? -pRemaining : pRemaining)}
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Barra de progreso */}
-        <div style={{marginTop:8,height:8,background:C.bg,borderRadius:6,overflow:"hidden",border:"0.5px solid "+C.bd}}>
-          <div style={{height:"100%",width:"100%",background:barColor,borderRadius:6,transformOrigin:"left",transform:"scaleX("+(pPct/100)+")",transition:"transform 0.25s cubic-bezier(.22,1,.36,1), background 0.25s ease"}}/>
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-          <span style={{fontSize:9,color:C.t2}}>{Math.round(pPct)}% asignado</span>
-          <span style={{fontSize:9,color:pOver?C.dn:C.t2,fontWeight:pOver?700:400}}>
-            {pOver ? "el plan excede el valor de la OC — quita $"+fmtMx(-pRemaining)+" para poder crear"
-              : (pFull ? "OC cubierta al 100%" : "lo no asignado puede quedar para otro plan")}
-          </span>
-        </div>
-      </div>;
-      })()}
 
       {/* v10.73.41 — amarre: saldo a favor del cliente (no-Corona) al foliar la matriz OC */}
       {!isCorona && coronaBalance > 0.005 && <SaldoFavorAmarreBanner balance={coronaBalance}/>}
       {/* v10.58.38: Toggle global de modo de captura (qty vs amount) */}
-      <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap",background:C.sf,padding:"8px 12px",borderRadius:10}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",background:C.sf,padding:"6px 12px",borderRadius:10}}>
         <label style={{...lbl,marginBottom:0}}>Capturar por:</label>
         <button onClick={()=>setCaptureMode("qty")}
           style={{...bs(captureMode==="qty"?C.fac:C.bg, captureMode==="qty"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="qty"?"none":"0.5px solid "+C.bd}}
           title="Karla teclea piezas, sistema calcula el monto proporcional. Útil cuando el cliente manda hoja con cantidades por destino.">
-          <ListNumbersIcon size={12} weight="bold"/>Cantidad (pzas)
+          <ListNumbersIcon size={12} weight="bold"/>Piezas
         </button>
         <button onClick={()=>setCaptureMode("amount")}
           style={{...bs(captureMode==="amount"?C.fac:C.bg, captureMode==="amount"?"#fff":C.t2),padding:"5px 11px",border:captureMode==="amount"?"none":"0.5px solid "+C.bd}}
           title="Karla teclea el monto, sistema calcula las piezas proporcionales. La unidad depende del tipo de cada columna: factura = CON IVA (como la hoja del cliente), remisión y saldo Corona = SIN IVA. Cada celda muestra c/IVA o s/IVA.">
           <CurrencyDollarIcon size={12} weight="bold"/>Monto ($)
         </button>
-        <span style={{fontSize:10,color:C.t2,fontStyle:"italic",marginLeft:4}}>· se recuerda tu preferencia</span>
         {/* v10.58.44: el rótulo decía "(con IVA)" global pero solo aplica a facturas —
             remisión/corona se capturan SIN IVA. La unidad real la marca cada celda. */}
         {captureMode==="amount"&&<span style={{fontSize:10,color:C.fac,fontWeight:600,marginLeft:4,background:C.fac+"10",padding:"3px 8px",borderRadius:6}}>
           <FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Factura: monto CON IVA (como la hoja del cliente) · <ClipboardTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>Remisión / <DiamondIcon size={10} weight="fill" style={{verticalAlign:"-1px",marginRight:2}}/>Saldo: SIN IVA
         </span>}
-      </div>
-
-      {/* Selector N facturas */}
-      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
-        <label style={{...lbl,marginBottom:0}}>N facturas:</label>
+        <span aria-hidden="true" style={{width:1,alignSelf:"stretch",background:C.bd,margin:"0 4px"}}/>
+        {/* Selector de cuántas facturas (v10.84.100: en el mismo renglón) */}
+        <label style={{...lbl,marginBottom:0}}>Facturas:</label>
         {[2,3,4,5,6].map(n => (
           <button key={n} onClick={()=>setGroupsCountSafe(n)}
             style={{...bs(groups.length===n?C.fac:C.sf, groups.length===n?"#fff":C.t2),padding:"5px 11px",border:groups.length===n?"none":"0.5px solid "+C.bd}}>
@@ -9843,12 +9808,11 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         <input type="number" min="1" max="10" value={groups.length}
           onChange={e=>{const v=e.target.value;if(v==="")return;setGroupsCountSafe(parseInt(v,10))}}
           style={{...inp,width:60,padding:"6px 10px",fontSize:12}}/>
+        {/* F1 (v10.84.100: en el renglón, sin caja aparte) */}
+        {folioAuto && <span style={{fontSize:11,color:C.t2,marginLeft:"auto"}}>Los folios los pone el sistema al crear, uno por factura.</span>}
       </div>
-
-      {/* F1: aviso de foliado automático (emisor ON) */}
-      {folioAuto && <FolioAutoNote label="uno por cada factura del plan"/>}
       {/* GRID: filas=órdenes, columnas=facturas */}
-      <div style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"auto",marginBottom:14,maxHeight:"50vh"}}>
+      <div data-plan-matriz style={{border:"0.5px solid "+C.bd,borderRadius:12,overflow:"auto",flex:"1 1 auto",minHeight:240}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
           <thead style={{position:"sticky",top:0,background:C.sf,zIndex:2}}>
             <tr>
@@ -9856,50 +9820,55 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                 <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Orden / Producto</div>
               </th>
               {groups.map((g, i) => (
-                <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:200}}>
+                <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:170,verticalAlign:"top"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <input value={g.label||""} placeholder="Etiqueta opcional (ej. Norte, Lote A, Pedido 123)"
+                    {/* v10.84.100 — «Nueva / Ya existe», la primera elección de cada factura (antes, el enlace «Ya tiene factura: ligarla» de 10 px) */}
+                    {g.doc_type !== "corona_saldo" && <div role="group" aria-label={"Factura "+(i+1)+": nueva o una que ya existe"} style={{display:"flex",border:"1px solid "+C.bd,borderRadius:8,overflow:"hidden"}}>
+                      {[["Nueva", false], ["Ya existe", true]].map(([txt, lig]) => { const on = !!g.ligar === lig;
+                        return <button key={txt} type="button" aria-pressed={on} onClick={()=>{ if(on) return; if(lig) ligarColumna(i); else soltarColumna(i); }}
+                          title={lig ? "La factura ya se hizo en CobranzaFlow (sin orden): escribe su folio para ligarla en vez de emitir otra" : "Se emite una factura nueva con el folio que sigue"}
+                          style={{flex:1,border:"none",padding:"5px 8px",fontSize:11.5,fontWeight:700,cursor:on?"default":"pointer",fontFamily:"inherit",background:on?tintaAA(C.fac,5):C.bg,color:on?"#fff":C.t2}}>{txt}</button>; })}
+                    </div>}
+                    <div style={{display:"flex",gap:4}}>
+                    <input value={g.label||""} placeholder="Etiqueta (opcional)" aria-label={"Etiqueta de la factura "+(i+1)+" (opcional)"}
                       onChange={e=>updateGroup(i, {label: e.target.value})}
                       title="Identificador para distinguir esta factura del resto del plan. Opcional — Karla puede dejarlo vacío y el folio fiscal sirve como identificador."
-                      style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600}}/>
+                      style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600,flex:1,minWidth:0}}/>
                     {/* v10.84.89 — sin la serie de Alpha en el nombre («Factura D-»): la serie la dice el folio. La ligada: el tipo lo pone su factura */}
                     <select value={g.doc_type} aria-label={"Tipo de la factura "+(i+1)} disabled={g.ligar && !!facturaDe(g)}
                       title={g.ligar && facturaDe(g) ? "El tipo lo pone la factura que ya existe" : undefined}
                       onChange={e=>cambiarTipo(i, e.target.value)}
-                      style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto"}}>
+                      style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto",width:"auto",flex:"0 0 auto"}}>
                       <option value="factura">Factura</option>
                       <option value="remision">Remisión</option>
                       {isCorona && <option value="corona_saldo">Saldo Corona</option>}
                     </select>
+                    </div>
                     {g.doc_type !== "corona_saldo" && (g.ligar ? (() => {
                       // v10.84.89 — la columna LIGA una factura que ya existe: su folio y lo que la base sabe de ella
                       const f = facturaDe(g), fol = folioNorm(g.folio);
                       const libres = Array.isArray(ligables) ? ligables.filter(c => !groups.some((gg, k) => k !== i && gg.ligar && folioNorm(gg.folio) === folioNorm(c.doc_number))) : [];
                       const estado = f ? [f.cfdi_status === "stamped" ? "timbrada" : null, f.status === "pagada" ? "pagada" : f.status === "parcial" ? "con abono" : "por cobrar"].filter(Boolean).join(" · ") : "";
                       return <div style={{display:"flex",flexDirection:"column",gap:4,padding:"6px 8px",background:C.fac+"0D",border:"1px solid "+C.fac+"40",borderRadius:8}}>
-                        <div style={{fontSize:10,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:4}}><LinkIcon size={10} weight="bold"/>Ya tiene factura: ligarla</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:C.tx,display:"flex",alignItems:"center",gap:4}}><LinkIcon size={10} weight="bold"/>Se liga con la factura que ya existe</div>
                         <input aria-label={"Folio de la factura "+(i+1)+" que ya existe"} value={g.folio||""} placeholder={g.doc_type==="remision"?"RS-XXXX existente":"F-XXXX existente"}
                           onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
                           style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(fol && Array.isArray(ligables) && !f) ? "1px solid "+C.dn : undefined}}/>
                         {ligables === undefined ? <div role="status" style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Leyendo las facturas sin orden de {oc?.client||"este cliente"}…</div>
                           : ligables === null ? <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>No se pudieron leer las facturas sin orden. <button type="button" onClick={()=>setLecturaLig(n=>n+1)} style={{...enlace,color:C.dnInk,fontWeight:700}}>Reintentar</button></div>
                           : !fol ? (libres.length
-                              ? <div style={{fontSize:10,color:C.t2,lineHeight:1.5}}>Sin orden: {libres.slice(0,4).map((c, k) => <span key={c.doc_number}>{k ? " · " : ""}<button type="button" onClick={()=>updateGroup(i, {folio: c.doc_number})} style={{...enlace,color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</button> {pesosMx(c.amount)}</span>)}</div>
+                              ? <div style={{fontSize:10.5,color:C.t2,lineHeight:1.6}}>Sin orden: {libres.map((c, k) => <span key={c.doc_number}>{k ? " · " : ""}<button type="button" onClick={()=>updateGroup(i, {folio: c.doc_number})} style={{...enlace,color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</button> {pesosMx(c.amount)}</span>)}</div>
                               : <div style={{fontSize:10,color:C.wnInk,lineHeight:1.4}}>{oc?.client||"El cliente"} no tiene facturas sin orden.</div>)
                           : f ? <div style={{fontSize:10,color:C.tx,lineHeight:1.4}}><b style={{fontFamily:"'Geist Mono',monospace"}}>{f.doc_number}</b> · {pesosMx(f.amount)}{f.doc_type==="factura"?" con IVA":""} · {fD(f.issued_date)}{estado?" · "+estado:""}</div>
                           : <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>{fol} no es una factura sin orden de {oc?.client||"este cliente"}.</div>}
-                        <button type="button" onClick={()=>soltarColumna(i)} style={{...enlace,color:C.t2}}>mejor que se asigne solo</button>
                       </div>;
                     })() : folioAuto ? (
                       /* F1: en modo emisor el folio nace del counter → chip en vez de input */
-                      <div style={{fontSize:10,fontWeight:600,color:C.fac,padding:"4px 8px",display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}} title="El folio se asignará automáticamente al confirmar (emisión SYGMA)">🔢 <span style={{color:C.t2,fontWeight:400}}>se asigna solo</span>
-                        {/* v10.84.89 — como en «Facturar por partes»: si esta factura ya se hizo (sin orden), se liga en vez de emitir otra */}
-                        <button type="button" onClick={()=>ligarColumna(i)} style={enlace} title="Si esta factura ya se hizo en CobranzaFlow (sin orden), escribe su folio para ligarla en vez de emitir otra">Ya tiene factura: ligarla</button></div>
+                      <div style={{fontSize:10.5,color:C.t2,padding:"2px 2px"}} title="El folio lo pone el sistema al crear (emisión SYGMA)">El folio se asigna al crear</div>
                     ) : (<>
                       <input value={g.folio||""} placeholder={g.doc_type==="factura"?"D-XXXX":"R-XXXX"}
                         onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
                         style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(g.folio && !folioRegex.test(g.folio.toUpperCase())) ? "1px solid "+C.dn : undefined}}/>
-                      <button type="button" onClick={()=>ligarColumna(i)} style={enlace} title="Si esta factura ya se hizo en CobranzaFlow (sin orden), escribe su folio para ligarla en vez de emitir otra">Ya tiene factura: ligarla</button>
                     </>))}
                     {/* 🆕 Fase 2.5 — facturar ESTE grupo a un tercero (razón social distinta del productor) */}
                     {g.doc_type !== "corona_saldo" && !isCorona && !g.ligar && (
@@ -9962,9 +9931,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
               return (
                 <tr key={o.id} style={{borderTop:"0.5px solid "+C.bd}}>
                   <td style={{padding:"8px",position:"sticky",left:0,background:C.bg,zIndex:1,borderRight:"0.5px solid "+C.bd}}>
-                    <div style={{fontSize:11,fontWeight:700,color:C.tx}}>{o.production_number}</div>
-                    <div style={{fontSize:10,color:C.t2}}>{o.product || o.product_type}</div>
-                    <div style={{fontSize:10,color:C.t2}}>{Number(o.quantity).toLocaleString("es-MX")} pzas · ${fmtMx(punit)}/pza</div>
+                    <div style={{fontSize:11,color:C.tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}} title={o.product || o.product_type}><b>{o.production_number}</b> <span style={{color:C.t2}}>· {o.product || o.product_type}</span></div>
+                    <div style={{fontSize:10,color:C.t2}}>{Number(o.quantity).toLocaleString("es-MX")} pzas a ${fmtMx(punit)}</div>
                     {/* v10.58.46 A2: LÍMITES REALES mientras captura — el badge ahora usa
                         lo DISPONIBLE (descuenta otros planes vivos) y se agrega el tope de
                         DINERO, que antes solo aparecía como error después de pasarse. */}
@@ -10065,12 +10033,13 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         </table>
       </div>
 
-      {/* Validación */}
+      </div>
+      <div data-plan-pie style={{flexShrink:0,borderTop:"0.5px solid "+C.bd,padding:"10px 20px 14px",display:"flex",flexDirection:"column",gap:8,background:C.bg}}>
+      {/* Validación (v10.84.100: en el pie fijo, con su propio scroll si son muchas) */}
       {validation.length > 0 && (
-        <div style={{background:C.amb+"10",border:"1px solid "+C.wn+"40",borderRadius:8,padding:10,marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.wnInk,marginBottom:4}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{validation.length} {validation.length===1?"error":"errores"}:</div>
-          {validation.slice(0,6).map((e,i) => <div key={i} style={{fontSize:10,color:C.wnInk}}>• {e}</div>)}
-          {validation.length > 6 && <div style={{fontSize:10,color:C.t2}}>... y {validation.length-6} más</div>}
+        <div data-plan-errores role="status" style={{background:C.amb+"10",border:"1px solid "+C.wn+"40",borderRadius:8,padding:"8px 10px",maxHeight:"22vh",overflowY:"auto"}}>
+          <div style={{fontSize:11.5,fontWeight:700,color:C.wnInk,marginBottom:4}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{validation.length===1?"Falta 1 cosa para crear:":"Faltan "+validation.length+" cosas para crear:"}</div>
+          {validation.map((e,i) => <div key={i} style={{fontSize:11.5,color:C.wnInk,lineHeight:1.45}}>• {e}</div>)}
           {/* v10.84.89 — la salida del candado del anticipo: ligar la que ya existe en esa columna */}
           {sugerenciasLigar.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{sugerenciasLigar.map(s =>
             <button key={s.i} type="button" onClick={()=>ligarColumna(s.i, s.c.doc_number)} style={{...bs(C.fac),padding:"5px 10px",fontSize:11}}><LinkIcon size={11} weight="bold"/>Ligar {s.c.doc_number} a la factura {s.i+1}</button>)}</div>}
@@ -10078,21 +10047,23 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       )}
 
       {coronaTotal > 0 && (
-        <div style={{background:coronaTotal<=coronaBalance?C.emr+"10":"#ff3b3010",borderRadius:8,padding:10,marginBottom:14,border:"0.5px solid "+(coronaTotal<=coronaBalance?C.emr+"40":C.dn+"40")}}>
+        <div style={{background:coronaTotal<=coronaBalance?C.emr+"10":"#ff3b3010",borderRadius:8,padding:10,border:"0.5px solid "+(coronaTotal<=coronaBalance?C.emr+"40":C.dn+"40")}}>
           <div style={{fontSize:11,fontWeight:700,color:coronaTotal<=coronaBalance?C.emr:C.dn}}>
             {coronaTotal<=coronaBalance ? <CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/> : <WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>}Saldo Corona: ${fmtMx(coronaTotal)} requerido / ${fmtMx(coronaBalance)} disponible
           </div>
         </div>
       )}
 
+      {errorBase && <div role="alert" data-plan-rechazo style={{fontSize:12.5,color:C.dnInk,background:C.dn+"0d",border:"1px solid "+C.dn+"33",borderRadius:8,padding:"8px 12px",lineHeight:1.45}}><b>La base no aceptó el plan:</b> {errorBase} <span style={{color:C.t2}}>Lo capturado sigue aquí.</span></div>}
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <button onClick={safeClose} disabled={saving} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>
           Cancelar
         </button>
-        <button onClick={handleSubmit} disabled={!canSubmit}
-          style={{...bt(canSubmit?C.fac:C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
-          {saving ? (nLigadas ? "Ligando…" : "Creando…") : <><ChartBarIcon size={14} weight="bold"/>{textoEnviar}</>}
+        <button onClick={()=>{ if(!canSubmit || enviandoRef.current) return; setErrorBase(""); setVistaPrevia(true); }} disabled={!canSubmit}
+          style={{...bt(canSubmit?tintaAA(C.fac,5):C.t3),flex:2,justifyContent:"center",opacity:canSubmit?1:0.6}}>
+          {saving ? (nLigadas ? "Ligando…" : "Creando…") : <><ChartBarIcon size={14} weight="bold"/>Revisar: {textoEnviar.charAt(0).toLowerCase() + textoEnviar.slice(1)}…</>}
         </button>
+      </div>
       </div>
       </>}
 
@@ -10123,6 +10094,25 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           </div>
         </div>
       )}
+      {/* v10.84.100 — antes de crear o ligar: lo que va a pasar, factura por factura (antes, al primer clic) */}
+      {vistaPrevia && (() => {
+        const tipo = g => g.doc_type === "remision" ? "Remisión" : g.doc_type === "corona_saldo" ? "Saldo Corona" : "Factura";
+        const filas = groups.map((g, i) => {
+          const ords = eligibleOrders.filter(o => Number(g.lines[o.id]?.qty||0) > 0).map(o => o.production_number + ": " + Number(g.lines[o.id].qty).toLocaleString("es-MX") + " pzas");
+          const quien = g.ligar ? (oc?.client||"el cliente") : (g.bill_to && !g.bill_to.incomplete ? (g.bill_to.name||"el tercero") + " (tercero)" : (oc?.client||"el cliente"));
+          return {titulo: tipo(g) + " " + (i+1) + (g.label ? " · " + g.label : "") + " · " + (g.ligar ? "liga " + folioNorm(g.folio) : g.pre_assigned ? "nueva, anticipada" : "nueva"),
+            sub: "A cargo de " + quien + " · " + ords.join(" · "),
+            monto: "$" + fmtMx(conIvaDe(totalSinIvaDe(g), g.doc_type)) + (g.doc_type === "factura" ? " c/IVA" : "")};
+        });
+        const total = Math.round(groups.reduce((s2, g) => s2 + conIvaDe(totalSinIvaDe(g), g.doc_type), 0) * 100) / 100;
+        const todasFactura = groups.every(g => g.doc_type === "factura");
+        const entregan = eligibleOrders.filter(o => ["salidas","maq_received"].includes(o.stage) && groups.some(g => !(g.pre_assigned && !g.ligar) && Number(g.lines[o.id]?.qty||0) > 0)).map(o => o.production_number);
+        return <ConfirmModal zIndex={1300} title={"¿" + textoEnviar + "?"}
+          detalle={{filas, total: {titulo: todasFactura ? "Total con IVA" : "Total (facturas con IVA, lo demás sin IVA)", monto: "$" + fmtMx(total)}}}
+          message={entregan.length ? entregan.join(", ") + (entregan.length === 1 ? " pasa a entregada." : " pasan a entregadas.") : "Ninguna orden pasa a entregada."}
+          confirmLabel={textoEnviar} confirmColor={tintaAA(C.fac,5)} cancelLabel="Volver al plan"
+          onConfirm={async () => { await handleSubmit(); setVistaPrevia(false); }} onClose={() => setVistaPrevia(false)}/>;
+      })()}
       {/* v10.84.98 — cerrar con algo capturado: lo dice y guarda el borrador (antes, confirm() del navegador) */}
       {preguntaCerrar && <ConfirmModal zIndex={1300} title={"¿Cerrar el plan de " + (oc?.id || "esta OC") + "?"}
         message={(capturedCells > 0 ? "Llevas " + capturedCells + " " + (capturedCells === 1 ? "celda capturada" : "celdas capturadas") + "." : "Llevas datos capturados.") + " Se guarda como borrador: al abrir otra vez el plan de esta OC puedes retomarlo."}
@@ -23309,7 +23299,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             return result;
           } catch(e) {
             console.error("[assignOCInvoiceSplitPlan] Error:", e);
-            showToast("❌ "+(e?.message||"No se pudo crear el plan"), "error");
+            throw e;   // v10.84.100 — lo dice el plan, dentro y con lo capturado (antes, el aviso de abajo, 7 s)
           }
         }}
         onClose={()=>setOcMatrixModal(null)}/>}

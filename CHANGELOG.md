@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.100 — El plan matriz se deja ver y confirmar: todo el alto, vista previa, el rechazo dentro y «Nueva / Ya existe» — 13-oct-2026
+
+**Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «el plan matriz no se deja ver ni
+confirmar»). A 1366×768 no se veía ninguna de las 4 órdenes de OC-0960 sin bajar, ni el botón; a 1920 el plan no pasaba de 1300 px y el
+botón quedaba bajo el borde. Una cifra de 24 px («POR ASIGNAR») era lo más grande de la pantalla. «Crear» o «Ligar» mandaba al primer
+clic, sin enseñar lo que iba a pasar; si la base rechazaba, el mensaje salía 7 s en el aviso de abajo, crudo («Grupo 1: …»). «Ya tiene
+factura: ligarla» era un enlace de 10 px escondido en cada columna, sólo salían 4 sugerencias (Hotsson tiene más), «🔢 se asigna solo»,
+y lo que faltaba decía «qty», «pzas», «drift» y «disponibles».
+
+**Qué se cambió** (`src/App.jsx`, `OCSplitMatrixModal`; la base no cambió):
+- **Todo el alto y el ancho** (hasta 1840 px): el encabezado en un renglón (el título, el cliente y lo asignado: «Asignado $X de $Y sin
+  IVA · faltan $Z», con una barra delgada, sin cifra grande); la matriz con el alto que sobra y su propio scroll; los controles de
+  captura en un renglón; cada orden en dos renglones; y un **pie fijo** con lo que falta («Faltan 3 cosas para crear:», en palabras: «P-0592:
+  90,000 piezas en el plan y sólo quedan 80,000») y el botón siempre a la vista.
+- **Vista previa antes de crear o ligar**: el botón dice «Revisar: crear 1 y ligar 1…» y abre una ventana con una fila por factura (nueva,
+  anticipada o «liga F-143»; a cargo de quién; las piezas de cada orden; el importe) y el total, con qué órdenes pasan a entregadas.
+  «Volver al plan» o confirmar. **Ctrl+Enter** abre la vista previa desde cualquier celda.
+- **El rechazo de la base, dentro del plan** (`role="alert"`, «La base no aceptó el plan: Factura 1: …», con lo capturado intacto). App ya
+  no lo manda al aviso de abajo: lo lanza y el plan lo dice.
+- **«Nueva / Ya existe»** como la primera elección de cada columna (botones con `aria-pressed`), en vez del enlace de 10 px; todas las
+  facturas sin orden como sugerencia; «El folio se asigna al crear» sin emoji; el tipo y la etiqueta en un renglón.
+
+**Cómo se probó** (tres vueltas, en `plan`): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.99: fallaban 11. pl-59 (a
+1366, ninguna orden ni el botón a la vista), pl-59b (a 1920, el botón bajo el borde y 1300 px), pl-60 (24 px), pl-61 y pl-62 (mandaba al
+primer clic), pl-63 (el rechazo se perdía), pl-64, pl-65 (4 sugerencias), pl-66b (sin Ctrl+Enter), pl-66 («pzas», «disponibles») y pl-17
+(el banco ahora lanza el rechazo como App: con el código de antes, eso quedaba sin atender). **Tres eran de la prueba**: pl-61 a pl-63
+llenaban la segunda columna con «Lo que falta», que sale justo por F-155, y el candado del anticipo apaga el botón; se corrigieron (la
+segunda, nueva con 1,000 piezas por orden) y volvieron a fallar por la razón buena. **Vuelta 2**, con el cambio: la tanda entera pasa
+(pl-66b tenía el mismo error de prueba; corregida). A 1366 se ven 3 de las 4 órdenes y el botón; a 1920, las 4, el botón y 1840 px.
+**Vuelta 3**, por donde no se diseñó: Esc en la vista previa (la cierra a ella), Ctrl+Enter con algo por resolver (nada), una remisión y
+una factura en la vista previa (el total lo dice), y 7 facturas con 9 cosas por resolver a 1366 (el botón a la vista, la página sin
+desbordarse): pasan las 4. **Cambiaron a propósito:** los ayudantes de la tanda (`ligar` con «Ya existe», `enviar` que confirma en la
+vista previa, `errores` con el título nuevo) y pl-01, pl-04, pl-12, pl-21 y pl-58 (los nombres nuevos). `plan` 74.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.99 — El dinero con AA en la cola de Karla y en la barra de la OC, y la medida sin «3×nullcm» — 13-oct-2026
 
 **Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «lo que carga dinero no pasa AA en la cola y

@@ -37,20 +37,26 @@ const encabezado = (p, i) => p.locator("thead th").nth(i + 1);
 const celda = (p, fila, i) => p.locator("tbody tr").nth(fila).locator("td").nth(i + 1).locator("input");
 const suma = (p, i) => p.locator("tfoot td").nth(i + 1);
 const ligar = async (p, i, folio) => {
-  await encabezado(p, i).getByRole("button", { name: /Ya tiene factura: ligarla/ }).click(); await espera(p, 150);
+  await encabezado(p, i).getByRole("button", { name: /^(Ya tiene factura: ligarla|Ya existe)$/ }).click(); await espera(p, 150);   // (v10.84.100: «Ya existe»)
   if (folio != null) { await p.getByLabel(`Folio de la factura ${i + 1} que ya existe`).fill(folio); await espera(p, 200); }
 };
 const piezas = async (p, i, qs) => { for (let f = 0; f < qs.length; f++) { await celda(p, f, i).fill(String(qs[f])); } await espera(p, 200); };
 const F143 = [4380, 3528, 7395, 5520], F155 = [75620, 76472, 72605, 74480];
-const enviar = p => p.getByRole("button", { name: /^(Ligar|Crear) \d+/ }).last();
+// (v10.84.100: el botón dice «Revisar: crear…» y abre la vista previa; click y dblclick confirman en ella si sale, así sirven a las dos versiones)
+const botonEnviar = p => p.getByRole("button", { name: /^(Revisar: )?(Ligar|Crear|ligar|crear) \d+/ }).last();
+const vista = p => p.getByRole("dialog", { name: /^¿(Crear|Ligar)/ });
+const confirmarVista = async (p, doble = false) => { if (!(await vista(p).count().catch(() => 0))) return; const b = vista(p).getByRole("button", { name: /^(Crear|Ligar) \d+/ }); if (doble) await b.dblclick(); else await b.click(); };
+const enviar = p => { const b = botonEnviar(p); return { isDisabled: () => b.isDisabled(), isEnabled: () => b.isEnabled(), textContent: () => b.textContent(), innerText: () => b.innerText(),
+  scrollIntoViewIfNeeded: () => b.scrollIntoViewIfNeeded(), click: async o => { await b.click(o); await espera(p, 250); await confirmarVista(p); },
+  dblclick: async () => { await b.dblclick(); await espera(p, 250); await confirmarVista(p, true); } }; };
 const planEnviado = async p => { const l = (await log(p)).split("\n").filter(x => x.startsWith("plan:confirm ")).pop(); return l ? JSON.parse(l.slice("plan:confirm ".length)) : null; };
 // («1 error:» con uno, «N errores:» con varios: la vuelta 2 encontró que el patrón de antes no veía el de uno)
-const errores = async p => { const l = p.getByText(/\d+ error(es)?:/); return (await l.count()) ? (await l.first().locator("xpath=..").textContent()) : ""; };
+const errores = async p => { const l = p.getByText(/\d+ error(es)?:|Faltan? (1 cosa|\d+ cosas) para crear:/); return (await l.count()) ? (await l.first().locator("xpath=..").textContent()) : ""; };   // (v10.84.100: «Faltan N cosas para crear:»)
 
 // ───────────── v10.84.89 — vuelta 1: escritas ANTES del cambio, contra v10.84.88
 await caso("pl-01 cada factura del plan ofrece ligar", "", async p => {
   await abrir(p);
-  const n = await p.getByRole("button", { name: /Ya tiene factura: ligarla/ }).count();
+  const n = await p.getByRole("button", { name: /^(Ya tiene factura: ligarla|Ya existe)$/ }).count();
   ok("pl-01 cada factura del plan ofrece «Ya tiene factura: ligarla»", n === 2, `${n} de 2 columnas`);
 });
 await caso("pl-02 ligar F-143", "", async p => {
@@ -77,7 +83,7 @@ await caso("pl-04 OC-0960 con F-143 y F-155", "", async p => {
   const lin = k => (g[k]?.lines || []).map(l => l.qty + ":" + l.amount).join(",");
   const esperado0 = "4380:613.2,3528:388.08,7395:1035.3,5520:607.2", esperado1 = "75620:10586.8,76472:8411.92,72605:10164.7,74480:8192.8";
   ok("pl-04 OC-0960: F-143 y F-155 cuadran y se mandan ligadas, con las piezas y el dinero exactos",
-    /cuadra/i.test(s1) && /cuadra/i.test(s2) && /Ligar 2 facturas/.test(boton) && g.length === 2
+    /cuadra/i.test(s1) && /cuadra/i.test(s2) && /ligar 2 facturas/i.test(boton) && g.length === 2
     && g[0].ligar === true && g[0].folio === "F-143" && g[0].doc_type === "factura" && !g[0].pre_assigned && !g[0].bill_to && lin(0) === esperado0
     && g[1].ligar === true && g[1].folio === "F-155" && lin(1) === esperado1,
     `suma1 «${s1.replace(/\s+/g, " ").trim()}» · suma2 «${s2.replace(/\s+/g, " ").trim()}» · botón «${boton.trim()}» · ${JSON.stringify(g.map(x => ({ ligar: x.ligar, folio: x.folio, lines: x.lines?.length })))} · 0=${lin(0)} · 1=${lin(1)}`);
@@ -149,7 +155,7 @@ await caso("pl-11 sin emisor", "emisor=off", async p => {
 });
 await caso("pl-12 mejor que se asigne solo", "", async p => {
   await abrir(p); await ligar(p, 0, "F-143");
-  await encabezado(p, 0).getByRole("button", { name: /mejor que se asigne solo/i }).click(); await espera(p, 200);
+  await encabezado(p, 0).getByRole("button", { name: /^(mejor que se asigne solo|Nueva)$/i }).click(); await espera(p, 200);   // (v10.84.100: «Nueva»)
   // (vuelta 1: la prueba capturaba justo las piezas de F-143 como factura NUEVA, y eso es lo que el candado del anticipo frena: otras)
   await piezas(p, 0, [1000, 1000, 1000, 1000]); await encabezado(p, 1).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
   await enviar(p).click(); await espera(p, 500);
@@ -234,7 +240,7 @@ await caso("pl-21 el candado en la segunda", "", async p => {
   await enviar(p).click().catch(() => {}); await espera(p, 500);
   const g = (await planEnviado(p))?.groups || [];
   ok("pl-21 con F-143 ligada, «Lo que falta» en la segunda sale justo por F-155: lo dice, ofrece ligarla y con un clic queda «Ligar 2 facturas»",
-    /F-155/.test(e) && ofrece && /Ligar 2 facturas/.test(boton) && g[1]?.ligar === true && g[1]?.folio === "F-155", e.replace(/\s+/g, " ").slice(0, 160) + " · " + boton.trim());
+    /F-155/.test(e) && ofrece && /ligar 2 facturas/i.test(boton) && g[1]?.ligar === true && g[1]?.folio === "F-155", e.replace(/\s+/g, " ").slice(0, 160) + " · " + boton.trim());
 });
 await caso("pl-22 tercero y luego ligar", "", async p => {
   await abrir(p);
@@ -536,11 +542,128 @@ await caso("pl-58 el aviso de errores con AA", "", async p => {
     const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
     const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
       let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
-    const el = [...document.querySelectorAll("div")].find(d => /^\d+ errores?:$/.test(d.textContent.trim()));
+    const el = [...document.querySelectorAll("div")].find(d => /^(\d+ errores?|Falta 1 cosa para crear|Faltan \d+ cosas para crear):$/.test(d.textContent.trim()));
     if (!el) return null;
     const lb = lum(fondo(el)), lt = lum(nums(getComputedStyle(el).color).slice(0, 3)); return +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2);
   });
   ok("pl-58 el título del aviso de errores del plan («N errores:») a 4.5:1 o más", cr !== null && cr >= 4.5, `contraste ${cr}`);
+});
+
+// ───────────── v10.84.100 — el plan se deja ver y confirmar (la critique del 13-oct, P1): a 1366 se veía 1 de 4 órdenes y el botón quedaba bajo
+//   el borde; una cifra héroe de 24 px; creaba o ligaba al primer clic, sin vista previa; el rechazo de la base salía abajo, crudo; «Ya tiene
+//   factura: ligarla» era un enlace de 10 px y sólo salían 4 sugerencias; el plan no pasaba de 1300 px a 1920. Vuelta 1: escritas ANTES.
+const caja = (p, sel) => p.evaluate(s => { const e = typeof s === "string" ? document.querySelector(s) : null; if (!e) return null; const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right, w: b.width, h: b.height }; }, sel);
+await caso("pl-59 a 1366: el botón y las órdenes a la vista", "", async p => {
+  await abrir(p);
+  const r = await p.evaluate(() => {
+    const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
+    const filas = [...document.querySelectorAll("tbody tr")].map(vis);
+    const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
+    return { filas, boton: btn ? vis(btn) : false, alto: innerHeight };
+  });
+  ok("pl-59 a 1366×768: el botón de crear se ve sin hacer scroll y al menos 2 de las 4 órdenes también", r.boton && r.filas.filter(Boolean).length >= 2, JSON.stringify(r));
+});
+await caso("pl-59b a 1920: las 4 órdenes, el botón y el ancho", "", async p => {
+  await abrir(p);
+  const r = await p.evaluate(() => {
+    const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
+    const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /Plan matriz de facturación/.test(x.textContent)) || [...document.querySelectorAll("h3")].find(x => /Plan matriz/.test(x.textContent))?.parentElement;
+    const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
+    return { filas: [...document.querySelectorAll("tbody tr")].map(vis), boton: btn ? vis(btn) : false, ancho: d ? Math.round(d.getBoundingClientRect().width) : 0 };
+  });
+  ok("pl-59b a 1920×1080: las 4 órdenes y el botón se ven sin scroll, y el plan usa el ancho (más de 1300 px)", r.filas.length === 4 && r.filas.every(Boolean) && r.boton && r.ancho > 1300, JSON.stringify(r));
+}, { width: 1920, height: 1080 });
+await caso("pl-60 sin cifra héroe", "", async p => {
+  await abrir(p);
+  const max = await p.evaluate(() => { const d = [...document.querySelectorAll("h3")].find(x => /Plan matriz/.test(x.textContent)); const raiz = d ? (d.closest('[role="dialog"]') || d.parentElement.parentElement) : document.body;
+    return Math.max(...[...raiz.querySelectorAll("*")].filter(e => e.children.length === 0 && e.textContent.trim()).map(e => parseFloat(getComputedStyle(e).fontSize))); });
+  ok("pl-60 ninguna cifra del plan pasa de 18 px (la de «POR ASIGNAR» medía 24)", max <= 18, `la letra más grande: ${max} px`);
+});
+await caso("pl-61 vista previa antes de crear", "", async p => {
+  // (la segunda, NUEVA con 1,000 piezas por orden: con «Lo que falta» sale justo por F-155 y el candado del anticipo apaga el botón; vuelta 1)
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await botonEnviar(p).click(); await espera(p, 400);
+  const antes = await cuenta(p, "plan:confirm"), v = vista(p), hay = await v.count();
+  const dice = hay ? ((await v.innerText()) || "").replace(/\s+/g, " ") : "";
+  if (hay) { await v.getByRole("button", { name: /^(Crear|Ligar) \d+/ }).click(); await espera(p, 500); }
+  ok("pl-61 el botón abre una vista previa (una fila por factura: liga F-143 o nueva, a cargo de quién, cuánto, y el total) y no manda nada hasta confirmar",
+    antes === 0 && hay === 1 && /liga F-143/.test(dice) && /nueva/.test(dice) && /A cargo de PORTLAND LEATHER/.test(dice) && /3,066\.78/.test(dice) && /Total/.test(dice) && (await cuenta(p, "plan:confirm")) === 1,
+    `antes de confirmar: ${antes} envíos · vista previa ${hay}: «${dice.slice(0, 260)}» · después: ${await cuenta(p, "plan:confirm")}`);
+});
+await caso("pl-62 «Volver al plan»", "", async p => {
+  // (la segunda, NUEVA con 1,000 piezas por orden: con «Lo que falta» sale justo por F-155 y el candado del anticipo apaga el botón; vuelta 1)
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await botonEnviar(p).click(); await espera(p, 400);
+  await vista(p).getByRole("button", { name: "Volver al plan" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  ok("pl-62 «Volver al plan» regresa sin mandar nada y con lo capturado", (await cuenta(p, "plan:confirm")) === 0 && (await vista(p).count()) === 0 && (await celda(p, 0, 0).inputValue().catch(() => "")) === "4380",
+    `${await cuenta(p, "plan:confirm")} envíos · vista ${await vista(p).count()}`);
+});
+await caso("pl-63 el rechazo de la base, dentro", "conf=falla", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await enviar(p).click(); await espera(p, 700);
+  const alerta = ((await p.locator("[data-plan-rechazo]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-63 si la base rechaza, el plan lo dice dentro (role=alert), en palabras («Factura 1», no «Grupo 1») y con lo capturado",
+    /La base no aceptó el plan/.test(alerta) && /Factura 1/.test(alerta) && !/Grupo 1/.test(alerta) && (await p.locator('[data-plan-rechazo][role="alert"]').count()) === 1 && (await celda(p, 0, 0).inputValue().catch(() => "")) === "4380",
+    `«${alerta.slice(0, 200)}»`);
+});
+await caso("pl-64 «Nueva / Ya existe» en cada columna", "", async p => {
+  await abrir(p);
+  const grupos = await p.locator('thead [role="group"]').count();
+  const nueva = encabezado(p, 0).getByRole("button", { name: "Nueva", exact: true }), existe = encabezado(p, 0).getByRole("button", { name: "Ya existe", exact: true });
+  const n0 = await nueva.getAttribute("aria-pressed").catch(() => null);
+  await existe.click().catch(() => {}); await espera(p, 200);
+  const folio = await p.getByLabel("Folio de la factura 1 que ya existe").count(), e1 = await existe.getAttribute("aria-pressed").catch(() => null);
+  await nueva.click().catch(() => {}); await espera(p, 200);
+  const folio2 = await p.getByLabel("Folio de la factura 1 que ya existe").count();
+  ok("pl-64 cada columna elige «Nueva» o «Ya existe» a la vista (aria-pressed); «Ya existe» pide el folio y «Nueva» lo quita", grupos === 2 && n0 === "true" && e1 === "true" && folio === 1 && folio2 === 0,
+    `grupos ${grupos} · Nueva ${n0} → Ya existe ${e1} · folio ${folio} → ${folio2}`);
+});
+await caso("pl-65 todas las facturas sin orden como sugerencia", "ligables=muchas", async p => {
+  await abrir(p); await ligar(p, 0, null); await espera(p, 300);
+  const sug = await encabezado(p, 0).locator("button").filter({ hasText: /^(F|RS)-\d+$/ }).allInnerTexts();
+  ok("pl-65 con 7 facturas sin orden, las 7 salen como sugerencia (antes, sólo 4)", sug.length === 7, JSON.stringify(sug));
+});
+await caso("pl-66b Ctrl+Enter abre la vista previa", "", async p => {
+  // (la segunda, nueva con 1,000 por orden: con «Lo que falta» el candado del anticipo apaga el envío y Ctrl+Enter, con razón, no abre nada)
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await celda(p, 0, 0).focus(); await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  ok("pl-66b Ctrl+Enter desde una celda abre la vista previa (no manda nada)", (await vista(p).count()) === 1 && (await cuenta(p, "plan:confirm")) === 0, `vista ${await vista(p).count()} · envíos ${await cuenta(p, "plan:confirm")}`);
+});
+await caso("pl-66 lo que falta, en palabras", "", async p => {
+  await abrir(p); await piezas(p, 0, [90000]);
+  const e = (await errores(p)).replace(/\s+/g, " ");
+  ok("pl-66 los errores del plan en palabras: «piezas», sin «pzas», «qty», «drift» ni «disponibles»", /piezas/.test(e) && !/\bpzas\b|\bqty\b|drift|disponibles|matchea|chars/.test(e), `«${e.slice(0, 260)}»`);
+});
+
+// vuelta 3, por donde no se diseñó
+await caso("pl-71 Esc en la vista previa", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await botonEnviar(p).click(); await espera(p, 400);
+  const hay = await vista(p).count();
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("pl-71 Esc en la vista previa la cierra a ella (el plan se queda, con lo capturado y sin mandar)", hay === 1 && (await vista(p).count()) === 0 && await p.getByText(/Plan matriz de facturación/).count() > 0
+    && (await cuenta(p, "plan:confirm")) === 0 && (await celda(p, 0, 0).inputValue().catch(() => "")) === "4380", `vista ${hay} → ${await vista(p).count()}`);
+});
+await caso("pl-72 Ctrl+Enter con algo por resolver", "", async p => {
+  await abrir(p); await piezas(p, 0, [90000]); await celda(p, 0, 0).focus();
+  await p.keyboard.press("Control+Enter"); await espera(p, 400);
+  ok("pl-72 con algo por resolver, Ctrl+Enter no abre la vista previa ni manda nada", (await vista(p).count()) === 0 && (await cuenta(p, "plan:confirm")) === 0);
+});
+await caso("pl-73 remisión y factura en la vista previa", "", async p => {
+  await abrir(p); await ligar(p, 0, "RS-31"); await piezas(p, 0, [10000, 0, 0, 0]); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await botonEnviar(p).click(); await espera(p, 400);
+  const dice = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-73 con una remisión y una factura, la vista previa dice cada una con su IVA y que el total mezcla («facturas con IVA, lo demás sin IVA»)",
+    /Remisión 1 · liga RS-31/.test(dice) && /Factura 2 · nueva/.test(dice) && /facturas con IVA, lo demás sin IVA/.test(dice), `«${dice.slice(0, 280)}»`);
+});
+await caso("pl-74 muchas cosas por resolver: el botón sigue a la vista", "", async p => {
+  await abrir(p);
+  await p.locator("input[type=number][max='10']").fill("7"); await espera(p, 300);
+  for (let i = 0; i < 7; i++) await piezas(p, i, [90000, 90000, 90000, 90000]);
+  const r = await p.evaluate(() => { const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
+    const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
+    const err = document.querySelector("[data-plan-errores]"); return { boton: btn ? vis(btn) : false, errores: err ? err.querySelectorAll("div").length : 0, ancho: document.documentElement.scrollWidth }; });
+  ok("pl-74 con 7 facturas llenas de más (muchas cosas por resolver) a 1366, el botón sigue a la vista y la página no se desborda", r.boton && r.errores > 6 && r.ancho <= 1366, JSON.stringify(r));
 });
 
 for (const r of res) console.log(r);

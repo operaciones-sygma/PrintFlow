@@ -9,7 +9,7 @@
 //   vista=1 (la vista del plan ya creado, con una factura ligada y pagada y otra creada por el plan) · rol=karla (sin botones de
 //   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
-//   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra)
+//   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -47,6 +47,8 @@ const db = {
     if (LIGABLES === "colgado") return new Promise(() => {});
     if (LIGABLES === "lento") await new Promise(r => setTimeout(r, 2500));
     if (LIGABLES === "falla" && lecturas === 1) throw new Error("timeout");
+    if (LIGABLES === "muchas") return [...LIGABLES_OK, ...[160, 161, 162, 163].map(n => ({ doc_number: "F-" + n, doc_type: "factura", amount: n * 10, balance: n * 10,
+      issued_date: "2026-10-1" + (n - 160), status: "pendiente", cfdi_status: "stamped", dias_sin_orden: 1, monto_cuadra: false, total_oc: 46400 }))];   // v10.84.100 — 7 sin orden
     return LIGABLES === "vacio" ? [] : LIGABLES_OK;
   },
 };
@@ -92,7 +94,7 @@ function Banco() {
       onCancelGroup={g => { anota("cancelar-factura " + g.id); setCancelar({ kind: "group", group: g }); }} busy={false}/>}
     {abierto && <OCSplitMatrixModal oc={OC} ocOrders={ORDERS} user="karla" userLogin="karla"
       onConfirm={async plan => { anota("plan:confirm " + JSON.stringify(plan)); await new Promise(r => setTimeout(r, 150));
-        if (CONF_FALLA) { anota("toast:error"); return undefined; }
+        if (CONF_FALLA) { anota("rechazo"); throw new Error("Grupo 1: F-143 ya está ligada a OP-OTRA: no se re-liga"); }   // (v10.84.100: App lanza; antes avisaba abajo)
         setAbierto(false); return { groups_count: plan.groups.length, linked_folios: plan.groups.filter(g => g.ligar).map(g => g.folio) }; }}
       onClose={() => { anota("cerrado"); setAbierto(false); }}/>}
     {cancelar && <MatrixCancelConfirmModal kind={cancelar.kind} line={cancelar.line} group={cancelar.group} order={cancelar.order} oc={OC} orders={ORDERS}
