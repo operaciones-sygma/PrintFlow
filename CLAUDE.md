@@ -77,7 +77,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
     `Kanban` no dice «vacío» sin `leido` (una lectura buena). El cliente de Supabase ya reintenta solo un GET con 503/520 tres
     veces (1, 2 y 4 s): el aviso llega a los ~7 s. Toda lectura nueva que alimente una pantalla sigue esta regla.
     `tests/recorrido/lectura-falla.mjs` lo vigila con la app real (la primera lectura lenta o caída, la bitácora caída y el
-    archivo completo caído).
+    archivo completo caído). 🔑 **Y tampoco es permiso** (v10.84.96): una lectura que decide si se puede emitir (las facturas que el
+    cliente ya tiene hechas sin orden) sin respuesta FRENA la emisión: «Reintentar», o la persona marca que revisó (`SinRevisionSinOrden`).
+    Nunca `null → []` en esas lecturas.
 
 ### React / App.jsx
 11. **Orden de declaración** (TDZ): `viewOrders → searchFilter → filteredOrders → myTasks → staleTasks`.
@@ -181,7 +183,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.95 (13-oct; READY `dpl_BfyAARdigKWyq5YqH5n5ASsb8vMP`, commits `060a402` (v10.84.94) y `9fc2387` (v10.84.95), subidas juntas; vuelta atrás:
+- **LIVE:** v10.84.96 (13-oct, ~23:02; READY `dpl_D8Tv1KgD2HhKhkbhfb3RJqWgjyvC`, commit `60bb12b`; vuelta atrás: promover
+  `dpl_9yBjkbL2cYCnpnneFFAhUmWEnpva` (el código de v10.84.95) o `git revert 60bb12b`; la base no cambió; candado 1505 de 1505, de a 2 tandas).
+  v10.84.96: 🔑 **un error de lectura no es permiso** (la pasada 1 de la critique del flujo de facturas de Karla, revisor independiente
+  21/40, snapshot `.impeccable/critique/2026-10-14T03-21-10Z__…`): sin la lectura de las facturas que el cliente tiene hechas sin orden
+  (`list_linkable_invoices_for_order` / `_for_oc`), ninguna de las cinco puertas que emiten un CFDI deja seguir (`SinRevisionSinOrden`:
+  «Reintentar» o «Ya revisé en CobranzaFlow»); el folio anticipado lee al abrir y ofrece «Facturar por partes y ligar F-…». Revisado en
+  producción sin escribir, 11 de 11. Sigue (aprobado por Marcelo, 13-oct): v10.84.97 (las puertas saben de su OC), v10.84.98 (el plan
+  matriz, una ventana de la app) y lo demás de la pasada 1; luego las pasadas 2 y 3 y la guía de Karla con capturas.
+  v10.84.95 (13-oct; READY `dpl_BfyAARdigKWyq5YqH5n5ASsb8vMP`, commits `060a402` (v10.84.94) y `9fc2387` (v10.84.95), subidas juntas; vuelta atrás:
   promover `dpl_FsUkjTVAarn83rJVkBf7gdETkvMt` (el código de v10.84.93) o `git revert 9fc2387` y/o `060a402`; la base no cambió; candado 1493 de 1493 (48 nuevas), de a 2 tandas, 23 min, al segundo intento: el primero frenó por `ERR_NO_BUFFER_SPACE` (Windows sin puertos: ~580 conexiones en TIME_WAIT tras los candados seguidos de tres sesiones) en spl-32 y pla-13, que no tienen segunda oportunidad; solas pasaban; se repitió con TIME_WAIT en 68).
   v10.84.95: 🔑 **«Mis Pendientes» dice qué te toca** (`queTeToca`, la regla una vez: «toca» si la ficha le da al rol, ahí, una acción que
   avanza; la tanda del tablero la compara con los botones de cada ficha, rol por rol): fichas sólo para lo que te toca, «Espera a otro»

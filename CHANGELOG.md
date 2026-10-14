@@ -52,7 +52,14 @@ leído), pl-40 (la casilla deja crear nuevas, no ligar) y oc-120 («Dividir» ta
 podía seguir. **Sin probar:** contra producción con la lectura caída de verdad (la cuenta de pruebas recibe 403 en esas lecturas: es
 justo el caso, y la revisión en producción lo verá).
 
-**En producción:** (se llena al subir)
+**En producción:** 13-oct ~23:02; READY `dpl_D8Tv1KgD2HhKhkbhfb3RJqWgjyvC` (commit `60bb12b`). Vuelta atrás: promover
+`dpl_9yBjkbL2cYCnpnneFFAhUmWEnpva` (el código de v10.84.95) o `git revert 60bb12b`; la base no cambió. Candado: 1505 de 1505 (12
+nuevas), de a 2 tandas, 23 min; una INESTABLE (`archivos-pantalla/ap-v2-la-orden-se-limpia-solo-si-sigue-con-ese`: `ERR_NO_BUFFER_SPACE`,
+Windows sin sockets a media corrida; sola pasa 3 de 3; revisada). Revisado en producción sin escribir (`.banco-revisor-orden/medir-96.mjs`,
+la cuenta de pruebas con el rol de Karla, que recibe 403 en esas lecturas: el caso de verdad), **11 de 11**: en el folio anticipado de
+P-0544, en «Asignar Folio y Entregar» de P-0631 (desde la cola) y en «Asignar folio» de OC-0960, la ventana dice «No pude revisar si … tiene
+facturas hechas sin orden», no deja seguir y dice por qué; con «Ya revisé en CobranzaFlow» deja (no se confirmó nada); sin errores, sin
+diálogos del navegador, sin escrituras.
 
 ## v10.84.95 — «Mis Pendientes» dice qué te toca: «Te toca», «Espera a otro» y el vendedor ve dónde van las suyas — 13-oct-2026
 
