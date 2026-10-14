@@ -9559,20 +9559,24 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   };
 
   // Cálculos por orden (cobertura)
+  // v10.84.110 — Karla (14-oct, Hotsson): las 11 ligadas cuadraban y el plan decía «P-0621: $80,370.04 pasa del total de la orden». Aquí se sumaba
+  //   cada celda redondeada CON IVA y vuelta a sin IVA (un centavo de más en varias de 11); lo que se manda a la base es otra cosa: exacto por piezas
+  //   (lineaSinIva, sólo las celdas con piezas: $80,369.98). El tope, el «Asignado» y el «Por asignar» suman ahora lo mismo que se manda.
   const orderTotals = useMemo(() => {
     const result = {};
     for(const o of eligibleOrders) {
-      let qtySum = 0, amountSumSinIva = 0;
+      let qtySum = 0, amountSumSinIva = 0, celdas = 0;
       for(const g of groups) {
         const cell = g.lines[o.id];
         if(!cell) continue;
         qtySum += Number(cell.qty||0);
-        amountSumSinIva += sinIvaFromCaptured(Number(cell.amountConIva||0), g.doc_type);
+        if(Number(cell.qty||0) > 0) { amountSumSinIva += lineaSinIva(cell, o, g.doc_type); celdas++; }
       }
+      amountSumSinIva = Math.round(amountSumSinIva * 100) / 100;
       const totalQty = Number(o.quantity);
       const totalAmount = Number(o.order_type === "maquila" ? o.maq_price : o.price);
       result[o.id] = {
-        qtySum, amountSumSinIva,
+        qtySum, amountSumSinIva, celdas,
         totalQty, totalAmount,
         qtyRemaining: totalQty - qtySum,
         qtyOver: qtySum > totalQty,
@@ -9831,7 +9835,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     let pAvail = 0, pAssigned = 0;
     for(const o of eligibleOrders) { const tt = orderTotals[o.id]; const ex = existingByOrder[o.id] || {qty:0, amount:0}; pAvail += Math.max(0, (tt?.totalAmount||0) - ex.amount); pAssigned += (tt?.amountSumSinIva||0); }
     pAvail = Math.round(pAvail*100)/100; pAssigned = Math.round(pAssigned*100)/100;
-    const pRemaining = Math.round((pAvail - pAssigned)*100)/100, pOver = pRemaining < -0.01, pFull = !pOver && Math.abs(pRemaining) <= 0.01 && pAssigned > 0;
+    // v10.84.110 — con TODAS las piezas asignadas, lo que falta por centavos de redondeo (cada celda se redondea; ≤ 1 centavo por celda) es «completo»
+    const todasLasPiezas = eligibleOrders.length > 0 && eligibleOrders.every(o => { const tt = orderTotals[o.id]; const ex = existingByOrder[o.id] || {qty:0}; return (tt?.qtySum||0) === (tt?.totalQty||0) - ex.qty; });
+    const redondeo = eligibleOrders.reduce((s, o) => s + 0.01 * (orderTotals[o.id]?.celdas || 0), 0);
+    const pRemaining = Math.round((pAvail - pAssigned)*100)/100, pOver = pRemaining < -0.01, pFull = !pOver && pAssigned > 0 && (Math.abs(pRemaining) <= 0.01 || (todasLasPiezas && pRemaining <= redondeo + 1e-9));
     const pPct = pAvail > 0 ? Math.min(100, (pAssigned/pAvail)*100) : 0;
     return <div data-plan-marcador style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,fontSize:12.5,color:C.t2,fontVariantNumeric:"tabular-nums",flexWrap:"wrap"}}>
       <span>Asignado <b style={{color:C.tx}}>${fmtMx(pAssigned)}</b> de ${fmtMx(pAvail)} <span style={{fontSize:11}}>sin IVA</span> · <b style={{color:pOver?C.dnInk:pFull?C.okInk:C.tx}}>{pOver ? "se pasa por $" + fmtMx(-pRemaining) : pFull ? "completo" : "faltan $" + fmtMx(pRemaining)}</b></span>

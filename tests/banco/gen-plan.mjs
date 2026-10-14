@@ -11,7 +11,7 @@
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
 //   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden) ·
 //   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina) ·
-//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109)
+//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109) · hotsson=1 (v10.84.110: OC-0966 de producción)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -29,7 +29,8 @@ const partes = [
   `// ── lo que toca la base, simulado (${simuladosUsados.join(", ")}) ──
 const Q = new URLSearchParams(location.search);
 const EMISOR = Q.get("emisor") !== "off", LIGABLES = Q.get("ligables") || "normal", CONF_FALLA = Q.get("conf") === "falla", CONF_CANDADO = Q.get("conf") === "candado";
-const A_NOMBRE = Q.get("anombre") || "";   // v10.84.108 — a_nombre_de_quien: 1 (F-143 y F-155 a nombre de PORTLAND STUDIO) · falla
+const A_NOMBRE = Q.get("anombre") || "";
+const HOTSSON = Q.get("hotsson") === "1";   // v10.84.110 — OC-0966 de producción: P-0621 y P-0623 y las 11 facturas hechas el 13-oct   // v10.84.108 — a_nombre_de_quien: 1 (F-143 y F-155 a nombre de PORTLAND STUDIO) · falla
 const registro = [];
 const anota = t => { registro.push(t); const el = document.getElementById("log"); if (el) el.textContent = registro.join("\\n"); };
 window.confirm = m => { anota("confirm: " + String(m).split("\\n")[0]); return Q.get("confirmar") !== "no"; };
@@ -50,6 +51,21 @@ const CONCEPTOS_DE = {
   "F-155": [cpt(1, 75620, 0.14, 10586.8, "STK-NGO-PNO4 STICKER REDONDO NEGRO DE PINOS 4 CM"), cpt(2, 72605, 0.14, 10164.7, "STK-NGO-PRL4 STICKER REDONDO NEGRO PORTLAND 4 CM"),
     cpt(3, 76472, 0.11, 8411.92, "STK-NGO-PNO3-STICKER REDONDO NEGRO DE PINOS 3 CM"), cpt(4, 74480, 0.11, 8192.8, "STK-NGO-PRL3 STICKER REDONDO NEGRO PORTLAND 3 CM")],
 };
+// v10.84.110 — Hotsson (producción, 14-oct): las 11 facturas sin orden de OC-0966 y sus conceptos timbrados
+const H = [["F-159", 20177.77, [110, 122.14, 13435.40, "HS HOTSSON HOTEL LEON LIBRETA /AGENDA"], [50, 79.1845, 3959.23, "HS HOTSSON HOTEL LEON  CALENDARIOS"]],
+  ["F-160", 12175.01, [60, 122.14, 7328.40, "HS HOTSSON HOTEL SILAO LIBRETA/AGENDA"], [40, 79.1825, 3167.30, "HS HOTSSON HOTEL SILAO CALENDARIO"]],
+  ["F-161", 9839.68, [50, 122.14, 6107.00, "CORPORATIVO APITALI GRUPO HOTELERO LIBRETA / AGENDA"], [30, 79.1825, 2375.48, "CORPORATIVO APITALI GRUPO HOTELERO CALENDARIO"]],
+  ["F-162", 11256.55, [60, 122.142, 7328.52, "HS HOTSSON SMART LEON-CENTRO MAX LIBRETA / AGENDA"], [30, 79.18, 2375.40, "HS HOTSSON SMART LEON-CENTRO MAX CALENDARIO"]],
+  ["F-163", 15790.47, [92, 122.1406, 11236.94, "HS HOTSSON ACAPULCO LIBRETA / AGENDA"], [30, 79.1845, 2375.54, "HS HOTSSON ACAPULCO CALENDARIO"]],
+  ["F-164", 11676.62, [50, 122.14, 6107.00, "HS HOTSSON HOTEL TAMPICO Y SMART VALUE TAMPICO LIBRETA / AGE"], [50, 79.181, 3959.05, "HS HOTSSON HOTEL TAMPICO Y SMART VALUE TAMPICO CALENDARIO"]],
+  ["F-165", 11676.62, [50, 122.14, 6107.00, "HS HOTSSON HOTEL QUERETARO LIBRETA / AGENDA"], [50, 79.181, 3959.05, "HS HOTSSON HOTEL QUERETARO CALENDARIO"]],
+  ["F-166", 12673.39, [70, 122.142, 8549.94, "HS HOTSSON HOTEL IRAPUATO LIBRETA"], [30, 79.18, 2375.40, "HS HOTSSON HOTEL IRAPUATO CALENDARIO"]],
+  ["F-167", 11676.62, [50, 122.14, 6107.00, "MORELIA MANSION SOLIS LIBRETA / AGENDA"], [50, 79.181, 3959.05, "MORELIA MANSION SOLIS  CALENDARIO"]],
+  ["F-168", 11676.62, [50, 122.14, 6107.00, "LA ARBOLEDA LIBRETA / AGENDA"], [50, 79.181, 3959.05, "LA ARBOLEDA CALENDARIO"]],
+  ["F-169", 3736.52, [16, 122.14125, 1954.26, "CORPORATIVO CAPITALI GRUPO HOTELERO LIBRETA / AGENDA"], [16, 79.18, 1266.88, "CORPORATIVO CAPITALI GRUPO HOTELERO CALENDARIO"]]];
+const LIGABLES_H = H.map(([doc_number, amount]) => ({ doc_number, doc_type: "factura", amount, balance: amount, issued_date: "2026-10-13", status: "pendiente",
+  cfdi_status: "stamped", dias_sin_orden: 1, monto_cuadra: false, total_oc: 114100 }));
+for (const [fol, , ...ls] of H) CONCEPTOS_DE[fol] = ls.map(([cantidad, vu, importe, descripcion], k) => cpt(k + 1, cantidad, vu, importe, descripcion));
 const db = {
   conceptosParaLigarEnOC: async (ocId, folio) => {
     lecturasConceptos++; anota("lee conceptos " + ocId + " " + folio + " #" + lecturasConceptos);
@@ -78,6 +94,7 @@ const db = {
     if (LIGABLES === "falla" && lecturas === 1) throw new Error("timeout");
     if (LIGABLES === "muchas") return [...LIGABLES_OK, ...[160, 161, 162, 163].map(n => ({ doc_number: "F-" + n, doc_type: "factura", amount: n * 10, balance: n * 10,
       issued_date: "2026-10-1" + (n - 160), status: "pendiente", cfdi_status: "stamped", dias_sin_orden: 1, monto_cuadra: false, total_oc: 46400 }))];   // v10.84.100 — 7 sin orden
+    if (HOTSSON) return LIGABLES_H;
     return LIGABLES === "vacio" ? [] : LIGABLES_OK;
   },
 };
@@ -111,6 +128,11 @@ const PLAN = { alive_count: 2, total_count: 2, groups: [
     ...(Q.get("tercero") === "1" ? { bill_to_name: "TERCERO SA DE CV", bill_to_rfc: "TSA010101AAA" } : {}),   // v10.84.108 — «Facturar a un tercero»
     payment_status: "unpaid", ligada: false, cancelled_at: null, lines: [linea("l5", "g2", ORDERS[0].id, 75620, 10586.8), linea("l6", "g2", ORDERS[1].id, 76472, 8411.92)] },
 ] };
+// v10.84.110 — hotsson=1: OC-0966 con sus dos órdenes como en producción (P-0621 en Empaque, P-0623 en máquina; precios que no dan centavos exactos)
+if (HOTSSON) { Object.assign(OC, { id: "OC-0966", client: "INMOBILIARIA HOTSSON", client_id: "c3" });
+  ORDERS.splice(0, ORDERS.length,
+    { id: "OP-MV1NON22D08", production_number: "P-0621", product: "AGENDAS 2027 PORTADAS MEDIDA 18.5 X 23 PASTA DURA", product_type: "LIBRETAS ENGARGOLADAS PASTA DURA", quantity: 658, price: 80370, order_type: "interna", stage: "packaging", invoice_folio: null },
+    { id: "OP-MV1NXBC9N49", production_number: "P-0623", product: "CALENDARIOS 2027 BASE MEDIDA EXT. 41 X 21", product_type: "CALENDARIOS DE ESCRITORIO", quantity: 426, price: 33730, order_type: "interna", stage: "in_production", current_machine: "manual_2", invoice_folio: null }); }
 function Banco() {
   const [abierto, setAbierto] = useState(false);
   const [cancelar, setCancelar] = useState(null);

@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.110 — El plan matriz ya no dice «pasa del total de la orden» por centavos de redondeo — 14-oct-2026
+
+**Qué pasaba.** Karla (14-oct, 13:54) ligó las 11 facturas de Hotsson en OC-0966, cada columna decía «CUADRA con F-…», y el plan no la dejaba
+crear: «Falta 1 cosa para crear: P-0621: $80,370.04 pasa del total de la orden ($80,370.00 sin IVA)», y arriba «se pasa por $0.03». El tope por
+orden (y el «Asignado» y el «Por asignar») sumaba cada celda redondeada CON IVA y vuelta a sin IVA, y con precios que no dan centavos exactos
+(P-0621: $80,370 / 658 = $122.142857… la pieza) varias de las 11 celdas ganaban un centavo. Lo que se manda a la base es otra cosa desde
+v10.84.89: exacto por piezas, $80,369.98, que la base acepta (su tope es el precio + $0.01). Los bancos sólo tenían PORTLAND, con precios de
+centavos exactos ($0.14 y $0.11), donde las dos cuentas dan lo mismo.
+
+**Qué se cambió** (`src/App.jsx`, `OCSplitMatrixModal`; la base no cambió):
+- El tope por orden, el «Asignado» del encabezado y el «Por asignar» de cada orden suman lo mismo que se manda a la base (`lineaSinIva`: por
+  piezas, exacto; por monto, lo capturado sin IVA; sólo las celdas con piezas).
+- Con TODAS las piezas asignadas, lo que falta por centavos de redondeo (hasta 1 centavo por celda) es «completo» (Hotsson: «Asignado
+  $114,099.97 de $114,100.00 · completo»; antes, «se pasa por $0.03»).
+
+**Cómo se probó** (tres vueltas; el banco del plan ahora tiene `hotsson=1`: OC-0966 con P-0621 y P-0623 y las 11 facturas con sus conceptos
+timbrados, como en producción). **Vuelta 1**, contra v10.84.109: pl-116 (las 11 ligadas con sus piezas traídas se dejan crear y lo mandado pasa
+los candados de dinero de `assign_oc_invoice_split_plan`) y pl-117 (el encabezado dice «completo») fallaban con la pantalla de Karla, letra por
+letra. **Vuelta 2**: pasan; lo mandado: P-0621 $80,369.98 y P-0623 $33,729.99, y cada ligada dentro de ±$0.02 de su CFDI. **Vuelta 3**, por
+donde no se diseñó: capturando por monto, pasarse de verdad sigue frenando («P-0592: $11,206.90 pasa del total», pl-118) y con una de las 11
+todavía sin piezas el encabezado dice «faltan $3,221.17», no «completo» (pl-119). Antes de este arreglo, Karla tenía un atajo con v10.84.109
+(probado en el banco con el código de producción): «Monto ($)» y, en P-0621, F-160 de 8,501.14 a 8,501.12 y F-161 de 7,084.29 a 7,084.27.
+
+**Lo que queda (para Marcelo):** si un día la suma exacta por piezas de una orden repartida en muchas facturas queda unos centavos ARRIBA de su
+precio (cada celda se redondea), la pantalla y la base frenan igual (la base: precio + $0.01). No pasó con Hotsson (quedó $0.02 abajo); si pasa,
+el atajo es el de arriba (bajar un centavo en una celda por monto), y el arreglo de fondo sería que la última celda absorba el redondeo.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.109 — «Traer sus piezas de su CFDI» con Hotsson: el singular y el plural, y el tipo de la orden — 14-oct-2026
 
 **Qué pasaba.** Con las 11 facturas de Hotsson listas para ligar en OC-0966, «Traer sus piezas de su CFDI» casaba 1 de sus 22 conceptos: los CFDI

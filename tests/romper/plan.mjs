@@ -1086,6 +1086,61 @@ await caso("pl-115 con producto escrito se manda exacto", "producto=1", async p 
     g.length === 2 && lin(0) === "4380:613.2,3528:388.08,7395:1035.3,5520:607.2" && lin(1) === "75620:10586.8,76472:8411.92,72605:10164.7,74480:8192.8", `0=${lin(0)} · 1=${lin(1)}`);
 });
 
+// v10.84.110 — Karla (14-oct, 13:54): las 11 de Hotsson cuadraban una por una y el plan no la dejaba crear: «P-0621: $80,370.04 pasa del total de
+// la orden». Lo que la base revisa (assign_oc_invoice_split_plan): por orden, lo mandado ≤ precio + $0.01; por ligada, |factura − con IVA| ≤ $0.02.
+const HOTSSON11 = ["F-159", "F-160", "F-161", "F-162", "F-163", "F-164", "F-165", "F-166", "F-167", "F-168", "F-169"];
+const PRECIO_H = { "OP-MV1NON22D08": 80370, "OP-MV1NXBC9N49": 33730 };
+const IMPORTE_H = { "F-159": 20177.77, "F-160": 12175.01, "F-161": 9839.68, "F-162": 11256.55, "F-163": 15790.47, "F-164": 11676.62, "F-165": 11676.62,
+  "F-166": 12673.39, "F-167": 11676.62, "F-168": 11676.62, "F-169": 3736.52 };
+const comoLaBase = plan => {   // los candados de dinero de assign_oc_invoice_split_plan, con el plan que se manda
+  const malos = [], porOrden = {};
+  for (const g of plan?.groups || []) {
+    const sinIva = Math.round((g.lines || []).reduce((s, l) => s + Number(l.amount), 0) * 100) / 100, conIva = Math.round(sinIva * 116) / 100;
+    for (const l of g.lines || []) porOrden[l.order_id] = Math.round(((porOrden[l.order_id] || 0) + Number(l.amount)) * 100) / 100;
+    if (g.ligar && Math.abs(IMPORTE_H[g.folio] - conIva) > 0.02 + 1e-9) malos.push(`${g.folio}: ${conIva} contra ${IMPORTE_H[g.folio]}`);
+  }
+  for (const [oid, s] of Object.entries(porOrden)) if (s > PRECIO_H[oid] + 0.01 + 1e-9) malos.push(`${oid}: ${s} > ${PRECIO_H[oid]}`);
+  return { malos, porOrden };
+};
+const ligarHotsson = async p => {
+  await abrir(p); await cuantas(p).fill("11"); await espera(p, 700);
+  for (let i = 0; i < 11; i++) { await ligar(p, i, HOTSSON11[i]); await traer(p, i).click().catch(() => {}); await espera(p, 300); }
+};
+await caso("pl-116 Hotsson: las 11 ligadas se dejan crear", "hotsson=1", async p => {
+  await ligarHotsson(p);
+  let cuadran = 0; for (let i = 0; i < 11; i++) if (/CUADRA con F-1\d\d/.test((await suma(p, i).innerText().catch(() => "")) || "")) cuadran++;
+  const err = (await errores(p)).replace(/\s+/g, " "), puede = await enviar(p).isEnabled().catch(() => false);
+  await enviar(p).click().catch(() => {}); await espera(p, 700);
+  const plan = await planEnviado(p), base = comoLaBase(plan);
+  ok("pl-116 las 11 facturas de Hotsson con sus piezas traídas cuadran, no dicen «pasa del total de la orden», se dejan ligar y lo mandado pasa los candados de la base",
+    cuadran === 11 && !/pasa del total/.test(err) && puede && (plan?.groups || []).length === 11 && (plan?.groups || []).every(g => g.ligar) && base.malos.length === 0,
+    `cuadran ${cuadran} · «${err.slice(0, 120)}» · botón ${puede} · mandadas ${(plan?.groups || []).length} · ${JSON.stringify(base)}`);
+});
+await caso("pl-117 Hotsson: el encabezado y cada orden dicen completo", "hotsson=1", async p => {
+  await ligarHotsson(p);
+  const marca = ((await p.locator("[data-plan-marcador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const filas = ((await p.locator("tbody").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-117 con las 658 y las 426 piezas asignadas, el encabezado dice «completo» (no «se pasa por» ni «faltan» por centavos de redondeo) y ninguna orden «se pasa»",
+    /completo/.test(marca) && !/se pasa|faltan/.test(marca) && !/se pasa por/.test(filas), `«${marca}» · ${/se pasa por/.test(filas) ? "una orden se pasa" : "ninguna se pasa"}`);
+});
+
+// vuelta 3 (v10.84.110), por donde no se diseñó
+await caso("pl-118 por monto, pasarse sigue frenando", "", async p => {
+  await abrir(p); await p.getByRole("button", { name: /Monto/ }).first().click(); await espera(p, 300);
+  await celda(p, 0, 0).fill("13000"); await espera(p, 400);   // P-0592 vale $11,200 sin IVA ($12,992 con IVA): $13,000 con IVA se pasa
+  const err = (await errores(p)).replace(/\s+/g, " "), marca = ((await p.locator("[data-plan-marcador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const puede = await enviar(p).isEnabled().catch(() => true);
+  ok("pl-118 capturando por monto, $13,000 con IVA en P-0592 (vale $12,992) dice «pasa del total de la orden», no deja crear y el encabezado no dice «completo»",
+    /P-0592: \$[\d,.]+ pasa del total de la orden/.test(err) && !puede && !/completo/.test(marca), `«${err.slice(0, 160)}» · botón ${puede} · «${marca}»`);
+});
+await caso("pl-119 una de las 11 sin piezas no es completo", "hotsson=1", async p => {
+  await abrir(p); await cuantas(p).fill("11"); await espera(p, 700);
+  for (let i = 0; i < 11; i++) { await ligar(p, i, HOTSSON11[i]); if (i < 10) { await traer(p, i).click().catch(() => {}); await espera(p, 300); } }
+  const marca = ((await p.locator("[data-plan-marcador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-119 con F-169 todavía sin piezas (faltan 16 agendas y 16 calendarios), el encabezado dice «faltan $3,221.14», no «completo»",
+    /faltan \$3,221\.1\d/.test(marca) && !/completo/.test(marca), `«${marca}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);
