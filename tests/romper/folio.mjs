@@ -1252,6 +1252,26 @@ await caso("inv-142 las dos preguntas seguidas: facturas sin orden y folio menor
   ok("inv-142 con F-9140 sin orden y un folio menor: pregunta por F-9140, luego por el folio menor, y llega a la vista previa con F-100",
     primera === 1 && segunda === 1 && llega, `primera ${primera} · segunda ${segunda} · vista previa con F-100 ${llega}`);
 });
+// v10.84.106 — la pasada 2 (P2-7): «No pude revisar…» sin hablar de «la base» (decía «(la base no contestó o no dejó leerlas)» y «(la base sólo
+// frena una del mismo importe)»). Vuelta 1: antes.
+await caso("inv-143 «No pude revisar…» sin «la base»", "anticipo=falla", async p => {
+  await inv(p); await espera(p, 500);
+  const t = ((await dlgInv(p).locator("[data-sin-revision]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("inv-143 el aviso de «No pude revisar…» dice qué pasa sin hablar de «la base»", /No pude revisar si/.test(t) && !/la base/.test(t), `«${t.slice(0, 220)}»`);
+});
+// vuelta 3 (v10.84.106): Esc con el foco en una casilla y algo capturado pregunta (antes, en una casilla Esc no hacía nada)
+await caso("inv-144 Esc en la casilla «Ya revisé» con algo capturado pregunta", "anticipo=falla", async p => {
+  // (el tipo solo no cuenta como capturado en esta ventana —el clic fuera tampoco pregunta—; el pago elegido sí)
+  await inv(p); await espera(p, 500); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
+  await dlgInv(p).getByLabel(/Ya revisé en CobranzaFlow/).focus(); await p.keyboard.press("Escape"); await espera(p, 400);
+  const q = await p.getByRole("dialog", { name: /¿Cerrar sin asignar/ }).count(), sigue = await dlgInv(p).count();
+  ok("inv-144 Esc con el foco en la casilla «Ya revisé en CobranzaFlow» y el pago elegido pregunta «¿Cerrar sin asignar…?» y la ventana sigue", q === 1 && sigue === 1, `pregunta ${q} · la ventana ${sigue}`);
+});
+await caso("inv-145 Esc en la casilla sin nada capturado cierra", "anticipo=falla", async p => {
+  await inv(p); await espera(p, 500);
+  await dlgInv(p).getByLabel(/Ya revisé en CobranzaFlow/).focus(); await p.keyboard.press("Escape"); await espera(p, 400);
+  ok("inv-145 Esc con el foco en la casilla y nada capturado cierra la ventana, como Esc en cualquier otro lado (antes no hacía nada)", (await dlgInv(p).count()) === 0 && (await cuenta(p, "inv:cerrado")) + (await cuenta(p, "cerrado")) >= 0);
+});
 await caso("inv-131 la base rechaza: se puede reintentar y Esc vuelve a preguntar", "falla=1", async p => {
   await hastaLaVistaPrevia(p); await final(p).click(); await espera(p, 600);
   const err = await ve(p, /No se asignó el folio/);

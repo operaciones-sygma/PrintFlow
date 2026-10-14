@@ -936,6 +936,41 @@ await caso("oc-117-sin-camino-al-plan", "sinorden=1&plan=no", async p => {
 await caso("oc-118-pre-asignar-tambien", "sinorden=1&pre=1", async p => {
   ok("oc-118-pre-asignar-tambien", /tiene 2 facturas hechas sin orden/.test(await texto(p)));
 });
+// v10.84.106 — la pasada 3 (P0-1): con F-143 y F-155 sin orden (juntas, justo la OC), «Crear la factura» preguntaba «¿Crear la factura de OC-0960?» sin
+// nombrarlas, y «Sí, crear» emitía $46,400 otra vez. Ahora la pregunta las nombra y su botón principal es ligarlas en el plan. Vuelta 1: antes.
+await caso("oc-123-crear-con-facturas-sin-orden-pregunta-por-ellas", "sinorden=1", async p => {
+  await primario(p).click(); await espera(p, 400);
+  const d = p.getByRole("dialog").last(), t = ((await d.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const ligar = d.getByRole("button", { name: /^Ligarlas en el plan matriz$/ }), hay = await ligar.count();
+  if (hay) { await ligar.click(); await espera(p, 400); }
+  const plan = await cuenta(p, "abrir-plan"), emitio = await cuenta(p, "simple:confirm");
+  // (el banco de oc: OC-1003 vale $111,627.38 y F-143 + F-155 no la suman; el «juntas suman justo» lo prueba el plan, pl-103)
+  ok("oc-123-crear-con-facturas-sin-orden-pregunta-por-ellas", /F-143/.test(t) && /F-155/.test(t) && hay === 1 && plan === 1 && emitio === 0,
+    `la pregunta: «${t.slice(0, 200)}» · «Ligarlas en el plan matriz» ${hay} · lleva al plan ${plan} · emitió ${emitio}`);
+});
+await caso("oc-124-son-de-otra-cosa-crea", "sinorden=1", async p => {
+  await primario(p).click(); await espera(p, 400);
+  await p.getByRole("button", { name: /^Son de otra cosa: crear/ }).click().catch(() => {}); await espera(p, 600);
+  ok("oc-124-son-de-otra-cosa-crea", (await cuenta(p, "simple:confirm")) === 1, `emitidas ${await cuenta(p, "simple:confirm")}`);
+});
+// vuelta 3 (v10.84.106): pre-asignar con facturas sin orden (la misma pregunta) y el doble clic en «Son de otra cosa» (emite una vez)
+await caso("oc-126-pre-asignar-con-facturas-sin-orden", "sinorden=1&pre=1", async p => {
+  await p.locator("textarea").first().fill("Reserva fiscal de fin de mes"); await espera(p);   // (sin la razón el botón queda apagado, como en oc-48)
+  await primario(p).click(); await espera(p, 400);
+  const d = p.getByRole("dialog").last(), t = ((await d.innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const otra = await d.getByRole("button", { name: /^Son de otra cosa: pre-asignar$/ }).count(), ligar = await d.getByRole("button", { name: /^Ligarlas en el plan matriz$/ }).count();
+  ok("oc-126-pre-asignar-con-facturas-sin-orden", /F-143/.test(t) && otra === 1 && ligar === 1, `«Son de otra cosa: pre-asignar» ${otra} · «Ligarlas…» ${ligar} · «${t.slice(0, 120)}»`);
+});
+await caso("oc-127-doble-clic-en-son-de-otra-cosa", "sinorden=1", async p => {
+  await primario(p).click(); await espera(p, 400);
+  await p.getByRole("button", { name: /^Son de otra cosa: crear/ }).dblclick().catch(() => {}); await espera(p, 800);
+  ok("oc-127-doble-clic-en-son-de-otra-cosa", (await cuenta(p, "simple:confirm")) === 1, `emitidas ${await cuenta(p, "simple:confirm")}`);
+});
+await caso("oc-125-sin-facturas-sin-orden-la-pregunta-de-siempre", "", async p => {
+  await primario(p).click(); await espera(p, 400);
+  const d = p.getByRole("dialog").last(), titulo = ((await d.locator("h3").first().innerText().catch(() => "")) || "");
+  ok("oc-125-sin-facturas-sin-orden-la-pregunta-de-siempre", /^¿Crear la factura de OC-/.test(titulo) && (await d.getByRole("button", { name: /Ligarlas/ }).count()) === 0, `«${titulo}»`);
+});
 // v10.84.104 — la pasada 2 (P2-1): un botón, un nombre. El aviso de «Asignar folio» de la OC citaba «Ya tiene factura: ligarla» (el de
 // «Facturar por partes»); en el plan matriz ese botón se llama «Ya existe». Vuelta 1: antes.
 await caso("oc-119-el-aviso-nombra-el-boton-del-plan", "sinorden=1", async p => {

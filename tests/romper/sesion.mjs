@@ -1187,7 +1187,7 @@ await caso("ses-69-la-cola-de-karla-con-aa", async ({ p, s }) => {
   const r = await p.evaluate(() => {
     const de = sel => [...document.querySelectorAll(sel)];
     return {
-      importe: de("div").filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).map(window.__cr),
+      importe: de("div,span").filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).map(window.__cr),   // (v10.84.106: el importe va en su <span>, junto a «sin IVA»)
       botones: de("button").filter(b => /Asignar Folio y Entregar/.test(b.textContent)).map(window.__cr),
       entrega: de("div").filter(d => /^Entrega:/.test(d.textContent.trim())).map(window.__cr),
       faltan: de("div").filter(d => /^Faltan \$/.test(d.textContent.trim())).map(window.__cr),
@@ -1439,6 +1439,37 @@ await caso("ses-87-la-orden-de-la-oc-lleva-a-su-oc", async ({ p, s }) => {
   await dlg.getByRole("button", { name: /Ir a OC-0960/ }).click().catch(() => {}); await p.waitForTimeout(1500);
   const enLaOC = /Productos \(4\)/.test(await texto(p)), cerrada = (await dlg.count()) === 0;
   ok("ses-87-la-orden-de-la-oc-lleva-a-su-oc", /una de las 4 órdenes de OC-0960/.test(nota) && cerrada && enLaOC, `la nota: «${nota}» · la ventana se cierra ${cerrada} · abre OC-0960 ${enLaOC}`);
+});
+// v10.84.106 — lo barato de la pasada 2: Esc con el foco en la casilla del tercero (P2-4), los botones de la cola con su orden (P2-5) y los
+// importes que dicen si llevan IVA (P2-3). Vuelta 1: antes.
+await caso("ses-88-esc-en-la-casilla-del-tercero", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [], get_folio_emitter_enabled: true };
+  await abrirOC(p, "karla", s);
+  await p.getByRole("button", { name: /^Plan matriz$/ }).first().click(); await p.waitForTimeout(1500);
+  await p.getByRole("button", { name: /Facturar a tercero/ }).first().click(); await p.waitForTimeout(600);
+  const d = p.getByRole("dialog", { name: /a cargo de un tercero/ });
+  await d.getByLabel(/Facturar a un tercero/).focus(); await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  const sigue = await d.count(), plan = /Plan matriz de facturación/.test(await texto(p));
+  ok("ses-88-esc-en-la-casilla-del-tercero", sigue === 0 && plan, `con el foco en la casilla, Esc: la ventana del tercero ${sigue ? "SIGUE" : "se cierra"} · el plan ${plan ? "sigue" : "SE CERRÓ"}`);
+});
+await caso("ses-89-los-botones-de-la-cola-dicen-su-orden", async ({ p, s }) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(800);
+  const nombres = await p.getByRole("button", { name: /Asignar Folio y Entregar/ }).evaluateAll(bs => bs.map(b => b.getAttribute("aria-label") || b.textContent.trim()));
+  const distintos = new Set(nombres).size, castores = nombres.filter(n => /P-0631/.test(n) && /CASTORES/.test(n)).length;
+  ok("ses-89-los-botones-de-la-cola-dicen-su-orden", nombres.length === 5 && distintos === 5 && castores === 1, `${nombres.length} botones, ${distintos} nombres distintos · ${JSON.stringify(nombres.slice(0, 2))}`);
+});
+await caso("ses-90-los-importes-dicen-si-llevan-iva", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155, get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(800);
+  const cola = (await texto(p)).replace(/\s+/g, " ");
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0960", { exact: false }).first().click(); await p.waitForTimeout(1500);
+  const oc = (await texto(p)).replace(/\s+/g, " ");
+  const enCola = /\$11,200\.00 sin IVA/.test(cola), total = /Total sin IVA \$40,000\.00/.test(oc), juntas = /Juntas suman \$46,400\.00 con IVA/.test(oc);
+  ok("ses-90-los-importes-dicen-si-llevan-iva", enCola && total && juntas, `la cola: ${enCola} · el total de la OC: ${total} · «Juntas suman … con IVA»: ${juntas}`);
 });
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {

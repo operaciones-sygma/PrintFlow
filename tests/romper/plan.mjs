@@ -467,10 +467,12 @@ await caso("pl-50 «Repartir» sin nada que repartir lo dice en su columna", "pr
 });
 
 // vuelta 3, por donde no se diseñó
-await caso("pl-51 Esc dentro de una celda no hace nada", "", async p => {
+// (v10.84.106: cambió a propósito — la pasada 2, P2-4, y el contrato de los diálogos: Esc también con el foco en el campo pregunta con algo escrito;
+//  antes Esc en una celda no hacía nada y con teclado no había cómo salir del plan sin tabular hasta un botón)
+await caso("pl-51 Esc dentro de una celda pregunta", "", async p => {
   await abrir(p); await piezas(p, 0, [1000]);
   await celda(p, 0, 0).focus(); await p.keyboard.press("Escape"); await espera(p, 300);
-  ok("pl-51 Esc con el cursor en una celda: ni pregunta ni cierra (se está escribiendo)", (await preguntaCerrar(p).count()) === 0 && await p.getByText(/Plan matriz de facturación/).count() > 0 && !(await log(p)).includes("cerrado"));
+  ok("pl-51 Esc con el cursor en una celda y algo capturado: pregunta, y el plan sigue abierto con lo capturado", (await preguntaCerrar(p).count()) === 1 && await p.getByText(/Plan matriz de facturación/).count() > 0 && !(await log(p)).includes("cerrado"));
 });
 await caso("pl-52 clic fuera: con captura pregunta, sin captura cierra", "", async p => {
   await abrir(p); await piezas(p, 0, [1000]);
@@ -924,6 +926,53 @@ await caso("pl-99 «Ver menos» vuelve a un renglón", "", async p => {
   await e.getByRole("button", { name: /^Ver menos$/ }).click().catch(() => {}); await espera(p, 200);
   const otraVez = (await e.boundingBox())?.height || 0;
   ok("pl-99 «Ver las N» abre y «Ver menos» regresa a un renglón", abierto > antes && Math.abs(otraVez - antes) <= 1, `${Math.round(antes)} → ${Math.round(abierto)} → ${Math.round(otraVez)} px`);
+});
+
+// v10.84.106 — lo barato de la pasada 2: Esc con el foco en una celda (P2-4), cada celda con su nombre (P2-5) y sin «prorratea» ni «matriciales»
+// (P2-7). Vuelta 1: antes.
+await caso("pl-100 Esc en una celda con algo capturado pregunta", "", async p => {
+  await abrir(p); await celda(p, 0, 0).fill("1000"); await espera(p, 200); await celda(p, 0, 0).focus();
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const q = await p.getByRole("dialog", { name: /¿Cerrar el plan de/ }).count();
+  ok("pl-100 Esc con el foco en una celda y algo capturado pregunta «¿Cerrar el plan de…?» (antes no hacía nada)", q === 1, `pregunta ${q}`);
+});
+await caso("pl-101 cada celda dice de qué orden y factura es", "", async p => {
+  await abrir(p);
+  const n = await p.getByLabel("Piezas de P-0592 en la factura 1", { exact: true }).count();
+  ok("pl-101 la celda se anuncia «Piezas de P-0592 en la factura 1» (antes, «0 pzas»)", n === 1, `${n}`);
+});
+await caso("pl-102 «Repartir» sin «prorratea»", "", async p => {
+  await abrir(p);
+  const titulo = await p.locator("thead th").nth(1).locator('input[placeholder^="Total"]').getAttribute("title").catch(() => "");
+  ok("pl-102 la ayuda del total de la columna dice «Repartir lo divide entre las órdenes…» sin «prorratea» ni «su disponible»", !!titulo && !/prorratea|su disponible/.test(titulo), `«${titulo}»`);
+});
+await caso("pv-08 la vista del plan sin «matriciales»", "vista=1", async p => {
+  const t = ((await p.locator("body").textContent()) || "").replace(/\s+/g, " ");
+  ok("pv-08 la vista del plan ya creado dice «N facturas del plan», no «facturas matriciales»", /\d+ facturas? del plan/.test(t) && !/matricial/.test(t), (t.match(/\d+ factura[^·]{0,30}/) || [""])[0]);
+});
+
+await caso("pv-09 la vista del plan dice cómo sacar el CFDI a otra razón social", "vista=1", async p => {
+  const t = ((await p.locator("[data-cfdi-otra]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pv-09 la vista del plan ya creado dice cómo sacar el CFDI de una factura a otra razón social (Por Timbrar → su folio → Datos → «CFDI a nombre de», sin escribir en «Razón social»)",
+    /Por Timbrar/.test(t) && /CFDI a nombre de/.test(t) && /no escribas en «Razón social»/.test(t), `«${t}»`);
+});
+
+// v10.84.106 — la pasada 3 (P0-1): el plan abre con sus columnas en «Nueva» aunque ya leyó F-143 y F-155, y su candado sólo compara factura contra
+// factura del mismo importe: «¿Crear 2 facturas?» por $46,400 sin mencionarlas. La vista previa lo dice y el botón dice «de todos modos». Vuelta 1: antes.
+await caso("pl-103 crear nuevas con facturas sin orden sin ligar: la vista previa avisa", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 1000, 1000, 1000]); await piezas(p, 1, [1000, 1000, 1000, 1000]);
+  await botonEnviar(p).click(); await espera(p, 500);
+  const t = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const boton = await vista(p).getByRole("button", { name: /de todos modos$/ }).count();
+  ok("pl-103 al crear facturas nuevas con F-143 y F-155 sin ligar, la vista previa las nombra («márcalas «Ya existe»») y el botón dice «… de todos modos»",
+    /F-143/.test(t) && /F-155/.test(t) && /Ya existe/.test(t) && boton === 1, `boton ${boton} · «${t.slice(0, 220)}»`);
+});
+await caso("pl-104 ligadas las dos, sin aviso", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await ligar(p, 1, "F-155"); await traer(p, 1).click().catch(() => {}); await espera(p, 400);
+  await botonEnviar(p).click(); await espera(p, 500);
+  const t = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-104 con F-143 y F-155 ligadas no hay aviso ni «de todos modos»", !/de todos modos|que este plan no liga/.test(t), `«${t.slice(0, 160)}»`);
 });
 
 for (const r of res) console.log(r);

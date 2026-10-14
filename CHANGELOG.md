@@ -12,6 +12,55 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.106 — Crear con facturas sin orden pregunta por ellas en las tres puertas; y lo barato que quedaba de la pasada 2 — 14-oct-2026
+
+**Qué pasaba.** La pasada 3 de la critique del flujo de facturas de Karla (14-oct, otro revisor independiente con producción y el banco del plan;
+**23/40**, más estricto que el 25 de la pasada 2 en prevención de errores, 1 de 4; informe en `.banco-revisor-orden/revisor-facturas-3/informe.md`)
+encontró un **P0 de dinero**: con F-143 y F-155 hechas sin orden, que juntas suman justo OC-0960 ($46,400), dos puertas de la OC emitían facturas
+nuevas por todo sin nombrarlas. «Asignar folio» de la OC preguntaba «¿Crear la factura de OC-0960?» y «Sí, crear la factura» le cobraba $46,400
+otra vez a PORTLAND; el plan matriz, con sus columnas en «Nueva», llegaba a «¿Crear 2 facturas?» por $46,400 sin mencionarlas (su candado sólo
+compara factura contra factura del mismo importe, y la base sólo frena una del MISMO importe). La puerta de una orden sola ya preguntaba (v10.84.104).
+Y quedaba lo barato de la pasada 2: Esc no hacía nada con el foco en una casilla ni en una celda del plan (P2-4); el lector de pantalla oía diez
+«Asignar Folio y Entregar» iguales y celdas «0 pzas» (P2-5); importes sin decir si llevan IVA (P2-3); «la base no contestó o no dejó leerlas»,
+«facturas matriciales», «Repartir lo prorratea… según su disponible» (P2-7); y la mitad de PrintFlow del P1-4 (la etiqueta de cada factura no viaja
+a Por Timbrar).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **«Asignar folio» de la OC** (crear, pre-asignar o dividir), con facturas sin orden del cliente de otro importe: «PORTLAND LEATHER ya tiene
+  facturas sin orden · Tiene F-143 por $3,066.78 y F-155 por $43,333.22, hechas sin orden (juntas suman justo esta OC…). Si son de este trabajo,
+  se ligan en el plan matriz y no se emite otra», con **«Ligarlas en el plan matriz»** de principal y «Son de otra cosa: crear la factura» de
+  segunda. Sin facturas sin orden, la pregunta de siempre.
+- **El plan matriz**: si crea facturas NUEVAS y el cliente tiene facturas sin orden que el plan no liga, la vista previa lo dice («Ojo: PORTLAND
+  LEATHER tiene F-143, F-155 sin orden ($46,400.00) que este plan no liga. Si son de esta OC, «Volver al plan» y márcalas «Ya existe».») y el botón
+  dice «… de todos modos».
+- **Esc** con el foco en una casilla o un botón de opción cierra como en cualquier otro lado (los campos de texto siguen fuera: su lista de
+  sugerencias es del Esc); en una celda del plan, como fuera de ella (pregunta si hay algo capturado). 🔑 Cambió a propósito pl-51 (de la 98:
+  «Esc en una celda ni pregunta ni cierra»): el contrato de los diálogos dice que Esc, también con el foco en el campo, pregunta con algo escrito.
+- **El lector de pantalla**: cada botón de la cola dice su orden y su cliente («Asignar Folio y Entregar · P-0631 · TRANSPORTES CASTORES DE BAJA»);
+  cada celda del plan, «Piezas de P-0592 en la factura 1» (o «Monto de…»).
+- **Los importes dicen si llevan IVA**: la ficha de la cola «$11,200.00 sin IVA», la OC «Total sin IVA», «Juntas suman $46,400.00 con IVA».
+- Sin jerga: «No pude revisar si… tiene facturas hechas sin orden. Sin esa revisión no se puede emitir: … se cobraría dos veces»; «2 facturas del
+  plan»; «Repartir lo divide entre las órdenes según lo que le falta a cada una».
+- La vista del plan ya creado dice cómo sacar el CFDI de una de sus facturas a otra razón social: «En CobranzaFlow: Por Timbrar → busca su folio →
+  Datos → «CFDI a nombre de» → Cambiar (no escribas en «Razón social»)».
+
+**Lo que queda de la pasada 3** (para decidir con Marcelo): el plan que llega armado desde «Ligar en el plan matriz» (P1-1: hoy, 7 clics y saber
+que se llama «Ya existe»); una ficha por OC en la cola y menos botones de dinero en la OC (P1-2; Marcelo eligió «tarjeta con su OC» el 13-oct); juntar
+órdenes de Hotsson sin buscar y que «Mover» se llame «Cambiar OC» (P1-3; elegir la OC de otro cliente sí pregunta, con un `confirm()` del navegador
+que falta pasar a la ventana de la app); los importes del plan a 9-10 px (P2-1); la última orden tapada por la suma a 1366 con el aviso de lectura; el
+folio anticipado en «⋯ Más».
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, escritas antes y corridas contra v10.84.105: fallaban las 12 (inv-143, oc-123, oc-124, pl-100 a
+pl-103, pv-08, pv-09, ses-88 a ses-90; oc-125 y pl-104 son guardas y pasaban). **Vuelta 2**: pasan; dos pruebas tenían supuestos equivocados y se
+corrigieron (se dice): oc-123 pedía «justo», pero en el banco de oc la OC (OC-1003, $111,627.38) no suma lo que F-143 + F-155 (el «justo» lo prueba
+pl-103 con OC-0960), y ses-69 buscaba los importes sólo en `<div>` (ahora el importe va en su `<span>` junto a «sin IVA»); pl-51 cambió a propósito
+(arriba). **Vuelta 3**, por donde no se diseñó: pre-asignar con facturas sin orden (la misma pregunta), doble clic en «Son de otra cosa: crear la
+factura» (emite una vez), Esc en la casilla «Ya revisé en CobranzaFlow» con el pago elegido (pregunta) y sin nada capturado (cierra, como el clic
+fuera): pasan; las dos primeras corridas de oc-126 e inv-144 tenían supuestos míos (la razón de la pre-asignación sin escribir; tomar el tipo como
+algo capturado) y se corrigieron. `oc` 126, `plan` 110, `folio` 175, `sesion` 91, todo en verde. `probar-alcance` y el build, limpios.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.105 — El plan matriz a 1366 deja ver lo que se captura — 14-oct-2026
 
 **Qué pasaba.** La pasada 2 de la critique (P1-3): a 1366 el plan enseñaba 1 o 2 de las 4 órdenes. Medido en el banco antes del cambio: dos
