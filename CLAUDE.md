@@ -183,7 +183,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.102 (14-oct, ~01:15; READY `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm`, commit `a6284e1`; vuelta atrás: promover
+- **LIVE:** v10.84.103 (14-oct, ~04:08; READY `dpl_Er87TotGp5y5MHNX3UqJhHyXnd3u`, commit `e1ebb36`; vuelta atrás: promover
+  `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm` (el código de v10.84.102) o `git revert e1ebb36`; la base no cambió; candado 1596 de 1596 a la cuarta vuelta: las
+  tres primeras frenaron por la máquina, ver `ERR_NETWORK_CHANGED` en el CHANGELOG). v10.84.103: lo menor de la pasada 1 (Karla entra a su cola,
+  «Ver también las de un solo producto», «Nueva OC» no se pierde, «Emitir factura por $…») y 🔑 **mover órdenes a una OC con la regla de la base**
+  (`puedeMoverAOC`: admin, secretaria y karla, nunca a OC web ni de un solo producto; el vendedor ya no ve «Agregar Producto Existente»).
+  v10.84.102 (14-oct, ~01:15; READY `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm`, commit `a6284e1`; vuelta atrás: promover
   `dpl_Cy1z8WBt5ggSVLCuaz1Z54iA3rgK` (el código de v10.84.101) o `git revert a6284e1`; candado 1587 de 1587). v10.84.102: 🔑 **«Traer sus piezas
   de su CFDI»** en la columna del plan que liga una factura (`public.conceptos_para_ligar_en_oc` + `src/lib/proponerPiezas.js`, tanda `proponer`):
   PORTLAND de punta a punta sin teclear un número; y el dinero en verde en su tinta en toda la app (`C.okInk`; `C.ok` sobre blanco da 3.05:1).

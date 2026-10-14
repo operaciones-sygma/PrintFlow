@@ -54,7 +54,7 @@ de 202. `probar-alcance` y el build, limpios.
 **Para Marcelo:** el vendedor ya no ve «Agregar Producto Existente» porque la base no le deja mover órdenes (sólo a Dirección, Lupita y
 Karla). Si quieres que el vendedor sí pueda, es un cambio de base (`move_order_to_oc`).
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~04:08; READY `dpl_Er87TotGp5y5MHNX3UqJhHyXnd3u` (commit `e1ebb36`). Vuelta atrás: promover `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm` (el código de v10.84.102) o `git revert e1ebb36`; la base no cambió. Candado: 1596 de 1596, a la cuarta vuelta, de a 1 tanda (46 min). Las tres primeras frenaron por la máquina, no por la app: ord-323 y oc-74 (tandas sin segunda oportunidad) por `ERR_NO_BUFFER_SPACE` con 2 tandas a la vez (~1,400 conexiones en TIME_WAIT y 1 GB de RAM libre: la fuga de memoria del 13-oct volvió, ~27 GB comprometidos sin dueño visible), y det-168, det-170, det-172 y det-173 «de golpe» por `net::ERR_NETWORK_CHANGED` (la red de la PC se desconectó y reconectó varias veces entre las 02:33:04 y 02:33:50). Solas pasan 3 de 3 (oc, 120 de 120); las cuatro del detalle, marcadas revisadas. Revisado en producción sin escribir (`.banco-revisor-orden/medir-103.mjs`, la cuenta de pruebas con el rol de Karla y luego de vendedor), 8 de 8: Karla entra a «Pendientes de Folio»; con «Ver también las de un solo producto» salen OC-0944 y OC-0949 de Hotsson, y OC-0944 trae la nota sin «Agregar Producto Existente»; en OC-0960 Karla sí lo tiene y es un diálogo con nombre; «Nueva OC» con algo escrito pregunta; el vendedor no lo ve; sin errores, sin diálogos nativos y sin escrituras.
 
 ## v10.84.102 — Las piezas de una factura que ya existe, desde su CFDI; y el dinero en verde con AA en toda la app — 14-oct-2026
 
