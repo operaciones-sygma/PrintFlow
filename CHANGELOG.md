@@ -12,6 +12,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.99 — El dinero con AA en la cola de Karla y en la barra de la OC, y la medida sin «3×nullcm» — 13-oct-2026
+
+**Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «lo que carga dinero no pasa AA en la cola y
+en la OC», medido por los dos revisores). En «Pendientes de Folio» el importe de cada ficha iba en verde a 3.05:1 y «Asignar Folio y
+Entregar», blanco sobre verde, también a 3.05:1 (AA pide 4.5; el arreglo de v10.84.94 fue a las fichas del tablero, no a éstas); la fecha
+vencida en rojo a 4.34:1 en letra de 10 px; la cuenta y el «Faltan $…» de «Por facturar en partes» en ámbar a 2.63:1; y la tarjeta de
+partes repetía el cliente («HAKUNA · HAKUNA»). En la barra de la OC: «Pre-asignar folio» blanco sobre naranja a 2.63:1, «Agregar Producto
+Existente» blanco sobre verde a 3.30:1 y «Plan matriz», el único degradado de la app, que terminaba en 4.13:1; cuatro botones rellenos de
+cuatro colores. En el plan, el título del aviso de errores en ámbar a 2.6:1. Y las 4 órdenes de OC-0960 decían «3×nullcm» (tienen ancho y
+no alto), en la OC y en el detalle.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- La cola: el importe y el «Faltan» en su tinta (`C.okInk`, `C.wnInk`), el botón verde con `tintaAA`, la fecha vencida en `C.dnInk`, la
+  cuenta de partes en tinta, y el cliente una vez también en la tarjeta de partes.
+- La barra de la OC: **una acción rellena** («Asignar folio», 5.65:1); «Pre-asignar folio», «Plan matriz» y «Agregar Producto Existente»
+  teñidos con su letra en tinta (`tenueAA`), sin degradado. El título del aviso de errores del plan en tinta.
+- `medidaCm(o)`: «3×4 cm», «3 cm de ancho» o «4 cm de alto», en sus cuatro usos (la ficha, el detalle, los pedidos web sueltos y los
+  de un carrito).
+
+**Cómo se probó** (tres vueltas, midiendo el contraste como se ve: la letra contra el fondo que de verdad queda detrás, capa por capa):
+**vuelta 1**, escritas antes del cambio y corridas contra v10.84.98: fallaban las 4 nuevas. ses-69 (la cola, con la app entera): importes
+3.0:1, «Asignar Folio y Entregar» 3.05:1, la entrega vencida 4.26:1, «Faltan» 2.59:1, la cuenta de partes 2.13:1 y el cliente dos veces;
+ses-70 (la barra de la OC): cuatro rellenos, «Pre-asignar folio» 2.63:1, «Agregar Producto Existente» 3.3:1 y el degradado; ses-71: «3×nullcm»
+en la OC; pl-58: el título de los errores del plan, 2.46:1. **Vuelta 2**, con el cambio: pasan tres; la cuenta de partes seguía en 4.06:1
+(su fondo ámbar le baja el contraste a la tinta): se oscureció un tono (`tintaAA(C.wnInk,7)`, 5.91:1) y pasa. Ahora: importes 4.92,
+el botón 6.18, la vencida 6.35, «Faltan» 4.93, la cuenta 5.91; en la OC, un relleno (5.65) y los demás 4.57-5.23, sin degradado.
+**Vuelta 3**, lo compartido en cada uso: la medida en los pedidos web, un carrito y uno suelto (ses-72), pasa; el banco del detalle arma
+con el ayudante nuevo. `sesion` 73, `plan` 60.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.98 — El plan matriz, una ventana de la app: sin preguntas del navegador, Esc y Tab adentro, el borrador se ofrece — 13-oct-2026
 
 **Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «el plan matriz está fuera del sistema de

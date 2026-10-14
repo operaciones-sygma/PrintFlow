@@ -528,6 +528,21 @@ await caso("pl-57 «Empezar de cero» y luego otra captura", "", async p => {
   ok("pl-57 tras «Empezar de cero», lo que se captura después es lo que se retoma (no el borrador viejo)", v === "2222", `al retomar «${v}»`);
 });
 
+// ───────────── v10.84.99 — el título del aviso de errores del plan («2 errores:») en ámbar daba 2.6:1. Vuelta 1: escrita antes.
+await caso("pl-58 el aviso de errores con AA", "", async p => {
+  await abrir(p);
+  const cr = await p.evaluate(() => {
+    const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+    const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+      let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+    const el = [...document.querySelectorAll("div")].find(d => /^\d+ errores?:$/.test(d.textContent.trim()));
+    if (!el) return null;
+    const lb = lum(fondo(el)), lt = lum(nums(getComputedStyle(el).color).slice(0, 3)); return +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2);
+  });
+  ok("pl-58 el título del aviso de errores del plan («N errores:») a 4.5:1 o más", cr !== null && cr >= 4.5, `contraste ${cr}`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

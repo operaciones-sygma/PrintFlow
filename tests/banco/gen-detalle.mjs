@@ -40,6 +40,7 @@ const partes = [
   ...opcional(L.some(l => l.startsWith("function atraparTab(")), () => fnBlock("atraparTab")),
   ...opcional(L.some(l => l.startsWith("function ConfirmModal(")), () => fnBlock("ConfirmModal")),
   multi(/^const STANDARD_SIZES=/, "STANDARD_SIZES"), line(/^const SS_BY_ID=/, "SS_BY_ID"), line(/^const ssLabel=/, "ssLabel"),
+  ...(L.some(l => l.startsWith("const medidaCm=")) ? [line(/^const medidaCm=/, "medidaCm")] : []),   // v10.84.99
   multi(/^const PRIOS=/, "PRIOS"), line(/^const PM=/, "PM"),
   multi(/^const INT_FLOW=/, "INT_FLOW"), multi(/^const MAQ_FLOW=/, "MAQ_FLOW"), multi(/^const ALL_S=/, "ALL_S"), line(/^const SM=/, "SM"),
   multi(/^const ROLE_PEOPLE=/, "ROLE_PEOPLE"), line(/^const AUTHOR_NAME=\{\},AUTHOR_COLOR=\{\};/, "AUTHOR"),

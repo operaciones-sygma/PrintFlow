@@ -1155,6 +1155,78 @@ for (const [n, vp] of [["ses-68-la-marca-de-la-oc-cabe-a-1366", { width: 1366, h
     ok(n, r.length === 4 && r.every(Boolean) && ancho <= vp.width && oc && detalle === 0, `marcas dentro de su ficha y en un renglón: ${JSON.stringify(r)}; ancho ${ancho}; Enter en la marca: ${oc ? "abre OC-0960" : "NO abre la OC"}${detalle ? " y ABRE la orden" : ""}`);
   }, { viewport: vp });
 }
+// ════════════════════════ el dinero con AA (v10.84.99) ════════════════════════
+// La critique del flujo de facturas de Karla (13-oct, P1): el importe verde de cada ficha y «Asignar Folio y Entregar» (blanco sobre verde)
+// daban 3.05:1; la barra de la OC, cuatro botones rellenos, uno con degradado. Se mide en la app entera, como se ve. Vuelta 1: escritas antes.
+const CONTRASTE = () => {
+  const nums = c => (c.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
+    let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
+  window.__cr = el => { const lb = lum(fondo(el)), lt = lum(nums(getComputedStyle(el).color).slice(0, 3)); return +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2); };
+  window.__relleno = el => lum(fondo(el)) < 0.4;
+};
+const COLA_AA = () => {
+  const f = PORTLAND();
+  f.orders[0] = { ...f.orders[0], due_date: "2026-10-01" };   // vencida
+  f.orders.push(ordenK("P-0640", { stage: "salidas", snooze_reason: "Esperando que el cliente pida factura", snooze_stage: "salidas", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snoozed_at: haceH(5) }));
+  f.orders.push(ordenK("P-0641", { stage: "delivered", client: "HAKUNA", client_company: "HAKUNA", price: 10000, quantity: 1000, delivered_at: haceH(48) }));
+  f.order_invoice_splits = [
+    { id: "s1", order_id: "OP-P-0641", position: 1, doc_type: "factura", folio: "F-9001", amount_portion: 6000, qty_portion: 600, cancelled_at: null, created_at: haceH(48) },
+    { id: "s2", order_id: "OP-P-0641", position: 2, doc_type: "por_facturar", folio: null, amount_portion: 4000, qty_portion: 400, cancelled_at: null, created_at: haceH(48) }];
+  return f;
+};
+await caso("ses-69-la-cola-de-karla-con-aa", async ({ p, s }) => {
+  s.filas = COLA_AA();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(900);
+  await p.evaluate(CONTRASTE);
+  const r = await p.evaluate(() => {
+    const de = sel => [...document.querySelectorAll(sel)];
+    return {
+      importe: de("div").filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).map(window.__cr),
+      botones: de("button").filter(b => /Asignar Folio y Entregar/.test(b.textContent)).map(window.__cr),
+      entrega: de("div").filter(d => /^Entrega:/.test(d.textContent.trim())).map(window.__cr),
+      faltan: de("div").filter(d => /^Faltan \$/.test(d.textContent.trim())).map(window.__cr),
+      cuenta: de("summary").filter(x => /Por facturar en partes/.test(x.textContent)).map(x => x.querySelector("span")).filter(Boolean).map(window.__cr),
+    };
+  });
+  const todos = [...r.importe, ...r.botones, ...r.entrega, ...r.faltan, ...r.cuenta], repetido = /HAKUNA · HAKUNA/.test(await texto(p));
+  ok("ses-69-la-cola-de-karla-con-aa", r.importe.length >= 5 && r.botones.length === 5 && r.entrega.length >= 1 && r.faltan.length === 1 && r.cuenta.length === 1 && todos.every(x => x >= 4.5) && !repetido,
+    `contraste (AA pide 4.5): importes ${JSON.stringify(r.importe)} · «Asignar Folio y Entregar» ${JSON.stringify(r.botones)} · entrega vencida ${JSON.stringify(r.entrega)} · «Faltan» ${JSON.stringify(r.faltan)} · la cuenta de partes ${JSON.stringify(r.cuenta)}${repetido ? " · el cliente SALE dos veces en la tarjeta de partes" : ""}`);
+});
+await caso("ses-70-la-barra-de-la-oc-con-aa", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirOC(p, "karla", s);
+  await p.evaluate(CONTRASTE);
+  const r = await p.evaluate(() => [...document.querySelectorAll("button")].filter(b => /^(Asignar folio|Pre-asignar folio|Plan matriz|Agregar Producto Existente)$/.test(b.textContent.trim()))
+    .map(b => ({ t: b.textContent.trim(), cr: window.__cr(b), degradado: getComputedStyle(b).backgroundImage !== "none", relleno: window.__relleno(b) })));
+  const rellenos = r.filter(x => x.relleno).map(x => x.t);
+  ok("ses-70-la-barra-de-la-oc-con-aa", r.length === 4 && r.every(x => x.cr >= 4.5 && !x.degradado) && JSON.stringify(rellenos) === '["Asignar folio"]',
+    `${r.map(x => x.t + " " + x.cr + (x.degradado ? " (DEGRADADO)" : "") + (x.relleno ? " (relleno)" : "")).join(" · ")}`);
+});
+// la medida con ancho y sin alto («3×nullcm» en las 4 órdenes de OC-0960, en la OC y en el detalle)
+await caso("ses-71-la-medida-sin-null", async ({ p, s }) => {
+  const f = PORTLAND(); f.orders = f.orders.map(o => o.purchase_order_id === "OC-0960" ? { ...o, paper_type: "AUTOADHERIBLE", width_cm: 3, height_cm: null } : o);
+  s.filas = f; s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirOC(p, "karla", s);
+  const enLaOC = await texto(p);
+  await p.locator('[role="button"][aria-label^="Orden P-0592"]').first().focus().catch(() => {}); await p.keyboard.press("Enter"); await p.waitForTimeout(1000);
+  const detalle = ((await p.getByRole("dialog").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("ses-71-la-medida-sin-null", !/null/.test(enLaOC) && /3 cm de ancho/.test(enLaOC) && !/null/.test(detalle) && /3 cm de ancho/.test(detalle),
+    `en la OC: ${(enLaOC.match(/AUTOADHERIBLE[^·]{0,40}/) || ["(sin papel)"])[0]} · en el detalle: ${(detalle.match(/medidas.{0,30}/i) || ["(sin medidas)"])[0]}`);
+});
+// vuelta 3: la medida también en los pedidos web (un carrito de dos, WebCartChildRow, y uno suelto, WebOrdersBandeja): lo compartido, en cada uso
+await caso("ses-72-la-medida-en-los-pedidos-web", async ({ p, s }) => {
+  const w = (pn, x) => ordenK(pn, { stage: "web_pending", paper_type: "COUCHÉ", width_cm: 3, height_cm: null, web_folio: "W-" + pn.slice(2), ...x });
+  s.filas = { orders: [w("P-0701", { cart_folio: "C-0101" }), w("P-0702", { cart_folio: "C-0101" }), w("P-0703", {})] };
+  await abrirYEntrar(p, s, "lupita");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Pedidos Web"]').first().click(); await p.waitForTimeout(900);
+  const t = await texto(p), veces = (t.match(/3 cm de ancho/g) || []).length;
+  ok("ses-72-la-medida-en-los-pedidos-web", !/null/.test(t) && veces >= 3, `«3 cm de ancho» ${veces} veces · ${/null/.test(t) ? "TODAVÍA dice null" : "sin null"}`);
+});
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),
