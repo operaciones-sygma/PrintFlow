@@ -1044,6 +1044,117 @@ await caso("ses-60-folio-anticipado-sin-lectura-no-asigna", async ({ p, s }) => 
   ok("ses-60-folio-anticipado-sin-lectura-no-asigna", dice && apagado && asignar === 0,
     `con la lectura de las facturas sin orden fallando: ${dice ? "lo dice" : "NO lo dice"}; «Continuar» ${apagado ? "apagado" : "PRENDIDO"}; intentos de asignar: ${asignar}`);
 });
+// ════════════════════════ las puertas saben de su OC (v10.84.97) ════════════════════════
+// La critique del flujo de facturas de Karla (13-oct, P1): las 4 fichas de PORTLAND en «Por foliar» no decían que eran de OC-0960, y la OC
+// no decía que F-143 y F-155 (hechas sin orden) suman exacto lo que falta. Vuelta 1: escritas antes del cambio.
+const PORTLAND = () => {
+  const o = (pn, price, x = {}) => ordenK(pn, { stage: "salidas", client: "PORTLAND LEATHER", client_company: "PORTLAND LEATHER", product_type: "ETIQUETA PLG",
+    categoria: "etiquetas", price, quantity: 10000, purchase_order_id: "OC-0960", ...x });
+  // (P-0631 va en su OC «simple», como toda orden suelta en producción: una OC de UNA orden no lleva la marca)
+  return { orders: [o("P-0592", 11200), o("P-0593", 8800), o("P-0594", 11200), o("P-0595", 8800),
+      ordenK("P-0631", { stage: "salidas", client: "TRANSPORTES CASTORES DE BAJA", purchase_order_id: "OC-0957" })],
+    purchase_orders: [{ id: "OC-0960", client: "PORTLAND LEATHER", client_id: "c1", status: "open", total: 40000, is_simple_oc: false, is_web_oc: false,
+      created_at: haceH(200), created_by: "secretaria", vendedor: "Genaro" },
+      { id: "OC-0957", client: "TRANSPORTES CASTORES DE BAJA", client_id: "c2", status: "in_progress", total: 14260, is_simple_oc: true, is_web_oc: false,
+      created_at: haceH(150), created_by: "secretaria", vendedor: "Genaro" }] };
+};
+const F143_F155 = [{ doc_number: "F-143", doc_type: "factura", amount: 3066.78, issued_date: "2026-10-09", dias_sin_orden: 4, monto_cuadra: false },
+  { doc_number: "F-155", doc_type: "factura", amount: 43333.22, issued_date: "2026-10-11", dias_sin_orden: 2, monto_cuadra: false }];
+await caso("ses-61-karla-la-ficha-dice-su-oc", async ({ p, s }) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(800);
+  const fichas = await p.locator("[data-oc-de-la-ficha]").allInnerTexts().catch(() => []);
+  const t = await texto(p);
+  const repetido = /PORTLAND LEATHER · PORTLAND LEATHER/.test(t);
+  if (fichas.length) { await p.locator("[data-oc-de-la-ficha]").first().click(); await p.waitForTimeout(1200); }
+  const t2 = await texto(p), detalle = await p.getByRole("dialog").count();   // (la marca va dentro de la ficha: su clic no abre la orden)
+  ok("ses-61-karla-la-ficha-dice-su-oc", fichas.length === 4 && fichas.every(x => /OC-0960 · 4 órdenes/.test(x)) && !repetido && /OC-0960/.test(t2) && /Productos \(4\)/.test(t2) && detalle === 0,
+    `fichas con su OC: ${JSON.stringify(fichas)} (P-0631, en su OC de una, sin); nombre repetido: ${repetido}; al tocarla: ${/Productos \(4\)/.test(t2) ? "abre OC-0960" : "NO abre la OC"}${detalle ? " y ABRE el detalle de la orden" : ""}`);
+});
+await caso("ses-62-la-oc-dice-que-sus-facturas-sin-orden-suman", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155, get_folio_emitter_enabled: true };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0960", { exact: false }).first().click(); await p.waitForTimeout(1200);
+  const aviso = ((await p.locator("[data-sin-orden-de-la-oc]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const b = p.getByRole("button", { name: /Ligar en el plan matriz/ });
+  const hay = await b.count();
+  if (hay) { await b.click(); await p.waitForTimeout(1500); }
+  const plan = /Plan matriz de facturación/.test(await texto(p));
+  ok("ses-62-la-oc-dice-que-sus-facturas-sin-orden-suman", /F-143/.test(aviso) && /F-155/.test(aviso) && /46,400\.00/.test(aviso) && /justo lo que falta/.test(aviso) && hay === 1 && plan,
+    `el aviso: «${aviso.slice(0, 200)}»; «Ligar en el plan matriz» ${hay ? "abre " + (plan ? "el plan" : "OTRA cosa") : "NO está"}`);
+});
+// vuelta 3, por donde no se diseñó: la lectura que falla (y «Reintentar»), una orden todavía en la planta, facturas que no suman, otro rol,
+// una orden cancelada en la OC, la búsqueda, y la otra pantalla de Marcelo
+const abrirOC = async (p, quien, s) => {
+  await abrirYEntrar(p, s, quien);
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByText("OC-0960", { exact: false }).first().click(); await p.waitForTimeout(1500);
+};
+const avisoOC = async p => ((await p.locator("[data-sin-orden-de-la-oc]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+await caso("ses-63-la-oc-sin-lectura-lo-dice", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcFalla = "list_linkable_invoices_for_oc";
+  await abrirOC(p, "karla", s);
+  const t1 = await texto(p), dice = /No pude revisar si PORTLAND LEATHER tiene facturas hechas sin orden/.test(t1), aviso1 = await p.locator("[data-sin-orden-de-la-oc]").count();
+  s.rpcFalla = null; s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155 };
+  await p.getByRole("button", { name: "Reintentar" }).first().click().catch(() => {}); await p.waitForTimeout(1500);
+  const aviso2 = await avisoOC(p);
+  ok("ses-63-la-oc-sin-lectura-lo-dice", dice && aviso1 === 0 && /F-143/.test(aviso2) && /justo lo que falta/.test(aviso2),
+    `sin la lectura: ${dice ? "lo dice" : "NO lo dice"} (aviso de facturas: ${aviso1}); con «Reintentar» y la base de vuelta: «${aviso2.slice(0, 120)}»`);
+});
+await caso("ses-64-la-oc-con-una-en-la-planta", async ({ p, s }) => {
+  const f = PORTLAND(); f.orders[3] = { ...f.orders[3], stage: "packaging" };
+  s.filas = f; s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155 };
+  await abrirOC(p, "karla", s);
+  const aviso = await avisoOC(p), b = await p.getByRole("button", { name: /Ligar en el plan matriz/ }).count();
+  ok("ses-64-la-oc-con-una-en-la-planta", /F-155/.test(aviso) && /El plan abre cuando todas las órdenes lleguen a Salidas/.test(aviso) && b === 0,
+    `con P-0595 en Empaque: «${aviso.slice(0, 220)}»; «Ligar en el plan matriz»: ${b}`);
+});
+await caso("ses-65-la-oc-con-una-que-no-suma", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [F143_F155[0]] };
+  await abrirOC(p, "karla", s);
+  const aviso = await avisoOC(p), b = await p.getByRole("button", { name: /Ligar en el plan matriz/ }).count();
+  ok("ses-65-la-oc-con-una-que-no-suma", /F-143/.test(aviso) && !/justo lo que falta/.test(aviso) && /lígala en el plan matriz/.test(aviso) && b === 1,
+    `sólo F-143 (no suma la OC): «${aviso.slice(0, 200)}»; «Ligar en el plan matriz»: ${b}`);
+});
+await caso("ses-66-la-oc-de-lupita-sin-aviso-ni-lectura", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155 };
+  await abrirOC(p, "lupita", s);
+  const aviso = await p.locator("[data-sin-orden-de-la-oc]").count(), lecturas = s.peticiones.filter(x => x.ruta === "/rest/v1/rpc/list_linkable_invoices_for_oc").length;
+  const abierta = /Productos \(4\)/.test(await texto(p));
+  ok("ses-66-la-oc-de-lupita-sin-aviso-ni-lectura", abierta && aviso === 0 && lecturas === 0, `Lupita en OC-0960 (${abierta ? "abierta" : "NO abrió"}): aviso ${aviso}, lecturas de facturas sin orden ${lecturas} (no factura)`);
+});
+await caso("ses-67-la-cancelada-no-cuenta-y-la-busqueda-no-cambia-la-cuenta", async ({ p, s }) => {
+  const f = PORTLAND(); f.orders.push(ordenK("P-0596", { stage: "cancelled", client: "PORTLAND LEATHER", client_company: "PORTLAND LEATHER", purchase_order_id: "OC-0960", cancelled_at: haceH(5) }));
+  s.filas = f;
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(800);
+  const todas = await p.locator("[data-oc-de-la-ficha]").allInnerTexts().catch(() => []);
+  await p.getByPlaceholder("Buscar orden...").first().fill("P-0592"); await p.waitForTimeout(900);
+  const buscando = await p.locator("[data-oc-de-la-ficha]").allInnerTexts().catch(() => []);
+  ok("ses-67-la-cancelada-no-cuenta-y-la-busqueda-no-cambia-la-cuenta", todas.length === 4 && todas.every(x => /OC-0960 · 4 órdenes/.test(x)) && buscando.length === 1 && /OC-0960 · 4 órdenes/.test(buscando[0]),
+    `con P-0596 cancelada: ${JSON.stringify(todas)}; buscando P-0592: ${JSON.stringify(buscando)}`);
+});
+for (const [n, vp] of [["ses-68-la-marca-de-la-oc-cabe-a-1366", { width: 1366, height: 768 }], ["ses-68b-la-marca-de-la-oc-cabe-a-1920", { width: 1920, height: 1080 }]]) {
+  await caso(n, async ({ p, s }) => {
+    s.filas = PORTLAND();
+    await abrirYEntrar(p, s, "karla");
+    await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+    await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(800);
+    const r = await p.evaluate(() => [...document.querySelectorAll("[data-oc-de-la-ficha]")].map(b => { let f = b.parentElement; while (f && !/14px/.test(getComputedStyle(f).borderRadius)) f = f.parentElement;
+      const a = b.getBoundingClientRect(), c = f ? f.getBoundingClientRect() : null; return c ? (a.left >= c.left - 0.5 && a.right <= c.right + 0.5 && a.height < 40) : false; }));
+    const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+    // con el teclado: Enter en la marca lleva a la OC y no abre la orden
+    await p.locator("[data-oc-de-la-ficha]").first().focus(); await p.keyboard.press("Enter"); await p.waitForTimeout(1200);
+    const oc = /Productos \(4\)/.test(await texto(p)), detalle = await p.getByRole("dialog").count();
+    ok(n, r.length === 4 && r.every(Boolean) && ancho <= vp.width && oc && detalle === 0, `marcas dentro de su ficha y en un renglón: ${JSON.stringify(r)}; ancho ${ancho}; Enter en la marca: ${oc ? "abre OC-0960" : "NO abre la OC"}${detalle ? " y ABRE la orden" : ""}`);
+  }, { viewport: vp });
+}
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),

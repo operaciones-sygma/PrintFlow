@@ -40,6 +40,7 @@ const GUARDA_LENTO = Q.get("guarda") === "lento";
 //   anticipo=mismo (una del mismo importe) · otro (de otro importe) · ambos · falla (no se pudieron leer) · falla1 (falla una vez)
 //   adelantada=1: al abrir no hay ninguna, y al confirmar la base dice que se emitió una mientras se capturaba
 const ANTICIPO = Q.get("anticipo") || "", ADELANTADA = Q.get("adelantada") === "1";
+const EN_OC = Q.get("oc") === "1";   // v10.84.97 — la orden es una de las 4 de OC-0960
 const CAND_MISMO = { doc_number: "F-9135", doc_type: "factura", amount: 66004, balance: 66004, issued_date: "2026-10-02", status: "pendiente",
   cfdi_status: "stamped", dias_sin_orden: 6, monto_cuadra: true, notas: "FACTURA POR ADELANTADO, sin orden de producción. Motivo: PIDE FACTURA PARA HACER EL PEDIDO." };
 const CAND_OTRO = { doc_number: "F-9140", doc_type: "factura", amount: 2157.6, balance: 2157.6, issued_date: "2026-10-07", status: "pendiente",
@@ -91,7 +92,8 @@ function Banco() {
     <button id="abrir-precio" onClick={() => setM("precio")}>precio</button>
     <pre id="log">{log.join("\\n")}</pre>
     {m === "inv" && <InvoiceModal order={ORDER} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
-      cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }} />}
+      cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
+      ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("inv:oc " + id); setM(null); }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }} />}
     {m === "ent" && <DeliverOnlyModal order={{ ...ORDER, invoice_folio: "F-9001", invoice_type: "factura" }} onConfirm={async () => { L("ent:confirm"); await new Promise(r => setTimeout(r, 150)); }}

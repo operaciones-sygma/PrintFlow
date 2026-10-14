@@ -1108,6 +1108,28 @@ await caso("pre-35 la casilla y luego la lectura buena", "anticipo=falla1", asyn
   const conf = (await log(p)).split("\n").find(l => l.startsWith("pre:confirm")) || "";
   ok("pre-35 folio anticipado: con la casilla marcada, si «Reintentar» sí lee, la casilla se va, se ve F-9140 y la app recibe lo leído (no la casilla)", sinCasilla && f9140 && /F-9140/.test(conf) && /,false\]$/.test(conf), `casilla fuera=${sinCasilla} · F-9140=${f9140} · «${conf.slice(-80)}»`);
 });
+// ── v10.84.97 — si la orden es una de VARIAS de una OC (PORTLAND: P-0592 a P-0595 de OC-0960, con F-143 y F-155 cubriendo un pedazo de
+//   cada una), el camino de la factura sin orden es el plan matriz de la OC, no «Facturar por partes» de UNA orden (la critique del
+//   13-oct, P1). Vuelta 1: escritas antes del cambio ──
+await caso("inv-132 orden de una OC: lleva a la OC", "anticipo=otro&oc=1", async p => {
+  await inv(p); await espera(p, 500);
+  const dice = await ve(p, /una de las 4 de/) && await ve(p, /se liga en su plan matriz/);
+  const partes = await p.getByRole("button", { name: /^Facturar por partes$/ }).count();
+  const b = p.getByRole("button", { name: /Ir a OC-0960/ });
+  const hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  ok("inv-132 una orden de OC-0960 con F-9140 sin orden: dice que es una de las 4 de la OC y que se liga en su plan, lleva a la OC y no ofrece «Facturar por partes»", dice && hay === 1 && partes === 0 && (await cuenta(p, "inv:oc OC-0960")) === 1, `dice=${dice} · «Ir a»=${hay} · «Facturar por partes»=${partes}`);
+});
+await caso("inv-133 orden suelta: sigue «Facturar por partes»", "anticipo=otro", async p => {
+  await inv(p); await espera(p, 500);
+  ok("inv-133 una orden sin OC con F-9140 sin orden: sigue ofreciendo «Facturar por partes» (y no habla de OC)", await p.getByRole("button", { name: /^Facturar por partes$/ }).count() === 1 && !(await ve(p, /una de las \d+ de/)));
+});
+// vuelta 3: doble clic en «Ir a OC-0960» (una vez)
+await caso("inv-134 doble clic en «Ir a la OC»", "anticipo=otro&oc=1", async p => {
+  await inv(p); await espera(p, 500);
+  await p.getByRole("button", { name: /Ir a OC-0960/ }).dblclick().catch(() => {}); await espera(p, 400);
+  ok("inv-134 doble clic en «Ir a OC-0960»: lleva una vez", (await cuenta(p, "inv:oc OC-0960")) === 1, `${await cuenta(p, "inv:oc OC-0960")} veces`);
+});
 await caso("ent-01 «Confirmar Entrega»: Esc en el mismo instante no cierra mientras entrega", "", async p => {
   await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
   await enElMismoInstante(p.getByRole("button", { name: /Confirmar Entrega/ }), "esc"); await espera(p, 600);

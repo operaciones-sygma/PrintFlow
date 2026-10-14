@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.97 — Las puertas saben de su OC: la ficha dice «OC-0960 · 4 órdenes» y la OC dice que F-143 y F-155 la suman — 13-oct-2026
+
+**Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «las puertas de cada orden no saben de su
+OC»; Marcelo eligió «Tarjeta con su OC»). El caso de verdad: PORTLAND LEATHER, OC-0960 (P-0592 a P-0595, en Salidas) y dos facturas
+hechas sin orden, F-143 ($3,066.78) y F-155 ($43,333.22), que juntas suman exacto la OC con IVA ($46,400.00) y cubren, cada una, un
+pedazo de los cuatro stickers. La cola de Karla enseñaba cuatro fichas sueltas, sin decir que eran de una OC (y con el cliente dos veces:
+«PORTLAND LEATHER · PORTLAND LEATHER»); «Asignar Folio y Entregar» de cualquiera de ellas veía F-143/F-155 de otro importe y ofrecía
+«Facturar por partes» de ESA orden (la base lo habría aceptado y estaría mal: el camino es el plan matriz de la OC, v10.84.89). Y la OC,
+que es donde se resuelve, no decía nada de esas facturas: cuatro botones, cuatro caminos.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **La ficha de la cola dice su OC**: «OC-0960 · 4 órdenes» (sólo si la OC tiene dos o más órdenes vivas; una OC «simple», de una
+  orden, no la lleva), y al tocarla (o Enter) abre la OC sin abrir la orden. La cuenta es de la OC entera, no de lo que pasa la búsqueda.
+  El cliente, una vez (la razón social sólo si es otra).
+- **«Asignar Folio y Entregar» de una orden de una OC de varias**: con una factura sin orden de otro importe dice «Esta orden es una de
+  las 4 de OC-0960. Si F-… es de esa OC, se liga en su plan matriz, con las piezas de cada producto: no la factures sola aquí» y lleva
+  **«Ir a OC-0960»** (en lugar de «Facturar por partes», que sigue para una orden suelta).
+- **La OC dice las facturas sin orden del cliente** (Karla y Dirección; se leen al abrir una OC con órdenes sin folio): cuáles y por
+  cuánto; si suman lo que falta por facturar (con o sin IVA, ±$0.02 cada una) lo dice («Juntas suman $46,400.00: justo lo que falta por
+  facturar de esta OC… no emitas folios nuevos: lígalas en el plan matriz») y da **«Ligar en el plan matriz»**; si alguna orden no ha
+  llegado a Salidas, «El plan abre cuando todas las órdenes lleguen a Salidas». Sin la lectura, «No pude revisar… · Reintentar» (la regla
+  de v10.84.96: no se presume que no hay).
+
+**Cómo se probó** (tres vueltas): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.96: fallaban las 3 nuevas de fondo:
+inv-132 (`folio`, variante nueva `oc=1`: la orden de OC-0960 ofrecía «Facturar por partes» y no decía de la OC), ses-61 (con la app
+entera: ninguna ficha decía su OC, el cliente salía dos veces y no había cómo llegar a la OC) y ses-62 (la OC no decía nada de F-143 y
+F-155); inv-133 (una orden suelta sigue con «Facturar por partes») pasaba y sigue pasando. **Vuelta 2**, con el cambio: las 4 pasan.
+**Vuelta 3**, por donde no se diseñó: la lectura de la OC que falla y «Reintentar» con la base de vuelta (ses-63), una orden todavía en
+Empaque (ses-64: lo dice y no ofrece el plan), sólo F-143, que no suma (ses-65), Lupita en la OC (ses-66: ni aviso ni lectura), una orden
+cancelada en la OC y la búsqueda (ses-67: la cuenta sigue en 4), las dos pantallas de Marcelo con Enter en la marca (ses-68 y ses-68b) y
+el doble clic en «Ir a OC-0960» (inv-134): pasan las 8. Completas: `folio` 163, `sesion` 69. **Sin probar:** «Asignar folio anticipado»
+de una orden de una OC de varias sigue ofreciendo «Facturar por partes y ligar» (el plan de la OC aún pide todo en Salidas: es el punto
+del plan matriz antes de Salidas, que sigue en la lista).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.96 — Un error de lectura no es permiso: sin revisar las facturas sin orden, no se emite — 13-oct-2026
 
 **Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, revisor independiente, **21/40**; snapshot
