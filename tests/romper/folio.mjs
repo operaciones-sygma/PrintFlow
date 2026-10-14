@@ -1130,6 +1130,15 @@ await caso("inv-134 doble clic en «Ir a la OC»", "anticipo=otro&oc=1", async p
   await p.getByRole("button", { name: /Ir a OC-0960/ }).dblclick().catch(() => {}); await espera(p, 400);
   ok("inv-134 doble clic en «Ir a OC-0960»: lleva una vez", (await cuenta(p, "inv:oc OC-0960")) === 1, `${await cuenta(p, "inv:oc OC-0960")} veces`);
 });
+// v10.84.101 — el folio anticipado de una orden de una OC de varias también lleva a la OC (su plan ya abre antes de Salidas). Vuelta 1: antes.
+await caso("pre-36 folio anticipado de una orden de OC: lleva a la OC", "anticipo=otro&oc=1", async p => {
+  await pre(p); await espera(p, 500);
+  const dice = await ve(p, /una de las 4 de/) && await ve(p, /se liga en su plan matriz/);
+  const partes = await p.getByRole("button", { name: /^Facturar por partes/ }).count();
+  const b = p.getByRole("button", { name: /Ir a OC-0960/ }), hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  ok("pre-36 el folio anticipado de una orden de OC-0960 con F-9140 sin orden: dice que se liga en el plan de la OC y lleva a ella, sin «Facturar por partes»", dice && hay === 1 && partes === 0 && (await cuenta(p, "pre:oc OC-0960")) === 1, `dice=${dice} · «Ir a»=${hay} · «Facturar por partes»=${partes}`);
+});
 await caso("ent-01 «Confirmar Entrega»: Esc en el mismo instante no cierra mientras entrega", "", async p => {
   await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);
   await enElMismoInstante(p.getByRole("button", { name: /Confirmar Entrega/ }), "esc"); await espera(p, 600);

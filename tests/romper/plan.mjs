@@ -557,7 +557,8 @@ await caso("pl-59 a 1366: el botón y las órdenes a la vista", "", async p => {
   await abrir(p);
   const r = await p.evaluate(() => {
     const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
-    const filas = [...document.querySelectorAll("tbody tr")].map(vis);
+    const visFila = tr => { const td = tr.querySelector("td"), b = td.getBoundingClientRect(); if (!(b.top >= 0 && b.bottom <= innerHeight)) return false; const el = document.elementFromPoint(b.left + 10, b.top + b.height / 2); return !!el && tr.contains(el); };   // (v10.84.101: que no la tape el encabezado ni el pie de la matriz)
+    const filas = [...document.querySelectorAll("tbody tr")].map(visFila);
     const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
     return { filas, boton: btn ? vis(btn) : false, alto: innerHeight };
   });
@@ -569,7 +570,8 @@ await caso("pl-59b a 1920: las 4 órdenes, el botón y el ancho", "", async p =>
     const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
     const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /Plan matriz de facturación/.test(x.textContent)) || [...document.querySelectorAll("h3")].find(x => /Plan matriz/.test(x.textContent))?.parentElement;
     const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
-    return { filas: [...document.querySelectorAll("tbody tr")].map(vis), boton: btn ? vis(btn) : false, ancho: d ? Math.round(d.getBoundingClientRect().width) : 0 };
+    const visFila = tr => { const td = tr.querySelector("td"), b = td.getBoundingClientRect(); if (!(b.top >= 0 && b.bottom <= innerHeight)) return false; const el = document.elementFromPoint(b.left + 10, b.top + b.height / 2); return !!el && tr.contains(el); };   // (v10.84.101: que no la tape el encabezado ni el pie de la matriz)
+    return { filas: [...document.querySelectorAll("tbody tr")].map(visFila), boton: btn ? vis(btn) : false, ancho: d ? Math.round(d.getBoundingClientRect().width) : 0 };
   });
   ok("pl-59b a 1920×1080: las 4 órdenes y el botón se ven sin scroll, y el plan usa el ancho (más de 1300 px)", r.filas.length === 4 && r.filas.every(Boolean) && r.boton && r.ancho > 1300, JSON.stringify(r));
 }, { width: 1920, height: 1080 });
@@ -664,6 +666,66 @@ await caso("pl-74 muchas cosas por resolver: el botón sigue a la vista", "", as
     const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
     const err = document.querySelector("[data-plan-errores]"); return { boton: btn ? vis(btn) : false, errores: err ? err.querySelectorAll("div").length : 0, ancho: document.documentElement.scrollWidth }; });
   ok("pl-74 con 7 facturas llenas de más (muchas cosas por resolver) a 1366, el botón sigue a la vista y la página no se desborda", r.boton && r.errores > 6 && r.ancho <= 1366, JSON.stringify(r));
+});
+
+// ───────────── v10.84.101 — el plan antes de Salidas (Marcelo, 13-oct: «Sí, con anticipados»; la critique: con Hotsson «el plan no abre hasta que
+//   P-0621 y P-0623 lleguen a Salidas»). Las que no han llegado entran; la factura NUEVA que las lleva va anticipada a fuerza (no las entrega).
+//   Vuelta 1: escritas ANTES del cambio.
+await caso("pl-67 una orden en Empaque entra al plan", "planta=1", async p => {
+  await abrir(p);
+  const filas = await p.locator("tbody tr").count(), aviso = ((await p.locator("[data-plan-anticipadas]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-67 con P-0595 en Empaque: entra al plan (4 órdenes) y el plan dice que va anticipada y dónde va", filas === 4 && /P-0595/.test(aviso) && /En Empaque/.test(aviso) && /anticipadas/.test(aviso),
+    `filas ${filas} · «${aviso.slice(0, 200)}»`);
+});
+await caso("pl-68 la factura que la lleva va anticipada", "planta=1", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 0, 0, 0]);
+  await encabezado(p, 1).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 300);
+  const marca = encabezado(p, 1).getByRole("checkbox", { name: /Anticipada/ });
+  const fija = (await marca.count()) ? (await marca.isChecked()) && (await marca.isDisabled()) : false;
+  const libre = (await encabezado(p, 0).getByRole("checkbox", { name: /Anticipada/ }).count()) ? !(await encabezado(p, 0).getByRole("checkbox", { name: /Anticipada/ }).isChecked()) : false;
+  const sinRazon = /por qué se anticipan/i.test(await errores(p));
+  await p.locator("[data-plan-anticipadas] input").fill("el cliente pidió sus facturas antes de la entrega").catch(() => {}); await espera(p, 200);
+  await enviar(p).click(); await espera(p, 600);
+  const g = (await planEnviado(p))?.groups || [];
+  ok("pl-68 la factura nueva que lleva a P-0595 va anticipada a fuerza (marcada y fija) con la razón de arriba; la que sólo lleva Salidas, normal",
+    fija && libre && sinRazon && g.length === 2 && g[0].pre_assigned === false && g[1].pre_assigned === true && /antes de la entrega/.test(g[1].reason || ""),
+    `fija ${fija} · la otra libre ${libre} · sin razón lo pide ${sinRazon} · ${JSON.stringify(g.map(x => ({ pre: x.pre_assigned, razon: x.reason })))}`);
+});
+await caso("pl-69 la vista previa dice quién se queda", "planta=1", async p => {
+  await abrir(p); await encabezado(p, 0).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
+  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  await p.getByRole("dialog", { name: /¿Quitar/ }).getByRole("button", { name: /^Quitar/ }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 200);
+  await p.locator("[data-plan-anticipadas] input").fill("pago adelantado").catch(() => {}); await espera(p, 200);
+  await botonEnviar(p).click(); await espera(p, 400);
+  const dice = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-69 la vista previa dice que la factura va anticipada y que P-0595 se queda donde va (se entrega al llegar a Salidas)", /anticipada/.test(dice) && /P-0595 se queda donde va/.test(dice), `«${dice.slice(0, 300)}»`);
+});
+await caso("pl-70 la ligada no se fuerza", "planta=1", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143);
+  await ligar(p, 1, "F-155"); await encabezado(p, 1).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
+  await enviar(p).click(); await espera(p, 600);
+  const g = (await planEnviado(p))?.groups || [];
+  ok("pl-70 con P-0595 en Empaque, F-143 y F-155 se ligan igual (una factura que ya existe no se anticipa)", g.length === 2 && g.every(x => x.ligar === true && x.pre_assigned === false),
+    JSON.stringify(g.map(x => ({ ligar: x.ligar, pre: x.pre_assigned }))) + " · errores «" + (await errores(p)).replace(/\s+/g, " ").slice(0, 120) + "»");
+});
+
+// vuelta 3, por donde no se diseñó
+await caso("pl-75 las cuatro todavía en máquina", "planta=todas", async p => {
+  await abrir(p);
+  const filas = await p.locator("tbody tr").count(), en = await p.locator("[data-en-la-planta]").count();
+  await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await ligar(p, 1, "F-155"); await encabezado(p, 1).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
+  await enviar(p).click(); await espera(p, 600);
+  const g = (await planEnviado(p))?.groups || [];
+  ok("pl-75 con las cuatro todavía en máquina, el plan abre con las cuatro (cada una dice dónde va) y F-143 y F-155 se ligan", filas === 4 && en === 4 && g.length === 2 && g.every(x => x.ligar && !x.pre_assigned),
+    `filas ${filas} · «va anticipada» ${en} · ${JSON.stringify(g.map(x => ({ folio: x.folio, pre: x.pre_assigned })))}`);
+});
+await caso("pl-76 deja de llevarla, deja de ser anticipada", "planta=1", async p => {
+  await abrir(p); await encabezado(p, 0).getByRole("button", { name: /lo que falta/i }).click(); await espera(p, 200);
+  const marca = encabezado(p, 0).getByRole("checkbox", { name: /Anticipada/ });
+  const antes = (await marca.isChecked()) && (await marca.isDisabled());
+  await celda(p, 3, 0).fill("0"); await espera(p, 200);   // P-0595 (la de Empaque) sale de esta factura
+  const despues = !(await marca.isChecked()) && !(await marca.isDisabled());
+  ok("pl-76 al quitarle a la factura las piezas de P-0595 (la que no ha llegado), deja de ser anticipada a fuerza (se puede volver a elegir)", antes && despues, `antes fija ${antes} · después libre ${despues}`);
 });
 
 for (const r of res) console.log(r);

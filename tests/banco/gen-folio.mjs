@@ -95,7 +95,8 @@ function Banco() {
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
       ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("inv:oc " + id); setM(null); }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
-      cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }} />}
+      cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }}
+      ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("pre:oc " + id); setM(null); }} />}
     {m === "ent" && <DeliverOnlyModal order={{ ...ORDER, invoice_folio: "F-9001", invoice_type: "factura" }} onConfirm={async () => { L("ent:confirm"); await new Promise(r => setTimeout(r, 150)); }}
       onClose={() => { L("ent:cerrado"); setM(null); }} />}
     {m === "precio" && <PriceCaptureModal order={ORDER} onCapture={async v => { L("precio:captura " + v); await new Promise(r => setTimeout(r, 150)); }}

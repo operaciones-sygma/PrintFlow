@@ -1111,8 +1111,10 @@ await caso("ses-64-la-oc-con-una-en-la-planta", async ({ p, s }) => {
   s.filas = f; s.rpcRespuestas = { list_linkable_invoices_for_oc: F143_F155 };
   await abrirOC(p, "karla", s);
   const aviso = await avisoOC(p), b = await p.getByRole("button", { name: /Ligar en el plan matriz/ }).count();
-  ok("ses-64-la-oc-con-una-en-la-planta", /F-155/.test(aviso) && /El plan abre cuando todas las órdenes lleguen a Salidas/.test(aviso) && b === 0,
-    `con P-0595 en Empaque: «${aviso.slice(0, 220)}»; «Ligar en el plan matriz»: ${b}`);
+  const plan = await p.getByRole("button", { name: /^Plan matriz$/ }).count();
+  // (v10.84.101: el plan ya abre antes de Salidas, con anticipadas; antes afirmaba «El plan abre cuando todas lleguen a Salidas» y sin el botón)
+  ok("ses-64-la-oc-con-una-en-la-planta", /F-155/.test(aviso) && /van anticipadas en el plan/.test(aviso) && b === 1 && plan === 1,
+    `con P-0595 en Empaque: «${aviso.slice(0, 220)}»; «Ligar en el plan matriz»: ${b}; «Plan matriz» en la barra: ${plan}`);
 });
 await caso("ses-65-la-oc-con-una-que-no-suma", async ({ p, s }) => {
   s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [F143_F155[0]] };

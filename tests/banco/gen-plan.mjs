@@ -9,7 +9,8 @@
 //   vista=1 (la vista del plan ya creado, con una factura ligada y pagada y otra creada por el plan) · rol=karla (sin botones de
 //   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
-//   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden)
+//   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden) ·
+//   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -64,6 +65,8 @@ const ORDERS = [
   { id: "OP-MUWXDWG1WX6", production_number: "P-0595", product_type: "STICKER #3 REDONDO NEGRO DE PORTLAND", quantity: 80000, price: 8800, order_type: "interna", stage: "salidas", invoice_folio: null },
 ];
 if (Q.get("foliada") === "1") ORDERS[3].invoice_folio = "F-200";
+if (Q.get("planta") === "1") ORDERS[3].stage = "packaging";
+if (Q.get("planta") === "todas") ORDERS.forEach(o => { o.stage = "in_production"; o.current_machine = "off_pm74"; });
 if (Q.get("foliada") === "todas") ORDERS.forEach((o, k) => { o.invoice_folio = "F-20" + k; });
 if (Q.get("previo") === "todo") OC.matrix_plan = { groups: [{ id: "g0", cancelled_at: null,
   lines: ORDERS.map((o, k) => ({ id: "l0" + k, order_id: o.id, qty_portion: o.quantity, amount_portion: o.price, cancelled_at: null })) }] };

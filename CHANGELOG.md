@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.101 — El plan matriz antes de Salidas, con anticipadas a fuerza; el encabezado de cada columna, compacto — 14-oct-2026
+
+**Qué pasaba.** El plan sólo dejaba entrar órdenes en Salidas y la OC no lo ofrecía hasta que llegaran todas («El plan abre cuando
+todas las órdenes lleguen a Salidas»). La critique (13-oct) lo marcó con Hotsson: P-0621 y P-0623 en máquina, y el plan no abría. Marcelo
+(13-oct): «Sí, con anticipados». La base ya lo aceptaba: `assign_oc_invoice_split_plan` sólo rechaza órdenes canceladas o web, y sólo
+entrega las que están en Salidas. El folio anticipado de una orden de una OC de varias seguía ofreciendo «Facturar por partes» de ella
+sola, y listaba 4 facturas sin orden como máximo. Y al probarlo apareció una falla de la 100: a 1366, con un aviso arriba, el renglón de
+sumas (fijo abajo) tapaba «Lo que falta» del encabezado de cada columna (fijo arriba), porque ese encabezado medía 249 px; la pl-59 de la
+100 contaba como «a la vista» filas que estaban detrás del renglón de sumas (en verdad se veía 1 de 4, no 3).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **Entran las órdenes que todavía no llegan a Salidas** (todas menos canceladas, web y entregadas). Cada una dice dónde va («En Empaque ·
+  todavía no está en Salidas»), y arriba un aviso dice qué pasa con ellas y pide **una sola razón** («¿Por qué se anticipan?»).
+- **La factura NUEVA que lleva alguna va anticipada a fuerza** («Anticipada», marcada y fija; deja de serlo si se le quitan esas piezas),
+  como «Facturar por partes» antes de Salidas (v10.84.89): no las entrega; se entregan al llegar, con «Marcar como Entregada». Una ligada
+  no se anticipa (la factura ya existe). La vista previa dice cuáles pasan a entregadas y cuáles se quedan donde van. «Pre-asignada» se
+  llama «Anticipada», como el folio anticipado de una orden.
+- **La OC ofrece «Plan matriz» y «Ligar en el plan matriz» antes de Salidas** («Las que no han llegado a Salidas van anticipadas en el plan»).
+- **El folio anticipado de una orden de una OC de varias** lleva a la OC («Ir a OC-0960»), como «Asignar folio y entregar» desde la 97, y
+  lista todas las facturas sin orden.
+- **El encabezado de cada columna, de 249 a 133 px**: «Nueva / Ya existe» con el tipo y la etiqueta en un renglón (se parte si la columna
+  es angosta); sin la línea del folio en cada columna (lo dice una vez el renglón de arriba) ni el título repetido de la que liga; el saldo
+  arriba y el tercero con «Anticipada» en un renglón; el total con «Repartir» y «Lo que falta», a 28 px (el mínimo de 40 es para el tablero
+  táctil). La matriz, con al menos 320 px de alto (si no caben los avisos, baja el cuerpo). Las piezas de cada orden, en palabras y en su
+  tinta («4,380 de 80,000 pzas · faltan 75,620», «Por asignar $… sin IVA»; antes «disp.», «pend» y colores bajo AA).
+
+**Cómo se probó** (tres vueltas): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.100: fallaban las 6 nuevas (pl-67 a pl-70:
+P-0595 en Empaque no entraba; pre-36: el folio anticipado no sabía de su OC; ses-64: la OC no ofrecía el plan). **Vuelta 2**, con el
+cambio: pl-68 y pl-69 caían porque el renglón de sumas tapaba «Lo que falta» (la falla de arriba, medida: encabezado 249 px, matriz 245);
+se compactó el encabezado y la pl-59 se endureció (cuenta sólo la fila que de verdad se ve: contra el código de antes da 1 de 4). La tanda
+`plan` entera pasa, 78 de 78 (a 1366: 2 órdenes de verdad a la vista y el botón; a 1920: las 4); `folio` 28 de 28 en lo del folio y la
+OC; `sesion` ses-60 a ses-69. **Vuelta 3**, por donde no se diseñó: las cuatro todavía en máquina (pl-75, con F-143 y F-155 ligadas) y la
+factura que deja de llevar a P-0595 (pl-76, deja de ser anticipada): pasan. **Cambió a propósito:** ses-64 (de la 97) afirmaba que el plan
+no abría antes de Salidas. `plan` 80, `folio` 164.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.100 — El plan matriz se deja ver y confirmar: todo el alto, vista previa, el rechazo dentro y «Nueva / Ya existe» — 13-oct-2026
 
 **Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «el plan matriz no se deja ver ni
