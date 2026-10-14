@@ -42,7 +42,7 @@ por resolver (se lee entera), 7 facturas como Hotsson (la matriz se desliza, las
 desborda) y «Ver menos»: pasan las 3. `plan` 103 de 103 (pv-01 cayó una vez por la máquina y sola pasa 3 de 3), `sesion` 88 de 88 (ses-85 compara
 ahora la franja de arriba de la etiqueta del menú: comparando el botón entero, en producción salía 1 pixel distinto, el borde de la «a» final).
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~07:58; READY `dpl_Gz888dBAaQyYizDymG3xpsocf2MT` (commit `6a046ca`). Vuelta atrás: promover `dpl_8XXWMSznHyYZkxSnNFXvZuE5Eoxu` (el código de v10.84.104) o `git revert 6a046ca`; la base no cambió. Candado: 1624 de 1624 a la primera, de a 1 tanda (47 min). Revisado en producción sin escribir (`.banco-revisor-orden/medir-105.mjs`, la cuenta de pruebas con el rol de Karla, el plan de OC-0960), 7 de 7: a 1366 se ven 2 de las 4 órdenes aun con el aviso «No pude revisar…» que sólo sale con esa cuenta (78 px; la pasada 2 midió 1 de 4 con él; sin él, en el banco, 3 de 4); la nota de quién paga en 29 px con su botón; lo que falta en 31 px; la ayuda de «+ Facturar a tercero»; a 1920 las 4; sin errores, sin diálogos nativos y sin escrituras.
 
 ## v10.84.104 — Lo que mueve dinero pregunta igual en las dos puertas; «Facturar a un tercero» dice quién paga y cuál es el otro camino — 14-oct-2026
 

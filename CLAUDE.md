@@ -183,7 +183,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.104 (14-oct, ~06:40; READY `dpl_88e1G9r3R9HYxW7QYrzWianDA9sv`, commits `08870ae` y `9352ab7`; vuelta atrás: promover
+- **LIVE:** v10.84.105 (14-oct, ~07:58; READY `dpl_Gz888dBAaQyYizDymG3xpsocf2MT`, commit `6a046ca`; vuelta atrás: promover
+  `dpl_8XXWMSznHyYZkxSnNFXvZuE5Eoxu` (el código de v10.84.104) o `git revert 6a046ca`; la base no cambió; candado 1624 de 1624). v10.84.105: **el plan
+  matriz a 1366 deja ver lo que se captura** (3 de 4 órdenes en el banco con dos facturas, con las piezas traídas, con 6 y antes de Salidas; la nota
+  de quién paga y lo que falta en un renglón; con 4 facturas o más, columnas de 230 px que se deslizan con la columna de órdenes fija).
+  v10.84.104 (14-oct, ~06:40; READY `dpl_88e1G9r3R9HYxW7QYrzWianDA9sv`, commits `08870ae` y `9352ab7`; vuelta atrás: promover
   `dpl_UGenBSHaDaaThiDUfwzwCuaR1e8p` (el código de v10.84.103) o `git revert 9352ab7 08870ae`; la base no cambió; candado 1614 de 1614). v10.84.104,
   la pasada 2 de la critique del flujo de facturas de Karla (25/40): 🔑 **lo que mueve dinero pregunta igual en las dos puertas** («Continuar» de
   «Asignar folio y entregar» pregunta por las facturas sin orden de otro importe, como el folio anticipado; una orden de OC lleva a su OC) y
