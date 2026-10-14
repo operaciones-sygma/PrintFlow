@@ -52,6 +52,7 @@ const USUARIOS = () => ({
   karla: { uid: "00000000-0000-4000-8000-00000000000a", pass: "buena", role: "karla", display_name: "Karla" },
   gerardo: { uid: "00000000-0000-4000-8000-00000000000b", pass: "buena", role: "produccion", display_name: "Gerardo" },
   bodega: { uid: "00000000-0000-4000-8000-00000000000c", pass: "buena", role: "almacen", display_name: "Bodega" },
+  lupita: { uid: "00000000-0000-4000-8000-00000000000d", pass: "buena", role: "secretaria", display_name: "Lupita" },
 });
 function simulada() {
   return {
@@ -65,6 +66,7 @@ function simulada() {
     perfil: "ok",      // ok | red | falla                 (get_user_session)
     salir: "ok",       // ok | red                         (POST /auth/v1/logout: con «red», la salida se anota y no llega)
     alPedirPerfil: null,   // async (page) => {}: corre ANTES de contestar get_user_session (para cerrar la sesión a media entrada)
+    filas: {},         // v10.84.93 — { tabla: [filas] | "falla" }: lo que contesta la base al leer esa tabla (por omisión, nada)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -155,7 +157,15 @@ async function rutear(ctx, s) {
       // PostgREST sólo revisa la firma y el vencimiento del JWT: con una sesión muerta en Auth, las lecturas siguen pasando.
       // Como anónimo, nada (la app de verdad recibe «permission denied»).
       if (quien !== "usuario") return J(401, { code: "42501", message: "permission denied for table " + ruta.split("/").pop(), details: null, hint: null });
-      if (m === "GET" || m === "HEAD") return J(200, [], { "content-range": "*/0" });
+      if (m === "GET" || m === "HEAD") {
+        const tabla = ruta.slice("/rest/v1/".length), filas = s.filas[tabla];
+        if (filas === "falla") return J(503, { message: "upstream connect error (prueba)" });
+        if (!filas) return J(200, [], { "content-range": "*/0" });
+        // por páginas, como PostgREST (la app pide de 1,000 en 1,000 hasta que una página llega vacía)
+        const desde = Number(url.searchParams.get("offset") || 0), cuantas = Number(url.searchParams.get("limit") || 1000);
+        const pag = filas.slice(desde, desde + cuantas);
+        return J(200, pag, { "content-range": pag.length ? desde + "-" + (desde + pag.length - 1) + "/" + filas.length : "*/" + filas.length });
+      }
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -691,6 +701,139 @@ for (const [id, viewport] of [["ses-19-aviso-a-1366", { width: 1366, height: 768
     ok(id + "-sin-franja", !!bordes && bordes[0] <= 1.5 && bordes[0] === bordes[1] && bordes[1] === bordes[2],
       `el aviso no lleva franja lateral de color: bordes izquierdo/derecho/arriba ${bordes ? bordes.join("/") : "?"} px`);
   }, { viewport });
+}
+
+// ════════════════════════ el menú de cada rol (v10.84.93) ════════════════════════
+// Viven aquí porque ésta es la tanda que corre la app ENTERA (el menú se arma en App, no en un componente del banco). La critique de
+// «Mis Pendientes» (13-oct, 17/40): Karla tenía DOS colas para las mismas órdenes, «Pendientes» (las fichas) y «Folios» (su vista de
+// verdad: «Por foliar» y «En la planta»), y el número del menú contaba también lo que con folio anticipado sigue en la planta, donde no
+// tiene nada que hacer todavía. Lo que DEBE pasar: «Pendientes» la lleva a Folios, no hay otra entrada «Folios», y el número es el de
+// «Por foliar» (sin lo que está en espera). Los demás roles no cambian. Vuelta 1: escritas antes del cambio.
+const haceH = h => new Date(Date.now() - h * 3600000).toISOString();
+const ordenK = (pn, x) => ({ id: "OP-" + pn, production_number: pn, client: "LIC. ORLANDO CASAS", client_id: "c1", product: "FORMATO DE SALIDA",
+  product_type: "Formatos", categoria: "formas", quantity: 100, price: 1450, created_at: haceH(120), updated_at: haceH(2), created_by: "secretaria",
+  order_type: "interna", priority: "normal", ...x });
+const ORDENES_KARLA = () => [
+  ordenK("P-0901", { stage: "salidas" }),                                                            // por foliar
+  ordenK("P-0902", { stage: "maq_received", order_type: "maquila" }),                                // por foliar (maquila recibida)
+  ordenK("P-0903", { stage: "salidas", snooze_reason: "Esperando que el cliente pida su factura", snooze_stage: "salidas",
+    snooze_kind: "factura", snoozed_by: "karla", snoozed_at: haceH(5) }),                            // en espera: no cuenta
+  ordenK("P-0904", { stage: "in_production", invoice_pre_assigned: true, invoice_folio: "F-9904" }), // folio anticipado, en la planta
+];
+const entradasDelMenu = p => p.evaluate(() => [...document.querySelectorAll("button[title]")].map(b => b.title)
+  .filter(t => /^(Pendientes|Folios|Tablero)( \(\d+\))?$/.test(t)));
+const tituloDeLaVista = p => p.evaluate(() => { const h = document.querySelector("h2"); return h ? h.textContent.replace(/\s+/g, " ").trim() : ""; });
+// el Despertador del día: con órdenes en la base sale al entrar («escribe SI ENTIENDO») y tapa los clics; se contesta y se cierra
+const despertar = async p => {
+  if (await p.getByText(/escribe SI ENTIENDO/i).first().waitFor({ timeout: 5000 }).then(() => true, () => false)) {
+    await p.getByPlaceholder(/Escribe aquí/).first().fill("SI ENTIENDO"); await p.waitForTimeout(800); }
+  for (let k = 0; k < 2; k++) { await p.keyboard.press("Escape"); await p.waitForTimeout(200); }
+};
+// con la lectura caída, la librería reintenta el 503 antes de rendirse: se espera la señal de la app, no un tiempo fijo
+const esperarFalla = p => p.waitForFunction(() => /No se pudo leer de la base|No se pudieron leer/i.test(document.body.innerText), null, { timeout: 45000, polling: 200 })
+  .then(() => true, () => false);
+const esperarMenu = (p, re) => p.waitForFunction(src => [...document.querySelectorAll("button[title]")].some(b => new RegExp(src).test(b.title)),
+  re.source, { timeout: 15000, polling: 100 }).then(() => true, () => false);
+await caso("ses-40-karla-una-sola-cola", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_KARLA() };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(700);
+  const vista = await tituloDeLaVista(p);
+  const porFoliar = ((await p.getByRole("tab", { name: /Por foliar/ }).first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("ses-40-karla-una-sola-cola", menu.filter(t => /^Pendientes/.test(t)).length === 1 && !menu.some(t => /^Folios/.test(t))
+    && menu.includes("Pendientes (2)") && /Pendientes de Folio/.test(vista) && /\b2\b/.test(porFoliar),
+    `el menú de Karla: ${JSON.stringify(menu)} (una sola cola, con las 2 por foliar); «Pendientes» abre «${vista}»; la pestaña: «${porFoliar}»`);
+});
+await caso("ses-41-karla-la-paleta-lleva-a-folios", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_KARLA() };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const ir = async q => {
+    await p.keyboard.press("Control+k"); await p.waitForTimeout(300);
+    await p.getByRole("combobox").last().fill(q); await p.waitForTimeout(250);
+    await p.keyboard.press("Enter"); await p.waitForTimeout(700);
+    return tituloDeLaVista(p);
+  };
+  const conPendientes = await ir("pendientes");
+  await p.locator('button[title="Dashboard"]').first().click(); await p.waitForTimeout(400);
+  const conFolio = await ir("folio");
+  ok("ses-41-karla-la-paleta-lleva-a-folios", /Pendientes de Folio/.test(conPendientes) && /Pendientes de Folio/.test(conFolio),
+    `Ctrl+K «pendientes» abre «${conPendientes}»; «folio» abre «${conFolio}» (las dos, su cola)`);
+});
+await caso("ses-42-karla-sin-lectura-no-cuenta", async ({ p, s }) => {
+  s.filas = { orders: "falla" };
+  await abrirYEntrar(p, s, "karla");
+  const fallo = await esperarFalla(p); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(700);
+  const t = await texto(p);
+  const presume = (t.match(/Por foliar\s*0|En la planta\s*0|Sin pendientes|Sin órdenes en salida/i) || [""])[0];
+  ok("ses-42-karla-sin-lectura-no-cuenta", fallo && menu.includes("Pendientes") && !menu.some(x => /^Pendientes \(\d+\)$/.test(x))
+    && /no se pud(o|ieron) leer/i.test(t) && !presume,
+    `con la lectura caída: el menú ${JSON.stringify(menu)} (sin número); la vista ${/no se pud(o|ieron) leer/i.test(t) ? "dice que no pudo leer" : "NO dice que no pudo leer"}`
+    + (presume ? ` y PRESUME cero («${presume}»)` : ""));
+});
+// Folios mismo (se llega por la paleta, que antes y después lo encuentra con «folio»), con la lectura caída: ni cifras ni «vacío»
+await caso("ses-46-karla-folios-sin-lectura-no-presume-cero", async ({ p, s }) => {
+  s.filas = { orders: "falla" };
+  await abrirYEntrar(p, s, "karla");
+  const fallo = await esperarFalla(p); await despertar(p);
+  await p.keyboard.press("Control+k"); await p.waitForTimeout(300);
+  await p.getByRole("combobox").last().fill("folio"); await p.waitForTimeout(250);
+  await p.keyboard.press("Enter"); await p.waitForTimeout(700);
+  const v = await tituloDeLaVista(p), t = await texto(p);
+  const presume = (t.match(/Por foliar\s*0|En la planta\s*0|Sin órdenes en salida/i) || [""])[0];
+  ok("ses-46-karla-folios-sin-lectura-no-presume-cero", fallo && /Pendientes de Folio/.test(v) && /no se pudieron leer tus pendientes de folio/i.test(t) && !presume,
+    `con la lectura caída, «${v}» ${/no se pudieron leer tus pendientes de folio/i.test(t) ? "dice que no pudo leer" : "NO dice que no pudo leer sus pendientes"}`
+    + (presume ? ` y PRESUME cero («${presume}»)` : ""));
+});
+await caso("ses-45-karla-reintentar-trae-el-numero", async ({ p, s }) => {
+  s.filas = { orders: "falla" };
+  await abrirYEntrar(p, s, "karla");
+  const fallo = await esperarFalla(p); await despertar(p);
+  const antes = await entradasDelMenu(p);
+  s.filas = { orders: ORDENES_KARLA() };   // la base vuelve
+  const reintentar = p.getByRole("button", { name: /^Reintentar/ }).first();
+  const hay = await reintentar.isVisible().catch(() => false);
+  if (hay) await reintentar.click();
+  const llego = await esperarMenu(p, /^Pendientes \(\d+\)$/);
+  const despues = await entradasDelMenu(p);
+  ok("ses-45-karla-reintentar-trae-el-numero", fallo && hay && llego && despues.includes("Pendientes (2)") && !antes.some(x => /\(\d+\)/.test(x)),
+    `con la lectura caída el menú decía ${JSON.stringify(antes)}; ${hay ? "con «Reintentar»" : "SIN «Reintentar»"} dice ${JSON.stringify(despues)}`);
+});
+// la otra pantalla de Marcelo (1920): la misma cola, y el menú plegado conserva su entrada con su nombre en el «title»
+await caso("ses-47-karla-una-sola-cola-1920", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_KARLA() };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+  const menu = await entradasDelMenu(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(700);
+  const vista = await tituloDeLaVista(p);
+  const ancho = await p.evaluate(() => document.documentElement.scrollWidth);
+  await p.getByTitle("Colapsar menú").first().click().catch(() => {}); await p.waitForTimeout(400);
+  const plegado = await entradasDelMenu(p);
+  ok("ses-47-karla-una-sola-cola-1920", JSON.stringify(menu) === '["Pendientes (2)"]' && /Pendientes de Folio/.test(vista) && ancho <= 1920 && plegado.includes("Pendientes (2)"),
+    `a 1920: el menú ${JSON.stringify(menu)}, «Pendientes» abre «${vista}», ancho ${ancho}; plegado: ${JSON.stringify(plegado)}`);
+}, { viewport: { width: 1920, height: 1080 } });
+for (const [n, quien, tablero] of [["ses-43-gerardo-sus-pendientes-siguen", "gerardo", true], ["ses-44-lupita-sus-pendientes-siguen", "lupita", false]]) {
+  await caso(n, async ({ p, s }) => {
+    s.filas = { orders: ORDENES_KARLA() };
+    await abrirYEntrar(p, s, quien);
+    await esperarMenu(p, /^Pendientes \(\d+\)$/); await despertar(p);
+    const menu = await entradasDelMenu(p);
+    await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(700);
+    const v = await tituloDeLaVista(p);
+    // la paleta es de todos: lo que cada quien busca por su nombre la sigue encontrando
+    await p.keyboard.press("Control+k"); await p.waitForTimeout(300);
+    await p.getByRole("combobox").last().fill(tablero ? "tablero" : "nueva"); await p.waitForTimeout(250);
+    await p.keyboard.press("Enter"); await p.waitForTimeout(700);
+    const v2 = await tituloDeLaVista(p);
+    const esperado = tablero ? /Tablero de Producción/ : /Nueva|Orden de Producción|Nueva orden/i;
+    ok(n, /Mis Pendientes/.test(v) && !menu.some(t => /^Folios/.test(t)) && menu.includes("Tablero") === tablero && esperado.test(v2 + " " + (await texto(p)).slice(0, 300)),
+      `${quien}: el menú ${JSON.stringify(menu)}; «Pendientes» abre «${v}» (como antes); Ctrl+K «${tablero ? "tablero" : "nueva"}» abre «${v2}»`);
+  });
 }
 
 await browser.close();

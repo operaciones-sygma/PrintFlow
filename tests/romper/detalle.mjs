@@ -77,35 +77,8 @@ const itemsMas = p => p.getByRole("menuitem").evaluateAll(xs => xs.map(x => x.te
 // con la guía aunque estuviera oculta (det-57 y det-75 pasaban contra v10.84.47; lo destapó la corrida doble)
 const guiaVisible = (p, re) => dlg(p).evaluate((d, src) => new RegExp(src).test(d.innerText), re.source);
 
-// ── P1: borrar el archivo de producción mira lo que contesta la base ───────────────────────────────────────────────────
-const pedirBorrar = async p => {
-  await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 900);
-  const si = p.getByRole("button", { name: /^Sí, borrar|^Borrar del servidor/ });
-  if (await si.count()) { await si.click(); await espera(p, 600); return true; }
-  return false;
-};
-await caso("det-01-borrar-storage-falla", "caso=archivo&rol=preprensa&falla=storage", async p => {
-  const pidio = await pedirBorrar(p);
-  const l = await log(p), t = await textoDlg(p);
-  ok("det-01-borrar-storage-falla", pidio && /storage:remove/.test(l) && !/tabla:update/.test(l) && /no se pudo/i.test(t) && /arte final\.pdf/.test(t),
-    `si Storage no borra: ${/tabla:update/.test(l) ? "la orden SE QUEDÓ sin archivo" : "la orden conserva su archivo"}; ${/no se pudo/i.test(t) ? "lo dice" : "NO lo dice"}`);
-});
-await caso("det-02-borrar-tabla-falla", "caso=archivo&rol=preprensa&falla=tabla", async p => {
-  const pidio = await pedirBorrar(p);
-  const t = await textoDlg(p);
-  ok("det-02-borrar-tabla-falla", pidio && /no se pudo|no se actualizó|no quedó/i.test(t), "si la orden no se actualiza, el detalle " + (/no se pudo|no se actualizó|no quedó/i.test(t) ? "lo dice" : "NO lo dice"));
-});
-await caso("det-03-borrar-bien", "caso=archivo&rol=preprensa", async p => {
-  const pidio = await pedirBorrar(p);
-  const l = await log(p);
-  const sigue = await p.getByRole("link", { name: /arte final\.pdf/ }).count();
-  ok("det-03-borrar-bien", pidio && /storage:remove/.test(l) && /tabla:update/.test(l) && sigue === 0, `borrado: ${sigue ? "el detalle SIGUE enseñando el archivo" : "el archivo ya no sale"}`);
-});
-await caso("det-04-borrar-dice-que-archivo", "caso=archivo&rol=preprensa", async p => {
-  await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 900);
-  const t = await textoDlg(p);
-  ok("det-04-borrar-dice-que-archivo", /¿Ya descargaste «arte final\.pdf»\?|¿Borrar «arte final\.pdf»/.test(t), "la pregunta de borrar " + (/«arte final\.pdf»/.test(t) ? "nombra el archivo" : "NO nombra el archivo"));
-});
+// (det-01 a det-04, y det-42 a det-44 más abajo, probaban el borrado del archivo desde el detalle, después de descargarlo: v10.84.93 lo
+//  quitó —«el archivo es el historial»—; det-172 a det-175, al final, cuidan que no regrese. Borrar uno a propósito sigue en «Archivos».)
 
 // ── P1: el foco no se sale del diálogo ──────────────────────────────────────────────────────────────────────────────────
 for (const [n, tecla] of [["det-05-tab-no-se-sale", "Tab"], ["det-06-shift-tab-no-se-sale", "Shift+Tab"]]) {
@@ -281,28 +254,8 @@ for (const [etapa, rol] of [["design", "preprensa"], ["proof_printing", "german"
     ok(n, r.length <= 1 && m.length === 0, `rellenos: ${r.join(" | ") || "ninguno"}; contraste: ${m.slice(0, 3).join(" · ") || "bien"}`);
   });
 }
-await caso("det-42-doble-clic-en-borrar", "caso=archivo&rol=preprensa", async p => {
-  await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 900);
-  await p.getByRole("button", { name: /^Sí, borrar/ }).dblclick(); await espera(p, 700);
-  const n = ((await log(p)).match(/storage:remove/g) || []).length;
-  ok("det-42-doble-clic-en-borrar", n === 1, `doble clic en «Sí, borrar»: ${n} borrado(s) pedidos a Storage`);
-});
-await caso("det-43-reintentar-tras-error", "caso=archivo&rol=preprensa&falla=storage", async p => {
-  await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 900);
-  await p.getByRole("button", { name: /^Sí, borrar/ }).click(); await espera(p, 500);
-  const sigue = await p.getByRole("button", { name: /^Sí, borrar/ }).count();
-  if (sigue) { await p.getByRole("button", { name: /^Sí, borrar/ }).click(); await espera(p, 500); }
-  const l = await log(p);
-  ok("det-43-reintentar-tras-error", sigue === 1 && (l.match(/storage:remove/g) || []).length === 2 && !/tabla:update/.test(l) && /no se pudo/i.test(await textoDlg(p)),
-    `tras el error: ${sigue ? "se puede reintentar" : "NO se puede reintentar"}; la orden ${/tabla:update/.test(l) ? "SE QUEDÓ sin archivo" : "conserva su archivo"}`);
-});
-await caso("det-44-conservar-limpia", "caso=archivo&rol=preprensa&falla=storage", async p => {
-  await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 900);
-  await p.getByRole("button", { name: /^Sí, borrar/ }).click(); await espera(p, 500);
-  await p.getByRole("button", { name: /^Conservar/ }).click(); await espera(p, 300);
-  const t = await textoDlg(p);
-  ok("det-44-conservar-limpia", !/no se pudo/i.test(t) && /arte final\.pdf/.test(t), "«Conservar» " + (/no se pudo/i.test(t) ? "deja el error a la vista" : "cierra la pregunta y el error"));
-});
+// (det-42 a det-44 —doble clic en «Sí, borrar», reintentar tras el error, «Conservar»— eran del mismo borrado desde el detalle que
+//  v10.84.93 quitó: ver la nota de det-01 a det-04)
 await caso("det-45-clic-fuera-del-menu", "caso=factura&rol=admin", async p => {
   await abrirMas(p);
   await dlg(p).locator("text=Producto").first().click(); await espera(p, 300);
@@ -1126,6 +1079,32 @@ await caso("det-171-el-historial-nombra-la-categoria", "caso=factura&rol=admin&h
   const tramo = (t.match(/Categor[ií]a.{0,120}/) || [""])[0];
   ok("det-171-el-historial-nombra-la-categoria", /Otro/.test(tramo) && /Formas, talonarios y formatos/.test(tramo) && !/\bformas\b/.test(tramo),
     `el historial: «${tramo.slice(0, 120)}» (los nombres de la lista, no «otro → formas»)`);
+});
+
+// ── v10.84.93 — descargar el archivo de producción ya no propone borrarlo (Marcelo, 13-oct: «el archivo es el historial»; un clic en
+//   «Sí, borrar» perdía el archivo de impresión para siempre; borrar uno a propósito sigue en «Archivos»). Vuelta 1: escritas antes del
+//   cambio, contra el detalle que lo proponía a preprensa, Germán y admin ──
+for (const [n, rol] of [["det-172-descargar-no-propone-borrar", "preprensa"], ["det-173-descargar-no-propone-borrar-german", "german"],
+  ["det-174-descargar-no-propone-borrar-admin", "admin"]]) {
+  await caso(n, "caso=archivo&rol=" + rol, async p => {
+    await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 1200);
+    const t = (await textoDlg(p)).replace(/\s+/g, " ");
+    const borrar = await dlg(p).getByRole("button", { name: /borrar/i }).count();
+    const sigue = await p.getByRole("link", { name: /arte final\.pdf/ }).count();
+    ok(n, !/Ya descargaste|Bórralo|del servidor/i.test(t) && borrar === 0 && sigue === 1 && p.popups.length === 1,
+      `${rol} descarga: ${/Ya descargaste|Bórralo/i.test(t) ? "le PROPONE borrarlo («" + (t.match(/¿Ya descargaste[^?]*\?/) || ["?"])[0] + "»)" : "no le propone borrarlo"}; `
+      + `botones de borrar: ${borrar}; el archivo ${sigue ? "sigue" : "YA NO SALE"}; se abrió ${p.popups.length} vez`);
+  });
+}
+await caso("det-175-descargar-dos-veces-no-escribe", "caso=archivo&rol=preprensa", async p => {
+  const l0 = (await log(p)).length;
+  const enlace = p.getByRole("link", { name: /arte final\.pdf/ });
+  await enlace.click(); await espera(p, 700); await enlace.click(); await espera(p, 1200);
+  // y lo que haría alguien que descarga y sigue con el teclado: Enter sobre lo que tenga el foco
+  await p.keyboard.press("Enter"); await espera(p, 800);
+  const l = (await log(p)).slice(l0);
+  ok("det-175-descargar-dos-veces-no-escribe", !/storage:remove|tabla:update/.test(l) && await p.getByRole("link", { name: /arte final\.pdf/ }).count() === 1,
+    `descargar dos veces y Enter: ${/storage:remove|tabla:update/.test(l) ? "SE BORRÓ/ESCRIBIÓ (" + l.trim().slice(0, 80) + ")" : "nada se borra ni se escribe"}`);
 });
 
 await browser.close();

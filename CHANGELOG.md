@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.93 — Karla con una sola cola, y descargar el archivo ya no propone borrarlo — 13-oct-2026
+
+**Qué pasaba** (dos de las recomendaciones de la critique de «Mis Pendientes», 17/40, que Marcelo aprobó el 13-oct con «sigamos con lo
+que falta»):
+- **Karla tenía dos colas para las mismas órdenes:** «Pendientes» (las fichas) y «Folios» (su vista de verdad, con «Por foliar» y «En la
+  planta»). El número del menú contaba además lo que con folio anticipado sigue en la planta, donde todavía no le toca nada. Y con la
+  lectura de la base caída, «Folios» decía «Por foliar 0» y «Sin órdenes en salida» (la regla 12: un error no es vacío), lo mismo que
+  «Mis Pendientes» antes de v10.84.87.
+- **Descargar el archivo de producción proponía borrarlo:** desde v10.54.10, medio segundo después de «Descargar», a preprensa, Germán y
+  admin: «¿Ya descargaste…? Bórralo del servidor». Contradice la decisión del 12-oct («el archivo es el historial»), el espacio no apura
+  (118 MB de 100 GB) y un clic en «Sí, borrar» perdía el archivo de impresión para siempre.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- El menú de Karla: su «Pendientes» abre Folios («Pendientes de Folio») con el número de «Por foliar» (Salidas y maquila recibida, sin lo
+  que está en espera); ya no hay «Folios» aparte. En la paleta (Ctrl+K), «folio» la sigue encontrando. Los demás roles, igual.
+- Folios sin una lectura buena: «Leyendo tus pendientes de folio…» o «No se pudieron leer tus pendientes de folio» (con «Reintentar»
+  arriba), sin cifras en las pestañas ni «Sin órdenes en salida».
+- El detalle ya no pregunta ni borra el archivo al descargarlo; se fueron el borrado del detalle y su permiso (`delete_file`). Borrar
+  uno a propósito sigue en «Archivos».
+
+**Cómo se probó** (vueltas): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.91: fallaban 8. En la tanda `detalle`,
+det-172 a det-174 (a preprensa, Germán y admin: «¿Ya descargaste «arte final.pdf»?»). En la tanda `sesion` (la app real compilada contra
+una base de mentira, que ahora puede traer órdenes por páginas, como PostgREST, o fallar al leer una tabla): ses-40 y ses-47 (el menú de
+Karla `["Pendientes (3)","Folios"]` a 1366 y a 1920, también plegado, y «Pendientes» abría «Mis Pendientes»), ses-41 (Ctrl+K «pendientes»
+abría «Mis Pendientes»), ses-45 («Reintentar» traía «Pendientes (3)») y ses-46 (con la lectura caída, Folios decía «Por foliar 0»).
+Pasaban, como guardias: det-175 (descargar dos veces y Enter no borra ni escribe), ses-42 (con la lectura caída, el menú sin número),
+ses-43 y ses-44 (Gerardo y Lupita como antes; la paleta, que es de todos, les sigue encontrando «Tablero» y «Nueva»). Dos fallas de la
+primera corrida eran de la prueba: con órdenes en la base sale el Despertador del día y tapaba los clics (se contesta, como en el revisor
+de producción), y con la lectura caída la librería reintenta el 503 antes de rendirse (se espera la señal de la app, no 1.5 s).
+**Vuelta 2**, con el cambio: las 12 pasan; la tanda `detalle` completa (184) y la `sesion` completa (44), sin fallas; ninguna falla de
+fondo, así que no hubo vuelta 3. **Retiradas (7):** det-01 a det-04 y det-42 a det-44 probaban el borrado desde el detalle (Storage que
+falla, la tabla que falla, el borrado bueno, la pregunta que nombra el archivo, doble clic en «Sí, borrar», reintentar, «Conservar»): ese
+borrado ya no existe y det-172 a det-175 cuidan que no regrese. **Sin probar:** el borrado a propósito de «Archivos» no tiene prueba de qué
+pasa cuando Storage falla (no es de esta versión; queda anotado).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.91 — La CATEGORÍA del trabajo: de lista cerrada, sugerida por el nombre, obligatoria al capturar; Analytics por categoría — 13-oct-2026
 
 **Qué pasaba** (la critique de Analytics del 12-oct y Marcelo, 12/13-oct: *«Archivos, luego los tipos»*, *«Categoría nueva aparte»*,
