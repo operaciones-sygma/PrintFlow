@@ -31,7 +31,7 @@ const espera = (p, ms = 250) => p.waitForTimeout(ms);
 async function sig(p) { await p.click("#abrir-sig"); await p.getByRole("dialog", { name: /Facturar siguiente parte/ }).waitFor(); await espera(p, 300); }
 async function split(p) { await p.click("#abrir-split"); await p.getByRole("dialog", { name: /Facturar por partes/ }).waitFor(); await espera(p, 400); }
 async function cancelar(p, ultima) { await p.click(ultima ? "#abrir-cancel-ultima" : "#abrir-cancel"); await p.getByRole("dialog", { name: /Cancelar la parte/ }).waitFor(); await espera(p, 150); }
-const facturarBtn = p => p.getByRole("button", { name: "Facturar", exact: true });
+const facturarBtn = p => p.getByRole("button", { name: /^(Facturar|Emitir (factura|remisión)( por \$[\d,.]+)?)$/ });   // (v10.84.103: dice lo que emite)
 const crearBtn = p => p.getByRole("button", { name: /^Crear \d+ folios?/ });
 const faltas = async p => { const l = p.getByText(/Falta para crear los folios/); return (await l.count()) ? (await l.first().locator("xpath=..").textContent()) : ""; };
 const dosPartes = async (p, a = "2500", b = "2500") => { await p.getByLabel("Cantidad de la parte 1").fill(a); await p.getByLabel("Cantidad de la parte 2").fill(b); await espera(p, 150); };
@@ -317,9 +317,28 @@ const sigConfirm = async p => { const lg = (await log(p)).split("\n").find(l => 
 const splitIntento = async p => { const lg = (await log(p)).split("\n").find(l => l.startsWith("split:intento")) || ""; try { return JSON.parse(lg.replace(/^split:intento /, "")); } catch { return null; } };
 const ligarCon = async (p, folio) => { await p.getByRole("button", { name: /ya tiene factura: ligarla/ }).click(); await espera(p, 300); await p.getByRole("button", { name: new RegExp(folio) }).click(); await espera(p); };
 // Con una factura elegida para ligar, el botón principal dice «Ligar» (no «Facturar»).
-const accionBtn = p => p.getByRole("button", { name: /^(Facturar|Ligar)$/ });
+const accionBtn = p => p.getByRole("button", { name: /^(Facturar|Ligar|Emitir (factura|remisión)( por \$[\d,.]+)?)$/ });
 const confirmarLigar = async (p, folio) => { await accionBtn(p).click(); await espera(p, 300); await p.getByRole("button", { name: new RegExp("^Ligar " + folio) }).click(); await espera(p, 450); };
 
+// v10.84.103 — la critique del 13-oct: «dice “Se emite una remisión por $14,000.00” pero el botón sólo dice “Facturar”». Vuelta 1: antes.
+await caso("sig-37 el botón dice lo que emite", "", async p => {
+  await sig(p);
+  const nombre = ((await facturarBtn(p).first().innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
+  ok("sig-37 el botón de «Facturar siguiente parte» dice lo que emite y por cuánto («Emitir factura por $…» o «Emitir remisión por $…»)", /^Emitir (factura|remisión) por \$[\d,.]+$/.test(nombre), `«${nombre}»`);
+});
+// v10.84.103, vuelta 3 — con un subtotal que no sirve (0, o más de lo que queda) el botón y el resumen no prometen una cifra que no se va a emitir
+// (con 0 decían «Emitir factura por $0.00»; con de más, «Quedarán $-65,859.00 sin IVA por facturar»)
+await caso("sig-38 un subtotal que no sirve no promete cifra", "", async p => {
+  await sig(p);
+  const leer = async () => ({ boton: ((await facturarBtn(p).first().innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim(),
+    apagado: await facturarBtn(p).first().isDisabled().catch(() => null), resumen: ((await p.getByText(/Se emite|subtotal que sirva/).first().innerText().catch(() => "")) || "").replace(/\s+/g, " ") });
+  await p.locator("#sp-subtotal").fill("0"); await espera(p); const cero = await leer();
+  await p.locator("#sp-subtotal").fill("99999"); await espera(p); const mucho = await leer();
+  await p.locator("#sp-subtotal").fill("10000"); await espera(p); const bien = await leer();
+  const sinCifra = x => /^Emitir (factura|remisión)$/.test(x.boton) && x.apagado === true && !/\$-|\$0\.00/.test(x.resumen);
+  ok("sig-38 con 0 o de más, ni el botón ni el resumen prometen una cifra; con uno que sirve, sí", sinCifra(cero) && sinCifra(mucho) && /^Emitir factura por \$11,600\.00$/.test(bien.boton) && bien.apagado === false,
+    `con 0: «${cero.boton}» / «${cero.resumen.slice(0, 90)}» · con de más: «${mucho.boton}» / «${mucho.resumen.slice(0, 110)}» · con 10,000: «${bien.boton}»`);
+});
 await caso("sig-30 ligar F-130 con el dinero de la orden", "hakuna=1", async p => {
   await sig(p); await ligarCon(p, "F-130");
   const sub = await p.locator("#sp-subtotal").inputValue(); const pz = await p.locator("#sp-piezas").inputValue();

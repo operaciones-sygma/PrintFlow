@@ -1342,6 +1342,10 @@ const canAddProductToOC=(oc,user,userLogin)=>{
   if(user==="vendedor")return oc.vendedor===userLogin;
   return false;
 };
+// v10.84.103 — MOVER órdenes que ya existen a una OC («Agregar Producto Existente»): la misma regla que la base (move_order_to_oc: admin,
+//   secretaria y karla; nunca a una OC web ni a una de un solo producto). La pantalla se la enseñaba a Karla y la ventana se la negaba (usaba
+//   canAddProductToOC, la de productos NUEVOS); al vendedor dueño se la abría y la base lo rechazaba. Una regla, en los dos lugares.
+const puedeMoverAOC=(oc,user)=>!!oc&&!oc.is_web_oc&&!oc.is_simple_oc&&["admin","secretaria","karla"].includes(user);
 
 // 🔒 v10.12.0.2 Phase 1 — Permisos centralizados por acción.
 // Cada acción declara: roles permitidos + cuáles de esos están ownership-bound (solo en órdenes propias).
@@ -7918,6 +7922,8 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
     }
   };
   const amountOk = cents(amount) > 0 && cents(amount) <= cents(restoSinIva) && (!unaPieza || todo);
+  // v10.84.103 — lo que se promete (el botón, el resumen, el total con IVA) es lo que se manda: `enviar` redondea a centavos
+  const subEnvio = cents(amount) / 100;
   const qtyOk = todo ? Number(qty) === restoQty : (Number(qty) >= 1 && Number(qty) < restoQty);
   const can = !saving && amountOk && qtyOk && folioOk;
   // v10.84.32 (/impeccable critique) — Esc por el escStack de la app: cierra sólo el diálogo de ARRIBA (el confirm de ligar,
@@ -7970,7 +7976,7 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
         <div>
           <label htmlFor="sp-subtotal" style={lbl}>Subtotal a facturar (sin IVA)</label>
           <input id="sp-subtotal" type="number" step="0.01" min="0" value={amount} onChange={e=>onAmount(e.target.value)} disabled={unaPieza} style={{...inp,fontSize:15,fontWeight:700,opacity:unaPieza?.6:1}}/>
-          <div style={{fontSize:F.meta,color:C.t2,marginTop:3}}>{conIva?<>Total con IVA: <b style={{color:C.tx}}>${fmtMx(Number(amount)*1.16)}</b></>:"Remisión: sin IVA"}</div>
+          <div style={{fontSize:F.meta,color:C.t2,marginTop:3}}>{conIva?<>Total con IVA: <b style={{color:C.tx}}>${fmtMx(subEnvio*1.16)}</b></>:"Remisión: sin IVA"}</div>
           {!amountOk&&<div style={{fontSize:F.meta,color:C.dnInk,marginTop:2}}>{unaPieza?"Con una sola pieza sólo se factura todo lo que queda":`Tiene que ser mayor a cero y no más de $${fmtMx(restoSinIva)}`}</div>}
         </div>
         <div>
@@ -8023,14 +8029,15 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
       <div style={{background:C.sf,borderRadius:10,padding:"10px 12px",fontSize:11,color:C.t2,marginBottom:14,lineHeight:1.5}}>
         {ligar&&ligada
           ? <>Se liga <b style={{color:C.tx}}>{ligada.doc_number}</b> (ya existe en cobranza por ${fmtMx(ligada.amount)}) a esta orden como la siguiente parte; no se acuña folio nuevo.</>
-          : <>Se emite <b style={{color:C.tx}}>{conIva?`una factura por $${fmtMx(Number(amount)*1.16)}`:`una remisión por $${fmtMx(Number(amount))}`}</b> {conIva?"(con IVA)":"(sin IVA)"} ligada a esta orden.</>}
-        {todo ? <> Es la última parte: la orden queda <b style={{color:C.okInk}}>facturada completa</b>.</> : <> Quedarán <b style={{color:C.tx}}>${fmtMx(restoSinIva-Number(amount))}</b> sin IVA por facturar después.</>}
+          : !amountOk ? <>Escribe un subtotal que sirva para ver lo que se emite.</>   /* v10.84.103: sin cifra que no se va a emitir ($0.00, «Quedarán $-…») */
+          : <>Se emite <b style={{color:C.tx}}>{conIva?`una factura por $${fmtMx(subEnvio*1.16)}`:`una remisión por $${fmtMx(subEnvio)}`}</b> {conIva?"(con IVA)":"(sin IVA)"} ligada a esta orden.</>}
+        {!amountOk ? null : todo ? <> Es la última parte: la orden queda <b style={{color:C.okInk}}>facturada completa</b>.</> : <> Quedarán <b style={{color:C.tx}}>${fmtMx(restoSinIva-subEnvio)}</b> sin IVA por facturar después.</>}
       </div>
       {err&&<div role="alert" style={{display:"flex",gap:6,alignItems:"flex-start",background:C.dn+"10",borderRadius:8,padding:10,marginBottom:12,border:"0.5px solid "+C.dn+"40",fontSize:11,color:C.dnInk,lineHeight:1.45}}><WarningIcon size={13} weight="fill" color={C.dn} style={{flexShrink:0,marginTop:1}}/><span>{err}</span></div>}
       <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
         <button onClick={onClose} disabled={saving} style={bs(C.sf,C.t2)}>Volver</button>
         <button onClick={facturar} disabled={!can} style={{...bt(C.fac),opacity:can?1:.5}}>
-          <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Facturando…"):(ligar?"Ligar":"Facturar")}
+          <FileTextIcon size={14} weight="bold"/>{saving?(ligar?"Ligando…":"Emitiendo…"):(ligar?"Ligar":!amountOk?(conIva?"Emitir factura":"Emitir remisión"):(conIva?"Emitir factura por $"+fmtMx(subEnvio*1.16):"Emitir remisión por $"+fmtMx(subEnvio)))}
         </button>
       </div>
     </div>
@@ -13516,8 +13523,8 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
   };
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:640,width:"100%",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
-      <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><PackageIcon size={17} weight="bold"/>Agregar Producto Existente</h3>
+    <div role="dialog" aria-modal="true" aria-labelledby="agregar-existente-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:640,width:"100%",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
+      <h3 id="agregar-existente-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.ac}}><PackageIcon size={17} weight="bold"/>Agregar Producto Existente</h3>
       <p style={{fontSize:12,color:C.t2,margin:"0 0 12px"}}>
         Órdenes de producción del cliente <strong>{oc?.client||"—"}</strong> que aún no tienen folio fiscal. Las órdenes seleccionadas se moverán a esta OC ({oc?.id}). Si están en otra OC, se mueven (y la OC origen se limpia automáticamente si queda vacía).
       </p>
@@ -13544,9 +13551,9 @@ function AddExistingProductsModal({oc, orders, purchaseOrders, onConfirm, onClos
               const inOtherOC = o.purchase_order_id && o.purchase_order_id !== oc.id;
               const extra = (o.due_date || inOtherOC || !o.purchase_order_id) ? (
                 <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginTop:1}}>
-                  {o.due_date && <span style={{fontSize:9,color:C.t2,display:"inline-flex",alignItems:"center",gap:2}}><CalendarDotsIcon size={9} weight="bold"/>{fD(o.due_date)}</span>}
-                  {inOtherOC && <span style={{background:C.wn+"15",color:C.wn,padding:"1px 6px",borderRadius:4,fontSize:9,fontWeight:600}} title={"Actualmente en "+o.purchase_order_id+" — se moverá a esta OC"}>en {o.purchase_order_id}</span>}
-                  {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t3,padding:"1px 6px",borderRadius:4,fontSize:9}}>Sin OC</span>}
+                  {o.due_date && <span style={{fontSize:10,color:C.t2,display:"inline-flex",alignItems:"center",gap:2}}><CalendarDotsIcon size={10} weight="bold"/>{fD(o.due_date)}</span>}
+                  {inOtherOC && <span style={{background:C.wn+"15",color:tintaAA(C.wnInk,7),padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:600}} title={"Actualmente en "+o.purchase_order_id+" — se moverá a esta OC"}>en {o.purchase_order_id}</span>}
+                  {!o.purchase_order_id && <span style={{background:C.t3+"15",color:C.t2,padding:"1px 6px",borderRadius:4,fontSize:10}}>Sin OC</span>}
                 </div>
               ) : null;
               return <OrderPickCard key={o.id} o={o} selected={selectedIds.has(o.id)} onToggle={() => toggle(o.id)} accent={C.ac} extra={extra}/>;
@@ -19036,6 +19043,9 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
+  // v10.84.103 — las OC de un solo producto (las que nacen con cada orden) se pueden ver: para juntar dos en una OC hay que saber dónde está cada
+  //   orden (Hotsson: P-0621 en OC-0944 y P-0623 en OC-0949; la critique del 13-oct: «ocultas por diseño», sin «ver todas»)
+  const [verSimples, setVerSimples] = useState(false);
   // v10.58.49 — Histórico en carpetas Año → Mes (pedido de Marcelo; mismo patrón que
   // el Archivo de órdenes de producción)
   const [openHistYear, setOpenHistYear] = useState(null);
@@ -19059,7 +19069,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   // 📚 v10.32.3 — Filtro adicional por tab: Activas (open/in_progress) vs Histórico (completed/cancelled)
   const complexOCs = useMemo(() =>
     purchaseOrders.filter(po => {
-      if(po.is_simple_oc)return false;
+      if(po.is_simple_oc&&!verSimples)return false;
       if(po.is_web_oc){
         const children=orders.filter(o=>o.purchase_order_id===po.id);
         if(children.length===0)return false;
@@ -19078,12 +19088,12 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
       }
       return new Date(b.created_at) - new Date(a.created_at);
     }),
-    [purchaseOrders, orders, role, userLogin, orderFilter, historicoTab]);
+    [purchaseOrders, orders, role, userLogin, orderFilter, historicoTab, verSimples]);
   // v10.32.3 — Conteos para badges de tabs (independientes de qué tab está activo)
   const tabCounts = useMemo(() => {
     let activas = 0, historico = 0;
     purchaseOrders.forEach(po => {
-      if(po.is_simple_oc) return;
+      if(po.is_simple_oc && !verSimples) return;
       if(po.is_web_oc){
         const children=orders.filter(o=>o.purchase_order_id===po.id);
         if(children.length===0)return;
@@ -19094,7 +19104,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
       if(isHistoric) historico++; else activas++;
     });
     return {activas, historico};
-  }, [purchaseOrders, orders, role, userLogin, orderFilter]);
+  }, [purchaseOrders, orders, role, userLogin, orderFilter, verSimples]);
   // v10.58.49 — Árbol Año → Mes para el Histórico (fecha de cierre: completada o cancelada)
   const histTree = useMemo(() => {
     if(!historicoTab) return {};
@@ -19177,7 +19187,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const canAddProductHere = canAddProductToOC(selectedOC, role, userLogin);
     const canAddProduct = canAddProductHere && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
     // v10.43.8 — Karla puede MOVER órdenes existentes a una OC pero NO crear órdenes de producción nuevas.
-    const canMoveExistingHere = (role === "admin" || isSec(role) || role === "karla" || (role === "vendedor" && selectedOC?.vendedor === userLogin)) && !selectedOC?.is_web_oc;
+    const canMoveExistingHere = puedeMoverAOC(selectedOC, role);   // v10.84.103: la regla de la base (ni a una OC de un producto ni el vendedor)
     const canMoveExisting = canMoveExistingHere && selectedOC.status !== "cancelled" && selectedOC.status !== "completed" && !isLocked;
     const canAssignFolio = (role === "admin" || role === "karla") && pendingOrders.length > 0 && !hasShared && !isLocked && selectedOC.status !== "cancelled";
     // 📄 Solo permitir asignar folio inmediato si TODAS las pendientes están listas para entrega (stages 'salidas'/'maq_received'),
@@ -19256,6 +19266,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {canAssignFolio && onMatrixPlan && ocOrders.length >= 2 && !selectedOC.shared_invoice_folio && !selectedOC.is_web_oc && <button onClick={()=>onMatrixPlan(selectedOC, ocOrders)} style={{...tenueAA(C.fac),fontSize:12,padding:"8px 14px"}} title="Plan matriz: crea N facturas con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, etc.). Cobertura parcial permitida."><SquaresFourIcon size={14} weight="bold"/>Plan matriz</button>}
         </div>
       </div>
+      {/* v10.84.103 — una OC de un solo producto no recibe otras órdenes (la base lo rechaza): para facturarlas juntas, una OC nueva */}
+      {selectedOC.is_simple_oc && (role === "admin" || isSec(role) || role === "karla") && <div role="note" data-oc-simple style={{fontSize:11.5,color:C.t2,background:C.sf,borderRadius:10,padding:"8px 12px",marginBottom:12,lineHeight:1.5}}>
+        Esta OC es de un solo producto (nació con su orden). Para facturar varias órdenes juntas, crea una «Nueva OC» en la lista y agrega ahí las órdenes con «Agregar Producto Existente».
+      </div>}
       {/* v10.84.67 — «Asignar folio» no sale si falta alguna en Salidas: se dice cuáles y dónde, y las que están en Empaque o máquina se pueden pasar */}
       {canAssignFolio && !allPendingReady && <FaltanParaFoliar pendientes={pendingOrders} onJalar={onJalar}/>}
       {isWeb && <div style={{fontSize:11,color:C.t3,fontStyle:"italic",padding:"8px 12px",background:WEB_BLUE+"08",borderRadius:8,border:"0.5px solid "+WEB_BLUE+"20",marginBottom:10}}><GlobeIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Las OCs de origen web no aceptan productos adicionales. Los productos del carrito están fijados al pago original del cliente.</div>}
@@ -19286,7 +19300,8 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
         <ArchiveIcon size={15} weight="bold"/>Histórico ({tabCounts.historico})
       </button>
     </div>
-    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · Read-only` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""} con múltiples productos · Las OCs simples (1 producto) están ocultas por diseño`}</p>
+    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · sólo para consulta` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""}${verSimples?"":" de varios productos"}`}
+      <label style={{display:"inline-flex",alignItems:"center",gap:5,cursor:"pointer",color:C.tx,fontWeight:600}}><input type="checkbox" checked={verSimples} onChange={e=>setVerSimples(e.target.checked)}/>Ver también las de un solo producto</label></p>
     {complexOCs.length === 0
       ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
           <div style={{display:"flex",justifyContent:"center"}}><ClipboardTextIcon size={46} color={C.t3}/></div>
@@ -19403,7 +19418,11 @@ function CreateOCModal({onCreate, onClose, showToast}){
   const rfcRef=useRef(null); // v10.72.10 — para enfocar/traer a la vista el campo RFC cuando el gate dispara
   // v10.59.2 — catálogo de AGENTES (contactos del cliente, ej. Eva/Jorge) de la razón social
   const [clientAgents,setClientAgents]=useState([]);
-  useEscClose(onClose);
+  // v10.84.103 — con algo capturado, Esc, el clic fuera y «Cancelar» preguntan (antes cerraban y se perdía; la critique del 13-oct)
+  const [preguntaCerrar,setPreguntaCerrar]=useState(false);
+  const capturado=!!(f.client.trim()||f.client_email.trim()||f.client_phone.trim()||f.client_rfc.trim()||f.client_agent.trim()||f.vendedor||f.delivery_date||f.notes.trim());
+  const pedirCerrar=()=>{if(saving)return;if(capturado){setPreguntaCerrar(true);return}onClose()};
+  useEscClose(pedirCerrar);
   useEffect(()=>{
     if(!f.client_id){setClientAgents([]);return}
     let alive=true;
@@ -19472,8 +19491,8 @@ function CreateOCModal({onCreate, onClose, showToast}){
       setSaving(false);
     }
   };
-  return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-    <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:C.sh3}}>
+  return <div onClick={pedirCerrar} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div role="dialog" aria-modal="true" aria-labelledby="createoc-modal-title" onKeyDown={e=>{if(!preguntaCerrar)atraparTab(e)}} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:14,padding:24,maxWidth:500,width:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:C.sh3}}>
       <h2 id="createoc-modal-title" style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",color:C.ac,display:"flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={18} weight="bold"/>Nueva Orden de Compra</h2>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 18px"}}>Crea una OC para agrupar varios productos del mismo cliente</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -19522,12 +19541,15 @@ function CreateOCModal({onCreate, onClose, showToast}){
         </div>
       </div>
       {ocAviso&&<div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,color:C.t2,lineHeight:1.45,marginTop:12}}><InfoIcon size={13} weight="bold" style={{flexShrink:0,marginTop:1}}/><span>{ocAviso}</span></div>}
-      {ocErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dn,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginTop:16}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{ocErr}</div>}
+      {ocErr&&<div role="alert" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:C.dnInk,background:C.dn+"08",border:"1px solid "+C.dn+"25",borderRadius:10,padding:"8px 12px",marginTop:16}}><WarningIcon size={13} weight="fill" style={{flexShrink:0,marginTop:1}}/>{ocErr}</div>}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:ocErr?10:20}}>
-        <button onClick={onClose} disabled={saving} style={{...bt(C.t3),fontSize:13,padding:"10px 18px"}}>Cancelar</button>
+        {!canSubmit&&!saving&&<span style={{fontSize:11,color:C.t2,alignSelf:"center",marginRight:"auto"}}>Falta el cliente.</span>}
+        <button onClick={pedirCerrar} disabled={saving} style={{...bt(C.t3),fontSize:13,padding:"10px 18px"}}>Cancelar</button>
         <button onClick={submit} disabled={!canSubmit} style={{...bt(C.ac),fontSize:13,padding:"10px 18px",opacity:canSubmit?1:0.5,cursor:canSubmit?"pointer":"not-allowed"}}>{saving?"Creando...":"Crear OC"}</button>
       </div>
     </div>
+    {preguntaCerrar&&<ConfirmModal zIndex={1100} title="¿Cerrar sin crear la OC?" message={"Lo que capturaste"+(f.client.trim()?" de "+f.client.trim():"")+" se pierde."}
+      confirmLabel="Cerrar sin crear" confirmColor={tintaAA(C.dn,5)} cancelLabel="Seguir capturando" onConfirm={()=>{setPreguntaCerrar(false);onClose()}} onClose={()=>setPreguntaCerrar(false)}/>}
   </div>;
 }
 
@@ -20616,8 +20638,8 @@ export default function PrintFlow() {
   // 📦 v10.39.0 — Abre modal para agregar órdenes EXISTENTES del mismo cliente a la OC
   // Usa mismos permisos que addProductToOC (canAddProductToOC).
   const addExistingToOC=useCallback(oc=>{
-    if(!canAddProductToOC(oc,user,userLogin)){
-      showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":"❌ Solo el vendedor asignado a esta OC puede agregar productos","error");
+    if(!puedeMoverAOC(oc,user)){   // v10.84.103 — la regla de la base (antes, la de productos nuevos: a Karla le decía que no)
+      showToast(oc?.is_web_oc?"❌ Las OCs de origen web no aceptan productos adicionales":oc?.is_simple_oc?"❌ A una OC de un solo producto no se le agregan órdenes: crea una «Nueva OC»":"❌ Mover órdenes a una OC lo hacen Dirección, Lupita o Karla","error");
       return;
     }
     // v10.39.1 — relajado: permitir si tiene client_id O client name. El modal hace
@@ -20967,6 +20989,8 @@ export default function PrintFlow() {
   const landedTorreRef=useRef(false);
   useEffect(()=>{
     if(user==="admin"&&!landedTorreRef.current){landedTorreRef.current=true;setView("torre");}
+    // v10.84.103 — Karla entra a su cola («Pendientes»: lo que tiene por foliar), no al Dashboard (la critique del 13-oct)
+    if(user==="karla"&&!landedTorreRef.current){landedTorreRef.current=true;setView("board");}
     if(!user)landedTorreRef.current=false;
   },[user]);
   // eslint-disable-next-line react-hooks/exhaustive-deps

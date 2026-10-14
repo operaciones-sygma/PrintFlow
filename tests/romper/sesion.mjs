@@ -1257,6 +1257,99 @@ await caso("ses-74-en-maquila-con-aa", async ({ p, s }) => {
     return caja ? [...caja.querySelectorAll("div,span")].filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).map(d => window.__cr(d)) : null; });
   ok("ses-74-en-maquila-con-aa", Array.isArray(maq) && maq.length > 0 && maq.every(x => x >= 4.5), `importes de «En Maquila»: ${JSON.stringify(maq)}`);
 });
+// ════════════════════════ lo menor de la pasada 1 (v10.84.103) ════════════════════════
+// La critique del flujo de facturas de Karla (13-oct): Karla entraba al Dashboard; la lista de OC escondía las de un solo producto (Hotsson:
+// OC-0944 y OC-0949) sin un «ver todas»; «Nueva OC» se cerraba con un clic fuera aunque tuviera datos y «Crear OC» apagado sin porqué;
+// «Agregar Producto Existente» sin rol de diálogo. Vuelta 1: escritas antes del cambio.
+const HOTSSON_Y_PORTLAND = () => {
+  const f = PORTLAND();
+  f.orders.push(ordenK("P-0621", { stage: "in_production", client: "INMOBILIARIA HOTSSON", client_id: "c3", purchase_order_id: "OC-0944", price: 80370, quantity: 9000 }));
+  f.purchase_orders.push({ id: "OC-0944", client: "INMOBILIARIA HOTSSON", client_id: "c3", status: "in_progress", total: 80370, is_simple_oc: true, is_web_oc: false,
+    created_at: haceH(100), created_by: "secretaria", vendedor: "Genaro" });
+  return f;
+};
+await caso("ses-75-karla-entra-a-su-cola", async ({ p, s }) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(500);
+  const v = await tituloDeLaVista(p);
+  ok("ses-75-karla-entra-a-su-cola", /Pendientes de Folio/.test(v), `al entrar, Karla ve «${v}»`);
+});
+await caso("ses-76-las-oc-de-un-solo-producto", async ({ p, s }) => {
+  s.filas = HOTSSON_Y_PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(900);
+  const antes = await p.getByText("OC-0944", { exact: false }).count();
+  const casilla = p.getByLabel(/Ver también las de un solo producto/), hay = await casilla.count();
+  if (hay) { await casilla.check(); await p.waitForTimeout(500); }
+  const despues = await p.getByText("OC-0944", { exact: false }).count();
+  if (despues) { await p.getByText("OC-0944", { exact: false }).first().click(); await p.waitForTimeout(1200); }
+  const nota = await p.locator("[data-oc-simple]").count(), agregar = await p.getByRole("button", { name: /Agregar Producto Existente/ }).count();
+  ok("ses-76-las-oc-de-un-solo-producto", antes === 0 && hay === 1 && despues > 0 && nota === 1 && agregar === 0,
+    `OC-0944 antes ${antes} · casilla ${hay} · después ${despues} · en OC-0944: la nota ${nota}, «Agregar Producto Existente» ${agregar}`);
+});
+await caso("ses-77-nueva-oc-no-se-pierde", async ({ p, s }) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByRole("button", { name: /\+ Nueva OC/ }).first().click(); await p.waitForTimeout(500);
+  const dlg = p.getByRole("dialog", { name: /Nueva Orden de Compra/ });
+  const porque = /Falta el cliente/.test((await dlg.innerText().catch(() => "")) || "");
+  await dlg.locator("input").first().fill("CLIENTE DE PRUEBA"); await p.waitForTimeout(300);
+  await p.mouse.click(5, 5); await p.waitForTimeout(400);
+  const q = p.getByRole("dialog", { name: /¿Cerrar sin crear la OC\?/ }), pregunta = await q.count();
+  if (pregunta) { await q.getByRole("button", { name: "Seguir capturando" }).click(); await p.waitForTimeout(300); }
+  const sigue = await dlg.count(), valor = sigue ? await dlg.locator("input").first().inputValue().catch(() => "") : "";
+  ok("ses-77-nueva-oc-no-se-pierde", porque && pregunta === 1 && sigue === 1 && valor === "CLIENTE DE PRUEBA",
+    `sin cliente dice por qué: ${porque} · clic fuera con algo capturado: ${pregunta ? "pregunta" : "NO pregunta"} · la forma ${sigue ? "sigue con «" + valor + "»" : "SE CERRÓ"}`);
+});
+await caso("ses-78-agregar-existente-es-dialogo", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirOC(p, "karla", s);
+  await p.getByRole("button", { name: /Agregar Producto Existente/ }).first().click(); await p.waitForTimeout(500);
+  const d = await p.getByRole("dialog", { name: "Agregar Producto Existente" }).count();
+  ok("ses-78-agregar-existente-es-dialogo", d === 1, `diálogo con nombre: ${d}`);
+});
+// vuelta 3 (v10.84.103), por donde no se diseñó: Esc en vez del clic fuera, la forma vacía, y el vendedor dueño de la OC (la base no lo deja mover)
+const nuevaOC = async (p, s) => {
+  s.filas = PORTLAND();
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.getByRole("button", { name: /\+ Nueva OC/ }).first().click(); await p.waitForTimeout(500);
+  return p.getByRole("dialog", { name: /Nueva Orden de Compra/ });
+};
+await caso("ses-79-nueva-oc-esc-pregunta", async ({ p, s }) => {
+  const dlg = await nuevaOC(p, s);
+  await dlg.locator("input").first().fill("CLIENTE DE PRUEBA"); await p.waitForTimeout(300);
+  await dlg.locator("#createoc-modal-title").click(); await p.waitForTimeout(200);   // fuera del campo (en un campo, Esc es del campo)
+  await p.keyboard.press("Escape"); await p.waitForTimeout(400);
+  const q = p.getByRole("dialog", { name: /¿Cerrar sin crear la OC\?/ }), pregunta = await q.count();
+  if (pregunta) { await p.keyboard.press("Escape"); await p.waitForTimeout(400); }
+  const quedaPregunta = await q.count(), sigue = await dlg.count(), valor = sigue ? await dlg.locator("input").first().inputValue().catch(() => "") : "";
+  ok("ses-79-nueva-oc-esc-pregunta", pregunta === 1 && quedaPregunta === 0 && sigue === 1 && valor === "CLIENTE DE PRUEBA",
+    `Esc con algo capturado: ${pregunta ? "pregunta" : "NO pregunta"} · Esc en la pregunta: ${quedaPregunta ? "la pregunta SIGUE" : "se va"} · la forma ${sigue ? "sigue con «" + valor + "»" : "SE CERRÓ"}`);
+});
+await caso("ses-80-nueva-oc-vacia-cierra-sin-preguntar", async ({ p, s }) => {
+  const dlg = await nuevaOC(p, s);
+  await p.mouse.click(5, 5); await p.waitForTimeout(400);
+  const pregunta = await p.getByRole("dialog", { name: /¿Cerrar sin crear la OC\?/ }).count(), sigue = await dlg.count();
+  ok("ses-80-nueva-oc-vacia-cierra-sin-preguntar", pregunta === 0 && sigue === 0, `sin nada capturado, el clic fuera: ${pregunta ? "PREGUNTA" : "no pregunta"} · la forma ${sigue ? "SIGUE" : "se cierra"}`);
+});
+await caso("ses-81-el-vendedor-no-mueve-ordenes-a-su-oc", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirYEntrar(p, s, "genaro");
+  await esperarMenu(p, /^Órdenes de Compra/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(800);
+  await p.locator("button:not([title])").filter({ hasText: /^Todas$/ }).first().click(); await p.waitForTimeout(600);   // el interruptor «Mis Órdenes / Todas»
+  const lista = (await texto(p)).replace(/\s+/g, " ");
+  if (!/OC-0960/.test(lista)) { ok("ses-81-el-vendedor-no-mueve-ordenes-a-su-oc", false, "Genaro no ve OC-0960 en la lista: «" + lista.slice(0, 300) + "»"); return; }
+  await p.getByText("OC-0960", { exact: false }).first().click(); await p.waitForTimeout(1500);
+  const enLaOC = /Productos \(4\)/.test(await texto(p)), agregar = await p.getByRole("button", { name: /Agregar Producto Existente/ }).count();
+  ok("ses-81-el-vendedor-no-mueve-ordenes-a-su-oc", enLaOC && agregar === 0, `Genaro en OC-0960 (la suya): ${enLaOC ? "abre" : "NO abre"} · «Agregar Producto Existente» ${agregar} (la base sólo deja a Dirección, Lupita y Karla)`);
+});
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),

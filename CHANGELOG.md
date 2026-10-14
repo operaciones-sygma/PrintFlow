@@ -12,6 +12,50 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.103 — Lo menor de la pasada 1: Karla entra a su cola, las OC de un solo producto a la vista, «Nueva OC» no se pierde, el botón dice lo que emite; y mover órdenes a una OC con la regla de la base — 14-oct-2026
+
+**Qué pasaba.** Lo menor que dejó la pasada 1 de la critique del flujo de facturas de Karla (13-oct):
+- Karla entraba al Dashboard; lo suyo está en «Pendientes» (lo que tiene por foliar).
+- La lista de OC escondía las de un solo producto «por diseño», sin cómo verlas: para juntar en una OC las órdenes de Hotsson (P-0621 en
+  OC-0944, P-0623 en OC-0949) no había dónde ver en qué OC está cada una.
+- «Nueva OC» se cerraba con un clic fuera, con Esc o con «Cancelar» aunque tuviera datos, y «Crear OC» apagado no decía por qué.
+- «Facturar siguiente parte»: el resumen decía «Se emite una remisión por $14,000.00» y el botón sólo «Facturar».
+- «Agregar Producto Existente» no era diálogo (sin nombre; Tab se salía) y sus chapitas iban a 9 px y sin AA.
+- Al probarlo (vuelta 2, ses-78) salió una falla de antes (v10.43.8): la OC le enseñaba a Karla «Agregar Producto Existente», pero al
+  tocarlo le decía «Solo el vendedor asignado a esta OC puede agregar productos» (usaba la regla de productos NUEVOS); y a cualquier
+  vendedor le abría la ventana para que la base lo rechazara al mover (`move_order_to_oc` sólo deja a admin, secretaria y karla, y nunca
+  hacia una OC de un solo producto).
+- Y la vuelta 3 (sig-38): con un subtotal que no sirve (0, o más de lo que queda), el botón nuevo decía «Emitir factura por $0.00», y el
+  resumen (así desde antes) «Se emite una factura por $0.00» o «Quedarán $-65,859.00 sin IVA por facturar».
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **Karla entra a «Pendientes»**, como Dirección entra a la Torre.
+- **«Ver también las de un solo producto»** en la lista de OC (Activas e Histórico). En una de ellas, una nota dice qué hacer («Para
+  facturar varias órdenes juntas, crea una «Nueva OC»…») y no sale «Agregar Producto Existente» (la base lo rechaza).
+- **«Nueva OC» no se pierde**: con algo capturado, Esc, el clic fuera y «Cancelar» preguntan «¿Cerrar sin crear la OC?» («Seguir
+  capturando» o «Cerrar sin crear»); vacía, se cierra sin preguntar. «Falta el cliente.» junto a «Crear OC» apagado; Tab no se sale; el
+  error en su tinta.
+- **El botón dice lo que emite y por cuánto**: «Emitir factura por $11,600.00» o «Emitir remisión por $…». Con un subtotal que no sirve,
+  «Emitir factura» sin cifra, y el resumen pide uno que sirva. Lo que se promete (el botón, el resumen y el total con IVA) es lo que se
+  manda: redondeado a centavos, como lo manda `enviar`.
+- **«Agregar Producto Existente» es un diálogo** con nombre y Tab adentro; sus chapitas, a 10 px con AA.
+- **Mover órdenes a una OC, con UNA regla: la de la base** (`puedeMoverAOC`: Dirección, Lupita y Karla; nunca a una OC web ni a una de un
+  solo producto), en el botón de la OC y en la ventana. El vendedor ya no ve «Agregar Producto Existente»; «+ Agregar Producto» (los
+  productos nuevos) no cambió.
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, escritas antes del cambio y corridas contra v10.84.102: fallaban las 5 (sig-37 y ses-75 a
+ses-78). **Vuelta 2**: pasan sig-37 y ses-75 a ses-77; ses-78 encontró la falla de la regla (Karla no podía abrir la ventana): se arregló
+con `puedeMoverAOC` y pasa. **Vuelta 3**, por donde no se diseñó: Esc en vez del clic fuera (ses-79), la forma vacía, que no pregunte de más
+(ses-80), el vendedor dueño de la OC (ses-81) y el subtotal en 0 o de más (sig-38, que falló y se arregló). **Corrida doble**: contra
+v10.84.102 fallan 6 de las 7 de la app (ses-80 pasa en las dos: vigila que no se pregunte de más) y las 2 del banco de partes (sig-37 y
+sig-38; las otras 72 pasan en las dos). `partes` 74 de 74; `sesion` y `oc`, 202
+de 202. `probar-alcance` y el build, limpios.
+
+**Para Marcelo:** el vendedor ya no ve «Agregar Producto Existente» porque la base no le deja mover órdenes (sólo a Dirección, Lupita y
+Karla). Si quieres que el vendedor sí pueda, es un cambio de base (`move_order_to_oc`).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.102 — Las piezas de una factura que ya existe, desde su CFDI; y el dinero en verde con AA en toda la app — 14-oct-2026
 
 **Qué pasaba.** Para ligar F-143 y F-155 en el plan de OC-0960, Karla tenía que ir a CobranzaFlow, abrir cada CFDI y copiar a mano las
