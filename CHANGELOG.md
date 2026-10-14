@@ -12,6 +12,32 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.111 — El redondeo hacia arriba de una orden repartida en muchas facturas ya no traba el plan matriz — 14-oct-2026
+
+**Qué pasaba.** Lo que dejó abierto v10.84.110. Cada celda del plan va exacta por piezas y se redondea al centavo; una orden repartida en muchas
+facturas puede sumar unos centavos ARRIBA de su precio (6 piezas por $100, una en cada factura: 6 × $16.67 = $100.02), y la base rechaza más de
+precio + $0.01: la pantalla decía «pasa del total de la orden» y no dejaba crear ni ligar. Con Hotsson no pasó (P-0621 quedó $0.02 abajo), pero en
+un plan de 11 facturas le tocaría más o menos a 1 de cada 20 órdenes. Y `npm run recorrido` tomaba por escrituras dos lecturas del plan matriz.
+
+**Qué se cambió** (`src/App.jsx`, `OCSplitMatrixModal`; la base no cambió):
+- Con TODAS las piezas de una orden en el plan (y nada capturado por monto, que es de quien lo tecleó), lo que se pasa de su precio se le quita,
+  centavo a centavo, a las facturas nuevas (de la más grande a la más chica) y, si no hay, a las ligadas que sigan a ±$0.02 de su factura. Si
+  ninguna puede, no se inventa un cuadre: la pantalla frena como la base.
+- Un solo cálculo de lo que manda cada celda (`montos`): lo leen el cuadre de cada factura, el tope por orden, el encabezado, la vista previa y
+  lo que se manda a la base. Hacia abajo no se toca (la base lo acepta; con todas las piezas es «completo», v10.84.110).
+- `tests/recorrido/*.mjs` (las 7 listas de lecturas): `conceptos_para_ligar_en_oc` y `a_nombre_de_quien` (las dos STABLE, medido el 14-oct).
+
+**Cómo se probó** (tres vueltas; el banco del plan tiene `redondeo=nuevas|ligadas|sinholgura|mixta`: P-0999, 6 piezas por $100). **Vuelta 1**,
+contra v10.84.110: pl-120 (6 nuevas de una pieza) y pl-121 (6 ligadas de $19.33) fallaban con «P-0999: $100.02 pasa del total de la orden»;
+pl-122 (6 ligadas de $19.36, ya a −$0.02: ninguna puede bajar) pasaba: es el guardia. **Vuelta 2**: las 6 nuevas suman $100.00 (una va en
+$16.65); las 6 ligadas suman $100.00 y cada una sigue a ±$0.02 de su factura; sin holgura sigue frenando; Hotsson (pl-116, pl-117), lo exacto
+de PORTLAND (pl-78) y pasarse por monto (pl-118) sin cambio. **Vuelta 3**, por donde no se diseñó: con 5 ligadas y una nueva, el centavo sale
+de la nueva y las ligadas quedan exactas (pl-123; la prueba tenía 6 sin orden y la nueva salía a $0.02 de F-306 sin ligar: el candado del
+anticipo la frenaba con razón; supuesto de la prueba, variante `mixta`); la orden incompleta no se toca (pl-124); la vista previa dice lo que se
+manda ($19.31 la que absorbe, pl-125). `plan` 135 de 135, `proponer`, `hooks`, build y alcance.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.110 — El plan matriz ya no dice «pasa del total de la orden» por centavos de redondeo — 14-oct-2026
 
 **Qué pasaba.** Karla (14-oct, 13:54) ligó las 11 facturas de Hotsson en OC-0966, cada columna decía «CUADRA con F-…», y el plan no la dejaba
@@ -36,8 +62,8 @@ todavía sin piezas el encabezado dice «faltan $3,221.17», no «completo» (pl
 (probado en el banco con el código de producción): «Monto ($)» y, en P-0621, F-160 de 8,501.14 a 8,501.12 y F-161 de 7,084.29 a 7,084.27.
 
 **Lo que queda (para Marcelo):** si un día la suma exacta por piezas de una orden repartida en muchas facturas queda unos centavos ARRIBA de su
-precio (cada celda se redondea), la pantalla y la base frenan igual (la base: precio + $0.01). No pasó con Hotsson (quedó $0.02 abajo); si pasa,
-el atajo es el de arriba (bajar un centavo en una celda por monto), y el arreglo de fondo sería que la última celda absorba el redondeo.
+precio (cada celda se redondea), la pantalla y la base frenan igual (la base: precio + $0.01). No pasó con Hotsson (quedó $0.02 abajo). Hecho en
+v10.84.111: lo que se pasa lo absorbe una factura nueva o una ligada que siga cuadrando.
 
 **En producción:** 14-oct ~15:15; READY `dpl_FXahvNDBa46jhhNYPVuEBPxU1wbo` (commit `e3c6ccb`). Vuelta atrás: promover `dpl_6EPzTnsoKZtykcRu9CQeCgNAXyeZ` (el código de v10.84.109) o `git revert e3c6ccb`; la base no cambió. Candado: 1670 de 1670 a la primera, de a 1 tanda (48 min; después del de CobranzaFlow v3.7.1001, que Marcelo priorizó por Deldhy). Revisado en producción sin escribir (`.banco-revisor-orden/medir-110.mjs`, la cuenta de pruebas con el rol de Karla), 3 de 3: producción sirve el mismo archivo que el build de esta versión (`index-CdJRTswp.js`); el plan de OC-0966 abre con 11 facturas y su encabezado («Asignado $0.00 de $114,100.00 sin IVA»); sin errores, sin diálogos nativos y sin escrituras. Ligar las 11 no se puede repetir con esa cuenta (es visor: no lee las facturas sin orden); lo prueban pl-116 a pl-119 con OC-0966 como en producción. Karla prefirió esperar este arreglo a usar el atajo: con F5, OC-0966 → «Plan matriz» → «Retomarlo».
 

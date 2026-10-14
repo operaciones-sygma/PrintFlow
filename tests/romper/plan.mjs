@@ -1141,6 +1141,71 @@ await caso("pl-119 una de las 11 sin piezas no es completo", "hotsson=1", async 
     /faltan \$3,221\.1\d/.test(marca) && !/completo/.test(marca), `«${marca}»`);
 });
 
+// v10.84.111 — el redondeo hacia ARRIBA: P-0999 (6 piezas por $100, la pieza a $16.666…), una pieza en cada una de 6 facturas: cada celda
+// $16.67 y la orden suma $100.02; la base rechaza más de $100.01. Con todas sus piezas en el plan, lo que se pasa se le quita a una nueva o a las
+// ligadas que sigan cuadrando con su factura. Vuelta 1: antes.
+const enviadoR = async p => { const plan = await planEnviado(p); const ls = (plan?.groups || []).flatMap(g => g.lines || []);
+  return { plan, n: (plan?.groups || []).length, suma: Math.round(ls.reduce((s, l) => s + Number(l.amount), 0) * 100) / 100, montos: ls.map(l => Number(l.amount)) }; };
+const conIvaR = g => Math.round(Math.round((g.lines || []).reduce((s, l) => s + Number(l.amount), 0) * 100) / 100 * 116) / 100;
+await caso("pl-120 seis nuevas de una pieza se dejan crear", "redondeo=nuevas", async p => {
+  await abrir(p); await cuantas(p).fill("6"); await espera(p, 600);
+  for (let i = 0; i < 6; i++) await celda(p, 0, i).fill("1");
+  await espera(p, 400);
+  const err = (await errores(p)).replace(/\s+/g, " "), puede = await enviar(p).isEnabled().catch(() => false);
+  await enviar(p).click().catch(() => {}); await espera(p, 700);
+  const e = await enviadoR(p);
+  ok("pl-120 seis facturas nuevas de una pieza de P-0999 ($16.666… c/u) se dejan crear y entre todas suman justo $100.00 (no $100.02, que la base rechaza)",
+    !/pasa del total/.test(err) && puede && e.n === 6 && e.suma === 100 && e.montos.every(a => a >= 16.6 && a <= 16.7), `«${err.slice(0, 120)}» · botón ${puede} · ${e.n} · suma ${e.suma} · ${e.montos.join(",")}`);
+});
+await caso("pl-121 seis ligadas de una pieza se dejan ligar", "redondeo=ligadas", async p => {
+  await abrir(p); await cuantas(p).fill("6"); await espera(p, 600);
+  for (let i = 0; i < 6; i++) { await ligar(p, i, "F-30" + (i + 1)); await celda(p, 0, i).fill("1"); await espera(p, 150); }
+  await espera(p, 400);
+  let cuadran = 0; for (let i = 0; i < 6; i++) if (/CUADRA con F-30\d/.test((await suma(p, i).innerText().catch(() => "")) || "")) cuadran++;
+  const err = (await errores(p)).replace(/\s+/g, " "), puede = await enviar(p).isEnabled().catch(() => false);
+  await enviar(p).click().catch(() => {}); await espera(p, 700);
+  const e = await enviadoR(p), lejos = (e.plan?.groups || []).filter(g => Math.abs(conIvaR(g) - 19.33) > 0.02 + 1e-9).map(g => g.folio + ":" + conIvaR(g));
+  ok("pl-121 seis ligadas de $19.33 con una pieza cada una: las 6 cuadran, se dejan ligar, suman justo $100.00 y cada una sigue a ±$0.02 de su factura (como la base)",
+    cuadran === 6 && !/pasa del total/.test(err) && puede && e.n === 6 && e.suma === 100 && lejos.length === 0, `cuadran ${cuadran} · «${err.slice(0, 120)}» · botón ${puede} · ${e.n} · suma ${e.suma} · lejos ${lejos.join(",")}`);
+});
+await caso("pl-122 sin holgura sigue frenando", "redondeo=sinholgura", async p => {
+  await abrir(p); await cuantas(p).fill("6"); await espera(p, 600);
+  for (let i = 0; i < 6; i++) { await ligar(p, i, "F-30" + (i + 1)); await celda(p, 0, i).fill("1"); await espera(p, 150); }
+  await espera(p, 400);
+  const err = (await errores(p)).replace(/\s+/g, " "), puede = await enviar(p).isEnabled().catch(() => true);
+  ok("pl-122 si ninguna ligada puede bajar un centavo sin dejar de cuadrar (las 6 de $19.36, ya a −$0.02), sigue diciendo «pasa del total de la orden» y no deja crear: no se inventa un cuadre",
+    /P-0999: \$100\.02 pasa del total de la orden/.test(err) && !puede, `«${err.slice(0, 140)}» · botón ${puede}`);
+});
+
+// vuelta 3 (v10.84.111), por donde no se diseñó
+await caso("pl-123 ligadas y una nueva: el centavo sale de la nueva", "redondeo=mixta", async p => {   // (con 6 sin orden, la nueva salía a $0.02 de F-306 sin ligar y el candado del anticipo la frenaba con razón: supuesto de la prueba)
+  await abrir(p); await cuantas(p).fill("6"); await espera(p, 600);
+  for (let i = 0; i < 5; i++) { await ligar(p, i, "F-30" + (i + 1)); await celda(p, 0, i).fill("1"); await espera(p, 150); }
+  await celda(p, 0, 5).fill("1"); await espera(p, 400);
+  const err = (await errores(p)).replace(/\s+/g, " ");
+  await enviar(p).click().catch(() => {}); await espera(p, 700);
+  const e = await enviadoR(p), gs = e.plan?.groups || [];
+  const lig = gs.filter(g => g.ligar).map(g => g.lines?.[0]?.amount), nueva = gs.filter(g => !g.ligar).map(g => g.lines?.[0]?.amount);
+  ok("pl-123 con 5 ligadas y una nueva, lo que se pasa se le quita a la nueva ($16.65) y las ligadas se quedan exactas por piezas ($16.67): suma $100.00",
+    e.n === 6 && e.suma === 100 && nueva.join() === "16.65" && lig.length === 5 && lig.every(a => a === 16.67), `${e.n} · suma ${e.suma} · nueva ${nueva} · ligadas ${lig} · «${err.slice(0, 160)}»`);
+});
+await caso("pl-124 la orden incompleta no se toca", "redondeo=nuevas", async p => {
+  await abrir(p); await cuantas(p).fill("5"); await espera(p, 600);
+  for (let i = 0; i < 5; i++) await celda(p, 0, i).fill("1");
+  await espera(p, 400); await enviar(p).click().catch(() => {}); await espera(p, 700);
+  const e = await enviadoR(p);
+  ok("pl-124 con 5 de las 6 piezas (la orden no está completa) cada factura va exacta por piezas, $16.67, sin repartir nada: suma $83.35",
+    e.n === 5 && e.suma === 83.35 && e.montos.every(a => a === 16.67), `${e.n} · suma ${e.suma} · ${e.montos.join(",")}`);
+});
+await caso("pl-125 la vista previa dice lo que se manda", "redondeo=nuevas", async p => {
+  await abrir(p); await cuantas(p).fill("6"); await espera(p, 600);
+  for (let i = 0; i < 6; i++) await celda(p, 0, i).fill("1");
+  await espera(p, 400); await botonEnviar(p).click().catch(() => {}); await espera(p, 500);
+  const t = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-125 la vista previa enseña la factura que absorbe el redondeo por lo que de verdad se manda ($19.31 con IVA, $16.65 sin IVA) y las otras cinco por $19.34",
+    (t.match(/\$19\.31/g) || []).length >= 1 && (t.match(/\$19\.34/g) || []).length >= 5, `«${t.slice(0, 300)}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

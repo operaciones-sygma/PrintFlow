@@ -20,7 +20,8 @@ const LECTURAS = new Set(["client_credit_balance", "get_app_config", "get_client
   "list_anticipo_clients", "list_consecutive_cobranza_folios", "list_corona_oc_invoices", "list_linkable_invoices_for_oc",
   "list_linkable_invoices_for_order", "list_linkable_invoices_for_split", "list_stock_clients", "load_credit_ledger",
   "oc_shared_folio_is_cancelled", "ordenes_saldo_consumido", "order_folio_is_cancelled", "pf_archivos_del_bucket", "resolve_client_for_order",
-  "search_clients_typeahead", "search_pantone", "sugerencia_folios", "validate_production_number"]);
+  "search_clients_typeahead", "search_pantone", "sugerencia_folios", "validate_production_number",
+  "conceptos_para_ligar_en_oc", "a_nombre_de_quien"]);   // v10.84.111: STABLE (provolatile 's', medido el 14-oct), las lecturas del plan matriz
 const args = process.argv.slice(2);
 let base = args.find(a => /^https?:/.test(a)), PN = args.find(a => /^P-\d+$/.test(a)) || "P-0540", servidor = null;
 if (!base) { const { preview } = await import("vite"); servidor = await preview({ root: RAIZ, logLevel: "error", preview: { host: "127.0.0.1", port: 4276, strictPort: true } }); base = "http://127.0.0.1:4276"; }

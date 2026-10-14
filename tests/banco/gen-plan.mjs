@@ -11,7 +11,7 @@
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
 //   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden) ·
 //   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina) ·
-//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109) · hotsson=1 (v10.84.110: OC-0966 de producción)
+//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109) · hotsson=1 (v10.84.110: OC-0966 de producción) · redondeo=nuevas|ligadas|sinholgura|mixta (v10.84.111; mixta: sólo 5 sin orden)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -30,7 +30,8 @@ const partes = [
 const Q = new URLSearchParams(location.search);
 const EMISOR = Q.get("emisor") !== "off", LIGABLES = Q.get("ligables") || "normal", CONF_FALLA = Q.get("conf") === "falla", CONF_CANDADO = Q.get("conf") === "candado";
 const A_NOMBRE = Q.get("anombre") || "";
-const HOTSSON = Q.get("hotsson") === "1";   // v10.84.110 — OC-0966 de producción: P-0621 y P-0623 y las 11 facturas hechas el 13-oct   // v10.84.108 — a_nombre_de_quien: 1 (F-143 y F-155 a nombre de PORTLAND STUDIO) · falla
+const HOTSSON = Q.get("hotsson") === "1";
+const REDONDEO = Q.get("redondeo") || "";   // v10.84.111 — nuevas · ligadas · sinholgura: P-0999, 6 piezas por $100, una en cada factura   // v10.84.110 — OC-0966 de producción: P-0621 y P-0623 y las 11 facturas hechas el 13-oct   // v10.84.108 — a_nombre_de_quien: 1 (F-143 y F-155 a nombre de PORTLAND STUDIO) · falla
 const registro = [];
 const anota = t => { registro.push(t); const el = document.getElementById("log"); if (el) el.textContent = registro.join("\\n"); };
 window.confirm = m => { anota("confirm: " + String(m).split("\\n")[0]); return Q.get("confirmar") !== "no"; };
@@ -95,6 +96,9 @@ const db = {
     if (LIGABLES === "muchas") return [...LIGABLES_OK, ...[160, 161, 162, 163].map(n => ({ doc_number: "F-" + n, doc_type: "factura", amount: n * 10, balance: n * 10,
       issued_date: "2026-10-1" + (n - 160), status: "pendiente", cfdi_status: "stamped", dias_sin_orden: 1, monto_cuadra: false, total_oc: 46400 }))];   // v10.84.100 — 7 sin orden
     if (HOTSSON) return LIGABLES_H;
+    if (REDONDEO === "ligadas" || REDONDEO === "sinholgura" || REDONDEO === "mixta") return (REDONDEO === "mixta" ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6]).map(k => ({ doc_number: "F-30" + k, doc_type: "factura",
+      amount: REDONDEO === "sinholgura" ? 19.36 : 19.33, balance: 0, issued_date: "2026-10-14", status: "pendiente", cfdi_status: "stamped", dias_sin_orden: 0, monto_cuadra: false, total_oc: 100 }));
+    if (REDONDEO) return [];
     return LIGABLES === "vacio" ? [] : LIGABLES_OK;
   },
 };
@@ -133,6 +137,9 @@ if (HOTSSON) { Object.assign(OC, { id: "OC-0966", client: "INMOBILIARIA HOTSSON"
   ORDERS.splice(0, ORDERS.length,
     { id: "OP-MV1NON22D08", production_number: "P-0621", product: "AGENDAS 2027 PORTADAS MEDIDA 18.5 X 23 PASTA DURA", product_type: "LIBRETAS ENGARGOLADAS PASTA DURA", quantity: 658, price: 80370, order_type: "interna", stage: "packaging", invoice_folio: null },
     { id: "OP-MV1NXBC9N49", production_number: "P-0623", product: "CALENDARIOS 2027 BASE MEDIDA EXT. 41 X 21", product_type: "CALENDARIOS DE ESCRITORIO", quantity: 426, price: 33730, order_type: "interna", stage: "in_production", current_machine: "manual_2", invoice_folio: null }); }
+// v10.84.111 — redondeo=…: una OC de una sola orden de 6 piezas por $100 (la pieza a $16.666…), en Salidas
+if (REDONDEO) { Object.assign(OC, { id: "OC-0999", client: "CLIENTE REDONDEO", client_id: "c9" });
+  ORDERS.splice(0, ORDERS.length, { id: "OP-REDONDEO1", production_number: "P-0999", product_type: "LONA IMPRESA", quantity: 6, price: 100, order_type: "interna", stage: "salidas", invoice_folio: null }); }
 function Banco() {
   const [abierto, setAbierto] = useState(false);
   const [cancelar, setCancelar] = useState(null);

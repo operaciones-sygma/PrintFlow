@@ -9362,9 +9362,51 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const lineaSinIva = (c, o, doc_type) => (c?.lastEdited === "amount" || !o)
     ? sinIvaFromCaptured(Number(c?.amountConIva||0), doc_type)
     : Math.round(Number(c?.qty||0) * priceUnit(o) * 100) / 100;
-  const totalSinIvaDe = g => Math.round(eligibleOrders.reduce((s, o) => { const c = g.lines[o.id]; return s + (c && Number(c.qty||0) > 0 ? lineaSinIva(c, o, g.doc_type) : 0); }, 0) * 100) / 100;
   const folioNorm = f => String(f||"").trim().toUpperCase();
   const facturaDe = g => Array.isArray(ligables) ? (ligables.find(c => folioNorm(c.doc_number) === folioNorm(g.folio)) || null) : null;
+  // v10.84.111 — EL REDONDEO DE UNA ORDEN REPARTIDA EN MUCHAS FACTURAS. Cada celda va exacta por piezas y se redondea al centavo; la orden entera
+  //   puede quedar unos centavos ARRIBA de su precio (6 piezas a $16.666… = 6 × $16.67 = $100.02) y la base rechaza más de precio + $0.01. Con
+  //   TODAS sus piezas en el plan (y nada capturado por monto, que es de quien lo tecleó), lo que se pasa se le quita, centavo a centavo, a las
+  //   facturas nuevas (de la más grande a la más chica) y, si no hay, a las ligadas que sigan a ±$0.02 de su factura. Si ninguna puede, no se
+  //   inventa un cuadre: la pantalla frena como la base. Lo que manda cada celda sin IVA, montos[i][orden], lo leen el cuadre, el tope y la base.
+  const montos = useMemo(() => {
+    const m = groups.map(g => {
+      const r = {};
+      for(const o of eligibleOrders) { const c = g.lines[o.id]; if(c && Number(c.qty||0) > 0) r[o.id] = lineaSinIva(c, o, g.doc_type); }
+      return r;
+    });
+    const cts = a => Math.round(a * 100);
+    const conIvaDelGrupo = gi => conIvaDe(Object.values(m[gi]).reduce((s, a) => s + cts(a), 0) / 100, groups[gi].doc_type);
+    for(const o of eligibleOrders) {
+      const ex = existingByOrder[o.id] || {qty:0, amount:0};
+      const celdas = groups.map((g, gi) => ({g, gi, c: g.lines[o.id]})).filter(x => x.c && Number(x.c.qty||0) > 0);
+      if(!celdas.length || celdas.some(x => x.c.lastEdited === "amount")) continue;
+      if(celdas.reduce((s, x) => s + Number(x.c.qty), 0) !== Number(o.quantity) - ex.qty) continue;
+      let sobra = celdas.reduce((s, x) => s + cts(m[x.gi][o.id]), 0) - cts(Number(o.order_type === "maquila" ? o.maq_price : o.price) - ex.amount);
+      if(sobra <= 0) continue;
+      for(const x of celdas.filter(x => !x.g.ligar).sort((a, b) => m[b.gi][o.id] - m[a.gi][o.id])) {
+        if(sobra <= 0) break;
+        const quita = Math.min(sobra, cts(m[x.gi][o.id]) - 1);
+        if(quita > 0) { m[x.gi][o.id] = (cts(m[x.gi][o.id]) - quita) / 100; sobra -= quita; }
+      }
+      while(sobra > 0) {   // las ligadas: un centavo a la vez, a la que más arriba esté de su factura, si sigue a ±$0.02
+        let mejor = null;
+        for(const x of celdas.filter(x => x.g.ligar && cts(m[x.gi][o.id]) > 1)) {
+          const f = facturaDe(x.g); if(!f) continue;
+          const antes = conIvaDelGrupo(x.gi) - Number(f.amount);
+          m[x.gi][o.id] = (cts(m[x.gi][o.id]) - 1) / 100;
+          const despues = Math.round((conIvaDelGrupo(x.gi) - Number(f.amount)) * 100) / 100;
+          m[x.gi][o.id] = (cts(m[x.gi][o.id]) + 1) / 100;
+          if(Math.abs(despues) <= 0.02 + 1e-9 && (!mejor || antes > mejor.antes)) mejor = {x, antes};
+        }
+        if(!mejor) break;
+        m[mejor.x.gi][o.id] = (cts(m[mejor.x.gi][o.id]) - 1) / 100; sobra--;
+      }
+    }
+    return m;
+  }, [groups, eligibleOrders, existingByOrder, ligables]);
+  const totalSinIvaDe = g => { const gi = groups.indexOf(g), m = gi >= 0 ? montos[gi] : null;
+    return Math.round(eligibleOrders.reduce((s, o) => { const c = g.lines[o.id]; return s + (c && Number(c.qty||0) > 0 ? (m && m[o.id] != null ? m[o.id] : lineaSinIva(c, o, g.doc_type)) : 0); }, 0) * 100) / 100; };
 
   // Setters
   const updateGroup = (idx, patch) => setGroups(p => p.map((g, i) => i === idx ? {...g, ...patch} : g));
@@ -9566,12 +9608,13 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     const result = {};
     for(const o of eligibleOrders) {
       let qtySum = 0, amountSumSinIva = 0, celdas = 0;
-      for(const g of groups) {
+      groups.forEach((g, gi) => {
         const cell = g.lines[o.id];
-        if(!cell) continue;
+        if(!cell) return;
         qtySum += Number(cell.qty||0);
-        if(Number(cell.qty||0) > 0) { amountSumSinIva += lineaSinIva(cell, o, g.doc_type); celdas++; }
-      }
+        // v10.84.111: lo que se manda, con el redondeo de la orden ya repartido
+        if(Number(cell.qty||0) > 0) { amountSumSinIva += montos[gi]?.[o.id] ?? lineaSinIva(cell, o, g.doc_type); celdas++; }
+      });
       amountSumSinIva = Math.round(amountSumSinIva * 100) / 100;
       const totalQty = Number(o.quantity);
       const totalAmount = Number(o.order_type === "maquila" ? o.maq_price : o.price);
@@ -9585,7 +9628,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       };
     }
     return result;
-  }, [groups, eligibleOrders]);
+  }, [groups, eligibleOrders, montos]);
 
   // Total Corona requerido (suma de groups corona_saldo)
   const coronaTotal = useMemo(() => {
@@ -9765,7 +9808,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     setSaving(true);
     try {
       const plan = {
-        groups: groups.map(g => ({
+        groups: groups.map((g, gi) => ({
           label: g.label || null,
           folio: g.doc_type === "corona_saldo" ? null : folioNorm(g.folio),
           doc_type: g.doc_type,
@@ -9778,7 +9821,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             .map(([oid, c]) => ({
               order_id: oid,
               qty: Number(c.qty),
-              amount: lineaSinIva(c, eligibleOrders.find(o => o.id === oid), g.doc_type)
+              amount: montos[gi]?.[oid] ?? lineaSinIva(c, eligibleOrders.find(o => o.id === oid), g.doc_type)   // v10.84.111: con el redondeo repartido
             }))
         }))
       };
