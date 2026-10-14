@@ -183,7 +183,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.101 (14-oct, ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS`, commits `f603594` a `d6ad8e0` (v10.84.97 a v10.84.101, subidas
+- **LIVE:** v10.84.102 (14-oct, ~01:15; READY `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm`, commit `a6284e1`; vuelta atrás: promover
+  `dpl_Cy1z8WBt5ggSVLCuaz1Z54iA3rgK` (el código de v10.84.101) o `git revert a6284e1`; candado 1587 de 1587). v10.84.102: 🔑 **«Traer sus piezas
+  de su CFDI»** en la columna del plan que liga una factura (`public.conceptos_para_ligar_en_oc` + `src/lib/proponerPiezas.js`, tanda `proponer`):
+  PORTLAND de punta a punta sin teclear un número; y el dinero en verde en su tinta en toda la app (`C.okInk`; `C.ok` sobre blanco da 3.05:1).
+  v10.84.101 (14-oct, ~00:43; READY `dpl_5J3zDzEbZ9v9uu9nBT8gLyHV4hqS`, commits `f603594` a `d6ad8e0` (v10.84.97 a v10.84.101, subidas
   juntas); vuelta atrás: promover `dpl_G4eTF6PyA96RngFwLwvKxV37Fnr5` (el código de v10.84.96) o `git revert`; la base no cambió con estas cinco; candado
   1562 de 1562). Lo que dejó la pasada 1 de la critique del flujo de facturas de Karla: v10.84.97 **las puertas saben de su OC** (la ficha «OC-0960 ·
   4 órdenes», la OC dice qué facturas sin orden la suman, la orden de una OC lleva a la OC); v10.84.98 🔑 **el plan matriz, una ventana de la app**

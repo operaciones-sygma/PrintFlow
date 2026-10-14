@@ -41,7 +41,7 @@ a 3.0:1). **Vuelta 2**: pasan, y la tanda `plan` entera (86). **Vuelta 3**, por 
 la lectura lenta (lee una vez, «Leyendo…»), «Nueva» después de traer, y «Lo que falta» de la otra columna a 1366 con la propuesta a la
 vista: pasan las 4. `plan` 90, `sesion` 75, `proponer` 13 (tanda nueva en el candado).
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~01:15; READY `dpl_HiRTHUZuE6Fb5xaxcWhLfHPSf4Mm` (commit `a6284e1`). Vuelta atrás: promover `dpl_Cy1z8WBt5ggSVLCuaz1Z54iA3rgK` (el código de v10.84.101) o `git revert a6284e1`; la función de la base puede quedarse (sólo lee) o quitarse con `DROP FUNCTION public.conceptos_para_ligar_en_oc(text, text)`. Candado: 1587 de 1587 (25 nuevas, con la tanda `proponer`), de a 2 tandas, 24 min, al segundo intento (el primero frenó en el build sin dejar error; se repitió y pasó: un archivo de `dist` ocupado). Revisado en producción sin escribir (`.banco-revisor-orden/medir-102.mjs`, la cuenta de pruebas con el rol de Karla), 4 de 4: ningún importe bajo AA en su vista (26, con «En Maquila»), en la lista de OC ni en el detalle de OC-0960. La propuesta de piezas no se puede ver con esa cuenta (no reconoce la factura sin la lectura de facturas sin orden): la cubren el banco y la tanda `proponer`.
 
 ## v10.84.101 — El plan matriz antes de Salidas, con anticipadas a fuerza; el encabezado de cada columna, compacto — 14-oct-2026
 
