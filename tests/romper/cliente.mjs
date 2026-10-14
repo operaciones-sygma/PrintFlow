@@ -20,7 +20,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.waitForSelector("#guardar");
+    await page.waitForSelector("#guardar", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await fn(page);
   } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
   if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
@@ -107,7 +107,7 @@ await caso("cli-04 «Crear cliente nuevo» enseña el RFC y el contacto que se c
 await caso("cli-08 con RFC, la base lo busca también por RFC; sin RFC, se pregunta como siempre (sólo el nombre)", "resolve=nada&rfc=ABC010101AB1", async p => {
   await guardar(p);
   const con = (await llamadas(p, "resolve_client_for_order"))[0] || {};
-  await p.goto(`http://127.0.0.1:${PORT}/?resolve=nada`); await p.waitForSelector("#guardar");
+  await p.goto(`http://127.0.0.1:${PORT}/?resolve=nada`); await p.waitForSelector("#guardar", { timeout: 30000 });
   await guardar(p);
   const sin = (await llamadas(p, "resolve_client_for_order"))[0] || {};
   ok("cli-08 con RFC, la base lo busca también por RFC; sin RFC, se pregunta como siempre (sólo el nombre)",
@@ -137,7 +137,7 @@ await caso("cli-17 sin conexión con la base: lo dice en español y que la orden
 await caso("cli-16 en la OC, sin RFC no se crea una razón social nueva (sin parecidos y después de «Crear como nuevo»)", "oc=1&resolve=nada", async p => {
   const que = await guardar(p);
   const r1 = await resultado(p);
-  await p.goto(`http://127.0.0.1:${PORT}/?oc=1&resolve=parecido`); await p.waitForSelector("#guardar");
+  await p.goto(`http://127.0.0.1:${PORT}/?oc=1&resolve=parecido`); await p.waitForSelector("#guardar", { timeout: 30000 });
   await guardar(p);
   await botonNuevo(p).click(); await espera(p, 400);
   const r2 = await resultado(p);

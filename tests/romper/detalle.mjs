@@ -23,7 +23,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.waitForSelector("#abrir-detalle");
+    await page.waitForSelector("#abrir-detalle", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await page.click("#abrir-detalle"); await page.waitForTimeout(700);
     await fn(page);
   } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }

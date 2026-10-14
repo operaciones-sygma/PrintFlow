@@ -22,7 +22,7 @@ async function caso(nombre, query, fn, { viewport = { width: 1366, height: 900 }
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.getByText("Almacenamiento Supabase").waitFor();
+    await page.getByText("Almacenamiento Supabase").waitFor({ timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await page.waitForTimeout(400);
     await fn(page);
     // v10.84.83 — la pantalla pregunta y avisa con la app, nunca con confirm()/alert() del navegador

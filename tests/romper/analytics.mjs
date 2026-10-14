@@ -26,7 +26,7 @@ async function caso(nombre, query, fn, { viewport = { width: 1366, height: 900 }
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.clock.setFixedTime(ahora);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.getByText("Financiero").first().waitFor();
+    await page.getByText("Financiero").first().waitFor({ timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await page.waitForTimeout(300);
     await fn(page);
     const nativos = ((await page.textContent("#log").catch(() => "")) || "").split("\n").filter(l => /^(confirm|alert):/.test(l));

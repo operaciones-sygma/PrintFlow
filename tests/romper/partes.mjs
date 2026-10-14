@@ -18,7 +18,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);   // si algo truena al pintar, que falle rápido y no espere 30 s por caso
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.waitForSelector("#abrir-sig");
+    await page.waitForSelector("#abrir-sig", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await fn(page);
   } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
   if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));

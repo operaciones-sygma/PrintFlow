@@ -21,7 +21,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);
-    await page.waitForSelector("#abrir-plan");
+    await page.waitForSelector("#abrir-plan", { timeout: 30000 });   // (la primera carga, con dos tandas a la vez, puede pasar de 6 s: espera hasta 30, como la navegación)
     await fn(page);
   } catch (e) { ok(nombre + " (la prueba se cayó)", false, e.message.split("\n")[0]); }
   if (errs.length) ok(nombre + " · errores de consola", false, errs.join(" ; ").slice(0, 300));
@@ -204,7 +204,7 @@ await caso("pl-17 la base rechaza", "conf=falla", async p => {
 });
 await caso("pl-18 el borrador conserva la ligada", "", async p => {
   await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);   // (v10.84.98: se ofrece en la ventana)
   const folio = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "");
   ok("pl-18 al retomar el borrador, la factura ligada sigue ligada (no se vuelve una factura nueva con ese folio)", folio === "F-143", `folio «${folio}» · ${(await log(p)).split("\n").filter(l => l.startsWith("confirm")).join(" / ")}`);
@@ -400,29 +400,29 @@ await caso("pl-44 «Cerrar el plan» guarda el borrador en ese momento", "", asy
   await p.keyboard.press("Escape");
   await preguntaCerrar(p).getByRole("button", { name: "Cerrar el plan" }).click({ timeout: 1500 }).catch(() => {});   // (sin esperar los 600 ms del autoguardado)
   const cerrado = (await log(p)).includes("cerrado");
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
   const v = await celda(p, 0, 0).inputValue().catch(() => "");
   ok("pl-44 «Cerrar el plan» cierra y el borrador ya trae lo último que se capturó", cerrado && v === "1234", `cerrado ${cerrado} · al retomar «${v}»`);
 });
 await caso("pl-45 el borrador se ofrece dentro de la ventana", "", async p => {
   await abrir(p); await piezas(p, 0, [1000, 2000]); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   const of = p.locator("[data-borrador]"), hay = await of.count(), dice = hay ? ((await of.innerText()) || "").replace(/\s+/g, " ") : "";
   const nav = (await log(p)).includes("confirm:");
   await p.getByRole("button", { name: "Empezar de cero" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 900);
   const v = await celda(p, 0, 0).inputValue().catch(() => "?");
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   const otraVez = await p.locator("[data-borrador]").count();
   ok("pl-45 al abrir, el plan sin terminar se ofrece en la ventana (cuántas celdas) con «Retomarlo» y «Empezar de cero»; «Empezar de cero» lo borra",
     hay === 1 && /2 celdas capturadas/.test(dice) && !nav && v === "" && otraVez === 0, `oferta «${dice.slice(0, 160)}» · navegador ${nav} · tras «Empezar de cero» la celda «${v}» · al reabrir ${otraVez ? "OTRA VEZ la oferta" : "sin oferta"}`);
 });
 await caso("pl-46 sin decidir, el borrador no se pierde", "", async p => {
   await abrir(p); await piezas(p, 0, [1500]); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   const hay = await p.locator("[data-borrador]").count();
   await p.locator("[data-borrador]").getByRole("button", { name: "Cerrar" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
   const v = await celda(p, 0, 0).inputValue().catch(() => "");
   ok("pl-46 cerrar la ventana sin elegir deja el borrador (al volver se ofrece y se retoma)", hay === 1 && v === "1500", `oferta ${hay} · al retomar después «${v}»`);
@@ -491,7 +491,7 @@ await caso("pl-53 doble clic en «Cerrar el plan»", "", async p => {
 });
 await caso("pl-54 el borrador con una orden que ya se folió", "", async p => {
   await abrir(p); await piezas(p, 0, [1000, 1000, 1000, 1000]); await espera(p, 900);
-  await p.goto(p.url().replace(/\?.*$/, "") + "?foliada=1"); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.goto(p.url().replace(/\?.*$/, "") + "?foliada=1"); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   const dice = ((await p.locator("[data-borrador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
   const filas = await p.locator("tbody tr").count(), v = await celda(p, 0, 0).inputValue().catch(() => "");
@@ -528,11 +528,11 @@ for (const [n, vp] of [["pl-56 la pregunta encima del plan a 1366", { width: 136
 }
 await caso("pl-57 «Empezar de cero» y luego otra captura", "", async p => {
   await abrir(p); await piezas(p, 0, [1111]); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Empezar de cero" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 200);
   await piezas(p, 0, [2222]); await fuera(p); await p.keyboard.press("Escape"); await espera(p, 200);
   await preguntaCerrar(p).getByRole("button", { name: "Cerrar el plan" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
   const v = await celda(p, 0, 0).inputValue().catch(() => "");
   ok("pl-57 tras «Empezar de cero», lo que se captura después es lo que se retoma (no el borrador viejo)", v === "2222", `al retomar «${v}»`);
@@ -995,7 +995,7 @@ await caso("pl-106 más de 30 no", "", async p => {
 // vuelta 3 (v10.84.107), por donde no se diseñó: el borrador con 11, justo 30, y bajar de 11 a 2 con algo capturado en la 11
 await caso("pl-107 el borrador con 11 facturas vuelve con las 11", "", async p => {
   await abrir(p); await cuantas(p).fill("11"); await espera(p, 400); await celda(p, 0, 10).fill("1000"); await espera(p, 900);
-  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan", { timeout: 30000 }); await abrir(p); await espera(p, 300);
   await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 400);
   const columnas = await p.locator("thead th").count() - 1, q = await celda(p, 0, 10).inputValue().catch(() => "");
   ok("pl-107 al retomar el borrador de 11 facturas vuelven las 11 con lo capturado en la 11", columnas === 11 && q === "1000", `columnas ${columnas} · la 11 «${q}»`);
