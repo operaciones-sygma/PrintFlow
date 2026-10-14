@@ -12,6 +12,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.98 — El plan matriz, una ventana de la app: sin preguntas del navegador, Esc y Tab adentro, el borrador se ofrece — 13-oct-2026
+
+**Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «el plan matriz está fuera del sistema de
+diálogos»). El plan de la OC (donde se ligan F-143 y F-155 de OC-0960) no era un diálogo para la app: preguntaba con `confirm()` del
+navegador al cerrarse con algo capturado, al abrirse con un borrador («¿Retomarla?», antes de enseñar nada) y al bajar el número de
+facturas (un `confirm()` dentro de un `setGroups`), y avisaba con `alert()` si «Repartir» no tenía qué repartir. Esc lo oía un listener
+propio en `window`: con el tercero de una factura abierto, Esc **cerraba el plan entero**; con la pregunta encima, también el de atrás. El
+Tab se salía al tablero, el foco se quedaba detrás y el borrador se guardaba 600 ms después de la última tecla (cerrar antes lo perdía).
+
+**Qué se cambió** (`src/App.jsx`, `OCSplitMatrixModal`; la base no cambió):
+- Es un diálogo (`role="dialog"`, `aria-modal`, su título es su nombre), el foco entra al abrir y regresa al cerrar, y el Tab no se sale
+  (`atraparTab`; con una ventana encima, atrapa ella).
+- Esc va por el escStack, como toda ventana (con el mismo cuidado de no contar en un campo): con el tercero abierto, cierra el tercero; con
+  la pregunta encima, la pregunta.
+- **Cerrar con algo capturado pregunta la app** («¿Cerrar el plan de OC-0960? Llevas N celdas capturadas. Se guarda como borrador…»,
+  «Seguir capturando» / «Cerrar el plan»), y el borrador se guarda en ese momento.
+- **El borrador se ofrece dentro**: «Tienes un plan sin terminar de OC-0960 (de hace ~N min: 2 facturas, 4 celdas capturadas)» con
+  «Retomarlo», «Empezar de cero» y «Cerrar»; si alguna orden ya no entra (ya tiene folio, se canceló o salió de la OC) lo dice por su P-…
+  Mientras no se elige, no se pisa (antes, un `confirm()` al abrir).
+- Bajar el número de facturas con datos en las que se van pregunta y dice cuáles, con qué órdenes y por cuánto («Dejarla» / «Quitar la
+  factura»). «Repartir» sin nada que repartir lo dice en su columna. Sin órdenes que entren, el diálogo lo dice en palabras (sin «stage»,
+  «splits» ni «elegibles»). El tercero de una factura también es un diálogo («Factura N: a cargo de un tercero», sin «grupo»).
+
+**Cómo se probó** (tres vueltas, en `plan`): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.97: fallaban 11 (pl-20 y
+pl-41 a pl-50): el plan no era diálogo ni metía el foco; Esc y clic fuera preguntaban con el navegador; un segundo Esc cerraba el plan;
+cerrar perdía la última captura; el borrador se ofrecía con el navegador y «Cerrar» sin elegir lo perdía; el Tab se salía; bajar a 1
+factura quitaba la segunda con su captura; **Esc con el tercero abierto cerraba el plan**; «Repartir» avisaba con `alert()`. **Vuelta 2**,
+con el cambio: pasan las 12 (con pl-18) y la tanda completa, 50 de 50. **Vuelta 3**, por donde no se diseñó: Esc dentro de una celda (ni
+pregunta ni cierra), clic fuera con y sin captura, doble clic en «Cerrar el plan», un borrador con P-0595 ya foliada (variante
+`foliada=1`) y con una orden que ya salió de la OC (pl-54b: la oferta habría enseñado su id interno `OP-…`; lo vi al escribirla y se
+arregló antes de correrla), sin órdenes que entren (`foliada=todas`), la pregunta encima a 1366 y 1920 con el Tab adentro, y «Empezar
+de cero» seguido de otra captura: pasan las 9. `plan` 59. **Cambiaron a propósito (2):** pl-20 afirmaba el `confirm()` del navegador (el
+defecto); pl-18 ahora pulsa «Retomarlo». **Sigue en la lista** (pasada 1): la vista previa antes de crear, el pie fijo con los errores en
+palabras, todo el alto y ancho, las sugerencias sin cortar en 4, «Nueva / Ya existe» por columna; el AA de la cola y de la barra de la
+OC; y el plan antes de Salidas con folios anticipados.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.97 — Las puertas saben de su OC: la ficha dice «OC-0960 · 4 órdenes» y la OC dice que F-143 y F-155 la suman — 13-oct-2026
 
 **Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, 21/40; P1 «las puertas de cada orden no saben de su

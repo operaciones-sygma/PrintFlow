@@ -9099,11 +9099,21 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
     [groups]);
   const hasCapture = capturedCells > 0 || groups.some(g=>(g.folio||"").trim()||(g.label||"").trim()||String(g.totalTarget||"").trim());
   const draftKey = "pf_matrix_draft_" + (oc?.id || "noid");
+  // v10.84.98 — EL PLAN, UNA VENTANA DE LA APP (la critique del flujo de facturas de Karla, 13-oct, P1): preguntaba con confirm() del
+  //   navegador (cerrar, retomar el borrador, quitar facturas) y avisaba con alert(); Esc lo oía un listener propio (también con otra
+  //   ventana encima: cerraba el plan de atrás) y el Tab se salía al tablero. Ahora pregunta la app (ConfirmModal, con lo que se pierde),
+  //   Esc va por el escStack, el Tab no se sale y el borrador se ofrece dentro de la ventana.
+  const [preguntaCerrar, setPreguntaCerrar] = useState(false);
+  const [preguntaQuitar, setPreguntaQuitar] = useState(null);   // a cuántas facturas se quiere bajar (con datos en las que se van)
+  const [avisoRepartir, setAvisoRepartir] = useState(null);      // {i, texto}: «Repartir» no pudo (antes, alert())
+  const [borrador, setBorrador] = useState(null);                // el de antes, mientras se ofrece: {d, mins, celdas, perdidas}
+  const borradorRef = useRef(null);                              // (el mismo, para el autoguardado: sin decidir, no se pisa)
+  const guardarBorrador = () => { try { if(hasCapture && !borradorRef.current) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()})); } catch(e) {} };
   const safeClose = useCallback(() => {
     if(saving) return;
-    if(hasCapture && !window.confirm("Tienes una captura en curso ("+capturedCells+" celda"+(capturedCells===1?"":"s")+" con datos). ¿Cerrar de todos modos?\n\nQueda guardado un borrador automático por si quieres retomarla.")) return;
+    if(hasCapture) { setPreguntaCerrar(true); return; }
     onClose();
-  }, [saving, hasCapture, capturedCells, onClose]);
+  }, [saving, hasCapture, onClose]);
 
   // A3b: restaurar borrador al abrir (declarado ANTES del autosave para correr primero)
   const restoreRanRef = useRef(false); // v10.58.53: StrictMode dev montaba doble el confirm
@@ -9127,49 +9137,71 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         const c=g.lines[oid];
         if(c&&(Number(c.qty||0)>0||Number(c.amountConIva||0)>0)&&!eligSet.has(oid)) droppedIds.add(oid);
       }));
-      const dropWarn = droppedIds.size>0 ? "\n\nOJO: "+droppedIds.size+" orden"+(droppedIds.size===1?"":"es")+" del borrador ya no "+(droppedIds.size===1?"es elegible":"son elegibles")+" (facturada/cancelada) — esas celdas se perderán." : "";
-      if(!window.confirm("Tienes una captura sin terminar de este plan (hace ~"+mins+" min). ¿Retomarla?"+dropWarn)) {
-        localStorage.removeItem(draftKey);
-        return;
-      }
-      const restored = d.groups.map(g => ({
-        label: g.label||"", folio: g.folio||"", doc_type: g.doc_type||"factura",
-        pre_assigned: !!g.pre_assigned, reason: g.reason||"", totalTarget: g.totalTarget||"",
-        bill_to: g.bill_to||null, // 🆕 Fase 2.5 — preservar el tercero del grupo al restaurar borrador
-        ligar: !!g.ligar, // v10.84.89 — la ligada sigue ligada al retomar (si no, el folio de la factura que ya existe iría como uno nuevo)
-        lines: Object.fromEntries(eligibleOrders.map(o => {
-          const c = (g.lines||{})[o.id];
-          return [o.id, c ? {qty:Number(c.qty||0), amountConIva:Number(c.amountConIva||0), lastEdited:(c.lastEdited==="amount"?"amount":"qty")} : {qty:0, amountConIva:0, lastEdited:"qty"}];
-        }))
-      }));
-      setGroups(restored);
-      setGroupsCount(restored.length);
-      if(d.captureMode==="qty"||d.captureMode==="amount") setCaptureMode(d.captureMode);
+      // v10.84.98 — se OFRECE dentro de la ventana («Retomarlo» / «Empezar de cero»), no con un confirm() del navegador al abrir.
+      //   Mientras no se elige, la matriz no se enseña y el autoguardado no lo pisa.
+      const celdas = d.groups.reduce((n,g)=>n+Object.values(g.lines||{}).filter(c=>c&&(Number(c.qty||0)>0||Number(c.amountConIva||0)>0)).length, 0);
+      // (las que ya no entran: por su P-… si siguen en la OC; si ya salieron de ella, sin nombre: nunca el id interno)
+      const oferta = {d, mins, celdas, perdidas: [...droppedIds].map(id => (ocOrders||[]).find(o=>o.id===id)?.production_number || null)};
+      borradorRef.current = oferta; setBorrador(oferta);
     } catch(e) { console.warn("[matriz draft restore]", e); }
     // Solo al montar — restaurar después pisaría la captura en curso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const retomarBorrador = () => {
+    const d = borrador?.d;
+    borradorRef.current = null; setBorrador(null);
+    if(!d) return;
+    const restored = d.groups.map(g => ({
+      label: g.label||"", folio: g.folio||"", doc_type: g.doc_type||"factura",
+      pre_assigned: !!g.pre_assigned, reason: g.reason||"", totalTarget: g.totalTarget||"",
+      bill_to: g.bill_to||null, // 🆕 Fase 2.5 — preservar el tercero del grupo al restaurar borrador
+      ligar: !!g.ligar, // v10.84.89 — la ligada sigue ligada al retomar (si no, el folio de la factura que ya existe iría como uno nuevo)
+      lines: Object.fromEntries(eligibleOrders.map(o => {
+        const c = (g.lines||{})[o.id];
+        return [o.id, c ? {qty:Number(c.qty||0), amountConIva:Number(c.amountConIva||0), lastEdited:(c.lastEdited==="amount"?"amount":"qty")} : {qty:0, amountConIva:0, lastEdited:"qty"}];
+      }))
+    }));
+    setGroups(restored);
+    setGroupsCount(restored.length);
+    if(d.captureMode==="qty"||d.captureMode==="amount") setCaptureMode(d.captureMode);
+  };
+  const empezarDeCero = () => { try { localStorage.removeItem(draftKey); } catch(e) {} borradorRef.current = null; setBorrador(null); };
 
   // A3c: autosave del borrador (debounce 600ms); se limpia si la captura queda vacía
+  // (v10.84.98: no mientras se ofrece el de antes: sin decidir, la matriz vacía lo borraba a los 600 ms)
   useEffect(() => {
+    if(borrador) return;
     const t = setTimeout(() => {
+      if(borradorRef.current) return;
       try {
         if(hasCapture) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()}));
         else localStorage.removeItem(draftKey);
       } catch(e) {}
     }, 600);
     return () => clearTimeout(t);
-  }, [groups, captureMode, hasCapture, draftKey]);
+  }, [groups, captureMode, hasCapture, draftKey, borrador]);
 
   // ESC + backdrop
   // v10.58.43 #25: guard de INPUT/TEXTAREA — ESC tecleando en una celda de la matriz
   // destruía un plan de N facturas × M órdenes sin confirmación.
   // v10.58.46 A3: ESC ahora pasa por safeClose (confirma si hay captura).
+  // v10.84.98 — por el escStack, como toda ventana (con el mismo guard de los campos): con una pregunta encima, Esc la cierra a ella (el
+  //   listener propio cerraba también el plan de atrás); con el tercero abierto, cierra el tercero.
+  useEscClose(() => { if(billToEditGroup !== null) { setBillToEditGroup(null); return; } safeClose(); });
+  useDevolverFoco();
+  const panelRef = useRef(null), terceroRef = useRef(null), abrioTerceroRef = useRef(null);
+  useEffect(() => { const el = panelRef.current; if(el && !el.contains(document.activeElement)) { try { el.focus({preventScroll:true}); } catch(e) {} } }, []);
   useEffect(() => {
-    const onKey = e => { const tag=e.target?.tagName; if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return; if(e.key === "Escape") safeClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [safeClose]);
+    if(billToEditGroup !== null) {
+      abrioTerceroRef.current = document.activeElement;
+      const tm = setTimeout(() => { const el = terceroRef.current; if(el && !el.contains(document.activeElement)) { try { el.focus({preventScroll:true}); } catch(e) {} } }, 0);
+      return () => clearTimeout(tm);
+    }
+    const a = abrioTerceroRef.current; abrioTerceroRef.current = null;
+    if(a && a.isConnected && (!document.activeElement || document.activeElement === document.body)) { try { a.focus({preventScroll:true}); } catch(e) {} }
+  }, [billToEditGroup]);
+  // el Tab del plan: no con una ventana encima (la pregunta o el tercero atrapan el suyo)
+  const tabDelPlan = e => { if(e.defaultPrevented || preguntaCerrar || preguntaQuitar !== null || billToEditGroup !== null) return; atraparTab(e); };
 
   // Cargar Corona info + folios sugeridos
   useEffect(() => {
@@ -9346,7 +9378,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       return {o, avail: Math.max(0, (t?.totalAmount||0) - ex.amount)};
     }).filter(w => w.avail > 0);
     const totalAvail = weights.reduce((s2,w)=>s2+w.avail, 0);
-    if(totalAvail <= 0){ window.alert("Ninguna orden tiene disponible para repartir."); return; }
+    if(totalAvail <= 0){ setAvisoRepartir({i: groupIdx, texto: "No hay qué repartir: las órdenes ya están cubiertas por otros planes de esta OC."}); return; }   // v10.84.98 — antes, alert()
+    setAvisoRepartir(null);
     // v10.58.53: reescrito — (a) el share crudo del cierre puede ser ≤0 (antes un
     // Math.max prematuro rompía la suma exacta y el rescate del residuo era código
     // muerto); (b) celdas cuya qty derivada es 0 redistribuyen su dinero (antes
@@ -9384,6 +9417,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   // Cambiar N groups
   const setGroupsCountSafe = (n) => {
     if(!Number.isFinite(n) || n < 1 || n > 10) return;
+    // v10.84.98 — con datos en las que se van, pregunta la app y dice cuáles (antes, un confirm() del navegador DENTRO del setGroups)
+    if(n < groups.length && groups.slice(n).some(g => (g.folio||"").trim() || Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0))) { setPreguntaQuitar(n); return; }
     setGroups(prev => {
       if(n === prev.length) return prev;
       if(n > prev.length) {
@@ -9406,10 +9441,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
         ];
       }
       // v10.58.43 #25: reducir N destruía la matriz capturada en silencio (borrar el
-      // campo para teclear otro número truncaba a 1). Confirmar si hay datos.
-      const dropped = prev.slice(n);
-      const hasData = dropped.some(g => (g.folio||"").trim() || Object.values(g.lines||{}).some(c=>Number(c.qty||0)>0||Number(c.amountConIva||0)>0));
-      if(hasData && !window.confirm("Vas a quitar "+(prev.length-n)+" factura(s) que ya tienen datos capturados. ¿Continuar?")) return prev;
+      // campo para teclear otro número truncaba a 1). Con datos, se pregunta antes (arriba, v10.84.98).
       setGroupsCount(n);
       return prev.slice(0, n);
     });
@@ -9670,9 +9702,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
 
   if(eligibleOrders.length === 0) {
     return <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520}}>
-        <h3 style={{fontSize:16,margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación</h3>
-        <p style={{fontSize:13,color:C.t2}}>Esta OC no tiene órdenes elegibles para plan matriz. Requieren: stage salidas o maq_received, sin folio, sin splits/grupos previos, con precio y cantidad capturados.</p>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="plan-matriz-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:520,outline:"none"}}>
+        <h3 id="plan-matriz-titulo" style={{fontSize:16,margin:"0 0 12px",display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación</h3>
+        <p style={{fontSize:13,color:C.t2,lineHeight:1.5}}>Ninguna orden de {oc?.id||"esta OC"} se puede facturar en un plan. Entran las que están en Salidas (o recibidas de maquila), sin folio, sin partes ni otro plan, y con precio y cantidad.</p>
         <div style={{marginTop:14,textAlign:"right"}}>
           <button onClick={onClose} style={bt(C.sf,C.t2)}>Cerrar</button>
         </div>
@@ -9681,11 +9713,25 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   }
 
   return <div onClick={()=>safeClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto"}}>
-      <h3 style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.fac,display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación · {oc?.id}</h3>
+    <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="plan-matriz-titulo" onKeyDown={tabDelPlan} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:20,padding:20,maxWidth:1300,width:"100%",maxHeight:"95vh",overflow:"auto",outline:"none"}}>
+      <h3 id="plan-matriz-titulo" style={{fontSize:16,fontWeight:700,margin:"0 0 4px",color:C.fac,display:"flex",alignItems:"center",gap:6}}><ChartBarIcon size={16} weight="bold"/>Plan matriz de facturación · {oc?.id}</h3>
       <p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>
         Crea N facturas para esta OC, cada factura con porciones de varias órdenes. Útil cuando 1 OC se factura segmentada (sucursal, evento, periodo, lote, departamento, etc.). Cobertura parcial OK: lo que no factures hoy queda pendiente para otro plan.
       </p>
+      {/* v10.84.98 — el plan sin terminar de la vez pasada: se elige aquí (antes, un confirm() del navegador al abrir) */}
+      {borrador ? <div data-borrador role="group" aria-labelledby="plan-borrador-titulo" style={{background:C.sf,borderRadius:12,padding:"16px 18px",margin:"4px 0 6px",maxWidth:640}}>
+        <div id="plan-borrador-titulo" style={{fontSize:14,fontWeight:700,color:C.tx}}>Tienes un plan sin terminar de {oc?.id||"esta OC"}</div>
+        <div style={{fontSize:12.5,color:C.t2,marginTop:4,lineHeight:1.5}}>
+          De hace {borrador.mins < 60 ? "~" + borrador.mins + " min" : borrador.mins < 60 * 48 ? "~" + Math.round(borrador.mins / 60) + " h" : Math.round(borrador.mins / 1440) + " días"}: {borrador.d.groups.length} {borrador.d.groups.length === 1 ? "factura" : "facturas"}{borrador.celdas > 0 ? ", " + borrador.celdas + " " + (borrador.celdas === 1 ? "celda capturada" : "celdas capturadas") : ""}.
+          {borrador.perdidas.length > 0 && (() => { const n = borrador.perdidas.length, nombres = borrador.perdidas.filter(Boolean);
+            return <> {nombres.length === n ? nombres.join(", ") : n === 1 ? "Una orden del borrador" : n + " órdenes del borrador"} ya no {n === 1 ? "entra" : "entran"} en el plan (ya {n === 1 ? "tiene" : "tienen"} folio, se {n === 1 ? "canceló" : "cancelaron"} o {n === 1 ? "salió" : "salieron"} de la OC): lo que tenía{n === 1 ? "" : "n"} capturado no se retoma.</>; })()}
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+          <button type="button" autoFocus onClick={retomarBorrador} style={{...bt(tintaAA(C.fac,5)),fontSize:12.5}}>Retomarlo</button>
+          <button type="button" onClick={empezarDeCero} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,fontSize:12.5}}>Empezar de cero</button>
+          <button type="button" onClick={onClose} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,fontSize:12.5,marginLeft:"auto"}}>Cerrar</button>
+        </div>
+      </div> : <>
       {/* v10.84.92 — QUIÉN PAGA (Marcelo, 13-oct, el caso Hotsson: «el saldo se queda con el cliente que pidió el producto»): cada
           factura del plan queda a cargo del cliente de la orden; «Facturar a tercero» es lo único que lo cambia (ése paga). El CFDI a
           otra razón social del mismo cliente, sin cambiar quién paga, se elige en CobranzaFlow (la regla 23 de CobranzaFlow) */}
@@ -9897,6 +9943,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                         <DivideIcon size={11} weight="bold"/>Repartir
                       </button>
                     </div>}
+                    {avisoRepartir && avisoRepartir.i === i && <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>{avisoRepartir.texto}</div>}
                     {/* v10.84.89 — «Lo que falta»: las piezas que ninguna otra factura tiene (la segunda factura de OC-0960 en un clic) */}
                     <button type="button" onClick={()=>loQueFalta(i)} aria-label={"Llenar la factura "+(i+1)+" con lo que falta"}
                       title="Pone en esta factura las piezas de cada orden que ninguna otra factura tiene"
@@ -10045,6 +10092,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           {saving ? (nLigadas ? "Ligando…" : "Creando…") : <><ChartBarIcon size={14} weight="bold"/>{textoEnviar}</>}
         </button>
       </div>
+      </>}
 
       {/* 🆕 Fase 2.5 — overlay para elegir el tercero de un grupo (reusa BillToSection; "Guardar" commitea al grupo) */}
       {billToEditGroup !== null && groups[billToEditGroup] && (
@@ -10053,9 +10101,9 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
             absorbe el backdrop; el dropdown escapa la card y se ve completo. Fix del residual C1-R4 (wthxjhsfy),
             acotado a ESTE overlay (no toca ClientInput global). */
         <div onClick={()=>setBillToEditGroup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1200,padding:20,overflowY:"auto"}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,maxWidth:480,width:"100%",margin:"auto",overflow:"visible"}}>
-            <div style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:13.5,fontWeight:700,display:"flex",alignItems:"center",gap:6,color:C.tx}}>
-              <UsersIcon size={15} weight="bold" color={C.fac}/>Facturar grupo {billToEditGroup+1}{groups[billToEditGroup].label?(" ("+groups[billToEditGroup].label+")"):""} a un tercero
+          <div ref={terceroRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="plan-tercero-titulo" onKeyDown={atraparTab} onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:16,maxWidth:480,width:"100%",margin:"auto",overflow:"visible",outline:"none"}}>
+            <div id="plan-tercero-titulo" style={{padding:"14px 20px",borderBottom:"0.5px solid "+C.bd,fontSize:13.5,fontWeight:700,display:"flex",alignItems:"center",gap:6,color:C.tx}}>
+              <UsersIcon size={15} weight="bold" color={C.fac}/>Factura {billToEditGroup+1}{groups[billToEditGroup].label?(" ("+groups[billToEditGroup].label+")"):""}: a cargo de un tercero
             </div>
             {groups[billToEditGroup].bill_to && !groups[billToEditGroup].bill_to.incomplete && (
               <div style={{margin:"12px 20px 0",padding:"8px 12px",background:C.fac+"0e",border:"1px solid "+C.fac+"40",borderRadius:10,fontSize:11.5,color:C.tx}}>
@@ -10073,6 +10121,24 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           </div>
         </div>
       )}
+      {/* v10.84.98 — cerrar con algo capturado: lo dice y guarda el borrador (antes, confirm() del navegador) */}
+      {preguntaCerrar && <ConfirmModal zIndex={1300} title={"¿Cerrar el plan de " + (oc?.id || "esta OC") + "?"}
+        message={(capturedCells > 0 ? "Llevas " + capturedCells + " " + (capturedCells === 1 ? "celda capturada" : "celdas capturadas") + "." : "Llevas datos capturados.") + " Se guarda como borrador: al abrir otra vez el plan de esta OC puedes retomarlo."}
+        confirmLabel="Cerrar el plan" confirmColor={tintaAA(C.fac,5)} cancelLabel="Seguir capturando"
+        onConfirm={()=>{ guardarBorrador(); setPreguntaCerrar(false); onClose(); }} onClose={()=>setPreguntaCerrar(false)}/>}
+      {/* v10.84.98 — bajar el número de facturas: cuáles se van y con qué (antes, confirm() del navegador) */}
+      {preguntaQuitar !== null && preguntaQuitar < groups.length && (() => {
+        const n = preguntaQuitar, van = groups.slice(n);
+        const monto = g => Object.values(g.lines||{}).reduce((s2, c) => s2 + Number(c?.amountConIva||0), 0);
+        return <ConfirmModal zIndex={1300}
+          title={van.length === 1 ? "¿Quitar la factura " + (n + 1) + "?" : "¿Quitar las facturas " + (n + 1) + " a " + groups.length + "?"}
+          detalle={{filas: van.map((g, k) => ({titulo: "Factura " + (n + k + 1) + (g.label ? " · " + g.label : ""),
+            sub: g.ligar ? "liga " + (folioNorm(g.folio) || "una factura que ya existe") : Object.values(g.lines||{}).filter(c => Number(c?.qty||0) > 0).length + " de " + eligibleOrders.length + " órdenes capturadas",
+            monto: "$" + fmtMx(monto(g)) + (g.doc_type === "factura" ? " c/IVA" : "")}))}}
+          message={"Lo capturado en " + (van.length === 1 ? "ella" : "ellas") + " se pierde."}
+          confirmLabel={van.length === 1 ? "Quitar la factura" : "Quitar " + van.length + " facturas"} confirmColor={tintaAA(C.dn,5)} cancelLabel={van.length === 1 ? "Dejarla" : "Dejarlas"}
+          onConfirm={()=>{ setGroups(pr => pr.slice(0, n)); setGroupsCount(n); setPreguntaQuitar(null); }} onClose={()=>setPreguntaQuitar(null)}/>;
+      })()}
     </div>
   </div>;
 }

@@ -7,7 +7,9 @@
 // Variantes por URL: emisor=off · ligables=vacio|falla|lento|colgado (las facturas sin orden del cliente) · conf=falla (la base
 //   rechaza el plan: la ventana se queda con lo capturado) · confirmar=no (los window.confirm de la ventana contestan «no») ·
 //   vista=1 (la vista del plan ya creado, con una factura ligada y pagada y otra creada por el plan) · rol=karla (sin botones de
-//   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada)
+//   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
+//   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
+//   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -59,6 +61,10 @@ const ORDERS = [
   { id: "OP-MUWXBE2VNZH", production_number: "P-0594", product_type: "STICKER #4 REDONDO NEGRO DE PORTLAND", quantity: 80000, price: 11200, order_type: "interna", stage: "salidas", invoice_folio: null },
   { id: "OP-MUWXDWG1WX6", production_number: "P-0595", product_type: "STICKER #3 REDONDO NEGRO DE PORTLAND", quantity: 80000, price: 8800, order_type: "interna", stage: "salidas", invoice_folio: null },
 ];
+if (Q.get("foliada") === "1") ORDERS[3].invoice_folio = "F-200";
+if (Q.get("foliada") === "todas") ORDERS.forEach((o, k) => { o.invoice_folio = "F-20" + k; });
+if (Q.get("previo") === "todo") OC.matrix_plan = { groups: [{ id: "g0", cancelled_at: null,
+  lines: ORDERS.map((o, k) => ({ id: "l0" + k, order_id: o.id, qty_portion: o.quantity, amount_portion: o.price, cancelled_at: null })) }] };
 // la vista del plan ya creado: F-143 ligada (y pagada) y F-157 creada por el plan con lo demás de dos órdenes
 const linea = (id, g, o, q, a) => ({ id, oc_invoice_split_group_id: g, order_id: o, qty_portion: q, amount_portion: a, cancelled_at: null });
 const PLAN = { alive_count: 2, total_count: 2, groups: [

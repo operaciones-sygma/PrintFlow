@@ -198,6 +198,7 @@ await caso("pl-17 la base rechaza", "conf=falla", async p => {
 await caso("pl-18 el borrador conserva la ligada", "", async p => {
   await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await espera(p, 900);
   await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);   // (v10.84.98: se ofrece en la ventana)
   const folio = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "");
   ok("pl-18 al retomar el borrador, la factura ligada sigue ligada (no se vuelve una factura nueva con ese folio)", folio === "F-143", `folio «${folio}» · ${(await log(p)).split("\n").filter(l => l.startsWith("confirm")).join(" / ")}`);
 });
@@ -208,10 +209,17 @@ await caso("pl-19 la sugerencia no se cuela", "emisor=off", async p => {
   const v2 = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "?");
   ok("pl-19 el folio sugerido del contador no se cuela en el de ligar (ni al cambiar cuántas facturas)", v1 === "" && v2 === "", `«${v1}» → «${v2}»`);
 });
+// (v10.84.98: afirmaba el confirm() del navegador —«confirm:» en la bitácora—, que es justo lo que la critique marcó; ahora la pregunta es
+//  de la app y con «Seguir capturando» se queda con la ligada)
 await caso("pl-20 Esc con una ligada", "confirmar=no", async p => {
-  await abrir(p); await ligar(p, 0, "F-143"); await p.locator("body").click({ position: { x: 5, y: 5 } }).catch(() => {});
+  await abrir(p); await ligar(p, 0, "F-143"); await p.locator("#plan-matriz-titulo, h3").first().click().catch(() => {});
   await p.keyboard.press("Escape"); await espera(p, 300);
-  ok("pl-20 Esc con una factura ligada capturada pregunta (y con «no» se queda)", await p.getByText(/Plan matriz de facturación/).count() > 0 && (await log(p)).includes("confirm:"), (await log(p)).split("\n").slice(-2).join(" / "));
+  const pregunta = p.getByRole("dialog", { name: /¿Cerrar el plan/ });
+  const hay = await pregunta.count();
+  if (hay) { await pregunta.getByRole("button", { name: "Seguir capturando" }).click(); await espera(p, 300); }
+  const folio = await p.getByLabel("Folio de la factura 1 que ya existe").inputValue().catch(() => "");
+  ok("pl-20 Esc con una factura ligada capturada pregunta LA APP (no el navegador) y con «Seguir capturando» se queda con la ligada",
+    hay === 1 && !(await log(p)).includes("confirm:") && folio === "F-143", `pregunta de la app: ${hay} · del navegador: ${(await log(p)).includes("confirm:")} · folio «${folio}»`);
 });
 
 // ───────────── vuelta 2: por donde no se diseñó
@@ -348,6 +356,176 @@ await caso("pl-38 siete facturas a 1366 (el caso Hotsson): se ven, dicen su sald
   ok("pl-38 siete facturas a 1366 (el caso Hotsson): se ven, dicen su saldo, se llenan y se mandan las 7 sin tercero",
     cols === 7 && saldos.every(t => /Saldo: PORTLAND LEATHER/.test(t)) && anchoPagina <= 1366 && habilitado && g.length === 7 && g.every(x => x.bill_to === null),
     `columnas ${cols} · saldos ${saldos.length} · ancho de la página ${anchoPagina} · botón «${textoBoton}» ${habilitado ? "habilitado" : "APAGADO"} · mandó ${g.length} (${g.map(x => x.bill_to === null ? "sin tercero" : "CON tercero").join(", ")}) · errores «${(await errores(p)).slice(0, 160)}»`);
+});
+
+// ───────────── v10.84.98 — el plan, una ventana de la app (la critique del flujo de facturas de Karla, 13-oct, P1: «fuera del sistema de
+//   diálogos»: confirm()/alert() del navegador, Esc con un listener propio, el Tab se salía). Vuelta 1: escritas ANTES del cambio.
+const preguntaCerrar = p => p.getByRole("dialog", { name: /¿Cerrar el plan/ });
+const fuera = async p => { await p.locator("#plan-matriz-titulo, h3").first().click().catch(() => {}); };   // el foco fuera de los campos (Esc no cuenta en un campo)
+await caso("pl-41 el plan es un diálogo", "", async p => {
+  await abrir(p);
+  const d = p.getByRole("dialog", { name: /Plan matriz de facturación · OC-0960/ });
+  const n = await d.count(), modal = n ? await d.getAttribute("aria-modal") : null;
+  const dentro = await p.evaluate(() => { const d = document.querySelector('[role="dialog"]'); return !!d && d.contains(document.activeElement); });
+  ok("pl-41 el plan es un diálogo con nombre (aria-modal) y al abrir el foco entra", n === 1 && modal === "true" && dentro, `diálogos «Plan matriz…» ${n} · aria-modal ${modal} · foco adentro ${dentro}`);
+});
+await caso("pl-42 Esc con algo capturado: pregunta la app", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000]); await fuera(p);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const hay = await preguntaCerrar(p).count(), dice = hay ? ((await preguntaCerrar(p).innerText()) || "").replace(/\s+/g, " ") : "";
+  if (hay) { await preguntaCerrar(p).getByRole("button", { name: "Seguir capturando" }).click(); await espera(p, 300); }
+  const sigue = await p.getByText(/Plan matriz de facturación/).count() > 0, v = await celda(p, 0, 0).inputValue().catch(() => "");
+  ok("pl-42 Esc con una celda capturada: pregunta la app (cuántas celdas, que queda el borrador), no el navegador; «Seguir capturando» se queda con lo capturado",
+    hay === 1 && /1 celda capturada/.test(dice) && /borrador/.test(dice) && !(await log(p)).includes("confirm:") && sigue && v === "1000", `pregunta «${dice.slice(0, 140)}» · navegador ${(await log(p)).includes("confirm:")} · sigue ${sigue} · celda «${v}»`);
+});
+await caso("pl-43 Esc con la pregunta encima cierra la pregunta", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000]); await fuera(p);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const hay = await preguntaCerrar(p).count();
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const pregunta = await preguntaCerrar(p).count(), sigue = await p.getByText(/Plan matriz de facturación/).count() > 0;
+  ok("pl-43 un segundo Esc cierra la pregunta y el plan se queda abierto con lo capturado", hay === 1 && pregunta === 0 && sigue && (await celda(p, 0, 0).inputValue().catch(() => "")) === "1000" && !(await log(p)).includes("cerrado"),
+    `pregunta ${hay} → ${pregunta} · plan ${sigue ? "abierto" : "CERRADO"} · ${(await log(p)).split("\n").slice(-2).join(" / ")}`);
+});
+await caso("pl-44 «Cerrar el plan» guarda el borrador en ese momento", "", async p => {
+  await abrir(p); await piezas(p, 0, [1234]); await fuera(p);
+  await p.keyboard.press("Escape");
+  await preguntaCerrar(p).getByRole("button", { name: "Cerrar el plan" }).click({ timeout: 1500 }).catch(() => {});   // (sin esperar los 600 ms del autoguardado)
+  const cerrado = (await log(p)).includes("cerrado");
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  const v = await celda(p, 0, 0).inputValue().catch(() => "");
+  ok("pl-44 «Cerrar el plan» cierra y el borrador ya trae lo último que se capturó", cerrado && v === "1234", `cerrado ${cerrado} · al retomar «${v}»`);
+});
+await caso("pl-45 el borrador se ofrece dentro de la ventana", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 2000]); await espera(p, 900);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  const of = p.locator("[data-borrador]"), hay = await of.count(), dice = hay ? ((await of.innerText()) || "").replace(/\s+/g, " ") : "";
+  const nav = (await log(p)).includes("confirm:");
+  await p.getByRole("button", { name: "Empezar de cero" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 900);
+  const v = await celda(p, 0, 0).inputValue().catch(() => "?");
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  const otraVez = await p.locator("[data-borrador]").count();
+  ok("pl-45 al abrir, el plan sin terminar se ofrece en la ventana (cuántas celdas) con «Retomarlo» y «Empezar de cero»; «Empezar de cero» lo borra",
+    hay === 1 && /2 celdas capturadas/.test(dice) && !nav && v === "" && otraVez === 0, `oferta «${dice.slice(0, 160)}» · navegador ${nav} · tras «Empezar de cero» la celda «${v}» · al reabrir ${otraVez ? "OTRA VEZ la oferta" : "sin oferta"}`);
+});
+await caso("pl-46 sin decidir, el borrador no se pierde", "", async p => {
+  await abrir(p); await piezas(p, 0, [1500]); await espera(p, 900);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  const hay = await p.locator("[data-borrador]").count();
+  await p.locator("[data-borrador]").getByRole("button", { name: "Cerrar" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 900);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  const v = await celda(p, 0, 0).inputValue().catch(() => "");
+  ok("pl-46 cerrar la ventana sin elegir deja el borrador (al volver se ofrece y se retoma)", hay === 1 && v === "1500", `oferta ${hay} · al retomar después «${v}»`);
+});
+await caso("pl-47 el Tab no se sale del plan", "", async p => {
+  await abrir(p);
+  const r = await p.evaluate(() => { const d = document.querySelector('[role="dialog"]') || document.querySelector("h3")?.closest("div");
+    const f = [...d.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled && el.getClientRects().length > 0);
+    f[f.length - 1].focus(); return f.length; });
+  await p.keyboard.press("Tab"); await espera(p, 100);
+  const tras = await p.evaluate(() => { const h = [...document.querySelectorAll("h3")].find(x => /Plan matriz/.test(x.textContent)); const d = h && (h.closest('[role="dialog"]') || h.parentElement); return !!d && d.contains(document.activeElement); });
+  await p.keyboard.press("Shift+Tab"); await espera(p, 100);
+  const atras = await p.evaluate(() => { const h = [...document.querySelectorAll("h3")].find(x => /Plan matriz/.test(x.textContent)); const d = h && (h.closest('[role="dialog"]') || h.parentElement); return !!d && d.contains(document.activeElement); });
+  ok("pl-47 del último control, Tab vuelve adentro del plan (y Mayús+Tab también)", r > 0 && tras && atras, `${r} controles · Tab ${tras ? "adentro" : "SE SALE"} · Mayús+Tab ${atras ? "adentro" : "SE SALE"}`);
+});
+await caso("pl-48 bajar el número de facturas con datos: pregunta la app", "", async p => {
+  await abrir(p); await piezas(p, 1, [1000, 1000]);
+  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  const q = p.getByRole("dialog", { name: /¿Quitar la factura 2\?/ }), hay = await q.count(), dice = hay ? ((await q.innerText()) || "").replace(/\s+/g, " ") : "";
+  if (hay) { await q.getByRole("button", { name: "Dejarla" }).click(); await espera(p, 300); }
+  const cols1 = await p.locator("thead th [data-saldo]").count();
+  await p.locator("input[type=number][max='10']").fill("1"); await espera(p, 300);
+  await p.getByRole("dialog", { name: /¿Quitar la factura 2\?/ }).getByRole("button", { name: "Quitar la factura" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  const cols2 = await p.locator("thead th [data-saldo]").count();
+  ok("pl-48 bajar a 1 con datos en la 2: pregunta la app y dice qué se va (2 de 4 órdenes); «Dejarla» la deja, «Quitar la factura» la quita",
+    hay === 1 && /Factura 2/.test(dice) && /2 de 4 órdenes/.test(dice) && !(await log(p)).includes("confirm:") && cols1 === 2 && cols2 === 1, `pregunta «${dice.slice(0, 160)}» · navegador ${(await log(p)).includes("confirm:")} · columnas ${cols1} → ${cols2}`);
+});
+await caso("pl-49 el tercero: Esc lo cierra a él, no al plan", "", async p => {
+  await abrir(p);
+  await encabezado(p, 0).getByRole("button", { name: /Facturar a tercero/ }).click(); await espera(p, 300);
+  const t = p.getByRole("dialog", { name: /a cargo de un tercero/ }), hay = await t.count();
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  const sigueTercero = await p.getByText(/a cargo de un tercero|a un tercero$/).count(), plan = await p.getByText(/Plan matriz de facturación/).count() > 0;
+  ok("pl-49 el tercero de una factura es un diálogo; Esc lo cierra y el plan se queda abierto", hay === 1 && sigueTercero === 0 && plan && !(await log(p)).includes("cerrado"),
+    `diálogo del tercero ${hay} · tras Esc: tercero ${sigueTercero ? "ABIERTO" : "cerrado"} · plan ${plan ? "abierto" : "CERRADO"}`);
+});
+await caso("pl-50 «Repartir» sin nada que repartir lo dice en su columna", "previo=todo", async p => {
+  await abrir(p);
+  const total = encabezado(p, 0).locator('input[type="number"]').first();
+  await total.fill("1000"); await encabezado(p, 0).getByRole("button", { name: /Repartir/ }).click(); await espera(p, 300);
+  const alerta = ((await encabezado(p, 0).getByRole("alert").allInnerTexts().catch(() => [])).join(" ")).replace(/\s+/g, " ");
+  ok("pl-50 con todo cubierto por un plan anterior, «Repartir» lo dice en su columna (no con alert())", /No hay qué repartir/.test(alerta) && !(await log(p)).includes("alert:"), `«${alerta.slice(0, 120)}» · ${(await log(p)).split("\n").filter(l => l.startsWith("alert")).join(" / ")}`);
+});
+
+// vuelta 3, por donde no se diseñó
+await caso("pl-51 Esc dentro de una celda no hace nada", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000]);
+  await celda(p, 0, 0).focus(); await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("pl-51 Esc con el cursor en una celda: ni pregunta ni cierra (se está escribiendo)", (await preguntaCerrar(p).count()) === 0 && await p.getByText(/Plan matriz de facturación/).count() > 0 && !(await log(p)).includes("cerrado"));
+});
+await caso("pl-52 clic fuera: con captura pregunta, sin captura cierra", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000]);
+  await p.mouse.click(4, 400); await espera(p, 300);
+  const pregunta = await preguntaCerrar(p).count();
+  if (pregunta) { await preguntaCerrar(p).getByRole("button", { name: "Seguir capturando" }).click(); await espera(p, 200); }
+  await celda(p, 0, 0).fill(""); await espera(p, 200); await p.mouse.click(4, 400); await espera(p, 300);
+  ok("pl-52 clic fuera del plan: con una celda capturada pregunta la app; ya vacío, cierra sin preguntar", pregunta === 1 && (await log(p)).includes("cerrado") && !(await log(p)).includes("confirm:"), `pregunta ${pregunta} · ${(await log(p)).split("\n").slice(-1)[0]}`);
+});
+await caso("pl-53 doble clic en «Cerrar el plan»", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000]); await fuera(p);
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  await preguntaCerrar(p).getByRole("button", { name: "Cerrar el plan" }).dblclick().catch(() => {}); await espera(p, 400);
+  ok("pl-53 doble clic en «Cerrar el plan»: cierra una vez, sin errores", (await cuenta(p, "cerrado")) === 1, `${await cuenta(p, "cerrado")} cierres`);
+});
+await caso("pl-54 el borrador con una orden que ya se folió", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 1000, 1000, 1000]); await espera(p, 900);
+  await p.goto(p.url().replace(/\?.*$/, "") + "?foliada=1"); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  const dice = ((await p.locator("[data-borrador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  const filas = await p.locator("tbody tr").count(), v = await celda(p, 0, 0).inputValue().catch(() => "");
+  ok("pl-54 el borrador con P-0595 ya foliada: lo dice al ofrecerlo (por su nombre) y al retomarlo quedan las otras tres con lo suyo",
+    /P-0595/.test(dice) && /ya no entra en el plan/.test(dice) && filas === 3 && v === "1000", `oferta «${dice.slice(0, 220)}» · filas ${filas} · P-0592 «${v}»`);
+});
+await caso("pl-54b el borrador con una orden que ya salió de la OC", "", async p => {
+  // un borrador guardado con una celda de una orden que ya no está en la OC (se movió a otra): sin su id interno en pantalla
+  await p.evaluate(() => localStorage.setItem("pf_matrix_draft_OC-0960", JSON.stringify({ captureMode: "qty", ts: Date.now() - 5 * 60000, groups: [
+    { label: "", folio: "", doc_type: "factura", lines: { "OP-MUWX46YVCR4": { qty: 1000, amountConIva: 162.4, lastEdited: "qty" }, "OP-SALIODELAOC": { qty: 500, amountConIva: 80, lastEdited: "qty" } } }] })));
+  await abrir(p); await espera(p, 300);
+  const dice = ((await p.locator("[data-borrador]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-54b el borrador con una orden que ya salió de la OC: «Una orden del borrador ya no entra», sin su id interno", /Una orden del borrador ya no entra en el plan/.test(dice) && !/OP-/.test(dice), `«${dice.slice(0, 220)}»`);
+});
+await caso("pl-55 sin órdenes que entren: diálogo en palabras", "foliada=todas", async p => {
+  await p.click("#abrir-plan"); await espera(p, 400);
+  const d = p.getByRole("dialog", { name: /Plan matriz de facturación/ }), n = await d.count(), t = n ? ((await d.innerText()) || "").replace(/\s+/g, " ") : "";
+  await p.keyboard.press("Escape"); await espera(p, 300);
+  ok("pl-55 sin órdenes que entren: es diálogo, lo dice en palabras (sin «stage», «splits» ni «elegibles») y Esc lo cierra",
+    n === 1 && /Ninguna orden de OC-0960 se puede facturar en un plan/.test(t) && !/stage|splits|elegibles|maq_received/.test(t) && (await log(p)).includes("cerrado"), `«${t.slice(0, 200)}»`);
+});
+for (const [n, vp] of [["pl-56 la pregunta encima del plan a 1366", { width: 1366, height: 768 }], ["pl-56b la pregunta encima del plan a 1920", { width: 1920, height: 1080 }]]) {
+  await caso(n, "", async p => {
+    await abrir(p); await piezas(p, 0, [1000]); await fuera(p);
+    await p.keyboard.press("Escape"); await espera(p, 300);
+    const r = await p.evaluate(() => { const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /¿Cerrar el plan/.test(x.textContent)); if (!d) return null;
+      const b = d.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2, enCima = d.contains(document.elementFromPoint(x, y));
+      return { dentro: b.left >= 0 && b.top >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, enCima, foco: d.contains(document.activeElement) }; });
+    // el Tab no se sale de la pregunta (al plan de atrás)
+    for (let k = 0; k < 4; k++) await p.keyboard.press("Tab");
+    const tabDentro = await p.evaluate(() => { const d = [...document.querySelectorAll('[role="dialog"]')].find(x => /¿Cerrar el plan/.test(x.textContent)); return !!d && d.contains(document.activeElement); });
+    ok(n, r && r.dentro && r.enCima && r.foco && tabDentro, JSON.stringify(r) + ` · Tab ×4 ${tabDentro ? "dentro de la pregunta" : "SE SALE al plan"}`);
+  }, vp);
+}
+await caso("pl-57 «Empezar de cero» y luego otra captura", "", async p => {
+  await abrir(p); await piezas(p, 0, [1111]); await espera(p, 900);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Empezar de cero" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 200);
+  await piezas(p, 0, [2222]); await fuera(p); await p.keyboard.press("Escape"); await espera(p, 200);
+  await preguntaCerrar(p).getByRole("button", { name: "Cerrar el plan" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  await p.reload(); await p.waitForSelector("#abrir-plan"); await abrir(p); await espera(p, 300);
+  await p.getByRole("button", { name: "Retomarlo" }).click({ timeout: 1500 }).catch(() => {}); await espera(p, 300);
+  const v = await celda(p, 0, 0).inputValue().catch(() => "");
+  ok("pl-57 tras «Empezar de cero», lo que se captura después es lo que se retoma (no el borrador viejo)", v === "2222", `al retomar «${v}»`);
 });
 
 for (const r of res) console.log(r);
