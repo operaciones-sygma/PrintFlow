@@ -1012,6 +1012,57 @@ await caso("pl-109 bajar de 11 a 2 con datos en la 11 pregunta", "", async p => 
   ok("pl-109 bajar de 11 a 2 con algo capturado en la 11 pregunta antes de quitar (y no quita todavía)", q === 1 && columnas === 11, `pregunta ${q} · columnas ${columnas}`);
 });
 
+// v10.84.108 — Marcelo (14-oct, Hotsson): «el detalle se debe ver todo, tal vez a quién se le facturó y la orden de producción que es». A nombre de
+// quién salió cada factura (public.a_nombre_de_quien), al ligar, en la vista previa y en la vista del plan ya creado. Vuelta 1: antes.
+await caso("pl-110 al ligar dice a nombre de quién salió", "anombre=1", async p => {
+  await abrir(p); await ligar(p, 1, "F-155"); await espera(p, 500);
+  const t = ((await encabezado(p, 1).locator("[data-a-nombre-de]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-110 la columna que liga F-155 dice «CFDI a nombre de PORTLAND STUDIO SA DE CV · el saldo, de PORTLAND LEATHER»", /CFDI a nombre de PORTLAND STUDIO SA DE CV/.test(t) && /el saldo, de PORTLAND LEATHER/.test(t), `«${t}»`);
+});
+await caso("pl-111 la vista previa lo dice", "anombre=1", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await ligar(p, 1, "F-155"); await traer(p, 1).click().catch(() => {}); await espera(p, 400);
+  await botonEnviar(p).click(); await espera(p, 500);
+  const t = ((await vista(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-111 la vista previa dice, en cada factura ligada, «CFDI a nombre de PORTLAND STUDIO SA DE CV»", (t.match(/CFDI a nombre de PORTLAND STUDIO SA DE CV/g) || []).length === 2, `«${t.slice(0, 260)}»`);
+});
+await caso("pl-112 sin la lectura, el plan sigue", "anombre=falla", async p => {
+  await abrir(p); await ligar(p, 1, "F-155"); await espera(p, 500);
+  const n = await p.locator("[data-a-nombre-de]").count(), dice = /F-155 · \$43,333\.22 con IVA/.test((await encabezado(p, 1).innerText().catch(() => "")) || "");
+  ok("pl-112 si no se puede leer a nombre de quién salió, no dice nada de eso y la columna sigue con su factura", n === 0 && dice, `«a nombre de» ${n} · la factura ${dice}`);
+});
+await caso("pv-10 la vista del plan dice a nombre de quién y quién paga", "vista=1&anombre=1", async p => {
+  const t = ((await p.locator("[data-a-nombre-de]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pv-10 la vista del plan ya creado dice «CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER» en F-143", /CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER/.test(t), `«${t}»`);
+});
+
+// vuelta 3 (v10.84.108), por donde no se diseñó: la factura a tercero (el saldo es del tercero) junto a la que salió a nombre de otra razón social (el
+// saldo es de quien pidió), y el folio escrito en minúsculas y con espacios
+await caso("pv-11 tercero y «a nombre de» no se confunden", "vista=1&tercero=1&anombre=1", async p => {
+  const t143 = ((await p.locator("[data-a-nombre-de]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const ter = ((await p.locator("[data-tercero]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  const nAnombre = await p.locator("[data-a-nombre-de]").count(), nTercero = await p.locator("[data-tercero]").count();
+  ok("pv-11 F-157 a tercero dice «Paga: TERCERO SA DE CV (tercero)» y F-143 «CFDI a nombre de … · lo paga PORTLAND LEATHER», cada una una vez",
+    /Paga: TERCERO SA DE CV \(tercero\)/.test(ter) && /lo paga PORTLAND LEATHER/.test(t143) && nAnombre === 1 && nTercero === 1, `«${t143}» · «${ter}» · ${nAnombre}/${nTercero}`);
+});
+await caso("pl-113 el folio en minúsculas y con espacios también dice a nombre de quién", "anombre=1", async p => {
+  await abrir(p); await ligar(p, 1, " f-155 "); await espera(p, 500);
+  const t = ((await encabezado(p, 1).locator("[data-a-nombre-de]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-113 con « f-155 » escrito así, la columna dice «CFDI a nombre de PORTLAND STUDIO SA DE CV»", /CFDI a nombre de PORTLAND STUDIO SA DE CV/.test(t), `«${t}»`);
+});
+
+// vuelta 3 (v10.84.108), el rol: la base sólo deja leer a nombre de quién salió a Dirección, Karla y Lupita (42501 a los demás); el vendedor y el
+// visor ven la vista del plan sin pedirlo (era una petición fallida cada vez que abrían la OC) y Karla la lee
+await caso("pv-12 el vendedor no pide a nombre de quién", "vista=1&anombre=1&rol=vendedor", async p => {
+  const log = (await p.locator("#log").textContent().catch(() => "")) || "";
+  const n = await p.locator("[data-a-nombre-de]").count(), plan = /2 facturas del plan/.test((await p.locator("body").innerText().catch(() => "")) || "");
+  ok("pv-12 el vendedor ve el plan sin pedir a nombre de quién salió (la base se lo niega) y sin «CFDI a nombre de»", !/lee a nombre de/.test(log) && n === 0 && plan, `pidió ${/lee a nombre de/.test(log)} · «a nombre de» ${n} · el plan ${plan}`);
+});
+await caso("pv-13 Karla sí lo lee", "vista=1&anombre=1&rol=karla", async p => {
+  const t = ((await p.locator("[data-a-nombre-de]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pv-13 Karla ve «CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER» en la vista del plan", /CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER/.test(t), `«${t}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

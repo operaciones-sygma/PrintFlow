@@ -4,7 +4,7 @@
 // OC-0960 de PORTLAND LEATHER (P-0592 a P-0595, 80,000 stickers cada uno) y sus facturas hechas sin orden, F-143 y F-155, que cubren
 // cada una un pedazo de los cuatro (según sus conceptos timbrados).
 // Uso: node gen-plan.mjs <App.jsx> <dirSalida>
-// Variantes por URL: emisor=off · ligables=vacio|falla|lento|colgado (las facturas sin orden del cliente) · conf=falla|candado (la base
+// Variantes por URL: emisor=off · ligables=vacio|falla|lento|colgado (las facturas sin orden del cliente) · anombre=1|falla (a nombre de quién salió cada factura, v10.84.108) · tercero=1 (con vista=1: F-157 a tercero) · conf=falla|candado (la base
 //   rechaza el plan: la ventana se queda con lo capturado) · confirmar=no (los window.confirm de la ventana contestan «no») ·
 //   vista=1 (la vista del plan ya creado, con una factura ligada y pagada y otra creada por el plan) · rol=karla (sin botones de
 //   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
@@ -29,6 +29,7 @@ const partes = [
   `// ── lo que toca la base, simulado (${simuladosUsados.join(", ")}) ──
 const Q = new URLSearchParams(location.search);
 const EMISOR = Q.get("emisor") !== "off", LIGABLES = Q.get("ligables") || "normal", CONF_FALLA = Q.get("conf") === "falla", CONF_CANDADO = Q.get("conf") === "candado";
+const A_NOMBRE = Q.get("anombre") || "";   // v10.84.108 — a_nombre_de_quien: 1 (F-143 y F-155 a nombre de PORTLAND STUDIO) · falla
 const registro = [];
 const anota = t => { registro.push(t); const el = document.getElementById("log"); if (el) el.textContent = registro.join("\\n"); };
 window.confirm = m => { anota("confirm: " + String(m).split("\\n")[0]); return Q.get("confirmar") !== "no"; };
@@ -57,6 +58,15 @@ const db = {
     if (CONCEPTOS === "vacio") return [];
     const filas = CONCEPTOS_DE[String(folio || "").trim().toUpperCase()] || [];
     return CONCEPTOS === "tasa0" ? filas.map((x, k) => k === 0 ? { ...x, iva_rate: 0 } : x) : filas;
+  },
+  // v10.84.108 — a nombre de quién salió cada factura (public.a_nombre_de_quien), por folio en mayúsculas
+  aNombreDeQuien: async folios => {
+    anota("lee a nombre de " + (folios || []).join(","));
+    if (A_NOMBRE === "falla") throw new Error("timeout");
+    if (A_NOMBRE !== "1") return {};
+    const m = {};
+    for (const f of (folios || [])) { const k = String(f || "").trim().toUpperCase(); if (k === "F-143" || k === "F-155") m[k] = { doc_number: k, doc_type: "factura", paga: "PORTLAND LEATHER", a_nombre_de: "PORTLAND STUDIO SA DE CV", a_nombre_de_rfc: "PST010101AAA" }; }
+    return m;
   },
   getClientBillingInfo: async () => ({ billing_mode: "normal", current_balance: 0 }),
   getNextFolioSuggestion: async t => EMISOR ? (t === "factura" ? "F-157" : "RS-40") : (t === "factura" ? "D-5781" : "R-1903"),
@@ -95,6 +105,7 @@ const PLAN = { alive_count: 2, total_count: 2, groups: [
     payment_status: "paid", ligada: true, cancelled_at: null, lines: [linea("l1", "g1", ORDERS[0].id, 4380, 613.2), linea("l2", "g1", ORDERS[1].id, 3528, 388.08),
       linea("l3", "g1", ORDERS[2].id, 7395, 1035.3), linea("l4", "g1", ORDERS[3].id, 5520, 607.2)] },
   { id: "g2", purchase_order_id: "OC-0960", position: 2, folio: "F-157", doc_type: "factura", total_amount: 19000, invoice_pre_assigned: false,
+    ...(Q.get("tercero") === "1" ? { bill_to_name: "TERCERO SA DE CV", bill_to_rfc: "TSA010101AAA" } : {}),   // v10.84.108 — «Facturar a un tercero»
     payment_status: "unpaid", ligada: false, cancelled_at: null, lines: [linea("l5", "g2", ORDERS[0].id, 75620, 10586.8), linea("l6", "g2", ORDERS[1].id, 76472, 8411.92)] },
 ] };
 function Banco() {

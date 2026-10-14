@@ -1913,6 +1913,15 @@ const db = {
     if(error) throw new Error(error.message);
     return data || []; // [{doc_number, doc_type, amount, dias_sin_orden, monto_cuadra, total_oc, ordenes, ...}]
   },
+  // v10.84.108 — a nombre de quién salió cada factura (su receptor timbrado, o el «CFDI a nombre de» de CobranzaFlow antes de timbrar) y quién la
+  //   paga; por folio en mayúsculas. Sólo Dirección, Karla y Lupita la leen (la base dice 42501 a los demás).
+  async aNombreDeQuien(folios) {
+    const fs = [...new Set((folios||[]).map(f => String(f||"").trim().toUpperCase()).filter(Boolean))];
+    if(!fs.length) return {};
+    const {data, error} = await supabase.rpc("a_nombre_de_quien", {p_folios: fs});
+    if(error) throw new Error(error.message);
+    return Object.fromEntries((data||[]).map(r => [String(r.doc_number||"").trim().toUpperCase(), r]));
+  },
   async linkInvoiceToOC(ocId, folio, actor) {
     const {data, error} = await supabase.rpc("link_invoice_to_oc", {p_oc_id: ocId, p_folio: folio, p_actor: actor});
     if(error) throw new Error(error.message);
@@ -8914,6 +8923,16 @@ function MatrixCancelConfirmModal({kind, line, group, order, oc, orders, onConfi
 // ─── OC MATRIX PLAN VIEW (v10.58.40) ────────────────────────────────────────
 function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGroup, busy}) {
   const [expanded, setExpanded] = useState(true);
+  // v10.84.108 — a nombre de quién salió cada factura del plan y quién la paga (Marcelo, 14-oct: «el detalle se debe ver todo»); sin lectura, nada
+  const [receptores, setReceptores] = useState({});
+  //   sólo Dirección, Karla y Lupita la piden: la base le dice 42501 a los demás (el vendedor y el visor abren esta vista)
+  const foliosPlan = ["admin","karla","secretaria"].includes(role) ? (matrixPlan?.groups||[]).filter(g => g.folio && !g.cancelled_at).map(g => g.folio).join(",") : "";
+  useEffect(() => {
+    if(!foliosPlan) return;
+    let vivo = true;
+    db.aNombreDeQuien(foliosPlan.split(",")).then(m => { if(vivo) setReceptores(m || {}); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [foliosPlan]);
   if(!matrixPlan || !matrixPlan.groups || matrixPlan.groups.length === 0) return null;
   const fmtMx = n => Number(n||0).toLocaleString("es-MX", {minimumFractionDigits:2, maximumFractionDigits:2});
   const orderById = Object.fromEntries((ocOrders||[]).map(o => [o.id, o]));
@@ -8954,6 +8973,10 @@ function OCMatrixPlanView({matrixPlan, ocOrders, role, onCancelLine, onCancelGro
                 {(g.lines||[]).filter(l=>!l.cancelled_at).length} línea{(g.lines||[]).filter(l=>!l.cancelled_at).length===1?"":"s"} · ${fmtMx(totalAmt)} sin IVA
                 {g.doc_type==="factura" && <span> · ${fmtMx(totalWithIva)} c/IVA</span>}
               </div>
+              {(() => { const r = receptores[String(g.folio||"").trim().toUpperCase()]; return <>
+                {r?.a_nombre_de && <div data-a-nombre-de style={{fontSize:11,color:C.tx,marginTop:3}}>CFDI a nombre de <b>{r.a_nombre_de}</b>{r.paga ? <> · lo paga <b>{r.paga}</b></> : null}</div>}
+                {g.bill_to_name && <div data-tercero style={{fontSize:11,color:C.tx,marginTop:3}}>Paga: <b>{g.bill_to_name}</b> (tercero)</div>}
+              </>; })()}
               {cancelled && g.cancellation_reason && <div style={{fontSize:10,color:C.dn,marginTop:2,fontStyle:"italic"}}>Motivo: {g.cancellation_reason}</div>}
             </div>
             {!cancelled && isAdmin && <button onClick={()=>onCancelGroup&&onCancelGroup(g)} disabled={busy}
@@ -9122,6 +9145,15 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       .catch(() => { if(vivo) setLigables(null); });
     return () => { vivo = false; };
   }, [oc?.id, lecturaLig]);
+  // v10.84.108 — a nombre de quién salió cada factura sin orden (Marcelo, 14-oct, Hotsson: «el detalle se debe ver todo»); sin lectura, nada
+  const [receptores, setReceptores] = useState({});
+  useEffect(() => {
+    if(!Array.isArray(ligables) || !ligables.length) return;
+    let vivo = true;
+    db.aNombreDeQuien(ligables.map(c => c.doc_number)).then(m => { if(vivo) setReceptores(m || {}); }).catch(() => { if(vivo) setReceptores({}); });
+    return () => { vivo = false; };
+  }, [ligables]);
+  const aNombreDe = folio => receptores[String(folio||"").trim().toUpperCase()]?.a_nombre_de || null;
 
   // v10.58.38: persistir captureMode al cambiar
   useEffect(() => {
@@ -9942,6 +9974,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                               : <div style={{fontSize:10,color:C.wnInk,lineHeight:1.4}}>{oc?.client||"El cliente"} no tiene facturas sin orden.</div>)
                           : f ? <>
                             <div style={{fontSize:10,color:C.tx,lineHeight:1.4}}><b style={{fontFamily:"'Geist Mono',monospace"}}>{f.doc_number}</b> · {pesosMx(f.amount)}{f.doc_type==="factura"?" con IVA":""} · {fD(f.issued_date)}{estado?" · "+estado:""}</div>
+                            {aNombreDe(f.doc_number) && <div data-a-nombre-de style={{fontSize:10,color:C.tx,lineHeight:1.4}}>CFDI a nombre de <b>{aNombreDe(f.doc_number)}</b> · el saldo, de {oc?.client||"el cliente"}</div>}
                             {/* v10.84.102 — sus piezas, desde su CFDI (antes había que copiarlas de CobranzaFlow) */}
                             {f.doc_type === "factura" && (() => { const pr = propuesta[i]; return <div data-propuesta={i} style={{display:"flex",flexDirection:"column",gap:3}}>
                               {(!pr || pr.estado === "falla") && <button type="button" onClick={()=>traerPiezas(i)} style={{...bs(C.bg,tintaAA(C.fac,5)),minHeight:28,padding:"3px 8px",fontSize:10.5,border:"1px solid "+C.fac+"55",justifyContent:"center"}}><DownloadSimpleIcon size={11} weight="bold"/>{pr?.estado === "falla" ? "Reintentar: traer sus piezas" : "Traer sus piezas de su CFDI"}</button>}
@@ -10209,7 +10242,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           const ords = eligibleOrders.filter(o => Number(g.lines[o.id]?.qty||0) > 0).map(o => o.production_number + ": " + Number(g.lines[o.id].qty).toLocaleString("es-MX") + " pzas");
           const quien = g.ligar ? (oc?.client||"el cliente") : (g.bill_to && !g.bill_to.incomplete ? (g.bill_to.name||"el tercero") + " (tercero)" : (oc?.client||"el cliente"));
           return {titulo: tipo(g) + " " + (i+1) + (g.label ? " · " + g.label : "") + " · " + (g.ligar ? "liga " + folioNorm(g.folio) : (g.pre_assigned || forzada(g)) ? "nueva, anticipada" : "nueva"),
-            sub: <>A cargo de {quien}{ords.map((x, k) => <span key={k}> · <span style={{whiteSpace:"nowrap"}}>{x}</span></span>)}</>,   // v10.84.104: cada orden entera
+            sub: <>A cargo de {quien}{g.ligar && aNombreDe(g.folio) ? <> · CFDI a nombre de {aNombreDe(g.folio)}</> : null}{ords.map((x, k) => <span key={k}> · <span style={{whiteSpace:"nowrap"}}>{x}</span></span>)}</>,   // v10.84.104: cada orden entera; v10.84.108: a nombre de quién
             monto: "$" + fmtMx(conIvaDe(totalSinIvaDe(g), g.doc_type)) + (g.doc_type === "factura" ? " c/IVA" : "")};
         });
         const total = Math.round(groups.reduce((s2, g) => s2 + conIvaDe(totalSinIvaDe(g), g.doc_type), 0) * 100) / 100;

@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.108 — El plan matriz dice a nombre de quién salió cada factura y quién la paga — 14-oct-2026
+
+**Qué pasaba.** Hotsson: las 11 facturas de OC-0966 salieron el 13-oct a nombre de cuatro razones sociales, y el plan matriz sólo liga las del
+cliente de la OC (5). Marcelo (14-oct) eligió que CobranzaFlow pase a Hotsson la deuda de las otras 6 (el saldo se queda con quien pidió; el CFDI,
+a nombre de quien salió: «CFDI a nombre de», la regla 23 de CobranzaFlow), «pero el detalle se debe ver todo, tal vez a quién se le facturó y la
+orden de producción que es». En el plan, una factura que se liga enseñaba su folio, su importe y su fecha; ni a nombre de quién salió ni quién la
+paga. Con las 6 a cargo de Hotsson, Karla vería «A cargo de INMOBILIARIA HOTSSON» en facturas cuyo CFDI dice otra empresa. Y la vista del plan
+ya creado no decía cuál era a un tercero.
+
+**Qué se cambió:**
+- **La base** (con el OK de Marcelo; sólo lee): `public.a_nombre_de_quien(folios)` dice, por folio, quién paga (`client_id`) y a nombre de quién
+  salió el CFDI: el receptor timbrado (`cfdi_documents`, lo que tiene el SAT) cuando su RFC no es el de quien paga, o, antes de timbrar, el «CFDI
+  a nombre de» de CobranzaFlow (`facturado_a_client_id`). Sólo Dirección, Karla y Lupita (42501 a los demás); sin EXECUTE para `anon`. Revisada
+  por CobranzaFlow, ensayada contra producción con rollback (F-70, F-71 y F-123 con su receptor;
+  F-159 y F-161 sin nada; « f-161 » igual que F-161; el vendedor y sin sesión, 42501) y aplicada el 14-oct ~10:40 (migración
+  `v10_84_108_a_nombre_de_quien`; copia y vuelta atrás en `docs/migrations/v10.84.108_a_nombre_de_quien.sql`).
+- **Al ligar** («Ya existe» en una columna): debajo del folio, «CFDI a nombre de PORTLAND STUDIO SA DE CV · el saldo, de PORTLAND LEATHER».
+- **La vista previa** antes de crear: «A cargo de … · CFDI a nombre de …» en cada factura ligada.
+- **La vista del plan ya creado** (en la OC): cada factura dice «CFDI a nombre de X · lo paga Y», y la de «Facturar a un tercero», «Paga: X
+  (tercero)». Las dos no se confunden: la primera es de quien pidió; la del tercero, del tercero.
+- Sin la lectura (falla o no contesta), no dice nada de eso y el plan sigue igual. El vendedor, que también ve las OC, ni la pide: la base se lo
+  niega, y era una petición fallida cada vez que abría una.
+- «La orden de producción que es» ya se veía en el plan (cada factura con sus órdenes y sus piezas). En CobranzaFlow, su sesión va a agregar al detalle
+  de la factura el «CFDI a nombre de» y los renglones del plan (orden y piezas).
+
+**Cómo se probó** (tres vueltas, banco del plan, que simula `a_nombre_de_quien`: `anombre=1|falla`, `tercero=1`). **Vuelta 1**, contra
+v10.84.107: pl-110 (al ligar), pl-111 (la vista previa) y pv-10 (la vista del plan) fallaban; pl-112 (sin la lectura el plan sigue) pasaba: es el
+guardia. **Vuelta 2**: pasan las 4. **Vuelta 3**, por donde no se diseñó: la factura a tercero junto a la que salió a nombre de otra razón social,
+cada una con lo suyo y una sola vez (pv-11); el folio escrito « f-155 » (pl-113); y el rol: el vendedor no la pide (pv-12, **fallaba**: la pedía)
+y Karla sí la ve (pv-13). `plan` 123 de 123, `hooks` 2 de 2, build y alcance.
+
+**Lo que sigue:** CobranzaFlow pasa a Hotsson la deuda de las 6 (su función, con el OK de Marcelo en su sesión); entonces se revisa sin escribir que
+las 11 salgan para ligar en OC-0966 y con su «a nombre de», y Karla las liga. Pendiente para otra versión: el detalle de la orden con las facturas
+que la cubren y a nombre de quién salió cada una.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.107 — El plan matriz deja hasta 30 facturas por OC (eran 10) — 14-oct-2026
 
 **Qué pasaba.** Marcelo (14-oct): «en OC sólo nos deja hacer un máximo de 10 facturas por OC; el caso de Inmobiliaria Hotsson nos piden 11 por una
@@ -27,7 +64,7 @@ fallaban («columnas 2»: el 11 se ignoraba). **Vuelta 2**: pasan; seis pruebas 
 (supuesto de la forma, se dice). **Vuelta 3**, por donde no se diseñó: el borrador con 11 vuelve con las 11 y lo capturado en la 11; justo 30 se arman
 sin desbordar la página; bajar de 11 a 2 con algo en la 11 pregunta antes de quitar: pasan las 3. `plan` 115 de 115.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~10:57; READY `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK` (commit `1219672`). Vuelta atrás: promover `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5` (el código de v10.84.106) o `git revert 1219672`; la base no cambió. Candado: 1647 de 1647 a la primera, de a 1 tanda (47 min). Revisado en producción sin escribir (`.banco-revisor-orden/medir-107.mjs`, la cuenta de pruebas con el rol de Karla, el plan de OC-0966), 4 de 4: arma 11 facturas; con 31 no las arma y dice «Hasta 30 facturas por plan.»; a 1366 la página no se desborda con 11; sin errores, sin diálogos nativos y sin escrituras.
 
 ## v10.84.106 — Crear con facturas sin orden pregunta por ellas en las tres puertas; y lo barato que quedaba de la pasada 2 — 14-oct-2026
 

@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1390 pruebas, ~13 min en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1655 pruebas, ~47 min de a 1 tanda en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -183,7 +183,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.106 (14-oct, ~09:57; READY `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5`, commit `2e0623b`; vuelta atrás: promover
+- **LIVE:** v10.84.107 (14-oct, ~10:57; READY `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK`, commit `1219672`; vuelta atrás: promover
+  `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5` (el código de v10.84.106) o `git revert 1219672`; la base no cambió con ella; candado 1647 de 1647). v10.84.107:
+  **el plan matriz deja hasta 30 facturas por OC** (eran 10, sólo en la pantalla: Hotsson pide 11 en OC-0966). 🔑 **La base:** `public.a_nombre_de_quien`
+  (14-oct ~10:40, OK de Marcelo, revisada por CobranzaFlow, ensayada; sólo lee; `docs/migrations/v10.84.108_a_nombre_de_quien.sql`): a nombre de quién
+  salió cada factura (su receptor timbrado, o el «CFDI a nombre de» antes de timbrar) y quién la paga; la pantalla va en v10.84.108. Hotsson (Marcelo,
+  14-oct, opción 1): CobranzaFlow pasa a Hotsson la deuda de las 6 facturas de OC-0966 hechas a otras razones sociales, y el detalle dice a nombre de
+  quién salió cada una.
+  v10.84.106 (14-oct, ~09:57; READY `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5`, commit `2e0623b`; vuelta atrás: promover
   `dpl_CM9wLhaU6QuNLXEFNoNDabb7txxm` (el código de v10.84.105) o `git revert 2e0623b`; la base no cambió; candado 1642 de 1642). v10.84.106, la pasada 3 de
   la critique (23/40): 🔑 **crear con facturas sin orden pregunta por ellas en las tres puertas** («Asignar folio» de la OC con «Ligarlas en el plan
   matriz» de principal; la vista previa del plan «… de todos modos»); Esc en casillas y celdas; el lector de pantalla con la orden en cada botón y
