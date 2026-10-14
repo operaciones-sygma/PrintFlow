@@ -1409,9 +1409,12 @@ await caso("ses-85-el-menu-no-recorta-acentos", async ({ p, s }) => {
   await abrirYEntrar(p, s, "karla");
   await esperarMenu(p, /^Órdenes de Compra/); await despertar(p); await p.mouse.move(700, 400); await p.waitForTimeout(300);
   const b = p.locator('button[title^="Órdenes de Compra"]').first();
-  const antes = await b.screenshot();
+  // (la franja de arriba de la etiqueta, donde van los acentos: comparando el botón entero, en producción salía 1 pixel distinto, el borde de la «a» final)
+  const r = await b.evaluate(el => { const x = el.querySelector("span").getBoundingClientRect(); return { x: x.left, y: x.top, w: x.width, h: x.height }; });
+  const clip = { x: Math.floor(r.x), y: Math.max(0, Math.floor(r.y) - 4), width: Math.ceil(r.w), height: Math.ceil(r.h * 0.45) + 4 };
+  const antes = await p.screenshot({ clip });
   await b.evaluate(el => { const sp = el.querySelector("span"); if (sp) sp.style.overflow = "visible"; });
-  const despues = await b.screenshot();
+  const despues = await p.screenshot({ clip });
   const igual = Buffer.compare(antes, despues) === 0;
   ok("ses-85-el-menu-no-recorta-acentos", igual, igual ? "la etiqueta se ve igual sin recortar" : "la etiqueta recorta algo arriba (el acento de la «Ó» de «Órdenes»)");
 });

@@ -9142,6 +9142,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [borrador, setBorrador] = useState(null);                // el de antes, mientras se ofrece: {d, mins, celdas, perdidas}
   const [vistaPrevia, setVistaPrevia] = useState(false);         // v10.84.100 — antes de crear o ligar, lo que va a pasar
   const [errorBase, setErrorBase] = useState("");                // v10.84.100 — el rechazo de la base, dentro del plan
+  const [verCFDI, setVerCFDI] = useState(false);                  // v10.84.105 — la nota de quién paga en un renglón; el CFDI a otra razón social, al pedirlo
+  const [verFaltas, setVerFaltas] = useState(false);              // v10.84.105 — lo que falta en un renglón; todo, con «Ver las N»
   const [propuesta, setPropuesta] = useState({});                // v10.84.102 — {[columna]: {estado, folio, n, r, tasas, antes}}: las piezas traídas de su CFDI
   const borradorRef = useRef(null);                              // (el mismo, para el autoguardado: sin decidir, no se pisa)
   const guardarBorrador = () => { try { if(hasCapture && !borradorRef.current) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()})); } catch(e) {} };
@@ -9802,7 +9804,6 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           <span style={{fontSize:12.5,color:C.t2}}>{oc?.client} · {eligibleOrders.length} {eligibleOrders.length === 1 ? "orden" : "órdenes"}</span>
           {!borrador && marcador}
         </div>
-        <p style={{fontSize:11.5,color:C.t2,margin:"4px 0 0",maxWidth:"75ch",lineHeight:1.45}}>Varias facturas para esta OC, cada una con piezas de varias órdenes (por sucursal, evento, lote…). Lo que no factures hoy queda para otro plan.</p>
       </div>
       {/* v10.84.98 — el plan sin terminar de la vez pasada: se elige aquí (antes, un confirm() del navegador al abrir) */}
       {borrador ? <div data-borrador role="group" aria-labelledby="plan-borrador-titulo" style={{background:C.sf,borderRadius:12,padding:"16px 18px",margin:"16px 20px",maxWidth:640}}>
@@ -9824,14 +9825,18 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           otra razón social del mismo cliente, sin cambiar quién paga, se elige en CobranzaFlow (la regla 23 de CobranzaFlow) */}
       {ligables === null && groups.some(g => !g.ligar && (g.doc_type === "factura" || g.doc_type === "remision")) && <SinRevisionSinOrden cliente={oc?.client} onReintentar={()=>setLecturaLig(n=>n+1)} revisado={revisoSinOrdenPlan} onRevisado={setRevisoSinOrdenPlan} que="crear facturas nuevas"/>}
       {/* v10.84.101 — las que todavía no llegan a Salidas: lo que pasa con ellas y una sola razón para sus facturas anticipadas */}
-      {enLaPlanta.length > 0 && <div data-plan-anticipadas role="note" style={{fontSize:12,color:C.tx,padding:"8px 12px",background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,lineHeight:1.5,maxWidth:"110ch"}}>
-        <b>{enLaPlanta.map(o => o.production_number).join(", ")} todavía no {enLaPlanta.length === 1 ? "llega" : "llegan"} a Salidas</b> ({enLaPlanta.map(o => dondeVa(o).lugar).filter((x, k, a) => a.indexOf(x) === k).join(", ")}): las facturas que {enLaPlanta.length === 1 ? "la llevan" : "las llevan"} quedan <b>anticipadas</b> y no {enLaPlanta.length === 1 ? "la entregan" : "las entregan"}; {enLaPlanta.length === 1 ? "se entrega" : "se entregan"} al llegar a Salidas, con «Marcar como Entregada».
-        <label style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}><span style={{fontWeight:600}}>¿Por qué se anticipan?</span>
+      {/* v10.84.105 (pasada 2, P1-3) — a lo ancho y en un renglón (con 110ch eran dos, más el de la razón) */}
+      {enLaPlanta.length > 0 && <div data-plan-anticipadas role="note" style={{fontSize:12,color:C.tx,padding:"6px 12px",background:C.amb+"12",border:"1px solid "+C.amb+"55",borderRadius:10,lineHeight:1.5,display:"flex",flexWrap:"wrap",alignItems:"center",gap:"4px 12px"}}>
+        <span><b>{enLaPlanta.map(o => o.production_number).join(", ")} todavía no {enLaPlanta.length === 1 ? "llega" : "llegan"} a Salidas</b> ({enLaPlanta.map(o => dondeVa(o).lugar).filter((x, k, a) => a.indexOf(x) === k).join(", ")}): sus facturas quedan <b>anticipadas</b> y {enLaPlanta.length === 1 ? "se entrega" : "se entregan"} al llegar, con «Marcar como Entregada».</span>
+        <label style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",flex:"1 1 380px"}}><span style={{fontWeight:600}}>¿Por qué se anticipan?</span>
           <input value={razonAnticipo} onChange={e=>setRazonAnticipo(e.target.value)} placeholder="Ej. el cliente pidió sus facturas antes de la entrega" style={{...inp,padding:"5px 10px",fontSize:12,flex:"1 1 260px",maxWidth:440}}/></label>
       </div>}
-        {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:0,padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5,maxWidth:"110ch"}}>
-        <b>El saldo de cada factura queda a cargo de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero.
-        {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos → Cambiar; no escribas en «Razón social», que cambia los datos de {oc?.client||"este cliente"}).
+        {/* v10.84.105 (pasada 2, P1-3) — en un renglón (eran tres a 1366); el camino del CFDI a otra razón social, con su botón */}
+        {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:0,padding:"6px 12px",background:C.sf,borderRadius:10,lineHeight:1.5}}>
+        <b>El saldo de cada factura es de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero».{" "}
+        {verCFDI
+          ? <>¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos → Cambiar; no escribas en «Razón social», que cambia los datos de {oc?.client||"este cliente"}).</>
+          : <button type="button" aria-expanded={false} onClick={()=>setVerCFDI(true)} style={{...enlace,fontSize:11.5,color:C.ac,fontWeight:700}}>¿Y el CFDI a otra razón social?</button>}
       </div>}
 
 
@@ -9879,7 +9884,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                 <div style={{fontSize:9,color:C.t2,textTransform:"uppercase",fontWeight:600}}>Orden / Producto</div>
               </th>
               {groups.map((g, i) => (
-                <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:170,verticalAlign:"top"}}>
+                <th key={i} style={{padding:"8px",borderBottom:"0.5px solid "+C.bd,borderLeft:"0.5px solid "+C.bd,minWidth:groups.length >= 4 ? 230 : 170,verticalAlign:"top"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
                     {/* v10.84.100 — «Nueva / Ya existe», la primera elección de cada factura (antes, el enlace «Ya tiene factura: ligarla» de 10 px) */}
@@ -9889,21 +9894,23 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                           title={lig ? "La factura ya se hizo en CobranzaFlow (sin orden): escribe su folio para ligarla en vez de emitir otra" : "Se emite una factura nueva con el folio que sigue"}
                           style={{flex:1,border:"none",padding:"5px 8px",fontSize:11.5,fontWeight:700,cursor:on?"default":"pointer",fontFamily:"inherit",background:on?tintaAA(C.fac,5):C.bg,color:on?"#fff":C.t2}}>{txt}</button>; })}
                     </div>}
-                    <div style={{display:"flex",gap:4,flex:"1 1 150px",minWidth:0}}>
+                    {/* v10.84.105 (pasada 2, P1-3) — con 4 facturas o más la etiqueta va en su renglón y el tipo sube junto a «Nueva / Ya existe»
+                        (con 6 medía 67 px: «Etiqueta (», justo donde Karla escribiría a qué razón social va cada una) */}
+                    <div style={{display:"flex",gap:4,flex:groups.length >= 4 ? "1 1 100%" : "1 1 150px",minWidth:0,order:2}}>
                     <input value={g.label||""} placeholder="Etiqueta (opcional)" aria-label={"Etiqueta de la factura "+(i+1)+" (opcional)"}
                       onChange={e=>updateGroup(i, {label: e.target.value})}
                       title="Identificador para distinguir esta factura del resto del plan. Opcional — Karla puede dejarlo vacío y el folio fiscal sirve como identificador."
                       style={{...inp,padding:"4px 8px",fontSize:11,fontWeight:600,flex:1,minWidth:0}}/>
+                    </div>
                     {/* v10.84.89 — sin la serie de Alpha en el nombre («Factura D-»): la serie la dice el folio. La ligada: el tipo lo pone su factura */}
                     <select value={g.doc_type} aria-label={"Tipo de la factura "+(i+1)} disabled={g.ligar && !!facturaDe(g)}
                       title={g.ligar && facturaDe(g) ? "El tipo lo pone la factura que ya existe" : undefined}
                       onChange={e=>cambiarTipo(i, e.target.value)}
-                      style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto",width:"auto",flex:"0 0 auto"}}>
+                      style={{...inp,padding:"4px 8px",fontSize:11,appearance:"auto",width:"auto",flex:"0 0 auto",order:groups.length >= 4 ? 1 : 3}}>
                       <option value="factura">Factura</option>
                       <option value="remision">Remisión</option>
                       {isCorona && <option value="corona_saldo">Saldo Corona</option>}
                     </select>
-                    </div>
                     </div>
                     {g.doc_type !== "corona_saldo" && (g.ligar ? (() => {
                       // v10.84.89 — la columna LIGA una factura que ya existe: su folio y lo que la base sabe de ella
@@ -9928,12 +9935,13 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                               {pr?.estado === "falla" && <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>No pude leer los conceptos de {pr.folio} (la base no contestó o no dejó). Captúralas a mano o reintenta.</div>}
                               {pr?.estado === "listo" && (pr.n === 0
                                 ? <div role="status" style={{fontSize:10,color:C.wnInk,lineHeight:1.4}}>{pr.folio} no trae desglose timbrado: captura las piezas a mano.</div>
-                                : <div role="status" style={{fontSize:10,color:C.tx,lineHeight:1.45}}>
-                                    De su CFDI: {pr.n} {pr.n === 1 ? "concepto" : "conceptos"}{pr.r.casados.length ? ", " + (pr.r.casados.length === pr.n ? (pr.n === 1 ? "puesto" : "los " + pr.n + " puestos") : pr.r.casados.length + " puestos") + " (" + pr.r.casados.map(c => c.production_number + ": " + c.cantidad.toLocaleString("es-MX")).join(" · ") + ")" : ""}.
+                                : <div role="status" title={pr.r.casados.map(c => c.production_number + ": " + c.cantidad.toLocaleString("es-MX")).join(" · ")} style={{fontSize:10,color:C.tx,lineHeight:1.45}}>
+                                    {/* v10.84.105 (pasada 2, P1-3) — corta: lo que puso en cada orden ya se ve en sus celdas (y va en el `title`) */}
+                                    De su CFDI: {pr.n} {pr.n === 1 ? "concepto" : "conceptos"}{pr.r.casados.length ? ", " + (pr.r.casados.length === pr.n ? (pr.n === 1 ? "puesto" : "los " + pr.n + " puestos") : pr.r.casados.length + " puestos") : ""}.
                                     {pr.r.sinCasar.length > 0 && <span style={{color:C.wnInk}}> Sin casar ({pr.r.sinCasar.length}): {pr.r.sinCasar.map(c => String(c.descripcion||"").slice(0, 40) + " (" + Number(c.cantidad).toLocaleString("es-MX") + ")").join(" · ")}: captúralas tú.</span>}
                                     {pr.r.dudosos.length > 0 && <span style={{color:C.wnInk}}> Dudosos ({pr.r.dudosos.length}): {pr.r.dudosos.map(d => String(d.concepto.descripcion||"").slice(0, 30) + " → " + d.candidatas.join(" o ")).join(" · ")}: elige tú.</span>}
                                     {pr.tasas > 0 && <span style={{color:C.wnInk}}> {pr.tasas === 1 ? "Un renglón trae" : pr.tasas + " renglones traen"} IVA distinto de 16 %: el plan calcula con 16 %, revisa el cuadre.</span>}
-                                    {" "}Revisa las piezas: la suma de abajo las compara con {pr.folio}.
+                                    {" "}Revisa la suma de abajo contra {pr.folio}.
                                     {pr.antes && <> <button type="button" onClick={()=>deshacerPiezas(i)} style={{...enlace,fontSize:10,color:C.ac,fontWeight:700}}>Deshacer</button></>}
                                   </div>)}
                             </div>; })()}
@@ -9957,7 +9965,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                     {/* 🆕 Fase 2.5 — facturar ESTE grupo a un tercero (razón social distinta del productor) */}
                     {g.doc_type !== "corona_saldo" && !isCorona && !g.ligar && (
                       <button type="button" onClick={()=>{setBillToDraft(null); setBillToEditGroup(i);}}
-                        title="Dirigir esta factura/remisión a una razón social distinta del cliente productor"
+                        title="Sólo si otra empresa paga esta factura (su cobranza, su estado de cuenta y su portal). Para el CFDI a otra razón social del mismo cliente: «CFDI a nombre de» en CobranzaFlow"
                         style={{...inp,width:"auto",flex:"1 1 auto",minWidth:0,padding:"3px 6px",fontSize:10,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:4,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
                           ...((g.bill_to && !g.bill_to.incomplete) ? {borderColor:C.fac,color:C.fac,fontWeight:700} : (g.bill_to && g.bill_to.incomplete) ? {borderColor:C.dn,color:C.dn} : {color:C.t2})}}>
                         <UsersIcon size={10} weight="bold"/>{(g.bill_to && !g.bill_to.incomplete) ? ("Paga: "+(g.bill_to.name||"el tercero")) : (g.bill_to && g.bill_to.incomplete) ? "Tercero incompleto" : "+ Facturar a tercero"}
@@ -10011,8 +10019,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                 <tr key={o.id} style={{borderTop:"0.5px solid "+C.bd}}>
                   <td style={{padding:"8px",position:"sticky",left:0,background:C.bg,zIndex:1,borderRight:"0.5px solid "+C.bd}}>
                     <div style={{fontSize:11,color:C.tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}} title={o.product || o.product_type}><b>{o.production_number}</b> <span style={{color:C.t2}}>· {o.product || o.product_type}</span></div>
-                    <div style={{fontSize:10,color:C.t2}}>{Number(o.quantity).toLocaleString("es-MX")} pzas a ${fmtMx(punit)}</div>
-                    {!enSalidas(o) && <div data-en-la-planta style={{fontSize:10,color:C.wnInk,fontWeight:700}}>{dondeVa(o).lugar} · todavía no está en Salidas</div>}
+                    {/* v10.84.105 (pasada 2, P1-3) — dónde va la que no ha llegado, en el renglón de sus piezas (era un renglón más por orden) */}
+                    <div style={{fontSize:10,color:C.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:260}}>{Number(o.quantity).toLocaleString("es-MX")} pzas a ${fmtMx(punit)}{!enSalidas(o) && <span data-en-la-planta title={dondeVa(o).lugar + " · todavía no está en Salidas: su factura va anticipada"} style={{color:C.wnInk,fontWeight:700}}> · {dondeVa(o).lugar}, no en Salidas</span>}</div>
                     {/* v10.58.46 A2: LÍMITES REALES mientras captura — el badge ahora usa
                         lo DISPONIBLE (descuenta otros planes vivos) y se agrega el tope de
                         DINERO, que antes solo aparecía como error después de pasarse. */}
@@ -10118,9 +10126,14 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       <div data-plan-pie style={{flexShrink:0,borderTop:"0.5px solid "+C.bd,padding:"10px 20px 14px",display:"flex",flexDirection:"column",gap:8,background:C.bg}}>
       {/* Validación (v10.84.100: en el pie fijo, con su propio scroll si son muchas) */}
       {validation.length > 0 && (
-        <div data-plan-errores role="status" style={{background:C.amb+"10",border:"1px solid "+C.wn+"40",borderRadius:8,padding:"8px 10px",maxHeight:"22vh",overflowY:"auto"}}>
-          <div style={{fontSize:11.5,fontWeight:700,color:C.wnInk,marginBottom:4}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{validation.length===1?"Falta 1 cosa para crear:":"Faltan "+validation.length+" cosas para crear:"}</div>
-          {validation.map((e,i) => <div key={i} style={{fontSize:11.5,color:C.wnInk,lineHeight:1.45}}>• {e}</div>)}
+        <div data-plan-errores role="status" style={{background:C.amb+"10",border:"1px solid "+C.wn+"40",borderRadius:8,padding:"6px 10px",...(verFaltas?{maxHeight:"22vh",overflowY:"auto"}:{})}}>
+          {/* v10.84.105 (pasada 2, P1-3) — en UN renglón (crecía uno por factura y a 1366 se comía la matriz); todo, con «Ver las N» */}
+          <div style={{display:"flex",alignItems:"baseline",gap:8,minWidth:0}}>
+            <span style={{fontSize:11.5,fontWeight:700,color:C.wnInk,flexShrink:0}}><WarningIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{validation.length===1?"Falta 1 cosa para crear:":"Faltan "+validation.length+" cosas para crear:"}</span>
+            <span style={{fontSize:11.5,color:C.wnInk,lineHeight:1.45,minWidth:0,flex:1,display:verFaltas?"none":undefined,...(validation.length>1?{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}:{})}}>{validation.join(" · ")}</span>
+            {validation.length > 1 && <button type="button" aria-expanded={verFaltas} onClick={()=>setVerFaltas(v=>!v)} style={{...enlace,fontSize:11.5,color:C.wnInk,fontWeight:700,flexShrink:0,marginLeft:"auto"}}>{verFaltas?"Ver menos":"Ver las "+validation.length}</button>}
+          </div>
+          {verFaltas && validation.map((e,i) => <div key={i} data-falta style={{fontSize:11.5,color:C.wnInk,lineHeight:1.45}}>• {e}</div>)}
           {/* v10.84.89 — la salida del candado del anticipo: ligar la que ya existe en esa columna */}
           {sugerenciasLigar.length > 0 && <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>{sugerenciasLigar.map(s =>
             <button key={s.i} type="button" onClick={()=>ligarColumna(s.i, s.c.doc_number)} style={{...bs(C.fac),padding:"5px 10px",fontSize:11}}><LinkIcon size={11} weight="bold"/>Ligar {s.c.doc_number} a la factura {s.i+1}</button>)}</div>}

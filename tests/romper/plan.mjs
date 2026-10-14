@@ -317,6 +317,7 @@ await caso("pv-07 renglón de la ligada", "cancelar=linea", async p => {
 const textoDe = async loc => ((await loc.first().innerText({ timeout: 1500 }).catch(() => "")) || "").replace(/\s+/g, " ");
 await caso("pl-34 el plan dice a cargo de quién queda el saldo y cómo sacar el CFDI a otra razón social", "", async p => {
   await abrir(p);
+  await p.locator("[data-quien-paga]").getByRole("button", { name: /CFDI a otra razón social/ }).click().catch(() => {}); await espera(p, 200);   // (v10.84.105: se despliega)
   const nota = await textoDe(p.locator("[data-quien-paga]"));
   ok("pl-34 el plan dice a cargo de quién queda el saldo y cómo sacar el CFDI a otra razón social",
     /saldo/i.test(nota) && /PORTLAND LEATHER/.test(nota) && /CFDI a nombre de/.test(nota) && /Facturar a tercero/.test(nota), `«${nota.slice(0, 240)}»`);
@@ -542,7 +543,7 @@ await caso("pl-58 el aviso de errores con AA", "", async p => {
     const lum = ([r, g, b]) => { const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
     const fondo = el => { const capas = []; for (let x = el; x; x = x.parentElement) { const v = nums(getComputedStyle(x).backgroundColor); if (v.length === 3 || (v.length === 4 && v[3] >= 0.999)) { capas.push([v[0], v[1], v[2], 1]); break; } if (v.length === 4 && v[3] > 0) capas.push(v); }
       let c = [255, 255, 255]; for (let i = capas.length - 1; i >= 0; i--) { const [r, g, b, a] = capas[i]; c = [r * a + c[0] * (1 - a), g * a + c[1] * (1 - a), b * a + c[2] * (1 - a)]; } return c; };
-    const el = [...document.querySelectorAll("div")].find(d => /^(\d+ errores?|Falta 1 cosa para crear|Faltan \d+ cosas para crear):$/.test(d.textContent.trim()));
+    const el = [...document.querySelectorAll("div, span")].find(d => /^(\d+ errores?|Falta 1 cosa para crear|Faltan \d+ cosas para crear):$/.test(d.textContent.trim()));   // (v10.84.105: es un <span>)
     if (!el) return null;
     const lb = lum(fondo(el)), lt = lum(nums(getComputedStyle(el).color).slice(0, 3)); return +((Math.max(lb, lt) + 0.05) / (Math.min(lb, lt) + 0.05)).toFixed(2);
   });
@@ -664,7 +665,8 @@ await caso("pl-74 muchas cosas por resolver: el botón sigue a la vista", "", as
   for (let i = 0; i < 7; i++) await piezas(p, i, [90000, 90000, 90000, 90000]);
   const r = await p.evaluate(() => { const vis = e => { const b = e.getBoundingClientRect(); return b.top >= 0 && b.bottom <= innerHeight; };
     const btn = [...document.querySelectorAll("button")].filter(b => /^(Revisar: )?(Crear|Ligar|crear|ligar) \d+/.test(b.textContent.trim())).pop();
-    const err = document.querySelector("[data-plan-errores]"); return { boton: btn ? vis(btn) : false, errores: err ? err.querySelectorAll("div").length : 0, ancho: document.documentElement.scrollWidth }; });
+    // (v10.84.105: lo que falta va en un renglón; se cuentan las N de «Faltan N cosas», no un <div> por cada una)
+    const err = document.querySelector("[data-plan-errores]"); return { boton: btn ? vis(btn) : false, errores: err ? Number((/Faltan (\d+) cosas/.exec(err.textContent) || [])[1] || 0) : 0, ancho: document.documentElement.scrollWidth }; });
   ok("pl-74 con 7 facturas llenas de más (muchas cosas por resolver) a 1366, el botón sigue a la vista y la página no se desborda", r.boton && r.errores > 6 && r.ancho <= 1366, JSON.stringify(r));
 });
 
@@ -838,6 +840,90 @@ await caso("pl-89 el rechazo nombra el botón del plan", "conf=candado", async p
   const t = ((await p.locator("[data-plan-rechazo]").innerText().catch(() => "")) || "").replace(/\s+/g, " ");
   ok("pl-89 el rechazo de la base nombra el botón del plan («Ya existe») y la factura por su número («Factura 1»), no «Ya tiene factura: ligarla»",
     /«Ya existe»/.test(t) && /Factura 1/.test(t) && !/Ya tiene factura: ligarla/.test(t), `«${t.slice(0, 220)}»`);
+});
+
+// v10.84.105 — la pasada 2 (P1-3): a 1366 el plan no dejaba ver lo que se captura. Vuelta 1: antes.
+const aLaVista = p => p.evaluate(() => {
+  const visFila = tr => { const td = tr.querySelector("td"), b = td.getBoundingClientRect(); if (!(b.top >= 0 && b.bottom <= innerHeight)) return false; const el = document.elementFromPoint(b.left + 10, b.top + b.height / 2); return !!el && tr.contains(el); };
+  return [...document.querySelectorAll("tbody tr")].map(visFila).filter(Boolean).length;
+});
+const alto = (p, sel) => p.evaluate(s => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().height) : 0; }, sel);
+await caso("pl-90 a 1366, dos facturas nuevas: 3 de 4 órdenes a la vista", "", async p => {
+  await abrir(p);
+  const n = await aLaVista(p);
+  ok("pl-90 a 1366×768 con dos facturas nuevas se ven al menos 3 de las 4 órdenes", n >= 3, `${n} de 4`);
+});
+await caso("pl-91 a 1366, F-143 con sus piezas traídas: 3 de 4", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 500);
+  const n = await aLaVista(p);
+  ok("pl-91 a 1366×768 con F-143 ligada y sus piezas traídas se ven al menos 3 de las 4 órdenes", n >= 3, `${n} de 4 · encabezado de columna ${await alto(p, "thead")} px`);
+});
+await caso("pl-92 a 1366, 6 facturas: 2 de 4 y la etiqueta se puede escribir", "", async p => {
+  await abrir(p); await p.getByRole("button", { name: "6", exact: true }).first().click(); await espera(p, 400);
+  const n = await aLaVista(p);
+  const anchos = await p.evaluate(() => [...document.querySelectorAll('input[aria-label^="Etiqueta de la factura"]')].map(e => Math.round(e.getBoundingClientRect().width)));
+  ok("pl-92 a 1366×768 con 6 facturas se ven al menos 2 de las 4 órdenes y cada «Etiqueta» mide 120 px o más", n >= 2 && anchos.length === 6 && anchos.every(w => w >= 120), `${n} de 4 · etiquetas ${JSON.stringify(anchos)}`);
+});
+await caso("pl-93 a 1366, antes de Salidas: 3 de 4", "planta=todas", async p => {
+  await abrir(p);
+  const n = await aLaVista(p);
+  ok("pl-93 a 1366×768 con las 4 órdenes todavía en la planta (el aviso de anticipadas arriba) se ven al menos 3 de las 4", n >= 3, `${n} de 4 · el aviso ${await alto(p, "[data-plan-anticipadas]")} px`);
+});
+await caso("pl-94 la nota de quién paga, en un renglón", "", async p => {
+  await abrir(p);
+  const antes = await alto(p, "[data-quien-paga]");
+  const b = p.locator("[data-quien-paga]").getByRole("button", { name: /CFDI a otra razón social/ }), hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 200); }
+  const t = await textoDe(p.locator("[data-quien-paga]"));
+  ok("pl-94 la nota de quién paga mide un renglón (≤ 40 px) y su botón «¿Y el CFDI a otra razón social?» despliega el camino (Por Timbrar → Datos, sin escribir en «Razón social»)",
+    antes <= 40 && hay === 1 && /CFDI a nombre de/.test(t) && /no escribas en «Razón social»/.test(t), `${antes} px · botón ${hay} · «${t.slice(0, 200)}»`);
+});
+await caso("pl-95 «Faltan N cosas» en un renglón; «Ver las N» las despliega", "", async p => {
+  await abrir(p);
+  const antes = await alto(p, "[data-plan-errores]");
+  const b = p.locator("[data-plan-errores]").getByRole("button", { name: /^Ver las \d+/ }), hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 200); }
+  const despues = await alto(p, "[data-plan-errores]");
+  const renglones = await p.locator("[data-plan-errores] [data-falta]").count();
+  ok("pl-95 lo que falta va en un renglón (≤ 40 px) con «Ver las N», que despliega uno por renglón",
+    antes <= 40 && hay === 1 && despues > antes && renglones >= 2, `${antes} px · botón ${hay} · desplegado ${despues} px con ${renglones} renglones`);
+});
+await caso("pl-96 «+ Facturar a tercero» no invita al caso equivocado", "", async p => {
+  await abrir(p);
+  const titulo = await encabezado(p, 0).getByRole("button", { name: /Facturar a tercero/ }).getAttribute("title").catch(() => "");
+  ok("pl-96 la ayuda de «+ Facturar a tercero» dice que es para cuando otra empresa paga (no «una razón social distinta»)",
+    /otra empresa paga/i.test(titulo || "") && !/razón social distinta/i.test(titulo || ""), `«${titulo}»`);
+});
+
+// vuelta 3 (v10.84.105), por donde no se diseñó: un solo error (que se lea entero, sin «…»), 7 facturas como Hotsson (la matriz a lo ancho con la
+// columna de órdenes fija) y «Ver menos»
+await caso("pl-97 con una sola cosa por resolver, se lee entera", "", async p => {
+  await abrir(p); await piezas(p, 0, [1000, 1000, 1000, 1000]); await espera(p, 300);
+  const r = await p.evaluate(() => { const e = document.querySelector("[data-plan-errores]"); if (!e) return null;
+    const t = [...e.querySelectorAll("span")].find(x => /todavía sin piezas|Factura \d/.test(x.textContent) && !/Faltan?/.test(x.textContent));
+    return t ? { texto: t.textContent, cortado: t.scrollWidth > t.clientWidth + 1, boton: !!e.querySelector("button[aria-expanded]") } : { texto: e.textContent, cortado: null, boton: !!e.querySelector("button[aria-expanded]") }; });
+  ok("pl-97 con una sola cosa por resolver, se lee entera (sin cortar) y sin «Ver las N»", !!r && r.cortado === false && !r.boton, JSON.stringify(r));
+});
+await caso("pl-98 siete facturas: la matriz se desliza y la columna de órdenes se queda", "", async p => {
+  await abrir(p); await p.locator("input[type=number][max='10']").fill("7"); await espera(p, 400);
+  const r = await p.evaluate(async () => {
+    const m = document.querySelector("[data-plan-matriz]"); m.scrollLeft = m.scrollWidth; await new Promise(x => setTimeout(x, 300));
+    const td = document.querySelector("tbody tr td"), b = td.getBoundingClientRect(), el = document.elementFromPoint(b.left + 10, b.top + b.height / 2);
+    const et = document.querySelector('input[aria-label="Etiqueta de la factura 7 (opcional)"]'), e = et.getBoundingClientRect(), mr = m.getBoundingClientRect();
+    return { ordenesFijas: !!el && td.contains(el), etiqueta7: Math.round(e.width), septimaALaVista: e.left >= mr.left && e.right <= mr.right + 1, anchoPagina: document.documentElement.scrollWidth };
+  });
+  ok("pl-98 con 7 facturas a 1366 la matriz se desliza a lo ancho: la columna de órdenes se queda a la vista, la etiqueta de la 7 se alcanza (≥ 120 px) y la página no se desborda",
+    r.ordenesFijas && r.septimaALaVista && r.etiqueta7 >= 120 && r.anchoPagina <= 1366, JSON.stringify(r));
+});
+await caso("pl-99 «Ver menos» vuelve a un renglón", "", async p => {
+  await abrir(p);
+  const e = p.locator("[data-plan-errores]");
+  const antes = (await e.boundingBox())?.height || 0;
+  await e.getByRole("button", { name: /^Ver las \d+/ }).click().catch(() => {}); await espera(p, 200);
+  const abierto = (await e.boundingBox())?.height || 0;
+  await e.getByRole("button", { name: /^Ver menos$/ }).click().catch(() => {}); await espera(p, 200);
+  const otraVez = (await e.boundingBox())?.height || 0;
+  ok("pl-99 «Ver las N» abre y «Ver menos» regresa a un renglón", abierto > antes && Math.abs(otraVez - antes) <= 1, `${Math.round(antes)} → ${Math.round(abierto)} → ${Math.round(otraVez)} px`);
 });
 
 for (const r of res) console.log(r);

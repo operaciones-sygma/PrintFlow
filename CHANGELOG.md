@@ -12,6 +12,38 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.105 — El plan matriz a 1366 deja ver lo que se captura — 14-oct-2026
+
+**Qué pasaba.** La pasada 2 de la critique (P1-3): a 1366 el plan enseñaba 1 o 2 de las 4 órdenes. Medido en el banco antes del cambio: dos
+facturas nuevas 2 de 4; F-143 con sus piezas traídas 1 de 4; 6 facturas 1 de 4, con cada «Etiqueta» en 67 px («Etiqueta (», justo donde Karla
+escribiría a qué razón social va cada una); antes de Salidas 1 de 4. Lo que se comía el alto: el párrafo de descripción del encabezado, la nota de
+quién paga (68 px, tres renglones), el aviso de anticipadas (86), el pie de «Faltan», que crecía un renglón por factura (70 a 137), la propuesta
+de piezas en el encabezado de la columna (205) y un renglón más por cada orden que no ha llegado a Salidas. Y la ayuda de «+ Facturar a tercero»
+seguía diciendo «Dirigir esta factura a una razón social distinta del cliente productor» (el resto del P1-2 que corrigió la 104).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- **La nota de quién paga en un renglón** («El saldo de cada factura es de PORTLAND LEATHER, quien pidió el trabajo, salvo las que lleven
+  «Facturar a tercero».») y el camino del CFDI a otra razón social con su botón, «¿Y el CFDI a otra razón social?».
+- **Lo que falta en un renglón**, con «Ver las N» y «Ver menos»; con una sola cosa, entera y sin botón.
+- Sin el párrafo de descripción del encabezado; el aviso de anticipadas a lo ancho (la razón en el mismo renglón si cabe); dónde va la orden que no
+  ha llegado, en el renglón de sus piezas («80,000 pzas a $0.11 · En Empaque, no en Salidas»); la propuesta de piezas corta (lo que puso en cada
+  orden ya se ve en las celdas, y va en su ayuda).
+- **Con 4 facturas o más, columnas de 230 px**: la matriz se desliza a lo ancho con la columna de órdenes fija, el tipo sube junto a «Nueva / Ya
+  existe» y la etiqueta va en su renglón (213 px con 6, 214 con 7).
+- La ayuda de «+ Facturar a tercero»: «Sólo si otra empresa paga esta factura…; para el CFDI a otra razón social del mismo cliente, «CFDI a nombre
+  de» en CobranzaFlow».
+
+**Cómo se probó** (tres vueltas, en el banco a 1366×768). **Vuelta 1**, escritas antes y corridas contra v10.84.104: fallaban las 7 (pl-90 a pl-96,
+con las cifras de arriba). **Vuelta 2**: pasan pl-90 (3 de 4), pl-91 (3 de 4), pl-94, pl-95 y pl-96; pl-92 y pl-93 encontraron que la etiqueta
+seguía compartiendo renglón con el tipo y que cada orden en la planta traía un renglón más: arreglado, 3 de 4 en los dos. Tres pruebas viejas
+tenían supuestos de la forma de antes y se corrigieron (se dice): pl-34 despliega la nota antes de leerla, pl-74 contaba un `<div>` por error (ahora
+cuenta las N de «Faltan N cosas») y pl-58 buscaba el título como `<div>` (ahora es un `<span>`). **Vuelta 3**, por donde no se diseñó: una sola cosa
+por resolver (se lee entera), 7 facturas como Hotsson (la matriz se desliza, las órdenes se quedan, la etiqueta de la 7 se alcanza, la página no se
+desborda) y «Ver menos»: pasan las 3. `plan` 103 de 103 (pv-01 cayó una vez por la máquina y sola pasa 3 de 3), `sesion` 88 de 88 (ses-85 compara
+ahora la franja de arriba de la etiqueta del menú: comparando el botón entero, en producción salía 1 pixel distinto, el borde de la «a» final).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.104 — Lo que mueve dinero pregunta igual en las dos puertas; «Facturar a un tercero» dice quién paga y cuál es el otro camino — 14-oct-2026
 
 **Qué pasaba.** La pasada 2 de la critique del flujo de facturas de Karla (14-oct, revisor independiente con producción, el banco del plan y el
