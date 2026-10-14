@@ -47,7 +47,12 @@ falla, la tabla que falla, el borrado bueno, la pregunta que nombra el archivo, 
 borrado ya no existe y det-172 a det-175 cuidan que no regrese. **Sin probar:** el borrado a propósito de «Archivos» no tiene prueba de qué
 pasa cuando Storage falla (no es de esta versión; queda anotado).
 
-**En producción:** (se llena al subir)
+**En producción** (13-oct, ~18:37): READY `dpl_3fJVLxRoRBjRwQj8GDzPTCAGor7W` (commit `0abb40a`), candado 1447 de 1447 a la primera (12
+nuevas; 1442 − 7 retiradas + 12), de a 2 tandas, 22 min. Vuelta atrás: promover `dpl_J5c6ANdo1AuerwYsheg15csjZh6C` (el código de
+v10.84.91) o `git revert 0abb40a`; la base no cambió. **Revisado contra producción** (`.banco-revisor-orden/medir-93.mjs`, cuenta `visor`,
+el rol sólo en el navegador, escrituras cortadas): 8 de 8. Karla: el menú `["Pendientes (10)"]` abre «Pendientes de Folio» con «Por foliar
+10» (antes «Pendientes (25)» y «Folios» aparte) y Ctrl+K «folio» la lleva ahí; admin: «Descargar» en P-0612 ya no propone borrarlo;
+Gerardo, como antes. Sin errores ni diálogos nativos; cortadas sólo las alertas de estancadas que toda sesión de admin manda sola.
 
 ## v10.84.91 — La CATEGORÍA del trabajo: de lista cerrada, sugerida por el nombre, obligatoria al capturar; Analytics por categoría — 13-oct-2026
 

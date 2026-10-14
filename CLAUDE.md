@@ -181,7 +181,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.91 (13-oct, ~17:57; READY `dpl_H9dAw2HPjr6KagmQQzAVyGUFmVMY`, commit `5c5df72`, la pantalla en `6bf0057` y `03ebdf1`;
+- **LIVE:** v10.84.93 (13-oct, ~18:37; READY `dpl_3fJVLxRoRBjRwQj8GDzPTCAGor7W`, commit `0abb40a`; vuelta atrás: promover
+  `dpl_J5c6ANdo1AuerwYsheg15csjZh6C` (el código de v10.84.91) o `git revert 0abb40a`; la base no cambió; 1447 pruebas, de a 2 tandas).
+  v10.84.93: **Karla con UNA cola** (su «Pendientes» abre Folios y cuenta lo que tiene por foliar; ya no hay «Folios» aparte; Folios sin
+  lectura buena no presume cero) y **descargar el archivo ya no propone borrarlo** (se fue el borrado desde el detalle y su permiso
+  `delete_file`; borrar a propósito, en «Archivos»). La tanda `sesion` (la app real) ahora puede traer filas o fallar al leer una tabla
+  (`s.filas`) y prueba el menú de cada rol. Sigue: v10.84.94 (Germán sin arrastrar y la ficha con una sola acción rellena) y v10.84.95
+  («Te toca / Espera a otro», con la lista del vendedor), las demás recomendaciones de la critique de «Mis Pendientes».
+  v10.84.91 (13-oct, ~17:57; READY `dpl_H9dAw2HPjr6KagmQQzAVyGUFmVMY`, commit `5c5df72`, la pantalla en `6bf0057` y `03ebdf1`;
   vuelta atrás: promover `dpl_DvkAFCUkdVXHDPbhvy3KgQdaJB4g` (el código de v10.84.92, que funciona con la base migrada) o `git revert 03ebdf1
   6bf0057`; 1442 pruebas, de a 2 tandas). v10.84.91: 🔑 **la CATEGORÍA del trabajo** (`orders.categoria`, lista cerrada de 12 + «Otro» en
   `src/lib/categorias.js`): la forma la sugiere por el nombre y la pide (obligatoria), Analytics da el ingreso por categoría (antes, 596
