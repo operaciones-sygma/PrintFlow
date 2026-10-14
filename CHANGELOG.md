@@ -39,7 +39,7 @@ todavía sin piezas el encabezado dice «faltan $3,221.17», no «completo» (pl
 precio (cada celda se redondea), la pantalla y la base frenan igual (la base: precio + $0.01). No pasó con Hotsson (quedó $0.02 abajo); si pasa,
 el atajo es el de arriba (bajar un centavo en una celda por monto), y el arreglo de fondo sería que la última celda absorba el redondeo.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~15:15; READY `dpl_FXahvNDBa46jhhNYPVuEBPxU1wbo` (commit `e3c6ccb`). Vuelta atrás: promover `dpl_6EPzTnsoKZtykcRu9CQeCgNAXyeZ` (el código de v10.84.109) o `git revert e3c6ccb`; la base no cambió. Candado: 1670 de 1670 a la primera, de a 1 tanda (48 min; después del de CobranzaFlow v3.7.1001, que Marcelo priorizó por Deldhy). Revisado en producción sin escribir (`.banco-revisor-orden/medir-110.mjs`, la cuenta de pruebas con el rol de Karla), 3 de 3: producción sirve el mismo archivo que el build de esta versión (`index-CdJRTswp.js`); el plan de OC-0966 abre con 11 facturas y su encabezado («Asignado $0.00 de $114,100.00 sin IVA»); sin errores, sin diálogos nativos y sin escrituras. Ligar las 11 no se puede repetir con esa cuenta (es visor: no lee las facturas sin orden); lo prueban pl-116 a pl-119 con OC-0966 como en producción. Karla prefirió esperar este arreglo a usar el atajo: con F5, OC-0966 → «Plan matriz» → «Retomarlo».
 
 ## v10.84.109 — «Traer sus piezas de su CFDI» con Hotsson: el singular y el plural, y el tipo de la orden — 14-oct-2026
 

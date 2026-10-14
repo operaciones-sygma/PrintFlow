@@ -183,7 +183,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.109 (14-oct, ~13:35; READY `dpl_Hd4jAUTKWjKy7ReWat5WuqMCaZbf`, commit `b08afa1`; vuelta atrás: promover
+- **LIVE:** v10.84.110 (14-oct, ~15:15; READY `dpl_FXahvNDBa46jhhNYPVuEBPxU1wbo`, commit `e3c6ccb`; vuelta atrás: promover
+  `dpl_6EPzTnsoKZtykcRu9CQeCgNAXyeZ` (el código de v10.84.109) o `git revert e3c6ccb`; la base no cambió; candado 1670 de 1670). v10.84.110: **el plan
+  matriz ya no dice «pasa del total de la orden» por centavos de redondeo** (Karla no podía ligar las 11 de Hotsson: «P-0621: $80,370.04»): el tope por
+  orden, el «Asignado» y el «Por asignar» suman lo mismo que se manda a la base (`lineaSinIva`, exacto por piezas), y con todas las piezas asignadas los
+  centavos de redondeo son «completo». 🔑 **Un banco con precios de centavos exactos no ve el redondeo**: el del plan tiene ahora `hotsson=1` (OC-0966
+  como en producción, $80,370 / 658 la pieza).
+  v10.84.109 (14-oct, ~13:35; READY `dpl_Hd4jAUTKWjKy7ReWat5WuqMCaZbf`, commit `b08afa1`; vuelta atrás: promover
   `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh` (el código de v10.84.108) o `git revert b08afa1`; la base no cambió; candado 1666 de 1666). v10.84.109: **«Traer sus
   piezas de su CFDI» casa también el singular con el plural y por el tipo de la orden** (`src/lib/proponerPiezas.js`, `descripcionDeOrden`: Hotsson, las
   11 facturas de OC-0966 sin teclear piezas). 🔥 **La fuga de memoria de la PC** (13 y 14-oct: los candados fallaban al azar) **era el controlador de la
