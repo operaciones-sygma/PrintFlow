@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1655 pruebas, ~47 min de a 1 tanda en la PC de casa; ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1666 pruebas, ~48 min de a 1 tanda en la PC de casa; ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -183,7 +183,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.107 (14-oct, ~10:57; READY `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK`, commit `1219672`; vuelta atrás: promover
+- **LIVE:** v10.84.108 (14-oct, ~12:03; READY `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh`, commit `29c1318`; vuelta atrás: promover
+  `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK` (el código de v10.84.107) o `git revert 29c1318`; candado 1655 de 1655). v10.84.108: **el plan matriz dice a nombre
+  de quién salió cada factura y quién la paga** (`public.a_nombre_de_quien`: sólo admin, karla y secretaria; el vendedor ni la pide). Hotsson: CobranzaFlow
+  ya pasó a Hotsson el saldo de las 6 (con el OK de Marcelo) y el plan de OC-0966 ofrece las 11 ($132,355.87); v10.84.109 hace que «Traer sus piezas
+  de su CFDI» case sus conceptos (el singular y el plural, y el tipo de la orden).
+  v10.84.107 (14-oct, ~10:57; READY `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK`, commit `1219672`; vuelta atrás: promover
   `dpl_9W5pBYqdSSmpZM89qCSkvzYkEPN5` (el código de v10.84.106) o `git revert 1219672`; la base no cambió con ella; candado 1647 de 1647). v10.84.107:
   **el plan matriz deja hasta 30 facturas por OC** (eran 10, sólo en la pantalla: Hotsson pide 11 en OC-0966). 🔑 **La base:** `public.a_nombre_de_quien`
   (14-oct ~10:40, OK de Marcelo, revisada por CobranzaFlow, ensayada; sólo lee; `docs/migrations/v10.84.108_a_nombre_de_quien.sql`): a nombre de quién

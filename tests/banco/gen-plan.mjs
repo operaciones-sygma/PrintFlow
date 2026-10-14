@@ -11,7 +11,7 @@
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
 //   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden) ·
 //   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina) ·
-//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga)
+//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -92,6 +92,9 @@ const ORDERS = [
   { id: "OP-MUWXBE2VNZH", production_number: "P-0594", product_type: "STICKER #4 REDONDO NEGRO DE PORTLAND", quantity: 80000, price: 11200, order_type: "interna", stage: "salidas", invoice_folio: null },
   { id: "OP-MUWXDWG1WX6", production_number: "P-0595", product_type: "STICKER #3 REDONDO NEGRO DE PORTLAND", quantity: 80000, price: 8800, order_type: "interna", stage: "salidas", invoice_folio: null },
 ];
+// v10.84.109 — producto=1: cada orden con un producto escrito que no comparte palabras con sus conceptos (como P-0621 de Hotsson, «AGENDAS 2027 …»,
+//   con su tipo «LIBRETAS …»): la propuesta tiene que casar también por el tipo
+if (Q.get("producto") === "1") for (const o of ORDERS) o.product = "ROLLO DE 1000";
 if (Q.get("foliada") === "1") ORDERS[3].invoice_folio = "F-200";
 if (Q.get("planta") === "1") ORDERS[3].stage = "packaging";
 if (Q.get("planta") === "todas") ORDERS.forEach(o => { o.stage = "in_production"; o.current_machine = "off_pm74"; });

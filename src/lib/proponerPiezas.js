@@ -8,6 +8,13 @@ const VACIAS = new Set(["DE", "DEL", "LA", "EL", "LOS", "LAS", "Y", "CON", "PARA
 export const palabras = s => new Set(String(s || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
   .replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/).filter(w => w && !VACIAS.has(w)));
 const enComun = (a, b) => { let n = 0; for (const w of a) if (b.has(w)) n++; return n; };
+// v10.84.109 — Hotsson (14-oct): el CFDI dice «LIBRETA / AGENDA» y «CALENDARIO»; las órdenes, «AGENDAS 2027 …» y «CALENDARIOS 2027 …». Al
+//   COMPARAR, el singular y el plural son la misma palabra (sin la S final, de 4 letras o más); `palabras` no cambia.
+const raiz = w => w.length > 3 && w.endsWith("S") ? w.slice(0, -1) : w;
+const raices = s => new Set([...palabras(s)].map(raiz));
+// v10.84.109 — con qué palabras se describe una orden: su producto Y su tipo (F-166 sólo dice «LIBRETA», que está en el tipo de P-0621,
+//   «LIBRETAS ENGARGOLADAS PASTA DURA», no en su producto). La app tomaba el producto o, si no había, el tipo.
+export const descripcionDeOrden = o => [o?.product, o?.product_type].filter(Boolean).join(" ");
 export const mismoPrecio = (a, b) => Number.isFinite(a) && Number.isFinite(b) && b > 0 && Math.abs(a - b) <= Math.max(0.005, b * 0.01);
 
 // conceptos: [{line_no, cantidad, valor_unitario, importe, descuento, descripcion}]
@@ -15,11 +22,11 @@ export const mismoPrecio = (a, b) => Number.isFinite(a) && Number.isFinite(b) &&
 // → { piezas: {[id]: n}, casados: [{line_no, id, production_number, cantidad}], sinCasar: [concepto], dudosos: [{concepto, candidatas: [pn]}] }
 export function proponerPiezas(conceptos, ordenes) {
   const piezas = {}, casados = [], sinCasar = [], dudosos = [];
-  const ords = (ordenes || []).map(o => ({ ...o, _w: palabras(o.nombre) }));
+  const ords = (ordenes || []).map(o => ({ ...o, _w: raices(o.nombre) }));
   for (const c of conceptos || []) {
     const cant = Math.round(Number(c?.cantidad));
     if (!(cant > 0)) { sinCasar.push(c); continue; }
-    const pal = palabras(c.descripcion), vu = Number(c.valor_unitario);
+    const pal = raices(c.descripcion), vu = Number(c.valor_unitario);
     const conPrecio = ords.filter(o => mismoPrecio(vu, Number(o.unitario)));
     const puntos = conPrecio.map(o => ({ o, n: enComun(pal, o._w) })).filter(x => x.n > 0).sort((a, b) => b.n - a.n);
     if (!puntos.length) { sinCasar.push(c); continue; }

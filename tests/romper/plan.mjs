@@ -1063,6 +1063,29 @@ await caso("pv-13 Karla sí lo lee", "vista=1&anombre=1&rol=karla", async p => {
   ok("pv-13 Karla ve «CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER» en la vista del plan", /CFDI a nombre de PORTLAND STUDIO SA DE CV · lo paga PORTLAND LEATHER/.test(t), `«${t}»`);
 });
 
+// v10.84.109 — Hotsson (14-oct): «Traer sus piezas» no casaba F-166 («… LIBRETA») con P-0621 («AGENDAS 2027 …», tipo «LIBRETAS ENGARGOLADAS …»):
+// la app tomaba el producto o, si no había, el tipo. Vuelta 1: antes del cambio.
+await caso("pl-114 casa también por el tipo de la orden", "producto=1", async p => {
+  await abrir(p); await ligar(p, 0, "F-143");
+  const hay = await traer(p, 0).count();
+  if (hay) { await traer(p, 0).click(); await espera(p, 500); }
+  const q = []; for (let f = 0; f < 4; f++) q.push(await celda(p, f, 0).inputValue().catch(() => "?"));
+  const s1 = ((await suma(p, 0).textContent()) || "").replace(/\s+/g, " ");
+  ok("pl-114 con un producto escrito («ROLLO DE 1000») que no dice lo del CFDI, las piezas casan por el tipo de cada orden: 4,380 · 3,528 · 7,395 · 5,520, y CUADRA",
+    hay === 1 && q.join(",") === "4380,3528,7395,5520" && /cuadra/i.test(s1), `botón ${hay} · ${q.join(",")} · «${s1.trim()}»`);
+});
+
+// vuelta 3 (v10.84.109): con el producto escrito, lo que se manda a la base también sale exacto (como pl-78)
+await caso("pl-115 con producto escrito se manda exacto", "producto=1", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await ligar(p, 1, "F-155"); await traer(p, 1).click().catch(() => {}); await espera(p, 400);
+  await enviar(p).click().catch(() => {}); await espera(p, 600);
+  const g = (await planEnviado(p))?.groups || [];
+  const lin = k => (g[k]?.lines || []).map(l => l.qty + ":" + l.amount).join(",");
+  ok("pl-115 con el producto escrito, F-143 y F-155 se mandan ligadas con las piezas y el dinero exactos de su CFDI (como pl-78)",
+    g.length === 2 && lin(0) === "4380:613.2,3528:388.08,7395:1035.3,5520:607.2" && lin(1) === "75620:10586.8,76472:8411.92,72605:10164.7,74480:8192.8", `0=${lin(0)} · 1=${lin(1)}`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

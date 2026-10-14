@@ -12,6 +12,36 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.109 — «Traer sus piezas de su CFDI» con Hotsson: el singular y el plural, y el tipo de la orden — 14-oct-2026
+
+**Qué pasaba.** Con las 11 facturas de Hotsson listas para ligar en OC-0966, «Traer sus piezas de su CFDI» casaba 1 de sus 22 conceptos: los CFDI
+dicen «LIBRETA / AGENDA» y «CALENDARIO»; las órdenes, «AGENDAS 2027 …» y «CALENDARIOS 2027 …» (tipo «LIBRETAS ENGARGOLADAS PASTA DURA» y
+«CALENDARIOS DE ESCRITORIO»). La propuesta casa un concepto con la orden del mismo precio (a medio centavo o 1 %) que comparta al menos una palabra,
+y «AGENDA» no era «AGENDAS». Además la app describía la orden con su producto o, si no había, con su tipo: el de P-0621, donde dice «LIBRETAS», se
+perdía (F-166 sólo dice «LIBRETA»). Karla habría tecleado 22 celdas.
+
+**Qué se cambió** (`src/lib/proponerPiezas.js` y `src/App.jsx`; la base no cambió):
+- Al comparar, el singular y el plural son la misma palabra (sin la S final, de 4 letras o más). `palabras` no cambia.
+- La orden se describe con su producto y su tipo (`descripcionDeOrden`). Se iba a llamar `nombreDeOrden`, que ya existe en App.jsx (la etiqueta
+  «P-0621» de una orden, con más de 30 usos): el banco del plan lo dijo al armar, antes que el build.
+- Sigue exigiendo el mismo precio y una palabra en común (un servicio del mismo precio no se casa), y un empate sigue «dudoso».
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.108: en la tanda `proponer` fallaban pp-14 (F-160: 60 y 40), pp-15 (F-166, sólo
+«LIBRETA», por el tipo) y pp-16 (las 11 de Hotsson con sus conceptos timbrados de verdad: 0 de 11; entre todas deben cubrir 658 y 426); en el banco
+del plan, pl-114 (`producto=1`: con un producto escrito que no dice lo del CFDI, no casaba nada). **Vuelta 2**: pasan las 4, y pl-77 a pl-84
+siguen. **Vuelta 3**, por donde no se diseñó: un servicio del mismo precio con palabras en plural no se casa (pp-17; la prueba usaba «SERVICIOS DE
+DISEÑO» y sí casaba, porque la descripción de P-0621 dice «MISMO DISEÑO»: supuesto de la prueba, se cambió a «FLETE Y MANIOBRAS», y ya pasaba
+igual antes de esta versión); dos órdenes del mismo precio, «AGENDAS» y «LIBRETAS», dejan «LIBRETA / AGENDA» dudoso (pp-18); una orden sin
+producto ni tipo no casa nada (pp-19); «PINO» en singular no cruza PINOS con PORTLAND (pp-20); la palabra repetida en producto y tipo cuenta una vez
+(pp-21); `palabras` no cambia (pp-22); y con el producto escrito, lo que se manda a la base sale exacto (pl-115). `proponer` 22 de 22, `plan` 125
+de 125, `hooks`, build y alcance.
+
+**Lo que queda (para Marcelo):** una sola palabra en común basta para casar, y con descripciones largas (la de P-0621 trae las especificaciones)
+puede casar de más; lo frena el cuadre (±$0.02 contra la factura, en la pantalla y en la base). Endurecerlo (que la palabra sea del título o del
+tipo) sería otra versión.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.108 — El plan matriz dice a nombre de quién salió cada factura y quién la paga — 14-oct-2026
 
 **Qué pasaba.** Hotsson: las 11 facturas de OC-0966 salieron el 13-oct a nombre de cuatro razones sociales, y el plan matriz sólo liga las del
@@ -47,7 +77,7 @@ y Karla sí la ve (pv-13). `plan` 123 de 123, `hooks` 2 de 2, build y alcance.
 las 11 salgan para ligar en OC-0966 y con su «a nombre de», y Karla las liga. Pendiente para otra versión: el detalle de la orden con las facturas
 que la cubren y a nombre de quién salió cada una.
 
-**En producción:** (se llena al subir)
+**En producción:** 14-oct ~12:03; READY `dpl_7XtVjxsbUqi84mKCzkf5noTPk6Bh` (commit `29c1318`). Vuelta atrás: promover `dpl_9GiYdKA4zD4kSRi773ZM6GWAkRbK` (el código de v10.84.107) o `git revert 29c1318`; la función de base se puede quedar (sólo lee; su vuelta atrás, en la copia de la migración). Candado: 1655 de 1655 a la primera, de a 1 tanda (48 min). Revisado en producción sin escribir (`.banco-revisor-orden/medir-108.mjs`, la cuenta de pruebas con el rol de Karla y luego con el de vendedor; OC-0960, en el Histórico), 7 de 7: OC-0960 abre con su plan; la app pide `a_nombre_de_quien` con F-143 y F-155; la base se lo niega a la cuenta de pruebas (es visor: 403) y la vista sigue igual, sin «a nombre de»; con el rol de vendedor ni la pide; sin errores, sin diálogos nativos y sin escrituras. («CFDI a nombre de» no se ve con esa cuenta: lo cubren el banco y lo de abajo.) **Hotsson con datos de producción** (sin escribir; como Karla, con la sesión simulada dentro de la consulta): CobranzaFlow pasó a Hotsson el saldo de las 6 (`cobranza.pasar_deuda_a_quien_paga`, con el OK de Marcelo en su sesión) y `list_linkable_invoices_for_oc('OC-0966')` trae las 11 (F-159 a F-169 sin F-157 ni F-158; $132,355.87, la OC con IVA; antes, 5); `a_nombre_de_quien` dice CAPITALI GRUPO HOTELERO en F-161, F-163, F-164 y F-169, MANSION SOLIS HOTEL Y SPA en F-167 y OPERADORA DE MOTELES Y RESTAURANTES en F-168, y de las 11, «lo paga INMOBILIARIA HOTSSON». Con las piezas de cada CFDI las 11 cuadran como las revisa la base (F-163 y F-166, justo en $0.02) y cubren completas P-0621 (658) y P-0623 (426); pero «Traer sus piezas de su CFDI» casaba 1 de sus 22 conceptos: es v10.84.109.
 
 ## v10.84.107 — El plan matriz deja hasta 30 facturas por OC (eran 10) — 14-oct-2026
 
