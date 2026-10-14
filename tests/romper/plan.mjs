@@ -728,6 +728,81 @@ await caso("pl-76 deja de llevarla, deja de ser anticipada", "planta=1", async p
   ok("pl-76 al quitarle a la factura las piezas de P-0595 (la que no ha llegado), deja de ser anticipada a fuerza (se puede volver a elegir)", antes && despues, `antes fija ${antes} · después libre ${despues}`);
 });
 
+// ───────────── v10.84.102 — las piezas desde su CFDI (Karla, 13-oct: «ya hay una factura, ligarla»; la critique: las piezas de F-143 había
+//   que copiarlas de CobranzaFlow). Vuelta 1: escritas ANTES del cambio de pantalla.
+const traer = (p, i) => encabezado(p, i).getByRole("button", { name: /Traer sus piezas|Reintentar: traer/ });
+await caso("pl-77 F-143: sus piezas desde su CFDI", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143");
+  const hay = await traer(p, 0).count();
+  if (hay) { await traer(p, 0).click(); await espera(p, 500); }
+  const q = []; for (let f = 0; f < 4; f++) q.push(await celda(p, f, 0).inputValue().catch(() => "?"));
+  const s1 = ((await suma(p, 0).textContent()) || "").replace(/\s+/g, " "), dice = ((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-77 ligar F-143 ofrece «Traer sus piezas de su CFDI»: pone 4,380 · 3,528 · 7,395 · 5,520, dice cuáles puso, y la suma CUADRA con F-143",
+    hay === 1 && q.join(",") === "4380,3528,7395,5520" && /cuadra/i.test(s1) && /los 4 puestos/.test(dice), `botón ${hay} · ${q.join(",")} · «${s1.trim()}» · «${dice.slice(0, 140)}»`);
+});
+await caso("pl-78 PORTLAND sin teclear un número", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await ligar(p, 1, "F-155"); await traer(p, 1).click().catch(() => {}); await espera(p, 400);
+  await enviar(p).click().catch(() => {}); await espera(p, 600);
+  const g = (await planEnviado(p))?.groups || [];
+  const lin = k => (g[k]?.lines || []).map(l => l.qty + ":" + l.amount).join(",");
+  ok("pl-78 F-143 y F-155 con sus piezas traídas de su CFDI se mandan ligadas con las piezas y el dinero exactos (sin teclear un número)",
+    g.length === 2 && lin(0) === "4380:613.2,3528:388.08,7395:1035.3,5520:607.2" && lin(1) === "75620:10586.8,76472:8411.92,72605:10164.7,74480:8192.8", `0=${lin(0)} · 1=${lin(1)}`);
+});
+await caso("pl-79 sin desglose timbrado", "conceptos=vacio", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  const dice = ((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-79 si la factura no trae desglose timbrado, lo dice («captura las piezas a mano») y no toca la columna", /no trae desglose timbrado/.test(dice) && (await celda(p, 0, 0).inputValue().catch(() => "?")) === "", `«${dice.slice(0, 120)}»`);
+});
+await caso("pl-80 la lectura falla y se reintenta", "conceptos=falla1", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  const dice = ((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  ok("pl-80 si no se pudieron leer los conceptos lo dice (no «no trae») y «Reintentar» los trae", /No pude leer los conceptos de F-143/.test(dice) && (await celda(p, 0, 0).inputValue().catch(() => "?")) === "4380", `«${dice.slice(0, 120)}»`);
+});
+await caso("pl-81 IVA distinto de 16", "conceptos=tasa0", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  const dice = ((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-81 si un renglón del CFDI trae IVA distinto de 16 %, lo dice (el plan calcula con 16 %)", /IVA distinto de 16/.test(dice), `«${dice.slice(0, 200)}»`);
+});
+await caso("pl-82 «Deshacer» regresa lo capturado", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, [1, 2, 3, 4]);
+  await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  const puso = await celda(p, 0, 0).inputValue().catch(() => "?");
+  await p.locator('[data-propuesta="0"]').getByRole("button", { name: "Deshacer" }).click().catch(() => {}); await espera(p, 300);
+  const q = []; for (let f = 0; f < 4; f++) q.push(await celda(p, f, 0).inputValue().catch(() => "?"));
+  ok("pl-82 traer las piezas reemplaza lo capturado, y «Deshacer» lo regresa (1 · 2 · 3 · 4)", puso === "4380" && q.join(",") === "1,2,3,4", `puso ${puso} · después de deshacer ${q.join(",")}`);
+});
+
+// vuelta 3, por donde no se diseñó
+await caso("pl-83 otro folio: la propuesta se va", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  const antes = await p.locator('[data-propuesta="0"]').innerText().catch(() => "");
+  await p.getByLabel("Folio de la factura 1 que ya existe").fill("F-155"); await espera(p, 300);
+  const despues = ((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("pl-83 al cambiar el folio, lo dicho de F-143 se va y se ofrece traer las de F-155 (no se mezclan)", /F-143|4 conceptos/.test(antes) && !/4 conceptos/.test(despues) && /Traer sus piezas/.test(despues), `«${despues.slice(0, 100)}»`);
+});
+await caso("pl-84 doble clic y la lectura lenta", "conceptos=lento", async p => {
+  await abrir(p); await ligar(p, 0, "F-143");
+  await traer(p, 0).dblclick().catch(() => {}); await espera(p, 300);
+  const leyendo = /Leyendo los conceptos de F-143/.test((await p.locator('[data-propuesta="0"]').innerText().catch(() => "")) || "");
+  await espera(p, 1800);
+  ok("pl-84 doble clic en «Traer» lee una vez; mientras tarda dice «Leyendo…»; al llegar, pone las piezas", leyendo && (await cuenta(p, "lee conceptos")) === 1 && (await celda(p, 0, 0).inputValue().catch(() => "")) === "4380",
+    `leyendo ${leyendo} · lecturas ${await cuenta(p, "lee conceptos")}`);
+});
+await caso("pl-85 «Nueva» después de traer", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await encabezado(p, 0).getByRole("button", { name: "Nueva", exact: true }).click().catch(() => {}); await espera(p, 200);
+  await encabezado(p, 0).getByRole("button", { name: "Ya existe", exact: true }).click().catch(() => {}); await espera(p, 200);
+  ok("pl-85 «Nueva» suelta la factura y su propuesta: al volver a «Ya existe» no queda lo dicho de F-143", (await p.locator('[data-propuesta="0"]').count()) === 0);
+});
+await caso("pl-86 traer en una y «Lo que falta» en la otra a 1366", "", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await traer(p, 0).click().catch(() => {}); await espera(p, 400);
+  await encabezado(p, 1).getByRole("button", { name: /lo que falta/i }).click({ timeout: 2500 }).catch(() => {}); await espera(p, 300);
+  ok("pl-86 con lo dicho de la propuesta en la columna 1, «Lo que falta» de la 2 se puede pulsar a 1366 (no lo tapa nada) y llena lo que queda",
+    (await celda(p, 0, 1).inputValue().catch(() => "")) === "75620", `columna 2, P-0592: «${await celda(p, 0, 1).inputValue().catch(() => "")}»`);
+});
+
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
 console.log(`\nplan: ${res.length - fallan} pasan, ${fallan} fallan`);

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
+import { proponerPiezas } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
 import { CATEGORIAS, categoriaSugerida, nombreDeCategoria, esVentaDeInventario } from "./lib/categorias.js"; // v10.84.91 — la categoría del trabajo (las reglas, una vez: la forma sugiere y la base genera su SQL de ellas)
 import { Broadcast as BroadcastIcon, SquaresFour as SquaresFourIcon, ListChecks as ListChecksIcon, Plus as PlusIcon, ShoppingCart as ShoppingCartIcon, Globe as GlobeIcon, Factory as FactoryIcon, CalendarDots as CalendarDotsIcon, ListBullets as ListBulletsIcon, Archive as ArchiveIcon, ChartBar as ChartBarIcon, CurrencyDollar as CurrencyDollarIcon, Heartbeat as HeartbeatIcon, FileText as FileTextIcon, FolderOpen as FolderOpenIcon, Flask as FlaskIcon, CaretLeft as CaretLeftIcon, CaretRight as CaretRightIcon, Package as PackageIcon, Wallet as WalletIcon, DownloadSimple as DownloadSimpleIcon, DotsSixVertical as DotsSixVerticalIcon, DotsThree as DotsThreeIcon, Receipt as ReceiptIcon, Lock as LockIcon, Gear as GearIcon, Printer as PrinterIcon, Wrench as WrenchIcon, Truck as TruckIcon, Warning as WarningIcon, Trophy as TrophyIcon, CaretUp as CaretUpIcon, CaretDown as CaretDownIcon, Clock as ClockIcon, Megaphone as MegaphoneIcon, Eye as EyeIcon, NotePencil as NotePencilIcon, BellSlash as BellSlashIcon, Fire as FireIcon, User as UserIcon, CheckCircle as CheckCircleIcon, Circle as CircleIcon, Check as CheckIcon, BellRinging as BellRingingIcon, WarningOctagon as WarningOctagonIcon, Users as UsersIcon, Hourglass as HourglassIcon, WarningCircle as WarningCircleIcon, Broom as BroomIcon, Link as LinkIcon, X as XIcon, ChatCircle as ChatCircleIcon, Palette as PaletteIcon, ClipboardText as ClipboardTextIcon, Disc as DiscIcon, Envelope as EnvelopeIcon, WhatsappLogo as WhatsappLogoIcon, Camera as CameraIcon, BookOpen as BookOpenIcon, UserPlus as UserPlusIcon, Lightbulb as LightbulbIcon, ArrowsClockwise as ArrowsClockwiseIcon, FloppyDisk as FloppyDiskIcon, Ruler as RulerIcon, Lightning as LightningIcon, CircleHalf as CircleHalfIcon, Files as FilesIcon, Diamond as DiamondIcon, Paperclip as PaperclipIcon, Tag as TagIcon, FastForward as FastForwardIcon, Export as ExportIcon, HandPointing as HandPointingIcon, ArrowUUpLeft as ArrowUUpLeftIcon, CopySimple as CopySimpleIcon, FlowArrow as FlowArrowIcon, ArrowsLeftRight as ArrowsLeftRightIcon, Trash as TrashIcon, ClockCounterClockwise as ClockCounterClockwiseIcon, Play as PlayIcon, Ticket as TicketIcon, TrendUp as TrendUpIcon, Drop as DropIcon, PuzzlePiece as PuzzlePieceIcon, Folder as FolderIcon, Sparkle as SparkleIcon, Tray as TrayIcon, MagnifyingGlass as MagnifyingGlassIcon, MagicWand as MagicWandIcon, Scissors as ScissorsIcon, Books as BooksIcon, ArrowsSplit as ArrowsSplitIcon, ArrowRight as ArrowRightIcon, ListNumbers as ListNumbersIcon, XCircle as XCircleIcon, Phone as PhoneIcon, Bank as BankIcon, CreditCard as CreditCardIcon, Money as MoneyIcon, Sun as SunIcon, Alarm as AlarmIcon, Mouse as MouseIcon, Target as TargetIcon, PushPin as PushPinIcon, HandWaving as HandWavingIcon, Divide as DivideIcon, UploadSimple as UploadSimpleIcon, Medal as MedalIcon, Command as CommandIcon, SignOut as SignOutIcon, Info as InfoIcon } from "@phosphor-icons/react";
 // v10.81.7 — CTP contador: cierre de los P3 restantes del scan (wf wzsz8pawt). Se retiró código muerto
@@ -1897,6 +1898,12 @@ const db = {
   // 🔗 v10.84.29 — Lo mismo para una OC entera (CobranzaFlow v3.7.931). El 30-sep la OC-0877 (P-0557 + P-0558) acuñó
   // F-115 encima de F-111, hecha sin orden por el mismo importe: foliar una OC no revisaba las facturas por adelantado
   // y link_invoice_to_order sólo liga una orden. Las candidatas las da la BD con los criterios del ligado.
+  // v10.84.102 — los conceptos timbrados de una factura sin orden del cliente de la OC (para proponer sus piezas en el plan); sin CFDI, []
+  async conceptosParaLigarEnOC(ocId, folio) {
+    const {data, error} = await supabase.rpc("conceptos_para_ligar_en_oc", {p_oc_id: ocId, p_folio: folio});
+    if(error) throw new Error(error.message);
+    return data || [];
+  },
   async listLinkableInvoicesForOC(ocId) {
     const {data, error} = await supabase.rpc("list_linkable_invoices_for_oc", {p_oc_id: ocId});
     if(error) throw new Error(error.message);
@@ -5214,7 +5221,7 @@ function HistoricFolioModal({order,user,userLogin,onApplied,onClose,showToast}) 
     <input style={{...inp,textTransform:"uppercase",fontWeight:700,letterSpacing:.5}} value={folio} onChange={e=>setFolio(e.target.value)} placeholder="D-5940 (factura) · R-1230 (remisión)" autoFocus onKeyDown={e=>{if(e.key==="Enter")submit()}}/>
     {f&&!valid&&<div style={{fontSize:11,color:C.dn,marginTop:6}}>Formato inválido. Usa D-#### (factura) o R-#### (remisión).</div>}
     {valid&&base>0&&<div style={{fontSize:12,color:C.t2,marginTop:8,background:C.sf,borderRadius:10,padding:"8px 12px"}}>
-      Registra una <b style={{color:C.tx}}>{isD?"factura":"remisión"}</b> en CobranzaFlow por <b style={{color:C.ok}}>{fmt(total)}</b>{isD?<span style={{color:C.t3}}> (base + IVA 16%)</span>:<span style={{color:C.t3}}> (sin IVA)</span>}. Si el folio ya existe, solo se vincula (no se duplica).
+      Registra una <b style={{color:C.tx}}>{isD?"factura":"remisión"}</b> en CobranzaFlow por <b style={{color:C.okInk}}>{fmt(total)}</b>{isD?<span style={{color:C.t3}}> (base + IVA 16%)</span>:<span style={{color:C.t3}}> (sin IVA)</span>}. Si el folio ya existe, solo se vincula (no se duplica).
     </div>}
     <div style={{display:"flex",gap:8,marginTop:18}}><button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button><button onClick={submit} disabled={!valid||busy||base<=0} style={{...bt((valid&&base>0)?C.ok:"#9ca3af"),flex:1,justifyContent:"center",opacity:(valid&&base>0&&!busy)?1:.6,cursor:(valid&&base>0&&!busy)?"pointer":"not-allowed"}}>{busy?<><HourglassIcon size={14} weight="bold"/>Aplicando...</>:<><ReceiptIcon size={14} weight="bold"/>Aplicar folio</>}</button></div>
   </div></div>;
@@ -5261,7 +5268,7 @@ function DeshacerSaldoModal({order,user,userLogin,onDone,onClose,showToast}) {
     <div style={{background:C.sf,border:"1px solid "+C.bd,borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:12}}>
       <div style={{fontWeight:700,color:C.tx}}>{order.client}{order.client_company&&order.client_company!==order.client?" · "+order.client_company:""}</div>
       <div style={{color:C.t2,marginTop:2}}>{order.production_number} · {(order.product_type||"").replace("🔴 ATRASADA · ","")}</div>
-      <div style={{color:C.t2,marginTop:2}}>Se devuelve: <b style={{color:C.ok}}>{fmt(base)}</b> <span style={{color:C.t3}}>(sin IVA, que es como se descuento)</span></div>
+      <div style={{color:C.t2,marginTop:2}}>Se devuelve: <b style={{color:C.okInk}}>{fmt(base)}</b> <span style={{color:C.t3}}>(sin IVA, que es como se descuento)</span></div>
     </div>
     <div style={{background:C.wn+"14",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"9px 12px",marginBottom:14,fontSize:11.5,color:C.t2,display:"flex",gap:7}}>
       <WarningIcon size={14} weight="fill" style={{flexShrink:0,marginTop:1,color:C.wn}}/>
@@ -7780,7 +7787,7 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 
       <label style={{...lbl,marginTop:4}}><CurrencyDollarIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{isMaq?"Precio al cliente (maquila)":"Precio"} (MXN)</label>
       <input style={{...inp,fontSize:16,fontWeight:700}} type="number" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} placeholder="0.00" autoFocus disabled={busy}/>
-      {validPrice && <div style={{fontSize:11,color:C.ok,marginTop:6}}><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>${numPrice.toLocaleString("es-MX",{minimumFractionDigits:2})}{isMaq?" (precio cliente)":""}</div>}
+      {validPrice && <div style={{fontSize:11,color:C.okInk,marginTop:6}}><CheckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>${numPrice.toLocaleString("es-MX",{minimumFractionDigits:2})}{isMaq?" (precio cliente)":""}</div>}
 
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button onClick={onClose} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
@@ -9122,6 +9129,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const [borrador, setBorrador] = useState(null);                // el de antes, mientras se ofrece: {d, mins, celdas, perdidas}
   const [vistaPrevia, setVistaPrevia] = useState(false);         // v10.84.100 — antes de crear o ligar, lo que va a pasar
   const [errorBase, setErrorBase] = useState("");                // v10.84.100 — el rechazo de la base, dentro del plan
+  const [propuesta, setPropuesta] = useState({});                // v10.84.102 — {[columna]: {estado, folio, n, r, tasas, antes}}: las piezas traídas de su CFDI
   const borradorRef = useRef(null);                              // (el mismo, para el autoguardado: sin decidir, no se pisa)
   const guardarBorrador = () => { try { if(hasCapture && !borradorRef.current) localStorage.setItem(draftKey, JSON.stringify({groups, captureMode, ts: Date.now()})); } catch(e) {} };
   const safeClose = useCallback(() => {
@@ -9306,7 +9314,32 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   const updateGroup = (idx, patch) => setGroups(p => p.map((g, i) => i === idx ? {...g, ...patch} : g));
   // v10.84.89 — ligar: sin tercero ni anticipada (la factura ya está hecha); el tipo y el total los pone la factura al reconocerla
   const ligarColumna = (i, folio = "") => updateGroup(i, {ligar: true, folio, bill_to: null, pre_assigned: false, reason: "", totalTarget: ""});
-  const soltarColumna = i => updateGroup(i, {ligar: false, folio: "", totalTarget: ""});
+  const soltarColumna = i => { updateGroup(i, {ligar: false, folio: "", totalTarget: ""}); setPropuesta(pr => ({...pr, [i]: undefined})); };
+  // v10.84.102 — «Traer sus piezas del CFDI»: los conceptos timbrados de la factura que se liga, casados con las órdenes del plan por precio
+  //   y por nombre (src/lib/proponerPiezas.js). Llena la columna (lo que tenía se puede recuperar con «Deshacer»); lo que no casa sin duda
+  //   se dice y no se adivina; el cuadre de abajo, contra el importe de la factura, confirma o no.
+  const traerPiezas = async i => {
+    const g = groups[i], fol = folioNorm(g.folio);
+    if(!fol) return;
+    const antes = g.lines;   // (se toma al dar clic: el actualizador de React corre después, no aquí)
+    setPropuesta(pr => ({...pr, [i]: {estado: "leyendo", folio: fol}}));
+    let rows;
+    try { rows = await db.conceptosParaLigarEnOC(oc?.id, fol); }
+    catch(e) { setPropuesta(pr => pr[i]?.folio === fol ? {...pr, [i]: {estado: "falla", folio: fol}} : pr); return; }
+    const ords = eligibleOrders.map(o => ({id: o.id, production_number: o.production_number, nombre: o.product || o.product_type, unitario: priceUnit(o),
+      disponible: Number(o.quantity) - ((existingByOrder[o.id] || {}).qty || 0)}));
+    const r = proponerPiezas(rows, ords);
+    const tasas = rows.filter(c => c && c.iva_rate != null && Math.abs(Number(c.iva_rate) - 0.16) > 0.0001).length;
+    const hay = Object.keys(r.piezas).length > 0;
+    setGroups(prev => prev.map((gg, k) => {
+      if(k !== i || folioNorm(gg.folio) !== fol || !hay) return gg;
+      const lines = {};
+      for(const o of eligibleOrders) { const q = r.piezas[o.id] || 0; lines[o.id] = {qty: q, amountConIva: Math.round(q * priceUnit(o) * (gg.doc_type === "factura" ? 1.16 : 1) * 100) / 100, lastEdited: "qty"}; }
+      return {...gg, lines};
+    }));
+    setPropuesta(pr => pr[i]?.folio === fol ? {...pr, [i]: {estado: "listo", folio: fol, n: rows.length, r, tasas, antes: hay ? antes : null}} : pr);
+  };
+  const deshacerPiezas = i => { const pr = propuesta[i]; if(pr?.antes) updateGroup(i, {lines: pr.antes}); setPropuesta(x => ({...x, [i]: undefined})); };
   // «Lo que falta»: la columna se queda con las piezas que ninguna otra factura (de este plan o de uno anterior) tiene
   const loQueFalta = i => {
     const g = groups[i], lines = {...g.lines};
@@ -9866,14 +9899,32 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
                       const estado = f ? [f.cfdi_status === "stamped" ? "timbrada" : null, f.status === "pagada" ? "pagada" : f.status === "parcial" ? "con abono" : "por cobrar"].filter(Boolean).join(" · ") : "";
                       return <div style={{display:"flex",flexDirection:"column",gap:3,padding:"5px 6px",background:C.fac+"0D",border:"1px solid "+C.fac+"40",borderRadius:8}}>
                         <input aria-label={"Folio de la factura "+(i+1)+" que ya existe"} value={g.folio||""} placeholder={g.doc_type==="remision"?"RS-XXXX existente":"F-XXXX existente"}
-                          onChange={e=>updateGroup(i, {folio: e.target.value.toUpperCase()})}
+                          onChange={e=>{ updateGroup(i, {folio: e.target.value.toUpperCase()}); if(propuesta[i]) setPropuesta(pr => ({...pr, [i]: undefined})); }}
                           style={{...inp,padding:"4px 8px",fontSize:11,fontFamily:"'Geist Mono',monospace",letterSpacing:0.3,border:(fol && Array.isArray(ligables) && !f) ? "1px solid "+C.dn : undefined}}/>
                         {ligables === undefined ? <div role="status" style={{fontSize:10,color:C.t2,lineHeight:1.4}}>Leyendo las facturas sin orden de {oc?.client||"este cliente"}…</div>
                           : ligables === null ? <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>No se pudieron leer las facturas sin orden. <button type="button" onClick={()=>setLecturaLig(n=>n+1)} style={{...enlace,color:C.dnInk,fontWeight:700}}>Reintentar</button></div>
                           : !fol ? (libres.length
                               ? <div style={{fontSize:10.5,color:C.t2,lineHeight:1.6}}>Sin orden: {libres.map((c, k) => <span key={c.doc_number}>{k ? " · " : ""}<button type="button" onClick={()=>updateGroup(i, {folio: c.doc_number})} style={{...enlace,color:C.tx,fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</button> {pesosMx(c.amount)}</span>)}</div>
                               : <div style={{fontSize:10,color:C.wnInk,lineHeight:1.4}}>{oc?.client||"El cliente"} no tiene facturas sin orden.</div>)
-                          : f ? <div style={{fontSize:10,color:C.tx,lineHeight:1.4}}><b style={{fontFamily:"'Geist Mono',monospace"}}>{f.doc_number}</b> · {pesosMx(f.amount)}{f.doc_type==="factura"?" con IVA":""} · {fD(f.issued_date)}{estado?" · "+estado:""}</div>
+                          : f ? <>
+                            <div style={{fontSize:10,color:C.tx,lineHeight:1.4}}><b style={{fontFamily:"'Geist Mono',monospace"}}>{f.doc_number}</b> · {pesosMx(f.amount)}{f.doc_type==="factura"?" con IVA":""} · {fD(f.issued_date)}{estado?" · "+estado:""}</div>
+                            {/* v10.84.102 — sus piezas, desde su CFDI (antes había que copiarlas de CobranzaFlow) */}
+                            {f.doc_type === "factura" && (() => { const pr = propuesta[i]; return <div data-propuesta={i} style={{display:"flex",flexDirection:"column",gap:3}}>
+                              {(!pr || pr.estado === "falla") && <button type="button" onClick={()=>traerPiezas(i)} style={{...bs(C.bg,tintaAA(C.fac,5)),minHeight:28,padding:"3px 8px",fontSize:10.5,border:"1px solid "+C.fac+"55",justifyContent:"center"}}><DownloadSimpleIcon size={11} weight="bold"/>{pr?.estado === "falla" ? "Reintentar: traer sus piezas" : "Traer sus piezas de su CFDI"}</button>}
+                              {pr?.estado === "leyendo" && <div role="status" style={{fontSize:10,color:C.t2}}>Leyendo los conceptos de {pr.folio}…</div>}
+                              {pr?.estado === "falla" && <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>No pude leer los conceptos de {pr.folio} (la base no contestó o no dejó). Captúralas a mano o reintenta.</div>}
+                              {pr?.estado === "listo" && (pr.n === 0
+                                ? <div role="status" style={{fontSize:10,color:C.wnInk,lineHeight:1.4}}>{pr.folio} no trae desglose timbrado: captura las piezas a mano.</div>
+                                : <div role="status" style={{fontSize:10,color:C.tx,lineHeight:1.45}}>
+                                    De su CFDI: {pr.n} {pr.n === 1 ? "concepto" : "conceptos"}{pr.r.casados.length ? ", " + (pr.r.casados.length === pr.n ? (pr.n === 1 ? "puesto" : "los " + pr.n + " puestos") : pr.r.casados.length + " puestos") + " (" + pr.r.casados.map(c => c.production_number + ": " + c.cantidad.toLocaleString("es-MX")).join(" · ") + ")" : ""}.
+                                    {pr.r.sinCasar.length > 0 && <span style={{color:C.wnInk}}> Sin casar ({pr.r.sinCasar.length}): {pr.r.sinCasar.map(c => String(c.descripcion||"").slice(0, 40) + " (" + Number(c.cantidad).toLocaleString("es-MX") + ")").join(" · ")}: captúralas tú.</span>}
+                                    {pr.r.dudosos.length > 0 && <span style={{color:C.wnInk}}> Dudosos ({pr.r.dudosos.length}): {pr.r.dudosos.map(d => String(d.concepto.descripcion||"").slice(0, 30) + " → " + d.candidatas.join(" o ")).join(" · ")}: elige tú.</span>}
+                                    {pr.tasas > 0 && <span style={{color:C.wnInk}}> {pr.tasas === 1 ? "Un renglón trae" : pr.tasas + " renglones traen"} IVA distinto de 16 %: el plan calcula con 16 %, revisa el cuadre.</span>}
+                                    {" "}Revisa las piezas: la suma de abajo las compara con {pr.folio}.
+                                    {pr.antes && <> <button type="button" onClick={()=>deshacerPiezas(i)} style={{...enlace,fontSize:10,color:C.ac,fontWeight:700}}>Deshacer</button></>}
+                                  </div>)}
+                            </div>; })()}
+                          </>
                           : <div role="alert" style={{fontSize:10,color:C.dnInk,lineHeight:1.4}}>{fol} no es una factura sin orden de {oc?.client||"este cliente"}.</div>}
                       </div>;
                     })() : folioAuto ? null /* (v10.84.101: el folio nuevo lo pone el sistema; lo dice una vez el renglón de arriba) */ : (<>
@@ -12024,7 +12075,7 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
         <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{topClients.map(([name,amt],i)=>
           <div key={i} style={{background:C.bg,borderRadius:8,padding:"6px 10px",fontSize:11}}>
             <span style={{fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}>{i<3?<MedalIcon size={13} weight="fill" color={i===0?"#d4af37":i===1?"#9ca3af":"#cd7f32"}/>:null}{name}</span>
-            <span style={{color:C.ok,fontWeight:600,marginLeft:6}}>{fmt(amt)}</span>
+            <span style={{color:C.okInk,fontWeight:600,marginLeft:6}}>{fmt(amt)}</span>
           </div>
         )}</div>
       </div>}
@@ -15069,7 +15120,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:18,fontWeight:800,color:urgColor}}>{days}d</div>
               <div style={{fontSize:10,color:C.t3}}>en maquila</div>
-              {!hp&&oOwns&&(precioVenta(o)>0)&&<div style={{fontSize:11,fontWeight:600,color:C.ok,marginTop:2}}>{fmt(precioVenta(o))}</div>}
+              {!hp&&oOwns&&(precioVenta(o)>0)&&<div style={{fontSize:11,fontWeight:600,color:C.okInk,marginTop:2}}>{fmt(precioVenta(o))}</div>}
             </div>
           </div>
           {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{isOverdue(o.due_date)?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
@@ -16294,7 +16345,7 @@ function Archive({orders,role,onAction,userLogin}) {
       </div>}
       {!hp&&<div style={{background:C.sf,borderRadius:10,padding:"8px 14px",fontSize:12}}>
         <span style={{color:C.t2,fontWeight:600}}>Facturado total: </span>
-        <span style={{fontWeight:800,color:C.ok}}>{fmt(totalRev)}</span>
+        <span style={{fontWeight:800,color:C.okInk}}>{fmt(totalRev)}</span>
       </div>}
     </div>
 
@@ -16316,7 +16367,7 @@ function Archive({orders,role,onAction,userLogin}) {
           <span style={{display:"inline-flex",alignItems:"center"}}>{yOpen?<FolderOpenIcon size={17} weight="bold" color={C.ac}/>:<FolderIcon size={17} weight="bold" color={C.t3}/>}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
           <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yCount} orden{yCount!==1?"es":""}</span>
-          {!hp&&<span style={{fontSize:11,color:C.ok,fontWeight:700}}>{fmt(yRev)}</span>}
+          {!hp&&<span style={{fontSize:11,color:C.okInk,fontWeight:700}}>{fmt(yRev)}</span>}
           <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{yOpen?<CaretUpIcon size={12} weight="bold"/>:<CaretDownIcon size={12} weight="bold"/>}</span>
         </button>
 
@@ -16334,7 +16385,7 @@ function Archive({orders,role,onAction,userLogin}) {
                 <span style={{display:"inline-flex",alignItems:"center"}}>{mOpen?<FolderOpenIcon size={15} weight="bold" color={C.dsn}/>:<FolderIcon size={15} weight="bold" color={C.t3}/>}</span>
                 <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{MONTHS[mi]} {y}</span>
                 <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mCount}</span>
-                {!hp&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(mRev)}</span>}
+                {!hp&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(mRev)}</span>}
                 <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{mOpen?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}</span>
               </button>
 
@@ -16350,7 +16401,7 @@ function Archive({orders,role,onAction,userLogin}) {
                       <span style={{display:"inline-flex",alignItems:"center"}}>{wOpen?<FolderOpenIcon size={13} weight="bold" color={C.ios}/>:<FolderIcon size={13} weight="bold" color={C.t3}/>}</span>
                       <span style={{fontSize:12,fontWeight:600,color:C.tx,flex:1,textAlign:"left"}}>Semana {w}</span>
                       <span style={{fontSize:10,color:C.t2}}>{wOrders.length} orden{wOrders.length!==1?"es":""}</span>
-                      {!hp&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(wRev)}</span>}
+                      {!hp&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(wRev)}</span>}
                       <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{wOpen?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</span>
                     </button>
 
@@ -16377,7 +16428,7 @@ function Archive({orders,role,onAction,userLogin}) {
                           <div style={{fontSize:10,color:C.t2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
                             <span style={{fontSize:9,color:isCancelled?C.dn:C.t3}}>{isCancelled?"Cancelada":"Entregada"}: {fD(o.delivered_at||o.deliveredAt||o.created_at)}</span>
-                            {!hp&&owns(o)&&!isCancelled&&(precioVenta(o)>0)&&<span style={{fontSize:12,fontWeight:800,color:C.ok}}>{fmt(precioVenta(o))}</span>}
+                            {!hp&&owns(o)&&!isCancelled&&(precioVenta(o)>0)&&<span style={{fontSize:12,fontWeight:800,color:C.okInk}}>{fmt(precioVenta(o))}</span>}
                           </div>
                         </div>;
                       })}
@@ -16404,7 +16455,7 @@ function WebRejectModal({order,onConfirm,onClose}) {
     <div style={{background:C.sf,borderRadius:10,padding:12,marginBottom:14}}>
       <div style={{fontSize:13,fontWeight:700}}>{order?.client}</div>
       <div style={{fontSize:11,color:C.t2}}>{order?.product_type}{order?.quantity?" · "+Number(order.quantity).toLocaleString()+" pzas":""}</div>
-      {order?.price&&<div style={{fontSize:11,color:C.ok,fontWeight:600,marginTop:2}}>{fmt(order.price)}</div>}
+      {order?.price&&<div style={{fontSize:11,color:C.okInk,fontWeight:600,marginTop:2}}>{fmt(order.price)}</div>}
     </div>
     <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>Describe el motivo del rechazo. El pedido quedará archivado como rechazado y no entrará al flujo de producción.</p>
     <div style={{marginBottom:16}}><label style={lbl}>Motivo (obligatorio)</label><textarea style={{...inp,minHeight:80,resize:"vertical",border:"1.5px solid "+(reason.trim()?C.bd:C.dn+"40")}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="¿Por qué se rechaza este pedido?" disabled={busy}/></div>
@@ -16432,7 +16483,7 @@ function WebCartChildRow({order,onApprove,onReject,busy}){
         {(order.paper_type||order.width_cm||order.standard_size)&&<div style={{fontSize:10,color:C.t3,marginTop:2}}>{order.paper_type||""}{order.paper_grammage?" "+order.paper_grammage+"g":""}{order.standard_size?" | "+ssLabel(order.standard_size):(medidaCm(order)?" | "+medidaCm(order):"")}{order.ink_front?" | F:"+order.ink_front:""}{order.ink_back?" V:"+order.ink_back:""}</div>}
         {order.finishes&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t3,marginTop:2}}><SparkleIcon size={10} weight="bold"/>{order.finishes}</div>}
       </div>
-      {order.price&&<div style={{fontSize:13,fontWeight:800,color:C.ok,whiteSpace:"nowrap"}}>{fmt(order.price)}</div>}
+      {order.price&&<div style={{fontSize:13,fontWeight:800,color:C.okInk,whiteSpace:"nowrap"}}>{fmt(order.price)}</div>}
     </div>
     <div style={{display:"flex",gap:4}}>
       <button onClick={()=>onApprove(order.id)} style={{...bs(C.ok),flex:1,justifyContent:"center",fontSize:11}}><CheckCircleIcon size={13} weight="bold"/>Aprobar</button>
@@ -16458,7 +16509,7 @@ function WebCartCard({cartFolio,orders,onApprove,onReject,onApproveCart,onDetail
     <div style={{fontSize:15,fontWeight:700,cursor:"pointer"}} onClick={()=>onDetail(first.id)}>{first.client||"Sin nombre"}</div>
     {first.client_phone&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#25d366",marginTop:2}}><WhatsappLogoIcon size={11} weight="bold"/>{first.client_lada||"+52"} {first.client_phone}</div>}
     {first.client_email&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:C.t2,marginTop:1}}><EnvelopeIcon size={11} weight="bold"/>{first.client_email}</div>}
-    {total>0&&<div style={{marginTop:8,padding:"6px 10px",background:C.ok+"10",border:"1px solid "+C.ok+"30",borderRadius:8,display:"inline-flex",alignItems:"center"}}><span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,fontWeight:600}}><CurrencyDollarIcon size={10} weight="bold"/>Total: </span><span style={{fontSize:14,fontWeight:800,color:C.ok}}>{fmt(total)}</span></div>}
+    {total>0&&<div style={{marginTop:8,padding:"6px 10px",background:C.ok+"10",border:"1px solid "+C.ok+"30",borderRadius:8,display:"inline-flex",alignItems:"center"}}><span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,color:C.t2,fontWeight:600}}><CurrencyDollarIcon size={10} weight="bold"/>Total: </span><span style={{fontSize:14,fontWeight:800,color:C.okInk}}>{fmt(total)}</span></div>}
     <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:10}}>
       {orders.map(o=><WebCartChildRow key={o.id} order={o} onApprove={onApprove} onReject={onReject} busy={actionLoading===o.id}/>)}
     </div>
@@ -16536,7 +16587,7 @@ function WebOrdersBandeja({orders,onApprove,onReject,onApproveCart,onDetail,acti
               {o.finishes&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:C.t3,marginTop:2}}><SparkleIcon size={10} weight="bold"/>{o.finishes}</div>}
               {o.product&&<div style={{fontSize:10,color:C.t2,marginTop:4,fontStyle:"italic"}}>{o.product}</div>}
             </div>
-            {o.price&&<div style={{marginTop:8,fontSize:16,fontWeight:800,color:C.ok}}>{fmt(o.price)}</div>}
+            {o.price&&<div style={{marginTop:8,fontSize:16,fontWeight:800,color:C.okInk}}>{fmt(o.price)}</div>}
             <div style={{display:"flex",gap:6,marginTop:12}}>
               <button onClick={()=>onApprove(o.id)} style={{...bt(C.ok),flex:1,justifyContent:"center"}}><CheckCircleIcon size={14} weight="bold"/>Aprobar</button>
               <button onClick={()=>onReject(o)} style={{...bt(C.dn),flex:1,justifyContent:"center"}}><XIcon size={14} weight="bold"/>Rechazar</button>
@@ -18621,7 +18672,7 @@ function AuditoriaView({orders, purchaseOrders, onNavigateToOC, onNavigateToOrde
             {hasMeta&&<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:3,fontSize:10,color:C.t3}}>
               {o.production_number&&<span style={{color:C.ac,fontWeight:600}}>{o.production_number}</span>}
               {isCorona&&o.coronaPoRef&&<span style={{fontFamily:"'Geist Mono',monospace"}}>PO: {o.coronaPoRef}</span>}
-              {isCorona&&o.coronaAmountWithIva&&<span style={{color:C.ok,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</span>}
+              {isCorona&&o.coronaAmountWithIva&&<span style={{color:C.okInk,fontWeight:700}}>${Number(o.coronaAmountWithIva).toLocaleString("es-MX",{minimumFractionDigits:2})} c/IVA</span>}
               {isCob&&o.cobranzaKind!=='externa'&&o.cobranzaAmount!=null&&<span style={{color:C.t2,fontWeight:700}}>${Number(o.cobranzaAmount).toLocaleString("es-MX",{minimumFractionDigits:2})}{Number(o.cobranzaBalance)>0?<span style={{color:C.dn,fontWeight:700}}> · saldo ${Number(o.cobranzaBalance).toLocaleString("es-MX",{minimumFractionDigits:2})}</span>:null}</span>}
               {o.invoiced_by&&<span style={{marginLeft:"auto",flexShrink:0}}>capturó {o.invoiced_by==="secretaria"?"Lupita":o.invoiced_by}</span>}
             </div>}
@@ -19161,7 +19212,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
           {selectedOC.vendedor && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><UserIcon size={10} weight="bold"/>Vendedor</div><div style={{fontSize:13,fontWeight:600}}>{selectedOC.vendedor}</div></div>}
           {ocAgent && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><UserIcon size={10} weight="bold"/>Contacto</div><div style={{fontSize:13,fontWeight:600}}>{ocAgent}</div></div>}
           {selectedOC.delivery_date && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={10} weight="bold"/>Entrega</div><div style={{fontSize:13,fontWeight:600}}>{fD(selectedOC.delivery_date)}</div></div>}
-          {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><CurrencyDollarIcon size={10} weight="bold"/>Total</div><div style={{fontSize:13,fontWeight:700,color:C.ok}}>{fmt(selectedOC.total)}</div></div>}
+          {selectedOC.total > 0 && <div><div style={{fontSize:10,color:C.t2,display:"flex",alignItems:"center",gap:3}}><CurrencyDollarIcon size={10} weight="bold"/>Total</div><div style={{fontSize:13,fontWeight:700,color:C.okInk}}>{fmt(selectedOC.total)}</div></div>}
           <div><div style={{fontSize:10,color:C.t2}}>Productos</div><div style={{fontSize:13,fontWeight:700}}>{ocOrders.length}{invoicedCount>0?<span style={{fontSize:10,color:C.t2,fontWeight:500}}> · {invoicedCount} facturado{invoicedCount!==1?"s":""}</span>:null}</div></div>
         </div>
         {selectedOC.notes && <div style={{marginTop:10,padding:"8px 10px",background:C.bd+"40",borderRadius:6,fontSize:12,color:C.t2}}>{selectedOC.notes}</div>}
@@ -19273,7 +19324,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
               <div style={{display:"flex",gap:10,marginTop:8,fontSize:11,color:C.t2,flexWrap:"wrap"}}>
                 <span><strong style={{color:C.tx}}>{products.length}</strong> productos</span>
                 {po.delivery_date && <span style={{display:"inline-flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={11} weight="bold"/>{fD(po.delivery_date)}</span>}
-                {po.total > 0 && <span style={{color:C.ok,fontWeight:700}}>{fmt(po.total)}</span>}
+                {po.total > 0 && <span style={{color:C.okInk,fontWeight:700}}>{fmt(po.total)}</span>}
               </div>
               {/* v10.32.3 — Info adicional en cards históricas (completed/cancelled) */}
               {historicoTab && po.status === "completed" && po.completed_at && (
@@ -19307,7 +19358,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                   {yOpen?<FolderOpenIcon size={18} weight="fill" color={C.ac}/>:<FolderIcon size={18} weight="fill" color={C.ac}/>}
                   <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
                   <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yOCs} OC{yOCs!==1?"s":""}</span>
-                  {yTotal>0&&<span style={{fontSize:11,color:C.ok,fontWeight:700}}>{fmt(yTotal)}</span>}
+                  {yTotal>0&&<span style={{fontSize:11,color:C.okInk,fontWeight:700}}>{fmt(yTotal)}</span>}
                   {yOpen?<CaretUpIcon size={12} weight="bold" color={C.t3}/>:<CaretDownIcon size={12} weight="bold" color={C.t3}/>}
                 </button>
                 {yOpen&&<div style={{paddingLeft:12,marginTop:4}}>
@@ -19324,7 +19375,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                         <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{OC_MONTHS[mi]} {y}</span>
                         <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mOCs.length} OC{mOCs.length!==1?"s":""}</span>
                         {mCancel>0&&<span style={{fontSize:10,color:C.dn,fontWeight:600,display:"inline-flex",alignItems:"center",gap:2}}><XCircleIcon size={10} weight="fill"/>{mCancel}</span>}
-                        {mTotal>0&&<span style={{fontSize:10,color:C.ok,fontWeight:600}}>{fmt(mTotal)}</span>}
+                        {mTotal>0&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(mTotal)}</span>}
                         {mOpen?<CaretUpIcon size={11} weight="bold" color={C.t3}/>:<CaretDownIcon size={11} weight="bold" color={C.t3}/>}
                       </button>
                       {mOpen&&<div style={{paddingLeft:8,marginTop:6,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginBottom:8}}>
@@ -19525,7 +19576,7 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         <span style={{fontSize:10,color:C.t3}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
         {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"12",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
         <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
-        {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.ok,marginLeft:"auto"}}>{fmt(m)}</span>}
+        {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.okInk,marginLeft:"auto"}}>{fmt(m)}</span>}
       </div>
       <div style={{fontSize:12,fontWeight:700,color:diag.sev==="red"?C.dn:"#b45309",marginTop:4}}>{diag.text}</div>
       {inCron&&!diag.external&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>→ le toca a <b>{diag.respName}</b></div>}

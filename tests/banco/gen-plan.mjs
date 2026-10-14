@@ -10,7 +10,8 @@
 //   cancelar) · cancelar=ligada|normal|linea (abre la ventana de cancelar esa factura del plan, o un renglón de la ligada) ·
 //   previo=todo (v10.84.98: un plan anterior de la OC ya cubre todas las piezas y el dinero de las cuatro órdenes) ·
 //   foliada=1 (P-0595 ya tiene folio: sale del plan) · foliada=todas (las cuatro: ninguna entra) · ligables=muchas (7 sin orden) ·
-//   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina)
+//   planta=1 (v10.84.101: P-0595 todavía en Empaque) · planta=todas (las cuatro todavía en máquina) ·
+//   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga)
 import fs from "node:fs";
 import path from "node:path";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
@@ -39,7 +40,24 @@ const LIGABLES_OK = [
   { doc_number: "F-155", doc_type: "factura", amount: 43333.22, balance: 43333.22, issued_date: "2026-10-13", status: "pendiente", cfdi_status: "stamped", dias_sin_orden: 0, monto_cuadra: false, total_oc: 46400 },
   { doc_number: "RS-31", doc_type: "remision", amount: 1400, balance: 0, issued_date: "2026-10-01", status: "pagada", cfdi_status: "none", dias_sin_orden: 12, monto_cuadra: false, total_oc: 40000 },
 ];
+// v10.84.102 — los conceptos timbrados (conceptos_para_ligar_en_oc), como los tiene la base
+const CONCEPTOS = Q.get("conceptos") || "normal"; let lecturasConceptos = 0;
+const cpt = (line_no, cantidad, valor_unitario, importe, descripcion, iva_rate = 0.16) => ({ line_no, cantidad, valor_unitario, importe, descuento: 0, iva_rate, objeto_imp: "02", descripcion });
+const CONCEPTOS_DE = {
+  "F-143": [cpt(1, 4380, 0.14, 613.2, "STK-NGO-PN04 STICKER REDONDO NEGRO DE PINOS 4 CM"), cpt(2, 7395, 0.14, 1035.3, "STK-NGO-PRL4 STICKER REDONDO NEGRO PORTLAND 4 CM"),
+    cpt(3, 3528, 0.11, 388.08, "STK-NGO-PN03 STICKER REDONDO NEGRO DE PINOS 3 CM"), cpt(4, 5520, 0.11, 607.2, "STK-NGO-PRL3 STICKER REDONDO NEGRO PORTLAND 3 CM")],
+  "F-155": [cpt(1, 75620, 0.14, 10586.8, "STK-NGO-PNO4 STICKER REDONDO NEGRO DE PINOS 4 CM"), cpt(2, 72605, 0.14, 10164.7, "STK-NGO-PRL4 STICKER REDONDO NEGRO PORTLAND 4 CM"),
+    cpt(3, 76472, 0.11, 8411.92, "STK-NGO-PNO3-STICKER REDONDO NEGRO DE PINOS 3 CM"), cpt(4, 74480, 0.11, 8192.8, "STK-NGO-PRL3 STICKER REDONDO NEGRO PORTLAND 3 CM")],
+};
 const db = {
+  conceptosParaLigarEnOC: async (ocId, folio) => {
+    lecturasConceptos++; anota("lee conceptos " + ocId + " " + folio + " #" + lecturasConceptos);
+    if (CONCEPTOS === "lento") await new Promise(r => setTimeout(r, 1500));
+    if (CONCEPTOS === "falla" || (CONCEPTOS === "falla1" && lecturasConceptos === 1)) throw new Error("timeout");
+    if (CONCEPTOS === "vacio") return [];
+    const filas = CONCEPTOS_DE[String(folio || "").trim().toUpperCase()] || [];
+    return CONCEPTOS === "tasa0" ? filas.map((x, k) => k === 0 ? { ...x, iva_rate: 0 } : x) : filas;
+  },
   getClientBillingInfo: async () => ({ billing_mode: "normal", current_balance: 0 }),
   getNextFolioSuggestion: async t => EMISOR ? (t === "factura" ? "F-157" : "RS-40") : (t === "factura" ? "D-5781" : "R-1903"),
   getFolioEmitterEnabled: async () => EMISOR,

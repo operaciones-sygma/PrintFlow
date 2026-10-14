@@ -12,6 +12,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.102 — Las piezas de una factura que ya existe, desde su CFDI; y el dinero en verde con AA en toda la app — 14-oct-2026
+
+**Qué pasaba.** Para ligar F-143 y F-155 en el plan de OC-0960, Karla tenía que ir a CobranzaFlow, abrir cada CFDI y copiar a mano las
+piezas de cada sticker (4 números por factura; la critique del 13-oct lo marcó: «las porciones que cubre cada factura hay que ir a
+copiarlas de CobranzaFlow»). Y la revisión en producción de v10.84.99 encontró dos importes de «En Maquila», al pie de su vista, en verde a
+3.0:1; el mismo verde estaba en 19 importes más de la app: el total de la OC y su lista (la critique: «lo que carga dinero… en la OC»), el
+archivo, los pedidos web, las ventanas de folio histórico y de deshacer, la auditoría y la de precio.
+
+**Qué se cambió** (`src/App.jsx`, `src/lib/proponerPiezas.js`; la base: `public.conceptos_para_ligar_en_oc`, aplicada antes de subir):
+- **«Traer sus piezas de su CFDI»** en la columna que liga una factura reconocida: lee sus conceptos timbrados y los casa con las órdenes del
+  plan por precio unitario (a medio centavo o 1 %) y por las palabras del nombre («STICKER REDONDO NEGRO DE PINOS 4 CM» con «STICKER #4
+  REDONDO NEGRO DE PINOS», no con «… DE PORTLAND»); llena la columna y dice cuáles puso («De su CFDI: 4 conceptos, los 4 puestos (P-0592:
+  4,380 · …)»), con **«Deshacer»**. Lo que no casa sin duda no se adivina: «Sin casar» o «Dudosos (elige tú)». Sin desglose timbrado
+  (remisión o sin timbrar): «captura las piezas a mano». Si la lectura falla: «No pude leer los conceptos… · Reintentar» (no «no trae»). Si un
+  renglón trae IVA distinto de 16 %, lo dice (el plan calcula con 16 %). El cuadre de abajo, contra el importe de la factura, confirma.
+  **PORTLAND, de punta a punta, sin teclear un número**: «Ya existe» F-143 → traer; «Ya existe» F-155 → traer; «Revisar» → «Ligar 2 facturas».
+- **El dinero en verde, en su tinta** (`C.okInk`, 5.0:1) en los 20 importes de la app que iban en `C.ok` (3.05:1).
+
+**La base** (14-oct ~00:45; OK de Marcelo, revisada por CobranzaFlow, ensayada 10 de 10; sus invariantes después: 78 de 80, igual que antes;
+copia legible `docs/migrations/v10.84.102_conceptos_para_ligar_en_oc.sql`): `public.conceptos_para_ligar_en_oc(p_oc_id, p_folio)`, sólo lee.
+
+**Cómo se probó** (tres vueltas): la lógica de casar es un módulo aparte con su tanda sin navegador, `proponer` (13 casos: los conceptos de
+verdad de F-143 y F-155, con «PNO4» y «PNO3-STICKER»; otro precio, órdenes gemelas, un servicio, sin conceptos, ceros, decimales, la misma
+orden dos veces); se escribieron juntos (el módulo era nuevo). La pantalla: **vuelta 1**, escritas antes del cambio y corridas contra
+v10.84.101, fallaban las 8 nuevas (pl-77 a pl-82: no había cómo traer las piezas; ses-73 y ses-74: el total de la OC, su lista y «En Maquila»
+a 3.0:1). **Vuelta 2**: pasan, y la tanda `plan` entera (86). **Vuelta 3**, por donde no se diseñó: otro folio (lo dicho se va), doble clic y
+la lectura lenta (lee una vez, «Leyendo…»), «Nueva» después de traer, y «Lo que falta» de la otra columna a 1366 con la propuesta a la
+vista: pasan las 4. `plan` 90, `sesion` 75, `proponer` 13 (tanda nueva en el candado).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.101 — El plan matriz antes de Salidas, con anticipadas a fuerza; el encabezado de cada columna, compacto — 14-oct-2026
 
 **Qué pasaba.** El plan sólo dejaba entrar órdenes en Salidas y la OC no lo ofrecía hasta que llegaran todas («El plan abre cuando

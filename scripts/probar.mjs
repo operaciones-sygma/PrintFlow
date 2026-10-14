@@ -59,6 +59,8 @@ const TANDAS = [
   // lectura, necesita SUPABASE_ACCESS_TOKEN), que la función generada diga lo mismo para todos los nombres, el CHECK, la historia y el
   // permiso de la app para escribirla
   { nombre: "categorias", romper: "tests/romper/categorias.mjs" },
+  // sin banco: las piezas de una factura que ya existe, propuestas desde su CFDI (v10.84.102): src/lib/proponerPiezas.js con los conceptos de verdad
+  { nombre: "proponer", romper: "tests/romper/proponer.mjs" },
   // «¿ya existe este cliente?» al capturar una orden o una OC: lo que casi seguro ya existe lo frena y dice cuál es (v10.84.69, con
   // CobranzaFlow v3.7.999m); el banco extrae la pregunta, su montaje y la lógica de las dos puertas, con la base simulada
   { nombre: "cliente", gen: "tests/banco/gen-cliente.mjs", romper: "tests/romper/cliente.mjs", puerto: 5192 },

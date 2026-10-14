@@ -1229,6 +1229,34 @@ await caso("ses-72-la-medida-en-los-pedidos-web", async ({ p, s }) => {
   const t = await texto(p), veces = (t.match(/3 cm de ancho/g) || []).length;
   ok("ses-72-la-medida-en-los-pedidos-web", !/null/.test(t) && veces >= 3, `«3 cm de ancho» ${veces} veces · ${/null/.test(t) ? "TODAVÍA dice null" : "sin null"}`);
 });
+// ════════════════════════ el dinero en verde, con AA en toda la app (v10.84.102) ════════════════════════
+// La revisión en producción de v10.84.99 encontró los importes de «En Maquila» al pie de la vista de Karla a 3.0:1; el mismo verde en el total
+// de la OC y su lista (la critique: «lo que carga dinero no pasa AA en la cola y en la OC»). Vuelta 1: escritas antes del cambio.
+const importesBajos = p => p.evaluate(() => [...document.querySelectorAll("div,span,b")].filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim()))
+  .map(d => window.__cr(d)).filter(x => x < 4.5));
+await caso("ses-73-el-total-de-la-oc-con-aa", async ({ p, s }) => {
+  s.filas = PORTLAND(); s.rpcRespuestas = { list_linkable_invoices_for_oc: [] };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Órdenes de Compra"]').first().click(); await p.waitForTimeout(900);
+  await p.evaluate(CONTRASTE);
+  const lista = await importesBajos(p), enLista = await p.evaluate(() => [...document.querySelectorAll("div,span,b")].filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).length);
+  await p.getByText("OC-0960", { exact: false }).first().click(); await p.waitForTimeout(1200);
+  await p.evaluate(CONTRASTE);
+  const detalle = await importesBajos(p);
+  ok("ses-73-el-total-de-la-oc-con-aa", enLista > 0 && lista.length === 0 && detalle.length === 0, `importes bajo AA: en la lista ${JSON.stringify(lista)} (de ${enLista}) · en el detalle ${JSON.stringify(detalle)}`);
+});
+await caso("ses-74-en-maquila-con-aa", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0750", { stage: "maq_sent", order_type: "maquila", maq_price: 4260, price: 3000, maquila_provider: "SERIGRAFÍA LÓPEZ", maq_provider: "SERIGRAFÍA LÓPEZ" }),
+    ordenK("P-0751", { stage: "salidas" })] };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title^="Pendientes"]').first().click(); await p.waitForTimeout(900);
+  await p.evaluate(CONTRASTE);
+  const maq = await p.evaluate(() => { const sec = [...document.querySelectorAll("span")].find(x => /^En Maquila$/.test(x.textContent.trim())); const caja = sec && sec.closest("div[style*='border-radius: 16px']");
+    return caja ? [...caja.querySelectorAll("div,span")].filter(d => d.children.length === 0 && /^\$[\d,]+\.\d{2}$/.test(d.textContent.trim())).map(d => window.__cr(d)) : null; });
+  ok("ses-74-en-maquila-con-aa", Array.isArray(maq) && maq.length > 0 && maq.every(x => x >= 4.5), `importes de «En Maquila»: ${JSON.stringify(maq)}`);
+});
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
   s.filas = { orders: [ordenK("P-0911", { stage: "in_production", created_by: "genaro", agent: "Genaro", current_machine: "off_pm74", machine_queue_position: 0 }),
