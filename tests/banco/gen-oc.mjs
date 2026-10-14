@@ -75,7 +75,9 @@ function BillToSection({ onChange }) { return <div style={{ padding: 8, fontSize
   <button id="tercero-medias" onClick={() => onChange({ incomplete: true })}>tercero a medias</button>
   <button id="tercero-listo" onClick={() => onChange({ client_id: "t1", name: "TERCERO SA", rfc: "TSA010101AAA" })}>tercero listo</button></div>; }`,
   ...opcional(L.some(l => l.startsWith("function ConfirmModal(")), () => fnBlock("ConfirmModal")),
-  fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"), fnBlock("MultiPaymentPicker"), fnBlock("AssignOCFolioModal"),
+  fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"), fnBlock("MultiPaymentPicker"),
+  ...opcional(L.some(l => l.startsWith("function SinRevisionSinOrden(")), () => fnBlock("SinRevisionSinOrden")),   // v10.84.96
+  fnBlock("AssignOCFolioModal"),
   `const CLIENTES = { normal: "PORTLAND STUDIO", corona: "CERVECERIA MODELO DE MEXICO", cuadra: "CUADRA SA DE CV", saldo: "IMPRENTA LEON" };
 const OC = { id: "OC-1003", client: CLIENTES[CLIENTE] || CLIENTES.normal, client_id: "c1" };
 const PRODUCTOS = ["Etiquetas colgantes", "Folders", "Bolsa kraft", "Tarjetas de presentación", "Volantes", "Cajas plegadizas", "Stickers", "Manteles"];

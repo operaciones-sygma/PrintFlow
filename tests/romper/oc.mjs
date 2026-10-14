@@ -897,10 +897,29 @@ await caso("oc-113-sin-orden-de-otro-importe", "sinorden=1", async p => {
 });
 await caso("oc-114-sin-orden-no-se-pudo-saber", "sinorden=falla", async p => {
   const t1 = await texto(p);
-  const dice = /No se pudo revisar si .* tiene facturas hechas sin orden/.test(t1);
+  const dice = /No (se pudo|pude) revisar si .* tiene facturas hechas sin orden/.test(t1);
   await p.getByRole("button", { name: "Reintentar" }).first().click().catch(() => {}); await espera(p, 600);
   const t2 = await texto(p);
   ok("oc-114-sin-orden-no-se-pudo-saber", dice && /F-143/.test(t2), `${dice} · después ${/F-143/.test(t2)}`);
+});
+// v10.84.96 — un error de lectura no es permiso: sin saber qué facturas sin orden tiene el cliente, la OC no se folia (antes: lo
+//   decía y dejaba asignar). Con «Ya revisé en CobranzaFlow» sí. Vuelta 1
+await caso("oc-119-sin-lectura-no-se-asigna", "sinorden=falla", async p => {
+  const t1 = await texto(p);
+  const frena = /Sin revisar las facturas hechas sin orden no se asigna/.test(t1);
+  const casilla = p.getByLabel(/Ya revisé en CobranzaFlow/);
+  const hay = await casilla.count();
+  if (hay) { await casilla.check(); await espera(p, 300); }
+  const t2 = await texto(p);
+  ok("oc-119-sin-lectura-no-se-asigna", frena && hay === 1 && !/Sin revisar las facturas hechas sin orden/.test(t2),
+    `sin la lectura: ${frena ? "no deja y dice por qué" : "DEJA asignar"}; casilla ${hay ? "sí" : "NO"}; con la casilla ${/Sin revisar/.test(t2) ? "sigue frenado" : "ya deja"}`);
+});
+// vuelta 3: «Dividir» también frena sin la lectura
+await caso("oc-120-dividir-sin-lectura-no-se-asigna", "sinorden=falla", async p => {
+  await p.getByRole("button", { name: "Dividir", exact: true }).click().catch(() => {}); await espera(p, 400);
+  const t1 = await texto(p);
+  const frena = /Sin revisar las facturas hechas sin orden no se asigna/.test(t1);
+  ok("oc-120-dividir-sin-lectura-no-se-asigna", frena, `«Dividir» sin la lectura: ${frena ? "no deja y dice por qué" : "DEJA asignar"}`);
 });
 await caso("oc-115-sin-orden-del-importe-exacto", "sinorden=cuadra", async p => {
   const t = await texto(p);

@@ -73,6 +73,12 @@ await caso("sig-07 sin candidatas", "candidatas=0", async p => {
   await p.getByRole("button", { name: "Mejor facturar normal" }).click(); await espera(p);
   ok("sig-07 sin candidatas: lo dice y se puede volver a facturar normal", dice && await p.getByRole("button", { name: /ya tiene factura: ligarla/ }).isVisible());
 });
+// v10.84.96 — si la lectura falla, no dice «no tiene facturas sin orden» (Karla emitiría otra): lo dice y ofrece «Reintentar». Vuelta 1
+await caso("sig-36 la lectura falla", "candidatas=falla", async p => {
+  await sig(p); await p.getByRole("button", { name: /ya tiene factura: ligarla/ }).click(); await espera(p, 400);
+  const mal = await ve(p, /no tiene facturas ni remisiones sin orden/), dice = await ve(p, /No pude leer las facturas hechas sin orden/);
+  ok("sig-36 si no se pudieron leer las facturas sin orden: lo dice con «Reintentar» (no que no hay)", !mal && dice && await p.getByRole("button", { name: "Reintentar" }).count() > 0, `dice que no hay=${mal} · dice que no pudo=${dice}`);
+});
 await caso("sig-08 candidata que no cabe", "", async p => {
   await sig(p); await p.getByRole("button", { name: /ya tiene factura: ligarla/ }).click(); await espera(p, 300);
   ok("sig-08 la factura que rebasa el resto no se puede elegir", await p.getByRole("button", { name: /F-131/ }).isDisabled());

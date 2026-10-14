@@ -38,7 +38,8 @@ const GUARDA_LENTO = Q.get("guarda") === "lento";
 const HAKUNA = Q.get("hakuna") || "";
 const db = {
   getFolioEmitterEnabled: async () => EMISOR,
-  listLinkableInvoicesForSplit: async () => SINCAND ? [] : HAKUNA ? [
+  listLinkableInvoicesForSplit: async () => { if (Q.get("candidatas") === "falla") throw new Error("falla de prueba");   // v10.84.96
+    return SINCAND ? [] : HAKUNA ? [
     ...(HAKUNA === "1" ? [{ doc_number: "F-130", doc_type: "factura", amount: 18268.35, issued_date: "2026-10-01", cfdi_status: "stamped", cabe: true, qty_cfdi: 20000 },
       // y una con piezas pero LEJOS de lo que la orden da por ellas (no es redondeo: un precio distinto)
       { doc_number: "F-133", doc_type: "factura", amount: 9999.99, issued_date: "2026-10-02", cfdi_status: "stamped", cabe: true, qty_cfdi: 20000 }] : []),
@@ -47,7 +48,7 @@ const db = {
     { doc_number: "F-90", doc_type: "factura", amount: 6887.5, issued_date: "2026-09-23", cfdi_status: "stamped", cabe: true, qty_cfdi: 0 },
     { doc_number: "F-77", doc_type: "factura", amount: 39602.4, issued_date: "2026-09-20", cfdi_status: "stamped", cabe: true, qty_cfdi: 0 },
     { doc_number: "F-131", doc_type: "factura", amount: 99000, issued_date: "2026-09-29", cfdi_status: "stamped", cabe: false },
-  ],
+  ]; },
   getClientBillingInfo: async () => CORONA ? { billing_mode: "anticipo", current_balance: 30000 } : { billing_mode: "normal", current_balance: SALDO ? 5000 : 0 },
   getNextFolioSuggestion: async t => t === "factura" ? "D-6001" : "R-900",
 };`,

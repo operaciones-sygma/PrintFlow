@@ -7862,9 +7862,10 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
   // sin orden antes de facturar por partes). La RPC ya lo sabía (v10.84.7); faltaba la opción en el modal.
   const [ligarManual,setLigar] = useState(false);
   const ligar = ligarManual || debeLigar;   // v10.84.19: en una orden historica con el emisor ON, ligar es el unico camino
-  const [candidatas,setCandidatas] = useState(null);   // null = cargando
+  const [candidatas,setCandidatas] = useState(null);   // null = cargando · "falla" = no se pudieron leer (v10.84.96)
+  const [lecturaCand,setLecturaCand] = useState(0);
   const [ligada,setLigada] = useState(null);           // la candidata elegida
-  useEffect(()=>{if(!ligar||!resto?.id)return;let alive=true;setCandidatas(null);db.listLinkableInvoicesForSplit(resto.id).then(v=>{if(alive)setCandidatas(v)}).catch(()=>{if(alive)setCandidatas([])});return()=>{alive=false}},[ligar,resto?.id]);
+  useEffect(()=>{if(!ligar||!resto?.id)return;let alive=true;setCandidatas(null);db.listLinkableInvoicesForSplit(resto.id).then(v=>{if(alive)setCandidatas(v)}).catch(()=>{if(alive)setCandidatas("falla")});return()=>{alive=false}},[ligar,resto?.id,lecturaCand]);
   const elegir = c => {
     setLigada(c); setDocType(c.doc_type);
     const sub = c.doc_type==="factura" ? Math.round(Number(c.amount)/1.16*100)/100 : Math.round(Number(c.amount)*100)/100;
@@ -7982,6 +7983,7 @@ function FacturarSiguienteParteModal({order,resto,onConfirm,onClose}) {
             : "Para la factura que se hizo sin orden (p. ej. desde CobranzaFlow). No se acuña folio: la que ya existe queda como esta parte y se descuenta del resto."}</div>
           <div style={{marginTop:8}}>
             {candidatas===null?<div style={{fontSize:11,color:C.t2}}>Buscando facturas del cliente sin orden…</div>
+            :candidatas==="falla"?<div role="alert" style={{fontSize:11,color:C.wnInk,display:"flex",gap:6,alignItems:"flex-start",lineHeight:1.45}}><WarningIcon size={12} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>No pude leer las facturas hechas sin orden de este cliente (no es que no tenga). <button type="button" onClick={()=>setLecturaCand(n=>n+1)} style={{background:"none",border:"none",padding:0,color:C.ac,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Reintentar</button></span></div>
             :candidatas.length===0?<div style={{fontSize:11,color:C.wnInk,display:"flex",gap:5,alignItems:"flex-start",lineHeight:1.45}}><WarningIcon size={12} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>Este cliente no tiene facturas ni remisiones sin orden en cobranza. Si ya la hiciste, revisa que sea del mismo cliente; si no, factura normal.</span></div>
             :<div style={{display:"flex",flexDirection:"column",gap:4}}>
               {candidatas.map(c=><button key={c.doc_number} type="button" disabled={saving||!c.cabe} onClick={()=>elegir(c)} aria-pressed={ligada?.doc_number===c.doc_number} title={c.cabe?"Ligar esta":"Rebasa lo que queda por facturar"}
@@ -9073,9 +9075,10 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
   //   al abrir: también avisan cuando una factura NUEVA sale justo por el importe de una que ya existe (lo que la base frena).
   const [ligables, setLigables] = useState(undefined);
   const [lecturaLig, setLecturaLig] = useState(0);
+  const [revisoSinOrdenPlan, setRevisoSinOrdenPlan] = useState(false);   // v10.84.96 — «Ya revisé en CobranzaFlow»
   const enviandoRef = useRef(false);
   useEffect(() => {
-    let vivo = true; setLigables(undefined);
+    let vivo = true; setLigables(undefined); setRevisoSinOrdenPlan(false);
     Promise.resolve().then(() => db.listLinkableInvoicesForOC(oc?.id))
       .then(r => { if(vivo) setLigables(Array.isArray(r) ? r : []); })
       .catch(() => { if(vivo) setLigables(null); });
@@ -9561,6 +9564,11 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
           const suma = conIvaDe(totalSinIvaDe(g), g.doc_type), dif = Math.round((suma - Number(f.amount)) * 100) / 100;
           if(Math.abs(dif) > 0.02) errors.push(`Factura ${i+1}: ${fol} es por $${fmtMx(f.amount)}${g.doc_type === "factura" ? " con IVA" : ""} y esta columna suma $${fmtMx(suma)} (${dif < 0 ? "faltan" : "sobran"} $${fmtMx(Math.abs(dif))})`);
         }
+      } else if((g.doc_type === "factura" || g.doc_type === "remision") && ligables === undefined) {
+        errors.push(`Factura ${i+1}: leyendo las facturas sin orden de ${oc?.client||"este cliente"}…`);
+      } else if((g.doc_type === "factura" || g.doc_type === "remision") && ligables === null && !revisoSinOrdenPlan) {
+        // v10.84.96 — un error de lectura no es permiso: sin saber qué facturas sin orden hay, una NUEVA podría cobrar dos veces
+        errors.push(`Factura ${i+1}: no pude revisar las facturas sin orden de ${oc?.client||"este cliente"}: sin eso no se crean nuevas («Reintentar» arriba, o marca que ya revisaste en CobranzaFlow)`);
       } else if(folioAuto && (g.doc_type === "factura" || g.doc_type === "remision") && !g.bill_to && Array.isArray(ligables)) {
         // el candado del anticipo (la base frena igual): una NUEVA justo por el importe de una sin orden del cliente
         const c = anticipoDe(g);
@@ -9597,7 +9605,7 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       errors.push(`Saldo Corona insuficiente: $${fmtMx(coronaTotal)} requerido vs $${fmtMx(coronaBalance)} disponible`);
     }
     return errors;
-  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder, folioAuto, ligables]);
+  }, [groups, eligibleOrders, orderTotals, coronaTotal, coronaBalance, isCorona, captureMode, existingByOrder, folioAuto, ligables, revisoSinOrdenPlan]);
 
   const canSubmit = !saving && validation.length === 0 && eligibleOrders.length > 0;
 
@@ -9681,7 +9689,8 @@ function OCSplitMatrixModal({oc, ocOrders, onConfirm, onClose, user, userLogin})
       {/* v10.84.92 — QUIÉN PAGA (Marcelo, 13-oct, el caso Hotsson: «el saldo se queda con el cliente que pidió el producto»): cada
           factura del plan queda a cargo del cliente de la orden; «Facturar a tercero» es lo único que lo cambia (ése paga). El CFDI a
           otra razón social del mismo cliente, sin cambiar quién paga, se elige en CobranzaFlow (la regla 23 de CobranzaFlow) */}
-      {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:"-6px 0 14px",padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5}}>
+      {ligables === null && groups.some(g => !g.ligar && (g.doc_type === "factura" || g.doc_type === "remision")) && <SinRevisionSinOrden cliente={oc?.client} onReintentar={()=>setLecturaLig(n=>n+1)} revisado={revisoSinOrdenPlan} onRevisado={setRevisoSinOrdenPlan} que="crear facturas nuevas"/>}
+        {!isCorona && <div data-quien-paga role="note" style={{fontSize:11.5,color:C.tx,margin:"-6px 0 14px",padding:"8px 12px",background:C.sf,borderRadius:10,lineHeight:1.5}}>
         <b>El saldo de cada factura queda a cargo de {oc?.client||"el cliente de la orden"}</b>, quien pidió el trabajo, salvo las que lleven «Facturar a tercero»: ésas las paga el tercero.
         {" "}¿Una factura debe salir a nombre de otra razón social de {oc?.client||"este cliente"} sin cambiar quién paga? Créala aquí sin tercero y en CobranzaFlow elige su «CFDI a nombre de» (Por Timbrar → Datos).
       </div>}
@@ -10211,9 +10220,10 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   // v10.84.72 (tercera revisión) — al tope de 8 s se decía «falló la red» aunque sólo TARDABA, y la respuesta que llegaba después cambiaba
   //   el aviso (o abría el camino de ligar) sin decirlo. Ahora: «está tardando» y, si llega tarde, «Llegó la revisión que tardaba».
   const [candsTarde,setCandsTarde]=useState(false), [candsLlego,setCandsLlego]=useState(false);
+  const [revisoSinOrden,setRevisoSinOrden]=useState(false);   // v10.84.96 — «Ya revisé en CobranzaFlow» (sin la lectura, el permiso lo da Karla)
   useEffect(()=>{
     if(!cargarCandidatas||!order?.id){setCands([]);return}
-    let vivo=true, tarde=false;setCands(undefined);setCandsTarde(false);setCandsLlego(false);
+    let vivo=true, tarde=false;setCands(undefined);setCandsTarde(false);setCandsLlego(false);setRevisoSinOrden(false);
     const tope=setTimeout(()=>{if(vivo){tarde=true;setCands(c=>c===undefined?null:c);setCandsTarde(true)}},8000);
     Promise.resolve(cargarCandidatas(order.id)).then(r=>{if(vivo){clearTimeout(tope);setCands(Array.isArray(r)?r:null);setCandsTarde(false);if(tarde&&Array.isArray(r))setCandsLlego(true)}}).catch(()=>{if(vivo){clearTimeout(tope);setCands(null);setCandsTarde(false)}});
     return ()=>{vivo=false;clearTimeout(tope)};
@@ -10328,7 +10338,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     // v10.84.70 — a la vista previa con el escudo: el segundo clic de un doble clic no llega a «Confirmar»
     if(ligando){if(faltaReconocer)return;escudoDeClics(500);setErr("");setConfirming(true);return}
     if(!folioValid||!paymentValid)return;   // el botón ya está apagado en esos casos (el alert nativo de aquí era inalcanzable)
-    if(cands===undefined||(cands===null&&conEfectivo)||bloqueaMismo)return;   // v10.84.70 — revisando, con efectivo sin poder revisar, o la base lo rechazaría
+    if(cands===undefined||(cands===null&&!revisoSinOrden)||bloqueaMismo)return;   // v10.84.70 — revisando, o la base lo rechazaría; v10.84.96 — sin la lectura (con o sin efectivo), hasta que Karla revise
     // v10.84.34 — la pregunta del folio menor, con ConfirmModal (antes confirm del navegador)
     if(folioIsLower&&!warnLow){
       preguntar({title:"¿Usar un folio menor al último?",
@@ -10503,7 +10513,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const fmtMx=n=>Number(n||0).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2});
   const conIvaTotal=Math.round(orderBaseAmount*116)/100;
   const colorTipo=C.ac;   // v10.84.70 — el tipo ya no se pinta con los colores del pago (violeta era Parcial, verde Pagada): la acción va en slate
-  const puedeSeguir=!ligando&&!!type&&folioValid&&paymentValid&&stockLoadValid&&!(billTo&&billTo.incomplete)&&cands!==undefined&&!(cands===null&&conEfectivo)&&!bloqueaMismo;
+  const puedeSeguir=!ligando&&!!type&&folioValid&&paymentValid&&stockLoadValid&&!(billTo&&billTo.incomplete)&&cands!==undefined&&!(cands===null&&!revisoSinOrden)&&!bloqueaMismo;
   const puedeLigar=ligando&&!faltaReconocer;
   // v10.84.70 (segunda revisión) — el botón final dice lo que hace (era «Confirmar» para todo)
   const verboFinal=ligando?"Ligar "+facturaPorLigar.doc_number+" y entregar"
@@ -10524,7 +10534,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
     :ligando?(faltaReconocer?aviso("Para ligar, marca «Lo registro en CobranzaFlow»: lo capturado no se cobra aquí."):null)
     :puedeSeguir?null
     :!type?(coronaInfoLoading?null:info((isCorona||isCuadra)?"Elige el tipo de comprobante.":"Elige si es factura o remisión."))
-    :(cands===null&&conEfectivo)?aviso("Con efectivo hay que revisar antes si ya se facturó por adelantado: «Reintentar» arriba.")
+    :(cands===null&&!revisoSinOrden)?aviso("Sin revisar las facturas hechas sin orden no se emite: «Reintentar» arriba, o marca que ya revisaste en CobranzaFlow.")
     :(!isNoFolio&&!isStockLoad&&emisor===undefined)?null
     :(!isNoFolio&&!isStockLoad&&emisor===null)?aviso("No se pudo confirmar quién asigna el folio: «Reintentar» arriba.")
     :!folioValid?info("Escribe el folio, o usa el sugerido.")
@@ -10566,10 +10576,7 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
   const bannerCandidatas=<>
     {candsLlego&&<div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.tx,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><InfoIcon size={12} weight="bold" style={{flexShrink:0}}/>Llegó la revisión que tardaba: {facturaPorLigar?facturaPorLigar.doc_number+" es del mismo importe (abajo).":otrasSinLigar.length?"el cliente tiene facturas hechas por adelantado (abajo).":"no hay facturas hechas por adelantado."}</div>}
     {cands===undefined&&<div role="status" style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Revisando si ya se facturó por adelantado…</div>}
-    {cands===null&&<div role="alert" style={{fontSize:11.5,color:C.wnInk,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-      <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/><span>{candsTarde?"La revisión de facturas por adelantado está tardando (más de 8 s).":"No se pudo revisar si ya hay una factura por adelantado (falló la red)."} {conEfectivo?"Con efectivo hay que revisarlo antes de cobrar.":"Sin efectivo puedes seguir: la base no deja emitir otra por el mismo importe."}</span></div>
-      <button onClick={()=>setCandKey(k=>k+1)} style={{...bt(C.wnInk),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}><ArrowsClockwiseIcon size={12} weight="bold"/>Reintentar</button>
-    </div>}
+    {cands===null&&<SinRevisionSinOrden cliente={order?.client} tarde={candsTarde} onReintentar={()=>setCandKey(k=>k+1)} revisado={revisoSinOrden} onRevisado={setRevisoSinOrden}/>}
     {facturaPorLigar&&(ligando
       ? <div ref={ligaRef} tabIndex={-1} role="group" aria-labelledby="liga-titulo" style={{background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:12,padding:"12px 14px",marginBottom:14,maxWidth:760}}>
           <div id="liga-titulo" style={{display:"flex",alignItems:"flex-start",gap:7,fontSize:13.5,fontWeight:700,color:C.tx,marginBottom:8,lineHeight:1.35}}><LinkIcon size={15} weight="bold" color={C.fac} style={{flexShrink:0,marginTop:2}}/>{facturaPorLigar.doc_number} es del mismo importe: ¿es la {docPalabra(facturaPorLigar)} de este trabajo?</div>
@@ -10892,7 +10899,22 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
 }
 
 // ─── PRE-INVOICE MODAL (v10.9.0) ─── Karla asigna folio ANTICIPADO antes de entregar
-function PreInvoiceModal({order,onConfirm,onClose}) {
+// v10.84.96 — «UN ERROR DE LECTURA NO ES PERMISO» (la critique del flujo de facturas de Karla, 13-oct, P1). Las facturas que el cliente
+//   ya tiene hechas SIN orden (un anticipo, una parte ya facturada) deciden si se emite un CFDI. Si no se podían leer, se decía y se
+//   dejaba seguir («la base no deja emitir otra por el mismo importe»), pero la base sólo frena una del MISMO importe: un anticipo o
+//   una parte de otro importe se cobraba dos veces (P-0544 con F-90; P-0631 con F-140). Ahora, sin esa lectura, no se emite:
+//   «Reintentar», o Karla marca que ya revisó en CobranzaFlow. El permiso lo da la persona, no el error.
+function SinRevisionSinOrden({cliente,tarde=false,onReintentar,revisado,onRevisado,que="emitir"}){
+  return <div role="alert" data-sin-revision style={{fontSize:11.5,color:C.wnInk,marginBottom:10,padding:"8px 10px",background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:8,lineHeight:1.45}}>
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+      <div style={{flex:1,display:"flex",alignItems:"flex-start",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/>
+        <span>{tarde?"La revisión de las facturas hechas sin orden está tardando (más de 8 s).":"No pude revisar si "+(cliente||"el cliente")+" tiene facturas hechas sin orden (la base no contestó o no dejó leerlas)."} Sin esa revisión no se puede {que}: un anticipo o una parte ya facturada se cobraría dos veces (la base sólo frena una del mismo importe).</span></div>
+      <button type="button" onClick={onReintentar} style={{...bt(C.wnInk),fontSize:11,padding:"4px 10px",whiteSpace:"nowrap"}}><ArrowsClockwiseIcon size={12} weight="bold"/>Reintentar</button>
+    </div>
+    <label style={{display:"flex",alignItems:"center",gap:7,marginTop:8,fontWeight:600,color:C.tx,cursor:"pointer"}}><input type="checkbox" checked={!!revisado} onChange={e=>onRevisado(e.target.checked)}/>Ya revisé en CobranzaFlow: no hay anticipo ni parte de este trabajo</label>
+  </div>;
+}
+function PreInvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onFacturarPorPartes=null}) {
   // v10.58.11: backdrop+ESC guards durante busy. v10.84.34: el Esc va más abajo (pregunta si hay algo capturado)
   const busyRef = useRef(false);
   const [type,setType]=useState(null);
@@ -10913,6 +10935,24 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const [pregunta,setPregunta]=useState(null);   // v10.84.34 — ConfirmModal en vez de confirm/alert del navegador
   const [err,setErr]=useState("");
   const panelRef=useRef(null);
+  // v10.84.96 — LO QUE SABE LA BASE, AL ABRIR (la critique del 13-oct, P1: P-0544 y F-90). Las facturas hechas sin orden se leían
+  //   hasta después de «Confirmar folio», y si la lectura fallaba se asignaba el folio por el total como si no hubiera ninguna.
+  //   Ahora se leen al abrir (como «Asignar folio y entregar» desde v10.84.70): undefined = revisando · null = no se pudo · lista.
+  const [cands,setCands]=useState(cargarCandidatas?undefined:[]);
+  const [candKey,setCandKey]=useState(0);
+  const [candsTarde,setCandsTarde]=useState(false);
+  const [revisoSinOrden,setRevisoSinOrden]=useState(false);
+  useEffect(()=>{
+    if(!cargarCandidatas||!order?.id){setCands([]);return}
+    let vivo=true;setCands(undefined);setCandsTarde(false);setRevisoSinOrden(false);
+    const tope=setTimeout(()=>{if(vivo){setCands(c=>c===undefined?null:c);setCandsTarde(true)}},8000);
+    Promise.resolve(cargarCandidatas(order.id)).then(r=>{if(vivo){clearTimeout(tope);setCands(Array.isArray(r)?r:null);setCandsTarde(false)}}).catch(()=>{if(vivo){clearTimeout(tope);setCands(null);setCandsTarde(false)}});
+    return ()=>{vivo=false;clearTimeout(tope)};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[order?.id,candKey]);
+  const sinOrden=Array.isArray(cands)?cands.filter(c=>c&&(c.doc_type==="factura"||c.doc_type==="remision")):[];
+  const sinOrdenMismo=sinOrden.find(c=>c.monto_cuadra)||null, sinOrdenOtras=sinOrden.filter(c=>!c.monto_cuadra);
+  const leyendoSinOrden=cands===undefined, sinLecturaSinOrden=cands===null&&!revisoSinOrden;
   // v10.29.0 + v10.30.0 — estado de pago obligatorio + monto parcial
   const [paymentStatus,setPaymentStatus]=useState(null);
   const [paymentMethod,setPaymentMethod]=useState(null);
@@ -11017,7 +11057,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
   const paymentExplicit = paymentStatus === "unpaid" || paymentStatus === "paid" || paymentStatus === "partial";
   const paymentValid = paymentExplicit && (paymentStatus === "unpaid" || refsValid);
 
-  const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid&&!(billTo&&billTo.incomplete);
+  const canProceed=type&&folioValid&&reasonValid&&dataComplete&&paymentValid&&!(billTo&&billTo.incomplete)&&!leyendoSinOrden&&!sinLecturaSinOrden;
 
   const handleProceed=()=>{
     if(!canProceed)return;
@@ -11039,12 +11079,15 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
       // v10.57.0 — Multi-pay refs si paid/partial
       // v10.72.29 — helper toBackendRef incluye bank_ref_omitted_intentional
       if(billTo&&billTo.incomplete){ setErr("Completa o quita la razón social del tercero («Facturar a un tercero»)."); return; }   // v10.84.34: antes alert
+      // v10.84.96 — lo que se leyó al abrir y si Karla marcó que revisó: App no vuelve a leer ni asigna sin una de las dos
       if(paymentStatus==="paid"||paymentStatus==="partial"){
         const refsClean=paymentRefs.map(toBackendRef);
-        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,refsClean,billTo);
+        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,refsClean,billTo,cands,revisoSinOrden);
       }else{
-        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null,billTo);
+        await onConfirm(type,folio,finalReason,paymentStatus,null,null,null,null,billTo,cands,revisoSinOrden);
       }
+    }catch(e){
+      setErr(e?.message||String(e));   // v10.84.96 — lo que App no dejó (antes la excepción se perdía: la ventana no decía nada)
     }finally{
       busyRef.current=false;setBusy(false);
     }
@@ -11097,6 +11140,16 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
         : type==="remision"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · remisión, sin IVA</>
         : <>Subtotal <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · con IVA ${fmtMx(conIvaTotal)}</>}</div>
 
+      {/* v10.84.96 — las facturas hechas sin orden, antes de llenar nada (P-0544: F-90, el 50% ya pagado) */}
+      {!confirming&&leyendoSinOrden&&<div role="status" data-revisando-sin-orden style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Revisando si {order?.client||"el cliente"} tiene facturas hechas sin orden…</div>}
+      {!confirming&&cands===null&&<SinRevisionSinOrden cliente={order?.client} tarde={candsTarde} onReintentar={()=>setCandKey(k=>k+1)} revisado={revisoSinOrden} onRevisado={setRevisoSinOrden} que="asignar el folio"/>}
+      {!confirming&&sinOrdenOtras.length>0&&<div role="status" data-anticipos style={{background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.tx,lineHeight:1.5}}>
+        <div style={{fontWeight:700,marginBottom:4,display:"flex",alignItems:"center",gap:6}}><WarningIcon size={13} weight="fill" color={C.wn} style={{flexShrink:0}}/>{order?.client||"El cliente"} ya tiene {sinOrdenOtras.length===1?"una factura hecha":sinOrdenOtras.length+" facturas hechas"} sin orden</div>
+        <ul style={{margin:"0 0 6px",paddingLeft:18}}>{sinOrdenOtras.slice(0,4).map(c=><li key={c.doc_number}><b style={{fontFamily:"'Geist Mono',monospace"}}>{c.doc_number}</b> por <span style={{fontFamily:"'Geist Mono',monospace"}}>{"$"+Number(c.amount).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})}</span>{c.status==="pagada"?" (pagada)":""}{c.dias_sin_orden!=null?", hace "+c.dias_sin_orden+" día"+(Number(c.dias_sin_orden)===1?"":"s"):""}</li>)}</ul>
+        <div>Si {sinOrdenOtras.length===1?"es el anticipo":"son anticipos"} de este trabajo, no asignes el folio por el total: factura por partes y liga {sinOrdenOtras.length===1?sinOrdenOtras[0].doc_number:"cada una"} como parte.</div>
+        {onFacturarPorPartes&&<button type="button" onClick={()=>{if(busyRef.current)return;escudoDeClics(500);onFacturarPorPartes()}} style={{...bt(C.sf,C.tx),marginTop:8,border:"0.5px solid "+C.bd,fontSize:12}}><ArrowsSplitIcon size={13} weight="bold"/>Facturar por partes{sinOrdenOtras.length===1?" y ligar "+sinOrdenOtras[0].doc_number:""}</button>}
+      </div>}
+      {!confirming&&sinOrdenMismo&&<div role="status" data-mismo-importe style={{display:"flex",alignItems:"flex-start",gap:6,background:C.fac+"0d",border:"1px solid "+C.fac+"40",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:12,color:C.tx,lineHeight:1.5}}><LinkIcon size={13} weight="bold" color={C.fac} style={{flexShrink:0,marginTop:2}}/><span><b style={{fontFamily:"'Geist Mono',monospace"}}>{sinOrdenMismo.doc_number}</b>, hecha sin orden, es justo del importe de este trabajo: al confirmar te ofrezco ligarla en lugar de emitir otra.</span></div>}
       {!confirming ? <>
         {/* v10.84.34: sin el «Datos completos.» que salía siempre (con datos incompletos se ve la otra pantalla) */}
         <label style={lbl}>Tipo de comprobante</label>
@@ -11196,6 +11249,7 @@ function PreInvoiceModal({order,onConfirm,onClose}) {
       </div>
       <div style={{padding:"12px 24px 20px",borderTop:"0.5px solid "+C.bd}}>
         {errBox}
+        {!confirming&&(leyendoSinOrden||sinLecturaSinOrden)&&<div role="status" style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:11,fontWeight:600,color:leyendoSinOrden?C.t2:C.wnInk,marginBottom:8,lineHeight:1.45}}>{leyendoSinOrden?<><HourglassIcon size={12} weight="bold" style={{flexShrink:0,marginTop:1}}/>Revisando las facturas hechas sin orden…</>:<><WarningIcon size={12} weight="fill" color={C.wn} style={{flexShrink:0,marginTop:1}}/>Sin revisar las facturas hechas sin orden no se asigna: «Reintentar» arriba, o marca que ya revisaste en CobranzaFlow.</>}</div>}
         {!confirming ? <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Volver</button>
           <button onClick={handleProceed} disabled={!canProceed} style={{...bt(C.wnInk),flex:1,justifyContent:"center",opacity:!canProceed?0.4:1}}>Continuar<CaretRightIcon size={13} weight="bold"/></button>
@@ -13646,8 +13700,10 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   //   esta OC, van por pedazos en el plan matriz, ligando cada una. undefined = leyendo · null = no se pudo saber · [] = ninguna.
   const [sinOrdenOc, setSinOrdenOc] = useState(undefined);
   const [lecturaSinOrden, setLecturaSinOrden] = useState(0);
+  const [revisoSinOrdenOc, setRevisoSinOrdenOc] = useState(false);   // v10.84.96 — «Ya revisé en CobranzaFlow»
+  const sinLecturaOc = sinOrdenOc===undefined || (sinOrdenOc===null && !revisoSinOrdenOc);
   useEffect(()=>{
-    let vivo = true; setSinOrdenOc(undefined);
+    let vivo = true; setSinOrdenOc(undefined); setRevisoSinOrdenOc(false);
     Promise.resolve().then(()=>conTope(db.listLinkableInvoicesForOC(oc?.id)))
       .then(r=>{ if(vivo) setSinOrdenOc(Array.isArray(r) ? r : []); })
       .catch(()=>{ if(vivo) setSinOrdenOc(null); });
@@ -13772,13 +13828,15 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
   // v10.84.44 — el saldo (Corona, saldo a favor) y el traslado llegan aparte: mientras, no se crea (con Cuadra un clic rápido se
   //   saltaba la opción del traslado, que aparece al llegar)
   const cargandoCliente = coronaInfo === null || (!preAssignedMode && tras === null);
-  const canSubmitSimple = !saving && !cargandoCliente && emisorSabido && folioValid && pendingCount > 0
+  const canSubmitSimple = !saving && !cargandoCliente && emisorSabido && folioValid && pendingCount > 0 && !sinLecturaOc
     && (!preAssignedMode || reason.trim().length > 0)
     && (mode !== "shared" || !(billTo && billTo.incomplete)); // 🆕 Fase 2 — no permitir submit con tercero a medio capturar
   // v10.84.42 — por qué no se puede todavía (en el pie, junto al botón)
   const porQueNoSimple = saving ? null
     : pendingCount===0 ? "No quedan productos sin folio en esta OC."
     : cargandoCliente ? "Revisando el saldo y el traslado del cliente…"
+    : sinOrdenOc===undefined ? "Revisando las facturas hechas sin orden del cliente…"
+    : (sinOrdenOc===null && !revisoSinOrdenOc) ? "Sin revisar las facturas hechas sin orden no se asigna: «Reintentar» arriba, o marca que ya revisaste en CobranzaFlow."
     : emisor===undefined ? "Consultando cómo se asigna el folio…"
     : emisor===null ? "Falta confirmar cómo se asigna el folio."
     : !folioValid ? (folioStart ? "Revisa el folio." : "Escribe el folio.")
@@ -13880,9 +13938,11 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
     return new Set(Object.keys(cuenta).filter(f=>cuenta[f]>1));
   }, [splitGroups, folioAuto]);
 
-  const canSubmitSplit = !saving && !cargandoCliente && emisorSabido && splitValidation.ok && (!preAssignedMode || reason.trim().length > 0);
+  const canSubmitSplit = !saving && !cargandoCliente && emisorSabido && splitValidation.ok && (!preAssignedMode || reason.trim().length > 0) && !sinLecturaOc;
   const porQueNoSplit = saving ? null
     : cargandoCliente ? "Revisando el saldo y el traslado del cliente…"
+    : sinOrdenOc===undefined ? "Revisando las facturas hechas sin orden del cliente…"
+    : (sinOrdenOc===null && !revisoSinOrdenOc) ? "Sin revisar las facturas hechas sin orden no se asigna: «Reintentar» arriba, o marca que ya revisaste en CobranzaFlow."
     : emisor===undefined ? "Consultando cómo se asigna el folio…"
     : emisor===null ? "Falta confirmar cómo se asigna el folio."
     : !splitValidation.ok ? splitValidation.reason
@@ -14172,10 +14232,7 @@ function AssignOCFolioModal({oc, ocOrders, preAssignedMode, onConfirmSimple, onC
         {!isCorona && Number(coronaInfo?.current_balance||0) > 0.005 && <SaldoFavorAmarreBanner balance={coronaInfo.current_balance}/>}
         {/* v10.84.89 — las facturas sin orden del cliente que NO son justo del importe de la OC (ésa la ofrece la base al confirmar): si
             son de esta OC, emitir otra le cobraría dos veces; se ligan por pedazos en el plan matriz. Si no se pudo saber, se dice. */}
-        {sinOrdenOc === null && <div role="status" style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:11.5,color:C.t2,background:C.sf,borderRadius:10,padding:"8px 12px",marginBottom:14}}>
-          <InfoIcon size={13} weight="bold" style={{flexShrink:0}}/>No se pudo revisar si {oc?.client||"el cliente"} tiene facturas hechas sin orden.
-          <button type="button" onClick={()=>setLecturaSinOrden(n=>n+1)} style={{background:"none",border:"none",padding:0,color:C.ac,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>Reintentar</button>
-        </div>}
+        {sinOrdenOc === null && <SinRevisionSinOrden cliente={oc?.client} onReintentar={()=>setLecturaSinOrden(n=>n+1)} revisado={revisoSinOrdenOc} onRevisado={setRevisoSinOrdenOc} que="asignar el folio"/>}
         {Array.isArray(sinOrdenOc) && (()=>{ const otras = sinOrdenOc.filter(c=>c && !c.monto_cuadra && (c.doc_type==="factura"||c.doc_type==="remision")); if(!otras.length) return null;
           const dias = d=>{const n=Number(d)||0;return n<=0?"hoy":n===1?"hace 1 día":"hace "+n+" días"};
           return <div role="status" style={{background:C.wn+"10",border:"1px solid "+C.wn+"40",borderRadius:10,padding:"10px 12px",marginBottom:14,fontSize:12,color:C.tx,lineHeight:1.5}}>
@@ -23274,13 +23331,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }}
         onClose={()=>setSplitInvoiceModal(null)}/>}
       {/* 🆕 v10.9.0 — Modal de folio anticipado (Karla asigna antes de producir) */}
-      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs,billTo)=>{
+      {preInvoiceModal&&<PreInvoiceModal order={preInvoiceModal} onConfirm={async(invoiceType,folio,reason,paymentStatus,paymentMethod,paymentAmount,bankReference,paymentRefs,billTo,leidasEnLaVentana,revisadoSinOrden)=>{
+        // v10.84.96 — UN ERROR DE LECTURA NO ES PERMISO (la critique del 13-oct, P1: con la lectura caída se asignaba por el total). Lo que
+        //   leyó la ventana al abrir, o una lectura nueva; si no hay ninguna y Karla no marcó que revisó, no se asigna (la ventana lo dice).
+        const leidas=Array.isArray(leidasEnLaVentana)?leidasEnLaVentana:await candidatasParaLigar(preInvoiceModal.id);
+        if(leidas===null&&!revisadoSinOrden) throw new Error("No pude revisar si "+(preInvoiceModal.client||"el cliente")+" tiene facturas hechas sin orden: no se asignó el folio. «Reintentar» arriba, o marca que ya revisaste en CobranzaFlow.");
         try{
           // v10.50.0 — paymentRefs (array) si multi-pago
           // v10.58.25: userLogin en lugar de user (rol) — assign_invoice gateada por verify_actor_role
           // 🔗 v10.84.31 — el caso de P-0544 (2-oct): folio anticipado por el trabajo completo con su 50% ya facturado.
           // v10.84.68 — con una del MISMO importe no se pregunta por las otras (la base la detecta y ofrece «Sí, ligar»)
-          {const otros=anticiposQuePreguntar((await candidatasParaLigar(preInvoiceModal.id))||[],invoiceType);
+          {const otros=anticiposQuePreguntar(leidas||[],invoiceType);
            // v10.84.89 — con el camino directo a «Facturar por partes» (antes de Salidas ya se puede)
            if(otros.length&&!(await preguntarPorAnticipos(otros, false, ()=>{const id=preInvoiceModal.id;setPreInvoiceModal(null);handleAction(id,"split_invoice")}))) return;}
           const appliedBillTo=await applyBillTo(preInvoiceModal.id, billTo); // v10.72.87 — fija el tercero antes del folio anticipado
@@ -23379,7 +23440,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           showToast("❌ "+(errMsg||"No se pudo asignar folio anticipado"),"error");
           reload();
         }
-      }} onClose={()=>setPreInvoiceModal(null)}/>}
+      }} onClose={()=>setPreInvoiceModal(null)} cargarCandidatas={candidatasParaLigar} onFacturarPorPartes={()=>{const id=preInvoiceModal.id;setPreInvoiceModal(null);handleAction(id,"split_invoice")}}/>}
       {/* v10.31.0 — Modal de entrega simple para órdenes con folio anticipado ya asignado */}
       {deliverOnlyModal&&<DeliverOnlyModal order={deliverOnlyModal} onConfirm={async()=>{
         try{

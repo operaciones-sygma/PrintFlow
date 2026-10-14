@@ -73,6 +73,7 @@ function simulada() {
     filas: {},         // v10.84.93 — { tabla: [filas] | "falla" }: lo que contesta la base al leer esa tabla (por omisión, nada)
     rpcFalla: null,    // v10.84.94 — el nombre de una RPC que contesta 500 (la base que falla al escribir)
     retraso: {},       // v10.84.95 — { tabla: ms }: la base tarda en contestar esa tabla (la primera lectura lenta)
+    rpcRespuestas: {}, // v10.84.96 — { rpc: valor }: lo que contesta esa RPC (por omisión, null)
   };
 }
 const b64u = o => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -174,6 +175,7 @@ async function rutear(ctx, s) {
         return J(200, pag, { "content-range": pag.length ? desde + "-" + (desde + pag.length - 1) + "/" + filas.length : "*/" + filas.length });
       }
       if (s.rpcFalla && ruta === "/rest/v1/rpc/" + s.rpcFalla) return J(500, { code: "XX000", message: "falla de prueba en " + s.rpcFalla });
+      if (ruta.startsWith("/rest/v1/rpc/") && Object.prototype.hasOwnProperty.call(s.rpcRespuestas, ruta.slice(13))) return J(200, s.rpcRespuestas[ruta.slice(13)]);
       return J(200, ruta.startsWith("/rest/v1/rpc/") ? null : []);
     }
     if (ruta.startsWith("/functions/v1/")) return J(200, {});
@@ -1013,6 +1015,34 @@ await caso("ses-59-pendientes-leyendo-sin-cifras", async ({ p, s }) => {
   const t2 = await texto(p);
   ok("ses-59-pendientes-leyendo-sin-cifras", /Leyendo/.test(t1) && !/\d/.test(sub1) && grupos === 0 && leido && /1 te toca/.test(t2),
     `leyendo: ${/Leyendo/.test(t1) ? "lo dice" : "NO dice que está leyendo"}; el renglón de arriba: «${sub1}», ${grupos} grupos; ya leído: ${(t2.match(/\d+ te tocan?[^·]*(· [^·]+)?/) || ["(sin cifras)"])[0].slice(0, 60)}`);
+});
+// ════════════════════════ un error de lectura no es permiso (v10.84.96) ════════════════════════
+// La critique del flujo de facturas de Karla (13-oct, P1): en P-0544 la lectura de las facturas sin orden falló y la app siguió a
+// `assign_invoice` (F-90, el 50% ya pagado, se habría cobrado dos veces). Con la app entera: Karla abre el folio anticipado de una orden en
+// máquina con esa lectura fallando; lo que DEBE pasar: lo dice, no deja seguir, y no se intenta asignar. Vuelta 1: escrita antes.
+await caso("ses-60-folio-anticipado-sin-lectura-no-asigna", async ({ p, s }) => {
+  s.filas = { orders: [ordenK("P-0919", { stage: "in_production", client: "DISEÑO EN ESTRUCTURAS DE EXPOSICION", product_type: "Formatos", price: 12000, quantity: 2000,
+    current_machine: "off_pm74", machine_queue_position: 0 })] };
+  s.rpcFalla = "list_linkable_invoices_for_order";
+  s.rpcRespuestas = { get_folio_emitter_enabled: true };   // el sistema asigna el folio (si no, la ventana lo pide a mano y no se llega a confirmar)
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p);
+  await p.locator('button[title="Todas"]').first().click(); await p.waitForTimeout(800);
+  // (la ficha se abre con Enter, como dice su nombre: un clic al centro cae en «Recordar a Gerardo»)
+  await p.locator('[role="button"][aria-label^="Orden P-0919"]').first().focus(); await p.keyboard.press("Enter"); await p.waitForTimeout(800);
+  await p.getByRole("button", { name: /Más acciones/ }).first().click(); await p.waitForTimeout(300);
+  await p.getByRole("menuitem", { name: /Asignar folio anticipado/ }).first().click(); await p.waitForTimeout(1500);
+  const dlg = p.getByRole("dialog", { name: /Folio anticipado/ });
+  const dice = /No pude revisar si/.test((await dlg.innerText().catch(() => "")) || "");
+  await dlg.getByRole("button", { name: "Factura", exact: true }).click().catch(() => {}); await p.waitForTimeout(300);
+  await dlg.getByLabel("Cliente paga adelantado").check().catch(() => {});
+  await dlg.getByRole("button", { name: "No pagada", exact: true }).click().catch(() => {}); await p.waitForTimeout(300);
+  const seguir = dlg.getByRole("button", { name: "Continuar" });
+  const apagado = await seguir.isDisabled().catch(() => false);
+  if (!apagado) { await seguir.click().catch(() => {}); await p.waitForTimeout(400); await dlg.getByRole("button", { name: "Confirmar folio" }).click().catch(() => {}); await p.waitForTimeout(2000); }
+  const asignar = s.peticiones.filter(x => x.ruta === "/rest/v1/rpc/assign_invoice").length;
+  ok("ses-60-folio-anticipado-sin-lectura-no-asigna", dice && apagado && asignar === 0,
+    `con la lectura de las facturas sin orden fallando: ${dice ? "lo dice" : "NO lo dice"}; «Continuar» ${apagado ? "apagado" : "PRENDIDO"}; intentos de asignar: ${asignar}`);
 });
 // «Recordar», con las mismas reglas que el «⋯» de la ficha (accionesDeLaFicha: no en un borrador, que es de dos roles)
 await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {

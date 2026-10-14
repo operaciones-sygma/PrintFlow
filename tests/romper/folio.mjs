@@ -412,13 +412,14 @@ await caso("inv-44 de otro importe, la factura completa sigue", "anticipo=otro",
 });
 await caso("inv-45 no se pudieron leer", "anticipo=falla", async p => {
   await inv(p); await espera(p, 400);
-  const avisa = await ve(p, /No se pudo revisar si (ya )?hay una factura por adelantado/) && await p.getByRole("button", { name: "Reintentar" }).first().isVisible();
+  const avisa = await ve(p, /No se pudo revisar si (ya )?hay una factura por adelantado|No pude revisar si .* tiene facturas hechas sin orden/) && await p.getByRole("button", { name: "Reintentar" }).first().isVisible();
   await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
-  const sinEfectivo = !(await continuar(p).isDisabled());
-  await p.getByRole("button", { name: "Pagada", exact: true }).click(); await espera(p, 200);
-  await p.getByRole("radio", { name: "Efectivo" }).first().click(); await p.getByLabel("Monto del pago 1").fill("66004"); await espera(p, 200);
-  const conEfectivo = await continuar(p).isDisabled() && await ve(p, /efectivo/i);
-  ok("inv-45 si no se pudieron leer: lo dice con «Reintentar»; sin efectivo deja seguir, con efectivo no (y dice por qué)", avisa && sinEfectivo && conEfectivo, `avisa=${avisa} · sin efectivo sigue=${sinEfectivo} · con efectivo frena=${conEfectivo}`);
+  // (v10.84.96 — antes afirmaba «sin efectivo deja seguir»: la base sólo frena una del MISMO importe, y un anticipo o una parte de otro
+  //  importe se cobraba dos veces. Ahora no deja seguir, con o sin efectivo, hasta leer o hasta que Karla marque que revisó)
+  const sinEfectivo = await continuar(p).isDisabled() && await ve(p, /Sin revisar las facturas hechas sin orden no se emite/);
+  await p.getByLabel(/Ya revisé en CobranzaFlow/).check(); await espera(p, 200);
+  const conCasilla = !(await continuar(p).isDisabled());
+  ok("inv-45 si no se pudieron leer: lo dice con «Reintentar» y no deja seguir (con o sin efectivo) hasta que Karla marca que revisó en CobranzaFlow", avisa && sinEfectivo && conCasilla, `avisa=${avisa} · sin lectura frena=${sinEfectivo} · con la casilla sigue=${conCasilla}`);
 });
 await caso("inv-46 el error de la base, dentro", "falla=1", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagada(p); await continuar(p).click(); await espera(p, 700);
@@ -602,16 +603,17 @@ await caso("inv-70 la lectura tarda más que el tope", "anticipo=lenta", async p
   // (tercera revisión: espera a lo que mide, no segundos fijos. Medía en la ventana entre los 8 s del tope y los 9.5 s de la
   //  respuesta tardía, y el escudo contra el doble clic retrasó sus clics ~0.4 s: medía tarde, ya con F-9140 en pantalla)
   // (v10.84.72: al tope dice que TARDA —no «falló la red»—; lo que mide sigue igual: sin efectivo se puede seguir)
-  const tope = await p.getByText(/está tardando|No se pudo revisar si (ya )?hay una factura por adelantado/).first().waitFor({ timeout: 9000 }).then(() => true, () => false)
-    && !(await continuar(p).isDisabled());
+  // (v10.84.96 — al tope, sin la lectura, «Continuar» sigue apagado: antes afirmaba que sin efectivo se podía seguir)
+  const tope = await p.getByText(/está tardando|No pude revisar si/).first().waitFor({ timeout: 9000 }).then(() => true, () => false)
+    && await continuar(p).isDisabled();
   const tarde = await p.getByText(/F-9140/).first().waitFor({ timeout: 4000 }).then(() => true, () => false);
-  ok("inv-70 mientras revisa, «Continuar» espera y lo dice; a los 8 s lo da por no leído (sin efectivo sigue); si llega tarde, lo muestra", revisando && apagado && tope && tarde, `revisando=${revisando} · apagado=${apagado} · tope=${tope} · tarde=${tarde}`);
+  ok("inv-70 mientras revisa, «Continuar» espera y lo dice; a los 8 s, sin la lectura, sigue apagado; si llega tarde, lo muestra", revisando && apagado && tope && tarde, `revisando=${revisando} · apagado=${apagado} · tope=${tope} · tarde=${tarde}`);
 });
 await caso("inv-71 «Reintentar» la lectura", "anticipo=falla1", async p => {
   await inv(p); await espera(p, 400);
-  const avisa = await ve(p, /No se pudo revisar/);
+  const avisa = await ve(p, /No (se pudo|pude) revisar/);
   await p.getByRole("button", { name: "Reintentar" }).first().click(); await espera(p, 600);
-  ok("inv-71 «Reintentar» vuelve a leer y, si contesta, dice lo que encontró (F-9140)", avisa && await ve(p, /F-9140/) && !(await ve(p, /No se pudo revisar/)));
+  ok("inv-71 «Reintentar» vuelve a leer y, si contesta, dice lo que encontró (F-9140)", avisa && await ve(p, /F-9140/) && !(await ve(p, /No (se pudo|pude) revisar/)));
 });
 await caso("inv-72 el foco al regresar con «Atrás»", "", async p => {
   await inv(p); await tipo(p, "Factura").click(); await espera(p); await pagoNo(p).click(); await espera(p);
@@ -1054,6 +1056,57 @@ await caso("pre-13 Esc en el mismo instante del clic en «Confirmar folio»", ""
 await caso("pre-14 dos clics en el mismo instante en «Confirmar folio»", "", async p => {
   await preHastaConfirmar(p); await enElMismoInstante(p.getByRole("button", { name: "Confirmar folio" }), "dos"); await espera(p, 600);
   ok("pre-14 folio anticipado: dos clics en el mismo instante: una sola vez", (await cuenta(p, "pre:confirm")) === 1, "veces " + await cuenta(p, "pre:confirm"));
+});
+// ── v10.84.96 — el folio anticipado lee al abrir las facturas hechas sin orden (la critique del 13-oct, P1: P-0544 y F-90; con la lectura
+//   caída se asignaba por el total). Vuelta 1: escritas antes del cambio ──
+const llenarPre = async p => { await p.getByRole("button", { name: "Factura", exact: true }).click(); await espera(p);
+  await p.getByLabel("Cliente paga adelantado").check(); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await espera(p, 200); };
+await caso("pre-30 el anticipo de otro importe, al abrir, con su camino", "anticipo=otro", async p => {
+  await pre(p); await espera(p, 400);
+  const dice = await ve(p, /F-9140/) && await ve(p, /hecha(s)? sin orden/);
+  const b = p.getByRole("button", { name: /Facturar por partes y ligar F-9140/ });
+  const hay = await b.count();
+  if (hay) { await b.click(); await espera(p, 400); }
+  ok("pre-30 folio anticipado: al abrir dice que el cliente ya tiene F-9140 sin orden y ofrece «Facturar por partes y ligar F-9140»", dice && hay === 1 && (await cuenta(p, "pre:partes")) === 1, `dice=${dice} · botón=${hay} · partes=${await cuenta(p, "pre:partes")}`);
+});
+await caso("pre-31 si no se pudieron leer, no se asigna (salvo que Karla revise)", "anticipo=falla", async p => {
+  await pre(p); await espera(p, 400);
+  const avisa = await ve(p, /No pude revisar si/) && await p.getByRole("button", { name: "Reintentar" }).first().isVisible();
+  await llenarPre(p);
+  const frena = await continuar(p).isDisabled() && await ve(p, /Sin revisar las facturas hechas sin orden no se asigna/);
+  await p.getByLabel(/Ya revisé en CobranzaFlow/).check(); await espera(p, 200);
+  const sigue = !(await continuar(p).isDisabled());
+  if (sigue) { await continuar(p).click(); await espera(p); await p.getByRole("button", { name: "Confirmar folio" }).click(); await espera(p, 600); }
+  const conf = (await log(p)).split("\n").find(l => l.startsWith("pre:confirm")) || "";
+  ok("pre-31 folio anticipado: si no se pudieron leer lo dice con «Reintentar» y no deja seguir; con «Ya revisé en CobranzaFlow» sí, y la app lo sabe", avisa && frena && sigue && /,true\]$/.test(conf), `avisa=${avisa} · frena=${frena} · sigue=${sigue} · «${conf.slice(-60)}»`);
+});
+await caso("pre-32 «Reintentar» la lectura", "anticipo=falla1", async p => {
+  await pre(p); await espera(p, 400);
+  const avisa = await ve(p, /No pude revisar si/);
+  await p.getByRole("button", { name: "Reintentar" }).first().click(); await espera(p, 600);
+  await llenarPre(p);
+  ok("pre-32 folio anticipado: «Reintentar» vuelve a leer, dice lo que encontró (F-9140) y ya deja seguir", avisa && await ve(p, /F-9140/) && !(await ve(p, /No pude revisar si/)) && !(await continuar(p).isDisabled()));
+});
+await caso("pre-33 la lectura tarda más que el tope", "anticipo=lenta", async p => {
+  await pre(p); await espera(p, 500); await llenarPre(p);
+  const revisando = await ve(p, /Revisando si .* tiene facturas hechas sin orden/) && await continuar(p).isDisabled();
+  const tope = await p.getByText(/está tardando/).first().waitFor({ timeout: 9000 }).then(() => true, () => false) && await continuar(p).isDisabled();
+  const llega = await p.getByText(/F-9140/).first().waitFor({ timeout: 4000 }).then(() => true, () => false);
+  ok("pre-33 folio anticipado: mientras revisa no deja seguir y lo dice; a los 8 s dice que tarda (sigue apagado); si llega, la muestra", revisando && tope && llega, `revisando=${revisando} · tope=${tope} · llega=${llega}`);
+});
+await caso("pre-34 la del mismo importe se dice al abrir", "anticipo=mismo", async p => {
+  await pre(p); await espera(p, 400);
+  ok("pre-34 folio anticipado: la factura sin orden del mismo importe se dice al abrir (al confirmar se ofrece ligarla)", await ve(p, /es justo del importe de este trabajo/));
+});
+// vuelta 3 (por donde no se diseñó): marca la casilla y luego «Reintentar» sí lee: la casilla se suelta y la app recibe lo leído
+await caso("pre-35 la casilla y luego la lectura buena", "anticipo=falla1", async p => {
+  await pre(p); await espera(p, 400); await llenarPre(p);
+  await p.getByLabel(/Ya revisé en CobranzaFlow/).check(); await espera(p, 200);
+  await p.getByRole("button", { name: "Reintentar" }).first().click(); await espera(p, 600);
+  const sinCasilla = (await p.getByLabel(/Ya revisé en CobranzaFlow/).count()) === 0, f9140 = await ve(p, /F-9140/);
+  await continuar(p).click(); await espera(p); await p.getByRole("button", { name: "Confirmar folio" }).click(); await espera(p, 600);
+  const conf = (await log(p)).split("\n").find(l => l.startsWith("pre:confirm")) || "";
+  ok("pre-35 folio anticipado: con la casilla marcada, si «Reintentar» sí lee, la casilla se va, se ve F-9140 y la app recibe lo leído (no la casilla)", sinCasilla && f9140 && /F-9140/.test(conf) && /,false\]$/.test(conf), `casilla fuera=${sinCasilla} · F-9140=${f9140} · «${conf.slice(-80)}»`);
 });
 await caso("ent-01 «Confirmar Entrega»: Esc en el mismo instante no cierra mientras entrega", "", async p => {
   await p.click("#abrir-ent"); await p.getByRole("dialog").first().waitFor(); await espera(p, 300);

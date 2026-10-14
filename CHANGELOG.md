@@ -12,6 +12,48 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.96 — Un error de lectura no es permiso: sin revisar las facturas sin orden, no se emite — 13-oct-2026
+
+**Qué pasaba** (la pasada 1 de la critique del flujo de facturas de Karla, 13-oct, revisor independiente, **21/40**; snapshot
+`.impeccable/critique/2026-10-14T03-21-10Z__src-app-jsx-flujo-de-facturas-de-karla.md`; informe en `.banco-revisor-orden/revisor-facturas/`).
+Su P1 más grave, medido en producción: en el **folio anticipado** de P-0544 la lectura de las facturas que el cliente ya tiene hechas sin
+orden contestó 403 y la app siguió a `assign_invoice`, sin preguntar ni avisar (`candidatasParaLigar` daba `null` al fallar y quien la
+llamaba lo volvía lista vacía). Con un tropiezo de red, Karla emitía $13,920.00 por un trabajo cuyo 50% ya cobró F-90. Y se enteraba de
+F-90 hasta después de llenar la ventana. La misma falla, en otras cuatro puertas que emiten un CFDI:
+- «Asignar folio y entregar»: sin la lectura, «sin efectivo puedes seguir: la base no deja emitir otra por el mismo importe» (y decía
+  «falló la red» aunque fuera un permiso). Pero la base sólo frena una del MISMO importe: un anticipo o una parte de otro importe se
+  cobraba dos veces (P-0631 con F-140, 6,000 de sus 46,000 piezas).
+- «Asignar folio» de la OC: lo decía y dejaba asignar.
+- El plan matriz: sin la lectura frenaba ligar, pero dejaba crear facturas NUEVAS.
+- «Facturar siguiente parte», modo ligar: si la lectura fallaba decía «no tiene facturas ni remisiones sin orden».
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió):
+- El folio anticipado lee al abrir las facturas sin orden del cliente (como «Asignar folio y entregar» desde v10.84.70): si hay una de
+  otro importe, lo dice arriba («Si es el anticipo de este trabajo, no asignes el folio por el total») con **«Facturar por partes y ligar
+  F-…»**; la del mismo importe también se dice (al confirmar se ofrece ligarla). La app ya no vuelve a leer al confirmar: usa lo que leyó
+  la ventana, y si no hay lectura no asigna (y la ventana enseña el porqué; antes la excepción se perdía).
+- **Sin la lectura no se emite** en las cinco puertas: el aviso `SinRevisionSinOrden` (una vez) dice qué no se pudo revisar y por qué
+  importa, con «Reintentar» y la casilla **«Ya revisé en CobranzaFlow: no hay anticipo ni parte de este trabajo»**: el permiso lo da la
+  persona, no el error. El botón dice por qué está apagado. En «Facturar siguiente parte», «No pude leer las facturas hechas sin orden
+  (no es que no tenga) · Reintentar».
+
+**Cómo se probó** (tres vueltas): **vuelta 1**, escritas antes del cambio y corridas contra v10.84.95: fallaban 11. En `folio`: pre-30
+a pre-34 (el folio anticipado no leía al abrir: ni F-9140 con su camino a «Facturar por partes», ni el aviso de la del mismo importe, ni
+«no pude revisar» con la lectura caída o lenta), inv-45 e inv-70 (sin la lectura dejaban seguir); en `oc`, oc-119 (la OC se dejaba
+foliar sin la lectura); en `plan`, pl-39 (se creaban facturas nuevas sin la lectura); en `partes`, sig-36 («no tiene facturas sin
+orden» cuando la lectura fallaba); y con la app entera (`sesion`, que ahora puede contestar una RPC a gusto: `s.rpcRespuestas`), ses-60:
+con la lectura de las facturas sin orden fallando, el folio anticipado no lo decía, «Continuar» prendido y **un intento de
+`assign_invoice`**: el P1 de la critique, reproducido. **Vuelta 2**, con el cambio: los bancos de folio y de OC no traían el componente
+nuevo (arman a mano su lista de piezas de `App.jsx`; ahora lo traen si existe); inv-45, inv-71 y oc-114 buscaban el texto viejo del
+aviso (ahora aceptan las dos redacciones); inv-48 cayó por `ERR_NO_BUFFER_SPACE` (Windows sin puertos; sola pasa). Ninguna falla de la
+app. **Vuelta 3**, por donde no se diseñó: pre-35 (la casilla marcada y luego una lectura buena: la casilla se va y la app recibe lo
+leído), pl-40 (la casilla deja crear nuevas, no ligar) y oc-120 («Dividir» también frena): pasan. Completas: `folio` 160, `oc` 120,
+`plan` 40, `partes` 72, `sesion` 60. **Cambiaron a propósito (2):** inv-45 e inv-70 afirmaban que sin la lectura y sin efectivo se
+podía seguir. **Sin probar:** contra producción con la lectura caída de verdad (la cuenta de pruebas recibe 403 en esas lecturas: es
+justo el caso, y la revisión en producción lo verá).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.95 — «Mis Pendientes» dice qué te toca: «Te toca», «Espera a otro» y el vendedor ve dónde van las suyas — 13-oct-2026
 
 **Qué pasaba** (el P1 de fondo de la critique de «Mis Pendientes», 17/40, y la lista del vendedor; Marcelo los aprobó el 13-oct): la lista

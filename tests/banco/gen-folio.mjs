@@ -65,7 +65,10 @@ function BillToSection({ onChange }) { return <div style={{ padding: 8, fontSize
   <button id="tercero-listo" onClick={() => onChange({ client_id: "t1", name: "TERCERO SA", rfc: "TSA010101AAA" })}>tercero listo</button></div>; }
 const StageLbl = ({ stage }) => <b>{stage}</b>;`,
   fnBlock("ConfirmModal"), fnBlock("FolioAutoNote"), fnBlock("SaldoFavorAmarreBanner"),
-  fnBlock("MultiPaymentPicker"), fnBlock("InvoiceModal"), fnBlock("PreInvoiceModal"),
+  fnBlock("MultiPaymentPicker"),
+  // v10.84.96 — el aviso de «no pude revisar las facturas sin orden» (si el App.jsx lo trae)
+  ...(L.some(l => l.startsWith("function SinRevisionSinOrden(")) ? [fnBlock("SinRevisionSinOrden")] : []),
+  fnBlock("InvoiceModal"), fnBlock("PreInvoiceModal"),
   // v10.84.90 — «Confirmar entrega» y «Capturar precio» (el mismo «ocupado desde el clic» que asignar el folio)
   fnBlock("DeliverOnlyModal"), fnBlock("PriceCaptureModal"),
   `const ORDER = { id: "o1", production_number: "P-0600", client: "PORTLAND STUDIO", client_id: "c1", product_type: INCOMPLETO ? "" : "Etiquetas",
@@ -89,7 +92,8 @@ function Banco() {
     <pre id="log">{log.join("\\n")}</pre>
     {m === "inv" && <InvoiceModal order={ORDER} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }} />}
-    {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }} />}
+    {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
+      cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }} />}
     {m === "ent" && <DeliverOnlyModal order={{ ...ORDER, invoice_folio: "F-9001", invoice_type: "factura" }} onConfirm={async () => { L("ent:confirm"); await new Promise(r => setTimeout(r, 150)); }}
       onClose={() => { L("ent:cerrado"); setM(null); }} />}
     {m === "precio" && <PriceCaptureModal order={ORDER} onCapture={async v => { L("precio:captura " + v); await new Promise(r => setTimeout(r, 150)); }}

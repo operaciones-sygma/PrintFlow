@@ -112,6 +112,25 @@ await caso("pl-09 la lectura falla", "ligables=falla", async p => {
   const t2 = (await encabezado(p, 0).textContent()) || "";
   ok("pl-09 si no se pudieron leer las facturas sin orden lo dice, no deja, y «Reintentar» las lee", dice && bloquea && /3,066\.78/.test(t2), `antes «${t1.replace(/\s+/g, " ").slice(0, 120)}» · después «${t2.replace(/\s+/g, " ").slice(0, 120)}»`);
 });
+// v10.84.96 — un error de lectura no es permiso: sin las facturas sin orden, tampoco se crean facturas NUEVAS (antes sólo frenaba ligar).
+//   Vuelta 1
+await caso("pl-39 sin la lectura no se crean facturas nuevas", "ligables=falla", async p => {
+  await abrir(p); await piezas(p, 0, F143); await piezas(p, 1, F155); await espera(p, 300);
+  const frena = await enviar(p).isDisabled() && /no pude revisar las facturas sin orden/i.test(await p.evaluate(() => document.body.innerText));
+  const casilla = p.getByLabel(/Ya revisé en CobranzaFlow/);
+  const hay = await casilla.count();
+  if (hay) { await casilla.check(); await espera(p, 300); }
+  const sigue = !(await enviar(p).isDisabled());
+  ok("pl-39 si no se pudieron leer las facturas sin orden, tampoco deja crear facturas nuevas (dice por qué); con «Ya revisé en CobranzaFlow» sí", frena && hay === 1 && sigue, `frena=${frena} · casilla=${hay} · sigue=${sigue}`);
+});
+// vuelta 3: la casilla deja crear NUEVAS, pero no ligar: para ligar hay que saber que la factura existe y de cuánto es
+await caso("pl-40 la casilla no deja ligar sin la lectura", "ligables=falla", async p => {
+  await abrir(p); await ligar(p, 0, "F-143"); await piezas(p, 0, F143); await piezas(p, 1, F155); await espera(p, 300);
+  const casilla = p.getByLabel(/Ya revisé en CobranzaFlow/);
+  if (await casilla.count()) { await casilla.check(); await espera(p, 300); }
+  const frena = await enviar(p).isDisabled();
+  ok("pl-40 sin la lectura, «Ya revisé en CobranzaFlow» no deja LIGAR (sólo crear nuevas): ligar sigue frenado", frena, `ligar ${frena ? "frenado" : "PERMITIDO sin saber de la factura"}`);
+});
 await caso("pl-10 la lectura tarda", "ligables=lento", async p => {
   await p.click("#abrir-plan"); await espera(p, 300); await ligar(p, 0, "F-143"); await piezas(p, 0, F143);
   const t = (await encabezado(p, 0).textContent()) || "";
