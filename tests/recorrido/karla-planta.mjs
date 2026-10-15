@@ -18,7 +18,9 @@
 //     (quien la lleva) y a Dirección les llega aviso (a Karla misma y a Gerardo no), y sale de «En la planta»;
 //  H. (v10.84.116) si le quitan el costo del proveedor con la pregunta abierta, no se recibe y se dice qué falta;
 //  I. (v10.84.116) si la base rechaza recibirla, se dice en palabras («no se recibió de maquila») y sigue en la planta;
-//  J. (v10.84.116) la maquila que lleva un vendedor con usuario (Genaro): la pregunta y el aviso son para él, no para Lupita.
+//  J. (v10.84.116) la maquila que lleva un vendedor con usuario (Genaro): la pregunta y el aviso son para él, no para Lupita;
+//  K. (v10.84.117) la que Lupita no marcó como enviada también se recibe: la pregunta lo dice, el cambio va de «Maquila por enviar» a
+//     «Recibida de maquila» con el candado de etapa, y a Lupita le llega el aviso.
 // Uso:  npm run build && node tests/recorrido/karla-planta.mjs            (sirve dist/ en 127.0.0.1:4278)
 //       node tests/recorrido/karla-planta.mjs https://produccion.sygma.mx (la app publicada)
 //       SOLO=AB corre sólo esos escenarios. Sale con 1 si algo sale MAL.
@@ -75,7 +77,7 @@ async function entrar(estado = {}) {
     if (m === "GET" && tabla === "orders") {
       const resp = await route.fetch(); let j = await resp.json().catch(() => null);
       if (Array.isArray(j)) {
-        if (!ordenes && j.length) { ordenes = fixtures(j.find(o => o.stage === "in_production") || j[0]); if (estado.agente4) ordenes.find(o => o.id === "PRUEBA-KP-4").agent = estado.agente4; }
+        if (!ordenes && j.length) { ordenes = fixtures(j.find(o => o.stage === "in_production") || j[0]); if (estado.agente4) ordenes.find(o => o.id === "PRUEBA-KP-4").agent = estado.agente4; if (estado.etapa4) ordenes.find(o => o.id === "PRUEBA-KP-4").stage = estado.etapa4; }
         const id = (q.get("id") || "").replace(/^eq\./, "");
         if (ordenes && /^PRUEBA-KP/.test(id)) j = ordenes.filter(o => o.id === id);
         else if (ordenes && (q.get("offset") || "0") === "0" && /created_at/.test(q.get("order") || "")) j = [...ordenes, ...j];
@@ -322,6 +324,21 @@ try {
       const aGenaro = av.filter(x => x.target_role === "genaro" && /Karla recibió P-9904/.test(x.message || "")), aLupita = av.filter(x => x.target_role === "secretaria");
       ok("J2 a Genaro le llega el aviso, a Lupita no", aGenaro.length === 1 && !aLupita.length, `a Genaro: ${aGenaro.length}; a Lupita: ${aLupita.length} · ${av.map(x => x.target_role + " «" + (x.message || "").slice(0, 60) + "»").join(" | ")}`);
     } catch (e) { ok("J (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // ── K (v10.84.117): la que Lupita no marcó como enviada también se recibe ──
+  if (corre("K")) { const { ctx, p, escritas } = await entrar({ etapa4: "maq_created" });
+    try {
+      if (!(await aLaPlanta(p))) throw new Error("no se ve la OC de prueba en «En la planta»");
+      await p.locator('[data-orden="PRUEBA-KP-4"]').getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 5000 }); await p.waitForTimeout(400);
+      const d = await p.evaluate(() => { const x = document.querySelector('[role="dialog"]'); return x ? x.innerText.replace(/\s+/g, " ") : ""; });
+      ok("K1 la pregunta dice que Lupita no la marcó como enviada", /Recibir P-9904 de maquila/.test(d) && /no la marcó como enviada/.test(d), d ? "«" + d.slice(0, 240) + "»" : "NO PREGUNTA");
+      await p.getByRole("button", { name: /Sí, ya llegó/ }).click();
+      await esperaAviso(p, /recibida de maquila/);
+      const p4 = escritas.find(e => e.m === "PATCH" && e.a === "orders" && e.q.id === "eq.PRUEBA-KP-4");
+      const aLupita = escritas.filter(e => e.a === "notifications").map(e => e.cuerpo).filter(x => x.target_role === "secretaria" && /Karla recibió P-9904/.test(x.message || ""));
+      ok("K2 de «Maquila por enviar» a «Recibida de maquila», con el candado de etapa, y Lupita lo sabe", !!p4 && p4.q.stage === "eq.maq_created" && p4.cuerpo?.stage === "maq_received" && aLupita.length === 1 && /sin marcar como enviada/.test(aLupita[0].message || ""),
+        (p4 ? p4.q.stage + " → " + JSON.stringify(p4.cuerpo) : "no cambió nada") + " · a Lupita: " + (aLupita.map(x => "«" + x.message.slice(0, 100) + "»").join(" ") || "nada"));
+      await p.screenshot({ path: path.join(OUT, "K-sin-enviar.png") });
+    } catch (e) { ok("K (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
 } finally {
   await nav.close();
   if (servidor) await new Promise(r => servidor.httpServer.close(r));

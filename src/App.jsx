@@ -4697,7 +4697,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   const mas=[
     // v10.84.67 — Karla: pasar a Salidas lo que ya está listo y Gerardo no ha pasado (App pregunta con lo que pasa)
     // v10.84.116 — y recibir la maquila completa que ya llegó (si quien la lleva no la ha recibido: a él o a ella le llega aviso)
-    role==="karla"&&sePuedeJalar(o)&&recibeDeMaquila(o)&&{k:"jalar_a_salidas",icono:<DownloadSimpleIcon size={14} weight="bold"/>,color:tintaAA(C.maqin,5),t:"Ya llegó de la maquila: recibirla",d:(()=>{const d=dondeVa(o),r=orderResponsible(o)?.name||"Lupita";return "Si "+r+" no la ha recibido. Sigue "+d.lugar.charAt(0).toLowerCase()+d.lugar.slice(1)+(d.detalle?" ("+d.detalle+")":"")+"; queda en «Por foliar» y a "+r+" le llega aviso."})()},
+    role==="karla"&&sePuedeJalar(o)&&recibeDeMaquila(o)&&{k:"jalar_a_salidas",icono:<DownloadSimpleIcon size={14} weight="bold"/>,color:tintaAA(C.maqin,5),t:"Ya llegó de la maquila: recibirla",d:(()=>{const d=dondeVa(o),r=orderResponsible(o)?.name||"Lupita";return (o.stage==="maq_created"?r+" no la marcó como enviada"+(d.detalle?" ("+d.detalle+")":"")+". Si ya llegó del proveedor, recíbela":"Si "+r+" no la ha recibido. Sigue "+d.lugar.charAt(0).toLowerCase()+d.lugar.slice(1)+(d.detalle?" ("+d.detalle+")":""))+"; queda en «Por foliar» y a "+r+" le llega aviso."})()},   // v10.84.117: la que no se marcó como enviada
     role==="karla"&&sePuedeJalar(o)&&!recibeDeMaquila(o)&&{k:"jalar_a_salidas",icono:<ExportIcon size={14} weight="bold"/>,color:tintaAA(C.sal,5),t:"Ya está lista: pasar a Salidas",d:(()=>{const d=dondeVa(o);return "Si Gerardo no la ha pasado. Sigue "+d.lugar.replace(/^En /,"en ")+(d.detalle?" ("+d.detalle+")":"")+"; a él le llega aviso."})()},
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
     canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
@@ -4989,7 +4989,9 @@ const ETAPAS_JALABLES=["in_production","packaging"];
 //   quien la lleva le llega aviso. Sin enviar todavía, no (no ha salido); sin su precio al cliente o su costo, tampoco: doAdv no recibe una
 //   maquila sin los dos, y aquí se dice cuál falta. La maquila de una orden de la planta (maquila_out/maquila_in) sigue con Gerardo. La
 //   base no cambia: la etapa la cambia cualquiera que escribe (orders_immutability_guard sólo frena lo entregado o cancelado).
-const ETAPAS_JALABLES_MAQUILA=["maq_sent","maq_in_progress"];
+// v10.84.117 — y la que Lupita no marcó como enviada (maq_created; Marcelo, 15-oct: «punto 4, sí por favor»): si ya llegó del proveedor, ya
+//   salió; la pregunta y «Más» dicen que no se marcó como enviada, y el aviso a quien la lleva también.
+const ETAPAS_JALABLES_MAQUILA=["maq_created","maq_sent","maq_in_progress"];
 const recibeDeMaquila=o=>!!o&&o.order_type==="maquila"&&ETAPAS_JALABLES_MAQUILA.includes(o.stage);
 const faltaParaRecibir=o=>[!(Number(o?.maq_price)>0)&&"el precio al cliente",!(Number(o?.maq_cost)>0)&&"el costo del proveedor"].filter(Boolean);
 const destinoAlJalar=o=>recibeDeMaquila(o)?"maq_received":"salidas";
@@ -5050,7 +5052,8 @@ function textoJalar(lista,todas){
   if(lista.length===1){const o=lista[0],d=dondeVa(o);
     if(recibeDeMaquila(o))return {title:"¿Recibir "+nombreDeOrden(o)+" de maquila?",
       message:[[o.client,o.product_type||o.product].filter(Boolean).join(" · "),
-        "En el tablero sigue "+d.lugar.charAt(0).toLowerCase()+d.lugar.slice(1)+(d.detalle?" ("+d.detalle+")":"")+".",
+        o.stage==="maq_created"?"En el tablero sigue como «"+d.lugar+"»"+(d.detalle?" ("+d.detalle+")":"")+": "+(orderResponsible(o)?.name||"Lupita")+" no la marcó como enviada."   // v10.84.117
+          :"En el tablero sigue "+d.lugar.charAt(0).toLowerCase()+d.lugar.slice(1)+(d.detalle?" ("+d.detalle+")":"")+".",
         "Sólo si ya llegó del proveedor. "+quePasaAlJalar(o,todas,salen)+enEsperaTexto(o)+" "+avisan+"la recibiste tú."].filter(Boolean).join("\n"),
       confirmLabel:"Sí, ya llegó",cancelLabel:"No"};
     return {title:"¿Pasar "+nombreDeOrden(o)+" a Salidas?",
@@ -21675,7 +21678,7 @@ export default function PrintFlow() {
     // v10.84.116 — la recibió Karla («Recibir de maquila», opts.jalada): no se avisa a sí misma, Dirección sabe quién, y a quien la lleva
     //   (Lupita, o el vendedor con usuario: orderResponsible con la etapa de antes) le llega aviso, como a Gerardo cuando le pasan algo a Salidas
     if(ns==="maq_received"){if(user!=="admin")await db.addNotification("admin",id,"new_order","📥 Maquila recibida del proveedor"+(opts.jalada?" (la recibió "+(AUTHOR_NAME[user]||user)+")":"")+" — "+(o?.client||"")+" · "+(o?.product_type||""),null,user);if(user!=="karla")await db.addNotification("karla",id,"new_order","📄 Maquila lista para asignar folio — "+(o?.client||"")+" · "+(o?.product_type||"")+" · "+(o?.production_number||""),null,user);
-      if(opts.jalada){const r=orderResponsible(o),dest=r&&responsibleNotifyTarget(o,r.role),antes=dondeVa(o);if(dest&&dest!==user)await db.addNotification(dest,id,"new_order","📥 "+(AUTHOR_NAME[user]||user)+" recibió "+nombreDeOrden(o)+" de maquila (estaba "+antes.lugar.charAt(0).toLowerCase()+antes.lugar.slice(1)+(antes.detalle?", "+antes.detalle:"")+"): ya llegó del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user)}}
+      if(opts.jalada){const r=orderResponsible(o),dest=r&&responsibleNotifyTarget(o,r.role),antes=dondeVa(o);if(dest&&dest!==user)await db.addNotification(dest,id,"new_order","📥 "+(AUTHOR_NAME[user]||user)+" recibió "+nombreDeOrden(o)+" de maquila (estaba "+(o?.stage==="maq_created"?"sin marcar como enviada":antes.lugar.charAt(0).toLowerCase()+antes.lugar.slice(1))+(antes.detalle?", "+antes.detalle:"")+"): ya llegó del proveedor — "+(o?.client||"")+" · "+(o?.product_type||""),null,user)}}
     }catch(nErr){console.warn("[doAdv] notif warn (avance OK):",nErr?.message)}
     if(!opts.silencioso)showToast(nombreDeOrden(o)+" pasó a «"+(SM[ns]?.lt||"la siguiente etapa")+"»"+(o?.client?" · "+o.client:""));   // v10.84.60 — con la orden
     return {ok:true};

@@ -1274,6 +1274,22 @@ await caso("det-200-precio-en-el-limite", "caso=maquila&rol=karla", async p => {
   ok("det-200-precio-en-el-limite", r.join(" ") === "0:no -5:no 0.5:sí", "precio al cliente → «Ya llegó de la maquila»: " + r.join(" · "));
 });
 
+// v10.84.117 — también la que Lupita no marcó como enviada (Marcelo, 15-oct). Vuelta 1: contra v10.84.116.
+await caso("det-201-sin-marcar-como-enviada", "caso=maquila&rol=karla&etapa=maq_created", async p => {
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const con = await enMas(p, /Ya llegó de la maquila/);
+  const t = con ? (await itemRecibir(p).innerText()).replace(/\s+/g, " ") : "";
+  ok("det-201-sin-marcar-como-enviada", con && /no la marcó como enviada/.test(t) && /Lupita/.test(t), `la maquila sin marcar como enviada: ${con ? "«" + t + "»" : "«Ya llegó de la maquila» NO está"}`);
+});
+
+// (vuelta 3) la de un vendedor con usuario: «Genaro no la marcó como enviada», y el aviso para él
+await caso("det-202-sin-enviar-de-genaro", "caso=maquila&rol=karla&etapa=maq_created&agente=Genaro", async p => {
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const con = await enMas(p, /Ya llegó de la maquila/);
+  const t = con ? (await itemRecibir(p).innerText()).replace(/\s+/g, " ") : "";
+  ok("det-202-sin-enviar-de-genaro", con && /Genaro no la marcó como enviada/.test(t) && /a Genaro le llega aviso/.test(t) && !/Lupita/.test(t), `la de Genaro sin marcar como enviada: ${con ? "«" + t + "»" : "«Ya llegó de la maquila» NO está"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

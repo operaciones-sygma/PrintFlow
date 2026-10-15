@@ -333,9 +333,11 @@ await caso("pla-76-sin-costo-no-se-recibe-y-dice-que-falta", "caso=maquila", asy
   const d = (await dice(p, "P-0752")) || "";
   ok("pla-76-sin-costo-no-se-recibe-y-dice-que-falta", !hay && /Falta el costo del proveedor/.test(d), `P-0752 (sin costo): botón ${hay ? "SÍ" : "no"} · «${d.slice(0, 160)}»`);
 });
-await caso("pla-77-sin-enviar-ni-de-la-planta-no-se-reciben", "caso=maquila", async p => {
-  const [a, b] = await Promise.all([tieneRecibir(p, "P-0753"), tieneRecibir(p, "P-0727")]);
-  ok("pla-77-sin-enviar-ni-de-la-planta-no-se-reciben", !a && !b, `P-0753 (sin enviar): ${a ? "SÍ tiene" : "no"} · P-0727 (maquila de una orden de la planta): ${b ? "SÍ tiene" : "no"}`);
+await caso("pla-77-la-de-la-planta-no-se-recibe", "caso=maquila", async p => {
+  // (v10.84.117: P-0753, la que Lupita no marcó como enviada, ya se recibe por decisión de Marcelo, pla-88; aquí queda la maquila de una
+  //  orden de la planta, que sigue con Gerardo. Antes esta prueba se llamaba pla-77-sin-enviar-ni-de-la-planta-no-se-reciben)
+  const b = await tieneRecibir(p, "P-0727");
+  ok("pla-77-la-de-la-planta-no-se-recibe", !b, `P-0727 (maquila de una orden de la planta): ${b ? "SÍ tiene «Recibir de maquila»" : "no"}`);
 });
 // (por donde no se diseñó) una OC revuelta: una a Salidas y una maquila que se recibe, en una sola pregunta; avisa a Gerardo y a Genaro
 await caso("pla-78-oc-revuelta-pasa-y-recibe", "caso=maquila", async p => {
@@ -407,6 +409,30 @@ for (const [an, al] of [[1920, 1080], [1366, 768]])
       salidos: [...document.querySelectorAll("[data-orden]")].filter(f => f.getClientRects().length && f.scrollWidth > f.clientWidth + 1).map(f => f.getAttribute("data-orden")) }));
     ok("pla-86-maquila-a-" + an, !r.h && !r.partidos.length && !r.salidos.length, `${r.h ? "CON barra horizontal" : "sin barra horizontal"}${r.partidos.length ? "; partidos: " + r.partidos.join(", ") : ""}${r.salidos.length ? "; se salen: " + r.salidos.join(", ") : ""}`);
   }, { width: an, height: al });
+
+// ── v10.84.117 — también la que Lupita no marcó como enviada (Marcelo, 15-oct: «punto 4, sí por favor»): si ya llegó del proveedor, ya salió.
+//   Vuelta 1: contra v10.84.116.
+await caso("pla-88-sin-marcar-como-enviada-tambien-se-recibe", "caso=maquila", async p => {
+  const hay = await tieneRecibir(p, "P-0753"), visible = await fila(p, "P-0753").isVisible().catch(() => false), r = (await dice(p, "P-0753")) || "";
+  let t = "", estado = "";
+  try {
+    await fila(p, "P-0753").getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 3000 }); await espera(p, 400);
+    t = (await dialogo(p)) || "";
+    await p.getByRole("button", { name: /Sí, ya llegó/ }).click({ timeout: 3000 }); await espera(p, 800);
+    estado = await p.evaluate(() => (window.__ordenes().find(o => o.production_number === "P-0753") || {}).stage);
+  } catch (e) { t = t || "(" + e.message.split("\n")[0] + ")"; }
+  ok("pla-88-sin-marcar-como-enviada-tambien-se-recibe", hay && visible && /Maquila por enviar/.test(r) && /no la marcó como enviada/.test(t) && /TRODAT/.test(t) && /Lupita/.test(t) && estado === "maq_received",
+    `P-0753 (sin marcar como enviada): ${visible ? "a la vista" : "PLEGADA"}, botón ${hay ? "sí" : "NO"} · «${r.slice(0, 100)}» · pregunta «${t.slice(0, 220)}» · etapa ${estado || "sin cambiar"}`);
+});
+
+// (vuelta 3) sin proveedor capturado: la pregunta no dice «null» ni deja «()»
+await caso("pla-89-sin-enviar-y-sin-proveedor", "caso=maquila", async p => {
+  await p.evaluate(() => window.__cambiar("P-0753", { maq_provider: null })); await espera(p, 400);
+  let t = "";
+  try { await fila(p, "P-0753").getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 3000 }); await espera(p, 400); t = (await dialogo(p)) || ""; }
+  catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("pla-89-sin-enviar-y-sin-proveedor", /no la marcó como enviada/.test(t) && !/null|undefined|\(\)/.test(t), `pregunta «${t.slice(0, 220)}»`);
+});
 
 await browser.close();
 for (const r of res) console.log(r);

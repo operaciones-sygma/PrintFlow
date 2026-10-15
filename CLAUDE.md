@@ -40,9 +40,9 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
   máquina** (su «Pendientes» → «En la planta», la OC y el detalle; `jalar_a_salidas` en `ACTION_ROLES`, por `doAdv` con aviso a Gerardo).
-  Desde v10.84.116 también **recibe la maquila completa que ya llegó** (enviada o con el proveedor, con su precio al cliente y su costo;
-  `recibeDeMaquila`, a «Recibida de maquila», con aviso a Lupita o al vendedor que la lleva). Desde Listas, CTP o diseño, no; ni la maquila
-  sin enviar ni la de una orden de la planta (decisiones por defecto; Marcelo puede cambiarlas).
+  Desde v10.84.116 también **recibe la maquila completa que ya llegó** (enviada o con el proveedor, y desde v10.84.117 también la que no se
+  marcó como enviada; con su precio al cliente y su costo; `recibeDeMaquila`, a «Recibida de maquila», con aviso a Lupita o al vendedor que la
+  lleva). Desde Listas, CTP o diseño, no; ni la maquila de una orden de la planta (decisión por defecto; Marcelo puede cambiarla).
 
 ---
 

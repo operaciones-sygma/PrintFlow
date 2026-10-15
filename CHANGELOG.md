@@ -12,6 +12,25 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.117 — Karla recibe también la maquila que Lupita no marcó como enviada — 15-oct-2026
+
+**Qué pasaba.** v10.84.116 dejó fuera, como decisión por defecto, la maquila que sigue como «Maquila por enviar» (Lupita, o el vendedor que la
+lleva, no apretó «Enviar al proveedor»). Marcelo (15-oct): «punto 4, sí por favor»: si ya llegó del proveedor, ya salió, y Karla también la recibe.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambia): `ETAPAS_JALABLES_MAQUILA` incluye `maq_created`. La pregunta dice «En el tablero sigue
+como «Maquila por enviar» (TRODAT): Lupita no la marcó como enviada.»; «Más» del detalle, «Lupita no la marcó como enviada (TRODAT). Si ya llegó
+del proveedor, recíbela…»; el aviso a quien la lleva, «(estaba sin marcar como enviada, TRODAT)». Lo demás, como en v10.84.116: con su precio al
+cliente y su costo; la maquila de una orden de la planta sigue con Gerardo. Al subir no había ninguna en «Maquila por enviar» en producción.
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.116: fallaban pla-88, det-201 y K del recorrido (lo nuevo); pla-77 pedía lo
+contrario (que P-0753, sin marcar como enviada, NO se recibiera): cambió por la decisión y ahora se llama `pla-77-la-de-la-planta-no-se-recibe`
+(antes `pla-77-sin-enviar-ni-de-la-planta-no-se-reciben`). **Vuelta 2**: planta 54 de 54; detalle todas menos det-63, que no cargó su página por
+`ERR_NO_BUFFER_SPACE` (427 conexiones en espera tras el candado de v10.84.116; sola, 3 de 3); el recorrido 34 de 34 (A a K). **Vuelta 3**, por
+donde no se diseñó: sin proveedor capturado (pla-89: sin «null» ni «()») y la de Genaro (det-202: «Genaro no la marcó como enviada» y el aviso
+para él): 2 de 2 a la primera. Quedan planta 55 y detalle 211.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.116 — Karla recibe también la maquila completa que ya llegó — 15-oct-2026
 
 **Qué pasaba.** Marcelo (15-oct): «checar si Karla también puede jalar órdenes del proceso de maquila completa, si puede en producción interna

@@ -93,8 +93,9 @@ const NORMAL = [
   orden("P-0729", { stage: "delivered", delivered_at: hace(5) }),
   en("P-0730", "salidas", hace(4), { client: "LIC. ORLANDO CASAS" }),
 ];
-// v10.84.116 — caso=maquila: más maquilas completas. Dos que NO se reciben desde aquí (una con el proveedor sin su costo, una sin
-//   enviar) y la OC-0670, revuelta: una en Salidas, una en Empaque y una maquila con el proveedor que lleva Genaro (pasar O recibir)
+// v10.84.116 — caso=maquila: más maquilas completas. Una con el proveedor sin su costo (NO se recibe desde aquí), una sin marcar como
+//   enviada (desde v10.84.117 sí se recibe) y la OC-0670, revuelta: una en Salidas, una en Empaque y una maquila con el proveedor que lleva
+//   Genaro (pasar O recibir)
 const MAQUILA_EXTRA = [
   en("P-0752", "maq_in_progress", hace(20), { client: "GOBIERNO DEL ESTADO DE GUANAJUATO", product_type: "Lonas", order_type: "maquila", maq_provider: "TRODAT", maq_price: 4000, maq_cost: null }),
   en("P-0753", "maq_created", hace(5), { client: "COSQUIM", product_type: "Sellos", order_type: "maquila", maq_provider: "TRODAT", maq_price: 900, maq_cost: 600 }),
