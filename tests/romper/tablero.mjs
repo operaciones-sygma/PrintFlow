@@ -1218,5 +1218,20 @@ await caso("tab-141-lupita-no-cancela-con-saldo", "vista=fichas&rol=secretaria",
   ok("tab-141-lupita-no-cancela-con-saldo", n === 0, `Lupita, P-0589 pagada con saldo a favor: «Cancelar» ${n === 0 ? "no está" : n === -1 ? "(no encontré la ficha)" : "SÍ está (le movería el saldo: Dirección)"}`);
 });
 
+// v10.84.114 — «Facturar por partes» antes de Salidas, también en el «⋯» de la ficha (donde está «Asignar folio anticipado»). La fila de acciones de
+//   la ficha sólo sale a quien le toca la etapa (canAct): en Empaque, a Dirección; Karla la abre desde el detalle («En la planta» → su folio → «Más»).
+const enMasDeLaFicha = async (p, pn, re) => { const c = p.locator('[role="button"][aria-label^="Orden ' + pn + '"]').first();
+  const mas = c.locator('button[title="Más acciones"]'); if (!(await mas.count())) return false; await mas.first().click(); await espera(p, 300);
+  const t = await p.locator('[role="menu"]').first().innerText().catch(() => ""); await p.keyboard.press("Escape"); await espera(p, 200); return re.test(t); };
+await caso("tab-142-por-partes-en-la-ficha", "vista=fichas&rol=admin", async p => {
+  const hay = await enMasDeLaFicha(p, "P-0585", /Facturar por partes/);
+  ok("tab-142-por-partes-en-la-ficha", hay, `Dirección, P-0585 en Empaque: en el «⋯» de su ficha «Facturar por partes» ${hay ? "está" : "NO está"}`);
+});
+await caso("tab-143-por-partes-ficha-no-con-partes", "vista=fichas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar("P-0585", { has_splits: true, splits: [{ id: "s1", position: 1, doc_type: "factura", invoice_folio: "F-150", invoice_pre_assigned: true, qty_portion: 10, amount_portion: 100 }] })); await espera(p, 400);
+  const hay = await enMasDeLaFicha(p, "P-0585", /Facturar por partes/);
+  ok("tab-143-por-partes-ficha-no-con-partes", !hay, `Dirección, P-0585 que ya va por partes: «Facturar por partes» ${hay ? "SÍ está (lo que falta es «Facturar siguiente parte»)" : "no está"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);

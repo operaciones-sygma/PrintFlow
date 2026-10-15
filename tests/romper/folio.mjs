@@ -1454,6 +1454,26 @@ for (const [id, w, h] of [["inv-157", 1366, 768], ["inv-158", 1920, 1080], ["inv
   }, { width: w, height: h });
 }
 
+// v10.84.114 — «Facturar por partes» siempre a la vista en el folio anticipado (Marcelo, 15-oct, con P-0648 de GRUPO VISION: «no veo el facturar
+//   por partes»): antes sólo salía dentro del aviso de las facturas sin orden de otro importe. Vuelta 1: contra v10.84.113.
+await caso("pre-37 folio anticipado sin facturas sin orden: «Facturar por partes» a la vista", "", async p => {
+  await pre(p); await espera(p, 500);
+  const b = dlgPre(p).getByRole("button", { name: /^Facturar por partes$/ }), hay = await b.count();
+  if (hay) { await b.first().click(); await espera(p, 300); }
+  ok("pre-37 el folio anticipado de una orden sin facturas sin orden ofrece «Facturar por partes» (un anticipo y el resto después), y lleva ahí", hay === 1 && (await cuenta(p, "pre:partes")) === 1,
+    `botones ${hay} · fue a partes ${await cuenta(p, "pre:partes")}`);
+});
+await caso("pre-38 con un anticipo de otro importe, un solo «Facturar por partes»", "anticipo=otro", async p => {
+  await pre(p); await espera(p, 500);
+  const n = await dlgPre(p).getByRole("button", { name: /^Facturar por partes/ }).count();
+  ok("pre-38 con F-9140 de otro importe, «Facturar por partes» sale UNA vez (el del aviso, que liga F-9140), no dos", n === 1, n + " botones");
+});
+await caso("pre-39 una orden de OC sin facturas sin orden también puede ir por partes", "oc=1", async p => {
+  await pre(p); await espera(p, 500);
+  const n = await dlgPre(p).getByRole("button", { name: /^Facturar por partes$/ }).count();
+  ok("pre-39 una orden de OC-0960 sin facturas sin orden: «Facturar por partes» a la vista (partir UNA orden lo acepta la base; el plan de la OC es para repartir facturas entre órdenes)", n === 1, n + " botones");
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

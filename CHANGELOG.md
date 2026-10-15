@@ -12,6 +12,29 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.114 — «Facturar por partes» antes de Salidas, a la vista — 15-oct-2026
+
+**Qué pasaba.** Marcelo (15-oct): «vi con Karla y no vi ninguna opción para poder hacerlo… Facturar por partes, que funcione en cualquier etapa del
+flujo de producción, ¿se puede? ¿cómo empata con folio por anticipado?», y con la captura de P-0648 de GRUPO VISION: «no veo el facturar por
+partes». La base lo acepta desde v10.84.89 (cada parte va como folio anticipado y la orden se entrega en Salidas con «Marcar como Entregada»), pero
+antes de Salidas la puerta estaba escondida: sólo en la ventana del folio anticipado, y ahí sólo dentro del aviso de las facturas sin orden de otro
+importe (sin una, no salía nunca). En Salidas sí era su botón de siempre.
+
+**Cómo empata con el folio anticipado:** uno u otro por orden. El folio anticipado es UNA factura por todo; por partes son varias (un anticipo y el
+resto después, o por entregas), cada una con su folio; lo que falta queda «por facturar» y sale con «Facturar siguiente parte». Si ya tiene folio
+anticipado no se parte, y si ya va por partes no se le da folio anticipado. Una factura que el cliente ya tiene sin orden se liga como una parte
+(«Ya tiene factura: ligarla»). Una orden de una OC de varias puede partirse sola; repartir facturas entre las órdenes de la OC es su plan matriz.
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió): «Facturar por partes» en «Más» del detalle (`accionesDelDetalle.porPartes`: las condiciones del
+folio anticipado y las de App al abrirla: con número, precio y cantidad, fuera de un grupo de OC, no en stock; en Salidas no se repite), en el «⋯» de
+la ficha junto a «Asignar folio anticipado» (lo ve quien tiene esa fila: Dirección; Karla, desde el detalle o «En la planta» → su folio) y, en la
+ventana del folio anticipado, una liga fija: «¿Sólo una parte ahora y el resto después? Facturar por partes» (con facturas sin orden de otro
+importe, la del aviso, que liga).
+
+**Cómo se probó.** Vuelta 1, contra v10.84.113: fallaban det-189 y det-190 (en Empaque y en máquina, Karla no tenía «Facturar por partes» en «Más»), tab-142 (tampoco en el «⋯» de la ficha), pre-37 y pre-39 (en el folio anticipado, sin facturas sin orden, no salía); los guardias pasaban (det-191 a det-194: en Salidas no se repite, Lupita, con folio anticipado, sin precio; tab-143: la que ya va por partes; pre-36 y pre-38: con un anticipo de otro importe, sólo el del aviso). Vuelta 2: todo pasa. Vuelta 3, por donde no se diseñó: la maquila en proceso, por su precio al cliente (maq_price; det-195). Los casos nuevos y los vecinos (det-116, det-124, det-128, tab-119, pre-1 a pre-39) pasan; build y alcance.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.113 — Lupita cancela una orden en cualquier etapa (lo que no tiene nada facturado) y «Cancelaciones» cancela completo — 15-oct-2026
 
 **Qué pasaba.** Marcelo (15-oct): «Lupita no puede cancelar órdenes de producción, lo puedes arreglar… ¿es buena idea que ella tenga esa función o
@@ -46,7 +69,10 @@ arrancaba para cancelarse enseguida) y el rechazo sin saber su lugar en la fila 
 primera versión de la prueba devolvía 0 por un «?? 0»: supuesto de la prueba); y en el detalle, sin saber si va por partes o en un grupo de OC,
 no se le ofrece (det-187, det-188). `detalle`, `tablero`, `cancelar`, `cancelaciones` y `corregir`: 579 de 579; build, `hooks` y alcance.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~13:26; READY `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE` (commit `3168cb2`). Vuelta atrás: promover `dpl_w2NYecCBegzE5bdmt7GmYmmi5ZnD` (el código de
+v10.84.112) o `git revert 3168cb2`; la base no cambió. Candado 1749 de 1749 de a 2 tandas, sin ninguna a la segunda. Revisado en producción sin
+escribir (medir-113, la cuenta visor con el rol de Lupita): 4 de 4; P-0578 (en máquina) le ofrece «Cancelar orden» y su ventana se abre encima, y
+P-0623 (en el plan matriz de OC-0966) no. «Cancelaciones» no se prueba en producción (cancelaría): la cubre la tanda `cancelaciones`.
 
 ## v10.84.112 — Karla corrige el precio de una orden antes de facturarla («Corregir precio») — 15-oct-2026
 

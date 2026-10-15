@@ -1193,6 +1193,46 @@ await caso("det-188-lupita-en-grupo-de-oc", "caso=salidas&rol=secretaria&etapa=p
   ok("det-188-lupita-en-grupo-de-oc", !hay, `Lupita, una orden de un grupo de OC facturado: «Cancelar orden» ${hay ? "SÍ está (es de Dirección)" : "no está"}`);
 });
 
+// v10.84.114 — «Facturar por partes» antes de Salidas, a la vista (Marcelo, 15-oct: «vi con Karla y no vi ninguna opción para poder hacerlo… que
+//   funcione en cualquier etapa»). La base lo acepta desde v10.84.89 (cada parte va como folio anticipado; la orden se entrega en Salidas), pero
+//   antes de Salidas sólo se llegaba por «Asignar folio anticipado», y ahí sólo salía si el cliente ya tenía una factura hecha sin orden.
+const enMas = async (p, re) => { const hay = await abrirMas(p); return hay ? re.test(await p.getByRole("menu").innerText()) : false; };
+await caso("det-189-karla-por-partes-en-empaque", "caso=salidas&rol=karla&etapa=packaging", async p => {
+  const hay = await enMas(p, /Facturar por partes/);
+  let despacha = false, encima = false;
+  if (hay) { await p.getByRole("menuitem", { name: /Facturar por partes/ }).click(); await espera(p, 300); const l = await log(p); despacha = /accion:split_invoice/.test(l); encima = !/cerrado/.test(l) && (await cuantosDialogos(p)) === 2; }
+  ok("det-189-karla-por-partes-en-empaque", hay && despacha && encima, `Karla, una orden en Empaque: «Facturar por partes» ${hay ? "está" : "NO está"}${hay ? (despacha ? ", la pide a App" + (encima ? " y se abre encima del detalle" : " y el detalle SE CIERRA") : " pero no hace nada") : ""}`);
+});
+await caso("det-190-karla-por-partes-en-maquina", "caso=salidas&rol=karla&etapa=in_production", async p => {
+  const hay = await enMas(p, /Facturar por partes/);
+  ok("det-190-karla-por-partes-en-maquina", hay, `Karla, una orden en máquina: «Facturar por partes» ${hay ? "está" : "NO está"}`);
+});
+await caso("det-191-por-partes-en-salidas-no-se-repite", "caso=salidas&rol=karla", async p => {
+  const hay = await enMas(p, /Facturar por partes/);
+  ok("det-191-por-partes-en-salidas-no-se-repite", !hay, `en Salidas «Facturar por partes» es su botón de siempre: en «Más» ${hay ? "SE REPITE" : "no se repite"}`);
+});
+await caso("det-192-por-partes-no-para-lupita", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  const hay = await enMas(p, /Facturar por partes/);
+  ok("det-192-por-partes-no-para-lupita", !hay, `Lupita: «Facturar por partes» ${hay ? "SÍ está (es de Karla y Dirección; la base se lo rechaza)" : "no está"}`);
+});
+await caso("det-193-por-partes-no-con-folio-anticipado", "caso=salidas&rol=karla&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-181", invoice_type: "factura", invoice_pre_assigned: true })); await espera(p, 300);
+  const hay = await enMas(p, /Facturar por partes/);
+  ok("det-193-por-partes-no-con-folio-anticipado", !hay, `con folio anticipado: «Facturar por partes» ${hay ? "SÍ está (es uno u otro)" : "no está"}`);
+});
+await caso("det-194-por-partes-no-sin-precio", "caso=salidas&rol=karla&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ price: null })); await espera(p, 300);
+  const hay = await enMas(p, /Facturar por partes/);
+  ok("det-194-por-partes-no-sin-precio", !hay, `sin precio: «Facturar por partes» ${hay ? "SÍ está (App la rechaza: «Captura el precio antes»)" : "no está"}`);
+});
+// vuelta 3, por donde no se diseñó: la maquila lleva su precio al cliente en maq_price (price va vacío)
+await caso("det-195-por-partes-maquila", "caso=maquila&rol=karla", async p => {
+  const sin = await enMas(p, /Facturar por partes/); await p.keyboard.press("Escape"); await espera(p, 200);
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const con = await enMas(p, /Facturar por partes/);
+  ok("det-195-por-partes-maquila", !sin && con, `una maquila en proceso: sin precio al cliente «Facturar por partes» ${sin ? "SÍ está" : "no está"}; con $972 (maq_price) ${con ? "está" : "NO está"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

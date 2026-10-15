@@ -4586,7 +4586,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
 
   // 🆕 v10.9.0 — Lógica de botones fiscales
   const isFinal=o.stage.includes("delivered")||o.stage.includes("cancelled")||o.stage==="web_pending"||o.stage==="web_rejected";
-  const {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:canDeshacerCancelacion}=accionesDelDetalle(o,role);   // v10.84.52, la misma definición que la ficha
+  const {folioAnticipado:canPreInvoice,porPartes:canPorPartes,devolverSaldo:canDevolverSaldo,deshacerCancelacion:canDeshacerCancelacion}=accionesDelDetalle(o,role);   // v10.84.52, la misma definición que la ficha
   const canCancelWithNC=role==="admin"&&o.invoice_folio&&!o.stage.includes("cancelled");
   // v10.84.53 — actuar no cierra el detalle (la quinta critique: «abrir una acción destruye el detalle»). Lo que abre su propia
   //   ventana la abre ENCIMA (todas van en zIndex 999-1000 y cierran con Esc por la pila; el detalle es 998), y al cerrarla
@@ -4702,6 +4702,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     fic.duplicar&&{k:"duplicate",icono:<CopySimpleIcon size={14} weight="bold"/>,color:C.fac,t:"Duplicar",d:"Crea una orden nueva igual, con su propio número."},
     fic.cambiarOC&&{k:"move_to_oc",icono:<ArrowsLeftRightIcon size={14} weight="bold"/>,color:C.ac,t:"Cambiar OC",d:"La pasa a otra orden de compra del cliente."},
     canPreInvoice&&{k:"pre_invoice",icono:<LightningIcon size={14} weight="fill"/>,color:C.fac,t:"Asignar folio anticipado",d:"Antes de entregar: para quien paga por adelantado o pide anticipo."},
+    // v10.84.114 — y por partes, antes de Salidas (en Salidas es su botón de siempre)
+    canPorPartes&&{k:"split_invoice",icono:<FilesIcon size={14} weight="bold"/>,color:C.fac,t:"Facturar por partes",d:"Un anticipo y el resto después, o por entregas: cada parte con su folio."},
     canHistoricFolio&&{k:"apply_historic_folio",icono:<ReceiptIcon size={14} weight="bold"/>,color:C.fac,t:o.created_by==="import-historico"?"Aplicar folio":"Folio de Alpha",d:o.created_by==="import-historico"?"Registra el folio de una orden histórica.":"Registra un folio que Alpha ya emitió."},
     canRefacturar&&folioCancelado&&{k:"refacturar",icono:<ArrowsClockwiseIcon size={14} weight="bold"/>,color:C.ac,t:"Liberar folio cancelado",d:"La factura "+o.invoice_folio+" ya está cancelada: la orden vuelve a ser facturable (para sustituir una vigente, «Re-facturar» en CobranzaFlow)."},
     canDevolverSaldo&&{k:"deshacer_saldo",icono:<ArrowUUpLeftIcon size={14} weight="bold"/>,color:C.dnInk,t:"Devolver saldo",d:"Regresa el saldo a la bolsa del cliente y deja la orden pendiente de facturar."},
@@ -11528,6 +11530,10 @@ function PreInvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onFactur
       <div style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{type==="factura"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(conIvaTotal)}</b> con IVA · subtotal ${fmtMx(orderBaseAmount)}</>
         : type==="remision"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · remisión, sin IVA</>
         : <>Subtotal <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · con IVA ${fmtMx(conIvaTotal)}</>}</div>
+      {/* v10.84.114 — «Facturar por partes» siempre a la vista (Marcelo, 15-oct, con P-0648 de GRUPO VISION: «no veo el facturar por partes»): antes
+          sólo salía dentro del aviso de las facturas sin orden de otro importe (ahí sigue, con su «ligar»). Uno u otro: el folio anticipado es UNA
+          factura por todo; por partes, un anticipo y el resto después, cada parte con su folio. */}
+      {!confirming&&onFacturarPorPartes&&!(sinOrdenOtras.length>0)&&<div style={{fontSize:12,color:C.t2,margin:"-8px 0 14px"}}>¿Sólo una parte ahora y el resto después? <button type="button" onClick={()=>{if(busyRef.current)return;escudoDeClics(500);onFacturarPorPartes()}} style={{background:"none",border:"none",padding:0,fontFamily:"inherit",fontSize:12,fontWeight:600,color:tintaAA(C.ac,6),textDecoration:"underline",cursor:"pointer"}}>Facturar por partes</button></div>}
 
       {/* v10.84.96 — las facturas hechas sin orden, antes de llenar nada (P-0544: F-90, el 50% ya pagado) */}
       {!confirming&&leyendoSinOrden&&<div role="status" data-revisando-sin-orden style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:C.t2,marginBottom:10,padding:"6px 10px",background:C.sf,borderRadius:8}}><HourglassIcon size={12} weight="bold"/>Revisando si {order?.client||"el cliente"} tiene facturas hechas sin orden…</div>}
@@ -14951,7 +14957,13 @@ function accionesDelDetalle(o,role){
     &&!o.has_splits&&!o.has_matrix_lines&&!o.grouped_invoice_folio&&!o.fiscal_desconocido;
   const canDevolverSaldo=(role==="admin"||role==="karla")&&!!o.credit_applied_at&&!o.invoice_folio&&!o.grouped_invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.cancelled_at&&!o.stage.includes("cancelled");
   const canDeshacerCancelacion=role==="admin"&&o.stage?.includes("cancelled")&&!!o.cancelled_at;
-  return {folioAnticipado:canPreInvoice,devolverSaldo:canDevolverSaldo,deshacerCancelacion:!!canDeshacerCancelacion};
+  // v10.84.114 — «FACTURAR POR PARTES» ANTES DE SALIDAS, A LA VISTA (Marcelo, 15-oct: «vi con Karla y no vi ninguna opción para poder hacerlo… que
+  //   funcione en cualquier etapa»). La base lo acepta desde v10.84.89 (cada parte va como folio anticipado y la orden se entrega en Salidas), pero
+  //   antes de Salidas sólo se llegaba por «Asignar folio anticipado», y ahí sólo salía si el cliente ya tenía una factura hecha sin orden. Las
+  //   condiciones del folio anticipado (uno u otro) y las de App al abrirla (handleAction «split_invoice»): número, precio y cantidad, fuera de un
+  //   grupo de OC, no en stock. En Salidas sigue siendo su botón de siempre.
+  const canPorPartes=canPreInvoice&&o.stage!=="stocked"&&!!o.production_number&&Number(o.order_type==="maquila"?o.maq_price:o.price)>0&&Number(o.quantity)>0&&!o.oc_invoice_group_id;
+  return {folioAnticipado:canPreInvoice,porPartes:canPorPartes,devolverSaldo:canDevolverSaldo,deshacerCancelacion:!!canDeshacerCancelacion};
 }
 function accionesDeLaFicha(o,role,userLogin){
   const st=SM[o.stage];
@@ -15066,7 +15078,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   const canDeleteBtn=role==="admin"&&!o.invoice_folio&&!o.stock_loaded;
   const hasDangerMenu=canRevertBtn||canCancelBtn||canCancelNCBtn||canDeleteBtn;
   // v10.84.52 — lo que ofrecía sólo el detalle, con sus mismas condiciones (accionesDelDetalle)
-  const delDetalle=accionesDelDetalle(o,role);const hayFiscal=delDetalle.folioAnticipado||delDetalle.devolverSaldo||delDetalle.deshacerCancelacion;
+  const delDetalle=accionesDelDetalle(o,role);const hayFiscal=delDetalle.folioAnticipado||delDetalle.porPartes||delDetalle.devolverSaldo||delDetalle.deshacerCancelacion;
   // v10.73.18 — poner "En espera": admin o el responsable del área de esta etapa (orderResponsible ya maneja maquila→vendedor).
   // v10.73.18b (workflow adversarial): isSec(role) es true también para vendedor → endurecido. El vendedor debe SER dueño
   // de la orden (espejo de secOwns/canAct); la cláusula secretaria exige role==="secretaria" (no isSec) para que un vendedor
@@ -15205,6 +15217,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
             {canSnooze&&!snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"snooze");}} style={mi(C.ac)}><BellSlashIcon size={14} weight="bold"/>Poner en espera</button>}
             {canSnooze&&snoozeActive(o)&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"unsnooze");}} style={mi(C.ac)}><BellRingingIcon size={14} weight="bold"/>{reactLabel}</button>}
             {delDetalle.folioAnticipado&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"pre_invoice");}} style={mi(C.fac)}><LightningIcon size={14} weight="fill"/>Asignar folio anticipado</button>}
+            {delDetalle.porPartes&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"split_invoice");}} style={mi(C.fac)}><FilesIcon size={14} weight="bold"/>Facturar por partes</button>}
             {delDetalle.devolverSaldo&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_saldo");}} style={mi(C.dnInk)}><ArrowUUpLeftIcon size={14} weight="bold"/>Devolver saldo</button>}
             {delDetalle.deshacerCancelacion&&<button role="menuitem" {...miHover} onClick={()=>{setMoreOpen(false);onAction(o.id,"deshacer_cancelacion");}} style={mi(C.wnInk)}><ArrowsClockwiseIcon size={14} weight="bold"/>Deshacer cancelación</button>}
             {(canSnooze||hayFiscal)&&hasDangerMenu&&<div style={{height:1,background:C.bd,margin:"3px 4px"}}/>}
