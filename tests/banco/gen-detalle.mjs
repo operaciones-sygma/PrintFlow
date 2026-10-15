@@ -56,6 +56,8 @@ const partes = [
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)
   ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
+  // v10.84.112 — «Reimprimir» es para producción: la regla de la ficha y del botón (si el App.jsx la trae)
+  ...(L.some(l => /^const pideReimprimir = /.test(l)) ? [multi(/^const pideReimprimir = /, "pideReimprimir")] : []),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),
   // el tiempo por etapa, el historial de cambios y los pantones REALES (v10.84.49): la base que leen y escriben va simulada abajo
   line(/^function bizMsBetween\(/, "bizMsBetween"), line(/^function bizHoursBetween\(/, "bizHoursBetween"), line(/^function bizDaysBefore\(/, "bizDaysBefore"),

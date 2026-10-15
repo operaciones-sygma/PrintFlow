@@ -38,8 +38,13 @@ no puede facturarlas a tiempo»; y nada de cambiarlo en la base a mano: «Karla 
   orden; si esa línea no queda, el precio sí cambió y Karla ve «el porqué no se anotó en su historial: agrégalo como nota».
 - **Después:** «Asignar folio» se reabre con el precio nuevo y vuelve a leer las facturas sin orden: con P-0600 en $60,500, F-180 sale «del mismo
   importe» para ligarla.
+- 🔑 **«REIMPRIMIR» es para producción** (lo midió CobranzaFlow antes de subir): la base marca `needs_reprint` con cualquier cambio de precio tras
+  imprimir (`auto_detect_post_print_edit`; la hoja lleva el precio), también con «Corregir precio», y en Salidas eso le pedía a Gerardo en rojo
+  reimprimir órdenes que ya terminaron producción, y tapaba el «Sin folio» de Karla (P-0600 ya estaba así desde la mañana; hoy 2 de las 22 impresas
+  en Salidas). Una regla, `pideReimprimir`: en Salidas y en la maquila recibida no se pide (el despertador, la torre de control, la ficha y el botón
+  del detalle); la marca se queda como dato y la ventana de imprimir la sigue diciendo. En producción, como siempre.
 - Lo que la base hace sola cuando cambia el precio (medido el 15-oct, sólo lectura): lo anota en `order_change_log`, el total de la OC lo sigue
-  (`recalculate_oc_total`) y, si la hoja ya se imprimió, la marca «Reimprimir» (la hoja lleva el precio; P-0600 ya la tenía). Los candados de
+  (`recalculate_oc_total`) y, si la hoja ya se imprimió, la marca `needs_reprint` (ver arriba: en Salidas ya no se pide). Los candados de
   precio de la base (`guard_order_price_direct_write`) son para lo facturado: aquí no aplican. Las columnas y sus permisos para `authenticated`
   existen (medido).
 
@@ -60,7 +65,9 @@ vez, que en 384 px no caben: supuesto de la prueba, ahora pide que se alcancen).
 1366×650 se salía del detalle por arriba (de y=30; el detalle empieza en 49). Arreglo: la descripción de «Corregir precio» en un renglón y el
 menú mide el espacio que hay arriba de «Más» dentro del detalle y, si no cabe, se desliza por dentro (`MenuMasDelDetalle`, sólo lo usa el detalle;
 la próxima opción tampoco lo saca): ahora de y=57 a y=540. Y las tres pantallas de inv-157 llevaban el mismo id (el candado cuenta por id: eran
-UNA prueba); ahora inv-157, inv-158 e inv-159. `folio` 189 de 189, `detalle` 187 de 187, `corregir` 21 de 21, `hooks`, build y alcance.
+UNA prueba); ahora inv-157, inv-158 e inv-159. Y lo de «REIMPRIMIR» en Salidas: contra lo de antes fallaban cor-22, cor-23 y cor-25
+(`diagnoseOrder` y el despertador de Gerardo, sacados vivos de `App.jsx` con `extraer.mjs`) y det-179 (el detalle en Salidas); cor-24 (en Empaque
+sí se pide, en rojo) pasaba: es el guardia; det-103, det-108, det-115 y det-139 siguen igual. `folio` 189 de 189, `detalle` 188 de 188, `corregir` 25 de 25, `hooks`, build y alcance.
 
 **Para Karla:** F5; P-0600 → «Asignar Folio y Entregar» → «Corregir precio» (junto al subtotal) → $60,500 y el porqué → «Cambiar a $60,500.00».
 La ventana se reabre y ofrece F-180 «del mismo importe»: ligarla.

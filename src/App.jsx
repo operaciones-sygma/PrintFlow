@@ -3319,6 +3319,12 @@ function daysInStage(o){
 // external, sev, days, action, snoozed} o null si está sana. ÚNICA fuente de
 // verdad — la consume la Torre (Marcelo, desde arriba) y el Despertador (cada
 // quien, desde abajo). Reglas en orden de prioridad: la primera que aplica gana.
+// v10.84.112 — «REIMPRIMIR» es para producción (CobranzaFlow, 15-oct, medido): la base marca needs_reprint con cualquier cambio de precio tras
+//   imprimir (auto_detect_post_print_edit), también con «Corregir precio» de Karla, y en Salidas eso le pedía a Gerardo en rojo reimprimir órdenes
+//   que ya terminaron producción (y tapaba el «Sin folio» de Karla). En Salidas y en la maquila recibida ya no hay hoja que reimprimir: no se pide
+//   (diagnoseOrder, el despertador y la torre; la ficha y el botón del detalle). La marca se queda como dato: la ventana de imprimir la dice.
+//   Entregada o cancelada, tampoco (como antes). Una sola regla para todos.
+const pideReimprimir = o => !!o?.needs_reprint && !/delivered|cancelled/.test(String(o?.stage||"")) && !["salidas","maq_received"].includes(o?.stage);
 function diagnoseOrder(o){
   const stage=String(o?.stage||"");
   if(!o||o.cancelled_at||stage.includes("cancelled")||stage.includes("delivered")||stage==="stocked"||["web_pending","web_rejected"].includes(stage)) return null;
@@ -3373,7 +3379,7 @@ function diagnoseOrder(o){
     return R("maq_sleep","🚚 En maquila con "+((o.maq_provider||"el proveedor").trim())+" hace "+d+" días sin recibirse",_maqRole,_maqName,{external:!_maqByVendor,sev:d>=14?"red":"orange"});
   if(stage==="ready"&&!o.current_machine&&d>=1&&!(o.due_date&&bizDaysUntil(o.due_date)>5)) // v10.73.27 — misma exención far-due que la regla stale/getStale (entrega lejana no toca máquina aún)
     return R("no_machine","🖱️ Sin máquina asignada hace "+d+" día"+(d===1?"":"s"),"produccion","Gerardo",{});
-  if(o.needs_reprint)
+  if(pideReimprimir(o))   // v10.84.112 — no en Salidas ni en la maquila recibida
     return R("reprint","🔁 Marcada para REIMPRIMIR","produccion","Gerardo",{sev:"red"});
   if(["salidas","maq_received"].includes(stage)&&!o.invoice_folio&&!o.has_splits&&!o.has_matrix_lines&&!o.grouped_invoice_folio&&!o.return_covered_by_folio&&d>=3)
     return R("no_folio","🧾 Sin folio de factura hace "+d+" días","karla","Karla",{}); // v10.73.45 (scan) — excluye plan matriz/agrupada/cubierta: sus botones de folio están ocultos → el nag quedaba sin acción posible para Karla
@@ -4875,7 +4881,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
           {canRevisarDraft&&<button onClick={()=>dispatch("edit")} style={tenueAA(C.ac)}><ClipboardTextIcon size={14} weight="bold"/>Revisar y Editar</button>}
           {canEditAdmin&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(C.ac,5)),justifyContent:"center"}:tenueAA(C.ac)}><NotePencilIcon size={14} weight="bold"/>Editar</button>}{/* v10.76.5/7: admin edita una entregada sin folio NI splits/matriz (maquila por facturar) para corregir capturas */}
           {role!=="admin"&&_canEditOwner&&<button ref={editarRef} onClick={()=>dispatch("edit")} style={editarPrincipal?{...bt(tintaAA(isMaq?C.maq:C.ac,5)),justifyContent:"center"}:tenueAA(isMaq?C.maq:C.ac)}><NotePencilIcon size={14} weight="bold"/>{isMaq?"Editar Maquila":"Editar"}</button>}
-          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>{o.needs_reprint&&!/delivered|cancelled/.test(o.stage)?"Reimprimir":"Imprimir"}</button>}
+          {canPrint&&<button ref={imprimirRef} onClick={printIt} style={hayFlujo||editarPrincipal?tenueAA(C.ac):{...bt(C.ac),justifyContent:"center"}}><PrinterIcon size={14} weight="bold"/>{pideReimprimir(o)?"Reimprimir":"Imprimir"}</button>}
         </div>
       </div>
     </div>
@@ -14999,7 +15005,7 @@ function alertasDeLaOrden(o,{inEsperaView}={}){
 }
 function banderasDeLaOrden(o){
   return [
-    o.needs_reprint&&!/delivered|cancelled/.test(o.stage)&&<Badge key="reprint" tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>,
+    pideReimprimir(o)&&<Badge key="reprint" tone="danger" strong title={"La copia física fue impresa (v"+(o.print_version||"?")+") pero se editó después. Reimprime y reemplaza."} icon={<PrinterIcon size={10} weight="bold"/>}>Reimprimir · v{o.print_version||"?"} obsoleta</Badge>,
     o.returned_at&&<Badge key="devuelta" tone="warn" strong title={"Orden devuelta"+(o.return_reason?": "+o.return_reason:"")+(o.returned_by?" · por "+o.returned_by:"")} icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Devuelta</Badge>,
     o.has_post_invoice_edits&&<Badge key="editada" tone="warn" title="Esta orden fue editada después de tener folio fiscal asignado" icon={<WarningIcon size={10} weight="fill"/>}>Editada tras facturar</Badge>,
     o.returned_from_order_id&&<Badge key="retrabajo" tone="info" title="Re-trabajo de una devolución — no genera 2ª factura (cubierta por el folio original)" icon={<ArrowUUpLeftIcon size={10} weight="bold"/>}>Re-trabajo{o.return_covered_by_folio?" · cubre "+o.return_covered_by_folio:""}</Badge>,
@@ -15041,7 +15047,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   if(o.plate_status==="new_ctp"&&!compact) bT3.push(<Badge key="ctp" tone="context" title="Requiere nueva placa CTP" icon={<PlusIcon size={10} weight="bold"/>}>CTP</Badge>);
   if(o.created_by){const stdU=["produccion","preprensa","german","admin"];if(!stdU.includes(o.created_by)) bT3.push(o.created_by==="secretaria"?<Badge key="cb" tone="context">Lupita</Badge>:<Badge key="cb" tone="context" icon={<TagIcon size={9} weight="bold"/>}>{o.created_by}</Badge>);}
   // v10.73.8 — /impeccable layout: ¿hay alguna fila de estado fiscal/flag? (ahora se renderizan como bloque DEBAJO del cliente)
-  const hasFiscalRows=!compact&&(o.cart_folio||o.web_folio||o.invoice_folio||(o.grouped_invoice_folio&&!o.invoice_folio)||o.has_splits||o.has_post_invoice_edits||(o.needs_reprint&&!/delivered|cancelled/.test(o.stage))||o.returned_at||o.returned_from_order_id||o.bill_to_client_id);
+  const hasFiscalRows=!compact&&(o.cart_folio||o.web_folio||o.invoice_folio||(o.grouped_invoice_folio&&!o.invoice_folio)||o.has_splits||o.has_post_invoice_edits||pideReimprimir(o)||o.returned_at||o.returned_from_order_id||o.bill_to_client_id);
   // v10.73.9 — /impeccable harden: gates de las acciones destructivas (ESPEJO EXACTO de los originales del cluster),
   // ahora agrupadas en el menú "⋯ Más" con etiquetas + divisor antes de Borrar. El menú aparece solo si hay ≥1.
   // v10.84.94 — «Regresar» vive aquí para todos los que pueden (como el «⋯ Más» del detalle: `canRegresar`); antes, fuera de admin, era

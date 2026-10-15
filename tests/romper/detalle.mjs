@@ -1136,6 +1136,14 @@ await caso("det-178-la-facturada-no-se-corrige-aqui", "caso=factura&rol=karla", 
   ok("det-178-la-facturada-no-se-corrige-aqui", !/Corregir precio/.test(t), `facturada (Karla): ${/Corregir precio/.test(t) ? "LO VE" : "no lo ve"}`);
 });
 
+// v10.84.112 — «Reimprimir» es para producción (CobranzaFlow, 15-oct): en Salidas la hoja ya no se usa; la marca de la base (que pone cualquier
+//   cambio de precio tras imprimir, también «Corregir precio») no sale arriba ni en el botón. Vuelta 1: contra lo de antes, sí salía.
+await caso("det-179-reimprimir-no-en-salidas", "caso=salidas&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ needs_reprint: true, print_version: 1 })); await espera(p, 300);
+  const t = await textoArriba(p), n = await dlg(p).getByRole("button", { name: /Reimprimir/ }).count();
+  ok("det-179-reimprimir-no-en-salidas", !/Reimprimir/.test(t) && n === 0, `en Salidas con la copia «obsoleta» (cambió el precio): arriba ${/Reimprimir/.test(t) ? "dice «Reimprimir» (no hay hoja que reimprimir)" : "no dice nada"}; el botón ${n ? "dice «Reimprimir»" : "dice «Imprimir»"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

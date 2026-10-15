@@ -1,11 +1,14 @@
 // Tratar de ROMPER «Corregir precio» contra la base (v10.84.112), sin navegador: src/lib/corregirPrecio.js con una base de mentira que contesta
 // como PostgREST (también cuando falla, cuando el permiso filtra el renglón sin error y cuando la orden cambió mientras se corregía), y la regla
 // de quién y qué se corrige (`puedeCorregirPrecio`) y las palabras de los errores (`errorEnPalabras`) sacadas de src/App.jsx tal cual.
+// Y «Reimprimir» en Salidas (cor-22 a cor-25): diagnoseOrder y el despertador de Gerardo, sacados VIVOS de App.jsx con extraer.mjs.
 // Cada caso afirma lo que DEBERÍA pasar: para Karla, P-0600 de PRIME PET ($40,000 → $60,500). Uso: node tests/romper/corregir.mjs · SOLO=<regex>
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { corregirPrecioEnLaBase } from "../../src/lib/corregirPrecio.js";
+import { extraer } from "../banco/extraer.mjs";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const APP = fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8").replace(/\r\n/g, "\n").split("\n");
@@ -14,6 +17,14 @@ const decl = nombre => { const i = APP.findIndex(l => l.startsWith("const " + no
   if (i < 0) throw new Error("no encuentro " + nombre + " en App.jsx"); let e = i; while (!/;\s*$/.test(APP[e])) e++; return APP.slice(i, e + 1).join("\n"); };
 const { puedeCorregirPrecio, errorEnPalabras, fmt } = new Function([decl("fmt"), decl("liquidadaConSaldoAFavor"), decl("puedeCorregirPrecio"), decl("errorEnPalabras"),
   "return { puedeCorregirPrecio, errorEnPalabras, fmt };"].join("\n"))();
+
+// «Reimprimir» (cor-22 a cor-25): diagnoseOrder y el despertador VIVOS, con sus dependencias (extraer.mjs), en Node
+const { codigo: codDiag } = extraer(fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8"), ["diagnoseOrder", "getWakeupItems"], { simulados: ["supabase"] });
+const tmpDiag = path.join(os.tmpdir(), "pf-corregir-diag-" + process.pid + ".mjs");
+fs.writeFileSync(tmpDiag, [...new Set(codDiag.match(/\b[A-Z][A-Za-z0-9]*Icon\b/g) || [])].map(i => `const ${i} = () => null;`).join("\n")
+  + "\nconst supabase = {};\n" + codDiag + "\nexport { diagnoseOrder, getWakeupItems };\n");
+const { diagnoseOrder, getWakeupItems } = await import(pathToFileURL(tmpDiag).href);
+fs.rmSync(tmpDiag, { force: true });
 
 const res = [];
 const ok = (n, c, x = "") => { if (process.env.SOLO && !new RegExp(process.env.SOLO).test(n)) return; res.push((c ? "PASA  " : "FALLA ") + n + (x ? "  · " + String(x).replace(/\s+/g, " ").slice(0, 240) : "")); };
@@ -133,6 +144,21 @@ try {
   const sinNota = [];
   for (const cfg of [{ fallaGuardar: "permission denied" }, { filtra: true }, { fila: { invoice_folio: "F-181" } }, { partes: 1 }]) { b = base(cfg); r = await corregir(b); sinNota.push(!!r.error && notas.length === 0); }
   ok("cor-21 cuando el precio NO cambió (rechazo, renglón filtrado, ya foliada, por partes), el historial no anota nada", sinNota.every(Boolean), JSON.stringify(sinNota));
+  // 22-25. «Reimprimir» es para producción (CobranzaFlow, 15-oct, sólo lectura): con la hoja ya impresa, cambiar el precio (también con «Corregir
+  //   precio») hace que la base marque needs_reprint (auto_detect_post_print_edit). En Salidas y en la maquila recibida producción ya terminó: la
+  //   marca se queda como dato, pero no se le pide a Gerardo ni tapa el «Sin folio» de Karla. En producción se sigue pidiendo.
+  const hace = d => new Date(Date.now() - d * 86400000).toISOString();
+  const impresa = { ...P0600, price: 60500, print_version: 1, needs_reprint: true, timeline: [{ to: "salidas", date: hace(10) }], created_at: hace(20), due_date: null };
+  let dg = diagnoseOrder(impresa);
+  ok("cor-22 P-0600 en Salidas, impresa y con el precio corregido: no le pide a Gerardo «REIMPRIMIR» y sale lo de Karla («Sin folio»)",
+    dg?.key === "no_folio" && dg?.respRole === "karla", JSON.stringify(dg));
+  dg = diagnoseOrder({ ...impresa, stage: "maq_received", order_type: "maquila", maq_price: 15000, maq_cost: 9000, timeline: [{ to: "maq_received", date: hace(10) }] });
+  ok("cor-23 una maquila ya recibida, con la marca: tampoco «REIMPRIMIR»", !!dg && dg.key !== "reprint", JSON.stringify(dg));
+  dg = diagnoseOrder({ ...impresa, stage: "packaging", timeline: [{ to: "packaging", date: hace(1) }] });
+  ok("cor-24 en producción (Empaque) la hoja sí importa: «REIMPRIMIR» a Gerardo, en rojo, como siempre", dg?.key === "reprint" && dg?.respRole === "produccion" && dg?.sev === "red", JSON.stringify(dg));
+  const desp = getWakeupItems("produccion", "gerardo", [impresa, { ...impresa, id: "OP-2", production_number: "P-0601", stage: "packaging", timeline: [{ to: "packaging", date: hace(1) }] }]);
+  const pns = (desp || []).map(x => x.o?.production_number);
+  ok("cor-25 el despertador de Gerardo trae P-0601 (en Empaque, por reimprimir) y no P-0600 (en Salidas)", pns.includes("P-0601") && !pns.includes("P-0600"), JSON.stringify(pns));
 } catch (e) {
   ok("cor-00 la prueba corrió sin tronar", false, e?.stack || e?.message || String(e));
 }
