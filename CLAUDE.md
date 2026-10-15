@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1726 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1749 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -188,7 +188,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.112 (15-oct, ~12:40; READY `dpl_G3tGyjWBhkdq2mBPuR5V2CY6AvS5`, commits `13be798` y `4efe555`; vuelta atrás: promover
+- **LIVE:** v10.84.113 (15-oct, ~13:26; READY `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE`, commit `3168cb2`; vuelta atrás: promover
+  `dpl_w2NYecCBegzE5bdmt7GmYmmi5ZnD` (el código de v10.84.112) o `git revert 3168cb2`; la base no cambió; candado 1749 de 1749, de a 2 tandas).
+  v10.84.113: 🔑 **Lupita cancela una orden en cualquier etapa si no tiene nada facturado** (`cancelaLaSecretaria`, el detalle y su ficha; lo
+  facturado sigue siendo de Dirección: la base lo frena) y **«Cancelaciones» cancela completo, como el detalle** (`src/lib/cancelarEnLote.js`,
+  tanda `cancelaciones`: la fila de la máquina antes de la RPC, el historial, el comentario y los avisos; P-0629 se había cancelado sin avisarle a Gerardo).
+  v10.84.112 (15-oct, ~12:40; READY `dpl_G3tGyjWBhkdq2mBPuR5V2CY6AvS5`, commits `13be798` y `4efe555`; vuelta atrás: promover
   `dpl_FYfMwjktK433SkhqwSwjpJL3Jmaa` (el código de v10.84.111 con el candado nuevo) o `git revert 4efe555 13be798`; la base no cambió; candado 1726 de 1726, de a 2 tandas).
   v10.84.112: 🔑 **Karla corrige el precio de una orden antes de facturarla** («Corregir precio» junto al subtotal de «Asignar folio y entregar» y en
   «Más» del detalle; `puedeCorregirPrecio`: Dirección y Karla, sólo lo que todavía no se factura). La parte de la base va en `src/lib/corregirPrecio.js`
