@@ -12,7 +12,13 @@
 //  C. si la base rechaza el cambio: el aviso dice qué orden y que no pasó, la otra no se intenta, y siguen en la planta;
 //  D. en «Órdenes de Compra», la OC dice cuáles faltan y dónde, con el botón; no ofrece «Asignar folio» (sí «Pre-asignar folio»);
 //  E. en el detalle de P-9903, «Más» ofrece «Ya está lista: pasar a Salidas» y la pregunta sale ENCIMA del detalle (Esc la cierra
-//     y el detalle sigue).
+//     y el detalle sigue);
+//  G. (v10.84.116) P-9904, una maquila completa con el proveedor y con su precio y su costo, sale con «Recibir de maquila»: pregunta,
+//     queda «Recibida de maquila» con el candado de etapa (sin tocar filas de máquina), la bitácora dice que la recibió Karla, a Lupita
+//     (quien la lleva) y a Dirección les llega aviso (a Karla misma y a Gerardo no), y sale de «En la planta»;
+//  H. (v10.84.116) si le quitan el costo del proveedor con la pregunta abierta, no se recibe y se dice qué falta;
+//  I. (v10.84.116) si la base rechaza recibirla, se dice en palabras («no se recibió de maquila») y sigue en la planta;
+//  J. (v10.84.116) la maquila que lleva un vendedor con usuario (Genaro): la pregunta y el aviso son para él, no para Lupita.
 // Uso:  npm run build && node tests/recorrido/karla-planta.mjs            (sirve dist/ en 127.0.0.1:4278)
 //       node tests/recorrido/karla-planta.mjs https://produccion.sygma.mx (la app publicada)
 //       SOLO=AB corre sólo esos escenarios. Sale con 1 si algo sale MAL.
@@ -49,6 +55,9 @@ function fixtures(plantilla) {
     { ...comun, id: "PRUEBA-KP-1", production_number: "P-9901", product_type: "Etiquetas de prueba", stage: "salidas", current_machine: null, machine_queue_position: null },
     { ...comun, id: "PRUEBA-KP-2", production_number: "P-9902", product_type: "Volantes de prueba", stage: "in_production", current_machine: "off_gto", machine_queue_position: 0 },
     { ...comun, id: "PRUEBA-KP-3", production_number: "P-9903", product_type: "Cajas de prueba", stage: "packaging", current_machine: "vm_manual", machine_queue_position: null },
+    // v10.84.116 — una maquila completa con el proveedor, suelta (sin OC), con su precio al cliente y su costo: la lleva Lupita (Manuel no tiene usuario)
+    { ...comun, id: "PRUEBA-KP-4", production_number: "P-9904", product_type: "Lonas de prueba", stage: "maq_in_progress", current_machine: null, machine_queue_position: null,
+      purchase_order_id: null, order_type: "maquila", maq_provider: "MAKILA DE PRUEBA", maq_price: 1500, maq_cost: 900, price: null, agent: "Manuel" },
   ];
 }
 // una sesión de Karla. `estado.falla`: la base rechaza el cambio de etapa de las órdenes de prueba
@@ -66,7 +75,7 @@ async function entrar(estado = {}) {
     if (m === "GET" && tabla === "orders") {
       const resp = await route.fetch(); let j = await resp.json().catch(() => null);
       if (Array.isArray(j)) {
-        if (!ordenes && j.length) ordenes = fixtures(j.find(o => o.stage === "in_production") || j[0]);
+        if (!ordenes && j.length) { ordenes = fixtures(j.find(o => o.stage === "in_production") || j[0]); if (estado.agente4) ordenes.find(o => o.id === "PRUEBA-KP-4").agent = estado.agente4; }
         const id = (q.get("id") || "").replace(/^eq\./, "");
         if (ordenes && /^PRUEBA-KP/.test(id)) j = ordenes.filter(o => o.id === id);
         else if (ordenes && (q.get("offset") || "0") === "0" && /created_at/.test(q.get("order") || "")) j = [...ordenes, ...j];
@@ -127,14 +136,16 @@ const esperaTexto = async (p, re, s = 20) => { for (let k = 0; k < s * 2; k++) {
 const aviso = p => p.evaluate(() => { const t = [...document.querySelectorAll("div")].find(d => { const cs = getComputedStyle(d); return cs.position === "fixed" && cs.bottom === "24px" && (d.innerText || "").trim(); }); return t ? t.innerText.replace(/\s+/g, " ").trim() : ""; });
 const esperaAviso = async (p, re, s = 15) => { let a = ""; for (let k = 0; k < s * 4; k++) { a = await aviso(p); if (re.test(a)) return a; await p.waitForTimeout(250); } return a; };
 const pestana = (p, nombre) => p.getByRole("tab", { name: new RegExp("^" + nombre) });
+// (v10.84.116) la vista «Folios» de Karla es su «Pendientes (N)» desde v10.84.93 («Karla con UNA cola»): con «Folios» el recorrido se caía al entrar
+const FOLIOS = "Pendientes";
 // a «Folios» y a la pestaña «En la planta», con la OC de prueba a la vista
-async function aLaPlanta(p) { await despertador(p); await ir(p, "Folios"); await pestana(p, "En la planta").click(); return esperaTexto(p, new RegExp(OC)); }
+async function aLaPlanta(p) { await despertador(p); await ir(p, FOLIOS); await pestana(p, "En la planta").click(); return esperaTexto(p, new RegExp(OC)); }
 const corre = l => !process.env.SOLO || process.env.SOLO.includes(l);
 try {
   // ── A: las pestañas, el buscador y la OC a medias ──
   if (corre("A")) { const { ctx, p } = await entrar();
     try {
-      await despertador(p); await ir(p, "Folios"); await p.waitForTimeout(800);
+      await despertador(p); await ir(p, FOLIOS); await p.waitForTimeout(800);
       const tabs = await p.getByRole("tab").allInnerTexts();
       ok("A1 «Folios» tiene «Por foliar» y «En la planta»", tabs.some(t => /^Por foliar/.test(t)) && tabs.some(t => /^En la planta\s*\d+/.test(t)), "pestañas: " + tabs.map(t => "«" + t.replace(/\s+/g, " ") + "»").join(", "));
       await pestana(p, "Por foliar").click();
@@ -149,7 +160,7 @@ try {
       ok("A4 la OC ofrece pasar las dos, y cada una la suya", b.filter(x => /^Pasar a Salidas$/.test(x)).length === 2 && b.some(x => /Pasar las 2 a Salidas/.test(x)), "botones: " + b.join(" · "));
       await p.screenshot({ path: path.join(OUT, "A-en-la-planta.png") });
       // (vuelta 3) la pestaña se recuerda al salir de «Folios» y volver; y en el monitor de 1920 no hay barra horizontal
-      await ir(p, "Órdenes de Compra"); await p.waitForTimeout(500); await ir(p, "Folios"); await p.waitForTimeout(600);
+      await ir(p, "Órdenes de Compra"); await p.waitForTimeout(500); await ir(p, FOLIOS); await p.waitForTimeout(600);
       const sel = await p.getByRole("tab", { selected: true }).innerText().catch(() => "");
       ok("A5 al volver a «Folios» sigue en «En la planta»", /^En la planta/.test(sel), "pestaña abierta: «" + sel.replace(/\s+/g, " ") + "»");
       for (const [an, al] of [[1920, 1080], [1366, 768]]) {
@@ -243,6 +254,74 @@ try {
         `pregunta ${abierta ? "abierta" : "NO SE ABRIÓ"} → ${queda ? "SIGUE abierta" : "se cerró"}; aviso: «${a}»${escritas.some(e => e.m === "PATCH") ? "; y ESCRIBIÓ" : ""}`);
       await p.screenshot({ path: path.join(OUT, "F-se-vence.png") });
     } catch (e) { ok("F (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // ── G (v10.84.116): Karla recibe la maquila completa (Marcelo, 15-oct: «si puede en producción interna, de maquila completa también») ──
+  if (corre("G")) { const { ctx, p, escritas } = await entrar();
+    try {
+      if (!(await aLaPlanta(p))) throw new Error("no se ve la OC de prueba en «En la planta»");
+      const f = p.locator('[data-orden="PRUEBA-KP-4"]'), b = await f.getByRole("button", { name: /Recibir de maquila/ }).count();
+      const vis = await f.isVisible().catch(() => false);
+      ok("G1 la maquila con el proveedor sale a la vista con «Recibir de maquila»", b === 1 && vis, b ? (vis ? "a la vista, con su botón" : "con botón pero PLEGADA") : "SIN botón" + (await f.count() ? (vis ? "" : " (plegada)") : " (no sale)"));
+      await f.getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 5000 }); await p.waitForTimeout(500);
+      const d = await p.evaluate(() => { const x = document.querySelector('[role="dialog"]'); return x ? x.innerText.replace(/\s+/g, " ") : ""; });
+      ok("G2 pregunta antes, con el proveedor y a quién se le avisa", /Recibir P-9904 de maquila/.test(d) && /MAKILA DE PRUEBA/.test(d) && /Lupita/.test(d) && !escritas.some(e => e.m === "PATCH"),
+        d ? "«" + d.slice(0, 240) + "»" + (escritas.some(e => e.m === "PATCH") ? " · y YA ESCRIBIÓ antes de contestar" : "") : "NO PREGUNTA");
+      await p.getByRole("button", { name: /Sí, ya llegó/ }).click();
+      const a = await esperaAviso(p, /recibida de maquila/);
+      const parches = escritas.filter(e => e.m === "PATCH" && e.a === "orders"), cola = escritas.filter(e => e.a === "rpc/move_order_in_queue");
+      const tl = escritas.filter(e => e.a === "order_timeline").map(e => e.cuerpo), av = escritas.filter(e => e.a === "notifications").map(e => e.cuerpo);
+      const p4 = parches.find(e => e.q.id === "eq.PRUEBA-KP-4");
+      ok("G3 queda «Recibida de maquila», con el candado de etapa y sin tocar filas de máquina", parches.length === 1 && !!p4 && p4.q.stage === "eq.maq_in_progress" && p4.cuerpo?.stage === "maq_received" && !cola.length,
+        (parches.map(e => e.q.id + " (" + e.q.stage + ") → " + JSON.stringify(e.cuerpo)).join(" · ") || "no cambió nada") + (cola.length ? " · y tocó la fila de una máquina" : ""));
+      ok("G4 la bitácora dice que la recibió Karla", tl.length === 1 && tl[0].by_user === "karla" && tl[0].to_stage === "maq_received" && /la recibió Karla/.test(tl[0].action || ""), tl.map(x => "«" + x.action + "» (" + x.by_user + ")").join(" · ") || "no anotó nada");
+      const aLupita = av.filter(x => x.target_role === "secretaria" && /Karla recibió P-9904/.test(x.message || "")), aDir = av.filter(x => x.target_role === "admin");
+      const aKarla = av.filter(x => x.target_role === "karla"), aGerardo = av.filter(x => x.target_role === "produccion");
+      ok("G5 a Lupita y a Dirección les llega aviso; a Karla misma y a Gerardo no", aLupita.length === 1 && aDir.length === 1 && !aKarla.length && !aGerardo.length,
+        `a Lupita: ${aLupita.length}; a Dirección: ${aDir.length}; a Karla: ${aKarla.length}; a Gerardo: ${aGerardo.length} · ${av.map(x => x.target_role + " «" + (x.message || "").slice(0, 70) + "»").join(" | ")}`);
+      ok("G6 el aviso dice dónde quedó", /P-9904 ya está recibida de maquila/.test(a) && /Por foliar/.test(a), "aviso: «" + a + "»");
+      await p.waitForTimeout(500);
+      const sigue = await p.locator('[data-orden="PRUEBA-KP-4"]').count();
+      ok("G7 sale de «En la planta»", !sigue, sigue ? "SIGUE en «En la planta»" : "ya no está");
+      await p.screenshot({ path: path.join(OUT, "G-recibida.png") });
+    } catch (e) { ok("G (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // ── H (v10.84.116): le quitan el costo del proveedor con la pregunta abierta ──
+  if (corre("H")) { const { ctx, p, escritas, cambiar } = await entrar();
+    try {
+      if (!(await aLaPlanta(p))) throw new Error("no se ve la OC de prueba en «En la planta»");
+      await p.locator('[data-orden="PRUEBA-KP-4"]').getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 5000 }); await p.waitForTimeout(400);
+      cambiar("PRUEBA-KP-4", { maq_cost: null });   // Lupita le quitó el costo para corregirlo
+      await p.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));   // la app relee (como al volver a la pestaña)
+      let a = await esperaAviso(p, /P-9904/, 12);
+      const abierta = await p.getByRole("button", { name: /Sí, ya llegó/ }).count();
+      if (abierta) { await p.getByRole("button", { name: /Sí, ya llegó/ }).click(); a = await esperaAviso(p, /P-9904/, 10); }
+      const escribio = escritas.some(e => e.m === "PATCH" && e.a === "orders");
+      ok("H1 sin el costo no la recibe y dice qué falta", !escribio && /P-9904/.test(a) && /costo del proveedor/.test(a) && !/no pasó a Salidas/.test(a),
+        `la pregunta ${abierta ? "SIGUIÓ abierta (se contestó)" : "se cerró sola"}; aviso: «${a}»${escribio ? "; y ESCRIBIÓ" : ""}`);
+    } catch (e) { ok("H (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // ── I (v10.84.116, vuelta 3): la base rechaza recibirla ──
+  if (corre("I")) { const { ctx, p } = await entrar({ falla: true });
+    try {
+      if (!(await aLaPlanta(p))) throw new Error("no se ve la OC de prueba en «En la planta»");
+      await p.locator('[data-orden="PRUEBA-KP-4"]').getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 5000 }); await p.waitForTimeout(400);
+      await p.getByRole("button", { name: /Sí, ya llegó/ }).click();
+      const a = await esperaAviso(p, /P-9904/);
+      await p.waitForTimeout(2500);
+      const sigue = await p.locator('[data-orden="PRUEBA-KP-4"]').count();
+      ok("I1 si la base no la acepta, lo dice en palabras y sigue en la planta", /P-9904 no se recibió de maquila/.test(a) && !/no pasó a Salidas|XX000|Error:/.test(a) && sigue === 1, `aviso: «${a}»; ${sigue ? "sigue en la planta" : "YA NO SE VE"}`);
+      await p.screenshot({ path: path.join(OUT, "I-rechazo.png") });
+    } catch (e) { ok("I (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
+  // ── J (v10.84.116, vuelta 3): la maquila que lleva un vendedor con usuario ──
+  if (corre("J")) { const { ctx, p, escritas } = await entrar({ agente4: "Genaro" });
+    try {
+      if (!(await aLaPlanta(p))) throw new Error("no se ve la OC de prueba en «En la planta»");
+      await p.locator('[data-orden="PRUEBA-KP-4"]').getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 5000 }); await p.waitForTimeout(400);
+      const d = await p.evaluate(() => { const x = document.querySelector('[role="dialog"]'); return x ? x.innerText.replace(/\s+/g, " ") : ""; });
+      ok("J1 la pregunta dice que el aviso es para Genaro", /Genaro recibe aviso/.test(d) && !/Lupita/.test(d), d ? "«" + d.slice(0, 240) + "»" : "NO PREGUNTA");
+      await p.getByRole("button", { name: /Sí, ya llegó/ }).click();
+      await esperaAviso(p, /recibida de maquila/);
+      const av = escritas.filter(e => e.a === "notifications").map(e => e.cuerpo);
+      const aGenaro = av.filter(x => x.target_role === "genaro" && /Karla recibió P-9904/.test(x.message || "")), aLupita = av.filter(x => x.target_role === "secretaria");
+      ok("J2 a Genaro le llega el aviso, a Lupita no", aGenaro.length === 1 && !aLupita.length, `a Genaro: ${aGenaro.length}; a Lupita: ${aLupita.length} · ${av.map(x => x.target_role + " «" + (x.message || "").slice(0, 60) + "»").join(" | ")}`);
+    } catch (e) { ok("J (se cayó)", false, e.message.split("\n")[0]); } finally { await ctx.close(); } }
 } finally {
   await nav.close();
   if (servidor) await new Promise(r => servidor.httpServer.close(r));

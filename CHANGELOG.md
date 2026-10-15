@@ -12,6 +12,46 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.116 — Karla recibe también la maquila completa que ya llegó — 15-oct-2026
+
+**Qué pasaba.** Marcelo (15-oct): «checar si Karla también puede jalar órdenes del proceso de maquila completa, si puede en producción interna
+pero de maquila completa también debería poder». Desde v10.84.67 Karla pasa a Salidas lo que ya está listo y Gerardo no ha pasado, pero sólo
+desde Empaque o una máquina: la maquila completa (`order_type` maquila, enviada o con el proveedor) quedaba plegada en «En maquila» con «la recibe
+Lupita», y si el trabajo ya había llegado y Lupita (o Genaro, en las suyas) no apretaba «Recibimos el Trabajo», Karla no la podía foliar. Ese día
+había 2 así, las dos con su precio y su costo y de Manuel (las lleva Lupita).
+
+**Qué se cambió** (`src/App.jsx`; la base no cambió: la etapa la cambia cualquiera que escribe, y `orders_immutability_guard` sólo frena lo
+entregado o cancelado; revisado de sólo lectura):
+- `sePuedeJalar` incluye la maquila completa enviada o con el proveedor (`recibeDeMaquila`) que tiene su precio al cliente y su costo
+  (`faltaParaRecibir`: doAdv no recibe una maquila sin los dos). Va a «Recibida de maquila» (`destinoAlJalar`), el Salidas de la maquila: queda en
+  «Por foliar».
+- «En la planta»: un grupo nuevo a la vista, «Con el maquilador», con «Recibir de maquila» (el color y el ícono de «Recibimos el Trabajo»). La que
+  no se puede recibir sigue plegada en «En maquila» («de aquí todavía no se reciben») y dice qué le falta («Falta el costo del proveedor para
+  recibirla»). Sin enviar, no (no ha salido); la maquila de una orden de la planta (`maquila_out`/`maquila_in`), tampoco: sigue con Gerardo.
+- La pregunta: «¿Recibir P-… de maquila?», con el proveedor, «Sólo si ya llegó del proveedor» y a quién le llega el aviso: Lupita, o el vendedor
+  con usuario que la lleva (`orderResponsible`). Una OC revuelta («Pasar o recibir las 2») dice el destino de cada una. Se vence sola si Lupita la
+  recibe o si le quitan su precio o su costo con la pregunta abierta (y al confirmar se vuelve a mirar).
+- «Más» del detalle: «Ya llegó de la maquila: recibirla» (sólo Karla). La OC en «Órdenes de Compra»: «Ya llegó: recibir P-… de maquila» y «la
+  maquila, recibida» en lo que falta para foliar.
+- doAdv: la bitácora dice «la recibió Karla: ya llegó del proveedor»; a quien la lleva le llega «📥 Karla recibió P-… de maquila (estaba con el
+  maquilador, MAKILA): ya llegó del proveedor…»; a Dirección, «📥 Maquila recibida del proveedor (la recibió Karla)…»; a Karla misma, ya no el
+  suyo. Si la base la rechaza, «P-… no se recibió de maquila: …» (antes habría dicho «no pasó a Salidas»).
+- Dónde va: la maquila con el proveedor dice con quién («Con el maquilador · MAKILA»); «Mis Pendientes» y el plan matriz sólo usan el lugar.
+
+**Decisiones por defecto (Marcelo puede cambiarlas):** la maquila sin enviar (`maq_created`) no se recibe desde aquí; la de una orden de la planta
+tampoco; y sin precio al cliente o costo no se recibe (lo exige doAdv desde v10.49.1).
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.115: fallaban las 11 que piden lo nuevo (pla-74, 75, 76, 78, 79 y 80; det-196 y
+det-198; G1 del recorrido, y G y H se caían sin el botón); los guardias pasaban (pla-01 a pla-05, pla-77, det-197). pla-05 cambió a propósito:
+P-0726 (maquila con el proveedor, con precio y costo) ya no va plegada (supuesto de la prueba). 🔑 **El recorrido `karla-planta` estaba roto
+desde v10.84.93**: buscaba el menú «Folios», que desde entonces es el «Pendientes» de Karla, y se caía al entrar sin probar nada; corregido
+(`FOLIOS`), A a F pasaron contra v10.84.115 (21 de 21). **Vuelta 2**: todo pasa (planta 46 de 46, detalle 207 de 207, recorrido 29 de 29).
+**Vuelta 3**, por donde no se diseñó: doble clic y Esc en «Recibir de maquila», la OC revuelta en «Órdenes de Compra», el contraste, la maquila
+«Enviada», 1920 y 1366, sin proveedor, el precio al cliente en 0, negativo y con centavos, la base que rechaza (I) y la maquila de Genaro (J: el
+aviso a él, no a Lupita): 13 de 13 a la primera, sin fallas de fondo. Quedan planta 53, detalle 209 y el recorrido karla-planta 32 de 32 (A a J).
+
+**En producción:** (se llena al subir)
+
 ## v10.84.115 — «Corregir precio»: los avisos, el candado de la forma para Karla y que nada regrese una corrección — 15-oct-2026
 
 **Qué pasaba.** CobranzaFlow revisó «Corregir precio» (v10.84.112) y Marcelo decidió lo suyo (15-oct). Lo que encontraron, y lo que esta versión

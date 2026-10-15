@@ -107,7 +107,7 @@ function SignedImg({ src, alt, style, onClick, title, fallback }) { return <img 
   fnBlock("ClientAliasManager"),
   ...["escudoDeClics", "FilaDelDetalle", "SeccionDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
   // v10.84.67 — «Ya está lista: pasar a Salidas» en «Más» (Karla) usa lo de «En la planta»
-  ...["ETAPAS_JALABLES", "sePuedeJalar", "LUGAR_DE_ETAPA"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
+  ...["ETAPAS_JALABLES", "ETAPAS_JALABLES_MAQUILA", "recibeDeMaquila", "faltaParaRecibir", "destinoAlJalar", "sePuedeJalar", "LUGAR_DE_ETAPA"].flatMap(n => opcional(L.some(l => l.startsWith("const " + n + "=")), () => line(new RegExp("^const " + n + "="), n))),
   ...opcional(L.some(l => l.startsWith("function dondeVa(")), () => fnBlock("dondeVa")),
   fnBlock("DetailModal"),
   ...["MasDelDetalle", "MenuMasDelDetalle"].flatMap(n => opcional(L.some(l => l.startsWith("function " + n + "(")), () => fnBlock(n))),

@@ -74,11 +74,13 @@ await caso("pla-04-lo-de-mas-atras-plegado", "", async p => {
     `plegado al abrir: ${!antes ? "sí" : "NO"}; el grupo dice «${(r || "").trim()}»; abierto: P-0724 «${a}», P-0725 «${b}»`);
 });
 await caso("pla-05-maquila-plegada", "", async p => {
-  const antes = await fila(p, "P-0726").isVisible().catch(() => false);
+  // (v10.84.116: P-0726, maquila completa con el proveedor y con su precio y su costo, ya se recibe desde aquí: sale arriba con su
+  //  botón, no plegada (pla-74). Lo plegado es la maquila que Karla no mueve, como P-0727, la maquila de una orden de la planta)
+  const antes = await fila(p, "P-0727").isVisible().catch(() => false);
   const resumen = p.getByText(/^En maquila/).first();
   await resumen.click(); await espera(p);
-  const [a, b] = await Promise.all([dice(p, "P-0726"), dice(p, "P-0727")]);
-  ok("pla-05-maquila-plegada", !antes && /maquilador/i.test(a || "") && /maquila/i.test(b || ""), `plegado: ${!antes ? "sí" : "NO"}; P-0726 «${a}», P-0727 «${b}»`);
+  const b = await dice(p, "P-0727");
+  ok("pla-05-maquila-plegada", !antes && /maquila/i.test(b || ""), `plegado: ${!antes ? "sí" : "NO"}; P-0727 «${b}»`);
 });
 await caso("pla-06-lo-que-ya-no-esta-en-la-planta-no-sale", "", async p => {
   const t = await enPantalla(p), salen = ["P-0728", "P-0729", "P-0730", "P-0701", "P-0702", "P-0703"].filter(x => t.includes(x));
@@ -305,5 +307,106 @@ await caso("pla-60-con-el-teclado", "", async p => {
   ok("pla-60-con-el-teclado", vistos.some(t => /Pasar las 2/.test(t)) && vistos.filter(t => /Pasar a Salidas/.test(t)).length >= 4 && abierto,
     `con Tab: ${vistos.some(t => /Pasar las 2/.test(t)) ? "llega a «Pasar las 2»" : "NO llega a «Pasar las 2»"}, ${vistos.filter(t => /Pasar a Salidas/.test(t)).length} «Pasar a Salidas»; Enter ${abierto ? "abre" : "NO abre"} «Todavía no llegan a máquina»`);
 });
+// ── v10.84.116 — Karla «jala» también la maquila completa (Marcelo, 15-oct: «si puede en producción interna, de maquila completa también
+//   debería poder»): enviada o con el proveedor, con su precio al cliente y su costo → «Recibida de maquila», como el «Recibimos el
+//   Trabajo» de Lupita o del vendedor (y a quien la lleva le llega aviso). Sin precio o costo, o sin enviar, no; la maquila de una orden de
+//   la planta, tampoco. Vuelta 1: contra v10.84.115.
+const tieneRecibir = (p, pn) => p.evaluate(pn => { const e = document.querySelector('[data-orden="OP-' + pn + '"]'); return !!e && [...e.querySelectorAll("button")].some(b => /Recibir de maquila/.test(b.textContent)); }, pn);
+await caso("pla-74-maquila-completa-se-recibe", "", async p => {
+  const visible = await fila(p, "P-0726").isVisible().catch(() => false), hay = await tieneRecibir(p, "P-0726");
+  ok("pla-74-maquila-completa-se-recibe", visible && hay, `P-0726 (con MAKILA, con precio y costo): ${visible ? "a la vista" : "PLEGADA"}; «Recibir de maquila» ${hay ? "está" : "NO está"}`);
+});
+await caso("pla-75-recibir-pregunta-y-recibe", "", async p => {
+  let t = "", estado = "";
+  try {
+    await fila(p, "P-0726").getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 3000 }); await espera(p, 400);
+    t = (await dialogo(p)) || "";
+    await p.getByRole("button", { name: /Sí, ya llegó/ }).click({ timeout: 3000 }); await espera(p, 800);
+    estado = await p.evaluate(() => (window.__ordenes().find(o => o.production_number === "P-0726") || {}).stage);
+  } catch (e) { t = t || "(" + e.message.split("\n")[0] + ")"; }
+  const l = await log(p);
+  ok("pla-75-recibir-pregunta-y-recibe", /Recibir P-0726 de maquila/.test(t) && /MAKILA/.test(t) && /Recibida de maquila/.test(t) && /Lupita/.test(t) && /jalar:P-0726/.test(l) && estado === "maq_received",
+    `pregunta «${t.slice(0, 220)}» · etapa ${estado || "sin cambiar"}`);
+});
+await caso("pla-76-sin-costo-no-se-recibe-y-dice-que-falta", "caso=maquila", async p => {
+  const hay = await tieneRecibir(p, "P-0752");
+  const d = (await dice(p, "P-0752")) || "";
+  ok("pla-76-sin-costo-no-se-recibe-y-dice-que-falta", !hay && /Falta el costo del proveedor/.test(d), `P-0752 (sin costo): botón ${hay ? "SÍ" : "no"} · «${d.slice(0, 160)}»`);
+});
+await caso("pla-77-sin-enviar-ni-de-la-planta-no-se-reciben", "caso=maquila", async p => {
+  const [a, b] = await Promise.all([tieneRecibir(p, "P-0753"), tieneRecibir(p, "P-0727")]);
+  ok("pla-77-sin-enviar-ni-de-la-planta-no-se-reciben", !a && !b, `P-0753 (sin enviar): ${a ? "SÍ tiene" : "no"} · P-0727 (maquila de una orden de la planta): ${b ? "SÍ tiene" : "no"}`);
+});
+// (por donde no se diseñó) una OC revuelta: una a Salidas y una maquila que se recibe, en una sola pregunta; avisa a Gerardo y a Genaro
+await caso("pla-78-oc-revuelta-pasa-y-recibe", "caso=maquila", async p => {
+  let d = "", estados = "";
+  try {
+    await grupoOC(p, "OC-0670").getByRole("button", { name: /Pasar o recibir las 2/ }).click({ timeout: 3000 }); await espera(p);
+    d = (await dialogo(p)) || "";
+    await p.getByRole("button", { name: /Sí, ya están listas/ }).click({ timeout: 3000 }); await espera(p, 900);
+    estados = await p.evaluate(() => ["P-0755", "P-0756"].map(pn => pn + ":" + (window.__ordenes().find(o => o.production_number === pn) || {}).stage).join(" "));
+  } catch (e) { d = d || "(" + e.message.split("\n")[0] + ")"; }
+  ok("pla-78-oc-revuelta-pasa-y-recibe", /Salidas/.test(d) && /Recibida de maquila/.test(d) && /Gerardo/.test(d) && /Genaro/.test(d) && estados === "P-0755:salidas P-0756:maq_received",
+    `pregunta «${d.slice(0, 240)}» · quedan ${estados || "sin mover"}`);
+});
+// (el dato que cambia con la pregunta abierta) Lupita la recibe al mismo tiempo; o le quitan el costo del proveedor
+await caso("pla-79-lupita-la-recibe-con-la-pregunta-abierta", "", async p => {
+  await fila(p, "P-0726").getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 3000 }).catch(() => {}); await espera(p);
+  const abierta = await dialogos(p);
+  await p.evaluate(() => window.__cambiar("P-0726", { stage: "maq_received" })); await espera(p, 600);
+  const n = await dialogos(p), l = await log(p);
+  ok("pla-79-lupita-la-recibe-con-la-pregunta-abierta", abierta === 1 && n === 0 && !/jalar:/.test(l) && /pregunta vencida: .*P-0726/.test(l),
+    `pregunta ${abierta ? "abierta" : "NO SE ABRIÓ"} → ${n ? "SIGUE abierta" : "se cierra"}; ${/jalar:/.test(l) ? "la MOVIÓ" : "no mueve nada"}; «${(l.match(/pregunta vencida: [^\n]*/) || ["no lo dice"])[0]}»`);
+});
+await caso("pla-80-le-quitan-el-costo-con-la-pregunta-abierta", "", async p => {
+  await fila(p, "P-0726").getByRole("button", { name: /Recibir de maquila/ }).click({ timeout: 3000 }).catch(() => {}); await espera(p);
+  const abierta = await dialogos(p);
+  await p.evaluate(() => window.__cambiar("P-0726", { maq_cost: null })); await espera(p, 600);
+  const n = await dialogos(p), l = await log(p);
+  ok("pla-80-le-quitan-el-costo-con-la-pregunta-abierta", abierta === 1 && n === 0 && !/jalar:/.test(l) && /pregunta vencida: .*P-0726.*costo del proveedor/.test(l),
+    `pregunta ${abierta ? "abierta" : "NO SE ABRIÓ"} → ${n ? "SIGUE abierta" : "se cierra"}; ${/jalar:/.test(l) ? "la MOVIÓ" : "no mueve nada"}; «${(l.match(/pregunta vencida: [^\n]*/) || ["no lo dice"])[0]}»`);
+});
+
+// (vuelta 3, por donde no se diseñó)
+await caso("pla-81-doble-clic-en-recibir", "", async p => {
+  await fila(p, "P-0726").getByRole("button", { name: /Recibir de maquila/ }).dblclick(); await espera(p, 500);
+  const n = await dialogos(p), pide = cuenta(await log(p), "pide:");
+  ok("pla-81-doble-clic-en-recibir", n === 1 && pide === 1, `${n} pregunta(s); se pidió ${pide} vez/veces`);
+});
+await caso("pla-82-esc-no-recibe-y-el-foco-regresa", "", async p => {
+  await fila(p, "P-0726").getByRole("button", { name: /Recibir de maquila/ }).focus(); await p.keyboard.press("Enter"); await espera(p);
+  const abierta = await dialogos(p);
+  await p.keyboard.press("Escape"); await espera(p, 400);
+  const n = await dialogos(p), l = await log(p);
+  const foco = await p.evaluate(() => { const a = document.activeElement; return a ? (a.textContent || "").trim() : ""; });
+  ok("pla-82-esc-no-recibe-y-el-foco-regresa", abierta === 1 && n === 0 && !/jalar:/.test(l) && /Recibir de maquila/.test(foco),
+    `pregunta ${abierta ? "abierta" : "NO SE ABRIÓ"} → Esc: ${n ? "SIGUE abierta" : "se cierra"}; ${/jalar:/.test(l) ? "la RECIBIÓ" : "no recibe"}; el foco en «${foco.slice(0, 40)}»`);
+});
+await caso("pla-83-la-oc-con-una-maquila", "vista=oc&oc=OC-0670&caso=maquila", async p => {
+  const nota = (await p.evaluate(() => { const e = document.querySelector('[role="note"]'); return e ? e.textContent.replace(/\s+/g, " ") : ""; })) || "";
+  let d = "";
+  try { await p.getByRole("button", { name: /pasar o recibir las 2/i }).click({ timeout: 3000 }); await espera(p); d = (await dialogo(p)) || ""; } catch (e) { d = "(" + e.message.split("\n")[0] + ")"; }
+  ok("pla-83-la-oc-con-una-maquila", /la maquila, recibida/.test(nota) && /Ya están listas: pasar o recibir las 2/.test(nota) && /Pasar o recibir 2 órdenes de OC-0670/.test(d),
+    `la nota «${nota.slice(0, 220)}» · pregunta «${d.slice(0, 120)}»`);
+});
+await caso("pla-84-lo-de-la-maquila-se-lee", "caso=maquila", async p => {
+  const resumen = p.getByText(/^En maquila/).first(); if (await resumen.count()) { await resumen.click(); await espera(p); }
+  const malos = await contrastes(p);
+  ok("pla-84-lo-de-la-maquila-se-lee", !malos.length, malos.length ? malos.length + " textos bajo 4.5: " + [...new Set(malos)].slice(0, 6).join(" · ") : "todo a 4.5 o más (con «Recibir de maquila» y «Falta… para recibirla»)");
+});
+await caso("pla-85-enviada-tambien-se-recibe", "", async p => {
+  await p.evaluate(() => window.__cambiar("P-0726", { stage: "maq_sent" })); await espera(p, 400);
+  const hay = await tieneRecibir(p, "P-0726"), d = (await dice(p, "P-0726")) || "";
+  ok("pla-85-enviada-tambien-se-recibe", hay && /Enviada al maquilador/.test(d) && /MAKILA/.test(d), `P-0726 enviada: botón ${hay ? "sí" : "NO"} · «${d.slice(0, 140)}»`);
+});
+for (const [an, al] of [[1920, 1080], [1366, 768]])
+  await caso("pla-86-maquila-a-" + an, "caso=maquila", async p => {
+    const resumen = p.getByText(/^En maquila/).first(); if (await resumen.count()) { await resumen.click(); await espera(p); }
+    const r = await p.evaluate(() => ({ h: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      partidos: [...document.querySelectorAll("[data-orden] button,[data-oc] button")].filter(b => /Recibir|Pasar/.test(b.textContent) && b.getClientRects().length && b.getBoundingClientRect().height > 48).map(b => b.textContent.trim()),
+      salidos: [...document.querySelectorAll("[data-orden]")].filter(f => f.getClientRects().length && f.scrollWidth > f.clientWidth + 1).map(f => f.getAttribute("data-orden")) }));
+    ok("pla-86-maquila-a-" + an, !r.h && !r.partidos.length && !r.salidos.length, `${r.h ? "CON barra horizontal" : "sin barra horizontal"}${r.partidos.length ? "; partidos: " + r.partidos.join(", ") : ""}${r.salidos.length ? "; se salen: " + r.salidos.join(", ") : ""}`);
+  }, { width: an, height: al });
+
 await browser.close();
 for (const r of res) console.log(r);

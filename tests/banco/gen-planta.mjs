@@ -6,7 +6,7 @@
 // tests/recorrido/karla-planta.mjs.
 // Uso: node gen-planta.mjs <App.jsx> <dirSalida>
 // Variantes por URL:
-//   vista=planta|oc (por defecto planta) · oc=OC-0657|OC-0660|OC-0665|OC-LISTA (la OC del aviso) · caso=normal|vacio ·
+//   vista=planta|oc (por defecto planta) · oc=OC-0657|OC-0660|OC-0665|OC-LISTA (la OC del aviso) · caso=normal|vacio|maquila ·
 //   buscar=P-0704 (lo que App filtra con su buscador) · falla=1 (la base rechaza al pasar)
 // window.__cambiar(id, {…}) cambia una orden con la pantalla abierta (como el tiempo real) · window.__ordenes() las devuelve.
 import fs from "node:fs";
@@ -17,7 +17,7 @@ const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
-const RAICES = ["EnLaPlanta", "FaltanParaFoliar", "ConfirmModal", "Toast", "preguntaJalar", "cambioMientrasPregunta"];
+const RAICES = ["EnLaPlanta", "FaltanParaFoliar", "ConfirmModal", "Toast", "preguntaJalar", "cambioMientrasPregunta", "destinoAlJalar"];
 const SIMULADOS = ["supabase", "db", "SignedImg", "firmarOrderFile", "propsArchivoFirmado", "useSignedFile", "abrirArchivoFirmado"];
 const { codigo, simuladosUsados } = extraer(fuente, RAICES, { simulados: SIMULADOS });
 const partes = [
@@ -84,7 +84,8 @@ const NORMAL = [
   // todavía no llegan a máquina (sin botón)
   en("P-0724", "ready", hace(8), { client: "ALEJANDRA RODRIGUEZ MANRIQUE IMPRESOS", product_type: "Volantes", quantity: 10000 }),
   en("P-0725", "design", hace(9), { client: "RESTAURANTES HAKUNA", product_type: "Cajas" }),
-  // en maquila (sin botón)
+  // en maquila: P-0726 (maquila completa con el proveedor, con su precio y su costo) se recibe desde aquí desde v10.84.116; P-0727 (la
+  //   maquila de una orden de la planta), no
   en("P-0726", "maq_in_progress", hace(40), { client: "CERVECERIA MODELO", product_type: "Displays", order_type: "maquila", maq_provider: "MAKILA", maq_price: 3000, maq_cost: 2000 }),
   en("P-0727", "maquila_out", hace(30), { client: "IMPRENTA LEON", product_type: "Encuadernado" }),
   // lo que ya no está en la planta: no sale
@@ -92,7 +93,16 @@ const NORMAL = [
   orden("P-0729", { stage: "delivered", delivered_at: hace(5) }),
   en("P-0730", "salidas", hace(4), { client: "LIC. ORLANDO CASAS" }),
 ];
-const ORDENES = CASO === "vacio" ? NORMAL.filter(o => ["salidas", "delivered", "cancelled"].includes(o.stage)) : NORMAL;
+// v10.84.116 — caso=maquila: más maquilas completas. Dos que NO se reciben desde aquí (una con el proveedor sin su costo, una sin
+//   enviar) y la OC-0670, revuelta: una en Salidas, una en Empaque y una maquila con el proveedor que lleva Genaro (pasar O recibir)
+const MAQUILA_EXTRA = [
+  en("P-0752", "maq_in_progress", hace(20), { client: "GOBIERNO DEL ESTADO DE GUANAJUATO", product_type: "Lonas", order_type: "maquila", maq_provider: "TRODAT", maq_price: 4000, maq_cost: null }),
+  en("P-0753", "maq_created", hace(5), { client: "COSQUIM", product_type: "Sellos", order_type: "maquila", maq_provider: "TRODAT", maq_price: 900, maq_cost: 600 }),
+  en("P-0754", "salidas", hace(6), { purchase_order_id: "OC-0670", client: "CASTORES", product_type: "Guías" }),
+  enEmpaque("P-0755", hace(3), { purchase_order_id: "OC-0670", client: "CASTORES", product_type: "Etiquetas" }),
+  en("P-0756", "maq_in_progress", hace(30), { purchase_order_id: "OC-0670", client: "CASTORES", product_type: "Lonas", order_type: "maquila", maq_provider: "TRODAT", maq_price: 2500, maq_cost: 1800, agent: "Genaro" }),
+];
+const ORDENES = CASO === "vacio" ? NORMAL.filter(o => ["salidas", "delivered", "cancelled"].includes(o.stage)) : CASO === "maquila" ? [...NORMAL, ...MAQUILA_EXTRA] : NORMAL;
 // los ids de cada OC del aviso (lo que App le pasa: las órdenes de la OC sin folio y vivas)
 const OC_LISTA = [en("P-0750", "salidas", hace(3), { purchase_order_id: "OC-LISTA" }), en("P-0751", "salidas", hace(2), { purchase_order_id: "OC-LISTA" })];
 function Banco() {
@@ -107,7 +117,8 @@ function Banco() {
   // lo que hace App (doAdv) al pasar una a Salidas, en corto: sale de su máquina y la fila sube un lugar (moveOrderInQueue)
   const aSalidas = id => setOrdenes(os => { const o = os.find(x => x.id === id); if (!o) return os;
     const deja = o.current_machine && o.current_machine !== "vm_manual" && o.machine_queue_position != null;
-    return os.map(x => x.id === id ? { ...x, stage: "salidas", current_machine: null, machine_queue_position: null }
+    // (v10.84.116) a su destino: Salidas, o «Recibida de maquila» si es maquila completa (destinoAlJalar, si el App.jsx lo trae)
+    return os.map(x => x.id === id ? { ...x, stage: typeof destinoAlJalar === "function" ? destinoAlJalar(o) : "salidas", current_machine: null, machine_queue_position: null }
       : deja && x.current_machine === o.current_machine && x.machine_queue_position > o.machine_queue_position
         ? { ...x, machine_queue_position: x.machine_queue_position - 1, ...(x.machine_queue_position - 1 === 0 ? { machine_log: [{ machine: x.current_machine, started: new Date().toISOString() }] } : {}) } : x); });
   const pedir = ids => { const lista = ids.map(id => ref.current.find(o => o.id === id)).filter(Boolean);
@@ -119,7 +130,7 @@ function Banco() {
       if (FALLA) { anotar("la base rechazó"); jalando.current = false; setPregunta(null); setAviso({ m: "❌ " + lista[0].production_number + " no pasó a «Salidas»: la base no lo aceptó.", t: "error" }); return; }
       lista.forEach(o => aSalidas(o.id));
       jalando.current = false; setPregunta(null);
-      setAviso({ m: lista.map(o => o.production_number).join(" y ") + (lista.length === 1 ? " ya está en Salidas." : " ya están en Salidas."), t: "success" });
+      setAviso({ m: lista.map(o => o.production_number + (typeof destinoAlJalar === "function" && destinoAlJalar(o) === "maq_received" ? " ya está recibida de maquila" : " ya está en Salidas")).join(" y ") + ".", t: "success" });
     })); };
   // la pregunta se vence si alguna de sus órdenes cambia con ella abierta (otra persona la movió): se cierra y se dice
   useEffect(() => { if (!pregunta?.jalar || jalando.current) return; const c = cambioMientrasPregunta(pregunta.jalar, ordenes);

@@ -1233,6 +1233,47 @@ await caso("det-195-por-partes-maquila", "caso=maquila&rol=karla", async p => {
   ok("det-195-por-partes-maquila", !sin && con, `una maquila en proceso: sin precio al cliente «Facturar por partes» ${sin ? "SÍ está" : "no está"}; con $972 (maq_price) ${con ? "está" : "NO está"}`);
 });
 
+// v10.84.116 — Karla recibe de maquila desde «Más» (la maquila completa con el proveedor, con su precio al cliente y su costo), y dice a
+//   quién se le avisa (Lupita, o el vendedor que la lleva); Lupita, no desde aquí (lo suyo es «Recibimos el Trabajo»). Vuelta 1: contra v10.84.115.
+const itemRecibir = p => p.getByRole("menuitem", { name: /Ya llegó de la maquila/ });
+await caso("det-196-karla-recibe-de-maquila", "caso=maquila&rol=karla", async p => {
+  const sin = await enMas(p, /Ya llegó de la maquila/); await p.keyboard.press("Escape"); await espera(p, 200);
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const con = await enMas(p, /Ya llegó de la maquila/);
+  const t = con ? (await itemRecibir(p).innerText()).replace(/\s+/g, " ") : "";
+  let despacha = false;
+  if (con) { await itemRecibir(p).click(); await espera(p, 300); despacha = /accion:jalar_a_salidas/.test(await log(p)); }
+  ok("det-196-karla-recibe-de-maquila", !sin && con && /Lupita/.test(t) && /MAKILA/.test(t) && despacha,
+    `una maquila con el proveedor: sin precio al cliente «Ya llegó de la maquila» ${sin ? "SÍ está" : "no está"}; con $972 ${con ? "«" + t + "»" + (despacha ? " y la pide a App" : " pero no hace nada") : "NO está"}`);
+});
+await caso("det-197-lupita-no-desde-mas", "caso=maquila&rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const hay = await enMas(p, /Ya llegó de la maquila/);
+  ok("det-197-lupita-no-desde-mas", !hay, `Lupita: «Ya llegó de la maquila» en «Más» ${hay ? "SÍ está (lo suyo es «Recibimos el Trabajo»)" : "no está"}`);
+});
+await caso("det-198-avisa-al-vendedor-que-la-lleva", "caso=maquila&rol=karla&agente=Genaro", async p => {
+  await p.evaluate(() => window.__cambiar({ maq_price: 972 })); await espera(p, 300);
+  const con = await enMas(p, /Ya llegó de la maquila/);
+  const t = con ? (await itemRecibir(p).innerText()).replace(/\s+/g, " ") : "";
+  ok("det-198-avisa-al-vendedor-que-la-lleva", con && /Genaro/.test(t) && !/Lupita/.test(t), `la maquila de Genaro: ${con ? "«" + t + "»" : "«Ya llegó de la maquila» NO está"}`);
+});
+
+// (vuelta 3) sin proveedor capturado, y el precio al cliente en el límite (0 y negativo no; centavos sí, como doAdv)
+await caso("det-199-sin-proveedor-no-dice-null", "caso=maquila&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ maq_price: 972, maq_provider: null })); await espera(p, 300);
+  const con = await enMas(p, /Ya llegó de la maquila/);
+  const t = con ? (await itemRecibir(p).innerText()).replace(/\s+/g, " ") : "";
+  ok("det-199-sin-proveedor-no-dice-null", con && !/null|undefined|\(\)/.test(t), `sin proveedor: ${con ? "«" + t + "»" : "«Ya llegó de la maquila» NO está"}`);
+});
+await caso("det-200-precio-en-el-limite", "caso=maquila&rol=karla", async p => {
+  const r = [];
+  for (const v of [0, -5, 0.5]) {
+    await p.evaluate(v => window.__cambiar({ maq_price: v }), v); await espera(p, 250);
+    r.push(v + ":" + (await enMas(p, /Ya llegó de la maquila/) ? "sí" : "no")); await p.keyboard.press("Escape"); await espera(p, 200);
+  }
+  ok("det-200-precio-en-el-limite", r.join(" ") === "0:no -5:no 0.5:sí", "precio al cliente → «Ya llegó de la maquila»: " + r.join(" · "));
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
