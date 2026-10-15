@@ -65,7 +65,8 @@ export async function corregirPrecioEnLaBase({ supabase, orden, nuevo, motivo = 
   if (avisar) {
     const mensaje = "💰 Precio corregido · " + nombre + (vivo.client ? " · " + vivo.client : "") + ": " + formato(antes) + " → " + formato(precio) + " sin IVA"
       + (isMaq ? " (maquila)" : "") + " · por " + (usuario || rol || "?") + " · «" + m + "»";
-    for (const d of destinosDelAviso(vivo, rol, usuario)) { try { await avisar(d, mensaje, m); } catch (e) { avisado = false; } }
+    // (cor-38) el porqué va en el mensaje y sólo ahí: la bandeja pinta aparte el «reason» como «Motivo:» (dos veces), como dijo CobranzaFlow
+    for (const d of destinosDelAviso(vivo, rol, usuario)) { try { await avisar(d, mensaje); } catch (e) { avisado = false; } }
   }
   return { upd, antes, isMaq, precio, anotado, avisado, fueraDeHorario: !enHorarioDeAvisos(ahora()) };
 }

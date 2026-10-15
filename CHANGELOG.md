@@ -34,7 +34,8 @@ recomiendes»). Lo ya facturado (la RS- de una entregada, la factura con cobro) 
   precio que se leyó): si algo cambió entre leer y escribir, «Mientras corregías…», sin anotar ni avisar.
 - Los avisos (`order_edit`, como la forma al editar) a Dirección y a quien capturó la orden, nunca a quien corrige. Fuera del horario de la base
   (lunes a viernes, 9:00 a 18:59 de México; `enHorarioDeAvisos`, la misma regla que `is_business_hours`) la base los tira sin error: al guardar se
-  dice «a esta hora no llegan avisos a Dirección: queda en el historial de la orden».
+  dice «a esta hora no llegan avisos a Dirección: queda en el historial de la orden». El porqué va UNA vez, en el mensaje (la bandeja pinta aparte el
+  «reason» como «Motivo:»; lo vio la revisión independiente de CobranzaFlow, cor-38).
 - El porqué de 8 letras (sin los espacios de las orillas), como Ajustar y Re-facturar de CobranzaFlow.
 - «¿Tecleaste el total con IVA?» si el precio es el de hoy por 1.16 o el importe con IVA de una factura sin orden del cliente; y al revés, «Con
   este precio, F-180 ($70,180.00 con IVA) queda del mismo importe».
@@ -51,7 +52,7 @@ fallaban (cor-26 a cor-37, cap-01, cap-02 y cap-04); en la ventana inv-160 a inv
 ord-334 (sin candado para Karla); los guardias pasaban (ord-333: si en la forma SÍ cambian el precio, se guarda el suyo; ord-335: sin precio,
 Karla lo captura). **Vuelta 2**: todo pasa; cor-01 pedía que el UPDATE llevara sólo el id (supuesto de la prueba: ahora lleva sus condiciones,
 cor-29). **Vuelta 3**, por donde no se diseñó: el precio al cliente de una maquila (ord-336) y «Editar Specs» (ord-337), que contra v10.84.114
-fallaban. Las tandas que tocan esto: folio 197 de 197, orden 153 de 153, orden-2 109 de 109, corregir 41 de 41, detalle 204 de 204 (det-138 se cayó al cargar su página por ERR_NO_BUFFER_SPACE, la red de Windows con dos tandas a la vez; sola, 3 de 3), hooks y chips; build y alcance.
+fallaban; y el porqué salía dos veces en la bandeja (cor-38, fallaba antes del arreglo). Las tandas que tocan esto: folio 197 de 197, orden 153 de 153, orden-2 109 de 109, corregir 41 de 41, detalle 204 de 204 (det-138 se cayó al cargar su página por ERR_NO_BUFFER_SPACE, la red de Windows con dos tandas a la vez; sola, 3 de 3), hooks y chips; build y alcance.
 
 **En producción:** (se llena al subir)
 

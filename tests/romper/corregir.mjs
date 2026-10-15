@@ -90,7 +90,9 @@ const updates = b => b.llamadas.filter(l => l.op === "update");
 // el historial de la orden (order_timeline): lo que se anotó, o que la base no lo aceptó
 let notas = [], fallaNota = false, avisos = [], fallaAviso = false, ahora = new Date("2026-10-15T17:00:00Z");   // jueves 11:00 en México
 const anotar = async texto => { if (fallaNota) throw new Error("insert into order_timeline: upstream timeout"); notas.push(texto); };
-const avisar = async (destino, mensaje) => { if (fallaAviso) throw new Error("insert into notifications: upstream timeout"); avisos.push(destino + " | " + mensaje); };
+let conMotivoAparte = 0;   // (cor-38) avisos que además traen el porqué aparte (la bandeja lo pintaría dos veces: en el mensaje y como «Motivo:»)
+const avisar = async (destino, mensaje, ...resto) => { if (fallaAviso) throw new Error("insert into notifications: upstream timeout"); if (resto.length && resto[0] != null) conMotivoAparte++;
+  avisos.push(destino + " | " + mensaje); };
 const corregir = (b, { orden = P0600, nuevo = 60500, rol = "karla", motivo = "Se capturó mal: el cliente aceptó $60,500" } = {}) => { notas = []; avisos = [];
   return corregirPrecioEnLaBase({ supabase: b.supabase, orden, nuevo, motivo, anotar, avisar, rol, usuario: rol, ahora: () => ahora,
     puede: vivo => puedeCorregirPrecio(vivo, rol), enPalabras: errorEnPalabras, quien: QUIEN, formato: fmt }); };
@@ -211,6 +213,9 @@ try {
   ok("cor-35 un pedido web no se corrige aquí", !!r.error && updates(b).length === 0, r.error);
   b = base({ fila: { return_covered_by_folio: "F-120" } }); r = await corregir(b, { orden: { ...P0600, return_covered_by_folio: "F-120" } });
   ok("cor-36 un re-trabajo cubierto por su folio no se corrige aquí (la base le exige precio 0)", !!r.error && updates(b).length === 0, r.error);
+  conMotivoAparte = 0; b = base(); r = await corregir(b);
+  ok("cor-38 el porqué va UNA vez en el aviso (en el mensaje; nada aparte que la bandeja pinte otra vez como «Motivo:»)",
+    !r.error && avisos.length === 2 && conMotivoAparte === 0 && avisos.every(a => a.split("Se capturó mal").length === 2), JSON.stringify({ conMotivoAparte, avisos }));
   b = base(); r = await corregir(b, { motivo: "ya está" });
   ok("cor-37 el porqué de menos de 8 letras (sin los espacios de las orillas) no llega a la base", !!r.error && b.llamadas.length === 0, JSON.stringify(r));
   // cap-01 a cap-04: «Capturar precio» (la orden sin precio al asignar folio) dice quién, sólo si sigue sin precio ni folio, y confirma

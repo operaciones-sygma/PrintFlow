@@ -22501,7 +22501,7 @@ export default function PrintFlow() {
     // v10.84.115 — y avisa a Dirección y a quien capturó la orden (Marcelo, 15-oct), con el antes, el después sin IVA y el porqué (tipo order_edit,
     //   como la forma al editar); fuera de horario la base los tira en silencio: se dice al guardar
     const r=await corregirPrecioEnLaBase({supabase,orden:o,nuevo,motivo,rol:user,usuario:userLogin||user,anotar:texto=>db.addTimeline(o.id,texto,user,C.fac),
-      avisar:(destino,mensaje,porque)=>db.addNotification(destino,o.id,"order_edit",mensaje,porque,user),puede:vivo=>puedeCorregirPrecio(vivo,user),
+      avisar:(destino,mensaje)=>db.addNotification(destino,o.id,"order_edit",mensaje,null,user),puede:vivo=>puedeCorregirPrecio(vivo,user),
       enPalabras:errorEnPalabras,formato:fmt,quien:{last_edited_by:userLogin||user,last_edited_by_uid:AUTH_UID,last_edited_at:new Date().toISOString()}});
     if(r.error) return {error:r.error};
     setOrders(p=>p.map(x=>x.id===o.id?{...x,...r.upd}:x));
