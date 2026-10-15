@@ -50,7 +50,12 @@ desde v10.84.93**: buscaba el menú «Folios», que desde entonces es el «Pendi
 «Enviada», 1920 y 1366, sin proveedor, el precio al cliente en 0, negativo y con centavos, la base que rechaza (I) y la maquila de Genaro (J: el
 aviso a él, no a Lupita): 13 de 13 a la primera, sin fallas de fondo. Quedan planta 53, detalle 209 y el recorrido karla-planta 32 de 32 (A a J).
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~17:36; READY `dpl_8MVqWgXSAvfQaHcLPXkLV31RoNgy` (commit `9990d27`). Vuelta atrás: promover
+`dpl_D4PcRr8hrVZfqmee7FVQfWbyMcBW` (el código de v10.84.115) o `git revert 9990d27`; la base no cambió. Candado 1808 de 1808 a la primera, de a 2
+tandas en 26 min (19 nuevas), ninguna a la segunda. Revisado en producción sin escribir (medir-116, la cuenta visor con el rol de Karla): 5 de 5; las
+3 maquilas con el proveedor de ese momento (P-0625 con CREATIVE, P-0636 con PEÑA y P-0650 con TRODAT, de Manuel: las lleva Lupita) salen a la vista
+con «Recibir de maquila»; la pregunta de P-0625 nombra a CREATIVE y a Lupita y «No» no escribe; «Más» de su detalle ofrece «Ya llegó de la maquila:
+recibirla».
 
 ## v10.84.115 — «Corregir precio»: los avisos, el candado de la forma para Karla y que nada regrese una corrección — 15-oct-2026
 

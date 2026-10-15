@@ -115,7 +115,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1789 pruebas, ~26 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1808 pruebas, ~26 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -190,7 +190,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.115 (15-oct, ~16:22; READY `dpl_BNKmkeUxLJe4x8j7iWQPRowd1tk7`, commits `0ce952e` y `6756c4e`; vuelta atrás: promover
+- **LIVE:** v10.84.116 (15-oct, ~17:36; READY `dpl_8MVqWgXSAvfQaHcLPXkLV31RoNgy`, commit `9990d27`; vuelta atrás: promover
+  `dpl_D4PcRr8hrVZfqmee7FVQfWbyMcBW` (el código de v10.84.115) o `git revert 9990d27`; la base no cambió; candado 1808 de 1808, de a 2).
+  v10.84.116: **Karla recibe la maquila completa que ya llegó** («En la planta» → «Con el maquilador» → «Recibir de maquila», «Más» del detalle y
+  la OC; con su precio al cliente y su costo; aviso a Lupita o al vendedor que la lleva). 🔥 El recorrido `karla-planta` estaba roto desde v10.84.93
+  (buscaba «Folios»): corregido.
+  v10.84.115 (15-oct, ~16:22; READY `dpl_BNKmkeUxLJe4x8j7iWQPRowd1tk7`, commits `0ce952e` y `6756c4e`; vuelta atrás: promover
   `dpl_BDNShWcGEerrtF9Q9ZqyHRUyuNQv` (el código de v10.84.114) o `git revert 6756c4e 0ce952e`; la base no cambió; candado 1789 de 1789, de a 2).
   v10.84.115: **«Corregir precio» avisa a Dirección y a quien capturó la orden** (con el antes, el después sin IVA y el porqué; fuera de horario
   se dice), **a Karla la forma le cierra un precio ya capturado** (`precioBloqueadoParaKarla`), **la forma no regresa una corrección**
