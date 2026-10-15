@@ -113,12 +113,16 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1676 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1683 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
     `net::ERR_NO_BUFFER_SPACE` frenaba el candado sin que la app fallara, v10.84.81); en la PC de casa, desde el 14-oct, `PROBAR_PARALELO=2` (las
-    primeras cargas de cada banco esperan hasta 30 s: con 6, una tanda de dinero se cayó mientras otra compilaba). Se activa una vez por copia: `git config core.hooksPath .githooks`.
+    primeras cargas de cada banco esperan hasta 30 s: con 6, una tanda de dinero se cayó mientras otra compilaba). 🔥 **Y desde el 15-oct el
+    candado prueba lo que se sube, no la carpeta** (como CobranzaFlow v3.7.1009): no arranca con cambios sin commit en `src scripts tests
+    index.html package.json package-lock.json vite.config.js .githooks` (también `tests/LEEME.md`) ni si lo que se sube no es HEAD, y
+    `probar.mjs --base` frena si la carpeta cambia durante la corrida: commit de todo ANTES de subir y nada se edita ahí mientras corre (tanda
+    `candado`). Se activa una vez por copia: `git config core.hooksPath .githooks`.
     **Nunca `--no-verify`.** Cada bug que se encuentra deja su prueba en `tests/romper/` (Marcelo, 5-oct-2026).
     🔑 **La segunda oportunidad** (8-oct, la misma de CobranzaFlow, el Cotizador y Almacén; Marcelo: «sí es una mejora, aplica la
     misma metodología para todos los proyectos»): lo que falla se repite UNA vez (sólo sus casos, con `SOLO`); lo que vuelve a fallar

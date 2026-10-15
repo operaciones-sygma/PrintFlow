@@ -7,8 +7,10 @@
 
 z40=0000000000000000000000000000000000000000
 cambios=""
+sube=""
 while read local_ref local_sha remote_ref remote_sha; do
   [ "$local_sha" = "$z40" ] && continue                       # se borra una rama: nada que probar
+  sube="$sube $local_sha"
   if [ "$remote_sha" = "$z40" ]; then cambios="$cambios src/"; continue; fi   # rama nueva: se prueba todo
   cambios="$cambios $(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null || echo src/)"
 done
@@ -17,6 +19,25 @@ case "$cambios" in
   *src/*|*tests/*|*scripts/*|*index.html*|*package.json*|*package-lock.json*|*vite.config*) ;;
   *) echo "candado: sólo documentos; no hace falta correr las pruebas"; exit 0 ;;
 esac
+
+# 15-oct-2026 (lo mismo que CobranzaFlow v3.7.1009) — EL CANDADO PRUEBA LA CARPETA, ASÍ QUE LA CARPETA TIENE QUE SER LO QUE SE SUBE. El build y
+# las pruebas corren sobre los archivos de aquí, no sobre el commit: con un arreglo sin commit (o un archivo sin «git add») todo pasaba y se
+# subía el commit SIN el arreglo; y lo que se sube tiene que ser HEAD. Lo generado (dist/, .banco-*/, tests/salida/) está en .gitignore.
+# tests/romper/candado.mjs lo prueba con el gancho de verdad en un repo temporal.
+CARPETAS="src scripts tests index.html package.json package-lock.json vite.config.js .githooks"
+sucio=$(git status --porcelain -- $CARPETAS 2>/dev/null)
+if [ -n "$sucio" ]; then
+  echo "candado: hay cambios sin commit; el candado probaría algo distinto de lo que se sube. Haz commit (o git stash -u) y vuelve a subir. No se sube."
+  echo "$sucio" | head -20
+  exit 1
+fi
+head_sha=$(git rev-parse HEAD)
+for s in $sube; do
+  if [ "$s" != "$head_sha" ]; then
+    echo "candado: lo que se sube ($s) no es lo que hay en la carpeta (HEAD $head_sha): el candado probaría otra cosa. No se sube."
+    exit 1
+  fi
+done
 
 echo "candado: build y pruebas antes de subir…"
 # la segunda oportunidad (8-oct-2026): con una prueba inestable sin revisar no se sube, y se dice antes de correr nada

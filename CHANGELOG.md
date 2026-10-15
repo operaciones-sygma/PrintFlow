@@ -12,6 +12,28 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## El candado prueba lo que se sube, no la carpeta — 15-oct-2026 (sin versión de la app)
+
+**Qué pasaba.** CobranzaFlow (v3.7.1009, su tercera revisión) encontró que su candado probaba la CARPETA y no el commit, y aquí era igual: el
+build y las pruebas corren sobre los archivos de la copia de trabajo, así que con un arreglo sin commit (o un archivo sin «git add») todo
+pasaba y se subía el commit SIN el arreglo; y lo que se subía podía no ser HEAD. Su otro hueco (el `vite preview` que, al cerrarse a medias,
+podía sacar al candado en 0) aquí no aplica: `probar.mjs` levanta los bancos con `createServer` y los cierra con `server.close()`. Los módulos
+de la segunda oportunidad (`reintento.mjs`, `inestables.mjs`) siguen con la misma huella en PrintFlow, CobranzaFlow y Almacén.
+
+**Qué se cambió** (`.githooks/pre-push`, `scripts/probar.mjs`; la app no cambió): el gancho no arranca si hay cambios sin commit en lo que
+prueba (`src scripts tests index.html package.json package-lock.json vite.config.js .githooks`) ni si lo que se sube no es HEAD; y
+`probar.mjs --base` toma la huella de la carpeta (HEAD y lo que no tiene commit ahí) al empezar y frena, sin guardar la base, si cambia durante
+la corrida. Lo generado (`dist/`, `.banco-*/`, `tests/salida/`) está en `.gitignore`: una corrida no deja rastro ahí (medido). 🔑 **Commit de
+todo antes de subir, también `tests/LEEME.md`** (vive en lo que se prueba), y nada se edita en la carpeta mientras corre el candado.
+
+**Cómo se probó.** Tanda nueva `candado` (`tests/romper/candado.mjs`, sin navegador): el gancho de verdad en un repo temporal, con las
+inestables, el build y las pruebas de mentira, y lo que git le pasa al subir. **Vuelta 1**, con el gancho de antes: fallaban 3 de 5 (con un
+cambio sin commit en `src/`, con un archivo nuevo sin agregar en `tests/` y subiendo algo que no es HEAD, decía «todo en verde» y dejaba subir).
+**Vuelta 2**: 5 de 5. **Vuelta 3**: un documento sin commit fuera de lo que se prueba (`CHANGELOG.md`) no frena una subida de código (can-g06)
+y `tests/LEEME.md` sin commit sí (can-g07: es lo que pasó el 14-oct, cuando un push de documentos lo dejó fuera). Con `reintento`, 26 + 2 de 26 + 2.
+
+**En producción:** (no aplica: el candado corre en la PC; se estrena con su propia subida)
+
 ## v10.84.111 — El redondeo hacia arriba de una orden repartida en muchas facturas ya no traba el plan matriz — 14-oct-2026
 
 **Qué pasaba.** Lo que dejó abierto v10.84.110. Cada celda del plan va exacta por piezas y se redondea al centavo; una orden repartida en muchas

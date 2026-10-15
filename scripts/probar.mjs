@@ -53,6 +53,8 @@ const TANDAS = [
   { nombre: "planta", gen: "tests/banco/gen-planta.mjs", romper: "tests/romper/planta.mjs", puerto: 5193 },
   // sin banco: la segunda oportunidad y sus candados (scripts/reintento.mjs e inestables.mjs, iguales en las cuatro apps; 8-oct)
   { nombre: "reintento", romper: "scripts/probar-reintento.mjs" },
+  // sin banco: el candado prueba lo que se sube, no la carpeta (15-oct, como CobranzaFlow v3.7.1009): el gancho de verdad en un repo temporal
+  { nombre: "candado", romper: "tests/romper/candado.mjs" },
   // sin banco: qué factura por adelantado se pregunta antes de asignar folio (v10.84.68: Karla, F-135 de Castores; las funciones vivas)
   { nombre: "anticipos", romper: "tests/romper/anticipos.mjs" },
   // sin banco: la categoría del trabajo (v10.84.91): las reglas de src/lib/categorias.js con ejemplos de verdad y, contra la base (sólo
@@ -98,6 +100,16 @@ const elegidas = TANDAS.filter(t => !solo || solo.includes(t.nombre));
 if (!elegidas.length) { console.error("probar: ninguna tanda con ese nombre (" + TANDAS.map(t => t.nombre).join(", ") + ")"); process.exit(1); }
 
 const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { cwd: RAIZ, encoding: "utf8" }).trim();
+// 15-oct-2026 (lo mismo que CobranzaFlow v3.7.1009) — el candado prueba la CARPETA, y la carpeta tiene que ser lo que se sube: el gancho no arranca
+//   con cambios sin commit, y con --base la huella de la carpeta (HEAD y lo que no tiene commit en lo que se prueba) se toma al empezar; si cambia
+//   durante la corrida (un commit o un archivo editado), lo que se probó no es lo que se sube: no se guarda la base y frena.
+const CARPETAS_DEL_CANDADO = ["src", "scripts", "tests", "index.html", "package.json", "package-lock.json", "vite.config.js", ".githooks"];
+const huellaDeLaCarpeta = () => {
+  try { return execFileSync("git", ["rev-parse", "HEAD"], { cwd: RAIZ, encoding: "utf8" }).trim() + "\n"
+    + execFileSync("git", ["status", "--porcelain", "--", ...CARPETAS_DEL_CANDADO], { cwd: RAIZ, encoding: "utf8" }).trim(); }
+  catch (e) { return "(no se pudo leer: " + (e?.message || e) + ")"; }
+};
+const huellaAlEmpezar = conBase ? huellaDeLaCarpeta() : null;
 const BASE = path.resolve(RAIZ, gitDir, "probar-base.json");
 // Una subida no pasa con una inestable sin revisar (no tiene caso correr todo para frenar al final)
 const INESTABLES = rutaDelEstado(RAIZ);
@@ -263,6 +275,10 @@ if (filas.nueva.length) console.log("nuevas que pasan: " + filas.nueva.length);
 console.log(`\nprobar: ${pasan + fallan} pruebas, ${pasan} pasan, ${fallan} fallan` + (filas.INESTABLE.length ? ` (${filas.INESTABLE.length} pasaron a la segunda)` : "") + (filas["REGRESIÓN"].length ? `, ${filas["REGRESIÓN"].length} REGRESIONES` : "") + (errores ? `, ${errores} tanda(s) sin correr` : "") + ` · ${seg} s`);
 
 if (fallan || errores) process.exit(1);
+if (conBase && huellaDeLaCarpeta() !== huellaAlEmpezar) {
+  console.log("probar: la carpeta cambió durante la corrida (un commit o un archivo editado): lo que se probó no es lo que se sube. No se guarda la base; vuelve a subir.");
+  process.exit(1);
+}
 if (conBase) {
   fs.writeFileSync(BASE, JSON.stringify({ ...base, ...ahora }, null, 1));
   console.log("probar: base guardada (" + path.relative(RAIZ, BASE) + ")");
