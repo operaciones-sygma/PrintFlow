@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1749 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1761 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -188,7 +188,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.113 (15-oct, ~13:26; READY `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE`, commit `3168cb2`; vuelta atrás: promover
+- **LIVE:** v10.84.114 (15-oct, ~14:00; READY `dpl_Gaucvk5B38HLxSNajfGfmjyxnXqN`, commit `4082c86`; vuelta atrás: promover
+  `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE` (el código de v10.84.113) o `git revert 4082c86`; la base no cambió; candado 1761 de 1761, de a 2 tandas).
+  v10.84.114: 🔑 **«Facturar por partes» antes de Salidas, a la vista** («Más» del detalle, el «⋯» de la ficha y una liga fija en el folio
+  anticipado; la base lo acepta desde v10.84.89, cada parte como folio anticipado). Uno u otro con el folio anticipado.
+  v10.84.113 (15-oct, ~13:26; READY `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE`, commit `3168cb2`; vuelta atrás: promover
   `dpl_w2NYecCBegzE5bdmt7GmYmmi5ZnD` (el código de v10.84.112) o `git revert 3168cb2`; la base no cambió; candado 1749 de 1749, de a 2 tandas).
   v10.84.113: 🔑 **Lupita cancela una orden en cualquier etapa si no tiene nada facturado** (`cancelaLaSecretaria`, el detalle y su ficha; lo
   facturado sigue siendo de Dirección: la base lo frena) y **«Cancelaciones» cancela completo, como el detalle** (`src/lib/cancelarEnLote.js`,

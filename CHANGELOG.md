@@ -33,7 +33,11 @@ importe, la del aviso, que liga).
 
 **Cómo se probó.** Vuelta 1, contra v10.84.113: fallaban det-189 y det-190 (en Empaque y en máquina, Karla no tenía «Facturar por partes» en «Más»), tab-142 (tampoco en el «⋯» de la ficha), pre-37 y pre-39 (en el folio anticipado, sin facturas sin orden, no salía); los guardias pasaban (det-191 a det-194: en Salidas no se repite, Lupita, con folio anticipado, sin precio; tab-143: la que ya va por partes; pre-36 y pre-38: con un anticipo de otro importe, sólo el del aviso). Vuelta 2: todo pasa. Vuelta 3, por donde no se diseñó: la maquila en proceso, por su precio al cliente (maq_price; det-195). Los casos nuevos y los vecinos (det-116, det-124, det-128, tab-119, pre-1 a pre-39) pasan; build y alcance.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~14:00; READY `dpl_Gaucvk5B38HLxSNajfGfmjyxnXqN` (commit `4082c86`). Vuelta atrás: promover `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE` (el código de
+v10.84.113) o `git revert 4082c86`; la base no cambió. Candado 1761 de 1761 de a 2 tandas, con det-157 a la segunda (ERR_NO_BUFFER_SPACE al cargar
+el banco; sola 3 de 3; revisada: la carga, no la app). Revisado en producción sin escribir (medir-114, la cuenta visor con el rol de Karla): 5 de 5;
+P-0578 (en máquina) le ofrece «Facturar por partes» y su ventana se abre encima, su folio anticipado trae la liga fija, y P-0623 (en el plan
+matriz) no lo ofrece.
 
 ## v10.84.113 — Lupita cancela una orden en cualquier etapa (lo que no tiene nada facturado) y «Cancelaciones» cancela completo — 15-oct-2026
 
