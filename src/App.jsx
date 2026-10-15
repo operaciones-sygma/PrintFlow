@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
 import { corregirPrecioEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node
+import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
 import { CATEGORIAS, categoriaSugerida, nombreDeCategoria, esVentaDeInventario } from "./lib/categorias.js"; // v10.84.91 — la categoría del trabajo (las reglas, una vez: la forma sugiere y la base genera su SQL de ellas)
@@ -1261,6 +1262,13 @@ const liquidadaConSaldoAFavor = o => !o?.invoice_folio && (
      !!o?.credit_applied_at
   || (String(o?.stage||"").includes("delivered")
       && /saldo a favor/i.test(String(o?.invoice_reason||""))));
+// v10.84.113 — LUPITA CANCELA EN CUALQUIER ETAPA lo que no tiene nada facturado (Marcelo, 15-oct: «Lupita no puede cancelar órdenes de producción»;
+//   esa mañana P-0629 se canceló desde Empaque y la tuvo que cancelar Dirección). Antes «Cancelar orden» del detalle pedía que la etapa fuera suya
+//   (captura, prueba con el cliente, maquila); su ficha completa sí lo enseñaba fuera de ellas, también en lo facturado. El dinero lo frena la base:
+//   lo facturado (folio propio o agrupado, partes, plan matriz, folio compartido de la OC, saldo a favor) sólo lo cancela Dirección
+//   (guard_order_cancel_direct_write, cancel_order_safe). Aquí no se le ofrece lo que la base le va a rechazar. Sacarla de la fila de su máquina
+//   (move_order_in_queue, también para secretaria), los avisos a Producción y Dirección y el historial van en cancelOrder; el motivo, en la ventana.
+const cancelaLaSecretaria = o => !!o && !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines && !o.oc_invoice_group_id && !o.fiscal_desconocido && !liquidadaConSaldoAFavor(o);
 // v10.84.112 — CORREGIR EL PRECIO ANTES DE FACTURAR (Marcelo, 15-oct: «te doy permiso para que Karla ajuste el precio de las órdenes al final; pasa
 //   muy seguido que las órdenes de producción las ingresan con precio erróneo y Karla no puede facturarlas a tiempo»; P-0600 de PRIME PET, capturada en
 //   $40,000 y era $60,500). Dirección y Karla, y sólo lo que todavía no se factura: sin folio propio ni agrupado, sin partes ni plan matriz (ni la duda
@@ -14961,7 +14969,7 @@ function accionesDeLaFicha(o,role,userLogin){
     ponerEnEspera:canAct&&canSnooze&&!snoozeActive(o),
     duplicar:canAct&&!o.stage.includes("cancelled")&&(role==="admin"||(isSec(role)&&secOwns)),
     cambiarOC:!!(canAct&&o.purchase_order_id&&!o.cart_folio&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns)||role==="karla")),
-    cancelar:canAct&&canCancelBtn,
+    cancelar:role==="secretaria"?(canCancelBtn&&cancelaLaSecretaria(o)):(canAct&&canCancelBtn),   // v10.84.113 — Lupita en cualquier etapa, sin lo facturado
     borrar:canAct&&canDeleteBtn,
     merma:(role==="produccion"||role==="admin")&&["in_production","maquila_out","maquila_in","packaging","salidas","delivered"].includes(o.stage),
     recordar:(!canAct&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!["web_pending","web_rejected"].includes(o.stage)&&!snoozeActive(o)&&resp&&role!==resp.role&&resp.role!=="both")?resp:null,
@@ -15053,7 +15061,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   // v10.84.94 — «Regresar» vive aquí para todos los que pueden (como el «⋯ Más» del detalle: `canRegresar`); antes, fuera de admin, era
   //   un botón más en la fila de la ficha, a veces el primero
   const canRevertBtn=role==="admin"?(o.stage!=="draft"&&o.stage!=="maq_created"&&!o.stage.includes("cancelled")):(canAct&&!snoozeActive(o)&&getRevertOptions(o.stage,role).length>0);
-  const canCancelBtn=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns));
+  const canCancelBtn=!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&(role==="admin"||(isSec(role)&&secOwns))&&(role!=="secretaria"||cancelaLaSecretaria(o));   // v10.84.113 — a Lupita, sin lo facturado
   const canCancelNCBtn=role==="admin"&&!o.stage.includes("cancelled")&&o.invoice_folio;
   const canDeleteBtn=role==="admin"&&!o.invoice_folio&&!o.stock_loaded;
   const hasDangerMenu=canRevertBtn||canCancelBtn||canCancelNCBtn||canDeleteBtn;
@@ -15218,7 +15226,7 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
     {/* Cancel + Move buttons for sec/vendedor (+ Karla solo Mover) — visible outside canAct gate too */}
     {!compact&&!canAct&&!inEsperaView&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&!o.invoice_folio&&((isSec(role)&&secOwns)||role==="karla")&&<div onClick={e=>e.stopPropagation()} style={{marginTop:6,display:"flex",justifyContent:"flex-end",gap:6}}>
       {o.purchase_order_id&&!o.cart_folio&&<button onClick={()=>onAction(o.id,"move_to_oc")} style={bs(C.sf,C.ac)} title="Cambiar OC"><ArrowsLeftRightIcon size={13} weight="bold"/>Mover</button>}
-      {isSec(role)&&secOwns&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dnInk)} title="Cancelar orden"><XIcon size={13} weight="bold"/>Cancelar</button>}
+      {isSec(role)&&secOwns&&(role!=="secretaria"||cancelaLaSecretaria(o))&&<button onClick={()=>onAction(o.id,"cancel_order")} style={bs(C.sf,C.dnInk)} title="Cancelar orden"><XIcon size={13} weight="bold"/>Cancelar</button>}
     </div>}
 
     {/* v10.58.50: tarjeta MUDA → contexto accionable. Si el rol NO tiene acciones en
@@ -22399,20 +22407,35 @@ export default function PrintFlow() {
   // 🆕 v10.72.83 — Cancelación multi: rutea por orden (con folio → cancel_invoiced_order NC admin-only;
   // sin folio → cancelación directa). Error aislado por orden (no aborta el lote). El trigger
   // sync_cancellation_to_cobranza cancela/prorratea la factura en CobranzaFlow cuando hay folio.
+  // v10.84.113 — cada orden se cancela COMPLETA, como «Cancelar orden» del detalle (src/lib/cancelarEnLote.js, tanda `cancelaciones`): sale de la
+  //   fila de su máquina antes de la RPC (que le borra la máquina sin recorrer la fila), y ya cancelada se anota en su historial, deja el
+  //   comentario y les avisa a Producción y a Dirección. P-0629 (15-oct): cancelada desde aquí sin historial ni aviso a Gerardo. La RPC sigue
+  //   decidiendo (rutea por vínculo con cobranza y lo facturado sólo lo deja a Dirección); si la rechaza, la orden regresa a su lugar en la fila.
   const doCancelOrders=useCallback(async(ids,reason)=>{
     if(!ids?.length||!reason||reason.trim().length<5){showToast("❌ Selecciona órdenes y escribe un motivo (mín. 5 caracteres)","error");return;}
-    const r=reason.trim(); let ok=0; const fail=[]; const failIds=[];
+    const r=reason.trim(); let ok=0; const fail=[]; const failIds=[]; const incompletas=[];
+    const dbLote={
+      sacarDeLaFila:id=>db.moveOrderInQueue(id,null,null,user||"sistema"),
+      regresarALaFila:(id,maq,pos)=>db.moveOrderInQueue(id,maq,pos,user||"sistema"),
+      cancelarSegura:(id,motivo,quien)=>db.cancelOrderSafe(id,motivo,quien),
+      arrancarSiguiente:(id,maq)=>promoteLog(id,maq),
+      cerrarTiempoDeMaquina:id=>db.closeMachineLog(id),
+      anotar:(id,texto)=>db.addTimeline(id,texto,user,"#ff3b30"),
+      comentar:(id,texto)=>db.addComment(id,texto,user),
+      avisar:(rol,id,mensaje,motivo)=>db.addNotification(rol,id,"order_cancelled",mensaje,motivo,user),
+    };
+    const pendientes=new Set(ids);
     for(const id of ids){
-      const o=orders.find(x=>x.id===id);
-      try{
-        // RPC autoritativo: rutea por vínculo con cobranza (folio/grupo/splits/matriz/compartido) y admin-gatea los vinculados.
-        await db.cancelOrderSafe(id, r, userLogin||user);
-        // v10.84.76 — el archivo de impresión se queda (antes se borraba aquí, v10.73.50)
-        ok++;
-      }catch(e){ fail.push(((o&&o.production_number)||id)+": "+(e?.message||"error")); failIds.push(id); }
+      pendientes.delete(id);
+      const o=orders.find(x=>x.id===id)||{id};
+      // v10.84.76 — el archivo de impresión se queda (antes se borraba aquí, v10.73.50)
+      const res=await cancelarUnaDelLote({orden:o,motivo:r,quien:userLogin||user,rol:user,db:dbLote,pendientes,nombreDeMaquina:m=>MACHINES.find(x=>x.id===m)?.name||m});
+      if(res.error){fail.push(res.error);failIds.push(id);}
+      else{ok++;if(res.quedo.length)incompletas.push((o.production_number||id)+": no se pudo "+res.quedo.join(", "));}
     }
     await reload();
-    if(fail.length){ showToast("Canceladas "+ok+" · "+fail.length+" con error: "+fail.join(" | "),"error"); }
+    if(fail.length){ showToast("Canceladas "+ok+" · "+fail.length+" con error: "+fail.join(" | ")+(incompletas.length?" · "+incompletas.join(" · "):""),"error"); }
+    else if(incompletas.length){ showToast("✅ "+ok+" orden"+(ok!==1?"es":"")+" cancelada"+(ok!==1?"s":"")+", pero "+incompletas.join(" · "),"warning"); }
     else { showToast("✅ "+ok+" orden"+(ok!==1?"es":"")+" cancelada"+(ok!==1?"s":"")); }
     return failIds; // preserva la selección de las fallidas para reintentar
   },[user,userLogin,orders]);

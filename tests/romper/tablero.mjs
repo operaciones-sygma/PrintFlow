@@ -1198,5 +1198,25 @@ for (const rol of ["produccion", "preprensa", "german", "secretaria", "vendedor"
   });
 }
 
+// v10.84.113 — Lupita cancela en cualquier etapa lo que no tiene nada facturado; lo facturado, Dirección (la base lo frena). Su ficha completa ya
+//   enseñaba «Cancelar» fuera de sus etapas (el detalle no: incoherente), también en lo que va por partes o se pagó con saldo, que la base le rechaza.
+const cancelarEnFicha = (p, pn) => p.evaluate(pn => { const c = [...document.querySelectorAll('[role="button"][aria-label^="Orden "]')].find(x => x.getAttribute("aria-label").startsWith("Orden " + pn));
+  return c ? c.querySelectorAll('button[title="Cancelar orden"]').length : -1; }, pn);
+await caso("tab-139-lupita-cancela-en-empaque", "vista=fichas&rol=secretaria", async p => {
+  const n = await cancelarEnFicha(p, "P-0585");
+  ok("tab-139-lupita-cancela-en-empaque", n === 1, `Lupita, P-0585 en Empaque sin facturar: «Cancelar» ${n === 1 ? "está" : n === -1 ? "(no encontré la ficha)" : "NO está"}`);
+});
+await caso("tab-140-lupita-no-cancela-con-partes", "vista=fichas&rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("P-0580", { has_splits: true, splits: [{ id: "s1", position: 1, doc_type: "factura", invoice_folio: "F-144", qty_portion: 50, amount_portion: 725 },
+    { id: "s2", position: 2, doc_type: "por_facturar", qty_portion: 50, amount_portion: 725 }] })); await espera(p, 400);
+  const n = await cancelarEnFicha(p, "P-0580");
+  ok("tab-140-lupita-no-cancela-con-partes", n === 0, `Lupita, P-0580 en Salidas que va por partes: «Cancelar» ${n === 0 ? "no está" : n === -1 ? "(no encontré la ficha)" : "SÍ está (la base se la rechaza: Dirección)"}`);
+});
+await caso("tab-141-lupita-no-cancela-con-saldo", "vista=fichas&rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar("P-0589", { credit_applied_at: "2026-10-15T10:00:00Z" })); await espera(p, 400);
+  const n = await cancelarEnFicha(p, "P-0589");
+  ok("tab-141-lupita-no-cancela-con-saldo", n === 0, `Lupita, P-0589 pagada con saldo a favor: «Cancelar» ${n === 0 ? "no está" : n === -1 ? "(no encontré la ficha)" : "SÍ está (le movería el saldo: Dirección)"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);

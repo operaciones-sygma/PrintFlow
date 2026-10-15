@@ -56,6 +56,8 @@ const partes = [
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)
   ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
+  // v10.84.113 — lo que Lupita puede cancelar (si el App.jsx lo trae)
+  ...(L.some(l => /^const cancelaLaSecretaria = /.test(l)) ? [multi(/^const cancelaLaSecretaria = /, "cancelaLaSecretaria")] : []),
   // v10.84.112 — «Reimprimir» es para producción: la regla de la ficha y del botón (si el App.jsx la trae)
   ...(L.some(l => /^const pideReimprimir = /.test(l)) ? [multi(/^const pideReimprimir = /, "pideReimprimir")] : []),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),

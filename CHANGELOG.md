@@ -12,6 +12,42 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.113 — Lupita cancela una orden en cualquier etapa (lo que no tiene nada facturado) y «Cancelaciones» cancela completo — 15-oct-2026
+
+**Qué pasaba.** Marcelo (15-oct): «Lupita no puede cancelar órdenes de producción, lo puedes arreglar… ¿es buena idea que ella tenga esa función o
+mejor no?». «Cancelar orden» del detalle le pedía a Lupita que la etapa fuera suya (captura, prueba con el cliente, maquila): en diseño, CTP,
+máquinas, Empaque o Salidas desaparecía. Su ficha completa sí se lo enseñaba, también en lo que va por partes o se pagó con saldo, que la base le
+rechaza. Y la otra puerta, «Cancelaciones» (en lote, de Dirección, Lupita y Karla), cancelaba a medias: sólo la RPC `cancel_order_safe`, sin la
+línea en el historial, sin comentario y sin aviso a Producción ni a Dirección, y si la orden estaba en la fila de una máquina la RPC le borraba la
+máquina sin recorrer la fila (la máquina se quedaba sin activa). P-0629 se canceló así esa mañana, en Empaque: su historial no dice que se canceló y
+Gerardo no recibió aviso (P-0628, que Lupita canceló el 13-oct desde el detalle, sí). En 90 días: 8 cancelaciones, 7 de Dirección (4 con folio) y 1
+de Lupita.
+
+**La decisión** (la recomendé y Marcelo siguió): sí puede, porque los riesgos ya tienen freno y la base no cambia. Lo facturado (folio propio o
+agrupado, partes, plan matriz, folio compartido de la OC, saldo a favor) sólo lo cancela Dirección (`guard_order_cancel_direct_write`,
+`cancel_order_safe`); cancelar la saca de la fila de su máquina (`move_order_in_queue` también deja a secretaria) y avisa; la ventana pide el motivo
+y dice lo que pasa; si ya movió inventario no deja; y si se equivoca, Dirección tiene «Deshacer cancelación».
+
+**Qué se cambió** (`src/App.jsx`, `src/lib/cancelarEnLote.js`; la base no cambió):
+- Una regla, `cancelaLaSecretaria` (sin nada facturado ni la duda de si lo tiene): el detalle («Más», `accionesDeLaFicha`) le ofrece «Cancelar
+  orden» a Lupita en cualquier etapa antes de entregar; su ficha completa (el menú «⋯» y el botón «Cancelar») ya no se lo ofrece en lo facturado. El
+  vendedor, como antes.
+- «Cancelaciones» cancela cada orden como el detalle (`cancelarUnaDelLote`, probado con Node): sale de la fila de su máquina ANTES de la RPC, la RPC
+  decide (lo facturado, sólo Dirección; si la rechaza, la orden regresa a su lugar en la fila), y ya cancelada arranca la siguiente de la máquina,
+  cierra su tiempo de máquina, la anota en su historial con el motivo, deja el comentario y les avisa a Producción y a Dirección; lo que falle de
+  eso se dice en el aviso. En un lote con dos seguidas de la misma máquina, la que también se cancela no arranca.
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.112: det-180 y det-181 fallaban (en Empaque y en máquina Lupita no tenía «Cancelar
+orden»), tab-140 y tab-141 también (su ficha le ofrecía cancelar lo que va por partes o se pagó con saldo); los guardias pasaban (det-182 a
+det-186: partes, saldo, folio anticipado, el vendedor como antes, saldo en su etapa; tab-139: su ficha en Empaque). La tanda nueva `cancelaciones`
+contra una copia fiel de lo de hoy: 8 de 9 fallaban (ni historial, ni comentario, ni avisos, ni la fila de la máquina; el rechazo no regresaba la
+orden a su lugar). **Vuelta 2**: todo pasa. **Vuelta 3**, por donde no se diseñó: dos seguidas de la misma máquina en un lote (cl-10: la segunda
+arrancaba para cancelarse enseguida) y el rechazo sin saber su lugar en la fila (cl-11: «regresar» sin posición la habría vuelto a sacar; la
+primera versión de la prueba devolvía 0 por un «?? 0»: supuesto de la prueba); y en el detalle, sin saber si va por partes o en un grupo de OC,
+no se le ofrece (det-187, det-188). `detalle`, `tablero`, `cancelar`, `cancelaciones` y `corregir`: 579 de 579; build, `hooks` y alcance.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.112 — Karla corrige el precio de una orden antes de facturarla («Corregir precio») — 15-oct-2026
 
 **Qué pasaba.** Las órdenes llegan seguido con el precio mal capturado y Karla no podía corregirlo: el precio de la forma de la orden lo cambia

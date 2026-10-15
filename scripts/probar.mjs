@@ -66,6 +66,9 @@ const TANDAS = [
   // sin banco: «Corregir precio» contra la base (v10.84.112, Karla y P-0600): src/lib/corregirPrecio.js con una base de mentira (la que falla, la
   // que filtra el renglón sin error, la orden que cambió mientras se corregía) y la regla de quién corrige y las palabras, sacadas de App.jsx
   { nombre: "corregir", romper: "tests/romper/corregir.mjs" },
+  // sin banco: «Cancelaciones» cancela cada orden completa, como el detalle (v10.84.113, P-0629): src/lib/cancelarEnLote.js con una base de mentira
+  //   (la fila de la máquina antes de la RPC, el historial, el comentario, los avisos; el rechazo regresa la orden a su lugar)
+  { nombre: "cancelaciones", romper: "tests/romper/cancelaciones.mjs" },
   // «¿ya existe este cliente?» al capturar una orden o una OC: lo que casi seguro ya existe lo frena y dice cuál es (v10.84.69, con
   // CobranzaFlow v3.7.999m); el banco extrae la pregunta, su montaje y la lógica de las dos puertas, con la base simulada
   { nombre: "cliente", gen: "tests/banco/gen-cliente.mjs", romper: "tests/romper/cliente.mjs", puerto: 5192 },
@@ -91,7 +94,7 @@ const TANDAS = [
 // subida no pasa con una sin revisar). Sin segunda oportunidad: las tandas de dinero (las que folian y facturan) y toda prueba de doble
 // acción; más de 3 a la vez, o la misma otra vez en 14 días, frenan. Las tandas que aceptan SOLO repiten sólo sus casos que fallaron;
 // las demás (cortas), completas.
-const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2", "corregir"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada; corregir, el de una por facturar: sin segunda oportunidad
+const TANDAS_DE_DINERO = ["folio", "oc", "plan", "partes", "cancelar", "orden", "orden-2", "corregir", "cancelaciones"];   // cancelar mueve facturas y saldos; orden, el precio de una facturada; corregir, el de una por facturar: sin segunda oportunidad
 const sinSegundaDe = tanda => hacerSinSegunda({ tandasDeDinero: TANDAS_DE_DINERO, tanda });
 const TOPE_MS = 12 * 60 * 1000;   // una tanda colgada no puede detener el candado para siempre
 

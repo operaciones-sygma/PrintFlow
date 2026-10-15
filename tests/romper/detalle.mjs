@@ -1144,6 +1144,55 @@ await caso("det-179-reimprimir-no-en-salidas", "caso=salidas&rol=admin", async p
   ok("det-179-reimprimir-no-en-salidas", !/Reimprimir/.test(t) && n === 0, `en Salidas con la copia «obsoleta» (cambió el precio): arriba ${/Reimprimir/.test(t) ? "dice «Reimprimir» (no hay hoja que reimprimir)" : "no dice nada"}; el botón ${n ? "dice «Reimprimir»" : "dice «Imprimir»"}`);
 });
 
+// v10.84.113 — Lupita cancela en CUALQUIER etapa lo que no tiene nada facturado (Marcelo, 15-oct: «Lupita no puede cancelar órdenes de producción»;
+//   esa mañana P-0629 se canceló desde Empaque y la tuvo que cancelar Dirección). Antes «Cancelar orden» pedía que la etapa fuera suya. Lo facturado
+//   (partes, folio, saldo a favor) sigue siendo de Dirección: la base se lo rechaza, así que no se le ofrece. El vendedor, como antes.
+const cancelarEnMas = async p => { const hay = await abrirMas(p); return hay ? /Cancelar orden/.test(await p.getByRole("menu").innerText()) : false; };
+await caso("det-180-lupita-cancela-en-empaque", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  const hay = await cancelarEnMas(p);
+  let despacha = false;
+  if (hay) { await p.getByRole("menuitem", { name: /Cancelar orden/ }).click(); await espera(p, 300); despacha = /accion:cancel_order/.test(await log(p)); }
+  ok("det-180-lupita-cancela-en-empaque", hay && despacha, `Lupita, una orden en Empaque sin facturar: «Cancelar orden» ${hay ? "está" : "NO está"}${hay ? (despacha ? " y la pide a App" : " pero no hace nada") : ""}`);
+});
+await caso("det-181-lupita-cancela-en-maquina", "caso=salidas&rol=secretaria&etapa=in_production", async p => {
+  const hay = await cancelarEnMas(p);
+  ok("det-181-lupita-cancela-en-maquina", hay, `Lupita, una orden en máquina sin facturar: «Cancelar orden» ${hay ? "está" : "NO está"}`);
+});
+await caso("det-182-lupita-no-cancela-con-partes", "caso=resto&rol=secretaria&etapa=salidas", async p => {
+  const hay = await cancelarEnMas(p);
+  ok("det-182-lupita-no-cancela-con-partes", !hay, `Lupita, una orden en Salidas que va por partes: «Cancelar orden» ${hay ? "SÍ está (la base se la rechaza: la cancela Dirección)" : "no está"}`);
+});
+await caso("det-183-lupita-no-cancela-con-saldo", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ credit_applied_at: "2026-10-15T10:00:00Z" })); await espera(p, 300);
+  const hay = await cancelarEnMas(p);
+  ok("det-183-lupita-no-cancela-con-saldo", !hay, `Lupita, una orden pagada con saldo a favor: «Cancelar orden» ${hay ? "SÍ está (le movería el saldo al cliente: Dirección)" : "no está"}`);
+});
+await caso("det-184-lupita-no-cancela-con-folio-anticipado", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-181", invoice_type: "factura", invoice_pre_assigned: true })); await espera(p, 300);
+  const hay = await cancelarEnMas(p);
+  ok("det-184-lupita-no-cancela-con-folio-anticipado", !hay, `Lupita, una orden con folio anticipado: «Cancelar orden» ${hay ? "SÍ está" : "no está"}`);
+});
+await caso("det-185-el-vendedor-como-antes", "caso=salidas&rol=vendedor&etapa=packaging", async p => {
+  const hay = await cancelarEnMas(p);
+  ok("det-185-el-vendedor-como-antes", !hay, `el vendedor, una orden en Empaque: «Cancelar orden» ${hay ? "SÍ está (esto no se le dio)" : "no está, como antes"}`);
+});
+await caso("det-186-lupita-en-su-etapa-con-saldo", "caso=borrador&rol=secretaria", async p => {
+  await p.evaluate(() => window.__cambiar({ credit_applied_at: "2026-10-15T10:00:00Z" })); await espera(p, 300);
+  const hay = await cancelarEnMas(p);
+  ok("det-186-lupita-en-su-etapa-con-saldo", !hay, `Lupita, en captura, una orden ya pagada con saldo a favor: «Cancelar orden» ${hay ? "SÍ está (la base se la rechaza: Dirección)" : "no está"}`);
+});
+// vuelta 3, por donde no se diseñó: lo que la base le rechazaría y la pantalla no siempre ve
+await caso("det-187-lupita-sin-saber-si-va-por-partes", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ fiscal_desconocido: true })); await espera(p, 300);
+  const hay = await cancelarEnMas(p);
+  ok("det-187-lupita-sin-saber-si-va-por-partes", !hay, `Lupita, sin saber si la orden va por partes (la lectura falló): «Cancelar orden» ${hay ? "SÍ está (una lectura que falla no es permiso)" : "no está"}`);
+});
+await caso("det-188-lupita-en-grupo-de-oc", "caso=salidas&rol=secretaria&etapa=packaging", async p => {
+  await p.evaluate(() => window.__cambiar({ oc_invoice_group_id: "g-oc-1" })); await espera(p, 300);
+  const hay = await cancelarEnMas(p);
+  ok("det-188-lupita-en-grupo-de-oc", !hay, `Lupita, una orden de un grupo de OC facturado: «Cancelar orden» ${hay ? "SÍ está (es de Dirección)" : "no está"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
