@@ -12,6 +12,61 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.112 — Karla corrige el precio de una orden antes de facturarla («Corregir precio») — 15-oct-2026
+
+**Qué pasaba.** Las órdenes llegan seguido con el precio mal capturado y Karla no podía corregirlo: el precio de la forma de la orden lo cambia
+quien la capturó, y ella se quedaba sin facturar a tiempo. El caso de hoy: P-0600 de PRIME PET (OC-0920) se capturó en $40,000 y era $60,500;
+F-180 ($70,180 = $60,500 + IVA) ya está timbrada sin orden (F-179 se canceló y CobranzaFlow liberó su folio). Marcelo (15-oct): «te doy permiso
+para que Karla ajuste el precio de las órdenes al final; pasa muy seguido que las órdenes de producción las ingresan con precio erróneo y Karla
+no puede facturarlas a tiempo»; y nada de cambiarlo en la base a mano: «Karla debe tener la opción de editar en PrintFlow».
+
+**Qué se cambió** (`src/App.jsx`, `src/lib/corregirPrecio.js`; la base no cambió):
+- **Quién y qué** (`puedeCorregirPrecio`): Dirección y Karla, y sólo lo que todavía no se factura: sin folio propio ni agrupado, sin partes ni
+  plan matriz (ni la duda de si los tiene), fuera de un grupo de OC, sin saldo a favor aplicado, y ni entregada, cancelada, en stock o web sin
+  revisar. Lo ya facturado no se corrige aquí (lo está revisando CobranzaFlow: su parte es de base).
+- **Dos puertas:** «Corregir precio» junto al subtotal de «Asignar folio y entregar» (apagado mientras emite) y en «Más» del detalle de la orden
+  (se abre encima del detalle).
+- **La ventana** (`CorregirPrecioModal`): el precio correcto SIN IVA (como el de la orden) con su IVA y su precio por pieza a la vista, y el
+  porqué (5 letras o más), que va al historial de la orden: «💰 Precio corregido: $40,000.00 → $60,500.00 sin IVA · …». El mismo precio no se
+  guarda; un cero de más o de menos dice «Cambia mucho: de … a …» sin frenar; sin precio capturado lo dice en palabras; Esc o el fondo con algo
+  escrito preguntan; «ocupado» desde el clic; el rechazo de la base se dice adentro y lo escrito se queda; Ctrl+Enter guarda; cabe en una
+  pantalla chica (683×384) y se desliza por dentro. La maquila corrige su precio al cliente (`maq_price`).
+- **La base** (`src/lib/corregirPrecio.js`, sin React, probado con Node): relee la orden (si mientras se corregía se folió, se entregó, se canceló o
+  se pagó con saldo, no), cuenta en la base las partes y las líneas del plan matriz (no son columnas), guarda en su columna **con quién lo cambió**
+  (`last_edited_by`/`_uid`/`_at`, como la forma: el historial de la base, `order_change_log`, lo atribuye por ahí) y **confirma que se guardó** (un
+  UPDATE que el permiso filtra no da error, sólo 0 renglones: regla 2). Ya guardado (y sólo entonces), anota el porqué en el historial de la
+  orden; si esa línea no queda, el precio sí cambió y Karla ve «el porqué no se anotó en su historial: agrégalo como nota».
+- **Después:** «Asignar folio» se reabre con el precio nuevo y vuelve a leer las facturas sin orden: con P-0600 en $60,500, F-180 sale «del mismo
+  importe» para ligarla.
+- Lo que la base hace sola cuando cambia el precio (medido el 15-oct, sólo lectura): lo anota en `order_change_log`, el total de la OC lo sigue
+  (`recalculate_oc_total`) y, si la hoja ya se imprimió, la marca «Reimprimir» (la hoja lleva el precio; P-0600 ya la tenía). Los candados de
+  precio de la base (`guard_order_price_direct_write`) son para lo facturado: aquí no aplican. Las columnas y sus permisos para `authenticated`
+  existen (medido).
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.111 (sin la función): fallaban inv-146 a inv-150 y det-176 a det-178 (inv-151, que
+quien no puede no vea el botón, pasaba: es el guardia); det-177 tronaba por la prueba (`newPage` en el contexto por omisión) y se partió en dos
+casos. **Vuelta 2**: inv-148 era un bug de verdad: Esc con el foco en el precio no hacía nada (el Esc de la app no atiende los campos de texto;
+cada ventana lo atiende en su `onKeyDown`), arreglado; inv-146 e inv-147 eran supuestos de la prueba (con F-180 del mismo importe la ventana se
+reabre en modo ligar, «Se liga F-180», y no dice «Subtotal»; sin precio válido el botón dice «Cambiar a …», sin «$»). **Vuelta 3**, por donde no
+se diseñó: la base de mentira (tanda nueva `corregir`, 21) contra la primera versión fallaba 5: el historial de la base habría dicho «sistema»
+(cor-02), un renglón que el permiso filtra decía «corregido» (cor-14), el mismo precio escribía «$60,500 → $60,500» (cor-15), un precio que no es
+precio llegaba a la base (cor-17) y sin redondeo a centavos (cor-18); y dos mensajes daban otra causa (cor-06, cor-16). Y el porqué: si la base
+guardaba el precio pero no su línea del historial, sólo quedaba en la consola y la pantalla decía «corregido» (cor-19 y cor-20 fallaban; cor-21,
+nada se anota si el precio no cambió). En la ventana, contra lo
+de antes: «$0.00» sin precio (inv-153), el cero de más sin aviso (inv-154), «Corregir precio» abría mientras «Asignar folio» emitía (inv-155) y a
+683×384 la ventana empezaba 43 px arriba de la pantalla, con el título inalcanzable (inv-159; su primera versión pedía el título y el botón a la
+vez, que en 384 px no caben: supuesto de la prueba, ahora pide que se alcancen). La maquila (inv-152) y el Tab (inv-156) pasaban. Las tandas
+`folio`, `detalle`, `corregir` y `hooks` juntas encontraron **una regresión** (det-128): con la opción nueva, el «Más» de Dirección (9 opciones) a
+1366×650 se salía del detalle por arriba (de y=30; el detalle empieza en 49). Arreglo: la descripción de «Corregir precio» en un renglón y el
+menú mide el espacio que hay arriba de «Más» dentro del detalle y, si no cabe, se desliza por dentro (`MenuMasDelDetalle`, sólo lo usa el detalle;
+la próxima opción tampoco lo saca): ahora de y=57 a y=540. Y las tres pantallas de inv-157 llevaban el mismo id (el candado cuenta por id: eran
+UNA prueba); ahora inv-157, inv-158 e inv-159. `folio` 189 de 189, `detalle` 187 de 187, `corregir` 21 de 21, `hooks`, build y alcance.
+
+**Para Karla:** F5; P-0600 → «Asignar Folio y Entregar» → «Corregir precio» (junto al subtotal) → $60,500 y el porqué → «Cambiar a $60,500.00».
+La ventana se reabre y ofrece F-180 «del mismo importe»: ligarla.
+
+**En producción:** (se llena al subir)
+
 ## El candado prueba lo que se sube, no la carpeta — 15-oct-2026 (sin versión de la app)
 
 **Qué pasaba.** CobranzaFlow (v3.7.1009, su tercera revisión) encontró que su candado probaba la CARPETA y no el commit, y aquí era igual: el

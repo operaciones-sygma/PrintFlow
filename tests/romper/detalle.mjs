@@ -1115,6 +1115,27 @@ await caso("det-175-descargar-dos-veces-no-escribe", "caso=archivo&rol=preprensa
     `descargar dos veces y Enter: ${/storage:remove|tabla:update/.test(l) ? "SE BORRÓ/ESCRIBIÓ (" + l.trim().slice(0, 80) + ")" : "nada se borra ni se escribe"}`);
 });
 
+// v10.84.112 — «Corregir precio» en «Más» del detalle (Marcelo, 15-oct: «a karla no le aparece la opción de editar en printflow»): Karla, en una orden
+// sin facturar; ni el vendedor, ni una ya facturada. Vuelta 1: antes del cambio.
+await caso("det-176-karla-corrige-el-precio", "caso=salidas&rol=karla", async p => {
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  let despacha = false, encima = false;
+  if (/Corregir precio/.test(t)) { await p.getByRole("menuitem", { name: /Corregir precio/ }).click(); await espera(p, 300); const l = await log(p); despacha = /accion:corregir_precio/.test(l); encima = !/cerrado/.test(l) && (await cuantosDialogos(p)) === 2; }
+  ok("det-176-karla-corrige-el-precio", /Corregir precio/.test(t) && /historial/.test(t) && despacha && encima,
+    `en «Más»: ${/Corregir precio/.test(t) ? "está" : "NO está"}; ${despacha ? "la pide a App" : "no hace nada"}${despacha ? (encima ? ", encima del detalle" : ", y el detalle SE CIERRA") : ""}`);
+});
+await caso("det-177-el-vendedor-no-corrige-el-precio", "caso=salidas&rol=vendedor", async p => {
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  ok("det-177-el-vendedor-no-corrige-el-precio", !/Corregir precio/.test(t), `vendedor: ${/Corregir precio/.test(t) ? "LO VE" : "no lo ve"}`);
+});
+await caso("det-178-la-facturada-no-se-corrige-aqui", "caso=factura&rol=karla", async p => {
+  const hay = await abrirMas(p);
+  const t = hay ? await p.getByRole("menu").innerText() : "";
+  ok("det-178-la-facturada-no-se-corrige-aqui", !/Corregir precio/.test(t), `facturada (Karla): ${/Corregir precio/.test(t) ? "LO VE" : "no lo ve"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -54,6 +54,8 @@ const partes = [
   fnBlock("snoozeActive"),
   multi(/^const ETAPA_NOMBRE = \{/, "ETAPA_NOMBRE"), multi(/^const etapaPreviaDeshacer = /, "etapaPreviaDeshacer"),
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
+  // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)
+  ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
   line(/^const recProof=/, "recProof"), multi(/^const STAGE_SEQUENCE/, "STAGE_SEQUENCE"), multi(/^const ROLE_AREAS=\{/, "ROLE_AREAS"), fnBlock("getRevertOptions"), fnBlock("StageFlowButtons"),
   // el tiempo por etapa, el historial de cambios y los pantones REALES (v10.84.49): la base que leen y escriben va simulada abajo
   line(/^function bizMsBetween\(/, "bizMsBetween"), line(/^function bizHoursBetween\(/, "bizHoursBetween"), line(/^function bizDaysBefore\(/, "bizDaysBefore"),
@@ -166,7 +168,7 @@ const ORDEN = { ...(CASOS[CASO] || CASOS.factura), ...(Q.get("etapa") ? { stage:
 // v10.84.53 — la ventana que abre la app para una acción (folio, cancelar, regresar…), como las de verdad: encima del detalle
 //   (zIndex 999), Esc por la pila (useEscClose), el foco en su panel; «Hecho» la termina (a la orden le ponen folio y se
 //   entrega). ventana=sinrol: sin role="dialog", como seis de las ventanas de la app.
-const ENCIMA_BANCO = new Set(["deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
+const ENCIMA_BANCO = new Set(["corregir_precio", "deliver_with_invoice", "deliver_covered", "deliver_only", "split_invoice", "pre_invoice", "apply_historic_folio", "refacturar",
   "deshacer_saldo", "deshacer_cancelacion", "cancel_with_nc", "cancel_order", "revert", "snooze", "waste", "send_maquila", "delete",
   "jalar_a_salidas"]);   // v10.84.67 — la pregunta de «pasar a Salidas» (App) sale encima del detalle
 function VentanaDeAccion({ nombre, onClose, onHecho }) {

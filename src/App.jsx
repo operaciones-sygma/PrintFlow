@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
+import { corregirPrecioEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
 import { CATEGORIAS, categoriaSugerida, nombreDeCategoria, esVentaDeInventario } from "./lib/categorias.js"; // v10.84.91 — la categoría del trabajo (las reglas, una vez: la forma sugiere y la base genera su SQL de ellas)
@@ -1260,6 +1261,12 @@ const liquidadaConSaldoAFavor = o => !o?.invoice_folio && (
      !!o?.credit_applied_at
   || (String(o?.stage||"").includes("delivered")
       && /saldo a favor/i.test(String(o?.invoice_reason||""))));
+// v10.84.112 — CORREGIR EL PRECIO ANTES DE FACTURAR (Marcelo, 15-oct: «te doy permiso para que Karla ajuste el precio de las órdenes al final; pasa
+//   muy seguido que las órdenes de producción las ingresan con precio erróneo y Karla no puede facturarlas a tiempo»; P-0600 de PRIME PET, capturada en
+//   $40,000 y era $60,500). Dirección y Karla, y sólo lo que todavía no se factura: sin folio propio ni agrupado, sin partes ni plan matriz (ni la duda
+//   de si los tiene), fuera de un grupo de OC, sin saldo a favor aplicado, ni entregada, cancelada, en stock o web sin revisar. Lo ya facturado se
+//   corrige donde nació su factura, no aquí.
+const puedeCorregirPrecio = (o, role) => ["admin","karla"].includes(role) && !!o && !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines && !o.fiscal_desconocido && !o.oc_invoice_group_id && !liquidadaConSaldoAFavor(o) && !String(o.stage||"").includes("cancelled") && !["delivered","maq_delivered","stocked","web_pending","web_rejected"].includes(o.stage);
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
@@ -4572,7 +4579,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
   //   —con Esc, «Cancelar» o al terminar— se regresa a la orden, que se actualiza sola (App la busca viva en `orders`), con
   //   el foco donde estaba. Lo que lleva a otra pantalla (editar, duplicar, imprimir) o se hace de una vez (avanzar,
   //   validar, recordar, quitar la espera) sí cierra, como antes.
-  const ENCIMA=["jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
+  const ENCIMA=["corregir_precio","jalar_a_salidas","deliver_with_invoice","deliver_covered","deliver_only","split_invoice","pre_invoice","apply_historic_folio","refacturar","deshacer_saldo","deshacer_cancelacion","cancel_with_nc","cancel_order","revert","snooze","waste","send_maquila","delete"];
   const volverA=useRef(null),revisarRef=useRef(null);
   const despachar=(id,action,arg)=>{
     escudoDeClics();   // v10.84.54 — el segundo clic de un doble clic no llega a nada
@@ -4673,6 +4680,8 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     role==="karla"&&sePuedeJalar(o)&&{k:"jalar_a_salidas",icono:<ExportIcon size={14} weight="bold"/>,color:tintaAA(C.sal,5),t:"Ya está lista: pasar a Salidas",d:(()=>{const d=dondeVa(o);return "Si Gerardo no la ha pasado. Sigue "+d.lugar.replace(/^En /,"en ")+(d.detalle?" ("+d.detalle+")":"")+"; a él le llega aviso."})()},
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
     canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
+    // v10.84.112 — Karla (y Dirección) corrigen el precio de lo que todavía no se factura (Marcelo, 15-oct: «a karla no le aparece la opción de editar»)
+    puedeCorregirPrecio(o,role)&&{k:"corregir_precio",icono:<CurrencyDollarIcon size={14} weight="bold"/>,color:tintaAA(C.fac,5),t:"Corregir precio",d:"Antes de facturar; queda en su historial."},
     fic.ponerEnEspera&&{k:"snooze",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera",d:"Eliges por qué y hasta cuándo; sale de las listas activas."},
     fic.pedirArchivo&&{k:"web_request_file",icono:<MegaphoneIcon size={14} weight="bold"/>,color:C.wnInk,t:"Avisar a Lupita: falta archivo",d:"Para que se lo pida al cliente. No valides sin el archivo."},
     fic.merma&&{k:"waste",icono:<TrashIcon size={14} weight="bold"/>,color:C.wnInk,t:"Registrar merma",d:"Pliegos o piezas que se echaron a perder."},
@@ -4893,6 +4902,11 @@ function MasDelDetalle({abierto,setAbierto,items,onElegir}){
 function MenuMasDelDetalle({cerrar,alEscape,contenedor,items,onElegir}){
   useEscClose(alEscape||cerrar);
   const menuRef=useRef(null);
+  // v10.84.112 (det-128) — el menú abre hacia arriba desde «Más»: con una opción más, a 1366×650 se salía del detalle por arriba. Se mide el espacio
+  //   que hay arriba de «Más» dentro del detalle (antes de pintar) y, si no cabe, se desliza por dentro: la próxima opción tampoco lo saca
+  const [tope,setTope]=useState(null);
+  useLayoutEffect(()=>{const c=contenedor.current,d=c?.closest('[role="dialog"]');if(!c||!d)return;
+    setTope(Math.max(120,Math.floor(c.getBoundingClientRect().top-Math.max(0,d.getBoundingClientRect().top)-14)));},[]);
   useEffect(()=>{const b=menuRef.current?.querySelector('[role="menuitem"]');if(b)b.focus();
     const fuera=e=>{if(contenedor.current&&!contenedor.current.contains(e.target))cerrar()};
     document.addEventListener("mousedown",fuera);return ()=>document.removeEventListener("mousedown",fuera)},[]);
@@ -4902,11 +4916,11 @@ function MenuMasDelDetalle({cerrar,alEscape,contenedor,items,onElegir}){
     const ir=k=>{e.preventDefault();xs[(k+xs.length)%xs.length].focus();};
     if(e.key==="ArrowDown")ir(i+1);else if(e.key==="ArrowUp")ir(i<0?xs.length-1:i-1);else if(e.key==="Home")ir(0);else if(e.key==="End")ir(xs.length-1);
     else if(e.key==="Tab"){e.preventDefault();e.stopPropagation();(alEscape||cerrar)();}};
-  return <div ref={menuRef} role="menu" aria-label="Más acciones" onKeyDown={mover} style={{position:"absolute",left:0,bottom:"100%",marginBottom:6,zIndex:5,background:C.bg,border:"1px solid "+C.bd,borderRadius:12,boxShadow:C.sh3,padding:4,width:320,maxWidth:"80vw",display:"flex",flexDirection:"column",gap:1}}>
+  return <div ref={menuRef} role="menu" aria-label="Más acciones" onKeyDown={mover} style={{position:"absolute",left:0,bottom:"100%",marginBottom:6,zIndex:5,background:C.bg,border:"1px solid "+C.bd,borderRadius:12,boxShadow:C.sh3,padding:4,width:320,maxWidth:"80vw",display:"flex",flexDirection:"column",gap:1,maxHeight:tope||undefined,overflowY:"auto"}}>
     {items.flatMap(it=>[
-      it.divide&&items.length>1?<div key={it.k+"-linea"} style={{height:1,background:C.bd,margin:"3px 6px"}}/>:null,
+      it.divide&&items.length>1?<div key={it.k+"-linea"} style={{height:1,background:C.bd,margin:"3px 6px",flexShrink:0}}/>:null,
       <button key={it.k} role="menuitem" onClick={()=>onElegir(it.k)} onMouseEnter={e=>{e.currentTarget.style.background=C.sf}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}}
-        style={{display:"flex",alignItems:"flex-start",gap:9,width:"100%",textAlign:"left",border:"none",background:"transparent",fontFamily:"inherit",padding:"8px 10px",borderRadius:8,cursor:"pointer"}}>
+        style={{display:"flex",alignItems:"flex-start",gap:9,width:"100%",textAlign:"left",border:"none",background:"transparent",fontFamily:"inherit",padding:"8px 10px",borderRadius:8,cursor:"pointer",flexShrink:0}}>
         <span style={{color:it.color,marginTop:1,flexShrink:0,display:"inline-flex"}}>{it.icono}</span>
         <span style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}><span style={{fontSize:12.5,fontWeight:700,color:it.color}}>{it.t}</span><span style={{fontSize:11,color:C.t2,lineHeight:1.4}}>{it.d}</span></span>
       </button>])}
@@ -7844,6 +7858,70 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
   </div>;
 }
 
+// v10.84.112 — CORREGIR EL PRECIO de una orden que todavía no se factura (Karla, «al final»; P-0600). El precio nuevo SIN IVA, como el de la orden, con
+//   su IVA y su precio por pieza a la vista, y el porqué, que va al historial de la orden. Ocupado desde el clic; Esc o el fondo con algo escrito
+//   preguntan; lo que la base rechaza se dice aquí y lo escrito se queda. Ctrl+Enter guarda.
+function CorregirPrecioModal({order, onGuardar, onClose}) {
+  const isMaq = order?.order_type === "maquila";
+  const actual = Number(isMaq ? order?.maq_price : order?.price) || 0;
+  const qty = Number(order?.quantity) || 0;
+  const [precio, setPrecio] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [err, setErr] = useState("");
+  const [preguntaSalir, setPreguntaSalir] = useState(false);
+  const nuevo = Number(String(precio).replace(/[$,\s]/g, ""));
+  const conPrecio = precio.trim() !== "" && Number.isFinite(nuevo) && nuevo > 0;
+  const mismo = conPrecio && Math.round(nuevo * 100) === Math.round(actual * 100);
+  const motivoOk = motivo.trim().length >= 5;
+  const valido = conPrecio && !mismo && motivoOk;
+  const escrito = precio.trim() !== "" || motivo.trim() !== "";
+  // (vuelta 3) un cero de más o de menos es el dedazo de dinero más común: con 3 veces o más (o un tercio o menos), se dice; no frena
+  const cambiaMucho = conPrecio && !mismo && actual > 0 && (nuevo >= actual * 3 || nuevo <= actual / 3);
+  const pedirCerrar = () => { if (busyRef.current) return; if (escrito) setPreguntaSalir(true); else onClose(); };
+  useEscClose(useCallback(() => pedirCerrar(), [escrito, onClose]));
+  const porPieza = n => qty > 0 ? " · " + fmt(n / qty) + " la pieza" : "";
+  const guardar = async () => {
+    if (!valido || busyRef.current) return;
+    busyRef.current = true; setBusy(true); setErr("");
+    try { const r = await onGuardar(Math.round(nuevo * 100) / 100, motivo.trim()); if (r && r.error) setErr(r.error); }
+    catch (e) { setErr("No se cambió el precio: " + (e?.message || "error") + "."); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}} onMouseDown={e=>{ if(e.target===e.currentTarget) pedirCerrar(); }}>
+    <div role="dialog" aria-modal="true" aria-labelledby="corregir-precio-titulo" onMouseDown={e=>e.stopPropagation()}
+      onKeyDown={e=>{ if(typeof atraparTab==="function") atraparTab(e); if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); guardar(); }
+        // (vuelta 2, inv-148) el Esc de la app no atiende los campos de texto (es de sus sugerencias): con el foco en el precio o el porqué, aquí
+        if(e.key==="Escape"&&/^(INPUT|TEXTAREA)$/.test(e.target?.tagName||"")){ e.preventDefault(); pedirCerrar(); } }}
+      // (vuelta 3, inv-159) en una pantalla chica (683×384) el centrado la sacaba por arriba y el título no se alcanzaba: cabe y se desliza por dentro
+      style={{background:C.bg,borderRadius:20,padding:24,maxWidth:460,width:"100%",maxHeight:"calc(100vh - 32px)",overflowY:"auto"}}>
+      <h3 id="corregir-precio-titulo" style={{fontSize:16,fontWeight:800,letterSpacing:"-0.008em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:6,color:C.tx}}><CurrencyDollarIcon size={17} weight="bold"/>Corregir el precio de {order?.production_number || "la orden"}</h3>
+      <p style={{fontSize:12,color:C.t2,margin:"0 0 14px"}}>{[order?.client, order?.product || order?.product_type, qty > 0 ? qty.toLocaleString("es-MX") + " pzas" : null].filter(Boolean).join(" · ")}</p>
+      <div style={{background:C.sf,borderRadius:10,padding:"9px 12px",fontSize:12.5,color:C.tx,marginBottom:14}}>Hoy: {actual > 0
+        ? <><b style={{fontFamily:"'Geist Mono',monospace"}}>{fmt(actual)}</b> sin IVA · {fmt(Math.round(actual * 116) / 100)} con IVA{porPieza(actual)}{isMaq ? " (precio al cliente)" : ""}</>
+        : <b>sin precio capturado</b>}</div>
+      <label htmlFor="corregir-precio-monto" style={lbl}>Precio correcto, sin IVA (MXN)</label>
+      <input id="corregir-precio-monto" style={{...inp,fontSize:16,fontWeight:700}} type="text" inputMode="decimal" autoComplete="off" value={precio} onChange={e=>setPrecio(e.target.value)} placeholder="0.00" autoFocus disabled={busy}/>
+      {conPrecio && (mismo
+        ? <div style={{fontSize:11.5,color:C.wnInk,marginTop:6,fontWeight:600}}>Es el mismo precio de hoy.</div>
+        : <div style={{fontSize:11.5,color:C.tx,marginTop:6}}>Con IVA: <b>{fmt(Math.round(nuevo * 116) / 100)}</b>{porPieza(nuevo)}</div>)}
+      {cambiaMucho && <div style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>Cambia mucho: de {fmt(actual)} a {fmt(nuevo)}. Revisa los ceros antes de guardar.</div>}
+      <label htmlFor="corregir-precio-motivo" style={{...lbl,marginTop:14}}>¿Por qué cambia? (queda en el historial de la orden)</label>
+      <textarea id="corregir-precio-motivo" rows={2} style={{...inp,resize:"vertical",minHeight:52}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej. se capturó mal: el cliente aceptó $60,500" disabled={busy}/>
+      {!motivoOk && motivo.trim() !== "" && <div style={{fontSize:11,color:C.t2,marginTop:4}}>Escribe por qué cambia (5 letras o más).</div>}
+      <div style={{fontSize:11.5,color:C.t2,marginTop:10,lineHeight:1.45}}>Cambia el precio de la orden antes de facturarla; todavía no tiene factura que tocar.</div>
+      {err && <div role="alert" style={{fontSize:12,color:C.dnInk,background:C.dn+"0f",border:"1px solid "+C.dn+"40",borderRadius:8,padding:"8px 10px",marginTop:10,lineHeight:1.4}}>{err}</div>}
+      <div style={{display:"flex",gap:8,marginTop:18}}>
+        <button type="button" onClick={pedirCerrar} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button type="button" onClick={guardar} disabled={!valido || busy} style={{...bt(tintaAA(C.fac,5)),flex:2,justifyContent:"center",opacity:(!valido || busy) ? 0.5 : 1,cursor:(!valido || busy) ? "not-allowed" : "pointer"}}>{busy ? <><HourglassIcon size={14} weight="bold"/>Guardando…</> : <><CurrencyDollarIcon size={14} weight="bold"/>Cambiar a {conPrecio ? fmt(nuevo) : "…"}</>}</button>
+      </div>
+    </div>
+    {preguntaSalir && <ConfirmModal title="¿Salir sin cambiar el precio?" message="Lo que escribiste se pierde y la orden se queda con su precio de hoy." confirmLabel="Salir sin cambiar" cancelLabel="Seguir corrigiendo"
+      onConfirm={() => { setPreguntaSalir(false); onClose(); }} onClose={() => setPreguntaSalir(false)} zIndex={1100}/>}
+  </div>;
+}
+
 // ─── SPLIT INVOICE MODAL (v10.58.34) ─────────────────────────────────────────
 // Karla parte UNA orden de producción en N facturas con cantidades y montos
 // parciales. Soporta factura D-, remisión R-, y saldo Corona (sin folio).
@@ -10377,7 +10455,7 @@ function useAnchoMinimo(px){
   useEffect(()=>{const f=()=>setOk(window.innerWidth>=px);window.addEventListener("resize",f);return ()=>window.removeEventListener("resize",f)},[px]);
   return ok;
 }
-function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=null,onFacturarPorPartes=null,ocDeLaOrden=null,onIrALaOC=null}) {
+function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=null,onFacturarPorPartes=null,ocDeLaOrden=null,onIrALaOC=null,onCorregirPrecio=null}) {
   // v10.58.11: backdrop+ESC guards durante busy.
   const busyRef = useRef(false);
   const [type,setType]=useState(null);
@@ -10929,7 +11007,9 @@ function InvoiceModal({order,onConfirm,onClose,cargarCandidatas=null,onLigar=nul
         ? (type==="factura"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(conIvaTotal)}</b> con IVA · subtotal ${fmtMx(orderBaseAmount)}</>
           : type==="remision"?<>Total <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · remisión, sin IVA</>
           : <>Subtotal <b style={{color:C.tx,fontSize:14}}>${fmtMx(orderBaseAmount)}</b> · con IVA ${fmtMx(conIvaTotal)}</>)
-        : <span style={{color:C.wnInk,fontWeight:600}}><WarningIcon size={12} weight="fill" color={C.wn} style={{verticalAlign:"-2px",marginRight:4}}/>Sin precio capturado</span>}</div>
+        : <span style={{color:C.wnInk,fontWeight:600}}><WarningIcon size={12} weight="fill" color={C.wn} style={{verticalAlign:"-2px",marginRight:4}}/>Sin precio capturado</span>}
+        {/* v10.84.112 — si el precio está mal, se corrige aquí antes de foliar (Karla y Dirección; App decide quién) */}
+        {!ligando&&onCorregirPrecio&&<> · <button type="button" onClick={onCorregirPrecio} disabled={busy} style={{background:"none",border:"none",padding:0,fontFamily:"inherit",fontSize:12,fontWeight:600,color:tintaAA(C.ac,6),textDecoration:"underline",cursor:busy?"not-allowed":"pointer",opacity:busy?0.5:1}}>Corregir precio</button></>}</div>
 
       {!confirming ? <>
         {bannerCandidatas}
@@ -20001,6 +20081,7 @@ export default function PrintFlow() {
   const [snoozeTarget,setSnoozeTarget]=useState(null); // v10.73.18 — orden a poner "En espera" (abre SnoozeModal)
   const [preInvoiceModal,setPreInvoiceModal]=useState(null); // 🆕 v10.9.0 — Modal Karla asigna folio anticipado
   const [priceCaptureModal,setPriceCaptureModal]=useState(null); // v10.49.0 — pop-up al Entregar si no hay precio
+  const [corregirPrecioId,setCorregirPrecioId]=useState(null); // v10.84.112 — «Corregir precio» (Karla y Dirección), la orden por su id (la viva)
   const [allowNoPriceForOrder,setAllowNoPriceForOrder]=useState(null); // v10.49.0 — si !null, assignInvoice usa flag allow_no_price para ese orderId
   const [deliverOnlyModal,setDeliverOnlyModal]=useState(null); // v10.31.0 — Entrega con folio ya asignado
   const [cancelInvoicedModal,setCancelInvoicedModal]=useState(null); // 🆕 v10.9.0 — Modal Marcelo cancela orden con folio (NC)
@@ -22330,6 +22411,21 @@ export default function PrintFlow() {
     return failIds; // preserva la selección de las fallidas para reintentar
   },[user,userLogin,orders]);
 
+  // v10.84.112 — «Corregir precio»: lo de la base va en src/lib/corregirPrecio.js (relee la orden, cuenta partes y plan matriz en la base, guarda en
+  //   su columna con quién lo cambió y confirma que se guardó; tanda `corregir`). Aquí, la pantalla: la orden, su historial con el porqué, y
+  //   «Asignar folio» abierta sobre esa orden se reabre con el precio nuevo, y así vuelve a leer las facturas sin orden: la del mismo importe se
+  //   ofrece para ligar (P-0600 y F-180). El rechazo, en palabras, dentro de la ventana.
+  const corregirPrecio=async(o,nuevo,motivo)=>{
+    const r=await corregirPrecioEnLaBase({supabase,orden:o,nuevo,motivo,anotar:texto=>db.addTimeline(o.id,texto,user,C.fac),puede:vivo=>puedeCorregirPrecio(vivo,user),
+      enPalabras:errorEnPalabras,formato:fmt,quien:{last_edited_by:userLogin||user,last_edited_by_uid:AUTH_UID,last_edited_at:new Date().toISOString()}});
+    if(r.error) return {error:r.error};
+    setOrders(p=>p.map(x=>x.id===o.id?{...x,...r.upd}:x));
+    setInvoiceModal(m=>m&&m.id===o.id?{...m,...r.upd}:m);
+    setCorregirPrecioId(null);
+    if(r.anotado) showToast((o.production_number||"La orden")+": precio corregido a "+fmt(r.precio)+" sin IVA");
+    else showToast((o.production_number||"La orden")+": el precio sí quedó en "+fmt(r.precio)+" sin IVA, pero el porqué no se anotó en su historial: agrégalo como nota.","warning");
+    return null;
+  };
   const handleAction=useCallback((id,action,payload)=>{
     // v10.84.94 — mandar a una máquina desde un botón (Germán: «A CTP», «A Procesadora»): lo mismo que soltarla en su tablero
     if(action==="asignar_maquina"){const mt=maintenance.find(m=>m.machine_id===payload&&!m.ended_at);if(mt){showToast((MACHINES.find(x=>x.id===payload)?.name||"Esa máquina")+" está en mantenimiento"+(mt.notes?" ("+mt.notes+")":"")+": no se mandó.","error");return}assignMachine(id,payload);return}
@@ -22337,6 +22433,8 @@ export default function PrintFlow() {
     if(action==="goto_espera"){setSearch("");setView("espera");return} // v10.73.31 — chip "N en espera" del tablero → vista dedicada. v10.73.84 (L10 chip-espera): limpiar la búsqueda al navegar; el chip contaba SIN buscador pero aterrizaba en una vista que SÍ filtra por búsqueda → desincronización. Se preserva la búsqueda DENTRO de la vista En espera (feature deliberada).
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
+    // v10.84.112 — «Corregir precio» (desde «Más» del detalle o «Asignar folio»): sólo lo que todavía no se factura
+    if(action==="corregir_precio"){const o=orders.find(x=>x.id===id);if(!o)return;if(puedeCorregirPrecio(o,user))setCorregirPrecioId(id);else showToast((o.production_number||"La orden")+": el precio ya no se corrige aquí (ya se facturó, se entregó o se canceló).","warning");return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
     if(action==="snooze"){const o=orders.find(x=>x.id===id);if(o)setSnoozeTarget(o);return} // v10.73.18 — poner en espera (SnoozeModal)
     if(action==="unsnooze"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
@@ -23362,8 +23460,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         }}
         onClose={()=>setPriceCaptureModal(null)}/>;
       })()}
+      {/* v10.84.112 — «Corregir precio» (Karla y Dirección), sobre la orden VIVA y encima de lo que la abrió */}
+      {corregirPrecioId&&(()=>{const o=orders.find(x=>x.id===corregirPrecioId);if(!o)return null;
+        return <CorregirPrecioModal key={o.id} order={o} onClose={()=>setCorregirPrecioId(null)} onGuardar={(nuevo,motivo)=>corregirPrecio(o,nuevo,motivo)}/>})()}
 
-      {invoiceModal&&<InvoiceModal order={invoiceModal} ocDeLaOrden={invoiceModal.purchase_order_id?{id:invoiceModal.purchase_order_id,n:orders.filter(x=>x.purchase_order_id===invoiceModal.purchase_order_id&&!String(x.stage||"").includes("cancelled")).length}:null} onIrALaOC={ocId=>{setInvoiceModal(null);setPendingOCNavId(ocId);setView("oc")}} cargarCandidatas={candidatasParaLigar} onLigar={(cand,info)=>ligarAdelantada(invoiceModal,cand,info)} onFacturarPorPartes={()=>{const id=invoiceModal.id;setInvoiceModal(null);setAllowNoPriceForOrder(null);handleAction(id,"split_invoice")}} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId,paymentRefs,billTo)=>{
+      {invoiceModal&&<InvoiceModal key={invoiceModal.id+":"+(invoiceModal.order_type==="maquila"?invoiceModal.maq_price:invoiceModal.price)} order={invoiceModal} onCorregirPrecio={puedeCorregirPrecio(invoiceModal,user)?()=>setCorregirPrecioId(invoiceModal.id):null} ocDeLaOrden={invoiceModal.purchase_order_id?{id:invoiceModal.purchase_order_id,n:orders.filter(x=>x.purchase_order_id===invoiceModal.purchase_order_id&&!String(x.stage||"").includes("cancelled")).length}:null} onIrALaOC={ocId=>{setInvoiceModal(null);setPendingOCNavId(ocId);setView("oc")}} cargarCandidatas={candidatasParaLigar} onLigar={(cand,info)=>ligarAdelantada(invoiceModal,cand,info)} onFacturarPorPartes={()=>{const id=invoiceModal.id;setInvoiceModal(null);setAllowNoPriceForOrder(null);handleAction(id,"split_invoice")}} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId,paymentRefs,billTo)=>{
         try{
           // v10.46.0 — Cuadra "stock_load": cargar a inventario sin folio fiscal
           if(invoiceType==="stock_load"){

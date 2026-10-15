@@ -2,7 +2,7 @@
 // reales (tokens, estilos, escStack, atraparTab, ConfirmModal, OTRO_CATS, refComplete, toBackendRef) y la base simulada.
 // BillToSection y StageLbl van simulados (arrastran el buscador de clientes y el mapa de etapas; aquí no se cambiaron).
 // Uso: node gen-banco-folio.mjs <App.jsx> <dirSalida>
-// Variantes por URL: emisor=off|falla|falla1 (falla una vez y luego sí) · cliente=corona|cuadra|saldo (saldo=N, el monto; 5000) · precio0=1 · maquila=1 ·
+// Variantes por URL (v10.84.112: corregir=1|falla y anticipo=f180, «Corregir precio» con P-0600 y F-180): emisor=off|falla|falla1 (falla una vez y luego sí) · cliente=corona|cuadra|saldo (saldo=N, el monto; 5000) · precio0=1 · maquila=1 ·
 //   incompleto=1 (a la orden le falta el tipo de producto) · lenta=1 (el cliente tarda 10 s, más que el tope de 8) · falla=1 (la base rechaza) · guarda=lento (asignar tarda 3 s)
 import fs from "node:fs";
 import path from "node:path";
@@ -45,12 +45,19 @@ const CAND_MISMO = { doc_number: "F-9135", doc_type: "factura", amount: 66004, b
   cfdi_status: "stamped", dias_sin_orden: 6, monto_cuadra: true, notas: "FACTURA POR ADELANTADO, sin orden de producción. Motivo: PIDE FACTURA PARA HACER EL PEDIDO." };
 const CAND_OTRO = { doc_number: "F-9140", doc_type: "factura", amount: 2157.6, balance: 2157.6, issued_date: "2026-10-07", status: "pendiente",
   cfdi_status: "stamped", dias_sin_orden: 1, monto_cuadra: false, notas: "FACTURA POR ADELANTADO, sin orden de producción. Motivo: ANTICIPO DEL 50%." };
+// v10.84.112 — corregir=1|falla: «Corregir precio» en la ventana (como Karla); anticipo=f180: F-180 por $70,180 (= $60,500 + IVA), que la base da
+//   por «del mismo importe» sólo si la orden ya vale $60,500 (P-0600 de PRIME PET, 15-oct)
+const CORREGIR = Q.get("corregir") || "";
+let precioActual = 56900;
+const CAND_F180 = () => ({ doc_number: "F-180", doc_type: "factura", amount: 70180, balance: 0, issued_date: "2026-10-14", status: "pagada", cfdi_status: "stamped",
+  dias_sin_orden: 1, monto_cuadra: Math.abs(Math.round(precioActual * 116) / 100 - 70180) <= 0.02, notas: "FACTURA SIN ORDEN. Motivo: LA BUENA DE P-0600." });
 let candLlamadas = 0;
 const cargarCandidatas = async () => { candLlamadas++; await new Promise(r => setTimeout(r, 120));
   if (ADELANTADA) return candLlamadas === 1 ? [] : [CAND_MISMO];
   if (ANTICIPO === "falla") return null;
   if (ANTICIPO === "lenta") { await new Promise(r => setTimeout(r, 9500)); return [CAND_OTRO]; }   // más que el tope de 8 s
   if (ANTICIPO === "falla1") return candLlamadas === 1 ? null : [CAND_OTRO];
+  if (ANTICIPO === "f180") return [CAND_F180()];
   return ANTICIPO === "mismo" ? [CAND_MISMO] : ANTICIPO === "otro" ? [CAND_OTRO] : ANTICIPO === "ambos" ? [CAND_MISMO, CAND_OTRO] : []; };
 let emisorLlamadas = 0;
 const db = {
@@ -74,11 +81,15 @@ const StageLbl = ({ stage }) => <b>{stage}</b>;`,
   fnBlock("InvoiceModal"), fnBlock("PreInvoiceModal"),
   // v10.84.90 — «Confirmar entrega» y «Capturar precio» (el mismo «ocupado desde el clic» que asignar el folio)
   fnBlock("DeliverOnlyModal"), fnBlock("PriceCaptureModal"),
+  // v10.84.112 — «Corregir precio» (si el App.jsx lo trae)
+  ...(L.some(l => l.startsWith("function CorregirPrecioModal(")) ? [fnBlock("CorregirPrecioModal")] : []),
   `const ORDER = { id: "o1", production_number: "P-0600", client: "PORTLAND STUDIO", client_id: "c1", product_type: INCOMPLETO ? "" : "Etiquetas",
   product: "Etiquetas colgantes", quantity: 5000, price: PRECIO0 ? 0 : (MAQUILA ? null : 56900), maq_price: MAQUILA ? 12000 : null,
   order_type: MAQUILA ? "maquila" : "normal", stage: "salidas", source: "admin", created_by: "secretaria" };
 function Banco() {
   const [m, setM] = useState(null);
+  const [orden, setOrden] = useState(ORDER);            // v10.84.112 — el precio puede cambiar con la ventana abierta
+  const [corrigiendo, setCorrigiendo] = useState(false);
   const [log, setLog] = useState([]);
   const L = t => setLog(l => [...l, t]);
   // (v10.84.70) lo que la base rechaza vuelve al diálogo como { error } (App ya no lo manda a un aviso que se borra)
@@ -93,9 +104,15 @@ function Banco() {
     <button id="abrir-ent" onClick={() => setM("ent")}>ent</button>
     <button id="abrir-precio" onClick={() => setM("precio")}>precio</button>
     <pre id="log">{log.join("\\n")}</pre>
-    {m === "inv" && <InvoiceModal order={ORDER} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
+    {m === "inv" && <InvoiceModal key={"inv:" + (orden.order_type === "maquila" ? orden.maq_price : orden.price)} order={orden} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
-      ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("inv:oc " + id); setM(null); }} />}
+      ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("inv:oc " + id); setM(null); }}
+      onCorregirPrecio={CORREGIR ? () => { L("inv:corregir"); setCorrigiendo(true); } : null} />}
+    {corrigiendo && typeof CorregirPrecioModal !== "undefined" && <CorregirPrecioModal order={orden} onClose={() => { L("corregir:cerrado"); setCorrigiendo(false); }}
+      onGuardar={async (nuevo, motivo) => { L("corregir:guardar " + nuevo + " " + motivo); await new Promise(r => setTimeout(r, 300));
+        if (CORREGIR === "falla") { L("corregir:rechazo"); return { error: "La base no aceptó el precio: sin conexión. No se cambió." }; }
+        // (vuelta 3) como App: la maquila guarda maq_price (el precio al cliente)
+        precioActual = nuevo; setOrden(o => ({ ...o, [o.order_type === "maquila" ? "maq_price" : "price"]: nuevo })); setCorrigiendo(false); return null; }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }}
       ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("pre:oc " + id); setM(null); }} />}

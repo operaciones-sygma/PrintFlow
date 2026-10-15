@@ -1295,6 +1295,165 @@ await caso("ent-03 «Confirmar Entrega»: al terminar, Esc cierra (no se queda �
     `entregas ${await cuenta(p, "ent:confirm")} · cerrado ${await cuenta(p, "ent:cerrado")}`);
 });
 
+// v10.84.112 — Karla corrige el precio antes de facturar (Marcelo, 15-oct: «a karla no le aparece la opción de editar en printflow»). P-0600:
+// capturada en $40,000 (aquí $56,900), era $60,500; F-180 ($70,180) ya está timbrada sin orden. Vuelta 1: antes del cambio.
+const dlgCorr = p => p.getByRole("dialog", { name: /Corregir el precio/ });
+const corregirA = async (p, precio, motivo) => {
+  await dlgInv(p).getByRole("button", { name: /Corregir precio/ }).click(); await dlgCorr(p).waitFor({ timeout: 3000 }); await espera(p, 200);
+  if (precio != null) await dlgCorr(p).getByLabel(/Precio correcto/).fill(String(precio));
+  if (motivo != null) await dlgCorr(p).getByLabel(/Por qué cambia/).fill(motivo);
+  await espera(p, 200);
+};
+const guardarCorr = p => dlgCorr(p).getByRole("button", { name: /^Cambiar a/ });   // (vuelta 2: sin precio válido dice «Cambiar a …», sin «$»)
+await caso("inv-146 Karla corrige el precio y se ofrece ligar F-180", "corregir=1&anticipo=f180", async p => {
+  await inv(p); await espera(p, 400);
+  const antes = ((await dlgInv(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  let despues = "", hay = false;
+  try {
+    await corregirA(p, "60500", "Se capturó mal: el cliente aceptó $60,500");
+    hay = true;
+    await guardarCorr(p).click(); await espera(p, 1200);
+    despues = ((await dlgInv(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  } catch (e) { despues = "(" + e.message.split("\n")[0] + ")"; }
+  const l = await log(p);
+  ok("inv-146 en «Asignar folio» Karla corrige $56,900 → $60,500 (con su porqué), la ventana se reabre con el precio nuevo y F-180 sale del mismo importe para ligarla",
+    // (vuelta 2: con F-180 del mismo importe la ventana se reabre en modo ligar: «Se liga F-180 · factura por $70,180.00», no «Subtotal»)
+    hay && /Subtotal \$56,900\.00/.test(antes) && /corregir:guardar 60500 Se capturó mal/.test(l) && /Se liga F-180/.test(despues) && /\$70,180\.00/.test(despues) && /F-180 es del mismo importe/.test(despues) && !(await dlgCorr(p).count()),
+    `botón ${hay} · antes «${antes.slice(0, 120)}» · después «${despues.slice(0, 200)}»`);
+});
+await caso("inv-147 corregir: lo que no se puede guardar", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  let r = [];
+  try {
+    await corregirA(p, "56900", "Se capturó mal el precio");
+    r.push(await guardarCorr(p).isDisabled(), /mismo precio/i.test((await dlgCorr(p).innerText()) || ""));
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill("60500"); await dlgCorr(p).getByLabel(/Por qué cambia/).fill("mal"); await espera(p, 150);
+    r.push(await guardarCorr(p).isDisabled());
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill("-5"); await dlgCorr(p).getByLabel(/Por qué cambia/).fill("Se capturó mal el precio"); await espera(p, 150);
+    r.push(await guardarCorr(p).isDisabled());
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill("60,500.00"); await espera(p, 150);
+    r.push(!(await guardarCorr(p).isDisabled()));
+  } catch (e) { r.push("(" + e.message.split("\n")[0] + ")"); }
+  ok("inv-147 no deja guardar el mismo precio (y lo dice), un porqué de menos de 5 letras ni un precio negativo; «60,500.00» con comas sí",
+    r.length === 5 && r.every(x => x === true), JSON.stringify(r));
+});
+await caso("inv-148 corregir: Esc con algo escrito pregunta", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  let pregunta = false, sigue = false, cierraVacio = false;
+  try {
+    await corregirA(p, "60500", null);
+    await p.keyboard.press("Escape"); await espera(p, 400);
+    pregunta = /Salir sin cambiar el precio/.test((await p.locator("body").innerText()) || ""); sigue = (await dlgCorr(p).count()) === 1;
+    await p.keyboard.press("Escape"); await espera(p, 300);   // cierra la pregunta: sigue capturando
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill(""); await espera(p, 150);
+    await p.keyboard.press("Escape"); await espera(p, 400);
+    cierraVacio = (await dlgCorr(p).count()) === 0 && /corregir:cerrado/.test(await log(p)) && await dlgInv(p).isVisible();
+  } catch (e) { }
+  ok("inv-148 Esc con el precio escrito pregunta «¿Salir sin cambiar el precio?» y no lo tira; sin nada escrito, cierra y «Asignar folio» sigue abierta",
+    pregunta && sigue && cierraVacio, `pregunta ${pregunta} · sigue ${sigue} · vacío cierra ${cierraVacio}`);
+});
+await caso("inv-149 corregir: el doble clic guarda una vez", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  try { await corregirA(p, "60500", "Se capturó mal el precio"); await guardarCorr(p).dblclick(); await espera(p, 900); } catch (e) { }
+  ok("inv-149 doble clic en «Cambiar a $60,500.00»: se guarda una vez", (await cuenta(p, "corregir:guardar")) === 1, (await cuenta(p, "corregir:guardar")) + " veces");
+});
+await caso("inv-150 corregir: el rechazo se queda en la ventana", "corregir=falla", async p => {
+  await inv(p); await espera(p, 300);
+  let dice = "", sigue = false, inv0 = "";
+  try {
+    await corregirA(p, "60500", "Se capturó mal el precio"); await guardarCorr(p).click(); await espera(p, 900);
+    dice = ((await dlgCorr(p).getByRole("alert").innerText().catch(() => "")) || ""); sigue = (await dlgCorr(p).count()) === 1;
+    inv0 = ((await dlgInv(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  } catch (e) { }
+  ok("inv-150 si la base no acepta el precio, lo dice dentro de la ventana (que sigue con lo escrito) y la orden se queda en $56,900",
+    /no aceptó el precio/.test(dice) && sigue && /Subtotal \$56,900\.00/.test(inv0), `«${dice}» · sigue ${sigue}`);
+});
+await caso("inv-151 sin permiso no hay «Corregir precio»", "", async p => {
+  await inv(p); await espera(p, 300);
+  ok("inv-151 a quien no le toca (App no le pasa onCorregirPrecio), «Asignar folio» no ofrece «Corregir precio»",
+    (await dlgInv(p).getByRole("button", { name: /Corregir precio/ }).count()) === 0);
+});
+
+// vuelta 3, por donde no se diseñó: la maquila, sin precio, el cero de más, mientras emite, el Tab y las pantallas
+await caso("inv-152 corregir una maquila", "corregir=1&maquila=1", async p => {
+  await inv(p); await espera(p, 300);
+  let hoy = "", despues = "";
+  try {
+    await corregirA(p, "15000", "Se capturó mal la maquila");
+    hoy = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " ");
+    await guardarCorr(p).click(); await espera(p, 1000);
+    despues = ((await dlgInv(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  } catch (e) { despues = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-152 una maquila: «Hoy» es su precio al cliente ($12,000, maq_price), se guarda $15,000 y «Asignar folio» vuelve con subtotal $15,000",
+    /Hoy: \$12,000\.00 sin IVA/.test(hoy) && /precio al cliente/.test(hoy) && /corregir:guardar 15000 /.test(await log(p)) && /Subtotal \$15,000\.00/.test(despues),
+    `hoy «${hoy.slice(0, 160)}» · después «${despues.slice(0, 140)}»`);
+});
+await caso("inv-153 corregir sin precio capturado", "corregir=1&precio0=1", async p => {
+  await inv(p); await espera(p, 300);
+  let txt = "";
+  try { await corregirA(p, null, null); txt = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " "); } catch (e) { txt = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-153 sin precio capturado, «Hoy» lo dice en palabras (no «$0.00 sin IVA · $0.00 la pieza»)", /Hoy: sin precio capturado/.test(txt) && !/\$0\.00/.test(txt), txt.slice(0, 200));
+});
+await caso("inv-154 corregir: el cero de más", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  const r = [];
+  try {
+    await corregirA(p, "569000", "Se capturó mal el precio");
+    const t1 = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " ");
+    r.push(/Cambia mucho: de \$56,900\.00 a \$569,000\.00/.test(t1), !(await guardarCorr(p).isDisabled()));
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill("60500"); await espera(p, 150);
+    r.push(!/Cambia mucho/.test((await dlgCorr(p).innerText()) || ""));
+    await dlgCorr(p).getByLabel(/Precio correcto/).fill("5690"); await espera(p, 150);
+    r.push(/Cambia mucho: de \$56,900\.00 a \$5,690\.00/.test(((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " ")));
+  } catch (e) { r.push("(" + e.message.split("\n")[0] + ")"); }
+  ok("inv-154 un cero de más ($569,000) o de menos ($5,690) dice «Cambia mucho: de … a …» sin frenar; $60,500 no", r.length === 4 && r.every(x => x === true), JSON.stringify(r));
+});
+await caso("inv-155 corregir: no mientras «Asignar folio» emite", "corregir=1&guarda=lento", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await continuar(p).click(); await espera(p);
+  let apagado = null;
+  try {
+    await final(p).click(); await espera(p, 300);
+    apagado = await dlgInv(p).getByRole("button", { name: /Corregir precio/ }).isDisabled();
+    await dlgInv(p).getByRole("button", { name: /Corregir precio/ }).click({ force: true, timeout: 1000 }).catch(() => {});
+    await espera(p, 300);
+  } catch (e) { }
+  ok("inv-155 mientras «Asignar folio» emite, «Corregir precio» está apagado y no abre nada (el precio no cambia a media emisión)",
+    apagado === true && (await cuenta(p, "inv:corregir")) === 0 && (await dlgCorr(p).count()) === 0, `apagado ${apagado} · abrió ${await cuenta(p, "inv:corregir")}`);
+});
+await caso("inv-156 corregir: el Tab se queda en la ventana", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  let dentro = [];
+  try {
+    await corregirA(p, "60500", "Se capturó mal el precio");
+    for (let i = 0; i < 9; i++) { await p.keyboard.press(i % 3 === 2 ? "Shift+Tab" : "Tab"); dentro.push(await p.evaluate(() => !!document.activeElement?.closest("[aria-labelledby='corregir-precio-titulo']"))); }
+  } catch (e) { dentro.push("(" + e.message.split("\n")[0] + ")"); }
+  ok("inv-156 con Tab y Shift+Tab el foco no se sale de «Corregir el precio» (no llega a «Asignar folio» de atrás)", dentro.length === 9 && dentro.every(x => x === true), JSON.stringify(dentro));
+});
+// las pantallas: la laptop (1366×768), el monitor (1920×1080) y la chica (683×384, la laptop al 200%): la ventana cabe completa o se
+// desliza por dentro; el título y «Cambiar a» se alcanzan, también con el aviso del cero de más y el rechazo de la base
+for (const [id, w, h] of [["inv-157", 1366, 768], ["inv-158", 1920, 1080], ["inv-159", 683, 384]]) {   // un id por pantalla: el candado cuenta por id
+  await caso(`${id} corregir a ${w}×${h}`, "corregir=falla", async p => {
+    await inv(p); await espera(p, 300);
+    // (vuelta 3: en 384 px de alto el título y el botón no caben A LA VEZ; lo que importa es que el rechazo se vea al momento y que el título y
+    //  «Cambiar a» se alcancen deslizando la ventana. Antes del arreglo la ventana empezaba arriba de la pantalla y el título no se alcanzaba)
+    let caja = null, aviso = null, titulo = null, boton = null, alerta = "";
+    try {
+      await corregirA(p, "569000", "Se capturó mal el precio"); await guardarCorr(p).click(); await espera(p, 900);
+      alerta = (await dlgCorr(p).getByRole("alert").innerText().catch(() => "")) || "";
+      caja = await dlgCorr(p).boundingBox();
+      aviso = await dlgCorr(p).getByRole("alert").boundingBox();
+      await dlgCorr(p).getByRole("heading", { name: /Corregir el precio/ }).scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => {});
+      titulo = await dlgCorr(p).getByRole("heading", { name: /Corregir el precio/ }).boundingBox();
+      await guardarCorr(p).scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => {});
+      boton = await guardarCorr(p).boundingBox();
+    } catch (e) { alerta = "(" + e.message.split("\n")[0] + ")"; }
+    const dentro = b => !!b && b.y >= 0 && b.y + b.height <= h + 0.5;
+    ok(`${id} a ${w}×${h} la ventana de corregir cabe en la pantalla (o se desliza por dentro): el rechazo se ve al momento, y el título y «Cambiar a» se alcanzan`,
+      /no aceptó el precio/.test(alerta) && dentro(caja) && dentro(aviso) && dentro(titulo) && dentro(boton),
+      `ventana ${caja ? Math.round(caja.y) + "+" + Math.round(caja.height) : "-"} · aviso ${aviso ? Math.round(aviso.y) : "-"} · título ${titulo ? Math.round(titulo.y) : "-"} · botón ${boton ? Math.round(boton.y) : "-"} · «${alerta.slice(0, 50)}»`);
+  }, { width: w, height: h });
+}
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));
