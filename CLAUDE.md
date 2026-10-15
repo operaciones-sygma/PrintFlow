@@ -36,7 +36,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   sesión se porta como la de CobranzaFlow (v3.7.999f/o): la que se cierra sola (`SIGNED_OUT`) lleva a entrar diciendo por qué; al
   abrir, la sesión guardada se le confirma a Auth y la entrada la vuelve a mirar antes de abrir (si se cerró a media entrada, la app
   abría como anónima); una falla al comprobar (red, 503) **no saca a nadie**: «Reintentar». Tanda `tests/romper/sesion.mjs`.
-- **Marcelo** es dueño y único desarrollador; **Karla** factura; **Lupita** captura; **Gerardo/Noemí/
+- **Marcelo** es dueño y único desarrollador; **Karla** factura (y desde v10.84.112 corrige el precio de lo que todavía no se factura); **Lupita** captura; **Gerardo/Noemí/
   Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
   máquina** («Folios» → «En la planta», la OC y el detalle; `jalar_a_salidas` en `ACTION_ROLES`, por `doAdv` con aviso a Gerardo).
@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1683 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1726 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -188,7 +188,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.111 (14-oct, ~16:38; READY `dpl_34uiRk7jQcV31LH2MUvEK31fioBV`, commits `79138a3` y `56edbf9`; vuelta atrás: promover
+- **LIVE:** v10.84.112 (15-oct, ~12:40; READY `dpl_G3tGyjWBhkdq2mBPuR5V2CY6AvS5`, commits `13be798` y `4efe555`; vuelta atrás: promover
+  `dpl_FYfMwjktK433SkhqwSwjpJL3Jmaa` (el código de v10.84.111 con el candado nuevo) o `git revert 4efe555 13be798`; la base no cambió; candado 1726 de 1726, de a 2 tandas).
+  v10.84.112: 🔑 **Karla corrige el precio de una orden antes de facturarla** («Corregir precio» junto al subtotal de «Asignar folio y entregar» y en
+  «Más» del detalle; `puedeCorregirPrecio`: Dirección y Karla, sólo lo que todavía no se factura). La parte de la base va en `src/lib/corregirPrecio.js`
+  (relee la orden, cuenta partes y plan matriz, guarda en su columna CON QUIÉN, `last_edited_*`, y confirma que se guardó; tanda `corregir`). El caso:
+  P-0600 de PRIME PET ($40,000 → $60,500) para ligar F-180 ($70,180, timbrada sin orden). Lo ya facturado no se corrige aquí: CobranzaFlow revisa el
+  diseño (su parte es de base). 🔑 **«REIMPRIMIR» es para producción** (`pideReimprimir`): en Salidas y en la maquila recibida ya no se le pide a
+  Gerardo (la base marca `needs_reprint` con cualquier cambio de precio tras imprimir; la marca se queda como dato).
+  v10.84.111 (14-oct, ~16:38; READY `dpl_34uiRk7jQcV31LH2MUvEK31fioBV`, commits `79138a3` y `56edbf9`; vuelta atrás: promover
   `dpl_44WaAaTqwZC6tuSfyBRqgjHbjAZq` (el código de v10.84.110) o `git revert 56edbf9 79138a3`; la base no cambió; candado 1676 de 1676, de a 2 tandas en 25 min).
   v10.84.111: **el redondeo hacia arriba de una orden repartida en muchas facturas lo absorbe una factura** (una nueva o una ligada que siga cuadrando;
   si ninguna puede, frena como la base); un solo cálculo (`montos`) para el cuadre, el tope, la vista previa y lo que se manda. Hotsson quedó ligado

@@ -72,7 +72,8 @@ sí se pide, en rojo) pasaba: es el guardia; det-103, det-108, det-115 y det-139
 **Para Karla:** F5; P-0600 → «Asignar Folio y Entregar» → «Corregir precio» (junto al subtotal) → $60,500 y el porqué → «Cambiar a $60,500.00».
 La ventana se reabre y ofrece F-180 «del mismo importe»: ligarla.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~12:40; READY `dpl_G3tGyjWBhkdq2mBPuR5V2CY6AvS5` (commits `13be798` y `4efe555`). Vuelta atrás: promover `dpl_FYfMwjktK433SkhqwSwjpJL3Jmaa` (el código de
+v10.84.111 con el candado nuevo) o `git revert 4efe555 13be798`; la base no cambió. Candado 1726 de 1726, de a 2 tandas. Revisado en producción sin escribir (medir-112, la cuenta visor con el rol de Karla): 5 de 5; P-0600 ofrece «Corregir precio» en «Asignar Folio y Entregar» y la ventana dice «Hoy: $40,000.00 sin IVA · $46,400.00 con IVA · $1.25 la pieza»; Esc la cierra sin escribir. El primer candado frenó por ord-121 (la página del banco tardó más de 30 s en cargar con dos tandas a la vez; sola, la tanda orden 153 de 153); el segundo pasó con det-92 a la segunda (ERR_NO_BUFFER_SPACE al cargar; sola 3 de 3; revisada: la carga, no la app). 🔑 **Para Karla:** F5; P-0600 → «Asignar Folio y Entregar» → «Corregir precio» → $60,500 y el porqué → «Cambiar a $60,500.00»; la ventana se reabre y ofrece F-180 «del mismo importe»: ligarla.
 
 ## El candado prueba lo que se sube, no la carpeta — 15-oct-2026 (sin versión de la app)
 
