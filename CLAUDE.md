@@ -113,7 +113,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1761 pruebas, ~25 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1789 pruebas, ~26 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -188,7 +188,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.114 (15-oct, ~14:00; READY `dpl_Gaucvk5B38HLxSNajfGfmjyxnXqN`, commit `4082c86`; vuelta atrás: promover
+- **LIVE:** v10.84.115 (15-oct, ~16:22; READY `dpl_BNKmkeUxLJe4x8j7iWQPRowd1tk7`, commits `0ce952e` y `6756c4e`; vuelta atrás: promover
+  `dpl_BDNShWcGEerrtF9Q9ZqyHRUyuNQv` (el código de v10.84.114) o `git revert 6756c4e 0ce952e`; la base no cambió; candado 1789 de 1789, de a 2).
+  v10.84.115: **«Corregir precio» avisa a Dirección y a quien capturó la orden** (con el antes, el después sin IVA y el porqué; fuera de horario
+  se dice), **a Karla la forma le cierra un precio ya capturado** (`precioBloqueadoParaKarla`), **la forma no regresa una corrección**
+  (`_precioAlAbrir`), el UPDATE con sus condiciones, «¿tecleaste el total con IVA?» y «Capturar precio» con quién. 🔥 Los candados de esa
+  tarde se caían por la PC (MSI Center acaparaba los puntos UDP; ver la memoria `msi-center-desactivado`): se desactivó y se reinició.
+  v10.84.114 (15-oct, ~14:00; READY `dpl_Gaucvk5B38HLxSNajfGfmjyxnXqN`, commit `4082c86`; vuelta atrás: promover
   `dpl_6QVwFYsHtuwtsrzsXDERuNE3A1iE` (el código de v10.84.113) o `git revert 4082c86`; la base no cambió; candado 1761 de 1761, de a 2 tandas).
   v10.84.114: 🔑 **«Facturar por partes» antes de Salidas, a la vista** («Más» del detalle, el «⋯» de la ficha y una liga fija en el folio
   anticipado; la base lo acepta desde v10.84.89, cada parte como folio anticipado). Uno u otro con el folio anticipado.

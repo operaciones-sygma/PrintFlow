@@ -54,7 +54,15 @@ Karla lo captura). **Vuelta 2**: todo pasa; cor-01 pedía que el UPDATE llevara 
 cor-29). **Vuelta 3**, por donde no se diseñó: el precio al cliente de una maquila (ord-336) y «Editar Specs» (ord-337), que contra v10.84.114
 fallaban; y el porqué salía dos veces en la bandeja (cor-38, fallaba antes del arreglo). Las tandas que tocan esto: folio 197 de 197, orden 153 de 153, orden-2 109 de 109, corregir 41 de 41, detalle 204 de 204 (det-138 se cayó al cargar su página por ERR_NO_BUFFER_SPACE, la red de Windows con dos tandas a la vez; sola, 3 de 3), hooks y chips; build y alcance.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~16:22; READY `dpl_BNKmkeUxLJe4x8j7iWQPRowd1tk7` (commits `0ce952e` y `6756c4e`). Vuelta atrás: promover
+`dpl_BDNShWcGEerrtF9Q9ZqyHRUyuNQv` (el código de v10.84.114) o `git revert 6756c4e 0ce952e`; la base no cambió. 🔥 **Tres candados frenaron
+por la PC, no por la app** (ord-120, pv-02; det-24 a la segunda), el último hasta DE A 1 tanda: `ERR_NO_BUFFER_SPACE` y cargas de página de más
+de 30 s, con la PC 26 h encendida, la memoria no paginada del kernel en 1.1 GB y MSI Center (`MSI.CentralServer`) con 332 de los 380 puntos UDP.
+Con el OK de Marcelo se desactivó MSI Center al arrancar, se cerraron Creative Cloud, Wallpaper Engine y SignalRGB, y se reinició: el cuarto
+candado pasó 1789 de 1789 a la primera, de a 2 tandas en 26 min, sin ninguna a la segunda. Las fallas se revisaron solas (3 de 3 cada una).
+Revisado en producción sin escribir (medir-115, la cuenta visor con el rol de Karla): 4 de 4; en P-0553, «Corregir precio» avisa del IVA con
+$4,452.08, no guarda con 7 letras y sale sin cambiar (el candado de la forma no aplica ahí: a Karla no le sale «Editar»; lo cubre ord-334).
+Karla ya corrigió P-0600 con v10.84.112 ese mediodía (12:50, «ME EQUIVOQUE A LA HORA DE CAPTURAR…») y ligó F-180: quedó entregada.
 
 ## v10.84.114 — «Facturar por partes» antes de Salidas, a la vista — 15-oct-2026
 
