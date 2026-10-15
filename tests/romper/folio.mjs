@@ -1474,6 +1474,50 @@ await caso("pre-39 una orden de OC sin facturas sin orden también puede ir por 
   ok("pre-39 una orden de OC-0960 sin facturas sin orden: «Facturar por partes» a la vista (partir UNA orden lo acepta la base; el plan de la OC es para repartir facturas entre órdenes)", n === 1, n + " botones");
 });
 
+// v10.84.115 — «Corregir precio», la revisión de CobranzaFlow: el porqué de 8 letras; «¿tecleaste el total con IVA?» (el precio de hoy por 1.16,
+//   o el importe de una factura sin orden del cliente) y la factura que queda del mismo importe; y en «Asignar folio» con algo capturado, preguntar
+//   antes (al corregir, la ventana se vuelve a abrir con el precio nuevo y lo capturado se pierde). Vuelta 1: contra v10.84.114.
+await caso("inv-160 corregir: el porqué de 8 letras", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  const r = [];
+  try {
+    await corregirA(p, "60500", "ya está"); r.push(await guardarCorr(p).isDisabled());
+    await dlgCorr(p).getByLabel(/Por qué cambia/).fill("   ya está   "); await espera(p, 150); r.push(await guardarCorr(p).isDisabled());
+    await dlgCorr(p).getByLabel(/Por qué cambia/).fill("se capturó"); await espera(p, 150); r.push(!(await guardarCorr(p).isDisabled()));
+  } catch (e) { r.push("(" + e.message.split("\n")[0] + ")"); }
+  ok("inv-160 un porqué de 7 letras no guarda (tampoco con espacios en las orillas); de 8 o más, sí", r.length === 3 && r.every(x => x === true), JSON.stringify(r));
+});
+await caso("inv-161 corregir: tecleó el total de F-180 (con IVA)", "corregir=1&anticipo=f180", async p => {
+  await inv(p); await espera(p, 500);
+  let t = "";
+  try { await corregirA(p, "70180", "Se capturó mal el precio"); await espera(p, 400); t = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " "); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-161 con $70,180 (el total de F-180, con IVA) pregunta «¿Tecleaste el total con IVA?» y dice el precio sin IVA ($60,500.00)",
+    /tecleaste el total con IVA/i.test(t) && /F-180/.test(t) && /\$60,500\.00/.test(t), t.slice(0, 260));
+});
+await caso("inv-162 corregir: con el precio bueno, F-180 queda del mismo importe", "corregir=1&anticipo=f180", async p => {
+  await inv(p); await espera(p, 500);
+  let t = "";
+  try { await corregirA(p, "60500", "Se capturó mal el precio"); await espera(p, 400); t = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " "); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-162 con $60,500 dice que F-180 ($70,180.00) queda del mismo importe (y no pregunta por el IVA)", /F-180/.test(t) && /mismo importe/.test(t) && !/tecleaste el total con IVA/i.test(t), t.slice(0, 260));
+});
+await caso("inv-163 corregir: tecleó el precio de hoy con IVA", "corregir=1", async p => {
+  await inv(p); await espera(p, 300);
+  let t = "";
+  try { await corregirA(p, "66004", "Se capturó mal el precio"); await espera(p, 300); t = ((await dlgCorr(p).innerText()) || "").replace(/\s+/g, " "); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-163 con $66,004 (el precio de hoy, $56,900, más IVA) pregunta «¿Tecleaste el total con IVA?»", /tecleaste el total con IVA/i.test(t), t.slice(0, 220));
+});
+await caso("inv-164 corregir desde «Asignar folio» con algo capturado pregunta", "corregir=1", async p => {
+  await inv(p); await tipo(p, "Factura").click(); await espera(p); await p.getByRole("button", { name: "No pagada", exact: true }).click(); await espera(p, 300);
+  let pregunta = false, antes = 0, despues = 0;
+  try {
+    await dlgInv(p).getByRole("button", { name: /Corregir precio/ }).click(); await espera(p, 400);
+    pregunta = /se pierde lo que capturaste/i.test((await p.locator("body").innerText()) || ""); antes = await cuenta(p, "inv:corregir");
+    const si = p.getByRole("button", { name: /^Corregir precio$/ }).last(); if (pregunta && await si.count()) { await si.click(); await espera(p, 400); } despues = await cuenta(p, "inv:corregir");
+  } catch (e) { }
+  ok("inv-164 en «Asignar folio» con la factura y el pago elegidos, «Corregir precio» pregunta primero (lo capturado se pierde) y al decir que sí, corrige",
+    pregunta && antes === 0 && despues === 1, `pregunta ${pregunta} · antes ${antes} · después ${despues}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

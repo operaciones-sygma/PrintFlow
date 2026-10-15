@@ -2282,6 +2282,47 @@ await caso("ord-331 Producción edita una orden sin categoría: no la ve ni se l
     `lista ${hay} · la pide ${/Falta la categoría/.test(t)} · update ${u ? JSON.stringify(u.categoria) : "NO hubo"}`);
 });
 
+// v10.84.115 — la forma y «Corregir precio» (la revisión de CobranzaFlow y lo que decidió Marcelo, 15-oct). Vuelta 1: contra v10.84.114.
+//   ord-332/333: una forma abierta desde ANTES de que corrigieran el precio no lo regresa (sin tocarlo); si quien edita SÍ lo cambia, el suyo.
+//   ord-334/335: a Karla, un precio ya capturado se le cierra con su porqué («Corregir precio»); sin precio, lo captura aquí.
+await caso("ord-332 la forma abierta desde antes no regresa el precio corregido", "modo=editar&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ price: 2400 })); await espera(p, 400);   // Karla lo corrigió con la forma abierta (llega por el tiempo real)
+  await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · 2a edición"); await espera(p, 200);
+  await guardar(p); await espera(p, 1200);
+  const e = await estado(p), o = e.base.find(x => x.id === "OP-ED"), ultimo = (await avisos(p)).pop() || "";
+  ok("ord-332 una forma abierta desde antes de que corrigieran el precio ($1,800 → $2,400) no lo regresa: se guarda lo demás y el aviso lo dice",
+    Number(o?.price) === 2400 && /2,400/.test(ultimo), `precio en la base ${o?.price} · aviso «${ultimo.slice(0, 160)}»`);
+});
+await caso("ord-333 si quien edita sí cambia el precio, se guarda el suyo", "modo=editar&rol=admin", async p => {
+  await p.evaluate(() => window.__cambiar({ price: 2400 })); await espera(p, 400);
+  await p.locator("#ff-precio").fill("2000"); await espera(p, 200);
+  await guardar(p); await espera(p, 1500);
+  const e = await estado(p), o = e.base.find(x => x.id === "OP-ED");
+  ok("ord-333 si en la forma SÍ cambiaron el precio (a $2,000), se guarda ese (no se regresa a $1,800 ni se queda el de $2,400)", Number(o?.price) === 2000, `precio en la base ${o?.price}`);
+});
+await caso("ord-334 a Karla, un precio ya capturado se le cierra con su porqué", "modo=editar&rol=karla", async p => {
+  const campo = p.locator("#ff-precio"); const cerrado = await campo.isDisabled().catch(() => false);
+  const t = ((await p.locator("body").innerText()) || "").replace(/\s+/g, " ");
+  ok("ord-334 Karla editando P-0650 ($1,800 ya capturado): el precio no se cambia aquí y dice que se corrige con «Corregir precio»", cerrado && /Corregir precio/.test(t), `cerrado ${cerrado}`);
+});
+await caso("ord-335 a Karla, sin precio capturado, lo captura aquí", "modo=editar&rol=karla", async p => {
+  await editar(p, "OP-ED", { price: null }); await p.evaluate(() => window.__cambiar({ price: null })); await espera(p, 400);
+  const abierto = !(await p.locator("#ff-precio").isDisabled().catch(() => true));
+  ok("ord-335 Karla editando una orden sin precio: el campo está abierto (lo captura ella, como antes)", abierto, `abierto ${abierto}`);
+});
+// vuelta 3, por donde no se diseñó: la maquila (su precio al cliente es otro campo) y «Editar Specs» (manda la forma entera, CobranzaFlow)
+await caso("ord-336 a Karla, el precio al cliente de una maquila también se le cierra", "modo=maquila&rol=karla", async p => {
+  const campo = p.locator("#ff-maq-precio"); const hay = await campo.count(); const cerrado = hay ? await campo.isDisabled().catch(() => false) : false;
+  ok("ord-336 Karla editando la maquila P-0647 ($12,500 al cliente): su precio al cliente no se cambia aquí", hay === 1 && cerrado, `campo ${hay} · cerrado ${cerrado}`);
+});
+await caso("ord-337 «Editar Specs» abierta desde antes no regresa el precio corregido", "modo=specs&rol=preprensa", async p => {
+  await p.evaluate(() => window.__cambiar({ price: 2400 })); await espera(p, 400);
+  await p.locator("textarea").first().fill("Recetas Dr. Eduardo Fuentes · specs revisadas"); await espera(p, 200);
+  await guardar(p); await espera(p, 1200);
+  const e = await estado(p), o = e.base.find(x => x.id === "OP-ED");
+  ok("ord-337 «Editar Specs» (manda la forma entera) abierta desde antes de que corrigieran el precio no lo regresa", Number(o?.price) === 2400, `precio en la base ${o?.price}`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

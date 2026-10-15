@@ -108,7 +108,7 @@ function Banco() {
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
       ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("inv:oc " + id); setM(null); }}
       onCorregirPrecio={CORREGIR ? () => { L("inv:corregir"); setCorrigiendo(true); } : null} />}
-    {corrigiendo && typeof CorregirPrecioModal !== "undefined" && <CorregirPrecioModal order={orden} onClose={() => { L("corregir:cerrado"); setCorrigiendo(false); }}
+    {corrigiendo && typeof CorregirPrecioModal !== "undefined" && <CorregirPrecioModal order={orden} cargarCandidatas={cargarCandidatas} onClose={() => { L("corregir:cerrado"); setCorrigiendo(false); }}
       onGuardar={async (nuevo, motivo) => { L("corregir:guardar " + nuevo + " " + motivo); await new Promise(r => setTimeout(r, 300));
         if (CORREGIR === "falla") { L("corregir:rechazo"); return { error: "La base no aceptó el precio: sin conexión. No se cambió." }; }
         // (vuelta 3) como App: la maquila guarda maq_price (el precio al cliente)

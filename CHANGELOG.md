@@ -12,6 +12,49 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.115 — «Corregir precio»: los avisos, el candado de la forma para Karla y que nada regrese una corrección — 15-oct-2026
+
+**Qué pasaba.** CobranzaFlow revisó «Corregir precio» (v10.84.112) y Marcelo decidió lo suyo (15-oct). Lo que encontraron, y lo que esta versión
+probó primero:
+- una forma de la orden abierta desde ANTES de la corrección (también «Editar Specs», que manda la forma entera) regresaba el precio viejo al
+  guardar, sin que nadie lo tocara (ord-332 y ord-337: $2,400 → $1,800);
+- a Karla le quedaba otra puerta para reescribir un precio sin porqué ni aviso: la forma de la orden («Datos Incompletos → Editar»);
+- el UPDATE escribía sólo con el id: si entre leer y escribir la foliaban, le cambiaban el precio o se entregaba, escribía igual;
+- nadie se enteraba de la corrección, ni Dirección ni quien capturó la orden;
+- nada avisaba del error de captura más probable: teclear el total CON IVA (con F-180: $70,180 en vez de $60,500);
+- se ofrecía en el pedido web (su precio es el de la tienda) y en el re-trabajo cubierto (la base le exige precio 0);
+- «Capturar precio» (la orden sin precio al asignar folio) escribía sin quién (el historial de la base decía «sistema») y sin confirmar.
+
+Marcelo (15-oct): se corrige en cualquier etapa de producción; los avisos a Dirección y a quien capturó la orden, con el antes, el después sin IVA y
+el porqué; sin tope para cambios grandes (sólo «cambia mucho» y «¿tecleaste el total con IVA?»); y el candado de la forma para Karla («haz lo que
+recomiendes»). Lo ya facturado (la RS- de una entregada, la factura con cobro) es de Dirección: entra con la entrega 2 de CobranzaFlow (su RPC).
+
+**Qué se cambió** (`src/App.jsx`, `src/lib/corregirPrecio.js`; la base no cambió):
+- El UPDATE lleva las mismas condiciones con que se revisó (sin folio, agrupada, grupo de OC ni saldo aplicado, no entregada ni cancelada, y el
+  precio que se leyó): si algo cambió entre leer y escribir, «Mientras corregías…», sin anotar ni avisar.
+- Los avisos (`order_edit`, como la forma al editar) a Dirección y a quien capturó la orden, nunca a quien corrige. Fuera del horario de la base
+  (lunes a viernes, 9:00 a 18:59 de México; `enHorarioDeAvisos`, la misma regla que `is_business_hours`) la base los tira sin error: al guardar se
+  dice «a esta hora no llegan avisos a Dirección: queda en el historial de la orden».
+- El porqué de 8 letras (sin los espacios de las orillas), como Ajustar y Re-facturar de CobranzaFlow.
+- «¿Tecleaste el total con IVA?» si el precio es el de hoy por 1.16 o el importe con IVA de una factura sin orden del cliente; y al revés, «Con
+  este precio, F-180 ($70,180.00 con IVA) queda del mismo importe».
+- En «Asignar folio», con algo capturado (el folio, el pago, sus referencias, el tercero), «Corregir precio» pregunta antes: la ventana se vuelve a
+  abrir con el precio nuevo y lo capturado se pierde.
+- Fuera de «Corregir precio»: el pedido web y el re-trabajo cubierto.
+- La forma guarda el precio con que se abrió: si nadie lo tocó y la orden ya tiene otro, no lo manda y el aviso lo dice («el precio se quedó en
+  $X: lo corrigieron mientras tenías la forma abierta»). A Karla, un precio ya capturado se le cierra con su porqué (`precioBloqueadoParaKarla`,
+  también el precio al cliente de la maquila, y en `update()` como red); sin precio, lo captura ella como antes. Dirección y quien captura, igual.
+- «Capturar precio» con quién, sólo si sigue sin precio ni folio, y confirmado (`capturarPrecioEnLaBase`).
+
+**Cómo se probó** (tres vueltas). **Vuelta 1**, contra v10.84.114: `corregir` (la base de mentira ahora evalúa las condiciones del UPDATE) 15 de 41
+fallaban (cor-26 a cor-37, cap-01, cap-02 y cap-04); en la ventana inv-160 a inv-164; en la forma ord-332 (la forma regresaba $2,400 a $1,800) y
+ord-334 (sin candado para Karla); los guardias pasaban (ord-333: si en la forma SÍ cambian el precio, se guarda el suyo; ord-335: sin precio,
+Karla lo captura). **Vuelta 2**: todo pasa; cor-01 pedía que el UPDATE llevara sólo el id (supuesto de la prueba: ahora lleva sus condiciones,
+cor-29). **Vuelta 3**, por donde no se diseñó: el precio al cliente de una maquila (ord-336) y «Editar Specs» (ord-337), que contra v10.84.114
+fallaban. Las tandas que tocan esto: folio 197 de 197, orden 153 de 153, orden-2 109 de 109, corregir 41 de 41, detalle 204 de 204 (det-138 se cayó al cargar su página por ERR_NO_BUFFER_SPACE, la red de Windows con dos tandas a la vez; sola, 3 de 3), hooks y chips; build y alcance.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.114 — «Facturar por partes» antes de Salidas, a la vista — 15-oct-2026
 
 **Qué pasaba.** Marcelo (15-oct): «vi con Karla y no vi ninguna opción para poder hacerlo… Facturar por partes, que funcione en cualquier etapa del
