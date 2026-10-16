@@ -17928,7 +17928,7 @@ function StatCard({ label, value, subValue, color }) {
 }
 
 // ─── SALUD OPERATIVA (v10.28.0) ─── Dashboard admin de supervisión diaria
-function OperationalHealthView({ orders, role, userLogin, notifications, maintenance, maintKey, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications }) {
+function OperationalHealthView({ orders, role, userLogin, notifications, maintenance, maintKey, purchaseOrders, onAction, setConfirmModal, showToast, reload, reloadNotifications, leido = true }) {
   // v10.54.5 m2 — modal admin para limpiar histórico de impresiones
   const [showPrintCleanup, setShowPrintCleanup] = useState(false);
   const [showMergeClients, setShowMergeClients] = useState(false);
@@ -17957,7 +17957,9 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
   const isVencida = (o) => o.due_date && isOverdue(o.due_date);
   const isUrgente = (o) => o.due_date && !isVencida(o) && new Date(String(o.due_date).slice(0,10) + "T12:00:00") <= new Date(Date.now() + 2*86400000);
 
-  const topPriority = useMemo(() => getTopPriority(active), [active, maintKey]);// v10.73.85 (ultracode) — maintKey en deps: getStale cambia su veredicto al caer/reparar una máquina, pero `active` (deps [orders]) no cambia por un toggle de mantenimiento → sin esto Salud mostraba la clasificación vieja (asimetría con la Torre)
+  // v10.84.123 — la prioridad del día, SÓLO entre las que tienen una razón (vencida, urgente o estancada): antes, sin ninguna, salía la orden
+  //   más cara con su etiqueta en ámbar (una alarma por nada)
+  const topPriority = useMemo(() => getTopPriority(active.filter(o => isVencida(o) || isUrgente(o) || !!getStale(o))), [active, maintKey]);// v10.73.85 (ultracode) — maintKey en deps: getStale cambia su veredicto al caer/reparar una máquina, pero `active` (deps [orders]) no cambia por un toggle de mantenimiento → sin esto Salud mostraba la clasificación vieja (asimetría con la Torre)
 
   const responsiblePulse = useMemo(() => {
     const icons = { preprensa: PaletteIcon, produccion: GearIcon, secretaria: ClipboardTextIcon, karla: ReceiptIcon, german: DiscIcon };
@@ -18098,147 +18100,110 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
     });
   };
 
-  return (
-    <div style={{ padding: "20px 24px", maxWidth: "min(1680px, 100%)", margin: "0 auto" }}>
-      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast} userLogin={userLogin}/>}
-      {showMergeClients && <ClientMergeModal onClose={()=>setShowMergeClients(false)} showToast={showToast} userLogin={userLogin}/>}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
-        <div>
-          <h2 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
-            {/* v10.58.24: karla ve mismo título que Lupita (Datos Pendientes) */}
-            {role === "admin" ? <><HeartbeatIcon size={22} weight="bold"/>Salud Operativa</> : <><NotePencilIcon size={22} weight="bold"/>Datos Pendientes</>}
-          </h2>
-          <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
-            {role === "admin" ? "Supervisión diaria del taller. Última actualización: ahora." : "Órdenes que requieren tu atención para completar datos."}
-          </p>
+  // v10.84.123 — «Datos Pendientes» (Lupita y Karla) y «Salud Operativa» (Dirección), lo de su /impeccable critique (16-oct, 20/40; snapshot
+  //   .impeccable/critique/…__src-app-jsx-datos-pendientes.md). Para Lupita y Karla, primero lo que ELLAS pueden completar (el precio que falta y
+  //   los datos incompletos) y después «Cómo va la planta» (antes, lo primero era una alarma roja de una orden en la máquina de Gerardo); Dirección
+  //   conserva su orden. Sin una lectura buena no dice que todo está bien (la regla 12). Las órdenes de las listas son botones (con el teclado),
+  //   «Ver las N» en vez de un «+ N más» sin salida, todo con AA (las tintas de la app), «Sin precio» una sola vez y las palabras en español.
+  const esDireccion = role === "admin";
+  // días de calendario desde la fecha de entrega, como «Entregas» («Retrasada N d»)
+  const diasVencida = o => { const [y, m, d] = String(o.due_date).slice(0, 10).split("-").map(Number); const hoy = new Date(); hoy.setHours(0, 0, 0, 0); return Math.round((hoy - new Date(y, m - 1, d)) / 86400000); };
+  const haceDias = f => { const n = Math.floor((Date.now() - new Date(f).getTime()) / 86400000); return n <= 0 ? "hoy" : n === 1 ? "hace 1 día" : "hace " + n + " días"; };
+  // horas hábiles sin movimiento, como las dice «Estancadas»: desde 48 h, en días
+  const quieta = h => h >= 48 ? Math.floor(h / 24) + " días" : h + " h";
+  const nombreDe = u => AUTHOR_NAME[u] || u;
+  const fila = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, width: "100%", padding: "6px 0", border: "none", borderBottom: "0.5px solid " + C.bd, background: "none", fontSize: 11, color: C.tx, cursor: "pointer", textAlign: "left", fontFamily: "inherit" };
+  const recorta = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+  const titulo = { display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" };
+
+  // SECCIÓN 1: la prioridad del día (sólo con una razón). A Dirección le grita: es su escalación, con «Notificar». A Lupita y Karla se la dice
+  //   sin alarma: la mueve quien la tiene.
+  const secPrioridad = topPriority && (() => {
+    const t = topPriority, venc = isVencida(t), urg = isUrgente(t), resp = orderResponsible(t); // v10.58.65: maquila → vendedor
+    const lastAct = t.timeline?.length > 0 ? t.timeline[t.timeline.length - 1].date : t.created_at;
+    const h = bizHoursAgo(lastAct); // v10.64.4 — horas hábiles (sin fines de semana)
+    const dias = venc ? diasVencida(t) : 0;
+    return (
+      <div style={{
+        // (sin el tinte de antes: sobre el gris de la página, el texto gris de adentro quedaba en 4.49:1; el borde de 2 px ya avisa)
+        background: C.bg,
+        border: esDireccion ? "2px solid " + (venc ? C.dn : C.amb) : "1px solid " + C.bd,
+        borderRadius: 14,
+        padding: "16px 20px",
+        marginBottom: 24
+      }}>
+        <h3 style={{ display:"flex", alignItems:"center", gap:6, fontSize: 11, fontWeight: 800, color: esDireccion ? (venc ? C.dnInk : C.wnInk) : C.t2, textTransform: "uppercase", margin: "0 0 8px" }}>
+          <WarningOctagonIcon size={13} weight="fill" color={venc ? C.dn : C.amb} style={{flexShrink:0}}/>Prioridad del día
+        </h3>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
+          {t.production_number || "—"} · {(t.client || "—").trim()}
         </div>
-        {role === "admin" && (
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>setShowMergeClients(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Fusionar clientes duplicados (admin)">
-              <LinkIcon size={13} weight="bold"/>Fusionar clientes
+        <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
+          {orderMoney(t) > 0 && <>${orderMoney(t).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
+          {venc && <span style={{ color: C.dnInk, fontWeight: 600 }}>Vencida hace {dias} {dias === 1 ? "día" : "días"} · </span>}
+          {urg && <span style={{ color: C.wnInk, fontWeight: 600 }}>Urgente · </span>}
+          <StageLbl stage={t.stage} size={10}/> · {resp?.name || "—"}
+          {h >= 24 && <> · {quieta(h)} sin movimiento</>}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => onAction(t.id, "detail")} style={{ ...bs(C.ac), fontSize: 12 }}>Ver orden</button>
+          {/* v10.32.0 — Notificar responsable es decisión admin (escalación), Lupita no */}
+          {esDireccion && resp && resp.role !== "both" && (
+            <button onClick={() => notifyResponsible(t)} style={{ ...bs(C.bg, C.tx), border: "1px solid " + C.bd, fontSize: 12 }}>
+              <MegaphoneIcon size={12} weight="bold"/>Notificar {resp.name}
             </button>
-            <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
-              <BroomIcon size={13} weight="bold"/>Mantenimiento
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+    );
+  })();
 
-      {/* SECCIÓN 1: Top Prioridad */}
-      {topPriority && (
-        <div style={{
-          background: isVencida(topPriority) ? "#ff3b3008" : isUrgente(topPriority) ? C.amb+"08" : "#f5f5f7",
-          border: "2px solid " + (isVencida(topPriority) ? "#ff3b30" : isUrgente(topPriority) ? C.amb : C.bd),
-          borderRadius: 14,
-          padding: "16px 20px",
-          marginBottom: 24
-        }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 11, fontWeight: 800, color: isVencida(topPriority) ? "#ff3b30" : C.amb, textTransform: "uppercase", marginBottom: 8 }}>
-            <WarningOctagonIcon size={13} weight="fill" style={{flexShrink:0}}/>Top Prioridad del Día
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.tx, marginBottom: 4 }}>
-            {topPriority.production_number || "—"} · {(topPriority.client || "—").trim()}
-          </div>
-          <div style={{ fontSize: 12, color: C.t2, marginBottom: 12 }}>
-            {orderMoney(topPriority) > 0 && <>${orderMoney(topPriority).toLocaleString("es-MX", { maximumFractionDigits: 0 })} atorados · </>}
-            {isVencida(topPriority) && <span style={{ color: "#ff3b30", fontWeight: 600 }}>VENCIDA hace {Math.floor((Date.now() - new Date(String(topPriority.due_date).slice(0,10) + "T23:59:59").getTime()) / 86400000)} día(s) · </span>}
-            {isUrgente(topPriority) && <span style={{ color: C.amb, fontWeight: 600 }}>URGENTE · </span>}
-            <StageLbl stage={topPriority.stage} size={10}/> · {orderResponsible(topPriority)?.name || "—"}
-            {(() => {
-              const lastAct = topPriority.timeline?.length > 0 ? topPriority.timeline[topPriority.timeline.length - 1].date : topPriority.created_at;
-              const h = bizHoursAgo(lastAct); // v10.64.4 — horas hábiles (sin fines de semana)
-              return h >= 24 ? <> · {h}h sin actividad</> : null;
-            })()}
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => onAction(topPriority.id, "detail")} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: C.ios, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>
-              Ver orden
-            </button>
-            {/* v10.32.0 — Notificar responsable es decisión admin (escalación), Lupita no */}
-            {role === "admin" && orderResponsible(topPriority) && orderResponsible(topPriority).role !== "both" && (
-              <button onClick={() => notifyResponsible(topPriority)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff", color: C.tx, border: "1px solid " + C.bd, borderRadius: 8, cursor: "pointer" }}>
-<MegaphoneIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:5}}/>Notificar {orderResponsible(topPriority).name}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* v10.58.24: SECCIÓN "Sin precio capturado" — accesible para admin/secretaria/karla.
-          Lista órdenes activas que no tienen precio. Click "✏️ Editar Precio" abre el form. */}
-      {ordersWithoutPriceList.length > 0 && (
-        <>
-          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.amb, margin: "0 0 12px" }}>
-            <WarningIcon size={16} weight="fill"/>Órdenes sin precio capturado ({ordersWithoutPriceList.length})
-          </h3>
-          <div style={{
-            background: C.amb+"08",
-            border: "1px solid "+C.amb+"40",
-            borderRadius: 12,
-            overflow: "hidden",
-            marginBottom: 24
-          }}>
-            {ordersWithoutPriceList.map((o, i) => (
-              <div key={o.id} style={{
-                padding: "10px 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                borderBottom: i < ordersWithoutPriceList.length - 1 ? "0.5px solid "+C.amb+"25" : "none"
-              }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.tx }}>
-                    {o.production_number || "—"} · {(o.client || "—").trim()}
-                    {o.order_type === "maquila" && <span style={{ marginLeft: 6, fontSize: 9, color: C.maq, background: C.maq+"18", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>MAQUILA</span>}
-                  </div>
-                  <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>
-                    <StageLbl stage={o.stage} size={10}/>
-                    {o.agent && <> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>{o.agent}</>}
-                    {o.created_by && o.created_by !== o.agent && <> · por {o.created_by}</>}
-                    {" · "}
-                    {(() => {
-                      const days = Math.floor((Date.now() - new Date(o.created_at).getTime()) / 86400000);
-                      return days + (days === 1 ? " día" : " días");
-                    })()}
-                  </div>
-                </div>
-                <button
-                  onClick={() => onAction(o.id, "edit")}
-                  style={{
-                    padding: "6px 12px",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    background: C.amb,
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    fontFamily: "'Geist',sans-serif",
-                    flexShrink: 0
-                  }}
-                >
-                  <NotePencilIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Editar Precio
-                </button>
+  // el precio que falta (v10.58.24): lo captura Lupita, y Karla antes de facturar. Abre la orden en la forma.
+  const secSinPrecio = ordersWithoutPriceList.length > 0 && (
+    <>
+      <h3 style={{ ...titulo, color: C.wnTx }}>
+        <WarningIcon size={16} weight="fill" color={C.amb}/>Órdenes sin precio capturado ({ordersWithoutPriceList.length})
+      </h3>
+      <div style={{ background: C.amb + "08", border: "1px solid " + C.amb + "40", borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+        {ordersWithoutPriceList.map((o, i) => (
+          <div key={o.id} style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            borderBottom: i < ordersWithoutPriceList.length - 1 ? "0.5px solid " + C.amb + "25" : "none" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12, fontWeight: 700, color: C.tx }}>
+                <span style={recorta} title={(o.client || "").trim()}>{o.production_number || "—"} · {(o.client || "—").trim()}</span>
+                {o.order_type === "maquila" && <span style={{ flexShrink: 0, fontSize: 10, color: C.wnTx, background: C.maq + "18", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>MAQUILA</span>}
               </div>
-            ))}
+              <div style={{ fontSize: 11, color: C.t2, marginTop: 2 }}>
+                <StageLbl stage={o.stage} size={10}/>
+                {o.agent && <> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:2}}/>{o.agent}</>}
+                {" · "}{o.created_by && o.created_by !== o.agent ? "la capturó " + nombreDe(o.created_by) + " " : "capturada "}{haceDias(o.created_at)}
+              </div>
+            </div>
+            <button onClick={() => onAction(o.id, "edit")} aria-label={"Capturar el precio de " + (o.production_number || "la orden")} style={{ ...bs(C.wnInk), fontSize: 11, flexShrink: 0 }}>
+              <NotePencilIcon size={12} weight="bold"/>Capturar precio
+            </button>
           </div>
-        </>
-      )}
+        ))}
+      </div>
+    </>
+  );
 
-      {/* SECCIÓN 2: Pulso por Responsable */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><UsersIcon size={16} weight="bold"/>Pulso por Responsable</h3>
+  // SECCIÓN 2: el pulso por persona (v10.58.67: una tarjeta por PERSONA; la llave y lo desplegado, también por nombre)
+  const secPulso = (
+    <>
+      <h3 style={titulo}><UsersIcon size={16} weight="bold"/>Pulso por responsable</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 24 }}>
         {responsiblePulse.length === 0 && (
           <div style={{gridColumn:"1/-1"}}><EmptyState icon={UsersIcon} title="Sin responsables con carga" hint="No hay órdenes activas asignadas a nadie ahora mismo. El taller está libre."/></div>
         )}
         {responsiblePulse.map(r => {
-          // v10.32.0 — destacar card propia cuando Lupita ve su sección
-          const isMe = role === "secretaria" && r.role === "secretaria";
+          // v10.32.0 — la tarjeta propia, destacada (v10.84.123: también la de Karla, que ve esta misma vista)
+          const isMe = (role === "secretaria" && r.role === "secretaria") || (role === "karla" && r.role === "karla");
+          const abierta = !!expandedSection["resp_" + r.name];
           return (
-          <div key={r.role} style={{
-            background: "#fff",
-            border: isMe ? "2px solid "+C.fac : "1.5px solid " + (r.vencidas > 0 ? "#ff3b30" : r.urgentes > 0 ? C.amb : C.live) + "66",
+          <div key={r.name} style={{
+            background: C.bg,
+            border: isMe ? "2px solid " + C.fac : "1.5px solid " + (r.vencidas > 0 ? C.dn : r.urgentes > 0 ? C.amb : C.live) + "66",
             borderRadius: 12,
             padding: 14,
             position: "relative"
@@ -18252,27 +18217,22 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
               {(()=>{const RI=r.icon;return RI?<RI size={15} weight="bold" style={{flexShrink:0}}/>:null})()}{r.name}
             </div>
             <div style={{ fontSize: 24, fontWeight: 800, color: C.tx, marginBottom: 8 }}>{r.orders.length}</div>
-            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}>
-              <CircleIcon size={9} weight="fill" color={r.vencidas > 0 ? "#ff3b30" : C.live} style={{flexShrink:0}}/>{r.vencidas > 0 ? r.vencidas + " vencida" + (r.vencidas !== 1 ? "s" : "") : "0 vencidas"}
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}>
-              <CircleIcon size={9} weight="fill" color={r.urgentes > 0 ? C.amb : C.live} style={{flexShrink:0}}/>{r.urgentes > 0 ? r.urgentes + " urgente" + (r.urgentes !== 1 ? "s" : "") : "0 urgentes"}
-            </div>
+            {r.vencidas > 0 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}><CircleIcon size={9} weight="fill" color={C.dn} style={{flexShrink:0}}/>{r.vencidas} vencida{r.vencidas !== 1 ? "s" : ""}</div>}
+            {r.urgentes > 0 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 4 }}><CircleIcon size={9} weight="fill" color={C.amb} style={{flexShrink:0}}/>{r.urgentes} urgente{r.urgentes !== 1 ? "s" : ""}</div>}
+            {!r.vencidas && !r.urgentes && <div style={{ fontSize: 11, color: C.t2, marginBottom: 4 }}>Sin vencidas ni urgentes</div>}
             <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2, marginBottom: 8 }}>
-              <ClockIcon size={11} style={{flexShrink:0}}/>{r.horasSinActividad}h máx sin actividad
+              <ClockIcon size={11} style={{flexShrink:0}}/>Sin movimiento: hasta {quieta(r.horasSinActividad)}
             </div>
-            <button onClick={() => setExpandedSection(s => ({ ...s, ["resp_" + r.role]: !s["resp_" + r.role] }))} style={{ width: "100%", padding: "6px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer" }}>
-              {expandedSection["resp_" + r.role] ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
+            <button onClick={() => setExpandedSection(s => ({ ...s, ["resp_" + r.name]: !s["resp_" + r.name] }))} aria-expanded={abierta} aria-label={(abierta ? "Ocultar" : "Ver") + " las órdenes de " + r.name} style={{ width: "100%", padding: "6px 10px", fontSize: 11, fontWeight: 600, background: C.sf, color: C.tx, border: "none", borderRadius: 8, cursor: "pointer", fontFamily: "inherit" }}>
+              {abierta ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
             </button>
-            {expandedSection["resp_" + r.role] && (
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "0.5px solid " + C.bd }}>
+            {abierta && (
+              <div style={{ marginTop: 8, paddingTop: 4, borderTop: "0.5px solid " + C.bd }}>
                 {r.orders.map(o => (
-                  <div key={o.id} onClick={() => onAction(o.id, "detail")} style={{
-                    fontSize: 10, color: C.t2, padding: "3px 0", cursor: "pointer", display: "flex", justifyContent: "space-between"
-                  }}>
-                    <span>{o.production_number || "—"} · {(o.client || "—").trim().substring(0, 18)}</span>
-                    <span style={{display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
-                  </div>
+                  <button key={o.id} type="button" onClick={() => onAction(o.id, "detail")} style={{ ...fila, color: C.t2, borderBottom: "none", padding: "4px 0" }}>
+                    <span style={recorta} title={(o.client || "").trim()}>{o.production_number || "—"} · {(o.client || "—").trim()}</span>
+                    <span style={{display:"inline-flex",alignItems:"center",flexShrink:0}}><StageLbl stage={o.stage} size={10}/></span>
+                  </button>
                 ))}
               </div>
             )}
@@ -18280,98 +18240,109 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           );
         })}
       </div>
+    </>
+  );
 
-      {/* SECCIÓN 3: Estancadas */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}>
-        <HourglassIcon size={16} weight="bold"/>Estancadas ({stale.total})
-      </h3>
-      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
-        <div style={{ display: "flex", gap: 20, marginBottom: 12 }}>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color="#ff3b30"/>Críticas (&gt;48h): <strong>{stale.critical.length}</strong></span>
-          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color={C.amb}/>Warning (24-48h): <strong>{stale.warning.length}</strong></span>
+  // SECCIÓN 3: las estancadas (la regla de la app: getStale)
+  const secEstancadas = (
+    <>
+      <h3 style={titulo}><HourglassIcon size={16} weight="bold"/>Estancadas ({stale.total})</h3>
+      <div style={{ background: C.bg, border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color={C.dn}/>Críticas (más de 48 h): <strong style={{ color: C.tx }}>{stale.critical.length}</strong></span>
+          <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 11, color: C.t2 }}><CircleIcon size={9} weight="fill" color={C.amb}/>Por vigilar (24 a 48 h): <strong style={{ color: C.tx }}>{stale.warning.length}</strong></span>
         </div>
         {[...stale.critical, ...stale.warning].slice(0, expandedSection.stale ? 999 : 8).map(o => (
-          <div key={o.id} onClick={() => onAction(o.id, "detail")} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "6px 0", borderBottom: "0.5px solid " + C.bd, fontSize: 11, cursor: "pointer", gap: 8
-          }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", minWidth: 0 }}>
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize: 11, fontWeight: 600, color: o._stale.lv === "critical" ? "#ff3b30" : C.amb }}>
-                <CircleIcon size={8} weight="fill" color={o._stale.lv === "critical" ? "#ff3b30" : C.amb}/>{o.production_number || "—"}
+          <button key={o.id} type="button" onClick={() => onAction(o.id, "detail")} style={fila}>
+            <span style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, fontWeight: 600, color: o._stale.lv === "critical" ? C.dnInk : C.wnInk, flexShrink: 0 }}>
+                <CircleIcon size={8} weight="fill" color={o._stale.lv === "critical" ? C.dn : C.amb}/>{o.production_number || "—"}
               </span>
-              <span style={{ color: C.t2 }}>{(o.client || "—").trim().substring(0, 22)}</span>
-              <span style={{ color: C.t3, display:"inline-flex", alignItems:"center" }}><StageLbl stage={o.stage} size={10}/></span>
-              <span style={{ color: C.t3 }}>{o._stale.lb}</span>
-            </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-              {isVencida(o) && <span style={{ fontSize: 9, color: "#ff3b30", fontWeight: 700, padding: "2px 6px", background: "#ff3b3010", borderRadius: 4 }}>VENCIDA</span>}
-              {isUrgente(o) && <span style={{ fontSize: 9, color: C.amb, fontWeight: 700, padding: "2px 6px", background: C.amb+"10", borderRadius: 4 }}>URGENTE</span>}
+              <span style={{ ...recorta, color: C.t2 }} title={(o.client || "").trim()}>{(o.client || "—").trim()}</span>
+              <span style={{ color: C.t3, display:"inline-flex", alignItems:"center", flexShrink: 0 }}><StageLbl stage={o.stage} size={10}/></span>
+              <span style={{ color: C.t3, flexShrink: 0 }}>{o._stale.lb}</span>
+            </span>
+            <span style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+              {isVencida(o) && <span style={{ fontSize: 10, color: C.dnInk, fontWeight: 700, padding: "2px 6px", background: C.dn + "10", borderRadius: 4 }}>Vencida</span>}
+              {isUrgente(o) && <span style={{ fontSize: 10, color: C.wnInk, fontWeight: 700, padding: "2px 6px", background: C.amb + "10", borderRadius: 4 }}>Urgente</span>}
               {orderMoney(o) > 0 && <span style={{ fontSize: 10, color: C.t2 }}>${orderMoney(o).toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>}
-            </div>
-          </div>
+            </span>
+          </button>
         ))}
         {stale.total > 8 && (
-          <button onClick={() => setExpandedSection(s => ({ ...s, stale: !s.stale }))} style={{ marginTop: 8, padding: "4px 12px", fontSize: 11, background: "transparent", border: "none", color: C.ios, cursor: "pointer" }}>
-            {expandedSection.stale ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver todas ({stale.total}) <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
+          <button onClick={() => setExpandedSection(s => ({ ...s, stale: !s.stale }))} aria-expanded={!!expandedSection.stale} style={{ marginTop: 8, padding: "4px 12px", fontSize: 11, fontWeight: 600, background: "transparent", border: "none", color: C.ac, cursor: "pointer", fontFamily: "inherit" }}>
+            {expandedSection.stale ? <>Ocultar <CaretUpIcon size={10} style={{verticalAlign:"middle"}}/></> : <>Ver las {stale.total} <CaretDownIcon size={10} style={{verticalAlign:"middle"}}/></>}
           </button>
         )}
-        {stale.total === 0 && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, color: C.live, fontSize: 12, padding: 20 }}><CheckCircleIcon size={14} weight="fill"/>Sin órdenes estancadas</div>}
+        {stale.total === 0 && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, color: C.okInk, fontSize: 12, padding: 20 }}><CheckCircleIcon size={14} weight="fill" color={C.ok}/>Sin órdenes estancadas</div>}
       </div>
+    </>
+  );
 
-      {/* SECCIÓN 4: Datos Incompletos */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><WarningCircleIcon size={16} weight="fill"/>Datos Incompletos</h3>
-      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
-        {[
-          { key: "vencidas", label: "Vencidas", color: "#ff3b30", list: incomplete.vencidas, alwaysExpanded: true },
-          { key: "sinFecha", label: "Sin fecha de entrega", color: "#ff3b30", list: incomplete.sinFecha, alwaysExpanded: true },
-          { key: "sinPrecio", label: "Sin precio", color: C.amb, list: incomplete.sinPrecio, alwaysExpanded: true },
-          { key: "sinCantidad", label: "Sin cantidad", color: C.amb, list: incomplete.sinCantidad, alwaysExpanded: true },
-          { key: "sinArchivoStageAvanzado", label: "Sin archivo en stage avanzado", color: C.amb, list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
-          { key: "maquilaSinProveedor", label: "Maquila sin proveedor", color: "#ff3b30", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
-          { key: "maquilaSinCosto", label: "Maquila sin costo (proveedor)", color: "#ff3b30", list: incomplete.maquilaSinCosto, alwaysExpanded: true },
-          { key: "sinAgente", label: "Sin vendedor asignado", color: "#fbbf24", list: incomplete.sinAgente, alwaysExpanded: false },
-          { key: "sinTelefono", label: "Sin teléfono cliente", color: "#fbbf24", list: incomplete.sinTelefono, alwaysExpanded: false },
-          { key: "sinEmail", label: "Sin email cliente", color: "#fbbf24", list: incomplete.sinEmail, alwaysExpanded: false }
-        ].filter(s => s.list.length > 0).map(section => {
-          const expanded = section.alwaysExpanded || expandedSection["inc_" + section.key];
+  // SECCIÓN 4: los datos incompletos (sin «Sin precio»: tiene su sección arriba). El tono: alta (rojo), media (ámbar), baja (sin color).
+  const TONO = { alta: { tinta: C.dnInk, punto: C.dn, fondo: C.dn + "08" }, media: { tinta: C.wnInk, punto: C.amb, fondo: C.amb + "08" }, baja: { tinta: C.t2, punto: C.t3, fondo: "transparent" } };
+  const incompletas = [
+    { key: "vencidas", label: "Vencidas", tono: "alta", list: incomplete.vencidas, alwaysExpanded: true },
+    { key: "sinFecha", label: "Sin fecha de entrega", tono: "alta", list: incomplete.sinFecha, alwaysExpanded: true },
+    { key: "sinCantidad", label: "Sin cantidad", tono: "media", list: incomplete.sinCantidad, alwaysExpanded: true },
+    { key: "sinArchivoStageAvanzado", label: "Sin archivo en etapa avanzada", tono: "media", list: incomplete.sinArchivoStageAvanzado, alwaysExpanded: false },
+    { key: "maquilaSinProveedor", label: "Maquila sin proveedor", tono: "alta", list: incomplete.maquilaSinProveedor, alwaysExpanded: true },
+    { key: "maquilaSinCosto", label: "Maquila sin el costo del proveedor", tono: "alta", list: incomplete.maquilaSinCosto, alwaysExpanded: true },
+    { key: "sinAgente", label: "Sin vendedor asignado", tono: "baja", list: incomplete.sinAgente, alwaysExpanded: false },
+    { key: "sinTelefono", label: "Sin teléfono del cliente", tono: "baja", list: incomplete.sinTelefono, alwaysExpanded: false },
+    { key: "sinEmail", label: "Sin correo del cliente", tono: "baja", list: incomplete.sinEmail, alwaysExpanded: false }
+  ].filter(x => x.list.length > 0);
+  const secIncompletos = (
+    <>
+      <h3 style={titulo}><WarningCircleIcon size={16} weight="fill"/>Datos incompletos</h3>
+      <div style={{ background: C.bg, border: "1px solid " + C.bd, borderRadius: 12, overflow: "hidden", marginBottom: 24 }}>
+        {incompletas.map(section => {
+          const tono = TONO[section.tono];
+          const expanded = section.alwaysExpanded || !!expandedSection["inc_" + section.key];
+          const todas = !!expandedSection["todas_" + section.key];
+          const cabeza = <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: tono.tinta }}><CircleIcon size={9} weight="fill" color={tono.punto}/>{section.label} ({section.list.length})</span>;
           return (
             <div key={section.key} style={{ borderBottom: "0.5px solid " + C.bd }}>
-              <div onClick={() => !section.alwaysExpanded && setExpandedSection(s => ({ ...s, ["inc_" + section.key]: !s["inc_" + section.key] }))} style={{
-                padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
-                cursor: section.alwaysExpanded ? "default" : "pointer", background: section.color + "08"
-              }}>
-                <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: section.color }}>
-                  <CircleIcon size={9} weight="fill" color={section.color}/>{section.label} ({section.list.length})
-                </span>
-                {!section.alwaysExpanded && <span style={{ fontSize: 11, color: C.t3 }}>{expanded ? <CaretUpIcon size={11}/> : <CaretDownIcon size={11}/>}</span>}
-              </div>
+              {section.alwaysExpanded
+                ? <div style={{ padding: "10px 14px", background: tono.fondo }}>{cabeza}</div>
+                : <button type="button" onClick={() => setExpandedSection(s => ({ ...s, ["inc_" + section.key]: !s["inc_" + section.key] }))} aria-expanded={expanded} style={{ width: "100%", padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", background: tono.fondo, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                    {cabeza}<span style={{ color: C.t2, display: "inline-flex" }}>{expanded ? <CaretUpIcon size={11}/> : <CaretDownIcon size={11}/>}</span>
+                  </button>}
               {expanded && (
                 <div style={{ padding: "4px 14px 10px" }}>
-                  {section.list.slice(0, 10).map(o => (
-                    <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd, gap: 8 }}>
-                      <span onClick={() => onAction(o.id, "detail")} style={{ cursor: "pointer", color: C.t2, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim().substring(0, 22)} · <StageLbl stage={o.stage} size={10}/>
-                      </span>
-                      <button onClick={() => onAction(o.id, "edit")} style={{ fontSize: 10, padding: "3px 8px", background: section.color, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", flexShrink: 0 }}>
-                        <NotePencilIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Editar
+                  {section.list.slice(0, todas ? section.list.length : 10).map(o => (
+                    <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "0.5px solid " + C.bd, gap: 8 }}>
+                      <button type="button" onClick={() => onAction(o.id, "detail")} style={{ ...fila, borderBottom: "none", color: C.t2, padding: "5px 0", minWidth: 0, flex: 1 }}>
+                        <span style={recorta} title={(o.client || "").trim()}><strong style={{ color: C.tx }}>{o.production_number || "—"}</strong> · {(o.client || "—").trim()} · <StageLbl stage={o.stage} size={10}/></span>
+                      </button>
+                      <button type="button" onClick={() => onAction(o.id, "edit")} aria-label={"Editar " + (o.production_number || "la orden") + " (" + section.label.toLowerCase() + ")"} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", background: C.sf, color: C.tx, border: "1px solid " + C.bd, borderRadius: 6, cursor: "pointer", flexShrink: 0, fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <NotePencilIcon size={11} weight="bold"/>Editar
                       </button>
                     </div>
                   ))}
-                  {section.list.length > 10 && <div style={{ fontSize: 10, color: C.t3, fontStyle: "italic", marginTop: 4 }}>+ {section.list.length - 10} más</div>}
+                  {section.list.length > 10 && (
+                    <button type="button" onClick={() => setExpandedSection(s => ({ ...s, ["todas_" + section.key]: !s["todas_" + section.key] }))} aria-expanded={todas} style={{ marginTop: 6, padding: "4px 0", fontSize: 11, fontWeight: 600, background: "none", border: "none", color: C.ac, cursor: "pointer", fontFamily: "inherit" }}>
+                      {todas ? "Ver sólo las primeras 10" : "Ver las " + section.list.length}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
-        {Object.values(incomplete).every(arr => arr.length === 0) && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding: 20, color: C.live, fontSize: 12 }}><CheckCircleIcon size={14} weight="fill"/>Datos completos en todas las órdenes activas</div>}
+        {incompletas.length === 0 && <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding: 20, color: C.okInk, fontSize: 12 }}><CheckCircleIcon size={14} weight="fill" color={C.ok}/>{ordersWithoutPriceList.length ? "Fuera del precio, no les falta nada a las órdenes activas" : "Datos completos en todas las órdenes activas"}</div>}
       </div>
+    </>
+  );
 
-      {/* SECCIÓN 5: Estado de Máquinas */}
-      <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><FactoryIcon size={16} weight="bold"/>Estado de Máquinas</h3>
-      <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+  // SECCIÓN 5: las máquinas
+  const secMaquinas = (
+    <>
+      <h3 style={titulo}><FactoryIcon size={16} weight="bold"/>Estado de las máquinas</h3>
+      <div style={{ background: C.bg, border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
         {machineStatus.inMaintenance.length > 0 ? (
           <>
-            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: C.amb, marginBottom: 8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, fontWeight: 700, color: C.wnInk, marginBottom: 8 }}>
               <WrenchIcon size={13} weight="bold"/>{machineStatus.inMaintenance.length} en mantenimiento
             </div>
             {machineStatus.inMaintenance.map(m => {
@@ -18379,16 +18350,16 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
               const daysInMaint = Math.floor((Date.now() - new Date(m.started_at).getTime()) / 86400000);
               const ordersStuck = active.filter(o => o.current_machine === m.machine_id).length;
               return (
-                <div key={m.id} style={{ fontSize: 11, padding: "6px 0", borderBottom: "0.5px solid " + C.bd }}>
-                  <strong>{machineName}</strong> · {daysInMaint} día(s) · iniciado por {m.started_by}
-                  {m.notes && <div style={{ fontSize: 10, color: C.t3, marginTop: 2 }}>{m.notes}</div>}
-                  {ordersStuck > 0 && <div style={{ display:"flex", alignItems:"center", gap:4, fontSize: 10, color: C.amb }}><WarningIcon size={11} weight="fill"/>{ordersStuck} órdenes detenidas</div>}
+                <div key={m.id} style={{ fontSize: 11, padding: "6px 0", borderBottom: "0.5px solid " + C.bd, color: C.tx }}>
+                  <strong>{machineName}</strong> · {daysInMaint <= 0 ? "desde hoy" : daysInMaint === 1 ? "1 día" : daysInMaint + " días"} · lo reportó {nombreDe(m.started_by)}
+                  {m.notes && <div style={{ fontSize: 11, color: C.t2, marginTop: 2 }}>{m.notes}</div>}
+                  {ordersStuck > 0 && <div style={{ display:"flex", alignItems:"center", gap:4, fontSize: 11, color: C.wnInk }}><WarningIcon size={11} weight="fill" color={C.amb}/>{ordersStuck === 1 ? "1 orden detenida" : ordersStuck + " órdenes detenidas"}</div>}
                 </div>
               );
             })}
           </>
         ) : (
-          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, color: C.live, marginBottom: 12 }}><CheckCircleIcon size={13} weight="fill"/>Todas las máquinas operativas (0 en mantenimiento)</div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize: 12, color: C.okInk, marginBottom: 12 }}><CheckCircleIcon size={13} weight="fill" color={C.ok}/>Todas las máquinas operativas: ninguna en mantenimiento</div>
         )}
 
         {machineStatus.activeMachines.length > 0 && (
@@ -18399,8 +18370,8 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
             {machineStatus.activeMachines.map(m => {
               const machineName = MACHINES.find(x => x.id === m.id)?.name || m.id;
               return (
-                <div key={m.id} style={{ fontSize: 11, padding: "4px 0", display: "flex", justifyContent: "space-between" }}>
-                  <span>{machineName} · {m.orders.length} órd</span>
+                <div key={m.id} style={{ fontSize: 11, padding: "4px 0", display: "flex", justifyContent: "space-between", color: C.tx }}>
+                  <span>{machineName} · {m.orders.length === 1 ? "1 orden" : m.orders.length + " órdenes"}</span>
                   <span style={{ fontWeight: 600, color: C.tx }}>${m.money.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</span>
                 </div>
               );
@@ -18408,44 +18379,92 @@ function OperationalHealthView({ orders, role, userLogin, notifications, mainten
           </>
         )}
       </div>
+    </>
+  );
 
-      {/* SECCIÓN 6: Limpieza Sugerida — v10.32.0: admin-only (acciones administrativas no son scope de Lupita) */}
-      {role === "admin" && (orphanOCs.length > 0 || unreadNotifs.length > 10) && (
-        <>
-          <h3 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 14, fontWeight: 700, color: C.tx, margin: "0 0 12px" }}><BroomIcon size={16} weight="bold"/>Limpieza Sugerida</h3>
-          <div style={{ background: "#fff", border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
-            {orphanOCs.length > 0 && (
-              <div style={{ marginBottom: unreadNotifs.length > 10 ? 16 : 0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>
-                  <CircleIcon size={9} weight="fill" color="#fbbf24"/>{orphanOCs.length} OCs huérfanas (sin órdenes activas)
-                </div>
-                {orphanOCs.map(oc => (
-                  <div key={oc.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd }}>
-                    <span>{oc.id} · {oc.client || "—"}</span>
-                    <button onClick={() => cancelOrphanOC(oc)} style={{ fontSize: 10, padding: "3px 8px", background: "#ff3b30", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-                      <XIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Cancelar
-                    </button>
-                  </div>
-                ))}
+  // SECCIÓN 6: la limpieza sugerida — v10.32.0: sólo Dirección (las acciones administrativas no son de Lupita)
+  const secLimpieza = esDireccion && (orphanOCs.length > 0 || unreadNotifs.length > 10) && (
+    <>
+      <h3 style={titulo}><BroomIcon size={16} weight="bold"/>Limpieza sugerida</h3>
+      <div style={{ background: C.bg, border: "1px solid " + C.bd, borderRadius: 12, padding: 14, marginBottom: 24 }}>
+        {orphanOCs.length > 0 && (
+          <div style={{ marginBottom: unreadNotifs.length > 10 ? 16 : 0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: C.wnInk, marginBottom: 8 }}>
+              <CircleIcon size={9} weight="fill" color={C.amb}/>{orphanOCs.length === 1 ? "1 OC huérfana" : orphanOCs.length + " OCs huérfanas"} (sin órdenes activas)
+            </div>
+            {orphanOCs.map(oc => (
+              <div key={oc.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 11, borderBottom: "0.5px solid " + C.bd, color: C.tx }}>
+                <span>{oc.id} · {oc.client || "—"}</span>
+                <button onClick={() => cancelOrphanOC(oc)} aria-label={"Cancelar " + oc.id} style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", background: C.dnInk, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                  <XIcon size={11} weight="bold"/>Cancelar
+                </button>
               </div>
-            )}
-
-            {unreadNotifs.length > 10 && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: C.fac }}>
-                    <ChatCircleIcon size={13} weight="fill"/>{unreadNotifs.length} notificaciones admin sin leer
-                  </span>
-                  <button onClick={markAllNotifsRead} style={{ fontSize: 11, padding: "5px 10px", background: C.fac, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>
-                    <CheckIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Marcar todas como leídas
-                  </button>
-                </div>
-                <div style={{ fontSize: 10, color: C.t3, marginTop: 4 }}>
-                  Tip: este dashboard reemplaza el valor informativo de la mayoría de notifs.
-                </div>
-              </div>
-            )}
+            ))}
           </div>
+        )}
+
+        {unreadNotifs.length > 10 && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize: 12, fontWeight: 700, color: C.fac }}>
+                <ChatCircleIcon size={13} weight="fill"/>{unreadNotifs.length} notificaciones de Dirección sin leer
+              </span>
+              <button onClick={markAllNotifsRead} style={{ fontSize: 11, fontWeight: 600, padding: "5px 10px", background: C.fac, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <CheckIcon size={12} weight="bold"/>Marcar todas como leídas
+              </button>
+            </div>
+            <div style={{ fontSize: 11, color: C.t2, marginTop: 4 }}>
+              Esta vista ya dice lo que traen casi todas.
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div style={{ padding: "20px 24px", maxWidth: "min(1680px, 100%)", margin: "0 auto" }}>
+      {showPrintCleanup && <PrintAuditCleanupModal onClose={()=>setShowPrintCleanup(false)} showToast={showToast} userLogin={userLogin}/>}
+      {showMergeClients && <ClientMergeModal onClose={()=>setShowMergeClients(false)} showToast={showToast} userLogin={userLogin}/>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24}}>
+        <div>
+          <h2 style={{ display:"flex", alignItems:"center", gap:8, fontSize: 20, fontWeight: 800, margin: "0 0 4px", color: C.tx }}>
+            {/* v10.58.24: karla ve mismo título que Lupita (Datos Pendientes) */}
+            {esDireccion ? <><HeartbeatIcon size={22} weight="bold"/>Salud Operativa</> : <><NotePencilIcon size={22} weight="bold"/>Datos Pendientes</>}
+          </h2>
+          <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>
+            {esDireccion ? "Supervisión diaria del taller." : "Lo que les falta capturar a las órdenes activas. Abajo, cómo va la planta."}
+          </p>
+        </div>
+        {esDireccion && (
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>setShowMergeClients(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Fusionar clientes duplicados (admin)">
+              <LinkIcon size={13} weight="bold"/>Fusionar clientes
+            </button>
+            <button onClick={()=>setShowPrintCleanup(true)} style={{...bs(C.sf, C.t2), border:"1px solid "+C.bd, fontSize:11, padding:"6px 12px"}} title="Limpiar histórico de impresiones (admin)">
+              <BroomIcon size={13} weight="bold"/>Mantenimiento
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* v10.84.123 — sin una lectura buena, ninguna cifra (ni «Sin órdenes estancadas» ni «Datos completos»): el aviso de App dice por qué */}
+      {!leido ? (
+        <div role="status" style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderRadius: 12, background: C.sf, border: "1px solid " + C.bd, fontSize: 12, color: C.t2 }}>
+          <ClockIcon size={14} weight="bold" style={{ flexShrink: 0 }}/>Sin cifras mientras no se lea de la base.
+        </div>
+      ) : esDireccion ? (
+        <>{secPrioridad}{secSinPrecio}{secPulso}{secEstancadas}{secIncompletos}{secMaquinas}{secLimpieza}</>
+      ) : (
+        <>
+          {secSinPrecio}
+          {secIncompletos}
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: C.tx, margin: "8px 0 4px" }}>Cómo va la planta</h2>
+          <p style={{ fontSize: 12, color: C.t2, margin: "0 0 16px" }}>Para que sepas cómo va: cada orden la mueve quien la tiene a su cargo.</p>
+          {secPrioridad}
+          {secPulso}
+          {secEstancadas}
+          {secMaquinas}
         </>
       )}
     </div>
@@ -23611,7 +23630,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="archive"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px",display:"flex",alignItems:"center",gap:8}}><ArchiveIcon size={18} weight="bold"/>Archivo de Completadas</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>Órdenes entregadas organizadas por fecha{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{!archiveLoaded?<div style={{textAlign:"center",padding:"40px 20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:14,padding:"14px 28px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar Archivo Completo</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Las órdenes activas ya están cargadas. Presiona para cargar el historial completo.</p></div>:<Archive orders={filteredOrders} role={user} onAction={handleAction} userLogin={userLogin}/>}</div>}
         {view==="analytics"&&user==="admin"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center"}}>Analytics</h2>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><ChartBarIcon size={14} weight="bold"/>Cargar datos completos para Analytics</button></div>:<Analytics orders={viewOrders} onReload={reload}/>}</div>}
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
-        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)}/>}
+        {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)} leido={!!lectura.ok}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
         {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}

@@ -12,6 +12,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.123 — «Datos Pendientes»: Lupita y Karla ven primero lo que pueden completar, y sin lectura no dice que todo está bien — 16-oct-2026
+
+**Qué pasaba.** La tercera pasada de /impeccable critique de la noche en PrintFlow: «Datos Pendientes», la vista de Lupita y Karla (para Dirección es
+«Salud Operativa», la misma vista). **20/40** (snapshot `.impeccable/critique/2026-10-16T10-29-04Z__src-app-jsx-datos-pendientes.md`). El título prometía
+«Órdenes que requieren tu atención para completar datos» y lo primero era «TOP PRIORIDAD DEL DÍA» en rojo: una orden en la máquina de Gerardo (P-0611
+en producción) que ellas no mueven; lo que sí pueden completar quedaba abajo, y «Datos incompletos» después del pulso y las estancadas. La alarma salía
+aunque nada estuviera mal (era sólo la orden más cara) y una sana de $500,000 le ganaba a una estancada. Sin una lectura buena decía en verde que todo
+estaba bien, y a Dirección le ofrecía cancelar como huérfanas TODAS las OC (sin órdenes leídas, todas lo parecen). El teclado no llegaba a ninguna orden
+de las listas; «+ N más» no se abría; «Sin precio» salía dos veces; el contraste (blanco sobre naranja 2.2:1, sobre amarillo 1.7:1) y los botones en
+Arial (no heredaban la letra); «Warning», «Top», «día(s)», «órd», «por secretaria», el cliente cortado a media palabra.
+
+**Qué se cambió** (sólo `OperationalHealthView` y la línea de App que la monta):
+- Para Lupita y Karla, primero «Órdenes sin precio capturado» y «Datos incompletos»; después «Cómo va la planta» (la prioridad, el pulso, las estancadas
+  y las máquinas). Dirección conserva su orden.
+- La prioridad del día, sólo entre las vencidas, urgentes o estancadas (`getTopPriority` recibe ésas); a Dirección le grita (borde de 2 px y
+  «Notificar»); a Lupita y Karla se la dice sin alarma. «Vencida hace 7 días» en días de calendario, como «Entregas» (antes, «6 día(s)»).
+- `leido` (de App: `lectura.ok`): sin una lectura buena, «Sin cifras mientras no se lea de la base» y nada más (ni «todo bien» ni la limpieza de OC).
+- Las órdenes de Estancadas, del pulso desplegado y de Datos incompletos son botones; las listas plegadas, botones con `aria-expanded`; «Ver las N»
+  cuando no caben 10.
+- «Sin precio» una vez (su sección); el botón dice «Capturar precio» y de cuál orden es; quién la capturó, por su nombre («la capturó Lupita hace 1 día»).
+- Todo con AA (las tintas de la app; el «Editar» neutro: el color va en el punto de la sección) y los botones con la letra de la app. El pulso: «Sin
+  vencidas ni urgentes», «Sin movimiento: hasta 6 días» (en días desde 48 h, como Estancadas), el «Tú» de Karla y la llave por persona. Las palabras
+  en español; el cliente completo (la orilla lo corta con «…»).
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-salud.mjs` (la vista con la línea de App que la monta, el reloj fijo en el miércoles 14-oct) y tanda
+`salud` (31). **Vuelta 1** (23, escritas antes del arreglo) contra v10.84.122: fallaban 17. **Vuelta 2** (8, por donde no se diseñó: le ponen precio con
+la vista abierta, la lista larga que se achica abierta, Karla captura, Dirección sin lectura, la estancada contra la cara, Dirección sin «Tú», la lista
+plegada con el teclado, Dirección a 1366): contra lo de antes fallaban 4. Con el arreglo, 30 de 31 a la primera: en la caja de Dirección, el gris sobre
+el tinte rojo y el gris de la página quedaba en 4.49:1 (se quitó el tinte; el borde avisa); luego 31 de 31. El detector de la skill en el navegador:
+de 22 a 42 hallazgos por estado a 13-14 (sólo la letra de 11 px de la app, Geist y un «gradient-text» falso: no hay ningún degradado en la página). La
+revisión a ojo de las capturas (Lupita y Dirección), sin hallazgos.
+
+**Para Marcelo (de fondo, no se tocó):** ¿Lupita y Karla deben ver «Cómo va la planta» (con el dinero por máquina)? El pulso sigue siendo tarjetas con
+número grande, y su «Sin movimiento» cuenta también lo que espera su fecha (Estancadas no): ¿contar sus estancadas en vez de horas? ¿«Datos incompletos»
+por orden (qué le falta a cada una)? ¿«Datos Pendientes (N)» en el menú, como «Pendientes»?
+
+**En producción:** (pendiente)
+
 ## v10.84.122 — «Entregas», lo de su critique: las fichas son botones y cambiar la fecha es una ventana de la app — 16-oct-2026
 
 **Qué pasaba.** La segunda pasada de /impeccable critique de la noche en PrintFlow (el encargo de Marcelo del 16-oct 02:35): «Entregas», el calendario

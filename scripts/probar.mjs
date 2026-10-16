@@ -92,6 +92,8 @@ const TANDAS = [
   { nombre: "plano", gen: "tests/banco/gen-plano.mjs", romper: "tests/romper/plano.mjs", puerto: 5186 },
   // v10.84.122 — «Entregas» (el calendario y su ventana de cambiar la fecha), con el reloj fijo
   { nombre: "entregas", gen: "tests/banco/gen-entregas.mjs", romper: "tests/romper/entregas.mjs", puerto: 5185 },
+  // v10.84.123 — «Datos Pendientes» (Lupita y Karla) y «Salud Operativa» (Dirección), con el reloj fijo y la línea de App que la monta
+  { nombre: "salud", gen: "tests/banco/gen-salud.mjs", romper: "tests/romper/salud.mjs", puerto: 5184 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
