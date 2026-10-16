@@ -44,7 +44,14 @@ timbrar» mientras abajo decía «ya está timbrada»: inv-180 (fallaba) y el ar
 ventana abierta (D): se vuelve a abrir revisando su factura y guarda por la base, 2 de 2 a la primera. La revisión en producción no prueba la ventana
 completa: la cuenta de pruebas no es Karla y la base le contesta «sólo Karla o Dirección»; ésa la cubre la prueba con la app real.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~20:16; READY `dpl_AegbgGoZJFC644qgesucgTJBSgF2` (commit `f1c96ea`). Vuelta atrás: promover
+`dpl_2vfdJjkfGcuq8yfdUarzku2hJE9k` (el código de v10.84.117) o `git revert f1c96ea`; la base de CobranzaFlow se queda (con PrintFlow de antes, lo
+foliado no se corrige aquí y a Karla la base le rechaza capturar por fuera el precio de una foliada). Candado 1842 de 1842 a la primera, de a 2
+tandas en 27 min (29 nuevas), ninguna a la segunda. Revisado en producción sin escribir (medir-118, la cuenta visor con el rol de Karla): 4 de 4; en
+P-0448 (RS-36, en Salidas), «Más» ofrece «Corregir precio» con su folio y la ventana le pregunta a la base DE VERDAD (`corregir_precio_revisar`),
+que a la cuenta de pruebas le contesta «Sólo Karla (Cobranza) o Dirección…»: la ventana lo dice, cierra el precio y no guarda (la puerta que corrige
+ni se llama). La ventana completa como Karla la cubre `tests/recorrido/corregir-foliada.mjs` (11 de 11). Para la revisión, `corregir_precio_revisar`
+entró a las lecturas de `.banco-revisor-orden/lib.mjs` (ni ella ni lo que llama escribe, medido el 15-oct).
 
 ## v10.84.117 — Karla recibe también la maquila que Lupita no marcó como enviada — 15-oct-2026
 
