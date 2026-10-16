@@ -19740,7 +19740,10 @@ function OcFolioCanceladoPanel({oc, role, userLogin, showToast, onReload}) {
 }
 
 // ─── ÓRDENES DE COMPRA (v10.10.0) ─── Lista + detalle de OCs complejas
-function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC, onJalar}){
+// v10.84.133 — la lista de OC (la duodécima pasada de /impeccable critique, 16-oct): sin una lectura buena no dice «Sin Órdenes de Compra» ni cuenta 0
+//   (la regla 12; `leido` de App); cada OC se abre con el teclado (antes un div con clic); Activas/Histórico son pestañas; la insignia del estado, el
+//   candado y el folio en tinta (AA); el motivo de la cancelada se lee; sin «complejas», «Click» ni «OCs».
+function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter, onAction, onReload, showToast, onCreateOC, onAddProduct, onAddExisting, onAssignFolio, onPreAssignFolio, onMatrixPlan, onCancelMatrixLine, onCancelMatrixGroup, pendingOCId, onConsumedPendingOC, onJalar, leido=true}){
   const [selectedOCId, setSelectedOCId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [historicoTab, setHistoricoTab] = useState(false); // v10.32.3 — tabs Activas/Histórico
@@ -19858,10 +19861,10 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
   const canCreateOC = isSec(role) || role === "admin" || role === "karla";
   const statusBadge = (st) => {
     const map = {
-      open: {color: C.ok, Icon: CircleIcon, weight: "fill", label: "Abierta"},
+      open: {color: C.okTx, Icon: CircleIcon, weight: "fill", label: "Abierta"},   // v10.84.133 — en tinta (el verde y el rojo de antes, sin AA sobre su tinte)
       in_progress: {color: C.ac, Icon: ArrowsClockwiseIcon, weight: "bold", label: "En proceso"},
-      completed: {color: C.t3, Icon: CheckCircleIcon, weight: "fill", label: "Completada"},
-      cancelled: {color: C.dn, Icon: XCircleIcon, weight: "fill", label: "Cancelada"}
+      completed: {color: C.t2, Icon: CheckCircleIcon, weight: "fill", label: "Completada"},
+      cancelled: {color: C.dnInk, Icon: XCircleIcon, weight: "fill", label: "Cancelada"}
     };
     const m = map[st] || {color: C.t3, Icon: CircleIcon, weight: "regular", label: st};
     const BIcon = m.Icon;
@@ -19898,7 +19901,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     const sharedFolioType = hasShared ? (esFolioFactura(selectedOC.shared_invoice_folio) ? "factura" : "remision") : null;
     const sharedFolioColor = sharedFolioType === "factura" ? C.fac : C.live;
     const SharedFolioIcon = sharedFolioType === "factura" ? FileTextIcon : ClipboardTextIcon;
-    return <div style={{maxWidth:1200,margin:"0 auto"}}>
+    return <div key="oc-detalle" style={{maxWidth:1200,margin:"0 auto"}}>
       <button onClick={()=>setSelectedOCId(null)} style={{...bt(C.t3),fontSize:11,marginBottom:14}}>← Volver a la lista</button>
       <div style={{background:C.card,borderRadius:14,padding:16,boxShadow:C.sh2,border:isWeb?"1.5px solid "+WEB_BLUE+"66":undefined,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
@@ -19987,27 +19990,30 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
     </div>;
   }
 
-  return <div>
+  return <div key="oc-lista">
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:4}}>
       <h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0,display:"inline-flex",alignItems:"center",gap:8}}><ShoppingCartIcon size={19} weight="bold"/>Órdenes de Compra</h2>
       {canCreateOC && !historicoTab && <button onClick={()=>setShowCreateModal(true)} style={{...bt(C.ac),fontSize:12,padding:"8px 14px"}}>+ Nueva OC</button>}
     </div>
     {/* v10.32.3 — Tabs Activas / Histórico */}
-    <div style={{display:"flex",gap:4,marginTop:8,marginBottom:14,borderBottom:"1px solid "+C.bd}}>
-      <button onClick={()=>setHistoricoTab(false)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:!historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(!historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
-        <ListBulletsIcon size={15} weight="bold"/>Activas ({tabCounts.activas})
+    <div role="tablist" aria-label="Órdenes de compra" style={{display:"flex",gap:4,marginTop:8,marginBottom:14,borderBottom:"1px solid "+C.bd}}>
+      <button role="tab" aria-selected={!historicoTab} onClick={()=>setHistoricoTab(false)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:!historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(!historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+        <ListBulletsIcon size={15} weight="bold" aria-hidden="true"/>Activas{leido?" ("+tabCounts.activas+")":""}
       </button>
-      <button onClick={()=>setHistoricoTab(true)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
-        <ArchiveIcon size={15} weight="bold"/>Histórico ({tabCounts.historico})
+      <button role="tab" aria-selected={historicoTab} onClick={()=>setHistoricoTab(true)} style={{padding:"10px 20px",fontSize:13,fontWeight:700,background:"transparent",color:historicoTab?C.ac:C.t2,border:"none",borderBottom:"3px solid "+(historicoTab?C.ac:"transparent"),marginBottom:-1,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:7}}>
+        <ArchiveIcon size={15} weight="bold" aria-hidden="true"/>Histórico{leido?" ("+tabCounts.historico+")":""}
       </button>
     </div>
-    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{historicoTab ? `${complexOCs.length} OC${complexOCs.length!==1?"s":""} cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · sólo para consulta` : `${complexOCs.length} OC${complexOCs.length!==1?"s":""}${verSimples?"":" de varios productos"}`}
+    <p style={{fontSize:11,color:C.t2,margin:"0 0 14px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{!leido ? "Sin cifras mientras no se lea de la base." : historicoTab ? `${complexOCs.length} OC cerrada${complexOCs.length!==1?"s":""} (completadas o canceladas) · sólo para consulta` : `${complexOCs.length} OC${verSimples?"":" de varios productos"}`}
       <label style={{display:"inline-flex",alignItems:"center",gap:5,cursor:"pointer",color:C.tx,fontWeight:600}}><input type="checkbox" checked={verSimples} onChange={e=>setVerSimples(e.target.checked)}/>Ver también las de un solo producto</label></p>
     {complexOCs.length === 0
-      ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t3,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
-          <div style={{display:"flex",justifyContent:"center"}}><ClipboardTextIcon size={46} color={C.t3}/></div>
-          <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>Sin Órdenes de Compra complejas</div>
-          <div style={{fontSize:11,color:C.t2,marginTop:4}}>{canCreateOC?"Click en \"+ Nueva OC\" para crear la primera":"Las OCs aparecerán aquí cuando se cree una con varios productos"}</div>
+      ? <div style={{textAlign:"center",padding:"40px 20px",color:C.t2,background:C.bg,borderRadius:10,border:"1px solid "+C.bd}}>
+          {/* v10.84.133 — sin una lectura buena no se sabe qué OC hay (la regla 12): antes «Sin Órdenes de Compra complejas» */}
+          <div style={{display:"flex",justifyContent:"center"}}><ClipboardTextIcon size={46} color={C.t2} aria-hidden="true"/></div>
+          {!leido ? <div role="status" style={{fontSize:13,fontWeight:700,color:C.tx,marginTop:8}}>No se pudieron leer las órdenes de compra de la base: mientras no se lean, no se sabe cuáles hay.</div> : <>
+          <div style={{fontSize:14,fontWeight:700,color:C.tx,marginTop:8}}>{historicoTab?"Todavía no hay OC cerradas":"Todavía no hay OC de varios productos"}</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:4}}>{historicoTab?"Aquí quedan las completadas y las canceladas.":canCreateOC?"Toca «+ Nueva OC» para crear la primera.":"Aquí aparecen cuando se crea una OC con varios productos."}</div>
+          </>}
         </div>
       : (() => {
           // v10.58.49 — tarjeta extraída para reusar en vista plana (Activas) y carpetas (Histórico)
@@ -20017,12 +20023,13 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
             const ocAgent = products.find(o=>(o.client_agent||"").trim())?.client_agent || "";
             const hasShared = !!po.shared_invoice_folio;
             const sFType = hasShared ? (esFolioFactura(po.shared_invoice_folio) ? "factura" : "remision") : null;
-            const sFColor = sFType === "factura" ? C.fac : C.live;
+            const sFColor = sFType === "factura" ? C.fac : C.okInk;   // v10.84.133 — la remisión en tinta (el verde de antes, 2.3:1)
             const SFIcon = sFType === "factura" ? FileTextIcon : ClipboardTextIcon;
             // 🌐 v10.12.0 Sub-fase C — D5 hierarchy en OCs web: C-XXXX prominente, OC-XXXX subtítulo chico
             const isWeb = po.is_web_oc === true;
             const cartFolio = isWeb ? getCartFolio(po) : null;
-            return <div key={po.id} onClick={()=>setSelectedOCId(po.id)} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",border:"1.5px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac))+"66",boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
+            // v10.84.133 — un botón (antes un div con clic: con el teclado no se abría ninguna OC)
+            return <div key={po.id} role="button" tabIndex={0} aria-label={"Abrir "+po.id+" · "+(po.client||"")} onClick={()=>setSelectedOCId(po.id)} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();setSelectedOCId(po.id)}}} style={{background:C.card,borderRadius:14,padding:14,cursor:"pointer",border:"1.5px solid "+(po.folios_locked?C.wn:(isWeb?WEB_BLUE:C.ac))+"66",boxShadow:C.sh2,transition:"transform .12s ease,box-shadow .16s ease"}} onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow=C.sh3}} onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=C.sh2}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                 {isWeb ? <div>
                   <div style={{fontSize:17,fontWeight:800,color:WEB_BLUE,letterSpacing:0.3,display:"flex",alignItems:"center",gap:5}}><ShoppingCartIcon size={16} weight="bold"/>{cartFolio}</div>
@@ -20035,7 +20042,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
               {(isWeb || hasShared || po.folios_locked) && <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap"}}>
                 {isWeb && <span style={{fontSize:10,fontWeight:700,color:WEB_BLUE,background:WEB_BLUE+"15",padding:"2px 8px",borderRadius:6,letterSpacing:0.3,display:"inline-flex",alignItems:"center",gap:3}}><GlobeIcon size={10} weight="bold"/>Pedido web</span>}
                 {hasShared && <span style={{fontSize:10,fontWeight:700,color:sFColor,background:sFColor+"15",padding:"2px 6px",borderRadius:4,fontFamily:"'Geist Mono',monospace",display:"inline-flex",alignItems:"center",gap:3}}><SFIcon size={10} weight="bold"/>{po.shared_invoice_folio}</span>}
-                {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wn,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={po.folios_lock_reason||"OC bloqueada"}><LockIcon size={10} weight="bold"/>Bloqueada</span>}
+                {po.folios_locked && <span style={{fontSize:10,fontWeight:700,color:C.wnInk,background:C.wn+"15",padding:"2px 6px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:3}} title={po.folios_lock_reason||"OC bloqueada"}><LockIcon size={10} weight="bold"/>Bloqueada</span>}
               </div>}
               <div style={{display:"flex",gap:10,marginTop:8,fontSize:11,color:C.t2,flexWrap:"wrap"}}>
                 <span><strong style={{color:C.tx}}>{products.length}</strong> productos</span>
@@ -20047,9 +20054,9 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                 <div style={{fontSize:10,color:C.t3,marginTop:6}}><CheckCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Completada {fDT(po.completed_at)}{po.completed_by?" · por "+po.completed_by:""}</div>
               )}
               {historicoTab && po.status === "cancelled" && po.cancelled_at && (
-                <div style={{fontSize:10,color:C.t3,marginTop:6}}>
-                  <XCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>Cancelada {fDT(po.cancelled_at)}{po.cancelled_by?" · por "+po.cancelled_by:""}
-                  {po.cancellation_reason && <div style={{fontSize:9,fontStyle:"italic",marginTop:2,color:C.dn}}>"{po.cancellation_reason}"</div>}
+                <div style={{fontSize:10,color:C.t2,marginTop:6}}>
+                  <XCircleIcon size={11} weight="fill" style={{verticalAlign:"-2px",marginRight:3}} aria-hidden="true"/>Cancelada {fDT(po.cancelled_at)}{po.cancelled_by?" · por "+po.cancelled_by:""}
+                  {po.cancellation_reason && <div style={{fontSize:11,fontStyle:"italic",marginTop:2,color:C.dnInk}}>«{po.cancellation_reason}»</div>}
                 </div>
               )}
             </div>;
@@ -20074,7 +20081,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                   {yOpen?<FolderOpenIcon size={18} weight="fill" color={C.ac}/>:<FolderIcon size={18} weight="fill" color={C.ac}/>}
                   <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
                   <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yOCs} OC{yOCs!==1?"s":""}</span>
-                  {yTotal>0&&<span style={{fontSize:11,color:C.okInk,fontWeight:700}}>{fmt(yTotal)}</span>}
+                  {yTotal>0&&<span style={{fontSize:11,color:C.okTx,fontWeight:700}}>{fmt(yTotal)}</span>}
                   {yOpen?<CaretUpIcon size={12} weight="bold" color={C.t3}/>:<CaretDownIcon size={12} weight="bold" color={C.t3}/>}
                 </button>
                 {yOpen&&<div style={{paddingLeft:12,marginTop:4}}>
@@ -20091,7 +20098,7 @@ function OrdenesCompraView({purchaseOrders, orders, role, userLogin, orderFilter
                         <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{OC_MONTHS[mi]} {y}</span>
                         <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mOCs.length} OC{mOCs.length!==1?"s":""}</span>
                         {mCancel>0&&<span style={{fontSize:10,color:C.dn,fontWeight:600,display:"inline-flex",alignItems:"center",gap:2}}><XCircleIcon size={10} weight="fill"/>{mCancel}</span>}
-                        {mTotal>0&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(mTotal)}</span>}
+                        {mTotal>0&&<span style={{fontSize:10,color:C.okTx,fontWeight:600}}>{fmt(mTotal)}</span>}
                         {mOpen?<CaretUpIcon size={11} weight="bold" color={C.t3}/>:<CaretDownIcon size={11} weight="bold" color={C.t3}/>}
                       </button>
                       {mOpen&&<div style={{paddingLeft:8,marginTop:6,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10,marginBottom:8}}>
@@ -23872,7 +23879,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
         {view==="cancelaciones"&&(user==="admin"||user==="secretaria"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><XCircleIcon size={18} weight="bold"/>Cancelaciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para gestionar cancelaciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden a cancelar y ver el historial</p></div>:<CancelacionesView orders={orders} role={user} onCancelOrders={doCancelOrders} onDetail={(id)=>setDetailModalId(id)}/>}</div>}
-        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView onJalar={jalarASalidas} purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)}/>}
+        {view==="oc"&&(isSec(user)||user==="admin"||user==="karla")&&<OrdenesCompraView onJalar={jalarASalidas} purchaseOrders={purchaseOrders} orders={orders} role={user} userLogin={userLogin} orderFilter={orderFilter} onAction={handleAction} onReload={reload} showToast={showToast} onCreateOC={createOC} onAddProduct={addProductToOC} onAddExisting={addExistingToOC} onAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:false})} onPreAssignFolio={(oc,ocOrders)=>setFolioOCModal({oc,ocOrders,preAssigned:true})} onMatrixPlan={(oc,ocOrders)=>setOcMatrixModal({oc,orders:ocOrders})} onCancelMatrixLine={(line,group,order,oc)=>setMatrixCancelModal({kind:"line",line,group,order,oc})} onCancelMatrixGroup={(group,oc)=>setMatrixCancelModal({kind:"group",group,oc})} pendingOCId={pendingOCNavId} onConsumedPendingOC={()=>setPendingOCNavId(null)} leido={!!lectura.ok}/>}
         {view==="storage"&&(user==="preprensa"||user==="german")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FolderIcon size={18} weight="bold"/>Archivos de Producción</h2><StorageTab orders={viewOrders} onReload={reload}/></div>}
         {view==="chemicals"&&(user==="german"||user==="admin")&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><FlaskIcon size={18} weight="bold"/>Químicos y Placas</h2><ChemicalPanel key={chemKey} user={user}/></div>}
         {/* v10.84.119 — «Planta»: diferida (su archivo se baja al abrirla) y con su guarda de carga */}

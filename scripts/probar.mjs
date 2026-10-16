@@ -110,6 +110,8 @@ const TANDAS = [
   { nombre: "inventario", gen: "tests/banco/gen-inventario.mjs", romper: "tests/romper/inventario.mjs", puerto: 5177 },
   // v10.84.131 — el Apartado Corona (los saldos a favor y su historial), con cada lectura de la base que puede fallar o tardar
   { nombre: "corona", gen: "tests/banco/gen-corona.mjs", romper: "tests/romper/corona.mjs", puerto: 5176 },
+  // v10.84.133 — la lista de Órdenes de Compra (Activas e Histórico), montada con la línea de App (la tanda «oc» es otra: el folio de la OC)
+  { nombre: "oc-lista", gen: "tests/banco/gen-oc-lista.mjs", romper: "tests/romper/oc-lista.mjs", puerto: 5175 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

@@ -12,6 +12,29 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.133 — La lista de Órdenes de Compra no dice «no hay» sin lectura y se abre con el teclado — 16-oct-2026
+
+**Qué pasaba.** La duodécima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la lista de Órdenes de Compra (`OrdenesCompraView`, Activas e
+Histórico; 38 OC de varios productos al mes). **24/40** (snapshot `.impeccable/critique/2026-10-16T23-28-53Z__src-app-jsx-lista-de-ordenes-de-compra.md`). Sin
+una lectura buena decía «Sin Órdenes de Compra complejas» y «Activas (0)» (la regla 12). Con el teclado no se abría ninguna OC (la tarjeta era un div con
+clic). Activas/Histórico no eran pestañas. La insignia «Abierta» a 2.8:1, «Bloqueada» a 2.4:1, el folio de remisión a 2.3:1, los totales del Histórico a
+4.49:1 y el motivo de la cancelada en 9 px. «complejas», «Click en», «OCs».
+
+**Qué se cambió** (`OrdenesCompraView` y su montaje en App):
+- App le pasa `leido` (`lectura.ok`): sin lectura, «No se pudieron leer las órdenes de compra de la base…», sin cifras en las pestañas ni en la cuenta.
+- Cada OC es un botón (`role="button"`, `tabIndex`, Enter y espacio, «Abrir OC-… · cliente»); Activas/Histórico, pestañas (`role="tab"`).
+- Las tintas (`C.okTx`, `C.dnInk`, `C.wnInk`, `C.okInk`) y el motivo de la cancelada en 11 px.
+- En palabras: «Todavía no hay OC de varios productos», «Toca «+ Nueva OC»», «OC» en plural.
+- La lista y el detalle con su `key`: al abrir una OC, React avisaba «don't mix shorthand and non-shorthand properties» (reusaba el contenedor de las
+  pestañas como la tarjeta del detalle). Pasaba igual antes; lo destapó la prueba de abrirla con el teclado.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-oc-lista.mjs` (montada con la línea de App; la tanda `oc` es otra: el folio de la OC) y tanda `oc-lista`
+(10). **Vuelta 1** contra v10.84.132: fallaban 6 (sin lectura, el teclado, las pestañas, AA, la jerga, el motivo de 9 px). Con el arreglo, la primera
+corrida dejó 2: la insignia «Abierta» y los totales del Histórico en el verde de antes (4.4 y 4.49:1: van en `C.okTx`) y el aviso de React al abrir la OC;
+luego 10 de 10. El detector de la skill casi no vio nada en las dos versiones (no compone los tintes): lo midió la tanda.
+
+**En producción:** (pendiente)
+
 ## v10.84.132 — «En espera» sin lectura ya no dice «Nada en espera» — 16-oct-2026
 
 **Qué pasaba.** Al buscar las vistas que todavía dicen «vacío» sin una lectura buena (la regla 12; la misma falla que tenían el Inventario y Corona, hoy
