@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2104 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2125 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.129 (16-oct, ~13:17; READY `dpl_7SQWYZ5j7RpEjv95iko3qvQRooaa`, commit `2c43a07`; vuelta atrás: promover
+- **LIVE:** v10.84.130 (16-oct, ~14:16; READY `dpl_3eHinTFmGrgCXxCkSGNqs6We5hvL`, commit `94d4e8c`; vuelta atrás: promover
+  `dpl_GFDumMRnxdLdYUBX2VMkzrADKoRp` (el código de v10.84.129) o `git revert 94d4e8c`; la base no cambió; candado 2125 de 2125, de a 4). La décima pasada
+  de `/impeccable critique`: **el Inventario Cuadra** (`InventoryModal`, 22/40): 🔑 cada lectura por su lado (`Promise.allSettled`, `lectura`): la que falla
+  lo dice en su pestaña con «Reintentar» (`FallaDelInventario`; antes «Sin productos en stock · Da de alta tu primer producto»); los movimientos en español
+  (`TIPO_DE_MOVIMIENTO`); quitar del catálogo pregunta en la tarjeta (sin `confirm()`); diálogo con pestañas; tintas. Banco `gen-inventario.mjs`.
+  v10.84.129 (16-oct, ~13:17; READY `dpl_7SQWYZ5j7RpEjv95iko3qvQRooaa`, commit `2c43a07`; vuelta atrás: promover
   `dpl_4DXgvwAVWVw6j5dKV5CuHZ8pJMnE` (el código de v10.84.128) o `git revert 2c43a07`; la base no cambió; candado 2104 de 2104, de a 4). La novena pasada de
   `/impeccable critique`: **la hoja impresa de la orden** (`PrintOrder`, 25/40): 🔑 se mide COMO SE IMPRIME (tanda `hoja`: el CSS de impresión, el ajuste a
   una hoja y el PDF Carta; letra efectiva = tamaño × zoom): nada de menos de 10 px, grises de `#444` para arriba (aguanta la fotocopia), lo elegido en

@@ -39,7 +39,9 @@ positivos.
 **Para Marcelo:** ¿avisar cuando un producto queda en negativo (se vendió más de lo que había)? Y en un pool (Grupo Cuadra), ¿decir cuánto se llevó cada
 cliente?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~14:16; READY `dpl_3eHinTFmGrgCXxCkSGNqs6We5hvL`, commit `94d4e8c`; vuelta atrás: promover `dpl_GFDumMRnxdLdYUBX2VMkzrADKoRp`
+(el código de v10.84.129) o `git revert 94d4e8c`; la base no cambió. Candado 2125 de 2125 (21 nuevas), de a 4, 14.7 min, a la primera y sin inestables.
+Revisado en producción: el código servido (`index-1QP31z_p.js`) trae el inventario nuevo, y el recorrido de los 8 roles no truena.
 
 ## v10.84.129 — La hoja impresa se lee en el taller: nada de menos de 7 pt, aguanta la fotocopia y lo elegido se distingue — 16-oct-2026
 
