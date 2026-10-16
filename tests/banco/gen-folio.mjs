@@ -51,6 +51,42 @@ const CORREGIR = Q.get("corregir") || "";
 let precioActual = 56900;
 const CAND_F180 = () => ({ doc_number: "F-180", doc_type: "factura", amount: 70180, balance: 0, issued_date: "2026-10-14", status: "pagada", cfdi_status: "stamped",
   dias_sin_orden: 1, monto_cuadra: Math.abs(Math.round(precioActual * 116) / 100 - 70180) <= 0.02, notas: "FACTURA SIN ORDEN. Motivo: LA BUENA DE P-0600." });
+// v10.84.118 — foliada=1|timbrada|cubierta|falla|falla1|lenta|avisos|sinprecio|timbra2|remision · guarda=rechazo (timbra2: al abrir se puede y, ya
+//   con un precio, la base dice que la timbraron; remision: RS-1250 por $40,000, sin IVA): «Corregir precio» de una orden YA foliada (P-0648 de
+//   GRUPO VISION, F-181 anticipada por $46,400 = $40,000 + IVA, sin timbrar), por la puerta de la base (corregir_precio_revisar, simulada aquí;
+//   window.__revisar() dice con qué precios se revisó). guarda=rechazo: corregir_precio_orden contesta lo que la base rechaza (en palabras).
+const FOLIADA = Q.get("foliada") || "", GUARDA = Q.get("guarda") || "";
+const ORDEN_F = { id: "o2", production_number: "P-0648", client: "GRUPO VISION", client_id: "c2", product_type: "Lonas", product: "Lonas impresas", quantity: 40,
+  price: FOLIADA === "sinprecio" ? null : 40000, maq_price: null, order_type: "normal", stage: "in_production", source: "admin", created_by: "secretaria",
+  invoice_folio: "F-181", invoice_type: "factura", invoice_pre_assigned: true, payment_status: "unpaid" };
+let revLlamadas = 0; const revisados = [];
+window.__revisar = () => revisados.slice();
+const revisarFoliada = async (id, precio) => { revLlamadas++; revisados.push(precio);
+  await new Promise(r => setTimeout(r, FOLIADA === "lenta" ? 1500 : 120));
+  if (FOLIADA === "falla" || (FOLIADA === "falla1" && revLlamadas === 1)) return { error: "sin conexión" };
+  if (FOLIADA === "remision") { const factura = { id: "inv1250", folio: "RS-1250", tipo: "remision", importe: 40000, saldo: 40000, cfdi_status: "none", existe: true, conceptos: false };
+    return { data: { folio: "RS-1250", precio_hoy: 40000, orden: { id, production_number: "P-0648" }, puede: true, codigo: "con_folio", caso: "con_folio", factura,
+      nuevo: precio == null ? null : { precio, importe: precio, diferencia: precio - 40000 }, avisos: [], sin_orden_del_cliente: [] } }; }
+  if (FOLIADA === "timbra2" && precio != null) return { data: { folio: "F-181", precio_hoy: 40000, orden: { id, production_number: "P-0648" }, puede: false, codigo: "timbrada",
+    porque: "F-181 ya está timbrada ante el SAT: su importe ya no cambia.", camino: "Cancélala en Cancelaciones, luego «Liberar folio» en PrintFlow, corrige el precio y vuelve a asignar folio." } };   // (como lo devuelve revisarPrecioFoliado: el motivo, en palabras)
+  const base = { folio: "F-181", precio_hoy: FOLIADA === "sinprecio" ? null : 40000, orden: { id, production_number: "P-0648" } };
+  if (FOLIADA === "timbrada") return { data: { ...base, puede: false, codigo: "timbrada", porque: "F-181 ya está timbrada ante el SAT: su importe ya no cambia.",
+    camino: "Cancélala en Cancelaciones, luego «Liberar folio» en PrintFlow, corrige el precio y vuelve a asignar folio; si sólo baja y el cliente está de acuerdo, nota de crédito." } };
+  const factura = FOLIADA === "sinprecio" ? { folio: "F-181", tipo: "factura", existe: false }
+    : { id: "inv181", folio: "F-181", tipo: "factura", importe: 46400, saldo: 46400, cfdi_status: "none", existe: true, conceptos: FOLIADA === "avisos" };
+  const caso = FOLIADA === "sinprecio" ? "foliada_sin_precio" : "con_folio";
+  const avisosHora = FOLIADA === "avisos" ? ["fuera_de_horario"] : [];
+  if (precio == null) return { data: { ...base, puede: true, codigo: caso, caso, factura, nuevo: null, avisos: avisosHora } };
+  if (FOLIADA === "cubierta" && precio === 60500) return { data: { ...base, puede: false, codigo: "cubierta",
+    cubierta_por: { folio: "F-180", importe: 70180, cfdi_status: "stamped", emitida: "2026-10-14", estado: "pendiente" },
+    porque: "F-180 (sin orden, timbrada, $70,180.00, del 14-10-2026) ya cubre este trabajo con el precio nuevo: si F-181 se timbra y es la misma venta, GRUPO VISION tendría dos CFDI.",
+    camino: "Avísale a Dirección. Si es el mismo trabajo, F-181 se cancela sin timbrar y P-0648 queda sin folio para ligar F-180; si es otro trabajo del mismo importe, Dirección lo corrige." } };
+  const importe = Math.round(precio * 116) / 100;
+  return { data: { ...base, puede: true, codigo: caso, caso, factura,
+    nuevo: { precio, importe, diferencia: Math.round((importe - (factura.importe || 0)) * 100) / 100 },
+    avisos: FOLIADA === "avisos" ? ["con_iva", "cambia_mucho", "sin_orden_de_otro_importe", "fuera_de_horario"] : [],
+    sin_orden_del_cliente: FOLIADA === "avisos" ? [{ folio: "F-170", tipo: "factura", importe: 11600, emitida: "2026-10-01", cfdi_status: "stamped", estado: "pendiente" }] : [] } };
+};
 let candLlamadas = 0;
 const cargarCandidatas = async () => { candLlamadas++; await new Promise(r => setTimeout(r, 120));
   if (ADELANTADA) return candLlamadas === 1 ? [] : [CAND_MISMO];
@@ -90,6 +126,7 @@ function Banco() {
   const [m, setM] = useState(null);
   const [orden, setOrden] = useState(ORDER);            // v10.84.112 — el precio puede cambiar con la ventana abierta
   const [corrigiendo, setCorrigiendo] = useState(false);
+  const [ordenF, setOrdenF] = useState(ORDEN_F), [foliadaAbierta, setFoliadaAbierta] = useState(false);   // v10.84.118
   const [log, setLog] = useState([]);
   const L = t => setLog(l => [...l, t]);
   // (v10.84.70) lo que la base rechaza vuelve al diálogo como { error } (App ya no lo manda a un aviso que se borra)
@@ -103,6 +140,7 @@ function Banco() {
     <button id="abrir-pre" onClick={() => setM("pre")}>pre</button>
     <button id="abrir-ent" onClick={() => setM("ent")}>ent</button>
     <button id="abrir-precio" onClick={() => setM("precio")}>precio</button>
+    <button id="abrir-foliada" onClick={() => setFoliadaAbierta(true)}>foliada</button>
     <pre id="log">{log.join("\\n")}</pre>
     {m === "inv" && <InvoiceModal key={"inv:" + (orden.order_type === "maquila" ? orden.maq_price : orden.price)} order={orden} onConfirm={confirma("inv")} onClose={() => { L("inv:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onLigar={ligar} onFacturarPorPartes={() => { L("inv:partes"); setM(null); }}
@@ -113,6 +151,11 @@ function Banco() {
         if (CORREGIR === "falla") { L("corregir:rechazo"); return { error: "La base no aceptó el precio: sin conexión. No se cambió." }; }
         // (vuelta 3) como App: la maquila guarda maq_price (el precio al cliente)
         precioActual = nuevo; setOrden(o => ({ ...o, [o.order_type === "maquila" ? "maq_price" : "price"]: nuevo })); setCorrigiendo(false); return null; }} />}
+    {foliadaAbierta && typeof CorregirPrecioModal !== "undefined" && <CorregirPrecioModal order={ordenF} revisar={FOLIADA ? revisarFoliada : null}
+      onClose={() => { L("corregir:cerrado"); setFoliadaAbierta(false); }}
+      onGuardar={async (nuevo, motivo, visto) => { L("corregir:guardar " + nuevo + " " + motivo + " visto=" + JSON.stringify(visto === undefined ? null : visto)); await new Promise(r => setTimeout(r, 300));
+        if (GUARDA === "rechazo") { L("corregir:rechazo"); return { error: "El importe de F-181 cambió mientras lo revisabas: ahora es $70,180.00. No se cambió nada." }; }
+        setOrdenF(o => ({ ...o, price: nuevo })); setFoliadaAbierta(false); return null; }} />}
     {m === "pre" && <PreInvoiceModal order={ORDER} onConfirm={confirma("pre")} onClose={() => { L("pre:cerrado"); setM(null); }}
       cargarCandidatas={cargarCandidatas} onFacturarPorPartes={() => { L("pre:partes"); setM(null); }}
       ocDeLaOrden={EN_OC ? { id: "OC-0960", n: 4 } : null} onIrALaOC={id => { L("pre:oc " + id); setM(null); }} />}

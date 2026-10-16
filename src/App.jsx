@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from "react";
-import { corregirPrecioEnLaBase, capturarPrecioEnLaBase } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»)
+import { corregirPrecioEnLaBase, capturarPrecioEnLaBase, revisarPrecioFoliado, corregirPrecioFoliado } from "./lib/corregirPrecio.js"; // v10.84.112 — «Corregir precio» contra la base, probado con Node (v10.84.115: y «Capturar precio»)
 import { cancelarUnaDelLote } from "./lib/cancelarEnLote.js"; // v10.84.113 — «Cancelaciones» cancela cada orden completa, probado con Node
 import { cuadrarPartes } from "./lib/cuadrarPartes.js"; // v10.84.3 — aritmetica del reparto, probada con Node
 import { proponerPiezas, descripcionDeOrden } from "./lib/proponerPiezas.js"; // v10.84.102 — casar los conceptos de un CFDI con las órdenes del plan, probado con Node
@@ -1272,14 +1272,21 @@ const cancelaLaSecretaria = o => !!o && !o.invoice_folio && !o.grouped_invoice_f
 // v10.84.115 — a Karla, un precio YA capturado no se le reescribe en la forma de la orden: se corrige con «Corregir precio», que deja el porqué en el
 //   historial y les avisa a Dirección y a quien capturó la orden (Marcelo, 15-oct: «haz lo que recomiendes»). Sin precio capturado, la forma sigue
 //   abierta para ella (v10.58.22). Una sola regla para la forma (OrderForm) y para update() (la red contra versiones viejas abiertas).
-const precioBloqueadoParaKarla = (o, role) => role === "karla" && !!o && Number(o.order_type === "maquila" ? o.maq_price : o.price) > 0;
+// v10.84.118 — y si ya tiene folio (aunque no tenga precio): desde la entrega 2 de CobranzaFlow (v3.7.1010) la base sólo deja a Dirección cambiar POR
+//   FUERA el precio de lo facturado; a Karla se le cierra con su camino («Corregir precio», que revisa y mueve su factura) en vez de que la base se lo rechace.
+const precioBloqueadoParaKarla = (o, role) => role === "karla" && !!o && (Number(o.order_type === "maquila" ? o.maq_price : o.price) > 0 || !!o.invoice_folio || !!o.grouped_invoice_folio || !!o.has_splits || !!o.has_matrix_lines || !!o.oc_invoice_group_id);
 // v10.84.112 — CORREGIR EL PRECIO ANTES DE FACTURAR (Marcelo, 15-oct: «te doy permiso para que Karla ajuste el precio de las órdenes al final; pasa
 //   muy seguido que las órdenes de producción las ingresan con precio erróneo y Karla no puede facturarlas a tiempo»; P-0600 de PRIME PET, capturada en
 //   $40,000 y era $60,500). Dirección y Karla, y sólo lo que todavía no se factura: sin folio propio ni agrupado, sin partes ni plan matriz (ni la duda
 //   de si los tiene), fuera de un grupo de OC, sin saldo a favor aplicado, ni entregada, cancelada, en stock o web sin revisar. Lo ya facturado se
 //   corrige donde nació su factura, no aquí.
 // v10.84.115 — (CobranzaFlow) tampoco el pedido web (su precio es el de la tienda) ni el re-trabajo cubierto por su folio (la base le exige precio 0)
-const puedeCorregirPrecio = (o, role) => ["admin","karla"].includes(role) && !!o && o.source !== "web" && !o.return_covered_by_folio && !o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines && !o.fiscal_desconocido && !o.oc_invoice_group_id && !liquidadaConSaldoAFavor(o) && !String(o.stage||"").includes("cancelled") && !["delivered","maq_delivered","stocked","web_pending","web_rejected"].includes(o.stage);
+// v10.84.118 — y LO YA FOLIADO SIN TIMBRAR (la entrega 2 de CobranzaFlow, v3.7.1010, aplicada el 15-oct; Marcelo: «sigo tu recomendación»): con folio
+//   propio y solo (sin partes, plan matriz, agrupada ni grupo de OC, sin saldo a favor aplicado y sin cobros), en cualquier etapa que no sea cancelada,
+//   también ya entregada. La ventana le pregunta a la base (`corregir_precio_revisar`) si se puede (timbrada, con un CFDI anterior, cubierta por otra
+//   factura… no, con su camino) y en cuánto queda la factura con el mismo folio; corrige `corregir_precio_orden`, que deja el rastro y avisa.
+const foliadaParaCorregir = o => !!o && !!o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines && !o.fiscal_desconocido && !o.oc_invoice_group_id && !liquidadaConSaldoAFavor(o) && !["paid","partial"].includes(o.payment_status);
+const puedeCorregirPrecio = (o, role) => ["admin","karla"].includes(role) && !!o && o.source !== "web" && !o.return_covered_by_folio && !o.cancelled_at && !String(o.stage||"").includes("cancelled") && !["stocked","web_pending","web_rejected"].includes(o.stage) && (foliadaParaCorregir(o) || (!o.invoice_folio && !o.grouped_invoice_folio && !o.has_splits && !o.has_matrix_lines && !o.fiscal_desconocido && !o.oc_invoice_group_id && !liquidadaConSaldoAFavor(o) && !["delivered","maq_delivered"].includes(o.stage)));
 const ld=async(k,fb)=>{try{const r=localStorage.getItem(k);return r?JSON.parse(r):fb}catch{return fb}};
 const sv=async(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 // Helper: roles with secretary-like permissions (create orders, see prices, confirm deliveries)
@@ -4702,7 +4709,7 @@ function DetailModal({order:o,onClose,onPrint,role,userLogin,onAction}) {
     // v10.84.48 — lo que en Salidas era el botón «El cliente no pide factura» (su explicación vivía sólo en el title)
     canActFlow&&(o.stage==="salidas"||o.stage==="maq_received")&&role==="karla"&&!o.invoice_folio&&!snoozeActive(o)&&{k:"snooze_invoice",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"El cliente no pide factura",d:"Sale de tu lista de Salidas hasta que el cliente pida factura o remisión."},
     // v10.84.112 — Karla (y Dirección) corrigen el precio de lo que todavía no se factura (Marcelo, 15-oct: «a karla no le aparece la opción de editar»)
-    puedeCorregirPrecio(o,role)&&{k:"corregir_precio",icono:<CurrencyDollarIcon size={14} weight="bold"/>,color:tintaAA(C.fac,5),t:"Corregir precio",d:"Antes de facturar; queda en su historial."},
+    puedeCorregirPrecio(o,role)&&{k:"corregir_precio",icono:<CurrencyDollarIcon size={14} weight="bold"/>,color:tintaAA(C.fac,5),t:"Corregir precio",d:foliadaParaCorregir(o)?o.invoice_folio+": si no está timbrada, cambia con el mismo folio.":"Antes de facturar; queda en su historial."},   // v10.84.118: también la foliada
     fic.ponerEnEspera&&{k:"snooze",icono:<BellSlashIcon size={14} weight="bold"/>,color:C.ac,t:"Poner en espera",d:"Eliges por qué y hasta cuándo; sale de las listas activas."},
     fic.pedirArchivo&&{k:"web_request_file",icono:<MegaphoneIcon size={14} weight="bold"/>,color:C.wnInk,t:"Avisar a Lupita: falta archivo",d:"Para que se lo pida al cliente. No valides sin el archivo."},
     fic.merma&&{k:"waste",icono:<TrashIcon size={14} weight="bold"/>,color:C.wnInk,t:"Registrar merma",d:"Pliegos o piezas que se echaron a perder."},
@@ -7924,7 +7931,7 @@ function PriceCaptureModal({order, onCapture, onSkip, onClose}) {
 // v10.84.112 — CORREGIR EL PRECIO de una orden que todavía no se factura (Karla, «al final»; P-0600). El precio nuevo SIN IVA, como el de la orden, con
 //   su IVA y su precio por pieza a la vista, y el porqué, que va al historial de la orden. Ocupado desde el clic; Esc o el fondo con algo escrito
 //   preguntan; lo que la base rechaza se dice aquí y lo escrito se queda. Ctrl+Enter guarda.
-function CorregirPrecioModal({order, onGuardar, onClose, cargarCandidatas = null}) {
+function CorregirPrecioModal({order, onGuardar, onClose, cargarCandidatas = null, revisar = null}) {
   const isMaq = order?.order_type === "maquila";
   const actual = Number(isMaq ? order?.maq_price : order?.price) || 0;
   const qty = Number(order?.quantity) || 0;
@@ -7938,10 +7945,40 @@ function CorregirPrecioModal({order, onGuardar, onClose, cargarCandidatas = null
   const conPrecio = precio.trim() !== "" && Number.isFinite(nuevo) && nuevo > 0;
   const mismo = conPrecio && Math.round(nuevo * 100) === Math.round(actual * 100);
   const motivoOk = motivo.trim().length >= 8;   // v10.84.115 — 8 sin los espacios de las orillas, como Ajustar y Re-facturar de CobranzaFlow
-  const valido = conPrecio && !mismo && motivoOk;
+  // v10.84.118 — LO YA FOLIADO (revisar: la puerta de la base, corregir_precio_revisar, que sólo lee): al abrir, si se puede (timbrada, con cobros,
+  //   cubierta por otra factura… no, con su camino) y en cuánto está su factura; con un precio, en cuánto queda con el mismo folio y lo que avisa la
+  //   base. Sólo se guarda lo que la base revisó con ESE precio, y con lo que se vio (corregir_precio_orden lo compara); una revisión que falla no es
+  //   permiso: «Reintentar». Lo que guarda la base también lo avisa: aquí no se avisa.
+  const foliada = typeof revisar === "function";
+  const [rev0, setRev0] = useState(foliada ? { estado: "leyendo" } : null);
+  const [revN, setRevN] = useState(null);   // { precio, estado: "leyendo" | "falla" | "listo", data, error }
+  const [vuelta0, setVuelta0] = useState(0);
+  const [vueltaN, setVueltaN] = useState(0);
+  useEffect(() => { if (!foliada) return; let vivo = true; setRev0({ estado: "leyendo" });
+    Promise.resolve(revisar(order.id, null)).then(r => { if (vivo) setRev0(r && r.data ? { estado: "listo", data: r.data } : { estado: "falla", error: (r && r.error) || "la base no contestó" }); })
+      .catch(e => { if (vivo) setRev0({ estado: "falla", error: e?.message || "error" }); });
+    return () => { vivo = false; }; }, [vuelta0]);
+  const precioN = conPrecio && !mismo ? Math.round(nuevo * 100) / 100 : null;
+  const puede0 = foliada && rev0?.estado === "listo" && !!rev0.data?.puede;
+  const bloqueada0 = foliada && rev0?.estado === "listo" && !rev0.data?.puede;
+  useEffect(() => { if (!puede0 || precioN == null) { setRevN(null); return; } let vivo = true; setRevN({ precio: precioN, estado: "leyendo" });
+    const tm = setTimeout(() => { Promise.resolve(revisar(order.id, precioN)).then(r => { if (vivo) setRevN(r && r.data ? { precio: precioN, estado: "listo", data: r.data } : { precio: precioN, estado: "falla", error: (r && r.error) || "la base no contestó" }); })
+      .catch(e => { if (vivo) setRevN({ precio: precioN, estado: "falla", error: e?.message || "error" }); }); }, 350);
+    return () => { vivo = false; clearTimeout(tm); }; }, [precioN, puede0, vueltaN, vuelta0]);
+  const revListo = puede0 && revN?.estado === "listo" && revN.precio === precioN;
+  const revBien = revListo && !!revN.data?.puede;
+  // (vuelta 3, inv-180) si al revisar el precio la base dice algo que no es del precio (la timbraron, le entró un cobro…), eso es lo de hoy: arriba
+  //   deja de decir «sin timbrar», lo dice una vez, y la ventana se cierra a escribir, como si hubiera abierto así
+  const cambioEstado = revListo && !revN.data?.puede && !["cubierta","mismo_precio","precio_invalido"].includes(revN.data?.codigo);
+  const bloqueada = bloqueada0 || cambioEstado;
+  const razon = cambioEstado ? revN.data : rev0?.data;
+  const avisosBase = revBien ? (revN.data.avisos || []) : [];
+  const facturaF = foliada ? (revN?.data?.factura || rev0?.data?.factura || null) : null;
+  const ligaBtn = {background:"none",border:"none",padding:0,color:tintaAA(C.ac,5),fontWeight:700,textDecoration:"underline",cursor:"pointer",fontFamily:"inherit",fontSize:"inherit"};
+  const valido = conPrecio && !mismo && motivoOk && (!foliada || revBien);
   const escrito = precio.trim() !== "" || motivo.trim() !== "";
   // (vuelta 3) un cero de más o de menos es el dedazo de dinero más común: con 3 veces o más (o un tercio o menos), se dice; no frena
-  const cambiaMucho = conPrecio && !mismo && actual > 0 && (nuevo >= actual * 3 || nuevo <= actual / 3);
+  const cambiaMucho = !foliada && conPrecio && !mismo && actual > 0 && (nuevo >= actual * 3 || nuevo <= actual / 3);   // (v10.84.118: en la foliada lo dice la base)
   // v10.84.115 — (CobranzaFlow) «¿tecleaste el total con IVA?»: el precio de hoy por 1.16, o el importe (con IVA) de una factura que el cliente ya
   //   tiene sin orden (las mismas que «Asignar folio» ofrece ligar); y al revés, la que con este precio queda del mismo importe (P-0600 y F-180)
   const [cands, setCands] = useState([]);
@@ -7951,14 +7988,16 @@ function CorregirPrecioModal({order, onGuardar, onClose, cargarCandidatas = null
   const quedaIgual = conPrecio && !mismo ? cands.find(x => Math.abs(Number(x.amount) - conIvaNuevo) <= 0.02) : null;
   const facturaConIva = conPrecio && !mismo ? cands.find(x => Math.abs(Number(x.amount) - nuevo) <= 0.02) : null;
   const hoyConIva = conPrecio && !mismo && actual > 0 && Math.abs(nuevo - Math.round(actual * 116) / 100) <= 0.01;
-  const tecleoConIva = !quedaIgual && (!!facturaConIva || hoyConIva);
+  const tecleoConIva = !foliada && !quedaIgual && (!!facturaConIva || hoyConIva);
   const pedirCerrar = () => { if (busyRef.current) return; if (escrito) setPreguntaSalir(true); else onClose(); };
   useEscClose(useCallback(() => pedirCerrar(), [escrito, onClose]));
   const porPieza = n => qty > 0 ? " · " + fmt(n / qty) + " la pieza" : "";
   const guardar = async () => {
     if (!valido || busyRef.current) return;
     busyRef.current = true; setBusy(true); setErr("");
-    try { const r = await onGuardar(Math.round(nuevo * 100) / 100, motivo.trim()); if (r && r.error) setErr(r.error); }
+    // (v10.84.118) la foliada guarda con lo que la base dijo al revisar ESE precio: su precio de hoy, su folio y el importe de su factura
+    const visto = foliada ? { precio: revN?.data?.precio_hoy ?? null, folio: revN?.data?.folio ?? rev0?.data?.folio ?? null, importe: facturaF?.existe ? Number(facturaF.importe) : null } : undefined;
+    try { const r = await onGuardar(Math.round(nuevo * 100) / 100, motivo.trim(), visto); if (r && r.error) setErr(r.error); }
     catch (e) { setErr("No se cambió el precio: " + (e?.message || "error") + "."); }
     finally { busyRef.current = false; setBusy(false); }
   };
@@ -7974,19 +8013,37 @@ function CorregirPrecioModal({order, onGuardar, onClose, cargarCandidatas = null
       <div style={{background:C.sf,borderRadius:10,padding:"9px 12px",fontSize:12.5,color:C.tx,marginBottom:14}}>Hoy: {actual > 0
         ? <><b style={{fontFamily:"'Geist Mono',monospace"}}>{fmt(actual)}</b> sin IVA · {fmt(Math.round(actual * 116) / 100)} con IVA{porPieza(actual)}{isMaq ? " (precio al cliente)" : ""}</>
         : <b>sin precio capturado</b>}</div>
+      {foliada && <div role="status" aria-live="polite" style={{fontSize:12,lineHeight:1.5,margin:"-6px 0 14px",color:C.tx}}>{rev0?.estado === "leyendo" ? <span style={{color:C.t2}}>Revisando {order?.invoice_folio || "su factura"} en cobranza…</span>
+        : rev0?.estado === "falla" ? <span style={{color:C.dnInk}}>No se pudo revisar {order?.invoice_folio || "su factura"} en cobranza: {rev0.error}. <button type="button" onClick={() => setVuelta0(n => n + 1)} style={ligaBtn}>Reintentar</button></span>
+        : bloqueada ? <span style={{color:C.dnInk}}><b>{razon?.porque || "La base no deja corregir este precio."}</b>{razon?.camino ? " " + razon.camino : ""}</span>
+        : rev0.data?.factura?.existe ? <>{rev0.data.factura.folio}: <b>{fmt(Number(rev0.data.factura.importe))}</b>{rev0.data.factura.tipo === "remision" ? "" : " con IVA"}, sin timbrar. Si cambias el precio, cambia con el mismo folio.</>
+        : <>{rev0.data?.folio || order?.invoice_folio}: se folió sin precio; su factura nace con el precio que captures.</>}</div>}
       <label htmlFor="corregir-precio-monto" style={lbl}>Precio correcto, sin IVA (MXN)</label>
-      <input id="corregir-precio-monto" style={{...inp,fontSize:16,fontWeight:700}} type="text" inputMode="decimal" autoComplete="off" value={precio} onChange={e=>setPrecio(e.target.value)} placeholder="0.00" autoFocus disabled={busy}/>
+      <input id="corregir-precio-monto" style={{...inp,fontSize:16,fontWeight:700}} type="text" inputMode="decimal" autoComplete="off" value={precio} onChange={e=>setPrecio(e.target.value)} placeholder="0.00" autoFocus disabled={busy || bloqueada}/>
       {conPrecio && (mismo
         ? <div style={{fontSize:11.5,color:C.wnInk,marginTop:6,fontWeight:600}}>Es el mismo precio de hoy.</div>
-        : <div style={{fontSize:11.5,color:C.tx,marginTop:6}}>Con IVA: <b>{fmt(Math.round(nuevo * 116) / 100)}</b>{porPieza(nuevo)}</div>)}
+        : !foliada && <div style={{fontSize:11.5,color:C.tx,marginTop:6}}>Con IVA: <b>{fmt(Math.round(nuevo * 116) / 100)}</b>{porPieza(nuevo)}</div>)}
+      {foliada && precioN != null && puede0 && !cambioEstado && <div role="status" aria-live="polite" style={{fontSize:11.5,marginTop:6,lineHeight:1.45}}>
+        {!revListo ? (revN?.estado === "falla" && revN.precio === precioN
+            ? <span style={{color:C.dnInk}}>No se pudo revisar con {fmt(precioN)}: {revN.error}. <button type="button" onClick={() => setVueltaN(n => n + 1)} style={ligaBtn}>Reintentar</button></span>
+            : <span style={{color:C.t2}}>Revisando con {fmt(precioN)}…</span>)
+          : !revBien ? <span style={{color:C.dnInk,fontWeight:600}}>{revN.data?.porque || "Con este precio la base no deja corregirla."}{revN.data?.camino ? " " + revN.data.camino : ""}</span>
+          : facturaF?.existe ? <span style={{color:C.tx}}>{facturaF.folio}: de {fmt(Number(facturaF.importe))} a <b>{fmt(Number(revN.data.nuevo?.importe))}</b>{facturaF.tipo === "remision" ? "" : " con IVA"}, con el mismo folio.</span>
+          : <span style={{color:C.tx}}>{revN.data.folio || rev0.data?.folio} nace por <b>{fmt(Number(revN.data.nuevo?.importe))}</b>{facturaF?.tipo === "remision" ? "" : " con IVA"}.</span>}
+      </div>}
+      {avisosBase.includes("con_iva") && <div role="status" style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>¿Tecleaste el total con IVA? Aquí va sin IVA: {fmt(Math.round(precioN / 1.16 * 100) / 100)}.</div>}
+      {avisosBase.includes("cambia_mucho") && <div style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>Cambia mucho: de {fmt(Number(revN.data.precio_hoy ?? actual))} a {fmt(precioN)}. Revisa los ceros antes de guardar.</div>}
+      {avisosBase.includes("sin_orden_de_otro_importe") && (revN.data.sin_orden_del_cliente || []).length > 0 && <div style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>{order?.client || "El cliente"} tiene {revN.data.sin_orden_del_cliente.map(x => x.folio + " (" + fmt(Number(x.importe)) + ")").join(", ")} sin orden y de otro importe: revisa que no sean este trabajo antes de timbrar.</div>}
+      {revBien && facturaF?.conceptos && <div style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>{facturaF.folio} ya tiene sus conceptos capturados en CobranzaFlow: después vuelve a cuadrarlos (traen el importe viejo).</div>}
+      {revBien && avisosBase.includes("fuera_de_horario") && <div style={{fontSize:11.5,color:C.t2,marginTop:4,lineHeight:1.45}}>A esta hora a Dirección no le llega el aviso de PrintFlow (lo ve en la campana de CobranzaFlow) y a quien capturó la orden tampoco: díselo tú.</div>}
       {cambiaMucho && <div style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>Cambia mucho: de {fmt(actual)} a {fmt(nuevo)}. Revisa los ceros antes de guardar.</div>}
       {tecleoConIva && <div role="status" style={{fontSize:11.5,color:C.wnInk,marginTop:4,fontWeight:600}}>¿Tecleaste el total con IVA? {fmt(nuevo)} es {facturaConIva ? facturaConIva.doc_number + " con IVA" : "el precio de hoy con IVA"}; aquí va sin IVA: {fmt(Math.round(nuevo / 1.16 * 100) / 100)}.</div>}
-      {quedaIgual && <div role="status" style={{fontSize:11.5,color:C.okInk,marginTop:4,fontWeight:600}}>Con este precio, {quedaIgual.doc_number} ({fmt(Number(quedaIgual.amount))} con IVA) queda del mismo importe: después se liga en «Asignar folio».</div>}
+      {!foliada && quedaIgual && <div role="status" style={{fontSize:11.5,color:C.okInk,marginTop:4,fontWeight:600}}>Con este precio, {quedaIgual.doc_number} ({fmt(Number(quedaIgual.amount))} con IVA) queda del mismo importe: después se liga en «Asignar folio».</div>}
       <label htmlFor="corregir-precio-motivo" style={{...lbl,marginTop:14}}>¿Por qué cambia? (queda en el historial de la orden)</label>
-      <textarea id="corregir-precio-motivo" rows={2} style={{...inp,resize:"vertical",minHeight:52}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej. se capturó mal: el cliente aceptó $60,500" disabled={busy}/>
+      <textarea id="corregir-precio-motivo" rows={2} style={{...inp,resize:"vertical",minHeight:52}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej. se capturó mal: el cliente aceptó $60,500" disabled={busy || bloqueada}/>
       {!motivoOk && motivo.trim() !== "" && <div style={{fontSize:11,color:C.t2,marginTop:4}}>Escribe por qué cambia (8 letras o más).</div>}
-      <div style={{fontSize:11.5,color:C.t2,marginTop:10,lineHeight:1.45}}>Cambia el precio de la orden antes de facturarla; todavía no tiene factura que tocar.</div>
-      {err && <div role="alert" style={{fontSize:12,color:C.dnInk,background:C.dn+"0f",border:"1px solid "+C.dn+"40",borderRadius:8,padding:"8px 10px",marginTop:10,lineHeight:1.4}}>{err}</div>}
+      <div style={{fontSize:11.5,color:C.t2,marginTop:10,lineHeight:1.45}}>{foliada ? "Lo revisa y lo guarda la base: la factura cambia con el mismo folio, el porqué queda en el historial de la orden y se avisa a Dirección y a quien capturó la orden." : "Cambia el precio de la orden antes de facturarla; todavía no tiene factura que tocar."}</div>
+      {err && <div role="alert" style={{fontSize:12,color:C.dnInk,background:C.dn+"0f",border:"1px solid "+C.dn+"40",borderRadius:8,padding:"8px 10px",marginTop:10,lineHeight:1.4}}>{err}{foliada && <> <button type="button" onClick={() => { setErr(""); setVuelta0(n => n + 1); }} style={ligaBtn}>Volver a revisar</button></>}</div>}
       <div style={{display:"flex",gap:8,marginTop:18}}>
         <button type="button" onClick={pedirCerrar} disabled={busy} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
         <button type="button" onClick={guardar} disabled={!valido || busy} style={{...bt(tintaAA(C.fac,5)),flex:2,justifyContent:"center",opacity:(!valido || busy) ? 0.5 : 1,cursor:(!valido || busy) ? "not-allowed" : "pointer"}}>{busy ? <><HourglassIcon size={14} weight="bold"/>Guardando…</> : <><CurrencyDollarIcon size={14} weight="bold"/>Cambiar a {conPrecio ? fmt(nuevo) : "…"}</>}</button>
@@ -12988,7 +13045,7 @@ function OrderForm({role,onSubmit,editOrder,onCancel,clients,orders=[],showToast
   // v10.84.115 — a Karla, un precio ya capturado se corrige con «Corregir precio» (su porqué al historial, el aviso a Dirección y a quien capturó)
   const candadoPrecioKarla=editando&&precioBloqueadoParaKarla(ordenViva,role);
   const precioBloqueado=financialsLocked||candadoPrecioVendedor||candadoPrecioKarla;
-  const porQuePrecio=candadoPrecioVendedor&&!financialsLocked?"El precio al cliente lo cambia Lupita o Dirección.":candadoPrecioKarla&&!financialsLocked?"Un precio ya capturado se corrige con «Corregir precio» (en «Más» de la orden o en «Asignar folio»): queda el porqué en su historial y se avisa a Dirección.":"";
+  const porQuePrecio=candadoPrecioVendedor&&!financialsLocked?"El precio al cliente lo cambia Lupita o Dirección.":candadoPrecioKarla&&!financialsLocked?(queFactura?"Ya tiene folio ("+queFactura+"): su precio se corrige con «Corregir precio» (en «Más» de la orden), que revisa su factura y, si no está timbrada, la mueve con el mismo folio.":"Un precio ya capturado se corrige con «Corregir precio» (en «Más» de la orden o en «Asignar folio»): queda el porqué en su historial y se avisa a Dirección."):"";
   const candadoVendedor=editando&&esVendedor;
   const candadoCantidad=editando&&!!ordenViva?.stock_loaded;
   // v10.84.77 — el rechazo de la base se dice AQUÍ, en el pie (junto al botón que se vuelve a apretar), en palabras y una vez; antes
@@ -22546,7 +22603,17 @@ export default function PrintFlow() {
   //   su columna con quién lo cambió y confirma que se guardó; tanda `corregir`). Aquí, la pantalla: la orden, su historial con el porqué, y
   //   «Asignar folio» abierta sobre esa orden se reabre con el precio nuevo, y así vuelve a leer las facturas sin orden: la del mismo importe se
   //   ofrece para ligar (P-0600 y F-180). El rechazo, en palabras, dentro de la ventana.
-  const corregirPrecio=async(o,nuevo,motivo)=>{
+  const corregirPrecio=async(o,nuevo,motivo,visto)=>{
+    // v10.84.118 — lo ya foliado, por la puerta de la base (corregir_precio_orden): ella deja el rastro y avisa a Dirección y a quien capturó la orden;
+    //   aquí no se anota ni se avisa (saldrían dobles), sólo se dice su nota (en cuánto quedó la factura, y lo que hay que revisar)
+    if(foliadaParaCorregir(o)){
+      const r=await corregirPrecioFoliado({supabase,orden:o,nuevo,motivo,visto,enPalabras:errorEnPalabras});
+      if(r.error) return {error:r.error};
+      setOrders(p=>p.map(x=>x.id===o.id?{...x,[r.columna]:r.precio}:x));
+      setCorregirPrecioId(null);
+      showToast(r.nota||((o.production_number||"La orden")+": precio corregido a "+fmt(r.precio)+" sin IVA, con el mismo folio."),/Ojo|díselo tú/.test(r.nota||"")?"warning":"success");
+      return null;
+    }
     // v10.84.115 — y avisa a Dirección y a quien capturó la orden (Marcelo, 15-oct), con el antes, el después sin IVA y el porqué (tipo order_edit,
     //   como la forma al editar); fuera de horario la base los tira en silencio: se dice al guardar
     const r=await corregirPrecioEnLaBase({supabase,orden:o,nuevo,motivo,rol:user,usuario:userLogin||user,anotar:texto=>db.addTimeline(o.id,texto,user,C.fac),
@@ -22570,7 +22637,7 @@ export default function PrintFlow() {
     // v10.72.50 — preset "el cliente no ha pedido factura" / reactivar desde cualquier OCard de Karla (Mis Pendientes incluido).
     if(action==="snooze_invoice"){const o=orders.find(x=>x.id===id);if(o)snoozeAwaitingInvoice(o);return}
     // v10.84.112 — «Corregir precio» (desde «Más» del detalle o «Asignar folio»): sólo lo que todavía no se factura
-    if(action==="corregir_precio"){const o=orders.find(x=>x.id===id);if(!o)return;if(puedeCorregirPrecio(o,user))setCorregirPrecioId(id);else showToast((o.production_number||"La orden")+": el precio ya no se corrige aquí (ya se facturó, se entregó o se canceló).","warning");return}
+    if(action==="corregir_precio"){const o=orders.find(x=>x.id===id);if(!o)return;if(puedeCorregirPrecio(o,user))setCorregirPrecioId(id);else showToast((o.production_number||"La orden")+": el precio ya no se corrige aquí (va por partes o agrupada, ya tiene cobros, se entregó sin folio o se canceló).","warning");return}
     if(action==="unsnooze_invoice"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
     if(action==="snooze"){const o=orders.find(x=>x.id===id);if(o)setSnoozeTarget(o);return} // v10.73.18 — poner en espera (SnoozeModal)
     if(action==="unsnooze"){const o=orders.find(x=>x.id===id);if(o)unsnoozeOrder(o);return}
@@ -23600,7 +23667,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       })()}
       {/* v10.84.112 — «Corregir precio» (Karla y Dirección), sobre la orden VIVA y encima de lo que la abrió */}
       {corregirPrecioId&&(()=>{const o=orders.find(x=>x.id===corregirPrecioId);if(!o)return null;
-        return <CorregirPrecioModal key={o.id} order={o} cargarCandidatas={candidatasParaLigar} onClose={()=>setCorregirPrecioId(null)} onGuardar={(nuevo,motivo)=>corregirPrecio(o,nuevo,motivo)}/>})()}
+        // v10.84.118 — la foliada revisa en la base (y si le asignan folio con la ventana abierta, se vuelve a abrir así: la llave cambia)
+        const fol=foliadaParaCorregir(o);
+        return <CorregirPrecioModal key={o.id+(fol?":foliada":"")} order={o} cargarCandidatas={fol?null:candidatasParaLigar} revisar={fol?(id,precio)=>revisarPrecioFoliado({supabase,orden:o,nuevo:precio,enPalabras:errorEnPalabras}):null}
+          onClose={()=>setCorregirPrecioId(null)} onGuardar={(nuevo,motivo,visto)=>corregirPrecio(o,nuevo,motivo,visto)}/>})()}
 
       {invoiceModal&&<InvoiceModal key={invoiceModal.id+":"+(invoiceModal.order_type==="maquila"?invoiceModal.maq_price:invoiceModal.price)} order={invoiceModal} onCorregirPrecio={puedeCorregirPrecio(invoiceModal,user)?()=>setCorregirPrecioId(invoiceModal.id):null} ocDeLaOrden={invoiceModal.purchase_order_id?{id:invoiceModal.purchase_order_id,n:orders.filter(x=>x.purchase_order_id===invoiceModal.purchase_order_id&&!String(x.stage||"").includes("cancelled")).length}:null} onIrALaOC={ocId=>{setInvoiceModal(null);setPendingOCNavId(ocId);setView("oc")}} cargarCandidatas={candidatasParaLigar} onLigar={(cand,info)=>ligarAdelantada(invoiceModal,cand,info)} onFacturarPorPartes={()=>{const id=invoiceModal.id;setInvoiceModal(null);setAllowNoPriceForOrder(null);handleAction(id,"split_invoice")}} onConfirm={async(invoiceType,folio,paymentStatus,paymentMethod,paymentAmount,bankReference,cuadraProductId,paymentRefs,billTo)=>{
         try{

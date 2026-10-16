@@ -12,6 +12,9 @@ const { corregirPrecioEnLaBase } = lib;
 // v10.84.115 — lo nuevo del módulo (si el módulo de antes no lo trae, sus casos fallan en vez de tronar la tanda)
 const enHorarioDeAvisos = lib.enHorarioDeAvisos || (() => { throw new Error("el módulo no trae enHorarioDeAvisos"); });
 const capturarPrecioEnLaBase = lib.capturarPrecioEnLaBase || (async () => ({ error: "el módulo no trae capturarPrecioEnLaBase" }));
+// v10.84.118 — lo ya foliado sin timbrar, por la puerta de la base (CobranzaFlow v3.7.1010); si el módulo no lo trae, sus casos fallan
+const revisarPrecioFoliado = lib.revisarPrecioFoliado || (async () => ({ error: "el módulo no trae revisarPrecioFoliado" }));
+const corregirPrecioFoliado = lib.corregirPrecioFoliado || (async () => ({ error: "el módulo no trae corregirPrecioFoliado" }));
 import { extraer } from "../banco/extraer.mjs";
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -19,7 +22,9 @@ const APP = fs.readFileSync(path.join(RAIZ, "src", "App.jsx"), "utf8").replace(/
 // una declaración de App.jsx, hasta el renglón que la cierra con «;»
 const decl = nombre => { const i = APP.findIndex(l => l.startsWith("const " + nombre + " ") || l.startsWith("const " + nombre + "="));
   if (i < 0) throw new Error("no encuentro " + nombre + " en App.jsx"); let e = i; while (!/;\s*$/.test(APP[e])) e++; return APP.slice(i, e + 1).join("\n"); };
-const { puedeCorregirPrecio, errorEnPalabras, fmt } = new Function([decl("fmt"), decl("liquidadaConSaldoAFavor"), decl("puedeCorregirPrecio"), decl("errorEnPalabras"),
+// (v10.84.118) foliadaParaCorregir, si el App.jsx la trae (contra v10.84.117 no: sus casos fallan sin tronar la tanda)
+const declOpcional = nombre => { try { return decl(nombre); } catch { return ""; } };
+const { puedeCorregirPrecio, errorEnPalabras, fmt } = new Function([decl("fmt"), decl("liquidadaConSaldoAFavor"), declOpcional("foliadaParaCorregir"), decl("puedeCorregirPrecio"), decl("errorEnPalabras"),
   "return { puedeCorregirPrecio, errorEnPalabras, fmt };"].join("\n"))();
 
 // «Reimprimir» (cor-22 a cor-25): diagnoseOrder y el despertador VIVOS, con sus dependencias (extraer.mjs), en Node
@@ -228,6 +233,74 @@ try {
   ok("cap-03 si mientras tanto le asignaron folio, tampoco", !!r.error && b.fila.price == null, JSON.stringify(r));
   b = base({ fila: { order_type: "maquila", price: 9000, maq_price: 0 } }); r = await capturarPrecioEnLaBase({ supabase: b.supabase, orden: { ...P0600, order_type: "maquila", price: 9000, maq_price: 0 }, nuevo: 15000, quien: QUIEN });
   ok("cap-04 una maquila: captura maq_price (en 0) y no toca price", !r.error && b.fila.maq_price === 15000 && b.fila.price === 9000, JSON.stringify({ r, fila: { price: b.fila.price, maq: b.fila.maq_price } }));
+  // ── v10.84.118 — LO YA FOLIADO SIN TIMBRAR (la entrega 2 de CobranzaFlow, v3.7.1010, aplicada el 15-oct; Marcelo: «sigo tu recomendación»): la
+  //   regla de la pantalla y la puerta de la base (corregir_precio_revisar sólo lee; corregir_precio_orden corrige con todo bloqueado y AVISA ella).
+  //   Vuelta 1: contra v10.84.117.
+  const F181 = { ...P0600, id: "OP-P0648", production_number: "P-0648", client: "GRUPO VISION", price: 40000, stage: "in_production", invoice_folio: "F-181",
+    invoice_type: "factura", invoice_pre_assigned: true, payment_status: "unpaid" };
+  const regla = [
+    ["foliada (folio anticipado, en máquina), Karla", F181, "karla", true],
+    ["foliada, Dirección", F181, "admin", true],
+    ["foliada, Lupita", F181, "secretaria", false],
+    ["foliada, el vendedor", F181, "vendedor", false],
+    ["foliada y entregada, sin cobros", { ...F181, stage: "delivered", invoice_pre_assigned: false }, "karla", true],
+    ["foliada y pagada", { ...F181, stage: "delivered", payment_status: "paid" }, "karla", false],
+    ["foliada con un pago parcial", { ...F181, payment_status: "partial" }, "karla", false],
+    ["foliada por partes", { ...F181, has_splits: true }, "karla", false],
+    ["foliada en el plan matriz", { ...F181, has_matrix_lines: true }, "karla", false],
+    ["foliada y agrupada", { ...F181, grouped_invoice_folio: "F-150" }, "karla", false],
+    ["foliada en un grupo de OC", { ...F181, oc_invoice_group_id: "g1" }, "karla", false],
+    ["foliada con la duda de si va por partes", { ...F181, fiscal_desconocido: true }, "karla", false],
+    ["foliada y cancelada", { ...F181, stage: "cancelled", cancelled_at: "2026-10-15T10:00:00Z" }, "karla", false],
+    ["foliada, pedido web", { ...F181, source: "web" }, "karla", false],
+    ["entregada SIN folio (como antes: Dirección)", { ...P0600, stage: "delivered" }, "karla", false],
+    ["sin folio en Salidas (como antes)", P0600, "karla", true],
+  ];
+  let malRegla = [];
+  try { malRegla = regla.filter(([, o, rol, esperado]) => puedeCorregirPrecio(o, rol) !== esperado).map(([n]) => n); } catch (e) { malRegla = ["(tronó: " + e.message + ")"]; }
+  ok("cor-39 «Corregir precio» también en lo ya foliado, para Karla y Dirección; no con partes, plan, agrupada, grupo de OC, saldo, cobros, cancelada ni web",
+    malRegla.length === 0, malRegla.length ? "mal: " + malRegla.join(" · ") : "");
+  // la puerta de la base, de mentira: lo que se le pidió y lo que contesta
+  const puerta = (cfg = {}) => { const llamadas = [];
+    return { llamadas, supabase: { rpc: async (nombre, args) => { llamadas.push({ nombre, args });
+      if (cfg.red) return { data: null, error: { message: "TypeError: Failed to fetch" } };
+      if (cfg.rechazo) return { data: null, error: { message: cfg.rechazo, code: "22023" } };
+      if ("data" in cfg) return { data: cfg.data, error: null };
+      if (nombre === "corregir_precio_revisar") return { data: { puede: true, codigo: "con_folio", caso: "con_folio", folio: "F-181", precio_hoy: 40000,
+        factura: { folio: "F-181", tipo: "factura", importe: 46400, existe: true },
+        nuevo: args.p_precio_nuevo == null ? null : { precio: args.p_precio_nuevo, importe: Math.round(args.p_precio_nuevo * 116) / 100 }, avisos: [] }, error: null };
+      return { data: { ok: true, caso: "con_folio", precio_antes: 40000, precio_despues: args.p_precio_nuevo, folio: "F-181", importe_antes: 46400,
+        importe_despues: Math.round(args.p_precio_nuevo * 116) / 100,
+        nota: "P-0648 quedó en $60,500.00 sin IVA y F-181 en $70,180.00, con el mismo folio: ya la puedes timbrar." }, error: null }; } } }; };
+  const VISTO = { precio: 40000, folio: "F-181", importe: 46400 }, MOTIVO = "Se capturó mal: el cliente aceptó $60,500";
+  let pu = puerta(); let rv = await revisarPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: 60500, enPalabras: errorEnPalabras });
+  ok("cor-40 revisar le pregunta a la base (corregir_precio_revisar, sólo lee) con la orden y el precio, y devuelve lo que dice",
+    pu.llamadas.length === 1 && pu.llamadas[0].nombre === "corregir_precio_revisar" && pu.llamadas[0].args.p_order_id === F181.id && pu.llamadas[0].args.p_precio_nuevo === 60500
+    && rv?.data?.puede === true && rv.data.factura?.folio === "F-181", JSON.stringify({ llamadas: pu.llamadas, rv }));
+  pu = puerta({ red: true }); rv = await revisarPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: null, enPalabras: errorEnPalabras });
+  ok("cor-41 si no se pudo revisar (la red), lo dice en palabras y no hay «puede»: una lectura que falla no es permiso",
+    !!rv?.error && !rv.data && /sin conexión/.test(rv.error), JSON.stringify(rv));
+  pu = puerta(); let rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: 60500.004, motivo: "  " + MOTIVO + "  ", visto: VISTO, enPalabras: errorEnPalabras });
+  const a0 = pu.llamadas[0]?.args || {};
+  ok("cor-42 corregir llama a corregir_precio_orden con el precio a centavos, el porqué sin orillas, lo que se vio (precio, folio e importe) y sin conceptos",
+    pu.llamadas.length === 1 && pu.llamadas[0].nombre === "corregir_precio_orden" && a0.p_order_id === F181.id && a0.p_precio_nuevo === 60500 && a0.p_motivo === MOTIVO
+    && a0.p_precio_visto === 40000 && a0.p_folio_visto === "F-181" && a0.p_importe_visto === 46400 && a0.p_conceptos === null, JSON.stringify(pu.llamadas));
+  ok("cor-43 lo que devuelve: listo, el precio, su columna y la nota de la base (qué pasó con F-181), para decirla",
+    rc?.ok === true && rc.precio === 60500 && rc.columna === "price" && /F-181/.test(rc.nota || ""), JSON.stringify(rc));
+  const RECHAZO = "El importe de F-181 cambió mientras lo revisabas: ahora es $70,180.00. No se cambió nada.";
+  pu = puerta({ rechazo: RECHAZO }); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: 60500, motivo: MOTIVO, visto: VISTO, enPalabras: errorEnPalabras });
+  ok("cor-44 lo que la base rechaza se dice tal cual, una vez (ya viene en palabras: qué cambió y que no se cambió nada)", rc?.error === RECHAZO && !rc.ok, JSON.stringify(rc));
+  pu = puerta({ red: true }); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: 60500, motivo: MOTIVO, visto: VISTO, enPalabras: errorEnPalabras });
+  ok("cor-45 si la red falla al corregir, dice que no se cambió, en palabras, y que reintente", !!rc?.error && /sin conexión/.test(rc.error) && /no se cambió/i.test(rc.error) && !rc.ok, JSON.stringify(rc));
+  const sinLlamar = [];
+  for (const [nuevo, motivo] of [[60500, "ya está"], [0, MOTIVO], [-5, MOTIVO], [NaN, MOTIVO]]) {
+    pu = puerta(); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo, motivo, visto: VISTO, enPalabras: errorEnPalabras }); sinLlamar.push(!!rc?.error && pu.llamadas.length === 0); }
+  ok("cor-46 sin un porqué de 8 letras, o con un precio de 0, negativo o que no es número, no llega a la base", sinLlamar.every(Boolean), JSON.stringify(sinLlamar));
+  pu = puerta({ data: null }); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: F181, nuevo: 60500, motivo: MOTIVO, visto: VISTO, enPalabras: errorEnPalabras });
+  ok("cor-47 si la base no confirma (sin «ok»), no dice que se corrigió", !!rc?.error && !rc.ok, JSON.stringify(rc));
+  pu = puerta(); rc = await corregirPrecioFoliado({ supabase: pu.supabase, orden: { ...F181, order_type: "maquila", maq_price: 12000 }, nuevo: 15000, motivo: MOTIVO,
+    visto: { precio: 12000, folio: "F-181", importe: 13920 }, enPalabras: errorEnPalabras });
+  ok("cor-48 una maquila: su columna es maq_price (el precio al cliente)", rc?.ok === true && rc.columna === "maq_price", JSON.stringify(rc));
 } catch (e) {
   ok("cor-00 la prueba corrió sin tronar", false, e?.stack || e?.message || String(e));
 }

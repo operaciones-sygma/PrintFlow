@@ -2311,6 +2311,16 @@ await caso("ord-335 a Karla, sin precio capturado, lo captura aquí", "modo=edit
   const abierto = !(await p.locator("#ff-precio").isDisabled().catch(() => true));
   ok("ord-335 Karla editando una orden sin precio: el campo está abierto (lo captura ella, como antes)", abierto, `abierto ${abierto}`);
 });
+// v10.84.118 — desde la entrega 2 de CobranzaFlow (v3.7.1010) la base sólo deja a Dirección cambiar POR FUERA el precio de lo facturado: a Karla, la
+//   orden ya foliada SIN precio también se le cierra, con el camino («Corregir precio»), en vez de dejarla capturar y que la base lo rechace.
+//   Vuelta 1: contra v10.84.117.
+await caso("ord-338 a Karla, la foliada sin precio se le cierra con su camino", "modo=editar&rol=karla", async p => {
+  await editar(p, "OP-ED", { price: null, invoice_folio: "F-181", invoice_type: "factura" }); await p.evaluate(() => window.__cambiar({ price: null, invoice_folio: "F-181", invoice_type: "factura" })); await espera(p, 400);
+  const cerrado = await p.locator("#ff-precio").isDisabled().catch(() => false);
+  const t = ((await p.locator("body").innerText()) || "").replace(/\s+/g, " ");
+  ok("ord-338 Karla editando una orden con F-181 y sin precio: el precio no se captura aquí (la base se lo rechazaría) y dice que va con «Corregir precio»",
+    cerrado && /Corregir precio/.test(t) && /F-181/.test(t), `cerrado ${cerrado} · «${(t.match(/[^.]*Corregir precio[^.]*\./) || [""])[0].slice(0, 200)}»`);
+});
 // vuelta 3, por donde no se diseñó: la maquila (su precio al cliente es otro campo) y «Editar Specs» (manda la forma entera, CobranzaFlow)
 await caso("ord-336 a Karla, el precio al cliente de una maquila también se le cierra", "modo=maquila&rol=karla", async p => {
   const campo = p.locator("#ff-maq-precio"); const hay = await campo.count(); const cerrado = hay ? await campo.isDisabled().catch(() => false) : false;

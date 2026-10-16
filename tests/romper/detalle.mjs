@@ -1290,6 +1290,22 @@ await caso("det-202-sin-enviar-de-genaro", "caso=maquila&rol=karla&etapa=maq_cre
   ok("det-202-sin-enviar-de-genaro", con && /Genaro no la marcó como enviada/.test(t) && /a Genaro le llega aviso/.test(t) && !/Lupita/.test(t), `la de Genaro sin marcar como enviada: ${con ? "«" + t + "»" : "«Ya llegó de la maquila» NO está"}`);
 });
 
+// v10.84.118 — «Corregir precio» también de lo ya foliado sin timbrar (la entrega 2 de CobranzaFlow): «Más» la ofrece con su folio; con cobros no, ni al
+//   vendedor. Vuelta 1: contra v10.84.117.
+await caso("det-203-corregir-la-foliada", "caso=salidas&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-181", invoice_type: "factura", invoice_pre_assigned: true, payment_status: "unpaid" })); await espera(p, 300);
+  const hay = await enMas(p, /Corregir precio/);
+  const t = hay ? (await p.getByRole("menuitem", { name: /Corregir precio/ }).innerText()).replace(/\s+/g, " ") : "";
+  let despacha = false;
+  if (hay) { await p.getByRole("menuitem", { name: /Corregir precio/ }).click(); await espera(p, 300); despacha = /accion:corregir_precio/.test(await log(p)); }
+  ok("det-203-corregir-la-foliada", hay && /F-181/.test(t) && /mismo folio/.test(t) && despacha, `con F-181 anticipada: ${hay ? "«" + t + "»" + (despacha ? " y la pide a App" : " pero no hace nada") : "«Corregir precio» NO está"}`);
+});
+await caso("det-204-la-foliada-con-cobros-no", "caso=salidas&rol=karla", async p => {
+  await p.evaluate(() => window.__cambiar({ invoice_folio: "F-181", invoice_type: "factura", payment_status: "partial" })); await espera(p, 300);
+  const conCobro = await enMas(p, /Corregir precio/); await p.keyboard.press("Escape"); await espera(p, 200);
+  ok("det-204-la-foliada-con-cobros-no", !conCobro, `F-181 con un pago parcial: «Corregir precio» ${conCobro ? "SÍ está (la base lo frena: «ya tiene cobros»)" : "no está"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

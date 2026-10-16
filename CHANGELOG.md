@@ -12,6 +12,40 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.118 — «Corregir precio» también de lo ya foliado sin timbrar, por la puerta de la base (la entrega 2 de CobranzaFlow) — 15-oct-2026
+
+**Qué pasaba.** «Corregir precio» (v10.84.112) sólo servía antes de facturar. Lo ya foliado y sin timbrar no tenía salida: el 15-oct, por P-0600,
+Karla terminó haciendo F-180 sin orden y hubo que cancelar F-179 a mano. CobranzaFlow hizo la base (v3.7.1010: `corregir_precio_revisar`, que sólo
+lee, y `corregir_precio_orden`, que corrige con todo bloqueado, mueve el MISMO folio, deja el rastro y avisa), revisada sin P1/P2 y ensayada 96 de
+96. Marcelo dijo «aplícala» en su sesión (17:40) y, en ésta, «lo de entrega 2, sigo tu recomendación» (la recomendación fue aplicarla). La base
+también partió el candado del precio: el precio de lo facturado, POR FUERA, sólo lo cambia Dirección; Karla va por la puerta.
+
+**Qué se cambió** (`src/App.jsx`, `src/lib/corregirPrecio.js`; la base es de CobranzaFlow):
+- `foliadaParaCorregir`: con folio propio y solo (sin partes, plan matriz, agrupada ni grupo de OC, sin saldo a favor aplicado y sin cobros:
+  `payment_status` paid o partial), en cualquier etapa que no sea cancelada, también entregada. «Más» del detalle la ofrece con su folio («F-181: si
+  no está timbrada, cambia con el mismo folio»).
+- La ventana, en modo «ya foliada» (`revisar`): al abrir le pregunta a la base si se puede (timbrada, con un CFDI anterior, con cobros, cubierta por
+  otra factura… no, con su porqué y su camino, y se cierra a escribir) y en cuánto está su factura; con un precio, en cuánto queda («F-181: de
+  $46,400.00 a $70,180.00 con IVA, con el mismo folio»; la remisión, sin IVA; la foliada sin precio, «nace por…») y lo que avisa la base (el total
+  con IVA, que cambia mucho, las facturas sin orden de otro importe, que vuelva a cuadrar sus conceptos, la hora). Sólo guarda lo que la base revisó
+  con ESE precio, y con lo que se vio (precio, folio e importe): si algo cambió, la base no escribe y la ventana lo dice con «Volver a revisar». Una
+  revisión que falla no es permiso: «Reintentar». Si al revisar el precio la base dice algo que no es del precio (la timbraron), eso es lo de hoy.
+- Guardar va por `corregir_precio_orden` (`corregirPrecioFoliado`): la app no escribe la orden, ni anota, ni avisa por su cuenta (lo hace la base:
+  saldrían dobles) y dice la nota de la base. Lo que la base rechaza a propósito ya viene en palabras y se dice tal cual. Lo que no tiene folio sigue
+  el camino de v10.84.112/115; si le asignan folio con la ventana abierta, la ventana se vuelve a abrir revisando su factura (lo escrito se pierde).
+- A Karla la forma le cierra también el precio de una orden YA foliada aunque no tenga precio, con su camino (la base se lo rechazaría por fuera).
+
+**Cómo se probó** (cuatro vueltas). **Vuelta 1**, contra v10.84.117: fallaban 21 (cor-39 a cor-45 y cor-48; inv-165 a inv-171 e inv-173; det-203;
+ord-338; A y C de la prueba con la app real `tests/recorrido/corregir-foliada.mjs`); los guardias pasaban (cor-46, cor-47, inv-172, det-204,
+ord-334 a ord-337, y B: sin folio, el camino de antes). **Vuelta 2**: todo pasa (corregir 52, los casos de «Corregir precio» de folio 29, detalle
+35, forma 9, la app real 9 de 9). **Vuelta 3**, por donde no se diseñó: Esc con algo escrito, la timbran con la ventana abierta, la remisión,
+683×384 con todos los avisos, «Volver a revisar» después del rechazo y el contraste: 6 de 6; y al leer inv-175 se vio que arriba seguía «sin
+timbrar» mientras abajo decía «ya está timbrada»: inv-180 (fallaba) y el arreglo. **Vuelta 4**, con la app real: la orden recibe su folio con la
+ventana abierta (D): se vuelve a abrir revisando su factura y guarda por la base, 2 de 2 a la primera. La revisión en producción no prueba la ventana
+completa: la cuenta de pruebas no es Karla y la base le contesta «sólo Karla o Dirección»; ésa la cubre la prueba con la app real.
+
+**En producción:** (se llena al subir)
+
 ## v10.84.117 — Karla recibe también la maquila que Lupita no marcó como enviada — 15-oct-2026
 
 **Qué pasaba.** v10.84.116 dejó fuera, como decisión por defecto, la maquila que sigue como «Maquila por enviar» (Lupita, o el vendedor que la

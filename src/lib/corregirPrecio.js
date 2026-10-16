@@ -29,11 +29,15 @@ export async function corregirPrecioEnLaBase({ supabase, orden, nuevo, motivo = 
   if (!orden?.id || !Number.isFinite(precio) || precio <= 0) return { error: "El precio nuevo no es válido: no se cambió." };
   // (v10.84.115, cor-37) el porqué de 8 letras sin los espacios de las orillas, como Ajustar y Re-facturar de CobranzaFlow
   if (m.length < 8) return { error: "Escribe por qué cambia (8 letras o más): no se cambió el precio." };
+  // (v10.84.118) por aquí sólo lo que no tiene folio: lo foliado va por la base (corregirPrecioFoliado), que revisa su factura
+  if (orden.invoice_folio) return { error: nombre + " ya tiene folio (" + orden.invoice_folio + "): su precio se corrige revisando su factura. Cierra y vuelve a abrir «Corregir precio»." };
   if (!puede(orden)) return { error: nombre + ": el precio ya no se corrige aquí (ya se facturó, se entregó o se canceló)." };
   const { data: fr, error: fe } = await supabase.from("orders").select(COLUMNAS_PARA_CORREGIR).eq("id", orden.id).maybeSingle();
   if (fe) return { error: "No se pudo leer la orden (" + enPalabras(fe) + "): no se cambió el precio. Reintenta." };
   if (!fr) return { error: nombre + " ya no está en la base: no se cambió el precio." };
   const vivo = { ...orden, ...fr };
+  // (v10.84.118, cor-07) si mientras se corregía le asignaron folio, ya no va por aquí: lo dice (la ventana se vuelve a abrir revisando su factura)
+  if (vivo.invoice_folio) return { error: "Mientras corregías, " + nombre + " recibió el folio " + vivo.invoice_folio + " (ya tiene folio): no se cambió el precio. Cierra y vuelve a abrir «Corregir precio», que ahora revisa su factura." };
   if (!puede(vivo)) return { error: "Mientras corregías, " + nombre + " cambió (ya tiene folio, se entregó, se canceló o se pagó con saldo a favor): el precio ya no se corrige aquí." };
   const [r1, r2] = await Promise.all([
     supabase.from("order_invoice_splits").select("id", { count: "exact", head: true }).eq("order_id", orden.id).is("cancelled_at", null),
@@ -84,4 +88,37 @@ export async function capturarPrecioEnLaBase({ supabase, orden, nuevo, quien = {
   const fila = Array.isArray(g) ? g[0] : g;
   if (!fila || Math.round(Number(fila[col]) * 100) !== Math.round(precio * 100)) return { error: "mientras lo capturabas, " + nombre + " ya tiene precio o folio: no se guardó" };
   return { ok: true, precio, col };
+}
+// v10.84.118 — LO YA FOLIADO SIN TIMBRAR va por la puerta de la base (la entrega 2 de CobranzaFlow, v3.7.1010, aplicada el 15-oct): una sola regla para
+//   PrintFlow y CobranzaFlow. `corregir_precio_revisar` sólo lee: si se puede (timbrada, con un CFDI anterior, con cobros, cubierta por otra
+//   factura… no, con su camino), en cuánto queda la factura con el mismo folio y lo que avisa. `corregir_precio_orden` corrige con todo bloqueado,
+//   compara lo que se vio (precio, folio e importe), deja que el puente mueva el MISMO folio y, si la factura no queda al centavo, deshace todo; deja
+//   el rastro y AVISA ella (aquí no se anota ni se avisa: saldrían dobles). Lo que la base rechaza a propósito ya viene en palabras: se dice tal cual.
+//   Devuelven { data } / { ok, precio, columna, nota } o { error }.
+const deLaRed = e => /Failed to fetch|NetworkError|network|timeout|ECONN|fetch failed|Load failed/i.test(String(e?.message || e || ""));
+export async function revisarPrecioFoliado({ supabase, orden, nuevo = null, enPalabras = e => String(e?.message || e || "error") }) {
+  const precio = nuevo == null ? null : Math.round(Number(nuevo) * 100) / 100;
+  if (!orden?.id) return { error: "no hay orden que revisar" };
+  if (precio != null && (!Number.isFinite(precio) || precio <= 0)) return { error: "el precio nuevo no es válido" };
+  const { data, error } = await supabase.rpc("corregir_precio_revisar", { p_order_id: orden.id, p_precio_nuevo: precio });
+  if (error) return { error: enPalabras(error) };
+  if (!data || typeof data !== "object") return { error: "la base no contestó" };
+  return { data };
+}
+export async function corregirPrecioFoliado({ supabase, orden, nuevo, motivo = "", visto = {}, enPalabras = e => String(e?.message || e || "error") }) {
+  const precio = Math.round(Number(nuevo) * 100) / 100;
+  const m = String(motivo || "").trim();
+  if (!orden?.id || !Number.isFinite(precio) || precio <= 0) return { error: "El precio nuevo no es válido: no se cambió." };
+  if (m.length < 8) return { error: "Escribe por qué cambia (8 letras o más): no se cambió el precio." };
+  const { data, error } = await supabase.rpc("corregir_precio_orden", { p_order_id: orden.id, p_precio_nuevo: precio, p_motivo: m,
+    p_precio_visto: visto?.precio ?? null, p_folio_visto: visto?.folio ?? null, p_importe_visto: visto?.importe ?? null, p_conceptos: null });
+  if (error) {
+    const msg = String(error.message || "").replace(/^ERROR:\s*/, "").trim(), cod = String(error.code || "");
+    // dos que se cruzan con la misma orden: Postgres cancela una (40P01) y nada queda a medias
+    if (cod === "40P01") return { error: "Otra operación tocó " + (orden.production_number || "la orden") + " al mismo tiempo: no se cambió nada. Vuelve a intentarlo." };
+    if (msg && !deLaRed(error) && ["22023", "42501", "P0001"].includes(cod)) return { error: msg };
+    return { error: "No se cambió el precio: " + enPalabras(error) + ". Reintenta." };
+  }
+  if (!data || data.ok !== true) return { error: "La base no confirmó el cambio, así que no se dice que quedó: revisa la orden antes de volver a intentarlo." };
+  return { ok: true, precio, columna: orden.order_type === "maquila" ? "maq_price" : "price", nota: String(data.nota || ""), res: data };
 }

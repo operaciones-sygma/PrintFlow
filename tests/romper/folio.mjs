@@ -1518,6 +1518,140 @@ await caso("inv-164 corregir desde «Asignar folio» con algo capturado pregunta
     pregunta && antes === 0 && despues === 1, `pregunta ${pregunta} · antes ${antes} · después ${despues}`);
 });
 
+// ── v10.84.118 — «Corregir precio» de lo YA FOLIADO sin timbrar, por la puerta de la base (la entrega 2 de CobranzaFlow, v3.7.1010). P-0648 con F-181
+//   anticipada por $46,400 ($40,000 + IVA). Al abrir la ventana revisa en la base; con un precio, dice en cuánto queda la factura con el mismo folio y
+//   sus avisos; sólo guarda lo que la base revisó con ESE precio, con lo que se vio. Vuelta 1: contra v10.84.117.
+async function foliada(p) { await p.click("#abrir-foliada"); await dlgCorr(p).waitFor(); await espera(p, 400); }
+const textoCorr = async p => ((await dlgCorr(p).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+const revisados = p => p.evaluate(() => (window.__revisar ? window.__revisar() : []));
+// la ventana ya está abierta (no viene de «Asignar folio»): sólo se llenan el precio y el porqué
+const llenarCorr = async (p, precio, motivo) => { if (precio != null) await dlgCorr(p).getByLabel(/Precio correcto/).fill(String(precio));
+  if (motivo != null) await dlgCorr(p).getByLabel(/Por qué cambia/).fill(motivo); await espera(p, 200); };
+await caso("inv-165 foliada: revisa al abrir, dice en cuánto queda F-181 y guarda con lo que se vio", "foliada=1", async p => {
+  await foliada(p);
+  const al = await textoCorr(p); let con = "", l = "";
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); con = await textoCorr(p);
+    await guardarCorr(p).click({ timeout: 3000 }); await espera(p, 900); } catch (e) { con = con || "(" + e.message.split("\n")[0] + ")"; }
+  l = await log(p); const r = await revisados(p);
+  ok("inv-165 al abrir revisa F-181 en la base ($46,400.00 con IVA); con $60,500 dice «de $46,400.00 a $70,180.00, con el mismo folio» y guarda con lo visto (precio, folio, importe)",
+    /F-181/.test(al) && /\$46,400\.00/.test(al) && r[0] === null && r.includes(60500) && /de \$46,400\.00 a \$70,180\.00/.test(con) && /mismo folio/.test(con)
+    && /corregir:guardar 60500 Se capturó mal: el cliente aceptó \$60,500 visto=\{"precio":40000,"folio":"F-181","importe":46400\}/.test(l),
+    `al abrir «${al.slice(0, 160)}» · con el precio «${con.slice(0, 200)}» · revisados ${JSON.stringify(r)} · log ${l.split("\n").filter(x => /corregir/.test(x)).join(" | ")}`);
+});
+await caso("inv-166 foliada y timbrada: dice por qué no y el camino, y no deja escribir ni guardar", "foliada=timbrada", async p => {
+  await foliada(p);
+  const t = await textoCorr(p), cerrado = await dlgCorr(p).getByLabel(/Precio correcto/).isDisabled().catch(() => false);
+  const guardarHay = await guardarCorr(p).count(), guardarApagado = guardarHay ? await guardarCorr(p).isDisabled() : true;
+  ok("inv-166 F-181 timbrada: «ya está timbrada ante el SAT» con su camino (Cancelaciones, «Liberar folio»…); el precio cerrado y sin guardar",
+    /ya está timbrada ante el SAT/.test(t) && /Liberar folio/.test(t) && cerrado && guardarApagado, `«${t.slice(0, 260)}» · precio cerrado ${cerrado} · guardar apagado ${guardarApagado}`);
+});
+await caso("inv-167 foliada: si otra factura ya cubre el precio nuevo, no guarda y dice el camino", "foliada=cubierta", async p => {
+  await foliada(p); let t = "", apagado = false;
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t = await textoCorr(p); apagado = await guardarCorr(p).isDisabled(); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-167 con $60,500, F-180 (sin orden) ya cubre el trabajo: lo dice con su camino («Avísale a Dirección…») y no deja guardar (dos CFDI por la misma venta)",
+    /F-180/.test(t) && /dos CFDI/.test(t) && /Avísale a Dirección/.test(t) && apagado, `«${t.slice(0, 280)}» · guardar apagado ${apagado}`);
+});
+await caso("inv-168 foliada: si no se pudo revisar, no deja guardar y ofrece reintentar", "foliada=falla1", async p => {
+  await foliada(p);
+  const t1 = await textoCorr(p); let t2 = "", deja = false;
+  try { await dlgCorr(p).getByRole("button", { name: /Reintentar/ }).click({ timeout: 3000 }); await espera(p, 600);
+    await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t2 = await textoCorr(p); deja = !(await guardarCorr(p).isDisabled()); } catch (e) { t2 = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-168 la revisión falla: «No se pudo revisar F-181…» con «Reintentar» y sin guardar; al reintentar revisa y ya deja",
+    /No se pudo revisar/.test(t1) && /Reintentar/.test(t1) && /de \$46,400\.00 a \$70,180\.00/.test(t2) && deja, `primero «${t1.slice(0, 160)}» · después «${t2.slice(0, 160)}» · deja ${deja}`);
+});
+await caso("inv-169 foliada: los avisos de la base", "foliada=avisos", async p => {
+  await foliada(p); let t = "";
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t = await textoCorr(p); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  const bien = [/Tecleaste el total con IVA/.test(t), /Cambia mucho/.test(t), /F-170/.test(t) && /sin orden/.test(t), /conceptos/.test(t), /campana de CobranzaFlow/.test(t)];
+  ok("inv-169 dice lo que avisa la base: el total con IVA, que cambia mucho, F-170 sin orden de otro importe, que vuelva a cuadrar sus conceptos y que a esta hora el aviso llega a la campana de CobranzaFlow",
+    bien.every(Boolean), ["IVA", "cambia mucho", "F-170", "conceptos", "fuera de horario"].map((x, i) => (bien[i] ? "" : "NO ") + x).join(" · ") + " · «" + t.slice(0, 200) + "»");
+});
+await caso("inv-170 foliada: lo que la base rechaza al guardar se queda en la ventana", "foliada=1&guarda=rechazo", async p => {
+  await foliada(p); let t = "", sigue = false;
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); await guardarCorr(p).click({ timeout: 3000 }); await espera(p, 900);
+    t = await textoCorr(p); sigue = (await dlgCorr(p).count()) === 1; } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-170 «El importe de F-181 cambió mientras lo revisabas…» se dice dentro de la ventana (que sigue abierta, con «Volver a revisar»)",
+    sigue && /El importe de F-181 cambió mientras lo revisabas/.test(t) && /Volver a revisar/.test(t), `sigue ${sigue} · «${t.slice(0, 260)}»`);
+});
+await caso("inv-171 foliada: mientras revisa no guarda, y sólo cuenta la revisión del último precio", "foliada=lenta", async p => {
+  await foliada(p); await espera(p, 1500); let apagado = null, t = "", l = "";
+  try { const dlg = dlgCorr(p);
+    await dlg.getByLabel(/Por qué cambia/).fill("Se capturó mal: el cliente aceptó"); await dlg.getByLabel(/Precio correcto/).fill("50000"); await espera(p, 600);
+    await dlg.getByLabel(/Precio correcto/).fill("60500"); await espera(p, 300);
+    apagado = await guardarCorr(p).isDisabled(); t = await textoCorr(p);
+    await p.keyboard.press("Control+Enter"); await espera(p, 300); l = await log(p);
+    await espera(p, 2500); t = t + " ‖ " + await textoCorr(p); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-171 mientras revisa «Revisando…» y no guarda (tampoco con Ctrl+Enter); al llegar dice lo de $60,500 (no lo de $50,000)",
+    apagado === true && /Revisando/.test(t) && !/corregir:guardar/.test(l) && /a \$70,180\.00/.test(t) && !/a \$58,000\.00/.test(t.split("‖")[1] || ""), `apagado ${apagado} · «${t.slice(0, 300)}»`);
+});
+await caso("inv-172 foliada: el doble clic guarda una vez", "foliada=1", async p => {
+  await foliada(p);
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); await guardarCorr(p).dblclick({ timeout: 3000 }); await espera(p, 900); } catch (e) {}
+  ok("inv-172 doble clic en «Cambiar a $60,500.00» de la foliada: se guarda una vez", (await cuenta(p, "corregir:guardar")) === 1, (await cuenta(p, "corregir:guardar")) + " veces");
+});
+await caso("inv-173 foliada SIN precio: la factura nace con el precio", "foliada=sinprecio", async p => {
+  await foliada(p); let t = "", l = "";
+  try { await llenarCorr(p, "60500", "Se capturó al foliar sin el precio"); await espera(p, 900); t = await textoCorr(p);
+    await guardarCorr(p).click({ timeout: 3000 }); await espera(p, 900); l = await log(p); } catch (e) { t = t || "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-173 P-0648 se folió sin precio: «F-181 nace por $70,180.00» y guarda con lo visto (sin precio ni importe)",
+    /F-181 nace por \$70,180\.00/.test(t) && /visto=\{"precio":null,"folio":"F-181","importe":null\}/.test(l), `«${t.slice(0, 220)}» · ${l.split("\n").filter(x => /guardar/.test(x)).join(" | ")}`);
+});
+
+// (vuelta 3, por donde no se diseñó)
+await caso("inv-174 foliada: Esc con algo escrito pregunta", "foliada=1", async p => {
+  await foliada(p); let pregunta = false, sigue = false;
+  try { await llenarCorr(p, "60500", null); await dlgCorr(p).getByLabel(/Precio correcto/).press("Escape"); await espera(p, 400);
+    pregunta = (await p.getByText(/Salir sin cambiar el precio/).count()) > 0; sigue = (await dlgCorr(p).count()) === 1; } catch (e) {}
+  ok("inv-174 Esc con el precio escrito pregunta «¿Salir sin cambiar el precio?» y no guarda nada", pregunta && sigue && !/corregir:guardar/.test(await log(p)), `pregunta ${pregunta} · sigue ${sigue}`);
+});
+await caso("inv-175 foliada: si la timbran con la ventana abierta, ya no deja guardar", "foliada=timbra2", async p => {
+  await foliada(p); let t = "", apagado = null;
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t = await textoCorr(p); apagado = await guardarCorr(p).isDisabled(); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-175 la timbraron mientras Karla capturaba: con el precio, la base dice «ya está timbrada» con su camino y no deja guardar",
+    /ya está timbrada ante el SAT/.test(t) && /Liberar folio/.test(t) && apagado === true, `apagado ${apagado} · «${t.slice(0, 260)}»`);
+});
+await caso("inv-176 foliada con remisión: sin «con IVA»", "foliada=remision", async p => {
+  await foliada(p); let t = "";
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t = await textoCorr(p); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-176 una remisión (RS-1250) no lleva IVA: «RS-1250: $40,000.00, sin timbrar» y «de $40,000.00 a $60,500.00, con el mismo folio», sin «con IVA»",
+    /RS-1250: \$40,000\.00, sin timbrar/.test(t) && /RS-1250: de \$40,000\.00 a \$60,500\.00, con el mismo folio/.test(t) && !/con IVA, con el mismo folio/.test(t), `«${t.slice(0, 320)}»`);
+});
+await caso("inv-177 foliada con avisos en una pantalla chica: todo se alcanza", "foliada=avisos", async p => {
+  await foliada(p); let r = null;
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900);
+    r = await dlgCorr(p).evaluate(d => { const b = d.getBoundingClientRect(), h = d.querySelector("h3")?.getBoundingClientRect();
+      return { cabe: b.top >= -1 && b.bottom <= innerHeight + 1, desliza: d.scrollHeight > d.clientHeight + 1 ? getComputedStyle(d).overflowY : "no hace falta", titulo: !!h && h.top >= b.top - 1 }; });
+    await guardarCorr(p).scrollIntoViewIfNeeded(); r.boton = await guardarCorr(p).isVisible(); } catch (e) { r = { error: e.message.split("\n")[0] }; }
+  ok("inv-177 a 683×384, con todos los avisos, la ventana cabe (se desliza por dentro), el título se ve y se alcanza «Cambiar a …»",
+    !!r && r.cabe && r.titulo && r.boton && ["auto", "scroll", "no hace falta"].includes(r.desliza), JSON.stringify(r));
+}, { width: 683, height: 384 });
+await caso("inv-178 foliada: «Volver a revisar» después del rechazo", "foliada=1&guarda=rechazo", async p => {
+  await foliada(p); let antes = 0, despues = 0, deja = null, t = "";
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); await guardarCorr(p).click({ timeout: 3000 }); await espera(p, 900);
+    antes = (await revisados(p)).length; await dlgCorr(p).getByRole("button", { name: /Volver a revisar/ }).click({ timeout: 3000 }); await espera(p, 1300);
+    despues = (await revisados(p)).length; deja = !(await guardarCorr(p).isDisabled()); t = await textoCorr(p); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-178 «Volver a revisar» lee otra vez la factura y el precio, quita el aviso del rechazo y deja volver a intentar",
+    despues >= antes + 2 && deja === true && !/cambió mientras lo revisabas/.test(t), `revisiones ${antes} → ${despues} · deja ${deja} · «${t.slice(0, 160)}»`);
+});
+await caso("inv-179 foliada: lo nuevo se lee (≥ 4.5:1)", "foliada=avisos", async p => {
+  await foliada(p); let malos = [];
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900);
+    const xs = await dlgCorr(p).evaluate(d => { const bg = getComputedStyle(d).backgroundColor;
+      return [...d.querySelectorAll("div, span, b")].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && !e.closest("button, input, textarea"))
+        .map(e => ({ t: e.textContent.trim().slice(0, 40), fg: getComputedStyle(e).color, bg: (() => { let x = e; while (x && x !== d) { const b = getComputedStyle(x).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(b)) return b; x = x.parentElement; } return bg; })() })); });
+    malos = xs.filter(x => contraste(x.fg, x.bg) < 4.5).map(x => "«" + x.t + "» " + contraste(x.fg, x.bg).toFixed(2)); } catch (e) { malos = ["(" + e.message.split("\n")[0] + ")"]; }
+  ok("inv-179 lo que dice la ventana de la foliada (el estado, en cuánto queda y los avisos) se lee a 4.5:1 o más", !malos.length, malos.slice(0, 6).join(" · "));
+});
+
+// (vuelta 3: al leer inv-175 se vio que arriba seguía «F-181: … sin timbrar» mientras abajo decía «ya está timbrada»: la ventana se contradecía)
+await caso("inv-180 foliada: si la timbran con la ventana abierta, arriba ya no dice «sin timbrar» y se cierra a escribir", "foliada=timbra2", async p => {
+  await foliada(p); let t = "", cerrado = null;
+  try { await llenarCorr(p, "60500", "Se capturó mal: el cliente aceptó $60,500"); await espera(p, 900); t = await textoCorr(p);
+    cerrado = await dlgCorr(p).getByLabel(/Precio correcto/).isDisabled(); } catch (e) { t = "(" + e.message.split("\n")[0] + ")"; }
+  ok("inv-180 la timbraron con la ventana abierta: ya no dice «sin timbrar» (lo de hoy es «ya está timbrada», una vez) y el precio se cierra",
+    /ya está timbrada ante el SAT/.test(t) && !/sin timbrar/.test(t) && t.split("ya está timbrada").length === 2 && cerrado === true, `cerrado ${cerrado} · «${t.slice(0, 320)}»`);
+});
+
 await browser.close();
 const fallas = res.filter(r => r.startsWith("FALLA")).length;
 console.log(res.join("\n"));

@@ -55,6 +55,7 @@ const partes = [
   multi(/^const ETAPA_NOMBRE = \{/, "ETAPA_NOMBRE"), multi(/^const etapaPreviaDeshacer = /, "etapaPreviaDeshacer"),
   multi(/^const vuelveAlDeshacer = /, "vuelveAlDeshacer"), multi(/^const liquidadaConSaldoAFavor = /, "liquidadaConSaldoAFavor", /\)\);\s*$/),
   // v10.84.112 — quién corrige el precio y de qué orden (si el App.jsx lo trae)
+  ...(L.some(l => /^const foliadaParaCorregir = /.test(l)) ? [multi(/^const foliadaParaCorregir = /, "foliadaParaCorregir")] : []),   // v10.84.118
   ...(L.some(l => /^const puedeCorregirPrecio = /.test(l)) ? [multi(/^const puedeCorregirPrecio = /, "puedeCorregirPrecio")] : []),
   // v10.84.113 — lo que Lupita puede cancelar (si el App.jsx lo trae)
   ...(L.some(l => /^const cancelaLaSecretaria = /.test(l)) ? [multi(/^const cancelaLaSecretaria = /, "cancelaLaSecretaria")] : []),

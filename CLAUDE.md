@@ -36,7 +36,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   sesión se porta como la de CobranzaFlow (v3.7.999f/o): la que se cierra sola (`SIGNED_OUT`) lleva a entrar diciendo por qué; al
   abrir, la sesión guardada se le confirma a Auth y la entrada la vuelve a mirar antes de abrir (si se cerró a media entrada, la app
   abría como anónima); una falla al comprobar (red, 503) **no saca a nadie**: «Reintentar». Tanda `tests/romper/sesion.mjs`.
-- **Marcelo** es dueño y único desarrollador; **Karla** factura (y desde v10.84.112 corrige el precio de lo que todavía no se factura); **Lupita** captura; **Gerardo/Noemí/
+- **Marcelo** es dueño y único desarrollador; **Karla** factura (y desde v10.84.112 corrige el precio de lo que todavía no se factura; desde v10.84.118 también de lo ya foliado sin timbrar, por la puerta de la base de
+  CobranzaFlow v3.7.1010: `corregir_precio_revisar`/`_orden`, que también avisan; el precio de lo facturado, POR FUERA, sólo lo cambia Dirección); **Lupita** captura; **Gerardo/Noemí/
   Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
   máquina** (su «Pendientes» → «En la planta», la OC y el detalle; `jalar_a_salidas` en `ACTION_ROLES`, por `doAdv` con aviso a Gerardo).
