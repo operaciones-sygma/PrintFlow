@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2005 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2053 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,12 +197,19 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.125 (16-oct, ~09:58; READY `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR`, commit `cf3fc8a`; vuelta atrás: promover
+- **LIVE:** v10.84.127 (16-oct, ~10:59; READY `dpl_E88PBu4bW5MkwcqpRWERKNaj82Cu`, commits `2b2e585` (v10.84.126) y `89a9ff9` (v10.84.127), subidas juntas;
+  vuelta atrás: promover `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR` (el código de v10.84.125) o `git revert 89a9ff9 2b2e585`; la base no cambió; candado 2053 de 2053,
+  de a 4). La sexta y la séptima pasadas de `/impeccable critique` de la mañana: v10.84.127 **los avisos** (19/40): tocar un aviso abre su orden, «Borrar
+  todas» pregunta, la base de los avisos revisa su `error` y App sabe si los leyó (`avisosLeidos`; sin lectura, «No se pudieron leer los avisos ·
+  Reintentar»), y la bandeja es una ventana con teclado. v10.84.126 **la Torre de Control** (23/40): «detenidas» es trabajo parado; los datos por capturar
+  (`no_date`, `no_price`) van aparte y sin alarma; sin lectura, sin cifras. Bancos `gen-torre.mjs` y `gen-avisos.mjs`, tandas `torre` y `avisos`. 🔑 El
+  Despertador NO pide fechas ni precios por capturar: los salta desde v10.58.63 (`SKIP_KEYS`).
+  v10.84.125 (16-oct, ~09:58; READY `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR`, commit `cf3fc8a`; vuelta atrás: promover
   `dpl_4Hp8e88VBWFBsd1wbdQbNQdx2mAA` (el código de v10.84.124) o `git revert cf3fc8a`; la base no cambió; candado 2021 de 2021, de a 4). La quinta pasada
   de `/impeccable critique` (Marcelo, 16-oct por la mañana: «sigamos con más»): **«Todas»** (22/40): 🔑 `VistaTodas` pinta de 40 en 40 (antes las 1002 de
   golpe: 1.1 s y 137,000 px), las activas primero (`ordenDeTodas`; antes las urgentes de hace meses arriba), el filtro por estado con su cuenta y sin
   lectura, sin cifras. Compartido: en la ficha (`OCard`, `ProgressBar`, `StageFlowButtons`) la etapa, el teléfono, el avance y «Prod · Pre-p» en tinta.
-  Banco `gen-todas.mjs` (1002 órdenes) y tanda `todas`. En la cola: v10.84.126, la Torre de Control (lo detenido es trabajo parado; los datos, aparte).
+  Banco `gen-todas.mjs` (1002 órdenes) y tanda `todas`.
   v10.84.124 (16-oct, ~06:01; READY `dpl_4sTqCaJTnzWsJq5P22ZpMT7Ca9SX`, commit `c8a9b57`; vuelta atrás: promover
   `dpl_BXpWxSZYYhLFsCqqU1TAhDG4biY4` (el código de v10.84.123) o `git revert c8a9b57`; la base no cambió; candado 2005 de 2005, de a 4). La cuarta
   pasada de `/impeccable critique` de la noche: **el «Dashboard»** (con el que abren casi todos; 20/40, snapshot

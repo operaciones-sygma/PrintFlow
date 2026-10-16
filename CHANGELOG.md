@@ -36,10 +36,14 @@ borra, el vacío de verdad): contra lo de antes fallaban 2 (cancelar y la base q
 skill: de 9 hallazgos (33 con 30 avisos) a 1 —el número de la campana, que la tanda no medía (excluía la barra de arriba): arreglado— y luego sólo los
 falsos positivos.
 
-**Para Marcelo:** ¿agrupar los avisos por orden (tres de P-0611 en uno)? Y el Despertador: hoy les pone a Lupita y a los vendedores como «pendientes esperando
-TU acción» las fechas de entrega por capturar (lo mismo que la Torre contaba como detenidas): ¿siguen ahí, o aparte y sin pedir «SI ENTIENDO» por ellas?
+**Para Marcelo:** ¿agrupar los avisos por orden (tres de P-0611 en uno)? (Corrección del mismo día: aquí también se preguntaba si el Despertador debía
+seguir pidiendo las fechas de entrega por capturar. No las pide: las salta desde v10.58.63 (`SKIP_KEYS` en `getWakeupItems`, junto con el precio). La
+pregunta sobraba; se vio al leer el Despertador para su critique.)
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~10:59, junto con v10.84.126; READY `dpl_E88PBu4bW5MkwcqpRWERKNaj82Cu`, commits `2b2e585` y `89a9ff9`; vuelta atrás: promover
+`dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR` (el código de v10.84.125) o `git revert 89a9ff9 2b2e585`; la base no cambió. Candado 2053 de 2053 (32 nuevas: `torre` y
+`avisos`), de a 4, 14.5 min, a la primera y sin inestables. Revisado en producción: el código servido (`index-Drr8QE9W.js`) trae lo de las dos («datos por
+capturar», «Marcar todas como leídas», «No se pudieron leer los avisos»).
 
 ## v10.84.126 — La Torre de Control: «detenidas» es trabajo parado; los datos por capturar, aparte — 16-oct-2026
 
@@ -67,10 +71,11 @@ prueba (la fecha se leía en una copia suelta, que no aplica el `text-transform`
 tinte; luego 17 de 17. El detector de la skill: de 20 hallazgos a 6 (de 10 a 2 con sólo datos): sólo la letra chica de la app, la escala, un renglón
 largo y los falsos positivos.
 
-**Para Marcelo:** ¿una orden sin fecha de entrega debería recordársele a quien vendió desde el primer día (hoy el Despertador y «Recordar» lo hacen), o
-sólo cuando ya corre en la planta?
+**Para Marcelo:** ¿una orden sin fecha de entrega debería recordársele a quien vendió desde el primer día (hoy lo hace «Recordar» de la Torre, a mano; el
+Despertador no: salta las fechas y los precios por capturar desde v10.58.63; aquí decía que sí, corregido el mismo día), o sólo cuando ya corre en la planta?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~10:59, junto con v10.84.127 (ver su entrada: READY `dpl_E88PBu4bW5MkwcqpRWERKNaj82Cu`, commit `2b2e585`; vuelta atrás: promover
+`dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR` o `git revert 89a9ff9 2b2e585`).
 
 ## v10.84.125 — «Todas» abre en un instante: de 40 en 40, lo activo primero y el filtro por estado — 16-oct-2026
 
