@@ -88,6 +88,24 @@ try {
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
+// v10.84.117 — lo que decide si un error de consola es de la app (tests/consola.mjs): el canal de recarga en caliente de Vite, no (frenó el
+//   candado de v10.84.117 por can-13, que sí pasó); un recurso de fuera, no; lo que no carga de la app o del banco, un error de la app, sí; y un
+//   websocket que no es local (el tiempo real de Supabase), sí.
+try {
+  const { deFuera, deVite } = await import("../consola.mjs");
+  const msg = (texto, url = "") => ({ text: () => texto, location: () => ({ url }) });
+  const casos = [
+    ["el canal de Vite que no se conectó", msg("WebSocket connection to 'ws://127.0.0.1:5187/?token=A-5UhD9Fal0X' failed: Error in connection establishment: net::ERR_NO_BUFFER_SPACE"), true],
+    ["«[vite] failed to connect to websocket»", msg("[vite] failed to connect to websocket (Error: WebSocket closed without opened.)."), true],
+    ["la letra de Google que no cargó", msg("Failed to load resource: net::ERR_NETWORK_CHANGED", "https://fonts.googleapis.com/css2?family=Geist"), true],
+    ["un archivo del banco que no cargó", msg("Failed to load resource: net::ERR_NO_BUFFER_SPACE", "http://127.0.0.1:5187/banco.jsx"), false],
+    ["un error de la app", msg("TypeError: Cannot read properties of undefined (reading 'price')"), false],
+    ["el tiempo real de Supabase", msg("WebSocket connection to 'wss://uvhardaeooaxjrrgdjwa.supabase.co/realtime/v1/websocket?apikey=x' failed"), false],
+  ];
+  const mal = casos.filter(([, m, esperado]) => deFuera(m) !== esperado || (typeof deVite !== "function")).map(([n]) => n);
+  ok("can-g08 el canal de recarga de Vite y un recurso de fuera no son errores de la app; lo que no carga del banco, un error de la app y un websocket que no es local, sí",
+    mal.length === 0, mal.length ? "mal: " + mal.join(" · ") : "");
+} catch (e) { ok("can-g08 el filtro de consola se pudo probar", false, e?.message || String(e)); }
 for (const x of res) console.log(x);
 const fallan = res.filter(x => x.startsWith("FALLA")).length;
 console.log(`\ncandado: ${res.length - fallan} pasan, ${fallan} fallan`);

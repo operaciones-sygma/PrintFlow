@@ -4,6 +4,7 @@
 // hechas sin orden, que cubren cada una un pedazo de los cuatro (F-143: 4,380 + 3,528 + 7,395 + 5,520 piezas; F-155: el resto).
 // Uso: node tests/romper/plan.mjs <dir-capturas> [puerto=5190]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
+import { deVite } from "../consola.mjs";   // (v10.84.117) el canal de recarga de Vite no es la app
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5190);
 fs.mkdirSync(OUT, { recursive: true });
@@ -17,7 +18,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errs.push("console: " + m.text()); });
+  page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text()) && !deVite(m)) errs.push("console: " + m.text()); });
   try {
     page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(30000);
     await page.goto(`http://127.0.0.1:${PORT}/?${query}`);

@@ -4,6 +4,7 @@
 // critique de esta noche.
 // Uso: node cancelar.mjs <dir-capturas> [puerto=5187]   ·   SOLO=<regex> corre sólo los casos que coinciden (sabotajes)
 import { chromium } from "playwright";
+import { deVite } from "../consola.mjs";   // (v10.84.117) el canal de recarga de Vite no es la app
 import fs from "node:fs";
 const OUT = process.argv[2] || "."; const PORT = Number(process.argv[3] || 5187);
 fs.mkdirSync(OUT, { recursive: true });
@@ -16,7 +17,7 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   const page = await browser.newPage({ viewport });
   const errs = [], nativos = [];
   page.on("pageerror", e => errs.push("pageerror: " + e.message));
-  page.on("console", m => { if (m.type() === "error" && !/favicon|Failed to load resource/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+  page.on("console", m => { if (m.type() === "error" && !/favicon|Failed to load resource/.test(m.text()) && !deVite(m)) errs.push("console: " + m.text().slice(0, 160)); });
   // un diálogo del navegador (confirm/alert) se anota y se acepta: la app no debería usarlos (DESIGN.md)
   page.on("dialog", async d => { nativos.push(d.type() + ": " + d.message().slice(0, 80)); await d.accept().catch(() => {}); });
   page.nativos = nativos;
