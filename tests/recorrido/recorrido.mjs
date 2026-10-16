@@ -63,10 +63,6 @@ const CONOCIDOS = [
   { vista: "Archivos", rx: /^HTTP 403 POST \/rest\/v1\/rpc\/pf_archivos_del_bucket$/ },
   { vista: "Archivos", rx: /^consola: Failed to load resource: the server responded with a status of 403/ },
   { vista: "Archivos", rx: /^consola: \[StorageTab list\]/ },
-  // v10.84.119 — «Planta» MIENTRAS NO SE APLIQUE su tabla (docs/migrations/v10.84.119_plano_versiones.sql, por el editor SQL): leer sus versiones
-  //   contesta 404 y la pantalla dice «Guardar versiones todavía no está disponible», que es lo correcto. Con la tabla, se quitan estos dos.
-  { vista: "Planta", rx: /^HTTP 404 GET \/rest\/v1\/plano_versiones$/ },
-  { vista: "Planta", rx: /^consola: Failed to load resource: the server responded with a status of 404/ },
 ];
 
 function candado(ctx, rol, reg) {
