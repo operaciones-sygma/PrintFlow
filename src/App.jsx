@@ -5563,6 +5563,15 @@ function ReturnToCtpModal({order,onConfirm,onClose}) {
 // v10.42.0 — Inventario Cuadra (producción a stock + venta desde stock).
 // Lista client_products con stock_actual, permite ADJUST (semilla / corrección),
 // venta directa desde stock (RPC sell_from_stock) y agregar producto nuevo al catálogo.
+// v10.84.130 — el Inventario Cuadra (la décima pasada de /impeccable critique, 16-oct): una lectura que falla no es «vacío» (la regla 12) y lo dice
+//   con «Reintentar»; los movimientos en español; quitar del catálogo pregunta en la app; un diálogo con pestañas; las tintas.
+const TIPO_DE_MOVIMIENTO={PRODUCED:"Entrada de producción",SOLD:"Venta",ADJUST:"Ajuste"};
+function FallaDelInventario({que,onReintentar}){
+  return <div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",marginBottom:10,borderRadius:10,background:C.bg,border:"1px solid "+C.dn,fontSize:12,color:C.dnInk,fontWeight:600}}>
+    <WarningIcon size={14} weight="fill" aria-hidden="true"/>No se pudo leer {que} de la base.
+    <button type="button" onClick={onReintentar} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"4px 12px",fontSize:12,minHeight:32}}>Reintentar</button>
+  </div>;
+}
 function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInvoice}) {
   useEscClose(onClose);
   const [products,setProducts]=useState([]);
@@ -5570,6 +5579,14 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
   const [history,setHistory]=useState([]); // v10.46.0 — historial órdenes Cuadra
   const [stockClients,setStockClients]=useState([]); // v10.42.1
   const [loading,setLoading]=useState(true);
+  // v10.84.130 — si cada lectura se hizo (null = leyendo; true = sí; false = falló): sin esto, una falla decía «Sin productos en stock»
+  const [lectura,setLectura]=useState({productos:null,movimientos:null,historial:null,clientes:null});
+  const [quitar,setQuitar]=useState(null);           // v10.84.130 — el producto que se pregunta si quitar del catálogo (en la app, no con confirm())
+  const [quitando,setQuitando]=useState(false);
+  const quitandoRef=useRef(false);
+  useDevolverFoco();
+  const pestanasRef=useRef(null);
+  useEffect(()=>{try{pestanasRef.current?.querySelector('[aria-selected="true"]')?.focus({preventScroll:true})}catch(e){}},[]);
   const [tab,setTab]=useState("products"); // products | movements | history (v10.46.0)
   const [editing,setEditing]=useState(null); // {mode:"new"|"adjust"|"sell", product?}
   // v10.46.8 — filtros independientes por tab (antes era uno solo y confundía al cambiar tab)
@@ -5578,19 +5595,31 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
 
   const reload=async()=>{
     setLoading(true);
-    try{
-      // v10.42.1 — RPC list_stock_clients evita exponer schema cobranza vía PostgREST
-      // v10.46.0 — Cargar historial de órdenes Cuadra (production + sale)
-      // v10.46.2 FIX — Si historial falla, avisamos al usuario en lugar de silenciar (tab quedaba vacío sin explicación).
-      const [prods,movs,scsRes,hist]=await Promise.all([
-        db.loadClientProducts(),
-        db.loadStockMovements(null,80),
-        supabase.rpc("list_stock_clients"),
-        db.loadCuadraOrdersHistory(80).catch(e=>{console.warn("[InventoryModal] history:",e);showToast("⚠️ No se pudo cargar el historial Cuadra: "+e.message,"error");return null})
-      ]);
-      setProducts(prods);setMovements(movs);setStockClients(scsRes.data||[]);setHistory(hist||[]);
-    }catch(e){console.error("[InventoryModal] load:",e);showToast("❌ Error cargando inventario: "+e.message,"error")}
-    finally{setLoading(false)}
+    // v10.42.1 — RPC list_stock_clients evita exponer schema cobranza vía PostgREST
+    // v10.84.130 — cada lectura por su lado (la regla 12): la que falla lo dice en su pestaña con «Reintentar», las demás siguen y lo último bueno se
+    //   queda. Antes, con Promise.all, una falla dejaba el catálogo en cero y decía «Sin productos en stock · Da de alta tu primer producto», y la de los
+    //   clientes se tragaba su error (la regla 2: salían «—»).
+    const [prods,movs,scs,hist]=await Promise.allSettled([
+      db.loadClientProducts(),
+      db.loadStockMovements(null,80),
+      supabase.rpc("list_stock_clients").then(({data,error})=>{if(error)throw new Error(error.message);return data||[]}),
+      db.loadCuadraOrdersHistory(80)
+    ]);
+    const bien=x=>x.status==="fulfilled";
+    if(bien(prods))setProducts(prods.value);
+    if(bien(movs))setMovements(movs.value);
+    if(bien(scs))setStockClients(scs.value);
+    if(bien(hist))setHistory(hist.value);
+    for(const [n,x] of [["catálogo",prods],["movimientos",movs],["clientes",scs],["historial",hist]])if(!bien(x))console.warn("[InventoryModal] "+n+":",x.reason?.message);
+    setLectura({productos:bien(prods),movimientos:bien(movs),clientes:bien(scs),historial:bien(hist)});
+    setLoading(false);
+  };
+  // v10.84.130 — quitar del catálogo con la pregunta en la app (antes confirm() del navegador) y una sola vez aunque haya doble clic
+  const quitarDelCatalogo=async p=>{
+    if(quitandoRef.current)return; quitandoRef.current=true; setQuitando(true);
+    try{await db.deleteClientProduct(p.id);showToast("Quitado del catálogo: "+p.name);setQuitar(null);await reload()}
+    catch(e){showToast("No se pudo quitar «"+p.name+"»: "+errorEnPalabras(e),"error")}
+    finally{quitandoRef.current=false;setQuitando(false)}
   };
   useEffect(()=>{reload()},[]);
 
@@ -5611,43 +5640,48 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
   });
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"94%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+    {/* v10.84.130 — un diálogo con su nombre: el foco entra (a la pestaña), el Tab no se sale y regresa al cerrar */}
+    <div role="dialog" aria-modal="true" aria-labelledby="pf-inv-titulo" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:780,width:"94%",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><PackageIcon size={18} weight="bold"/>Inventario Cuadra</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>Productos en stock · {products.length} SKUs</div>
+          <h3 id="pf-inv-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><PackageIcon size={18} weight="bold" aria-hidden="true"/>Inventario Cuadra</h3>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{lectura.productos===false&&!products.length?"Sin leer el catálogo":products.length+(products.length===1?" producto":" productos")+" en el catálogo"}</div>
         </div>
-        <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
+        <button onClick={onClose} aria-label="Cerrar el inventario" style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
       </div>
-      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center"}}>
+      <div style={{padding:"10px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <div ref={pestanasRef} role="tablist" aria-label="Inventario" style={{display:"flex",gap:8}}>
         {[{id:"products",ic:PackageIcon,l:"Productos"},{id:"movements",ic:ListBulletsIcon,l:"Movimientos"},{id:"history",ic:BooksIcon,l:"Historial"}].map(t=>
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?C.emr+"15":"transparent",color:tab===t.id?C.emr:C.t2,fontWeight:700,fontSize:12,fontFamily:"'Geist',sans-serif"}}>{(()=>{const TI=t.ic;return <TI size={13} weight="bold"/>})()}{t.l}</button>
+          <button key={t.id} role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:10,border:"none",cursor:"pointer",background:tab===t.id?C.emr+"15":"transparent",color:tab===t.id?C.emrInk:C.t2,fontWeight:700,fontSize:12,fontFamily:"'Geist',sans-serif"}}>{(()=>{const TI=t.ic;return <TI size={13} weight="bold" aria-hidden="true"/>})()}{t.l}</button>
         )}
+        </div>
         <div style={{flex:1}}/>
         {/* v10.55.0 — Carrito de venta batch (sustituye el flujo individual sell_from_stock con folio compartido) */}
         {/* v10.58.30 BUG #2: gatear a admin/karla (alineado con backend bulk_sell_from_stock). Antes
             usaba canExecuteAction("sell_from_stock") que incluía secretaria/vendedor, pero el backend
             rechaza con 42501 → UX broken. */}
-        {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt(C.sal),padding:"8px 12px"}}><ShoppingCartIcon size={14} weight="bold"/>Carrito de venta</button>}
-        {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt(C.emr),padding:"8px 12px"}}><PlusIcon size={14} weight="bold"/>Nuevo Producto</button>}
+        {tab==="products"&&(user==="admin"||user==="karla")&&<button onClick={()=>setEditing({mode:"bulk_sell"})} style={{...bt(C.okInk),padding:"8px 12px"}}><ShoppingCartIcon size={14} weight="bold"/>Carrito de venta</button>}
+        {tab==="products"&&<button onClick={()=>setEditing({mode:"new"})} style={{...bt(C.emrInk),padding:"8px 12px"}}><PlusIcon size={14} weight="bold"/>Nuevo Producto</button>}
       </div>
       {loading?<SkelRows n={6}/>:
         <div style={{overflowY:"auto",padding:"14px 22px",flex:1}}>
           {tab==="products"&&<>
+            {lectura.productos===false&&<FallaDelInventario que="el catálogo" onReintentar={reload}/>}
+            {lectura.clientes===false&&lectura.productos!==false&&<FallaDelInventario que="de qué cliente es cada producto" onReintentar={reload}/>}
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterProducts} onChange={e=>setFilterProducts(e.target.value)} placeholder="Filtrar por nombre, SKU o cliente" aria-label="Filtrar productos del catálogo"/>
-            {filtered.length===0?(products.length===0?<EmptyState icon={PackageIcon} title="Sin productos en stock" hint="Da de alta tu primer producto con Nuevo Producto, o cárgalo desde una orden Cuadra de producción." action={{label:"Nuevo Producto",icon:PlusIcon,onClick:()=>setEditing({mode:"new"})}}/>:<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>):
+            {filtered.length===0?(products.length===0?(lectura.productos===false?null:<EmptyState icon={PackageIcon} title="Sin productos en stock" hint="Da de alta tu primer producto con Nuevo Producto, o cárgalo desde una orden Cuadra de producción." action={{label:"Nuevo Producto",icon:PlusIcon,onClick:()=>setEditing({mode:"new"})}}/>):<div style={{textAlign:"center",padding:30,color:C.t2,fontSize:12}}>Sin coincidencias</div>):
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(p=>
                   <div key={p.id} style={{padding:"12px 14px",borderRadius:12,background:C.sf,border:"0.5px solid "+C.bd}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:10}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                        <div style={{fontSize:10,color:p.stock_pool_id?C.emr:C.t2,marginTop:2,fontWeight:p.stock_pool_id?600:400}}>{productOwner(p)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
+                        <div style={{fontSize:11,color:p.stock_pool_id?C.emrInk:C.t2,marginTop:2,fontWeight:p.stock_pool_id?600:400}}>{productOwner(p)}{p.sku?" · "+p.sku:""}{p.unit_price?" · $"+Number(p.unit_price).toLocaleString():""}</div>
                       </div>
                       <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?C.emr:C.dn}}>{p.stock_actual}</div>
-                        <div style={{fontSize:9,color:C.t2,textTransform:"uppercase"}}>en stock</div>
-                        {kgEquiv(p.stock_actual,p.specs)&&<div style={{fontSize:10,color:C.emr,fontWeight:700,marginTop:1}}>≈{kgEquiv(p.stock_actual,p.specs)}</div>}
+                        <div style={{fontSize:18,fontWeight:800,color:p.stock_actual>0?C.emrInk:C.dnInk}}>{p.stock_actual}</div>
+                        <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>en stock</div>
+                        {kgEquiv(p.stock_actual,p.specs)&&<div style={{fontSize:10,color:C.emrInk,fontWeight:700,marginTop:1}}>≈{kgEquiv(p.stock_actual,p.specs)}</div>}
                       </div>
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:10}}>
@@ -5655,34 +5689,40 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                       {/* v10.55.0 — "🛒 Vender" individual eliminado: ahora todo va por el Carrito de venta (header) con folio compartido */}
                       {canExecuteAction("adjust_stock",null,user,userLogin)&&<button onClick={()=>setEditing({mode:"adjust",product:p})} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd,padding:"6px 10px",fontSize:11}}><ChartBarIcon size={12} weight="bold"/>Ajustar</button>}
                       {/* v10.46.0 — Eliminar producto vacío (stock=0) creado por error */}
-                      {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&<button onClick={async()=>{
-                        if(!confirm("¿Eliminar producto \""+p.name+"\" del catálogo?\n\nSolo se permite porque stock=0. Esta acción no se puede deshacer."))return;
-                        try{await db.deleteClientProduct(p.id);showToast("🗑️ Producto eliminado");await reload()}
-                        catch(e){showToast("❌ No se pudo eliminar: "+e.message,"error")}
-                      }} title="Eliminar producto (solo si stock=0)" style={{...bt(C.dn+"15",C.dn),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}><TrashIcon size={13} weight="bold"/></button>}
+                      {p.stock_actual===0&&canExecuteAction("delete_client_product",null,user,userLogin)&&quitar!==p.id&&<button onClick={()=>setQuitar(p.id)} aria-label={"Quitar "+p.name+" del catálogo"} title="Quitar del catálogo (sólo sin existencias)" style={{...bt(C.dn+"15",C.dnInk),justifyContent:"center",border:"0.5px solid "+C.dn+"40",padding:"6px 10px",fontSize:11}}><TrashIcon size={13} weight="bold" aria-hidden="true"/></button>}
                     </div>
+                    {/* v10.84.130 — la pregunta en la app (antes confirm() del navegador): qué pasa y qué no */}
+                    {quitar===p.id&&<div role="group" aria-label={"Quitar "+p.name} style={{marginTop:10,padding:"10px 12px",borderRadius:10,background:C.bg,border:"1px solid "+C.dn}}>
+                      <div style={{fontSize:12,color:C.tx,lineHeight:1.45}}>¿Quitar <b>{p.name}</b> del catálogo? Se puede porque no tiene existencias. Sus movimientos se conservan.</div>
+                      <div style={{display:"flex",gap:8,marginTop:8,justifyContent:"flex-end"}}>
+                        <button type="button" onClick={()=>setQuitar(null)} disabled={quitando} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:12}}>Cancelar</button>
+                        <button type="button" onClick={()=>quitarDelCatalogo(p)} disabled={quitando} style={{...bt(C.dnInk),padding:"6px 12px",fontSize:12,cursor:quitando?"wait":"pointer"}}>{quitando?"Quitando…":"Sí, quitar"}</button>
+                      </div>
+                    </div>}
                   </div>
                 )}
               </div>
             }
           </>}
-          {tab==="movements"&&(movements.length===0?<EmptyState icon={ListBulletsIcon} title="Sin movimientos todavía" hint="Aquí verás cada entrada y salida de stock cuando cargues producción o registres una venta del catálogo."/>:
+          {tab==="movements"&&lectura.movimientos===false&&<FallaDelInventario que="los movimientos" onReintentar={reload}/>}
+          {tab==="movements"&&(movements.length===0?(lectura.movimientos===false?null:<EmptyState icon={ListBulletsIcon} title="Sin movimientos todavía" hint="Aquí verás cada entrada y salida de stock cuando cargues producción o registres una venta del catálogo."/>):
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {movements.map(m=>{
                 const prod=products.find(p=>p.id===m.client_product_id);
-                const color=m.kind==="PRODUCED"?C.emr:m.kind==="SOLD"?C.sal:"#f59e0b";
+                // v10.84.130 — el tipo en español (decía PRODUCED, SOLD, ADJUST) y en tinta sobre el gris de la tarjeta
+                const color=m.kind==="PRODUCED"?C.emrInk:m.kind==="SOLD"?C.okTx:C.wnTx;
                 const MIcon=m.kind==="PRODUCED"?DownloadSimpleIcon:m.kind==="SOLD"?ExportIcon:ChartBarIcon;
                 return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}><MIcon size={12} weight="bold"/>{m.kind}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}><MIcon size={12} weight="bold" aria-hidden="true"/>{TIPO_DE_MOVIMIENTO[m.kind]||m.kind}</div>
                     <div style={{fontSize:11,marginTop:2}}>{prod?.name||"(producto)"}</div>
-                    {m.notes&&<div style={{fontSize:10,color:C.t2,marginTop:2}}>{m.notes}</div>}
-                    <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}</div>
+                    {m.notes&&<div style={{fontSize:11,color:C.t2,marginTop:2}}>{m.notes}</div>}
+                    <div style={{fontSize:10,color:C.t2,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}</div>
                   </div>
                   <div style={{textAlign:"right",marginLeft:10}}>
                     <div style={{fontSize:14,fontWeight:800,color}}>{m.qty>0?"+":""}{m.qty}</div>
-                    {kgEquiv(m.qty,prod?.specs)&&<div style={{fontSize:9,color:C.t2}}>≈{kgEquiv(m.qty,prod?.specs)}</div>}
-                    <div style={{fontSize:9,color:C.t2}}>saldo: {m.balance_after}</div>
+                    {kgEquiv(m.qty,prod?.specs)&&<div style={{fontSize:10,color:C.t2}}>≈{kgEquiv(m.qty,prod?.specs)}</div>}
+                    <div style={{fontSize:10,color:C.t2}}>quedan {m.balance_after}</div>
                   </div>
                 </div>;
               })}
@@ -5690,8 +5730,9 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
           )}
           {/* v10.46.0 — Tab Historial: órdenes Cuadra (production + sale), filtrables por cliente + búsqueda */}
           {tab==="history"&&<>
+            {lectura.historial===false&&<FallaDelInventario que="el historial" onReintentar={reload}/>}
             <SearchInput wrapStyle={{marginBottom:10}} style={{...inp}} value={filterHistory} onChange={e=>setFilterHistory(e.target.value)} placeholder="Filtrar por cliente, P-folio o producto" aria-label="Filtrar historial de órdenes Cuadra"/>
-            {history.length===0?<EmptyState icon={BooksIcon} title="Sin órdenes Cuadra todavía" hint="Cuando captures órdenes de stock Cuadra (a stock o desde stock) aparecerán aquí con su folio P y fiscal."/>:(()=>{
+            {history.length===0?(lectura.historial===false?null:<EmptyState icon={BooksIcon} title="Sin órdenes Cuadra todavía" hint="Cuando captures órdenes de stock Cuadra (a stock o desde stock) aparecerán aquí con su folio P y fiscal."/>):(()=>{
               // v10.46.2 FIX — accent-insensitive (Dipticos == Dípticos), consistente con OrderForm.normForSearch
               const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
               const q=norm(filterHistory.trim());
@@ -5702,7 +5743,7 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                   const _hpSpecs=products.find(p=>p.id===o.client_product_id)?.specs; // v10.73.4 — equiv kg si es producto vendido por kilo
                   const isProd=o.stock_role==="production";
                   const isSale=o.stock_role==="sale";
-                  const color=isProd?C.emr:isSale?C.sal:C.t2;
+                  const color=isProd?C.emrInk:isSale?C.okTx:C.t2;   // v10.84.130 — en tinta sobre el gris
                   const HIcon=isProd?PackageIcon:isSale?ShoppingCartIcon:null;
                   const label=isProd?(o.stock_loaded?"a Stock":"a Stock (pendiente)"):(isSale?"desde Stock":"—");
                   return <div key={o.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd}}>
@@ -5711,12 +5752,12 @@ function InventoryModal({onClose, user, userLogin, clients, showToast, onOpenInv
                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{HIcon?<HIcon size={12} weight="bold"/>:"·"}{label}</span>
                           <span style={{fontSize:11,color:C.ac,fontWeight:700,fontFamily:"'Geist Mono',monospace"}}>{o.production_number||"—"}</span>
-                          {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live}}>{o.invoice_folio}</span>}
+                          {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.okTx}}>{o.invoice_folio}</span>}
                         </div>
                         <div style={{fontSize:11,marginTop:3}}>{o.client||"—"}</div>
                         {(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 6px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
-                        <div style={{fontSize:10,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}{kgEquiv(o.quantity,_hpSpecs)?" ≈ "+kgEquiv(o.quantity,_hpSpecs):""}</div>
-                        <div style={{fontSize:9,color:C.t3,marginTop:3}}>Stage: <StageLbl stage={o.stage} size={9}/> · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
+                        <div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product||"—"}{o.quantity?" · "+o.quantity+" pzas":""}{kgEquiv(o.quantity,_hpSpecs)?" ≈ "+kgEquiv(o.quantity,_hpSpecs):""}</div>
+                        <div style={{fontSize:10,color:C.t2,marginTop:3}}>Etapa: <StageLbl stage={o.stage} size={10}/> · {new Date(o.created_at).toLocaleDateString()}{o.invoiced_by?" · "+o.invoiced_by:""}</div>
                       </div>
                       {/* v10.46.2 FIX — null check explícito permite mostrar ventas $0 (regalos/cortesía) */}
                       {o.price!==null&&o.price!==undefined&&<div style={{textAlign:"right",marginLeft:8}}>

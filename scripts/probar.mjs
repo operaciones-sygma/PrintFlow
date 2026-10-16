@@ -106,6 +106,8 @@ const TANDAS = [
   { nombre: "despertador", gen: "tests/banco/gen-despertador.mjs", romper: "tests/romper/despertador.mjs", puerto: 5179 },
   // v10.84.129 — la hoja impresa de la orden (PrintOrder): la ventana para elegir la copia y la hoja medida como se imprime (CSS de impresión, ajuste, PDF Carta)
   { nombre: "hoja", gen: "tests/banco/gen-hoja.mjs", romper: "tests/romper/hoja.mjs", puerto: 5178 },
+  // v10.84.130 — el Inventario Cuadra (el catálogo, los movimientos y el historial), con cada lectura de la base que puede fallar por su lado
+  { nombre: "inventario", gen: "tests/banco/gen-inventario.mjs", romper: "tests/romper/inventario.mjs", puerto: 5177 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

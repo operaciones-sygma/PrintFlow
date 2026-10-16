@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.130 — El Inventario Cuadra ya no dice «vacío» cuando no pudo leer, habla en español y pregunta en la app — 16-oct-2026
+
+**Qué pasaba.** La décima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Inventario Cuadra (`InventoryModal`; en la base, 209
+ventas del catálogo y 68 órdenes Cuadra en 60 días; Pedidos Web, en cambio, tiene una sola orden en toda su historia y se dejó). **22/40** (snapshot
+`.impeccable/critique/2026-10-16T19-45-27Z__src-app-jsx-inventario-cuadra.md`). Con `Promise.all`, si la lectura del catálogo fallaba decía «Sin productos
+en stock · Da de alta tu primer producto» (la regla 12), y lo mismo los movimientos y el historial; la de los clientes se tragaba su error (la regla 2) y
+cada producto salía de «—». Los movimientos decían PRODUCED, SOLD, ADJUST. Quitar un producto preguntaba con `confirm()` del navegador. El verde de las
+existencias y de las pestañas a 2.3:1, «Nuevo Producto» blanco sobre verde a 2.5:1, el rojo a 3.9:1 y letra de 9 px. No era un diálogo (el Tab se salía).
+
+**Qué se cambió** (sólo `InventoryModal`; sus ventanas de producto nuevo, ajuste y carrito no se tocaron):
+- Cada lectura por su lado (`Promise.allSettled`, `lectura`): la que falla lo dice en su pestaña («No se pudo leer el catálogo de la base. Reintentar»,
+  `FallaDelInventario`) y lo último bueno se queda; los vacíos sólo con una lectura buena. El encabezado: «N productos en el catálogo».
+- Los movimientos en español (`TIPO_DE_MOVIMIENTO`: «Entrada de producción», «Venta», «Ajuste»), «quedan N»; el historial dice «Etapa».
+- Quitar del catálogo pregunta en la tarjeta («Sus movimientos se conservan»), «Cancelar» primero, una sola vez aunque haya doble clic, y si la base no lo
+  quita lo dice (`errorEnPalabras`).
+- `role="dialog"` con su nombre, pestañas (`role="tab"`), el foco en la pestaña elegida, `atraparTab`, el foco regresa; las tintas (`C.emrInk`, `C.okInk`,
+  `C.okTx`, `C.wnTx`, `C.dnInk`) y 10 px o más.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-inventario.mjs` (con cada lectura de la base que falla por su lado o sólo la primera vez) y tanda `inventario`
+(21). **Vuelta 1** (14, escritas antes del arreglo) contra v10.84.129: fallaban 9. **Vuelta 2** (7, por donde no se diseñó): contra lo de antes fallaban 2
+(cancelar no existía: `confirm()` respondía que sí; reintentar los movimientos) y en dos más saltaba el `confirm()` del navegador. Con el arreglo, 21 de 21 a
+la primera. El detector de la skill: de 8 hallazgos (el verde a 2.3-2.5:1, el rojo a 3.9:1, letra de 9-10 px) a la letra chica de la app y los falsos
+positivos.
+
+**Para Marcelo:** ¿avisar cuando un producto queda en negativo (se vendió más de lo que había)? Y en un pool (Grupo Cuadra), ¿decir cuánto se llevó cada
+cliente?
+
+**En producción:** (pendiente)
+
 ## v10.84.129 — La hoja impresa se lee en el taller: nada de menos de 7 pt, aguanta la fotocopia y lo elegido se distingue — 16-oct-2026
 
 **Qué pasaba.** La novena pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la hoja impresa de la orden (`PrintOrder`), la que la
