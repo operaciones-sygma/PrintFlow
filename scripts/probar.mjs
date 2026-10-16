@@ -100,6 +100,8 @@ const TANDAS = [
   { nombre: "todas", gen: "tests/banco/gen-todas.mjs", romper: "tests/romper/todas.mjs", puerto: 5182 },
   // v10.84.126 — la Torre de Control (Dirección): lo detenido es trabajo parado; los datos por capturar, aparte
   { nombre: "torre", gen: "tests/banco/gen-torre.mjs", romper: "tests/romper/torre.mjs", puerto: 5181 },
+  // v10.84.127 — los avisos (la campana y su bandeja), con la base de los avisos simulada como la de cada versión (la que falla al leer, marcar o borrar)
+  { nombre: "avisos", gen: "tests/banco/gen-avisos.mjs", romper: "tests/romper/avisos.mjs", puerto: 5180 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

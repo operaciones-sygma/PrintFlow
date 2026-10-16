@@ -1689,8 +1689,10 @@ const db = {
     if(!viva&&!esFallaDeRed(vErr)) return {error:AVISO_SESION_CERRADA};
     return {username:dbUser.username,role:dbUser.role,display_name:dbUser.display_name};
   },
+  // v10.84.127 — los avisos revisan su error (la regla 2; la 12: una lectura que falla no es «Sin notificaciones»): quien llama decide qué decir
   async loadNotifications(role) {
-    const { data } = await supabase.from("notifications").select("*").eq("target_role", role).order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await supabase.from("notifications").select("*").eq("target_role", role).order("created_at", { ascending: false }).limit(50);
+    if(error)throw new Error("loadNotifications: "+error.message);
     return data || [];
   },
   async addNotification(targetRole, orderId, type, message, reason, byUser) {
@@ -1705,16 +1707,20 @@ const db = {
     if(targetRole !== "admin" && byUser !== "admin") await this.addNotification("admin", orderId, type, message, reason, byUser);
   },
   async markRead(id) {
-    await supabase.from("notifications").update({ read: true }).eq("id", id);
+    const {error}=await supabase.from("notifications").update({ read: true }).eq("id", id);
+    if(error)throw new Error("markRead: "+error.message);
   },
   async markAllRead(role) {
-    await supabase.from("notifications").update({ read: true }).eq("target_role", role).eq("read", false);
+    const {error}=await supabase.from("notifications").update({ read: true }).eq("target_role", role).eq("read", false);
+    if(error)throw new Error("markAllRead: "+error.message);
   },
   async deleteNotification(id) {
-    await supabase.from("notifications").delete().eq("id", id);
+    const {error}=await supabase.from("notifications").delete().eq("id", id);
+    if(error)throw new Error("deleteNotification: "+error.message);
   },
   async deleteAllNotifications(role) {
-    await supabase.from("notifications").delete().eq("target_role", role);
+    const {error}=await supabase.from("notifications").delete().eq("target_role", role);
+    if(error)throw new Error("deleteAllNotifications: "+error.message);
   },
   async addPlate(orderId, plateSize, quantity, byUser) {
     const {error}=await supabase.from("plate_log").insert({ order_id: orderId, plate_size: plateSize, quantity, registered_by: byUser, registered_by_uid: AUTH_UID });
@@ -3962,7 +3968,7 @@ function NotificationBell({count,onClick}) {
   // v10.72.39 — /impeccable polish: alto 40px (alinea con los bs vecinos del cluster + touch target),
   // badge anclado al ícono (no a la esquina del botón) con anillo para separarlo del fondo, hover ghost, aria-label con conteo.
   return <button onClick={onClick} aria-label={count>0?"Notificaciones, "+count+" sin leer":"Notificaciones"} title="Notificaciones" onMouseEnter={e=>{e.currentTarget.style.background=C.bd+"55"}} onMouseLeave={e=>{e.currentTarget.style.background="transparent"}} style={{background:"transparent",border:"none",cursor:"pointer",minHeight:40,padding:"0 9px",borderRadius:10,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.tx,flexShrink:0}}>
-    <span style={{position:"relative",display:"inline-flex"}}><BellRingingIcon size={18} weight={count>0?"fill":"regular"}/>{count>0&&<div style={{position:"absolute",top:-6,right:-7,background:C.dn,color:"#fff",minWidth:16,height:16,padding:"0 3px",boxSizing:"border-box",borderRadius:8,fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 0 1.5px "+C.card}}>{count>9?"9+":count}</div>}</span>
+    <span style={{position:"relative",display:"inline-flex"}}><BellRingingIcon size={18} weight={count>0?"fill":"regular"}/>{count>0&&<div style={{position:"absolute",top:-6,right:-7,background:C.dnInk,color:"#fff",minWidth:16,height:16,padding:"0 3px",boxSizing:"border-box",borderRadius:8,fontSize:8,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 0 1.5px "+C.card}}>{count>9?"9+":count}</div>}</span>
   </button>;
 }
 
@@ -4020,34 +4026,58 @@ function CommandPalette({open,onClose,groups}){
     </div>
   );
 }
-function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDeleteAll,role}) {
+// v10.84.127 — los avisos, su /impeccable critique (16-oct, 19/40; snapshot .impeccable/critique/…__src-app-jsx-avisos.md). Tocar un aviso sólo lo marcaba
+//   como leído: ahora abre su orden (y lo marca; si la orden ya no está entre las cargadas, lo dice). «Borrar todas» borraba todo de un clic: ahora
+//   pregunta, con la cuenta. Si la base no marca o no borra, App lo dice y no lo da por hecho (antes la bandeja se adelantaba y al recargar regresaba); si
+//   la lectura falló, no dice «Sin notificaciones» (la regla 12). Es una ventana (el foco entra, Esc la cierra y regresa a la campana, el Tab no se sale),
+//   los avisos son botones con su nombre, y todo con AA.
+function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDeleteAll,onOpen,existe,leidos=true,onReintentar,role}) {
   useEscClose(onClose);
+  useDevolverFoco();
+  const caja=useRef(null);
+  const [borrarTodas,setBorrarTodas]=useState(false);
+  const [trabajando,setTrabajando]=useState(false);
+  useLayoutEffect(()=>{caja.current?.focus({preventScroll:true})},[]);
+  const sinLeer=notifications.filter(n=>!n.read).length;
+  // lo que cambia la base, uno a la vez (un doble clic en «Sí, borrar» borra una vez); App dice si falló (devuelve false)
+  const hacer=async fn=>{if(trabajando)return false;setTrabajando(true);try{return await fn()}finally{setTrabajando(false)}};
+  const abrir=async n=>{const puede=!!n.order_id&&(!existe||existe(n.order_id));if(!n.read)await hacer(()=>onRead(n.id));if(puede&&onOpen)onOpen(n.order_id)};
+  const chico={...bs(C.bg,C.tx),boxShadow:"0 0 0 0.5px "+C.bd,minHeight:32,fontSize:11,padding:"5px 10px"};
   return <div style={{position:"fixed",inset:0,zIndex:998}} onClick={onClose}>
-    <div style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:C.sh3,width:360,maxHeight:"70vh",overflow:"hidden",border:"0.5px solid "+C.bd}} onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",borderBottom:"0.5px solid "+C.bd}}>
-        <span style={{fontSize:14,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}><BellRingingIcon size={15} weight="fill"/>Notificaciones</span>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={onReadAll} style={{...bs(C.sf,C.t2),boxShadow:"0 0 0 0.5px "+C.bd}}>Leídas</button>
-          {notifications.length>0&&<button onClick={onDeleteAll} style={{...bs(C.sf,C.dn),boxShadow:"0 0 0 0.5px "+C.bd}}><TrashIcon size={12} weight="bold"/>Borrar todas</button>}
-        </div>
+    <div ref={caja} tabIndex={-1} role="dialog" aria-modal="true" aria-label={"Avisos"+(sinLeer?", "+sinLeer+" sin leer":"")} onKeyDown={atraparTab} onClick={e=>e.stopPropagation()}
+      style={{position:"absolute",top:48,right:16,background:C.bg,borderRadius:16,boxShadow:C.sh3,width:380,maxWidth:"calc(100vw - 32px)",maxHeight:"70vh",display:"flex",flexDirection:"column",overflow:"hidden",border:"0.5px solid "+C.bd,outline:"none"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"12px 14px",borderBottom:"0.5px solid "+C.bd,flexWrap:"wrap"}}>
+        <span style={{fontSize:14,fontWeight:800,display:"inline-flex",alignItems:"center",gap:6}}><BellRingingIcon size={15} weight="fill"/>Avisos</span>
+        {notifications.length>0&&!borrarTodas&&<div style={{display:"flex",gap:4}}>
+          {sinLeer>0&&<button onClick={()=>hacer(onReadAll)} disabled={trabajando} style={chico}>Marcar todas como leídas</button>}
+          <button onClick={()=>setBorrarTodas(true)} disabled={trabajando} style={{...chico,color:C.dnInk}}><TrashIcon size={12} weight="bold"/>Borrar todas</button>
+        </div>}
       </div>
-      <div style={{overflowY:"auto",maxHeight:"calc(70vh - 56px)"}}>
-        {notifications.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:C.t3}}><div style={{display:"flex",justifyContent:"center"}}><CheckCircleIcon size={32} weight="fill" color={C.ok}/></div><div style={{fontSize:12,marginTop:8}}>Sin notificaciones</div></div>
-        :notifications.map(n=><div key={n.id} onClick={()=>!n.read&&onRead(n.id)} style={{padding:"12px 16px",borderBottom:"0.5px solid "+C.bd,background:n.read?"transparent":C.ios+"06",cursor:n.read?"default":"pointer"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</div>
-              {n.reason&&<div style={{fontSize:11,color:C.wn,marginTop:2,fontStyle:"italic"}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</div>}
-              <div style={{fontSize:9,color:C.t3,marginTop:3}}>
-                <span style={{color:AUTHOR_COLOR[n.by_user]||C.t3,fontWeight:600}}>{AUTHOR_NAME[n.by_user]||n.by_user}</span> · {fDT(n.created_at)}
-              </div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              {!n.read&&<div style={{width:8,height:8,borderRadius:"50%",background:C.ios}}/>}
-              <button onClick={e=>{e.stopPropagation();onDelete(n.id)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:C.t3,padding:"2px 4px",display:"inline-flex",alignItems:"center"}} title="Borrar"><XIcon size={13} weight="bold"/></button>
-            </div>
-          </div>
-        </div>)}
+      {borrarTodas&&<div role="alert" style={{padding:"10px 14px",borderBottom:"0.5px solid "+C.bd,background:C.bg,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{flex:1,minWidth:170,fontSize:12,color:C.tx}}>¿Borrar {notifications.length===1?"el aviso":"los "+notifications.length+" avisos"}? No se pueden recuperar.</span>
+        <button autoFocus onClick={()=>setBorrarTodas(false)} disabled={trabajando} style={chico}>Cancelar</button>
+        <button onClick={async()=>{if(await hacer(onDeleteAll)!==false)setBorrarTodas(false)}} disabled={trabajando} style={{...bs(C.dnInk),minHeight:32,fontSize:11,padding:"5px 10px"}}>{trabajando?"Borrando…":"Sí, borrar"}</button>
+      </div>}
+      <div style={{overflowY:"auto",flex:1}}>
+        {notifications.length===0
+          ?(leidos===false
+            ?<div style={{textAlign:"center",padding:"30px 20px",color:C.t2,fontSize:12}}>No se pudieron leer los avisos.{onReintentar&&<div style={{marginTop:8}}><button onClick={onReintentar} style={chico}>Reintentar</button></div>}</div>
+            :leidos===null
+              ?<div style={{textAlign:"center",padding:"30px 20px",color:C.t2,fontSize:12}}>Leyendo los avisos…</div>
+              :<div style={{textAlign:"center",padding:"40px 20px",color:C.t2}}><div style={{display:"flex",justifyContent:"center"}}><CheckCircleIcon size={32} weight="fill" color={C.ok}/></div><div style={{fontSize:12,marginTop:8}}>Sin avisos</div></div>)
+          :notifications.map(n=>{const puede=!!n.order_id&&(!existe||existe(n.order_id));return <div key={n.id} style={{display:"flex",alignItems:"flex-start",gap:2,borderBottom:"0.5px solid "+C.bd,background:n.read?C.bg:C.ios+"08"}}>
+            <button onClick={()=>abrir(n)} aria-label={(n.read?"":"Sin leer. ")+n.message+(puede?". Abrir la orden":"")} style={{flex:1,minWidth:0,textAlign:"left",background:"none",border:"none",padding:"11px 4px 11px 14px",cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                {!n.read&&<span aria-hidden="true" style={{width:8,height:8,borderRadius:"50%",background:C.ios,flexShrink:0,marginTop:5}}/>}
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{display:"block",fontSize:12,fontWeight:n.read?500:700,color:C.tx}}>{n.message}</span>
+                  {n.reason&&<span style={{display:"block",fontSize:11,color:C.wnTx,marginTop:2}}><ChatCircleIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Motivo: {n.reason}</span>}
+                  <span style={{display:"block",fontSize:10,color:C.t2,marginTop:3}}>{AUTHOR_NAME[n.by_user]||n.by_user} · {fDT(n.created_at)}{n.order_id&&!puede?" · la orden ya no está entre las cargadas":""}</span>
+                </span>
+              </span>
+            </button>
+            <button onClick={()=>hacer(()=>onDelete(n.id))} disabled={trabajando} aria-label={"Borrar el aviso: "+n.message} title="Borrar" style={{background:"none",border:"none",cursor:"pointer",color:C.t2,padding:"12px 12px 8px 6px",display:"inline-flex",alignItems:"center"}}><XIcon size={13} weight="bold"/></button>
+          </div>})}
       </div>
     </div>
   </div>;
@@ -20374,6 +20404,8 @@ export default function PrintFlow() {
     setWakeupItems([]);
   },[user,userLogin,wakeupItems]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
+  // v10.84.127 — si los avisos se leyeron (null = todavía; true = sí; false = la última lectura falló): sin eso la bandeja decía «Sin notificaciones»
+  const [avisosLeidos,setAvisosLeidos]=useState(null);
   const [paletteOpen,setPaletteOpen]=useState(false); // v10.72.40 — command palette (Ctrl/⌘+K)
   useEffect(()=>{const onKey=e=>{if((e.ctrlKey||e.metaKey)&&(e.key==="k"||e.key==="K")){e.preventDefault();setPaletteOpen(o=>!o);}};window.addEventListener("keydown",onKey);return ()=>window.removeEventListener("keydown",onKey);},[]);
   const [devolverModal,setDevolverModal]=useState(null);
@@ -20805,7 +20837,7 @@ export default function PrintFlow() {
   // Load notifications and maintenance
   useEffect(() => {
     if (!user) return;
-    db.loadNotifications(notifKey).then(setNotifications);
+    db.loadNotifications(notifKey).then(n=>{setNotifications(n);setAvisosLeidos(true)}).catch(()=>setAvisosLeidos(false));
     db.loadMaintenance().then(setMaintenance);
     db.loadChemicals().then(setChemicals);
     db.loadPlates().then(setPlates);
@@ -20861,7 +20893,7 @@ export default function PrintFlow() {
       if (notifDebounceRef.current) clearTimeout(notifDebounceRef.current);
       notifDebounceRef.current = setTimeout(() => {
         notifDebounceRef.current = null;
-        db.loadNotifications(notifKey).then(setNotifications).catch(()=>{});
+        db.loadNotifications(notifKey).then(n=>{setNotifications(n);setAvisosLeidos(true)}).catch(()=>setAvisosLeidos(false));
       }, 400);
     };
     const channel = supabase.channel("orders-realtime")
@@ -20914,7 +20946,7 @@ export default function PrintFlow() {
     const onReturn = () => {
       if (document.visibilityState === "visible") {
         reloadRef.current();
-        db.loadNotifications(notifKey).then(setNotifications).catch(()=>{});
+        db.loadNotifications(notifKey).then(n=>{setNotifications(n);setAvisosLeidos(true)}).catch(()=>setAvisosLeidos(false));
       }
     };
     document.addEventListener("visibilitychange", onReturn);
@@ -23743,7 +23775,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       </div>{/* ═══ /COLUMNA PRINCIPAL (v10.60.0) ═══ */}
 
       {paletteOpen&&<CommandPalette open={paletteOpen} onClose={()=>setPaletteOpen(false)} groups={cmdGroups}/>}
-      {showNotifs&&<NotificationTray notifications={notifications} onClose={()=>setShowNotifs(false)} onRead={async id=>{await db.markRead(id);setNotifications(p=>p.map(n=>n.id===id?{...n,read:true}:n))}} onReadAll={async()=>{await db.markAllRead(notifKey);setNotifications(p=>p.map(n=>({...n,read:true})))}} onDelete={async id=>{await db.deleteNotification(id);setNotifications(p=>p.filter(n=>n.id!==id))}} onDeleteAll={async()=>{await db.deleteAllNotifications(notifKey);setNotifications([])}} role={user}/>}
+      {/* v10.84.127 — la bandeja abre la orden del aviso; si la base no marca o no borra, lo dice y no lo da por hecho */}{showNotifs&&<NotificationTray notifications={notifications} onClose={()=>setShowNotifs(false)} leidos={avisosLeidos} onReintentar={()=>{setAvisosLeidos(null);db.loadNotifications(notifKey).then(n=>{setNotifications(n);setAvisosLeidos(true)}).catch(()=>setAvisosLeidos(false))}} existe={id=>orders.some(o=>o.id===id)} onOpen={id=>{setShowNotifs(false);handleAction(id,"detail")}} onRead={async id=>{try{await db.markRead(id);setNotifications(p=>p.map(n=>n.id===id?{...n,read:true}:n));return true}catch(e){showToast("No se pudo marcar el aviso como leído: la base no contestó.","warning");return false}}} onReadAll={async()=>{try{await db.markAllRead(notifKey);setNotifications(p=>p.map(n=>({...n,read:true})));return true}catch(e){showToast("No se pudieron marcar los avisos como leídos: la base no contestó.","warning");return false}}} onDelete={async id=>{try{await db.deleteNotification(id);setNotifications(p=>p.filter(n=>n.id!==id));return true}catch(e){showToast("No se pudo borrar el aviso: la base no contestó.","warning");return false}}} onDeleteAll={async()=>{try{await db.deleteAllNotifications(notifKey);setNotifications([]);return true}catch(e){showToast("No se pudieron borrar los avisos: la base no contestó.","warning");return false}}} role={user}/>}
       {showWelcome&&<WelcomeGuide role={user} onClose={()=>setShowWelcome(false)}/>}
       {maqModal&&<MaqModal order={orders.find(x=>x.id===maqModal)} onSend={(p,ph,em,n)=>sendMaquila(maqModal,p,ph,em,n)} onClose={()=>setMaqModal(null)} providers={(()=>{const pm={};orders.forEach(o=>{const n=o.maquila_provider||o.maq_provider;if(!n)return;if(!pm[n])pm[n]={name:n,phone:o.maquila_phone||"",email:o.maquila_email||""};if(!pm[n].phone&&o.maquila_phone)pm[n].phone=o.maquila_phone;if(!pm[n].email&&o.maquila_email)pm[n].email=o.maquila_email});return Object.values(pm)})()}/>}
       {wasteModal&&<WasteModal order={orders.find(x=>x.id===wasteModal)} onSave={(pz,pl,n)=>addWaste(wasteModal,pz,pl,n)} onClose={()=>setWasteModal(null)}/>}

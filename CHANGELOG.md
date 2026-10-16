@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.127 — Los avisos llevan a su orden, «Borrar todas» pregunta y si la base falla se dice — 16-oct-2026
+
+**Qué pasaba.** La séptima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): los avisos (la campana y su bandeja), que todos los roles
+ven muchas veces al día y nunca se habían criticado. **19/40** (snapshot `.impeccable/critique/2026-10-16T16-21-41Z__src-app-jsx-avisos.md`). Tocar un aviso
+sólo lo marcaba como leído: no llevaba a su orden. «Borrar todas» borraba todo de un clic. La base de los avisos no revisaba su error (la regla 2): si la
+lectura fallaba, «Sin notificaciones» (la regla 12), y marcar o borrar «salían» aunque la base no lo hubiera hecho (al recargar regresaban). No era una
+ventana (el foco no entraba; los avisos eran renglones con clic; la X sólo decía «Borrar»); el motivo en naranja (2.6:1), «Borrar todas» en rojo sobre gris
+(3.9:1), quién y cuándo en 9 px, el número de la campana blanco sobre rojo (4.3:1); «Leídas» no decía qué hacía.
+
+**Qué se cambió:**
+- `NotificationTray` completa: tocar un aviso abre su orden y lo marca (`onOpen`; si la orden ya no está entre las cargadas, lo dice: `existe`); «Borrar
+  todas» pregunta con la cuenta, «Cancelar» de primero, y un doble clic en «Sí, borrar» borra una vez; sin lectura buena, «No se pudieron leer los avisos ·
+  Reintentar» (`leidos`); `role="dialog"`, el foco entra, Esc la cierra y regresa a la campana (`useDevolverFoco`), `atraparTab`; los avisos y la X son
+  botones con su nombre; las tintas de la app y 10 px; «Marcar todas como leídas»; «Avisos».
+- La base de los avisos (`db.loadNotifications`, `markRead`, `markAllRead`, `deleteNotification`, `deleteAllNotifications`) revisa su `error` y lanza; App
+  sabe si los leyó (`avisosLeidos`) y, si marcar o borrar falla, lo dice con su aviso y no lo da por hecho. El número de la campana sobre `C.dnInk`.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-avisos.mjs` (la campana y la bandeja con las líneas de App; la base de los avisos simulada como la de cada
+versión: la de antes se tragaba los errores, la nueva los avisa) y tanda `avisos` (15). **Vuelta 1** (10, escritas antes del arreglo) contra v10.84.126:
+fallaban las 10. **Vuelta 2** (5, por donde no se diseñó: llega uno con la bandeja abierta, doble clic en «Sí, borrar», cancelar el borrado, la base no
+borra, el vacío de verdad): contra lo de antes fallaban 2 (cancelar y la base que no borra). Con el arreglo, 15 de 15 a la primera. El detector de la
+skill: de 9 hallazgos (33 con 30 avisos) a 1 —el número de la campana, que la tanda no medía (excluía la barra de arriba): arreglado— y luego sólo los
+falsos positivos.
+
+**Para Marcelo:** ¿agrupar los avisos por orden (tres de P-0611 en uno)? Y el Despertador: hoy les pone a Lupita y a los vendedores como «pendientes esperando
+TU acción» las fechas de entrega por capturar (lo mismo que la Torre contaba como detenidas): ¿siguen ahí, o aparte y sin pedir «SI ENTIENDO» por ellas?
+
+**En producción:** (pendiente)
+
 ## v10.84.126 — La Torre de Control: «detenidas» es trabajo parado; los datos por capturar, aparte — 16-oct-2026
 
 **Qué pasaba.** La sexta pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la Torre de Control, con la que abre Dirección. **23/40**
