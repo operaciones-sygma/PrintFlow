@@ -36,6 +36,9 @@ Google) y pasa: sin el canal de Vite, React de desarrollo, sus propias letras, `
 armadas y de a 4: la primera corrida (todavía con Google Fonts) 1842 de 1843 en 15 min (sig-06 no cargó su página: `ERR_NO_BUFFER_SPACE`); la
 segunda, con las letras propias, **1843 de 1843 en 14.4 min**, con la PC igual de cargada (la memoria no paginada del kernel en ~807 MB). Antes:
 1842 en 26.5 min de a 2.
+El primer candado de esto frenó por det-172 (descargar el archivo): contaba la ventana tras una espera FIJA de 1.2 s y con 4 tandas a la vez
+Chrome a veces tardaba más en crearla («se abrió 0 vez»; a la segunda pasó, pero ya había salido inestable el 14-oct). Supuesto de la prueba:
+`esperaVentana` (hasta 8 s, y 0.6 s más por si se abriera dos veces; sigue exigiendo una), también en det-30. Solas, 3 de 3; revisada.
 
 ## v10.84.118 — «Corregir precio» también de lo ya foliado sin timbrar, por la puerta de la base (la entrega 2 de CobranzaFlow) — 15-oct-2026
 

@@ -32,6 +32,9 @@ async function caso(nombre, query, fn, viewport = { width: 1366, height: 768 }) 
   await page.close();
 }
 const espera = (p, ms = 300) => p.waitForTimeout(ms);
+// (15-oct) la ventana que abre un clic, contada cuando se abre: hasta 8 s y luego un poco más, por si se abriera dos veces (con 4 tandas a la vez
+//   Chrome a veces tardaba más de 1.2 s en crearla y det-172 contaba «0 veces»: una espera fija era un supuesto de la prueba)
+const esperaVentana = async (p, hasta = 8000) => { for (let k = 0; k < hasta / 200 && !p.popups.length; k++) await espera(p, 200); await espera(p, 600); };
 const log = async p => (await p.textContent("#log")) || "";
 const dlg = p => p.getByRole("dialog").first();
 const textoDlg = p => dlg(p).evaluate(d => d.innerText);
@@ -198,7 +201,9 @@ await caso("det-29-miniatura", "caso=factura&rol=karla", async p => {
   ok("det-29-miniatura", altos.length > 0 && Math.max(...altos) <= 96, `alto de las imágenes al abrir: ${altos.join(", ") || "ninguna"} px`);
 });
 await caso("det-30-miniatura-se-amplia", "caso=factura&rol=karla", async p => {
-  await dlg(p).locator("img").first().click(); await espera(p, 600);
+  await dlg(p).locator("img").first().click();
+  // (15-oct) abre en grande en una ventana (se espera a que se abra) o dentro del detalle
+  for (let k = 0; k < 40 && !p.popups.length && !(await p.locator('[role="dialog"] img').evaluateAll(xs => xs.some(i => i.getBoundingClientRect().height > 300)).catch(() => false)); k++) await espera(p, 200);
   ok("det-30-miniatura-se-amplia", p.popups.length >= 1 || (await p.locator('[role="dialog"] img').evaluateAll(xs => xs.some(i => i.getBoundingClientRect().height > 300))), `tocar la imagen ${p.popups.length ? "la abre en grande" : "NO la abre"}`);
 });
 await caso("det-31-vendedor-ajeno-sin-precio", "caso=factura&rol=vendedor&login=genaro", async p => {
@@ -1095,7 +1100,7 @@ await caso("det-171-el-historial-nombra-la-categoria", "caso=factura&rol=admin&h
 for (const [n, rol] of [["det-172-descargar-no-propone-borrar", "preprensa"], ["det-173-descargar-no-propone-borrar-german", "german"],
   ["det-174-descargar-no-propone-borrar-admin", "admin"]]) {
   await caso(n, "caso=archivo&rol=" + rol, async p => {
-    await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await espera(p, 1200);
+    await p.getByRole("link", { name: /arte final\.pdf/ }).click(); await esperaVentana(p);
     const t = (await textoDlg(p)).replace(/\s+/g, " ");
     const borrar = await dlg(p).getByRole("button", { name: /borrar/i }).count();
     const sigue = await p.getByRole("link", { name: /arte final\.pdf/ }).count();
