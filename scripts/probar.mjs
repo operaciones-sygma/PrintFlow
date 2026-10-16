@@ -88,6 +88,8 @@ const TANDAS = [
   // las reglas de los hooks de React en App.jsx, leídas del código (v10.84.80: tres hooks de App después de sus «return» tempranos
   // tumbaban la app al entrar, «React error #310», y ningún banco lo veía: montan los componentes sin esos «return»)
   { nombre: "hooks", romper: "tests/romper/hooks.mjs" },
+  // v10.84.119 — «Planta»: el acomodo de las máquinas en el plano (la geometría con Node y la pantalla en su banco, con la tabla de versiones en memoria)
+  { nombre: "plano", gen: "tests/banco/gen-plano.mjs", romper: "tests/romper/plano.mjs", puerto: 5186 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
@@ -188,7 +190,7 @@ const inicio = performance.now();
 //   todavía pasaba, sin holgura. Empiezan las más largas (minutos aproximados), para que la última no arranque tarde; las que no tienen
 //   banco corren todas de una vez. El tope de 12 minutos sigue siendo por tanda, desde que ésa empieza.
 const PARALELO = Math.max(1, Number(process.env.PROBAR_PARALELO || 7));
-const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, plan: 3, "orden-2": 3, planta: 3, cliente: 2, "archivos-pantalla": 2, analytics: 2 };
+const MINUTOS = { orden: 7, folio: 6, cancelar: 6, detalle: 6, tablero: 5, oc: 4, partes: 4, plan: 3, "orden-2": 3, planta: 3, plano: 3, cliente: 2, "archivos-pantalla": 2, analytics: 2 };
 async function deATope(lista, n, fn) {
   const res = new Array(lista.length);
   const cola = lista.map((t, k) => k).sort((a, b) => (MINUTOS[lista[b].nombre] || 1) - (MINUTOS[lista[a].nombre] || 1));

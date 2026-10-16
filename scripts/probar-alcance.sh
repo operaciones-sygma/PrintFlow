@@ -114,7 +114,7 @@ if ! printf '%s' "$AUTOPRUEBA" | grep -q "NoExisteEsteComponente" \
 fi
 
 echo "Buscando identificadores fuera de alcance…"
-corre src/*.jsx || exit 2
+corre src/*.jsx src/plano/*.jsx || exit 2   # v10.84.119: y el plano (src/plano/, su módulo diferido)
 FUGAS="$(cat "$TMP/hallazgos")"
 
 if [ -n "$FUGAS" ]; then

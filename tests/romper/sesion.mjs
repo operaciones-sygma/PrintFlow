@@ -1488,6 +1488,35 @@ await caso("ses-54-recordar-desde-espera-a-otro", async ({ p, s }) => {
     `P-0911 en máquina (con Gerardo): ${hay ? "trae «Recordar»" : "NO trae «Recordar»"}; el borrador P-0918: ${enBorrador ? "TRAE «Recordar»" : "sin «Recordar» (como su ficha)"}; avisos mandados: ${avisos}`);
 });
 
+// ════════════════════════ «Planta» (v10.84.119) ════════════════════════
+// Con la app entera (el banco del plano copia el montaje, aquí va el de verdad): el menú la da sólo a Producción y a Dirección, el módulo
+// diferido se baja y pinta las 14 máquinas, lee sus versiones, y salir con cambios sin guardar pregunta (el navClick de App). Vuelta 1.
+await caso("ses-91-gerardo-abre-la-planta", async ({ p, s }) => {
+  await abrirYEntrar(p, s, "gerardo");
+  const hay = await esperarMenu(p, /^Planta$/); await despertar(p);
+  await p.locator('button[title="Planta"]').first().click();
+  const pinto = await p.locator("[data-plano-lienzo] polygon[data-pieza]").first().waitFor({ timeout: 20000 }).then(() => true, () => false);
+  const n = await p.locator("[data-plano-lienzo] polygon[data-pieza]").count();
+  const leyo = s.peticiones.some(x => x.m === "GET" && x.ruta === "/rest/v1/plano_versiones");
+  // un cambio (girar la PM-74 con R) y salir por el menú: pregunta
+  await p.locator('[data-pieza="m-2"]').click({ force: true }); await p.keyboard.press("r"); await p.waitForTimeout(300);
+  const estado = (await p.locator("[data-plano-estado]").innerText().catch(() => "")).trim();
+  await p.locator('button[title="Entregas"]').first().click(); await p.waitForTimeout(500);
+  const pregunta = await p.getByRole("dialog").innerText().catch(() => "");
+  await p.getByRole("button", { name: "Seguir aquí" }).click().catch(() => {}); await p.waitForTimeout(300);
+  const sigue = await p.locator("[data-plano-lienzo]").count();
+  ok("ses-91-gerardo-abre-la-planta", hay && pinto && n === 14 && leyo && /sin guardar/i.test(estado) && /cambios sin guardar/i.test(pregunta) && sigue === 1,
+    `Gerardo: «Planta» en el menú ${hay ? "sí" : "NO"}; el plano ${pinto ? "pintó " + n + " piezas" : "NO PINTÓ"}; leyó sus versiones ${leyo ? "sí" : "NO"}; tras girar «${estado}»; salir ${pregunta ? "pregunta" : "NO PREGUNTA"} y «Seguir aquí» ${sigue ? "se queda" : "SALIÓ"}`);
+});
+for (const [quien, debe] of [["marcelo", true], ["karla", false], ["lupita", false], ["german", false], ["noemi", false], ["genaro", false]]) {
+  await caso("ses-92-planta-solo-produccion-y-direccion-" + quien, async ({ p, s }) => {
+    await abrirYEntrar(p, s, quien);
+    await esperarMenu(p, /^(Dashboard|Pendientes|Tablero|Todas)( \(\d+\))?$/); await despertar(p);
+    const hay = await p.locator('button[title="Planta"]').count();
+    ok("ses-92-planta-solo-produccion-y-direccion-" + quien, (hay > 0) === debe, `${quien}: «Planta» en el menú ${hay ? "sí" : "no"} (${debe ? "debe estar" : "no debe estar"})`);
+  });
+}
+
 await browser.close();
 await servidor.close();
 fin();

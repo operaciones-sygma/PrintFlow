@@ -13,8 +13,9 @@ const require = createRequire(import.meta.url);
 const { parse } = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const ARCHIVO = process.argv[2] || path.join(RAIZ, "src", "App.jsx");
-const ast = parse(fs.readFileSync(ARCHIVO, "utf8"), { sourceType: "module", plugins: ["jsx"] });
+// v10.84.119 — y los módulos de pantalla aparte (el plano de la planta, diferido): mismos componentes, mismas reglas
+const ARCHIVOS = process.argv[2] ? [process.argv[2]] : [path.join(RAIZ, "src", "App.jsx"), path.join(RAIZ, "src", "plano", "PlanoPlanta.jsx")].filter(f => fs.existsSync(f));
+const asts = ARCHIVOS.map(f => parse(fs.readFileSync(f, "utf8"), { sourceType: "module", plugins: ["jsx"] }));
 
 const esHook = n => /^use[A-Z0-9]/.test(n);
 const nombreDe = p => {
@@ -24,7 +25,7 @@ const nombreDe = p => {
 };
 // los componentes y los hooks propios: funciones de módulo con nombre en mayúscula o «use…»
 const funciones = [];
-traverse(ast, { "FunctionDeclaration|ArrowFunctionExpression|FunctionExpression"(p) {
+for (const ast of asts) traverse(ast, { "FunctionDeclaration|ArrowFunctionExpression|FunctionExpression"(p) {
   const n = nombreDe(p); if (!n || !(/^[A-Z]/.test(n) || esHook(n))) return;
   if (p.getFunctionParent?.() && p.getFunctionParent() !== p && p.parentPath.getFunctionParent()) return;   // sólo las de módulo
   if (p.node.body.type !== "BlockStatement") return;
