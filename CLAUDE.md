@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2125 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2141 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.130 (16-oct, ~14:16; READY `dpl_3eHinTFmGrgCXxCkSGNqs6We5hvL`, commit `94d4e8c`; vuelta atrás: promover
+- **LIVE:** v10.84.131 (16-oct, ~15:21; READY `dpl_3KEURpCVd7j5SnJLuhBum8F2PpNp`, commit `d3550f9`; vuelta atrás: promover
+  `dpl_HunvwAhy2NtmwFKPEqvqeFjgH35o` (el código de v10.84.130) o `git revert d3550f9`; la base no cambió; candado 2141 de 2141, de a 4). La undécima pasada
+  de `/impeccable critique`: **el Apartado Corona** (`CoronaModal`, 21/40): 🔑 una lectura fallida de los saldos o del historial ya no dice «nadie tiene
+  saldo» (`lecturaClientes`, `lecturaLedger`, `FallaDeCorona`; es dinero de los clientes); el historial por un camino (`leerLedger`: leyendo no es vacío, la
+  respuesta vieja no pisa); en palabras (`MODO_DE_COBRO`, `TIPO_CORONA`) y el dinero «−$1,200.00» (`pesosCorona`); sin raya lateral. Banco `gen-corona.mjs`.
+  v10.84.130 (16-oct, ~14:16; READY `dpl_3eHinTFmGrgCXxCkSGNqs6We5hvL`, commit `94d4e8c`; vuelta atrás: promover
   `dpl_GFDumMRnxdLdYUBX2VMkzrADKoRp` (el código de v10.84.129) o `git revert 94d4e8c`; la base no cambió; candado 2125 de 2125, de a 4). La décima pasada
   de `/impeccable critique`: **el Inventario Cuadra** (`InventoryModal`, 22/40): 🔑 cada lectura por su lado (`Promise.allSettled`, `lectura`): la que falla
   lo dice en su pestaña con «Reintentar» (`FallaDelInventario`; antes «Sin productos en stock · Da de alta tu primer producto»); los movimientos en español

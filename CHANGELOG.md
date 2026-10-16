@@ -39,7 +39,9 @@ El detector de la skill: de ~25 hallazgos de contraste y letra de 9 px a la letr
 
 **Para Marcelo:** ¿el historial debería ligar cada cargo con su factura y su orden? ¿Un saldo negativo (se usó más de lo depositado) se avisa a Tesorería?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~15:21; READY `dpl_3KEURpCVd7j5SnJLuhBum8F2PpNp`, commit `d3550f9`; vuelta atrás: promover `dpl_HunvwAhy2NtmwFKPEqvqeFjgH35o`
+(el código de v10.84.130) o `git revert d3550f9`; la base no cambió. Candado 2141 de 2141 (16 nuevas), de a 4, 14.5 min, a la primera y sin inestables.
+Revisado en producción: el código servido (`index-fM9M8JjZ.js`) trae la Corona nueva, y el recorrido de los 8 roles no truena.
 
 ## v10.84.130 — El Inventario Cuadra ya no dice «vacío» cuando no pudo leer, habla en español y pregunta en la app — 16-oct-2026
 
