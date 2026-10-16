@@ -3510,50 +3510,79 @@ function getWakeupItems(role, userLogin, orders){
     }
     if(!mine) continue;
     let action;
-    if(role==="admin") action = "Ve con " + diag.respName + ": " + baseAct(o);
+    if(role==="admin") action = baseAct(o);   // v10.84.128 — Dirección lo ve por persona («Con Gerardo · 3»): el «Ve con …» de cada renglón sobraba
     else if(role==="vendedor") action = "Apura con " + diag.respName + " o avísale al cliente del retraso";
     else if(viaManuel) action = "Apura con " + diag.respName + " o avísale al cliente (tú llevas lo de " + ag + ")";
     else if(diag.external) action = "Dale seguimiento " + (diag.key==="maq_sleep" ? ("al proveedor " + ((o.maq_provider||"").trim()||"externo")) : "al cliente") + " para destrabarla";
     else action = baseAct(o);
-    items.push({o, why:diag.text, action, late:diag.days});
+    items.push({o, why:diag.text, action, late:diag.days, quien:diag.respName});   // v10.84.128 — quien: para agruparlo por persona (Dirección)
   }
   items.sort((a,b)=>b.late-a.late);
   return items;
 }
 
+// v10.84.128 — EL DESPERTADOR SE PUEDE USAR (la octava pasada de /impeccable critique, 16-oct): cada pendiente es un botón y, al escribir
+//   SI ENTIENDO, se abre el que se tocó (antes decía «Ábrela…» y no abría nada, y al cerrarse la lista se iba por el resto del día); «Sí,
+//   entiendo», con signos o sin espacio, también cierra (antes la coma o el «¡» no pasaban y no decía por qué), y si lo escrito se desvía lo
+//   dice; el saludo va con la hora y la fecha sin «De Octubre»; es una ventana (role=dialog con su nombre, el Tab no se sale a la app de
+//   atrás, Esc recuerda cómo se cierra); Dirección lo ve por persona («Con Gerardo · 3»); las tintas de la app y nada de menos de 11 px. La
+//   regla de Marcelo (v10.58.51) se queda: sólo se cierra escribiendo SI ENTIENDO y queda el registro (log_wakeup_ack).
 function WakeupModal({user, userLogin, items, onAck}){
   const [text,setText]=useState("");
-  const norm=s=>String(s||"").toUpperCase().normalize("NFD").replace(/[.,;:!¡?¿]+\s*$/,"").replace(/[̀-ͯ]/g,"").replace(/\s+/g," ").trim();
-  const matched=norm(text)==="SI ENTIENDO";
-  useEffect(()=>{ if(matched) onAck(); },[matched,onAck]);
-  const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
-  return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:16,backdropFilter:"blur(3px)"}}>
-    <div style={{background:C.bg,borderRadius:20,padding:28,maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:C.sh3}}>
-      <div style={{fontSize:30,fontWeight:900,color:C.tx,lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}><SunIcon size={28} weight="fill" color="#f59e0b"/>Buenos días, {userDisplayName(user)}</div>
-      <div style={{fontSize:12,color:C.t2,marginTop:4,textTransform:"capitalize"}}>{today}</div>
-      <div style={{fontSize:14,fontWeight:700,color:"#b45309",background:"#f59e0b12",border:"1px solid #f59e0b30",borderRadius:12,padding:"10px 14px",marginTop:14}}>
-        {items.length===1?"Hay 1 pendiente esperando TU acción antes de empezar el día:":"Hay "+items.length+" pendientes esperando TU acción antes de empezar el día:"}
+  const [elegida,setElegida]=useState(null);     // la orden que se abre al confirmar (su id)
+  const [recordar,setRecordar]=useState(false);  // con Esc se recuerda cómo se cierra
+  const campoRef=useRef(null), yaRef=useRef(false);
+  // sin acentos, sin signos y sin espacios: «Sí, entiendo», «¡SÍ ENTIENDO!», «si entiendo.» y «SIENTIENDO» cierran
+  const plano=String(text||"").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]+/g,"");
+  const matched=plano==="SIENTIENDO";
+  const desvio=plano.length>0&&!"SIENTIENDO".startsWith(plano);
+  useEffect(()=>{ if(matched&&!yaRef.current){ yaRef.current=true; onAck(elegida); } },[matched,onAck,elegida]);
+  const ahora=new Date(), hora=ahora.getHours();
+  const saludo=hora<12?"Buenos días":hora<19?"Buenas tardes":"Buenas noches";
+  const dia=ahora.toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
+  const fecha=dia.charAt(0).toUpperCase()+dia.slice(1);
+  const esDir=user==="admin";
+  // Dirección va a ver a cada quien: por persona, primero la que tiene lo más viejo; los demás, lo más viejo primero (como llegan)
+  const grupos=useMemo(()=>{
+    if(!esDir)return [{quien:null,items}];
+    const m=new Map();
+    for(const it of items){const q=(it.quien&&it.quien!=="—")?it.quien:"Sin responsable";if(!m.has(q))m.set(q,[]);m.get(q).push(it)}
+    return [...m].map(([quien,its])=>({quien,items:its,max:Math.max(0,...its.map(x=>x.late||0))})).sort((a,b)=>b.max-a.max||b.items.length-a.items.length);
+  },[items,esDir]);
+  const pnElegida=elegida?(items.find(x=>x.o.id===elegida)?.o.production_number||elegida):null;
+  return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:16}}>
+    <div role="dialog" aria-modal="true" aria-labelledby="pf-despertador-titulo" aria-describedby="pf-despertador-como"
+      onKeyDown={e=>{atraparTab(e);if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setRecordar(true);campoRef.current?.focus({preventScroll:true})}}}
+      style={{background:C.bg,borderRadius:20,padding:"24px 28px",maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:C.sh3}}>
+      <h2 id="pf-despertador-titulo" style={{margin:0,fontSize:28,fontWeight:900,color:C.tx,lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}><SunIcon size={26} weight="fill" color="#f59e0b" aria-hidden="true"/>{saludo}, {userDisplayName(user)}</h2>
+      <div style={{fontSize:12,color:C.t2,marginTop:4}}>{fecha}</div>
+      <div style={{fontSize:14,fontWeight:700,color:C.wnInk,background:C.bg,border:"1px solid "+C.wn,borderRadius:12,padding:"10px 14px",marginTop:14}}>
+        {items.length===1?"1 pendiente espera tu acción.":items.length+" pendientes esperan tu acción."}{" "}<span style={{fontWeight:500,color:C.t2}}>Toca el que quieras abrir primero.</span>
       </div>
       <div style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
-        {items.map(({o,why,action,late},i)=>(
-          <div key={o.id} style={{border:"1.5px solid "+(late>3?C.dn:"#f59e0b")+"66",borderRadius:10,padding:"10px 14px",background:late>3?C.dn+"06":C.bg}}>
-            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
-              <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
-              {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"12",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
-              {o.due_date&&<span style={{fontSize:10,color:late>0?C.dn:C.t3,fontWeight:late>0?700:400,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={10} weight="bold"/>{fD(o.due_date)}</span>}
-            </div>
-            <div style={{fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?<> · <TruckIcon size={11} weight="bold" style={{verticalAlign:"-1px"}}/> {o.maq_provider.trim()}</>:""}</div>
-            <div style={{fontSize:12,fontWeight:700,color:late>3?C.dn:"#b45309",marginTop:4}}><WarningIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{why}</div>
-            {action&&<div style={{fontSize:12,fontWeight:700,color:C.ok,marginTop:5,background:C.ok+"0e",border:"1px solid "+C.ok+"30",borderRadius:8,padding:"6px 10px"}}><HandPointingIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Qué hacer: <span style={{fontWeight:600,color:C.tx}}>{action}</span></div>}
-          </div>
-        ))}
+        {grupos.map(g=><div key={g.quien||"todos"} role={g.quien?"group":undefined} aria-label={g.quien?"Con "+g.quien:undefined} style={{display:"flex",flexDirection:"column",gap:8}}>
+          {g.quien&&<h3 style={{margin:"6px 0 0",fontSize:12,fontWeight:800,color:C.t2,letterSpacing:.3}}>Con {g.quien} · {g.items.length}</h3>}
+          {g.items.map(({o,why,action,late})=>{const sel=elegida===o.id,rojo=late>3,vencida=isOverdue(o.due_date);return(
+            <button key={o.id} type="button" aria-pressed={sel} onClick={()=>{setElegida(x=>x===o.id?null:o.id);campoRef.current?.focus({preventScroll:true})}}
+              style={{textAlign:"left",font:"inherit",color:C.tx,cursor:"pointer",width:"100%",background:C.bg,border:sel?"2px solid "+C.ac:"1.5px solid "+(rojo?C.dn:C.wn),borderRadius:10,padding:sel?"9.5px 13.5px":"10px 14px"}}>
+              <span style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
+                <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
+                {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:tintaAA(C.fac),fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
+                {o.due_date&&<span style={{fontSize:11,color:vencida?C.dnInk:C.t2,fontWeight:vencida?700:500,marginLeft:"auto",display:"inline-flex",alignItems:"center",gap:3}}><CalendarDotsIcon size={11} weight="bold" aria-hidden="true"/>{fD(o.due_date)}</span>}
+              </span>
+              <span style={{display:"block",fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?<> · <TruckIcon size={11} weight="bold" style={{verticalAlign:"-1px"}} aria-hidden="true"/> {o.maq_provider.trim()}</>:""}</span>
+              <span style={{display:"block",fontSize:12,fontWeight:700,color:rojo?C.dnInk:C.wnInk,marginTop:4}}>{why}</span>
+              {action&&<span style={{display:"block",fontSize:12,color:C.tx,marginTop:4}}><b style={{color:C.okInk}}>{esDir?"Qué falta:":"Qué hacer:"}</b> {action}</span>}
+              {sel&&<span style={{display:"block",fontSize:12,fontWeight:700,color:C.ac,marginTop:6}}>Se abre al escribir SI ENTIENDO</span>}
+            </button>)})}
+        </div>)}
       </div>
       <div style={{marginTop:16,borderTop:"1px solid "+C.bd,paddingTop:14}}>
-        <div style={{fontSize:12,color:C.t2,marginBottom:8}}>Para continuar, escribe <b style={{color:C.tx,letterSpacing:1}}>SI ENTIENDO</b> — la ventana se cierra sola y queda registrada tu confirmación.</div>
-        <input autoFocus value={text} onChange={e=>setText(e.target.value)}
-          placeholder="Escribe aquí..."
-          style={{...inp,fontSize:16,fontWeight:700,letterSpacing:1,textAlign:"center",padding:"12px 16px",border:"2px solid "+(matched?C.ok:C.bd)}}/>
+        <label id="pf-despertador-como" htmlFor="pf-despertador-campo" style={{display:"block",fontSize:12,color:C.t2,marginBottom:8}}>Para continuar escribe <b style={{color:C.tx,letterSpacing:1}}>SI ENTIENDO</b>: la ventana se cierra sola y queda registrado que lo viste{pnElegida?<>; se abre <b style={{color:C.tx}}>{pnElegida}</b></>:null}.</label>
+        <input id="pf-despertador-campo" ref={campoRef} autoFocus autoComplete="off" value={text} onChange={e=>setText(e.target.value)} placeholder="Escribe aquí..." aria-invalid={desvio||undefined} aria-describedby="pf-despertador-pista"
+          style={{...inp,fontSize:16,fontWeight:700,letterSpacing:1,textAlign:"center",padding:"12px 16px",border:"2px solid "+(matched?C.ok:desvio?C.dn:C.bd)}}/>
+        <div id="pf-despertador-pista" aria-live="polite" style={{minHeight:18,marginTop:6,fontSize:12,fontWeight:600,color:desvio?C.dnInk:C.t2}}>{desvio?"Así no se cierra: escribe SI ENTIENDO, sin otras palabras.":recordar?"Esta ventana se cierra escribiendo SI ENTIENDO.":""}</div>
       </div>
     </div>
   </div>;
@@ -20384,7 +20413,9 @@ export default function PrintFlow() {
     }catch(e){}
   },[]);
   useEffect(()=>{
-    if(!loaded||!user){setWakeupItems(null);return}
+    // v10.84.128 — el Despertador espera una lectura BUENA de la base (la regla 12): si la primera fallaba se armaba con cero órdenes, no salía,
+    //   y la lectura buena de después ya no lo volvía a armar: ese día no había Despertador
+    if(!loaded||!user||!lectura.ok){setWakeupItems(null);return}
     try{
       const key="pf_wakeup_"+(userLogin||user)+"_"+localDayStr();
       if(localStorage.getItem(key)){setWakeupItems([]);return}
@@ -20392,7 +20423,7 @@ export default function PrintFlow() {
     }catch(e){console.warn("[wakeup]",e);setWakeupItems([])}
     // Evalúa al completar la carga inicial o cambiar de usuario — no con cada reload
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[loaded,user,userLogin]);
+  },[loaded,user,userLogin,!!lectura.ok]);
   const ackWakeup=useCallback(()=>{
     try{
       const key="pf_wakeup_"+(userLogin||user)+"_"+localDayStr();
@@ -20400,7 +20431,7 @@ export default function PrintFlow() {
     }catch(e){}
     const compact=(wakeupItems||[]).map(({o,why})=>({pn:o.production_number||o.id,why}));
     // Registro best-effort de la confirmación (no bloquea el cierre)
-    supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(()=>{},()=>{});
+    supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(({error})=>{if(error)console.warn("[wakeup] no se guardó el registro:",error.message)},e=>console.warn("[wakeup]",e?.message));   // v10.84.128 — supabase-js no lanza (la regla 2): el error se ve; la ventana se cierra igual
     setWakeupItems([]);
   },[user,userLogin,wakeupItems]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
@@ -24486,7 +24517,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {flowDiagram&&<FlowDiagram currentStage={flowDiagram.stage} orderType={flowDiagram.type} onClose={()=>setFlowDiagram(null)}/>}
       {detailModalId&&orders.find(x=>x.id===detailModalId)&&<DetailModal order={orders.find(x=>x.id===detailModalId)} role={user} userLogin={userLogin} onClose={()=>setDetailModalId(null)} onPrint={o=>setPrintModal(o)} onAction={handleAction}/>}
       {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
-      {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={ackWakeup}/>}
+      {/* v10.84.128 — al confirmar se abre la orden que se tocó en el Despertador */}
+      {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={elegida=>{ackWakeup();if(elegida)handleAction(elegida,"detail")}}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
       {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} rfc={clientConfirmModal.rfc} contact={clientConfirmModal.contact} dadosDeBaja={clientConfirmModal.dadosDeBaja} onResolve={clientConfirmModal.onResolve}/>}
       {/* 🔒 v10.75.11 — bajar el precio de una orden ya facturada y cobrada */}

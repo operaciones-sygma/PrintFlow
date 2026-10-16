@@ -12,6 +12,44 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.128 — El Despertador se puede usar: lo que se toca se abre al confirmar, «Sí, entiendo» cierra y la lectura fallida ya no lo apaga — 16-oct-2026
+
+**Qué pasaba.** La octava pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Despertador, la ventana grande que cada quien ve al
+entrar en el día y que sólo se cierra escribiendo SI ENTIENDO (la regla de Marcelo, v10.58.51, se queda). **17/40** (snapshot
+`.impeccable/critique/2026-10-16T17-25-24Z__src-app-jsx-despertador.md`). Cada pendiente decía «Ábrela…» y no abría nada, y al confirmar la lista se iba por el resto del día: había que recordar los
+P- y buscarlos. «Sí, entiendo» (con coma), «¡Sí entiendo!» o escrito junto no cerraban, y nada decía por qué (sólo perdonaba signos al final). Si la
+primera lectura de la base fallaba, se armaba con cero órdenes y la lectura buena de después ya no lo volvía a armar: ese día no había Despertador (la regla
+12). No era una ventana (sin role=dialog; el Tab se iba al buscador de atrás; el campo sin etiqueta). Dirección recibía una lista plana con «Ve con X:» en
+cada renglón. «Buenos días» a las 5 de la tarde, «antes de empezar el día», «Jueves, 16 De Octubre»; «Qué hacer» en verde sin AA (3.0:1), el porqué rojo
+en `C.dn`, letra de 10 px; y la fecha de entrega salía en ROJO con los días del diagnóstico (una orden «5 días sin avanzar» con entrega la semana que
+entra se veía vencida).
+
+**Qué se cambió** (`WakeupModal`, `getWakeupItems` y lo de App que lo arma; `diagnoseOrder` no se tocó):
+- Cada pendiente es un botón: el que se toca se abre al escribir SI ENTIENDO (App lo abre con `handleAction(id,"detail")` después de `ackWakeup`). Tocarlo
+  otra vez lo suelta.
+- La frase sin acentos, sin signos y sin espacios («Sí, entiendo», «¡SÍ ENTIENDO!», «SIENTIENDO» cierran); si lo escrito se desvía, lo dice
+  (`aria-live`, `aria-invalid`). Confirma una vez.
+- App espera una lectura BUENA (`lectura.ok`) para armarlo.
+- `role="dialog"` con su título, `atraparTab`, la instrucción es la etiqueta del campo, Esc recuerda cómo se cierra (y no borra lo escrito).
+- Dirección lo ve por persona («Con Gerardo · 3», la persona con lo más viejo primero; «Qué falta:»); `getWakeupItems` da `quien`.
+- El saludo con la hora, la fecha con sólo la primera mayúscula, «N pendientes esperan tu acción», las tintas de la app (`C.wnInk`, `C.dnInk`, `C.okInk`), 11
+  px o más, sin el desenfoque ni el ícono repetido; la fecha de entrega en rojo sólo si está vencida (`isOverdue`).
+- `log_wakeup_ack` revisa su error (la regla 2): si no se guardó, se ve en la consola; la ventana se cierra igual.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-despertador.mjs` (el Despertador con las líneas de App que lo arman y lo confirman, y una «app» detrás) y
+tanda `despertador` (27). **Vuelta 1** (16, escritas antes del arreglo) contra v10.84.127: fallaban 11 (pasaban las 5 que cuidan lo que ya estaba bien: sin datos por capturar, Gerardo sin lo montado,
+el campo a 1366 y a 1920, Esc no cierra). **Vuelta 2** (11, por donde no se diseñó): contra lo de antes fallaban 3 (elegir otra, escribir mal lo dice y la entrega que no está vencida en
+rojo: un bug que encontró la prueba).
+Con el arreglo: 27 de 27 a la primera. El detector de la skill: de 5 hallazgos (11 con Dirección: el porqué rojo a 4.3:1 y «Qué hacer» en verde a 3.0:1) a sólo los falsos
+positivos (Geist, «gradient-text»). Las pruebas y los recorridos que contestan el Despertador lo reconocen por «escribe SI ENTIENDO» y «Escribe aquí...»,
+que se quedan. `getWakeupItems` también lo usa `corregir.mjs` (cor-25, lo de Gerardo por sus P-): lo de Gerardo no cambió; se agregó `quien` y a
+Dirección se le quitó el «Ve con X:» de la acción.
+
+**Para Marcelo:** ¿el Despertador se puede volver a abrir en el día (sin pedir SI ENTIENDO) desde la barra de arriba, para ver lo que sigue pendiente? Y
+cuando no hay nada pendiente no sale: ¿que diga «Nada pendiente hoy», o así está bien?
+
+**En producción:** (pendiente)
+
 ## v10.84.127 — Los avisos llevan a su orden, «Borrar todas» pregunta y si la base falla se dice — 16-oct-2026
 
 **Qué pasaba.** La séptima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): los avisos (la campana y su bandeja), que todos los roles
