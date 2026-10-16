@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.125 — «Todas» abre en un instante: de 40 en 40, lo activo primero y el filtro por estado — 16-oct-2026
+
+**Qué pasaba.** Marcelo (16-oct, por la mañana): «sigamos con más /impeccable critique en general y mejoras». La quinta pasada: «Todas», la lista de
+todas las órdenes que usan todos los roles para buscar y revisar. **22/40** (snapshot `.impeccable/critique/2026-10-16T15-36-49Z__src-app-jsx-todas.md`).
+Pintaba las 1002 órdenes de golpe como fichas completas (en el banco, 1.1 s y una página de 137,356 px: tres órdenes por pantalla); el orden ponía
+TODAS las urgentes primero, también las entregadas hace meses, y la orden más nueva quedaba debajo de unas 60; no había filtro por estado; sin una
+lectura buena decía «Todas (0) · Sin órdenes que mostrar». Y dentro de la ficha (compartida), sin AA: el teléfono en verde (1.9:1), la etapa (3.0), el
+avance «7/13» (3.3) y «Prod · Pre-p» (2.6).
+
+**Qué se cambió:**
+- `VistaTodas` (nueva; el montaje de App la usa): de 40 en 40 con «Ver 40 más (quedan N)» y «Se ven 40 de 1,002»; las activas primero (las urgentes
+  arriba) y luego lo cerrado por fecha (`ordenDeTodas`); el filtro «Todas · Activas · Entregadas · Canceladas» con su cuenta (`aria-pressed`); el filtro
+  sin nada lo dice; buscar o cambiar el filtro regresa a las primeras 40; sin lectura buena, «Sin cifras mientras no se lea de la base».
+- 🔑 **Compartido:** en `OCard` la etapa y el teléfono en su tinta (`tintaAA`), «Prod · Pre-p» en `okInk`/`wnInk`; en `ProgressBar` el avance en su tinta;
+  en `StageFlowButtons` los textos de estado en tinta también en la ficha (antes sólo en el detalle). Se ven así en «Pendientes», «En espera», la OC y
+  el tablero de fichas.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-todas.mjs` (1002 órdenes como en producción: 47 activas, 945 entregadas, 10 canceladas; la línea de App
+que monta la vista) y tanda `todas` (15). **Vuelta 1** (11, escritas antes del arreglo) contra v10.84.124: fallaban 6. **Vuelta 2** (4, por donde no se
+diseñó: cambiar el filtro con «ver más» abierto, la que se entrega con el filtro puesto, el filtro sin nada, los filtros con el teclado): contra lo de
+antes fallaban las 4. Con el arreglo: abre en 180 ms (antes 1,105) y la página mide 7,844 px; la primera corrida dejó «Prod · Pre-p» (2.6:1) y un
+supuesto de la prueba (COSQUIM sí tiene una cancelada en el banco: se buscó CERVECERIA); luego 15 de 15. El detector de la skill en el navegador: de
+1003 hallazgos con Lupita (1002, el teléfono) a sólo los falsos positivos de siempre (Geist, «gradient-text»).
+
+**Para Marcelo:** aun de 40 en 40, son fichas grandes (dos por renglón). Para REVISAR (no para buscar), una lista compacta —folio, cliente, producto,
+etapa, entrega, monto— que abra el detalle serviría más. ¿La hago?
+
+**En producción:** (pendiente)
+
 ## La auditoría del candado: de a 4 es estable; de a 6 destapó dos tandas en el mismo puerto — 16-oct-2026 (sin versión de la app)
 
 **Qué se pidió.** Marcelo (15-oct): «¿podemos auditar que funcione bien?»; (16-oct, al volver del reinicio) «si quieres hacer el test del candado». Con un

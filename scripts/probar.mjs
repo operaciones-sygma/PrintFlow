@@ -96,6 +96,8 @@ const TANDAS = [
   { nombre: "salud", gen: "tests/banco/gen-salud.mjs", romper: "tests/romper/salud.mjs", puerto: 5184 },
   // v10.84.124 — el «Dashboard» (la vista con la que abren casi todos: el resumen de 7 días, el flujo por etapas y la maquila), con el reloj fijo
   { nombre: "dashboard", gen: "tests/banco/gen-dashboard.mjs", romper: "tests/romper/dashboard.mjs", puerto: 5183 },
+  // v10.84.125 — «Todas» (la lista de todas las órdenes) con 1002 órdenes como en producción: de 40 en 40, las activas primero, el filtro por estado
+  { nombre: "todas", gen: "tests/banco/gen-todas.mjs", romper: "tests/romper/todas.mjs", puerto: 5182 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
