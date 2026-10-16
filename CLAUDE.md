@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2141 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2151 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.132 (16-oct, ~16:55; READY `dpl_DBaaQWCCTjH67p3QTyXJvm3CSFTP`, commit `31db72a`; vuelta atrás: promover
+- **LIVE:** v10.84.133 (16-oct, ~17:44; READY `dpl_yxVxYtzVYXcD9ymDguw7qmtE2grV`, commit `33cf302`; vuelta atrás: promover
+  `dpl_cbHFNwGP7HBTy1LCozYjCwaPQrMH` (el código de v10.84.132) o `git revert 33cf302`; la base no cambió; candado 2151 de 2151, de a 4). La lista de Órdenes
+  de Compra (`OrdenesCompraView`, 24/40): sin lectura no dice «no hay» (`leido`), cada OC se abre con el teclado, pestañas, tintas; banco `gen-oc-lista.mjs`
+  (la tanda `oc` es otra: el folio de la OC). 🔑 **Decisiones de Marcelo del 16-oct** (las «Para Marcelo» de la 123 a la 131): en el CHANGELOG, entrada de
+  v10.84.133; lo que falta hacer de ellas va en ese orden (Despertador reabrible, avisos por orden, Datos Pendientes, Torre, hoja en dos hojas, negativos,
+  Corona, «Planta» con fichas de máquina).
+  v10.84.132 (16-oct, ~16:55; READY `dpl_DBaaQWCCTjH67p3QTyXJvm3CSFTP`, commit `31db72a`; vuelta atrás: promover
   `dpl_ARh2xzQvA6XdwqVDz8ocWyBJjaru` (el código de v10.84.131) o `git revert 31db72a`; la base no cambió; candado 2141 de 2141, de a 4). «En espera» sin una
   lectura buena (`lectura.ok`) ya no dice «Nada en espera» con su palomita (la regla 12); probado con la app real en `tests/recorrido/lectura-falla.mjs` (B).
   v10.84.131 (16-oct, ~15:21; READY `dpl_3KEURpCVd7j5SnJLuhBum8F2PpNp`, commit `d3550f9`; vuelta atrás: promover

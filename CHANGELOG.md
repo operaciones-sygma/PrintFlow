@@ -33,7 +33,17 @@ clic). Activas/Histórico no eran pestañas. La insignia «Abierta» a 2.8:1, «
 corrida dejó 2: la insignia «Abierta» y los totales del Histórico en el verde de antes (4.4 y 4.49:1: van en `C.okTx`) y el aviso de React al abrir la OC;
 luego 10 de 10. El detector de la skill casi no vio nada en las dos versiones (no compone los tintes): lo midió la tanda.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~17:44; READY `dpl_yxVxYtzVYXcD9ymDguw7qmtE2grV`, commit `33cf302`; vuelta atrás: promover `dpl_cbHFNwGP7HBTy1LCozYjCwaPQrMH`
+(el código de v10.84.132) o `git revert 33cf302`; la base no cambió. Candado 2151 de 2151 (10 nuevas), de a 4, 14.6 min; una INESTABLE revisada:
+tab-141 (`net::ERR_NO_BUFFER_SPACE` al abrir el banco: la red de Windows a media corrida; sola pasa 3 de 3; la 133 no toca el tablero). Revisado en
+producción: el código servido (`index-uXTYBHtX.js`) trae la lista nueva, y el recorrido de los 8 roles no truena.
+
+**Decisiones de Marcelo (16-oct, ~17:45), sobre las preguntas «Para Marcelo» de la 123 a la 131** («De printflow acepto recomendaciones menos la 3, no,
+déjala con foto, me gusta que sea visual»): Datos Pendientes sin el dinero por máquina para Lupita y Karla, y con su número en el menú; la Torre recuerda
+la fecha de entrega sólo cuando la orden ya corre en la planta; los avisos juntos por orden; el Despertador se puede volver a abrir en el día (un botón en
+la barra); la hoja impresa en DOS hojas legibles cuando no cabe a 7 pt; el Inventario avisa a Dirección y a Karla los negativos; Corona liga cada cargo
+con su factura y su orden, y avisa a Tesorería un saldo negativo (con CobranzaFlow); el registro de maquinaria en «Planta» (tabla nueva, por el editor).
+Se quedan como están: las fichas del Dashboard con su foto; el Despertador sin pendientes no sale; la hoja con las casillas de acabados no elegidas.
 
 ## v10.84.132 — «En espera» sin lectura ya no dice «Nada en espera» — 16-oct-2026
 
