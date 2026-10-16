@@ -12,6 +12,35 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.131 — El Apartado Corona no dice «nadie tiene saldo» cuando no pudo leer, y habla en palabras — 16-oct-2026
+
+**Qué pasaba.** La undécima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Apartado Corona (`CoronaModal`, los saldos a favor de
+los clientes). **21/40** (snapshot `.impeccable/critique/2026-10-16T21-06-22Z__src-app-jsx-apartado-corona.md`). Si la lectura de los saldos fallaba, un
+aviso que se iba y «Aún no hay clientes con saldo a favor»; si fallaba el historial, «Sin movimientos todavía» (la regla 12; es dinero de los clientes:
+Karla podía cobrarle a uno con saldo). «Recargar» vaciaba el historial y lo decía vacío mientras leía, sin manejar su error. Decía «billing_mode=anticipo»,
+DEPOSITO, CONSUMO, ANTICIPO; los negativos «$-1,200.00»; el elegido con una raya lateral de 3 px; sin AA (el ámbar de los ajustes a 1.9:1, el verde de los
+saldos a 2.3-2.5:1) y letra de 9 px; el Tab se salía.
+
+**Qué se cambió** (sólo `CoronaModal`; sus ventanas de ajuste y de OC a crédito no se tocaron):
+- La lectura de los saldos y la del historial dicen si se hicieron (`lecturaClientes`, `lecturaLedger`): la falla se dice con «Reintentar» («No se pudo
+  leer … de la base: no quiere decir que no haya», `FallaDeCorona`); el encabezado sin cifras si no se leyó.
+- El historial por un solo camino (`leerLedger`): «leyendo» no es «vacío», una respuesta vieja no pisa al cliente que se eligió después, y «Recargar», el
+  ajuste y la OC a crédito lo usan.
+- En palabras: «Modo de cobro: con saldo a favor (anticipo)» (`MODO_DE_COBRO`), «Depósito», «Cargo por factura», «Anticipo aplicado» (`TIPO_CORONA`); el
+  dinero con el signo antes del peso (`pesosCorona`: «−$1,200.00», «+$60,000.00»).
+- El elegido con su fondo y en negritas (sin la raya lateral); las tintas (`C.emrInk`, `C.dnInk`, `C.wnTx`, el cian `#0e7490`) y 10 px o más; `atraparTab`,
+  el foco regresa al cerrar.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-corona.mjs` (los saldos y el historial pueden fallar, sólo la primera vez, o tardar) y tanda `corona` (16).
+**Vuelta 1** (12, escritas antes del arreglo) contra v10.84.130: fallaban 8. **Vuelta 2** (4, por donde no se diseñó): contra lo de antes fallaban 2
+(reintentar el historial y el «$-1,200.00», que encontró la prueba). La carrera de «Recargar» (cambiar de cliente mientras lee) no se vio ni antes: la
+segunda respuesta llega detrás y tapa a la vieja; queda como guardia, y el arreglo igual ignora la respuesta vieja. Con el arreglo, 16 de 16 a la primera.
+El detector de la skill: de ~25 hallazgos de contraste y letra de 9 px a la letra chica de la app (10-11 px) y el falso positivo.
+
+**Para Marcelo:** ¿el historial debería ligar cada cargo con su factura y su orden? ¿Un saldo negativo (se usó más de lo depositado) se avisa a Tesorería?
+
+**En producción:** (pendiente)
+
 ## v10.84.130 — El Inventario Cuadra ya no dice «vacío» cuando no pudo leer, habla en español y pregunta en la app — 16-oct-2026
 
 **Qué pasaba.** La décima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Inventario Cuadra (`InventoryModal`; en la base, 209

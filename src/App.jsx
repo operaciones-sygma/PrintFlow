@@ -6547,6 +6547,19 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
 // dinero que no tiene. CobranzaFlow lo corrigio en v3.7.676; aqui vivia igual desde entonces.
 // Lista clientes con billing_mode='anticipo', su saldo y el ledger de cada uno.
 // Karla/Admin/Secretaria pueden ver historial; los DEPOSITOS los registra Lucero en CobranzaFlow.
+// v10.84.131 — el Apartado Corona (la undécima pasada de /impeccable critique, 16-oct): una lectura fallida de los saldos o del historial ya no se ve como
+//   «nadie tiene saldo» o «sin movimientos» (la regla 12; es dinero de los clientes) y lo dice con «Reintentar»; los tipos y el modo en palabras (decía
+//   DEPOSITO, CONSUMO y «billing_mode=anticipo»); sin la raya lateral; las tintas y 10 px; el Tab no se sale.
+const TIPO_CORONA={DEPOSITO:"Depósito",CONSUMO:"Cargo por factura",REVERSO:"Reverso",AJUSTE:"Ajuste",ANTICIPO:"Anticipo aplicado"};
+const MODO_DE_COBRO={anticipo:"con saldo a favor (anticipo)",normal:"normal",stock:"de stock"};
+const CIAN_TINTA="#0e7490";   // el cian de Corona (C.ctp) en tinta: 4.7:1 sobre el gris de las tarjetas
+const pesosCorona=(n,conSigno)=>{const v=Number(n||0);return (v<0?"−":(conSigno&&v>0?"+":""))+"$"+Math.abs(v).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})};   // «−$1,200.00» (decía «$-1,200.00»)
+function FallaDeCorona({que,onReintentar}){
+  return <div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,background:C.bg,border:"1px solid "+C.dn,fontSize:12,color:C.dnInk,fontWeight:600}}>
+    <WarningIcon size={14} weight="fill" aria-hidden="true"/>No se pudo leer {que} de la base: no quiere decir que no haya.
+    <button type="button" onClick={onReintentar} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"4px 12px",fontSize:12,minHeight:32}}>Reintentar</button>
+  </div>;
+}
 function CoronaModal({onClose, user, userLogin, showToast}) {
   useEscClose(onClose);
   const [clients,setClients]=useState([]);
@@ -6556,6 +6569,11 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   const [loadingLedger,setLoadingLedger]=useState(false);
   const [adjusting,setAdjusting]=useState(false); // modal interno para AJUSTE manual (solo admin)
   const [registering,setRegistering]=useState(false); // v10.43.11 — modal nuevo: registrar OC a crédito Corona
+  // v10.84.131 — si se leyeron los saldos y el historial (null = leyendo; true = sí; false = falló): sin esto, una falla decía «Aún no hay clientes con saldo
+  //   a favor» o «Sin movimientos todavía», y es dinero de los clientes (Karla podía cobrarle a alguien con saldo)
+  const [lecturaClientes,setLecturaClientes]=useState(null);
+  const [lecturaLedger,setLecturaLedger]=useState(null);
+  useDevolverFoco();
 
   // v10.58.12 F18: alive ref + cleanup. Antes: si Marcelo cerraba el modal mientras
   // listAnticipoClients seguía cargando, setClients/setSelectedId corrían sobre
@@ -6567,11 +6585,11 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       const list=await db.listAnticipoClients();
       if(!reloadAliveRef.current)return;
       const leadersOnly=(list||[]).filter(c=>c.is_pool_leader);
-      setClients(leadersOnly);
+      setClients(leadersOnly);setLecturaClientes(true);
       if(leadersOnly.length>0&&!selectedId)setSelectedId(leadersOnly[0].id);
     }catch(e){
       if(!reloadAliveRef.current)return;
-      console.error("[CoronaModal] clients:",e);showToast("❌ Error: "+e.message,"error");
+      console.warn("[CoronaModal] clients:",e?.message);setLecturaClientes(false);   // v10.84.131 — se dice en la ventana, con «Reintentar»
     }
     finally{ if(reloadAliveRef.current) setLoadingClients(false); }
   };
@@ -6582,36 +6600,42 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
-  useEffect(()=>{
-    if(!selectedId)return;
-    let alive=true;
+  // v10.84.131 — el historial del elegido: «leyendo» mientras llega (antes «Recargar» lo vaciaba y decía «Sin movimientos todavía»), y si falla se dice
+  const ledgerVivoRef=useRef(0);
+  const leerLedger=useCallback(async id=>{
+    if(!id)return;
+    const vuelta=++ledgerVivoRef.current;
     setLoadingLedger(true);
-    db.loadCreditLedger(selectedId,200).then(l=>{if(alive)setLedger(l)}).catch(e=>{if(alive){console.error("[CoronaModal] ledger:",e);showToast("❌ "+e.message,"error")}}).finally(()=>{if(alive)setLoadingLedger(false)});
-    return ()=>{alive=false};
-  },[selectedId]);
+    try{const l=await db.loadCreditLedger(id,200);if(vuelta===ledgerVivoRef.current&&reloadAliveRef.current){setLedger(l);setLecturaLedger(true)}}
+    catch(e){if(vuelta===ledgerVivoRef.current&&reloadAliveRef.current){console.warn("[CoronaModal] ledger:",e?.message);setLecturaLedger(false)}}
+    finally{if(vuelta===ledgerVivoRef.current&&reloadAliveRef.current)setLoadingLedger(false)}
+  },[]);
+  useEffect(()=>{ if(selectedId){setLedger([]);setLecturaLedger(null);leerLedger(selectedId)} },[selectedId,leerLedger]);
 
   const selected=clients.find(c=>c.id===selectedId);
   const canAdjust=user==="admin";
 
-  const tipoColor=t=>t==="DEPOSITO"?C.emr:t==="CONSUMO"?"#dc2626":t==="REVERSO"?C.ctp:"#f59e0b";
+  // v10.84.131 — en tinta sobre el gris de la tarjeta (el verde y el ámbar de antes no llegaban a AA)
+  const tipoColor=t=>t==="DEPOSITO"?C.emrInk:t==="CONSUMO"?C.dnInk:t==="REVERSO"?CIAN_TINTA:C.wnTx;
   const TipoIcon=t=>t==="DEPOSITO"?CurrencyDollarIcon:t==="CONSUMO"?ExportIcon:t==="REVERSO"?ArrowUUpLeftIcon:ChartBarIcon;
 
   // v10.58.15 — role=dialog para accessibility
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div role="dialog" aria-modal="true" aria-label="Saldos a favor Corona" style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
+    <div role="dialog" aria-modal="true" aria-label="Saldos a favor Corona" onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:0,maxWidth:820,width:"96%",maxHeight:"92vh",display:"flex",flexDirection:"column"}}>
       <div style={{padding:"18px 22px",borderBottom:"0.5px solid "+C.bd,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
         <div>
           <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:17,fontWeight:800,margin:0}}><DiamondIcon size={17} weight="fill"/>Apartado Corona — Facturado por adelantado</h3>
-          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{clients.length} cliente{clients.length===1?"":"s"} con saldo · {clients.reduce((s,c)=>s+(Array.isArray(c.pool_members)?c.pool_members.length:0),0)} sub-cuentas en pools</div>
+          <div style={{fontSize:11,color:C.t2,marginTop:2}}>{lecturaClientes===false&&!clients.length?"Sin leer los saldos":<>{clients.length} cliente{clients.length===1?"":"s"} con saldo · {clients.reduce((s,c)=>s+(Array.isArray(c.pool_members)?c.pool_members.length:0),0)} sub-cuentas en pools</>}</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {/* v10.43.11 — Karla/Lupita/admin pueden registrar OC a crédito desde PrintFlow */}
-          {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt(C.emr),padding:"7px 12px",fontSize:12}}><DiamondIcon size={13} weight="fill"/>+ Nueva OC a Crédito</button>}
-          <button onClick={onClose} style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
+          {(user==="admin"||user==="karla"||user==="secretaria")&&<button onClick={()=>setRegistering(true)} style={{...bt(C.emrInk),padding:"7px 12px",fontSize:12}}><DiamondIcon size={13} weight="fill"/>+ Nueva OC a Crédito</button>}
+          <button onClick={onClose} aria-label="Cerrar el apartado Corona" style={{...bt(C.sf,C.t2),padding:"8px",border:"0.5px solid "+C.bd,minWidth:40,minHeight:40,justifyContent:"center"}}><XIcon size={15} weight="bold"/></button>
         </div>
       </div>
 
-      {loadingClients?<SkelRows n={6}/>:
+      {loadingClients&&!clients.length?<SkelRows n={6}/>:
+       lecturaClientes===false&&!clients.length?<div style={{padding:"18px 22px"}}><FallaDeCorona que="los clientes con saldo a favor" onReintentar={reloadClients}/></div>:
        clients.length===0?<EmptyState icon={WalletIcon} title="Aún no hay clientes con saldo a favor" hint="Aparecen aquí cuando Lucero registra un depósito en CobranzaFlow o se activa el modo a crédito del cliente."/>:
        <div style={{display:"grid",gridTemplateColumns:"260px 1fr",flex:1,minHeight:0}}>
          <div style={{borderRight:"0.5px solid "+C.bd,overflowY:"auto",padding:"10px 0"}}>
@@ -6620,11 +6644,12 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              const negative=Number(c.current_balance)<0;
              const hasMembers=Array.isArray(c.pool_members)&&c.pool_members.length>0;
              // v10.56.2: sidebar SIEMPRE muestra líderes (filtrados en reloadClients).
-             return <button key={c.id} onClick={()=>setSelectedId(c.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?C.ctp+"10":"transparent",cursor:"pointer",borderLeft:sel?"3px solid "+C.ctp:"3px solid transparent",fontFamily:"'Geist',sans-serif"}}>
-               <div style={{fontSize:12,fontWeight:700,color:sel?C.ctp:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+             // v10.84.131 — el elegido con su fondo y su nombre en negritas (antes una raya lateral de 3 px, que el sistema de diseño no usa)
+             return <button key={c.id} onClick={()=>setSelectedId(c.id)} aria-pressed={sel} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",border:"none",background:sel?C.ctp+"14":"transparent",cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
+               <div style={{fontSize:12,fontWeight:sel?800:700,color:sel?CIAN_TINTA:C.tx,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
                <div style={{fontSize:10,color:C.t2,marginTop:2}}>{c.rfc||"sin RFC"}</div>
-               {hasMembers&&<div style={{display:"flex",alignItems:"center",gap:3,fontSize:9,color:C.ctp,marginTop:2,fontWeight:600}}><LinkIcon size={9} weight="bold"/>incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
-               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dn:C.emr}}>${Number(c.current_balance||0).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+               {hasMembers&&<div style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:CIAN_TINTA,marginTop:2,fontWeight:600}}><LinkIcon size={10} weight="bold" aria-hidden="true"/>incluye sub-cuentas: {c.pool_members.join(", ")}</div>}
+               <div style={{fontSize:14,fontWeight:800,marginTop:4,color:negative?C.dnInk:C.emrInk}}>{pesosCorona(c.current_balance)}</div>
              </button>;
            })}
          </div>
@@ -6637,39 +6662,40 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
              <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:14}}>
                <div>
                  <h4 style={{fontSize:15,fontWeight:800,margin:0}}>{selected.name}</h4>
-                 <div style={{fontSize:11,color:C.t2,marginTop:2}}>{selected.rfc||"sin RFC"} · billing_mode=<b>{selected.billing_mode}</b></div>
+                 <div style={{fontSize:11,color:C.t2,marginTop:2}}>{selected.rfc||"sin RFC"} · Modo de cobro: <b>{MODO_DE_COBRO[selected.billing_mode]||selected.billing_mode||"—"}</b></div>
                </div>
                <div style={{textAlign:"right"}}>
                  <div style={{fontSize:10,color:C.t2,textTransform:"uppercase"}}>Saldo {selIsMember?"del pool":"actual"} (sin IVA)</div>
-                 <div style={{fontSize:20,fontWeight:800,color:displayBalance<0?C.dn:C.emr}}>${displayBalance.toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
-                 <div style={{fontSize:9,color:C.t3,marginTop:2}}>≈ ${(displayBalance*1.16).toLocaleString("es-MX",{minimumFractionDigits:2})} con IVA</div>
+                 <div style={{fontSize:20,fontWeight:800,color:displayBalance<0?C.dnInk:C.emrInk}}>{pesosCorona(displayBalance)}</div>
+                 <div style={{fontSize:10,color:C.t2,marginTop:2}}>≈ {pesosCorona(displayBalance*1.16)} con IVA</div>
                </div>
              </div>
-             {selIsMember && <div style={{padding:"8px 12px",background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:8,fontSize:11,color:C.ctp,marginBottom:12,lineHeight:1.5}}>
+             {selIsMember && <div style={{padding:"8px 12px",background:C.ctp+"10",border:"1px solid "+C.ctp+"40",borderRadius:8,fontSize:11,color:CIAN_TINTA,marginBottom:12,lineHeight:1.5}}>
                <PaperclipIcon size={12} weight="bold" style={{verticalAlign:"-2px",marginRight:4}}/>Estás viendo el saldo y movimientos del <b>pool de {selected.leader_name}</b>. {selected.name} comparte este saldo con las otras sub-cuentas. Cualquier movimiento aquí afecta a todo el pool.
              </div>}
              <div style={{display:"flex",gap:8,marginBottom:12}}>
                {canAdjust&&<button onClick={()=>setAdjusting(true)} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}><ChartBarIcon size={12} weight="bold"/>Ajuste manual</button>}
-               <button onClick={()=>{setLedger([]);setSelectedId(s=>s);db.loadCreditLedger(selectedId,200).then(l=>setLedger(l))}} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}><ArrowsClockwiseIcon size={12} weight="bold"/>Recargar</button>
+               <button onClick={()=>leerLedger(selectedId)} disabled={loadingLedger} style={{...bt(C.sf,C.t2),border:"0.5px solid "+C.bd,padding:"6px 12px",fontSize:11}}><ArrowsClockwiseIcon size={12} weight="bold"/>{loadingLedger?"Leyendo…":"Recargar"}</button>
                <div style={{flex:1}}/>
                <div style={{fontSize:10,color:C.t2,alignSelf:"center"}}>Lucero registra depósitos y cobra facturas Corona pendientes en CobranzaFlow</div>
              </div>
              <div style={{fontSize:10,fontWeight:700,color:C.t2,textTransform:"uppercase",marginBottom:6}}>Historial (últimos 200)</div>
-             {loadingLedger?<div style={{padding:20,textAlign:"center",color:C.t2}}>Cargando ledger…</div>:
+             {loadingLedger&&!ledger.length?<div style={{padding:20,textAlign:"center",color:C.t2}}>Leyendo el historial…</div>:
+              lecturaLedger===false?<FallaDeCorona que="el historial de este cliente" onReintentar={()=>leerLedger(selectedId)}/>:
               ledger.length===0?<EmptyState icon={ClockCounterClockwiseIcon} title="Sin movimientos todavía" hint="Aquí se listarán los depósitos, cargos por factura Corona y ajustes en cuanto haya movimiento en el saldo de este cliente."/>:
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {ledger.map(m=>{
                   const color=tipoColor(m.tipo);
                   return <div key={m.id} style={{padding:"10px 12px",borderRadius:10,background:C.sf,border:"0.5px solid "+C.bd,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{(()=>{const TI=TipoIcon(m.tipo);return <TI size={12} weight="bold"/>})()}{m.tipo}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{(()=>{const TI=TipoIcon(m.tipo);return <TI size={12} weight="bold" aria-hidden="true"/>})()}{TIPO_CORONA[m.tipo]||m.tipo}</div>
                       {m.referencia&&<div style={{fontSize:11,marginTop:2}}>{m.referencia}</div>}
                       {m.notas&&<div style={{fontSize:10,color:C.t2,marginTop:2,fontStyle:"italic"}}>{m.notas}</div>}
-                      <div style={{fontSize:9,color:C.t3,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}{m.periodo?" · "+m.periodo:""}</div>
+                      <div style={{fontSize:10,color:C.t2,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}{m.periodo?" · "+m.periodo:""}</div>
                     </div>
                     <div style={{textAlign:"right",marginLeft:10}}>
-                      <div style={{fontSize:14,fontWeight:800,color}}>{m.monto>0?"+":""}${Number(m.monto).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
-                      <div style={{fontSize:9,color:C.t2}}>saldo: ${Number(m.balance_despues).toLocaleString("es-MX",{minimumFractionDigits:2})}</div>
+                      <div style={{fontSize:14,fontWeight:800,color}}>{pesosCorona(m.monto,true)}</div>
+                      <div style={{fontSize:10,color:C.t2}}>saldo: {pesosCorona(m.balance_despues)}</div>
                     </div>
                   </div>;
                 })}
@@ -6682,7 +6708,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       }
     </div>
     {adjusting&&<CreditAdjustModal client={selected} userLogin={userLogin} onSave={async(monto,motivo)=>{
-      try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();const fresh=await db.loadCreditLedger(selected.id,200);setLedger(fresh)}
+      try{await db.creditAdjust({client_id:selected.id,monto,motivo,user:userLogin||user});showToast("✅ Ajuste registrado");setAdjusting(false);await reloadClients();leerLedger(selected.id)}
       catch(e){showToast("❌ "+e.message,"error")}
     }} onClose={()=>setAdjusting(false)}/>}
     {registering&&<RegisterCoronaPOModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setRegistering(false)} onSaved={async()=>{
@@ -6690,7 +6716,7 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
       showToast("✅ OC a Crédito registrada · Tesorería notificada");
       await reloadClients();
       // v10.43.14 FIX M13 — refrescar ledger del cliente seleccionado si lo había
-      if(selectedId){try{const fresh=await db.loadCreditLedger(selectedId,200);setLedger(fresh)}catch(e){console.warn("[CoronaModal] refresh ledger:",e)}}
+      if(selectedId)leerLedger(selectedId);   // v10.84.131 — con su falla, como «Recargar»
     }}/>}
   </div>;
 }
