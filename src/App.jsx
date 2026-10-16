@@ -4115,6 +4115,9 @@ function NotificationTray({notifications,onClose,onRead,onReadAll,onDelete,onDel
 // ─── MODALS ────────────────────────────────────────
 function PrintOrder({order:o,onClose,role,userLogin,onPrintError}) {
   useEscClose(onClose);
+  useDevolverFoco();   // v10.84.129
+  const primeroRef=useRef(null);
+  useEffect(()=>{try{primeroRef.current?.querySelector("button")?.focus({preventScroll:true})}catch(e){}},[]);
   const [printing,setPrinting]=useState(false);
   // v10.53.1 M2 — mountedRef previene setState/callback en componente desmontado
   const mountedRef=useRef(true);
@@ -4181,50 +4184,52 @@ body{font-family:Arial,Helvetica,sans-serif;padding:18px 22px;font-size:11px;col
 table{width:100%;border-collapse:collapse}
 td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
 .header{display:flex;align-items:stretch;border:2.5px solid #222;margin-bottom:0}
-.header-logo{width:160px;padding:8px 10px;text-align:center;border-right:2.5px solid #222;display:flex;align-items:center;justify-content:center}
+.header-logo{width:160px;padding:6px 10px;text-align:center;border-right:2.5px solid #222;display:flex;align-items:center;justify-content:center}
 .header-title{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 10px}
 .header-title .main{font-size:20px;font-weight:800;letter-spacing:1px;text-transform:uppercase}
-.header-title .sub{font-size:9px;color:#666;margin-top:2px;letter-spacing:.5px}
-.header-title .copy-badge{font-size:8px;color:#fff;background:#c00;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block}
+.header-title .sub{font-size:10px;color:#444;margin-top:2px;letter-spacing:.5px}
+.header-title .copy-badge{font-size:10px;color:#fff;background:#c00;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block}
 .vbanner{padding:7px 10px;text-align:center;border:2.5px solid #222;border-top:none}
 .vbanner .vt{font-size:15px;font-weight:800;letter-spacing:3px;text-transform:uppercase;line-height:1.1}
-.vbanner .vs{display:block;font-size:8px;font-weight:600;letter-spacing:1.2px;margin-top:2px;text-transform:uppercase}
+.vbanner .vs{display:block;font-size:10px;font-weight:600;letter-spacing:1.2px;margin-top:2px;text-transform:uppercase}
 .vbanner.admin{background:#1a1a1a;color:#fff}
 .vbanner.prod{background:#fff;color:#111}
 .vcancel-wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:9;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .vcancel-wm span{font-size:128px;font-weight:900;letter-spacing:10px;color:rgba(178,0,0,.26);border:9px solid rgba(178,0,0,.26);border-radius:14px;padding:4px 46px;transform:rotate(-26deg);text-transform:uppercase;white-space:nowrap;line-height:1;font-family:Arial,Helvetica,sans-serif}
 .vcancel-note{margin-top:6px;border:3px solid #111;background:#fff;border-radius:4px;padding:9px 13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .vcancel-note .vct{font-size:14px;font-weight:900;color:#111;letter-spacing:.6px;text-transform:uppercase;line-height:1.2}
-.vcancel-note .vcd{font-size:9.5px;color:#222;margin-top:3px;line-height:1.55}
+.vcancel-note .vcd{font-size:10.5px;color:#222;margin-top:3px;line-height:1.55}
 .header-folio{width:140px;border-left:2.5px solid #222;padding:8px 10px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.header-folio .lbl{font-size:8px;font-weight:700;text-transform:uppercase;color:#666;margin-bottom:4px;letter-spacing:1px}
+.header-folio .lbl{font-size:10px;font-weight:700;text-transform:uppercase;color:#444;margin-bottom:4px;letter-spacing:1px}
 .header-folio .num{font-size:26px;font-weight:800;color:#c00;line-height:1}
-.header-folio .cart{font-size:10px;font-weight:700;color:#0891b2;margin-top:4px;letter-spacing:.5px}
-.header-folio .webf{font-size:8px;font-weight:600;color:#94a3b8;margin-top:1px;letter-spacing:.3px}
-.header-folio .date{font-size:8px;color:#888;margin-top:4px}
-.section-title{background:#e0e0e0;font-size:8px;font-weight:800;text-transform:uppercase;text-align:center;padding:4px;letter-spacing:1.5px;color:#333}
-.field-lbl{font-size:7px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:.3px}
+.header-folio .cart{font-size:11px;font-weight:700;color:#0e7490;margin-top:4px;letter-spacing:.5px}
+.header-folio .webf{font-size:10px;font-weight:600;color:#475569;margin-top:1px;letter-spacing:.3px}
+.header-folio .date{font-size:10px;color:#444;margin-top:4px}
+.section-title{background:#e0e0e0;font-size:10px;font-weight:800;text-transform:uppercase;text-align:center;padding:2px 4px;letter-spacing:1.2px;color:#111}
+.field-lbl{font-size:10px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.3px}
 .field-val{font-size:12px;font-weight:600;min-height:16px;margin-top:1px}
-.check{display:inline-block;width:11px;height:11px;border:1.5px solid #aaa;margin-right:3px;vertical-align:middle;text-align:center;font-size:9px;line-height:11px;color:transparent}
+.check{display:inline-block;width:12px;height:12px;border:1.5px solid #aaa;margin-right:3px;vertical-align:middle;text-align:center;font-size:10px;line-height:12px;color:transparent}
 .check.on{color:#000;font-weight:bold;border-color:#000}
-.fin-tag{display:inline-block;background:#ededed;border:0.75px solid #b0b0b0;border-radius:4px;padding:2px 7px;margin-left:6px;font-size:7.5px;font-weight:700;color:#1a1a1a;letter-spacing:.4px;vertical-align:1px;text-transform:uppercase;line-height:1.3}
-.sig-row{display:flex;gap:16px;margin-top:28px;page-break-inside:avoid}
-.sig-box{flex:1;border-top:1.5px solid #000;padding-top:5px;text-align:center;font-size:7px;color:#999;text-transform:uppercase;letter-spacing:.5px}
+.opt{color:#555}
+.opt.on{color:#000;font-weight:800}
+.fin-tag{display:inline-block;background:#ededed;border:0.75px solid #b0b0b0;border-radius:4px;padding:1px 6px;margin-left:5px;font-size:10px;font-weight:700;color:#1a1a1a;letter-spacing:.4px;vertical-align:1px;text-transform:uppercase;line-height:1.3}
+.sig-row{display:flex;gap:16px;margin-top:14px;page-break-inside:avoid}
+.sig-box{flex:1;border-top:1.5px solid #000;padding-top:5px;text-align:center;font-size:10px;color:#444;text-transform:uppercase;letter-spacing:.5px}
 .imp-table td{height:20px}
-.imp-table .hdr{font-size:7px;font-weight:800;text-align:center;background:#f0f0f0;text-transform:uppercase;letter-spacing:.5px}
-.otros-row{font-size:10px;padding:3px 7px;border-top:none}
+.imp-table .hdr{font-size:10px;font-weight:800;text-align:center;background:#f0f0f0;color:#222;text-transform:uppercase;letter-spacing:.5px}
+.otros-row{font-size:11px;padding:3px 7px;border-top:none}
 .product-images{display:flex;gap:8px;margin-top:-1px;border:1px solid #444;padding:6px;background:#fafafa;page-break-inside:avoid}
-.product-images .ptitle{font-size:7px;font-weight:800;color:#777;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.product-images .ptitle{font-size:10px;font-weight:800;color:#444;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
 .product-images img{max-width:100%;max-height:180px;object-fit:contain;border:1px solid #ddd;background:#fff}
-.pay-badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.pay-badge{display:inline-block;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
 .pay-paid{background:#dcfce7;color:#15803d;border:1px solid #16a34a}
-.pay-partial{background:#fef3c7;color:#a16207;border:1px solid #ca8a04}
+.pay-partial{background:#fef3c7;color:#854d0e;border:1px solid #ca8a04}
 .pay-unpaid{background:#fee2e2;color:#b91c1c;border:1px solid #dc2626}
 .print-version-corner{position:fixed;top:6mm;right:6mm;font-size:10px;font-weight:800;color:#fff;background:#111;padding:4px 10px;border-radius:4px;letter-spacing:.5px;z-index:10}
 .print-version-corner.reprint{background:#dc2626}
 .print-version-corner.unregistered{background:#a16207}
-.print-footer{margin-top:24px;padding-top:8px;border-top:1px dashed #999;font-size:8px;color:#666;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
-.print-footer .pv-hash{font-family:Courier,monospace;font-weight:700;color:#222;font-size:9px;background:#f0f0f0;padding:2px 6px;border-radius:3px}
+.print-footer{margin-top:10px;padding-top:6px;border-top:1px dashed #999;font-size:10px;color:#444;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:center}
+.print-footer .pv-hash{font-family:Courier,monospace;font-weight:700;color:#222;font-size:10px;background:#f0f0f0;padding:2px 6px;border-radius:3px}
 .print-footer .pv-reprint-tag{color:#dc2626;font-weight:800;text-transform:uppercase}
 .pf-toolbar{position:sticky;top:0;left:0;right:0;background:#1a1a1a;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:center;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .pf-toolbar button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
@@ -4262,8 +4267,11 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     try{
       var s=document.getElementById('pf-sheet'); if(!s) return;
       s.style.zoom='';
+      var fotos=[].slice.call(s.querySelectorAll('.product-images img')); fotos.forEach(function(i){ i.style.maxHeight=''; });
       var ref=document.getElementById('pf-pageref'); if(!ref) return;
       var pageH=ref.offsetHeight, h=s.offsetHeight;
+      // v10.84.129 — antes de encoger la letra (que en una orden larga quedaba de 5 pt), ceden las fotos: de 180 px hasta 70
+      if(pageH>0 && h>pageH && fotos.length){ var alto=Math.max(70, 180-(h-pageH)-6); fotos.forEach(function(i){ i.style.maxHeight=alto+'px'; }); h=s.offsetHeight; }
       if(pageH>0 && h>pageH){ s.style.zoom=(pageH/h*0.97).toFixed(4); }
     }catch(e){}
   }
@@ -4296,13 +4304,13 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     // v10.52.1 — badge web + indicador OC split
     const logoSrc=window.location.origin+"/sygma-logo.png";
     // v10.72.23 — "Sin empaque SYGMA": ocultar el logo en la orden impresa (white-label para imprenta externa)
-    const logoHtml=o.sin_empaque_sygma?'<div style="font-size:9px;font-weight:700;color:#9ca3af;text-align:center;line-height:1.4;letter-spacing:.5px">SIN<br>LOGO</div>':`<img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:80px;height:auto;width:auto;"/>`;
+    const logoHtml=o.sin_empaque_sygma?'<div style="font-size:10px;font-weight:700;color:#555;text-align:center;line-height:1.4;letter-spacing:.5px">SIN<br>LOGO</div>':`<img src="${logoSrc}" onerror="this.onerror=null;this.src='${SYGMA_LOGO}'" style="max-width:140px;max-height:62px;height:auto;width:auto;"/>`;
     const isWebOrder=o.source==="web";
     const isOcSplit=!!o.oc_invoice_group_id; // orden pertenece a grupo OC split (v10.51.0)
     h+=`<div class="header">
       <div class="header-logo">${logoHtml}</div>
-      <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isWebOrder?'<div style="font-size:8px;color:#fff;background:#06b6d4;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
-      <div class="header-folio"><div class="lbl">Folio</div><div class="num"${(isVoidStockSale||isCancelledOrder)?' style="text-decoration:line-through;text-decoration-thickness:3px;color:#888"':''}>${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#34c759")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:7px;color:#7c3aed;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
+      <div class="header-title"><div class="main">Orden de Producción</div><div class="sub">Padilla Hnos. Impresora · León, Gto.</div>${isWebOrder?'<div style="font-size:10px;color:#fff;background:#0e7490;padding:2px 8px;border-radius:3px;margin-top:4px;letter-spacing:1px;text-transform:uppercase;display:inline-block">🌐 Pedido Web</div>':''}</div>
+      <div class="header-folio"><div class="lbl">Folio</div><div class="num"${(isVoidStockSale||isCancelledOrder)?' style="text-decoration:line-through;text-decoration-thickness:3px;color:#888"':''}>${o.production_number||o.id}</div>${o.cart_folio?'<div class="cart">🛒 '+esc(o.cart_folio)+'</div>':''}${o.web_folio?'<div class="webf">'+esc(o.web_folio)+'</div>':''}${o.purchase_order_id?'<div class="webf" style="color:#7c3aed;margin-top:2px;font-weight:700">📦 '+esc(o.purchase_order_id)+'</div>':''}${o.invoice_folio?'<div class="invf" style="font-size:14px;font-weight:800;color:'+(o.invoice_type==="factura"?"#5856d6":"#15803d")+';margin-top:4px;">'+(o.invoice_type==="factura"?"📄":"📋")+' '+esc(o.invoice_folio)+'</div>':''}${isOcSplit?'<div style="font-size:10px;color:#6d28d9;margin-top:2px;font-weight:700;font-style:italic">↳ Folio compartido (OC dividida)</div>':''}<div class="date">${pDate.getDate()} ${months[pDate.getMonth()].slice(0,3)} ${pDate.getFullYear()}</div></div>
     </div>`;
 
     // v10.72.62 — banner de VERSIÓN, muy visible y B&N-proof: ADMINISTRATIVA = barra negra sólida (invertida);
@@ -4329,7 +4337,7 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     if(o.sin_empaque_sygma){
       h+=`<div style="margin-top:6px;border:2.5px solid #b91c1c;background:#fef2f2;border-radius:4px;padding:7px 12px;display:flex;align-items:center;gap:9px">
         <div style="font-size:19px;line-height:1">⚠️</div>
-        <div><div style="font-size:12.5px;font-weight:800;color:#b91c1c;letter-spacing:.5px">EMPACAR SIN LOGOS DE SYGMA</div><div style="font-size:9px;color:#7f1d1d;margin-top:1px">Trabajo para imprenta externa. Empacar SIN logotipos ni identificación de SYGMA / Padilla Hnos.</div></div>
+        <div><div style="font-size:12.5px;font-weight:800;color:#b91c1c;letter-spacing:.5px">EMPACAR SIN LOGOS DE SYGMA</div><div style="font-size:10.5px;color:#7f1d1d;margin-top:1px">Trabajo para imprenta externa. Empacar SIN logotipos ni identificación de SYGMA / Padilla Hnos.</div></div>
       </div>`;
     }
 
@@ -4337,26 +4345,28 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     h+=`<table style="margin-top:-1px"><tr>
       <td style="width:33%"><div class="field-lbl">Fecha de Pedido</div><div class="field-val">${pDate.getDate()} / ${months[pDate.getMonth()]} / ${pDate.getFullYear()}</div></td>
       <td style="width:34%;text-align:center"><div class="field-lbl">Tipo de Proceso</div><div style="display:flex;gap:14px;justify-content:center;margin-top:3px">
-        <span><span class="check${isNorm?" on":""}">✓</span> Normal</span>
-        <span><span class="check${isUrg?" on":""}">✓</span> Urgente</span>
-        <span><span class="check${isBaja?" on":""}">✓</span> Baja</span>
+        <span class="opt${isNorm?" on":""}"><span class="check${isNorm?" on":""}">✓</span> Normal</span>
+        <span class="opt${isUrg?" on":""}"><span class="check${isUrg?" on":""}">✓</span> Urgente</span>
+        <span class="opt${isBaja?" on":""}"><span class="check${isBaja?" on":""}">✓</span> Baja</span>
       </div></td>
-      <td style="width:33%"><div class="field-lbl">Fecha de Entrega</div><div class="field-val" style="color:${isUrg?"#c00":"inherit"};font-weight:800">${dDate?dDate.getDate()+" / "+months[dDate.getMonth()]+" / "+dDate.getFullYear():"—"}</div></td>
+      <td style="width:33%"><div class="field-lbl">Fecha de Entrega</div><div class="field-val" style="color:${isUrg?"#c00":"inherit"};font-weight:800;font-size:15px">${dDate?dDate.getDate()+" / "+months[dDate.getMonth()]+" / "+dDate.getFullYear():"—"}</div></td>
     </tr></table>`;
 
     // ═══ DATOS DEL CLIENTE ═══
     if(isProd){
       // Production copy: client name + agente (contacto del cliente). Sin teléfono/email (datos de contacto sensibles).
-      h+=`<table style="margin-top:-1px"><tr><td colspan="2" class="section-title">Cliente</td></tr>
-      <tr><td style="width:62%"><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
-      <td style="width:38%"><div class="field-lbl">Agente de compras</div><div class="field-val">${esc(o.client_agent||"—")}</div></td></tr></table>`;
+      // v10.84.129 — el vendedor va aquí (antes en «Información Adicional», una tabla aparte que repetía «Tipo de Orden»)
+      h+=`<table style="margin-top:-1px"><tr><td colspan="3" class="section-title">Cliente</td></tr>
+      <tr><td style="width:52%"><div class="field-lbl">Nombre</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
+      <td style="width:26%"><div class="field-lbl">Agente de compras</div><div class="field-val">${esc(o.client_agent||"—")}</div></td>
+      <td style="width:22%"><div class="field-lbl">Vendedor</div><div class="field-val">${esc(o.agent||"—")}</div></td></tr></table>`;
     } else {
       // Full copy: all client data
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos del Cliente</td></tr>
       <tr><td style="width:35%"><div class="field-lbl">Nombre o Denominación</div><div class="field-val" style="font-size:14px">${esc(o.client||"—")}</div></td>
       <td style="width:25%"><div class="field-lbl">Agente de compras</div><div class="field-val">${esc(o.client_agent||"—")}</div></td>
       <td style="width:20%"><div class="field-lbl">Teléfono</div><div class="field-val">${o.client_phone?esc((o.client_lada||"+52")+" "+o.client_phone):""}</div></td>
-      <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:10px">${esc(o.client_email||"")}</div></td></tr></table>`;
+      <td style="width:20%"><div class="field-lbl">Email</div><div class="field-val" style="font-size:11px">${esc(o.client_email||"")}</div></td></tr></table>`;
     }
 
     // ═══ DATOS DE LA FORMA ═══
@@ -4365,7 +4375,7 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Datos de la Forma</td></tr>
     <tr>
       <td style="width:15%"><div class="field-lbl">Cantidad</div><div class="field-val" style="font-size:16px;font-weight:800;color:#c00">${o.quantity?Number(o.quantity).toLocaleString():""}</div></td>
-      <td style="width:35%"><div class="field-lbl">Tipo de Producto</div><div class="field-val" style="font-size:13px">${esc(o.product_type||"")}</div></td>
+      <td style="width:35%"><div class="field-lbl">Tipo de Producto</div><div class="field-val" style="font-size:14px">${esc(o.product_type||"")}</div></td>
       ${!isAdvanced?`<td style="width:30%"><div class="field-lbl">Tamaño Final</div><div class="field-val">${o.standard_size?esc(ssLabel(o.standard_size)):(o.width_cm&&o.height_cm?o.width_cm+" × "+o.height_cm+" cm":"")}</div></td>`:`<td style="width:30%"><div class="field-lbl">Modo</div><div class="field-val" style="font-size:10px;color:#8b5cf6;font-weight:700">📖 Datos técnicos en descripción</div></td>`}
       <td style="width:20%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Interna"}</div></td>
     </tr>
@@ -4408,10 +4418,8 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     // v10.25.2 — Pantones en bloque independiente (aparece en modo Sencillo Y Avanzado, mientras haya pantones capturados)
     if(!isMaq&&((Array.isArray(o.pantone_front)&&o.pantone_front.length>0)||(Array.isArray(o.pantone_back)&&o.pantone_back.length>0))){
       h+=`<table class="imp-table" style="margin-top:-1px">
-      <tr><td colspan="2" class="section-title">🎨 Pantones</td></tr>
-      <tr class="hdr"><td class="hdr" style="width:50%">Frente</td><td class="hdr" style="width:50%">Vuelta</td></tr>
-      <tr><td style="font-weight:600">${(o.pantone_front||[]).map(esc).join(", ")||"—"}</td><td style="font-weight:600">${(o.pantone_back||[]).map(esc).join(", ")||"—"}</td></tr>
-      </table>`;
+      <tr><td style="width:50%"><div class="field-lbl">Pantones · frente</div><div class="field-val">${(o.pantone_front||[]).map(esc).join(", ")||"—"}</div></td><td style="width:50%"><div class="field-lbl">Pantones · vuelta</div><div class="field-val">${(o.pantone_back||[]).map(esc).join(", ")||"—"}</div></td></tr>
+      </table>`;   // v10.84.129 — un renglón (era una sección con su barra y su encabezado): la orden larga cabe sin encoger la letra
     }
 
     // ═══ PROCESOS ESPECIALES Y ACABADOS (solo si hay specs o acabados) ═══
@@ -4430,13 +4438,15 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
       // v10.72.48: excluir de "Otros" SOLO el nombre canónico exacto (finBase ya cubre los SPECIAL con detalle);
       // un texto libre que solo EMPIECE con un canónico (ej. "Doblez especial mariposa") va LITERAL a "Otros".
       const customAcabados=acabados.filter(a=>!FINISHES.includes(finBase(a))&&!ACABADO_ALIASES.includes(a.toLowerCase()));
+      // v10.84.129 — cada casilla con su nombre: lo elegido en negritas y negro (en una fotocopia se distingue sin buscar la palomita); con su detalle
+      const opc=(nombre,clave,conDetalle)=>{const on=ac(clave);return '<span class="opt'+(on?' on':'')+'"><span class="check'+(on?' on':'')+'">✓</span> '+nombre+((on&&conDetalle&&acDetail(clave))?" <span class='fin-tag'>"+esc(acDetail(clave))+"</span>":"")+'</span>'};
       if(acabados.length>0||hasSpecs){
       h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">Procesos Especiales y Acabados</td></tr>
       <tr>
-        <td style="width:25%"><span class="check${ac("barniz brillante")?" on":""}">✓</span> Barniz Brillante<br/><span class="check${ac("barniz mate")?" on":""}">✓</span> Barniz Mate<br/><span class="check${ac("barniz a registro")?" on":""}">✓</span> Barniz a Registro</td>
-        <td style="width:25%"><span class="check${ac("doblez")?" on":""}">✓</span> Doblez<br/><span class="check${ac("intercalado")?" on":""}">✓</span> Intercalado<br/><span class="check${ac("grapado")?" on":""}">✓</span> Grapado</td>
-        <td style="width:25%"><span class="check${ac("perforado")?" on":""}">✓</span> Perforado<br/><span class="check${ac("plastificado")?" on":""}">✓</span> Plastificado${(ac("plastificado")&&acDetail("plastificado"))?" <span class='fin-tag'>"+esc(acDetail("plastificado"))+"</span>":""}<br/><span class="check${ac("suajado")?" on":""}">✓</span> Suajado<br/><span class="check${ac("botado")?" on":""}">✓</span> Botado</td>
-        <td style="width:25%"><span class="check${ac("forma suelta")?" on":""}">✓</span> Forma Suelta<br/><span class="check${ac("blocks")?" on":""}">✓</span> Blocks${(ac("blocks")&&acDetail("blocks"))?" <span class='fin-tag'>"+esc(acDetail("blocks"))+"</span>":""}<br/><span class="check${ac("folio")?" on":""}">✓</span> Folio${(ac("folio")&&acDetail("folio"))?" <span class='fin-tag'>"+esc(acDetail("folio"))+"</span>":""}<br/><span class="check${ac("engomado superior")?" on":""}">✓</span> Engomado Sup.<br/><span class="check${ac("engomado lateral")?" on":""}">✓</span> Engomado Lat.</td>
+        <td style="width:25%">${opc("Barniz Brillante","barniz brillante")}<br/>${opc("Barniz Mate","barniz mate")}<br/>${opc("Barniz a Registro","barniz a registro")}</td>
+        <td style="width:25%">${opc("Doblez","doblez")}<br/>${opc("Intercalado","intercalado")}<br/>${opc("Grapado","grapado")}</td>
+        <td style="width:25%">${opc("Perforado","perforado")}<br/>${opc("Plastificado","plastificado",1)}<br/>${opc("Suajado","suajado")}<br/>${opc("Botado","botado")}</td>
+        <td style="width:25%">${opc("Forma Suelta","forma suelta")}<br/>${opc("Blocks","blocks",1)}<br/>${opc("Folio","folio",1)}<br/>${opc("Engomado Sup.","engomado superior")}<br/>${opc("Engomado Lat.","engomado lateral")}</td>
       </tr>
       ${customAcabados.length>0?`<tr><td colspan="4" class="otros-row"><strong>Otros:</strong> ${customAcabados.map(esc).join(", ")}</td></tr>`:""}
       </table>`;
@@ -4454,10 +4464,10 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     // — el piso necesita saber dónde se envía el trabajo (encuadernación, acabado externo, etc.).
     // En versión producción se OCULTA email (PII innecesaria); se mantiene proveedor + teléfono.
     if(!isMaq&&o.maquila_provider){
-      h+=`<table style="margin-top:-1px"><tr><td colspan="3" class="section-title">🚚 Maquila Externa (Proveedor)</td></tr>
-      <tr><td style="width:40%"><div class="field-lbl">Proveedor</div><div class="field-val">${esc(o.maquila_provider)}</div></td>
-      <td style="width:30%"><div class="field-lbl">Teléfono</div><div class="field-val">${esc(o.maquila_phone||"")}</div></td>
-      <td style="width:30%"><div class="field-lbl">${isProd?"":"Email"}</div><div class="field-val">${isProd?"":esc(o.maquila_email||"")}</div></td></tr></table>`;
+      // v10.84.129 — un renglón (sin su barra) y en la de producción sin la casilla vacía del correo
+      h+=`<table style="margin-top:-1px"><tr><td style="width:${isProd?60:40}%"><div class="field-lbl">🚚 Maquila externa · proveedor</div><div class="field-val">${esc(o.maquila_provider)}</div></td>
+      <td style="width:${isProd?40:30}%"><div class="field-lbl">Teléfono</div><div class="field-val">${esc(o.maquila_phone||"")}</div></td>
+      ${isProd?"":`<td style="width:30%"><div class="field-lbl">Email</div><div class="field-val">${esc(o.maquila_email||"")}</div></td>`}</tr></table>`;
     }
 
     // ═══ INSTRUCCIONES ═══
@@ -4467,8 +4477,9 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
     if(Array.isArray(o.distribution)){
       const _lug=o.distribution.map(x=>String(x||"").trim()).filter(Boolean);
       if(_lug.length){
-        h+=`<table style="margin-top:-1px"><tr><td colspan="2" class="section-title">🚚 Distribución · ${_lug.length} ${_lug.length===1?"lugar":"lugares"}</td></tr>`;
-        _lug.forEach((l,i)=>{h+=`<tr><td style="width:26px;text-align:center;font-weight:800">${i+1}</td><td style="font-size:11px;line-height:1.4">${esc(l)}</td></tr>`;});
+        h+=`<table style="margin-top:-1px"><tr><td colspan="4" class="section-title">🚚 Distribución · ${_lug.length} ${_lug.length===1?"lugar":"lugares"}</td></tr>`;
+        // v10.84.129 — dos lugares por renglón (1 2 / 3 4): la orden larga cabe sin encoger la letra
+        for(let i=0;i<_lug.length;i+=2){const a=_lug[i],b=_lug[i+1];h+=`<tr><td style="width:24px;text-align:center;font-weight:800">${i+1}</td><td style="font-size:11px;line-height:1.35"${b==null?' colspan="3"':''}>${esc(a)}</td>${b!=null?`<td style="width:24px;text-align:center;font-weight:800">${i+2}</td><td style="font-size:11px;line-height:1.35">${esc(b)}</td>`:''}</tr>`;}
         h+=`</table>`;
       }
     }
@@ -4488,16 +4499,9 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
       <td style="width:25%"><div class="field-lbl">R.F.C.</div><div class="field-val">${esc(o.client_rfc||"")}</div></td>
       <td style="width:20%"><div class="field-lbl">Vendedor</div><div class="field-val">${esc(o.agent||"")}</div></td>
       <td style="width:15%"><div class="field-lbl">Precio</div><div class="field-val" style="font-weight:800;font-size:14px">${(isMaq?o.maq_price:o.price)?fmt(isMaq?o.maq_price:o.price):""}</div></td></tr>
-      <tr><td colspan="2"><div class="field-lbl">Email</div><div class="field-val">${esc(o.client_email||"")}</div></td>
-      <td><div class="field-lbl">Cotización</div><div class="field-val"></div></td>
+      <tr><td colspan="3"><div class="field-lbl">Email</div><div class="field-val">${esc(o.client_email||"")}</div></td>
       <td><div class="field-lbl">Estado de Pago</div><div class="field-val">${payBadge||"—"}</div></td></tr>
       </table>`;
-    } else {
-      // Production copy: only agent, no price/RFC/email
-      h+=`<table style="margin-top:-1px"><tr><td colspan="2" class="section-title">Información Adicional</td></tr>
-      <tr><td style="width:50%"><div class="field-lbl">Vendedor</div><div class="field-val">${esc(o.agent||"")}</div></td>
-      <td style="width:50%"><div class="field-lbl">Tipo de Orden</div><div class="field-val">${isMaq?"Maquila":"Producción Interna"}</div></td>
-      </tr></table>`;
     }
 
     // ═══ FIRMAS ═══
@@ -4546,10 +4550,11 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
   const lastPrintStr=lastPrintWhen?(lastPrintWhen.getDate()+"-"+months[lastPrintWhen.getMonth()].slice(0,3).toLowerCase()+" "+String(lastPrintWhen.getHours()).padStart(2,"0")+":"+String(lastPrintWhen.getMinutes()).padStart(2,"0")):"";
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-    <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto",textAlign:"center"}}>
+    {/* v10.84.129 — un diálogo: su nombre, el foco adentro y el Tab que no se sale a la app de atrás */}
+    <div role="dialog" aria-modal="true" aria-label={"Imprimir "+(o.production_number||o.id)} onKeyDown={atraparTab} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto",textAlign:"center"}}>
       <div style={{fontSize:28,fontWeight:800,marginBottom:4}}>{o.production_number||o.id}</div>
       <div style={{fontSize:12,color:C.t2,marginBottom:4}}>{o.client} · {o.product_type}</div>
-      {isMaq&&<div style={{fontSize:10,color:C.maq,fontWeight:600,marginBottom:4}}><TruckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
+      {isMaq&&<div style={{fontSize:11,color:tintaAA(C.maq),fontWeight:600,marginBottom:4}}><TruckIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>Orden Maquila{o.maq_provider?" · "+o.maq_provider:""}</div>}
 
       {/* v10.53.0 — info de versión */}
       {o.needs_reprint && (
@@ -4565,8 +4570,8 @@ ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoi
       )}
       {/* v10.58.63: el hint refleja versión-por-contenido — sin cambios reimprime la MISMA
           versión (no "será vN+1" engañoso); editada sí sube. */}
-      {canChoose&&<div style={{fontSize:10,color:C.t3,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&(o.needs_reprint?" (cambió desde la última → será v"+((o.print_version||0)+1)+")":" (sin cambios → se reimprime v"+(o.print_version||0)+")")}</div>}
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {canChoose&&<div style={{fontSize:11,color:C.t2,marginBottom:12}}>Elige la versión a imprimir{wasPrinted&&(o.needs_reprint?" (cambió desde la última → será v"+((o.print_version||0)+1)+")":" (sin cambios → se reimprime v"+(o.print_version||0)+")")}</div>}
+      <div ref={primeroRef} style={{display:"flex",flexDirection:"column",gap:8}}>
         {canChoose&&<button onClick={()=>printIt("full")} disabled={printing} style={{...bt(printing?"#9ca3af":C.fac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir — Administrativa (Completa)</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(con precio y contactos)</span></button>}
         {canChoose&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><FactoryIcon size={14} weight="bold"/>Imprimir — Copia Producción</>}<span style={{fontSize:10,fontWeight:400,opacity:.8}}>(sin precio ni datos fiscales)</span></button>}
         {isFloor&&<button onClick={()=>printIt("production")} disabled={printing} style={{...bt(printing?"#9ca3af":C.ac),width:"100%",justifyContent:"center",padding:"12px 18px",borderRadius:12,cursor:printing?"wait":"pointer"}}>{printing?<><HourglassIcon size={14} weight="bold"/>Registrando...</>:<><PrinterIcon size={14} weight="bold"/>Imprimir Orden</>}</button>}

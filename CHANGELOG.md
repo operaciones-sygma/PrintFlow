@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.129 — La hoja impresa se lee en el taller: nada de menos de 7 pt, aguanta la fotocopia y lo elegido se distingue — 16-oct-2026
+
+**Qué pasaba.** La novena pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la hoja impresa de la orden (`PrintOrder`), la que la
+planta tiene en la mano y muchas veces fotocopia. **25/40** (snapshot `.impeccable/critique/2026-10-16T19-01-04Z__src-app-jsx-hoja-impresa.md`). Medida como se
+imprime (el CSS de impresión, el ajuste a una hoja y el PDF Carta): 37 textos de menos de 7 pt (las etiquetas de 7 px, los títulos de sección de 8, las
+firmas de 7), y en una orden larga (dos fotos, 9 acabados, 6 renglones de notas, 4 lugares) el ajuste a una hoja ponía zoom 0.761: la letra más chica de
+5.3 px (4 pt). En fotocopia se perdían la fecha del pedido (`#888`, 3.5:1), las firmas (`#999`, 2.8:1), el folio web y el de remisión (verde a 2.3:1). Lo
+elegido en «Procesos y acabados» y en «Tipo de proceso» se veía igual que lo no elegido (sólo una palomita de 9 px). La fecha de entrega en 12 px. La
+ventana para elegir la copia no era un diálogo (el foco no entraba: con Enter no imprimía; el Tab se iba a la app de atrás). «Cotización» siempre vacío en la
+administrativa y «Tipo de Orden» dos veces en la de producción.
+
+**Qué se cambió** (sólo `PrintOrder`; la versión, el registro y lo que lleva cada copia, igual):
+- La hoja: nada de menos de 10 px (etiquetas, títulos de sección, firmas, pie, la palomita), los grises de `#444` para arriba y las tintas oscuras (el
+  folio de remisión, el web, el de la OC dividida); la fecha de entrega de 15 px y el producto de 14.
+- Lo elegido en negritas y negro, lo demás en gris (`.opt`): los acabados (con su detalle) y Normal/Urgente/Baja.
+- Compacta para que la orden larga quepa sin encoger la letra: los Pantones en un renglón, la maquila externa sin su barra (y sin la casilla vacía del
+  correo en la de producción), la distribución de dos en dos (1 2 / 3 4), el vendedor junto al cliente en la de producción (adiós «Información
+  Adicional»), sin «Cotización», el logotipo y los márgenes un poco más justos. Y el ajuste a una hoja (`pfFit`): primero ceden las fotos (de 180 px hasta
+  70) y sólo después se encoge la letra.
+- La ventana para elegir la copia: `role="dialog"` con su nombre, el foco en el primer botón (Enter imprime), `atraparTab`, el foco regresa al cerrar; su
+  letra de 11 px y la maquila en tinta.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-hoja.mjs` (la ventana y la hoja que abre, con la base simulada) y tanda `hoja` (24), que mide la hoja COMO
+SE IMPRIME (letra efectiva = tamaño × el zoom del ajuste; contraste contra lo que tiene debajo, que es lo que sobrevive a una fotocopia; las hojas del PDF
+Carta). **Vuelta 1** (15, escritas antes del arreglo) contra v10.84.128: fallaban 8. Tres supuestos de la prueba se corrigieron antes de contar (las
+etiquetas salen en mayúsculas: buscaba «Cotización» y «Tipo de Orden» en minúsculas y no los veía; el botón del banco contaba como de la ventana; y «sin
+precios» del letrero contaba como precio). **Vuelta 2** (9, por donde no se diseñó): contra lo de antes fallaban 3 (la orden mínima con letra chica,
+«Urgente» sin negritas, el teclado). Con el arreglo, la orden larga quedó a zoom 0.906 (9.1 px): se compactó más (logotipo, márgenes, las fotos hasta 70
+px) y quedó a 0.951 (9.5 px); 24 de 24. El doble clic NO abría dos ventanas (la prueba pasaba también antes: React apaga el botón entre los dos clics);
+un seguro que se había puesto por eso se quitó. El detector de la skill: de 17 hallazgos (22 en la larga) a los que en papel no aplican (la letra de
+10-11 px que mide como pantalla, las mayúsculas de las etiquetas, Arial) y el «gradient-text» del banco.
+
+**Para Marcelo:** ¿las casillas de acabados que NO se eligieron deben seguir saliendo (la forma que la planta conoce) o sólo lo elegido? Y una orden más
+larga que la de prueba: ¿una hoja aunque la letra se encoja, o dos hojas legibles? (v10.71.5 eligió una hoja.)
+
+**En producción:** (pendiente)
+
 ## v10.84.128 — El Despertador se puede usar: lo que se toca se abre al confirmar, «Sí, entiendo» cierra y la lectura fallida ya no lo apaga — 16-oct-2026
 
 **Qué pasaba.** La octava pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Despertador, la ventana grande que cada quien ve al

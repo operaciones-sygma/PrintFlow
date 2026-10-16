@@ -104,6 +104,8 @@ const TANDAS = [
   { nombre: "avisos", gen: "tests/banco/gen-avisos.mjs", romper: "tests/romper/avisos.mjs", puerto: 5180 },
   // v10.84.128 — el Despertador (la ventana del día), con lo de App que lo arma y lo confirma; la primera lectura que falla, con el reloj fijo
   { nombre: "despertador", gen: "tests/banco/gen-despertador.mjs", romper: "tests/romper/despertador.mjs", puerto: 5179 },
+  // v10.84.129 — la hoja impresa de la orden (PrintOrder): la ventana para elegir la copia y la hoja medida como se imprime (CSS de impresión, ajuste, PDF Carta)
+  { nombre: "hoja", gen: "tests/banco/gen-hoja.mjs", romper: "tests/romper/hoja.mjs", puerto: 5178 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
