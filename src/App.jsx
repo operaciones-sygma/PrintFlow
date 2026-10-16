@@ -3036,7 +3036,7 @@ function FirstTimeHint({hintKey,text,color=C.ac,role}) {
   if(!show)return null;
   return <div style={{background:color+"10",border:"1.5px solid "+color+"30",borderRadius:10,padding:"8px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8,animation:"toastIn .3s ease"}}>
     <span style={{fontSize:11,color,fontWeight:600,flex:1,lineHeight:1.4}}><LightbulbIcon size={12} weight="fill" style={{verticalAlign:"-2px",marginRight:3}}/>{text}</span>
-    <button onClick={dismiss} style={{background:color+"20",border:"none",color,borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0}}>Entendido</button>
+    <button onClick={dismiss} style={{/* v10.84.124 — sobre el fondo y en su tinta: sobre el tinte daba 4.4:1 */background:C.bg,border:"1px solid "+color+"40",color:tintaAA(color),borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Geist',sans-serif",flexShrink:0}}>Entendido</button>
   </div>;
 }
 
@@ -12434,7 +12434,10 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
   const created=myOrders.filter(o=>new Date(o.created_at)>=wa);const delivered=myOrders.filter(o=>(o.deliveredAt||o.delivered_at)&&new Date(o.deliveredAt||o.delivered_at)>=wa);
   const rev=delivered.reduce((s,o)=>s+(precioVenta(o)),0);
   const late=myOrders.filter(o=>o.due_date&&isOverdue(o.due_date)&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled")).length;
-  const St=({l,v,c=C.tx})=><div style={{background:C.bg,borderRadius:10,padding:10,flex:"1 1 90px",textAlign:"center"}}><div style={{fontSize:10,color:C.t2,fontWeight:600,textTransform:"uppercase",marginBottom:2}}>{l}</div><div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div></div>;
+  // v10.84.124 — las cifras en un renglón (antes, tarjetas iguales de número grande: la plantilla que la critique del Dashboard marcó) y en su TINTA:
+  //   el verde, el rojo y el ámbar de la app no llegan a AA como letra (3.0, 4.0 y 2.7:1); lo demás, en el color del texto.
+  const tinta=c=>c===C.ok?C.okInk:c===C.dn?C.dnInk:c===C.wn?C.wnInk:[C.ac,C.okInk,C.dnInk,C.wnInk].includes(c)?c:C.tx;
+  const St=({l,v,c=C.tx})=><div style={{display:"inline-flex",alignItems:"baseline",gap:6,background:C.bg,borderRadius:8,padding:"6px 10px",flex:"0 0 auto"}}><span style={{fontSize:11,color:C.t2,fontWeight:600}}>{l}</span><span style={{fontSize:14,fontWeight:800,color:tinta(c)}}>{v}</span></div>;
 
   // Extended stats for admin
   const isAdmin=role==="admin";
@@ -12475,10 +12478,10 @@ function WeeklyReport({orders,role,chemicals=[],plates=[],maintenance=[],userLog
 
   return <div style={{background:C.sf,borderRadius:14,padding:16,marginBottom:14}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><ChartBarIcon size={13} weight="bold"/>{role==="vendedor"?"Tu Semana":"Resumen Semanal"}</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><ChartBarIcon size={13} weight="bold"/>{role==="vendedor"?"Tus últimos 7 días":"Últimos 7 días"}</span>
       {isAdmin&&<button onClick={()=>setExpanded(!expanded)} style={{...bs(C.bg,C.ac),boxShadow:"0 0 0 0.5px "+C.bd,fontSize:10}}>{expanded?<><CaretUpIcon size={11} weight="bold"/>Cerrar</>:<><CaretDownIcon size={11} weight="bold"/>Reporte Completo</>}</button>}
     </div>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><St l="Creadas" v={created.length} c={C.ac}/><St l="Entregadas" v={delivered.length} c={C.ok}/><St l="Facturado" v={fmt(rev)} c={C.ok}/><St l="Con retraso" v={late} c={late>0?C.dn:C.ok}/></div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><St l="Creadas" v={created.length} c={C.ac}/><St l="Entregadas" v={delivered.length} c={C.ok}/><St l="Ingreso (lo entregado)" v={fmt(rev)} c={C.ok}/><St l="Con retraso hoy" v={late} c={late>0?C.dn:C.ok}/></div>
 
     {isAdmin&&expanded&&<div style={{marginTop:12,borderTop:"0.5px solid "+C.bd,paddingTop:12}}>
       {/* Row 2: Production metrics */}
@@ -15247,7 +15250,8 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
   // T1 — alertas: desde v10.84.50 vienen de alertasDeLaOrden, la misma definición que el detalle de la orden
   const bT1=alertasDeLaOrden(o,{inEsperaView}), bT2=[], bT3=[];
   // T2 — identidad (la etapa es la señal primaria; #folio o, si no hay, el id como fallback)
-  if(!inEsperaView) bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:F.body,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>); // en la vista "En espera" la etapa ya es el header del grupo
+  // v10.84.124 — tampoco en la compacta (el Dashboard): ahí la etapa es la columna, y su color a 11 px daba 3.0:1
+  if(!inEsperaView&&!compact) bT2.push(<span key="stage" style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:F.body,fontWeight:700,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}><StageLbl stage={o.stage}/></span>); // en la vista "En espera" la etapa ya es el header del grupo
   if(o.production_number) bT2.push(<Badge key="pn" tone="identity">#{o.production_number}</Badge>);
   else if(o.id) bT2.push(<Badge key="id" tone="context" style={{fontFamily:"'Geist Mono',monospace"}}>{o.id}</Badge>);
   if(o.stock_role==="production") bT2.push(<Badge key="stockp" tone="context" title="Producción a stock — no se entrega al cliente, ingresa al inventario interno" icon={<PackageIcon size={11} weight="bold"/>}>a Stock</Badge>);
@@ -15325,14 +15329,14 @@ function OCard({o,role,onAction,compact,busy,noDragHint,userLogin,inOCView,inEsp
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{color:C.tx,fontWeight:700,fontSize:compact?F.body:F.title,letterSpacing:"-0.01em",cursor:"pointer"}} onClick={e=>{e.stopPropagation();!compact&&vOwns&&onAction(o.id,"client_history")}}>{o.client}</div>
+            <div style={{color:C.tx,fontWeight:700,fontSize:compact?F.body:F.title,letterSpacing:"-0.01em",cursor:"pointer"}} onClick={e=>{/* v10.84.124 — sólo se detiene si abre el historial del cliente: antes se tragaba el clic y el nombre (lo más grande de la ficha) no abría nada en la compacta */if(!compact&&vOwns){e.stopPropagation();onAction(o.id,"client_history")}}}>{o.client}</div>
             {/* v10.73.38 — en la vista dedicada el MOTIVO de la pausa sube a línea PRIMARIA (justo bajo el cliente): es la señal que decide "¿sigue teniendo sentido la pausa?" y antes iba enterrada al fondo en el banner. */}
             {inEsperaView&&snoozeActive(o)&&<div style={{marginTop:4,fontSize:F.label,fontWeight:700,color:C.tx,display:"flex",alignItems:"flex-start",gap:5,lineHeight:1.3}}><BellSlashIcon size={13} weight="bold" color={C.ac} style={{flexShrink:0,marginTop:1}}/><span>{o.snooze_reason}{o.snoozed_by?<span style={{fontWeight:500,color:C.t3,fontSize:F.meta}}> — {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}</span>:null}</span></div>}
             {!inEsperaView&&!hp&&vOwns&&!compact&&(o.client_agent||"").trim()&&<div style={{marginTop:2}}><span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:F.meta,fontWeight:600,color:C.ac,background:C.ac+"12",border:"1px solid "+C.ac+"22",padding:"1px 7px",borderRadius:20}}><UserIcon size={10} weight="bold" style={{opacity:.8}}/>{o.client_agent}</span></div>}
             {!inEsperaView&&!compact&&!hp&&vOwns&&o.client_phone&&<div style={{fontSize:F.meta,color:"#25d366",marginTop:1}}><WhatsappLogoIcon size={11} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{o.client_lada||"+52"} {o.client_phone}</div>}
             <div style={{color:C.t2,fontSize:compact?F.meta:F.body,marginTop:1}}>{o.product||o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
             {!inEsperaView&&!compact&&o.paper_type&&<div style={{color:C.t3,fontSize:F.meta,marginTop:2}}><FileTextIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.paper_type}{o.paper_grammage?" "+o.paper_grammage+"g":""}{o.standard_size?" | "+ssLabel(o.standard_size):(medidaCm(o)?" | "+medidaCm(o):"")}{o.ink_front?" | F:"+o.ink_front:""}{o.ink_back?" V:"+o.ink_back:""}</div>}
-            {(o.created_at||o.due_date)&&<div style={{fontSize:compact?F.micro:F.meta,marginTop:1,color:C.t3}}>{o.created_at&&<><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{color:late?C.dn:"inherit"}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.due_date)}</span>}</div>}
+            {(o.created_at||o.due_date)&&<div style={{fontSize:compact?F.micro:F.meta,marginTop:1,color:C.t3}}>{o.created_at&&<><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.created_at)}</>}{o.created_at&&o.due_date&&" → "}{o.due_date&&<span style={{/* v10.84.124 — en su tinta: C.dn a 10 px daba 4.3:1 */color:late?C.dnInk:"inherit"}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-2px",marginRight:3}}/>{fD(o.due_date)}</span>}</div>}
           </div>
           {!compact&&!inEsperaView&&<div style={{textAlign:"right",minWidth:70,flexShrink:0}}>
             {!hp&&vOwns?(precioVenta(o)>0?<div style={{fontSize:F.title,fontWeight:800}}>{fmt(precioVenta(o))}</div>:<span style={{fontSize:10,color:C.t2}}>Sin precio</span>):!hp&&!vOwns?null:(precioVenta(o)>0?<span style={{fontSize:10,color:C.ok,display:"inline-flex",alignItems:"center",gap:2}}><CheckIcon size={10} weight="bold"/>Precio</span>:<span title="Precio pendiente" aria-label="Precio pendiente" style={{fontSize:10,color:C.wn,display:"inline-flex",alignItems:"center"}}><HourglassIcon size={11} weight="bold"/></span>)}
@@ -15569,8 +15573,8 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
   return <div style={{background:C.maq+"08",border:"1.5px solid "+C.maq+"25",borderRadius:16,padding:16,marginBottom:16}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:C.maq}}><TruckIcon size={15} weight="bold"/>En Maquila</span>
-        <div style={{background:C.maq,color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{all.length}</div>
+        <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:C.wnTx}}>{/* v10.84.124 — las letras de este seguimiento, en su tinta (AA) */}<TruckIcon size={15} weight="bold" color={C.maq}/>En Maquila</span>
+        <div style={{background:C.wnInk,color:"#fff",padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700}}>{all.length}</div>
       </div>
       <div style={{display:"flex",gap:8,fontSize:10,color:C.t2}}>
         {partial.length>0&&<span style={{display:"inline-flex",alignItems:"center",gap:3}}><ArrowsClockwiseIcon size={11} weight="bold"/>{partial.length} parcial{partial.length>1?"es":""}</span>}
@@ -15580,7 +15584,7 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
 
     {provs.map(([prov,d])=>{const vOwnsSample=role==="vendedor"?d.orders.find(o=>(o.maquila_phone||o.maquila_email)&&(!o.created_by||o.created_by===userLogin)):d.orders.find(o=>o.maquila_phone||o.maquila_email);const sample=vOwnsSample;return <div key={prov} style={{marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-        <div style={{background:C.maq+"15",padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,color:C.maq}}>{prov}</div>
+        <div style={{background:C.maq+"15",padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,color:C.wnTx}}>{prov}</div>
         <span style={{fontSize:10,color:C.t2}}>{d.orders.length===1?"1 orden":d.orders.length+" órdenes"}</span>
         {sample?.maquila_phone&&<a href={"https://wa.me/"+(sample.maquila_phone.replace(/\D/g,"").replace(/^(?!52|1)/,"52"))} target="_blank" rel="noopener" style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#25d366",textDecoration:"none",fontWeight:500}}><WhatsappLogoIcon size={11} weight="bold"/>{sample.maquila_phone}</a>}
         {sample?.maquila_email&&<a href={"mailto:"+sample.maquila_email} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:C.ios,textDecoration:"none",fontWeight:500}}><EnvelopeIcon size={11} weight="bold"/>{sample.maquila_email}</a>}
@@ -15593,36 +15597,74 @@ function MaquilaTracker({orders,onAction,role,userLogin}) {
               <div style={{fontSize:12,fontWeight:700}}>{o.client}</div>
               <div style={{fontSize:10,color:C.t2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
               <div style={{display:"flex",gap:4,marginTop:4,flexWrap:"wrap"}}>
-                <span style={{background:(st?.c||C.t3)+"15",color:st?.c,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
-                {o.order_type==="maquila"?<span style={{background:C.maq+"12",color:C.maq,padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila completa</span>:<span style={{background:C.maqin+"12",color:C.maqin,padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila parcial</span>}
-                {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
-                {days>=14&&<span style={{background:C.dn+"12",color:C.dn,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={10} weight="fill"/>+14 días</span>}
+                <span style={{background:(st?.c||C.t3)+"15",color:tintaAA(st?.c||C.t3),padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
+                {o.order_type==="maquila"?<span style={{background:C.maq+"12",color:tintaAA(C.maq),padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila completa</span>:<span style={{background:C.maqin+"12",color:tintaAA(C.maqin),padding:"2px 8px",borderRadius:6,fontSize:10}}>Maquila parcial</span>}
+                {o.priority==="urgente"&&<span style={{background:C.dn+"12",color:C.dnInk,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={8} weight="fill"/>Urgente</span>}
+                {days>=14&&<span style={{background:C.dn+"12",color:C.dnInk,padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:3}}><WarningIcon size={10} weight="fill"/>+14 días</span>}
               </div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:18,fontWeight:800,color:urgColor}}>{days}d</div>
+              <div style={{fontSize:18,fontWeight:800,color:tintaAA(urgColor)}}>{days}d</div>
               <div style={{fontSize:10,color:C.t3}}>en maquila</div>
               {!hp&&oOwns&&(precioVenta(o)>0)&&<div style={{fontSize:11,fontWeight:600,color:C.okInk,marginTop:2}}>{fmt(precioVenta(o))}</div>}
             </div>
           </div>
-          {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dn:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{isOverdue(o.due_date)?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
+          {o.due_date&&<div style={{fontSize:10,color:isOverdue(o.due_date)?C.dnInk:C.t3,marginTop:4}}><CalendarDotsIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Entrega: {fD(o.due_date)}{isOverdue(o.due_date)?<><WarningIcon size={10} weight="fill" style={{verticalAlign:"-1px",margin:"0 2px 0 4px"}}/>RETRASO</>:""}</div>}
         </div>})}
     </div>})}
   </div>;
 }
 
-function Pipeline({orders,role,onAction}) {
+// v10.84.124 — el «Dashboard», su /impeccable critique (16-oct, 20/40; snapshot .impeccable/critique/…__src-app-jsx-dashboard.md). Es la vista con la
+//   que abren casi todos, y a 1366 su primera pantalla eran cinco columnas VACÍAS (Validar, Diseño, Prueba, Aprobación, CTP) estiradas a todo lo alto: las
+//   órdenes activas quedaban a la derecha, fuera de la vista. Ahora una etapa vacía es un riel angosto en su lugar del flujo (su ícono, el 0 y su nombre)
+//   y las que tienen órdenes ocupan el ancho, sin estirarse a la altura de la más larga; sin una lectura buena no dice «Sin órdenes» (la regla 12); el
+//   aviso de las que no avanzan dice cuáles y lleva a cada una; los encabezados con AA (el color de la etapa va en su ícono).
+function EtapasDelFlujo({etapas,ordenes,onAction,role,final=null}){
+  return <DualScroll style={{display:"flex",gap:6,alignItems:"flex-start",paddingBottom:10,marginBottom:16}}>
+    {etapas.map(st=>{const so=ordenes.filter(o=>o.stage===st.id).sort(prioSort);const I=st.Icon;const nombre=st.lt||st.l;
+      if(so.length===0)return <div key={st.id} data-etapa={st.id} data-nombre={nombre} aria-label={nombre+": sin órdenes"} title={nombre+": sin órdenes"}
+        style={{flex:"0 0 36px",width:36,minHeight:150,background:C.sf,borderRadius:12,border:"1px solid "+C.bd,display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"10px 0"}}>
+        {I?<I size={13} weight="bold" color={st.c} style={{flexShrink:0}}/>:null}
+        <span style={{fontSize:11,fontWeight:700,color:C.t2}}>0</span>
+        <span style={{writingMode:"vertical-rl",transform:"rotate(180deg)",fontSize:11,fontWeight:600,color:C.t2,whiteSpace:"nowrap"}}>{nombre}</span>
+      </div>;
+      return <div key={st.id} data-etapa={st.id} data-nombre={nombre} style={{flex:"1 0 180px",minWidth:180,maxWidth:280,background:C.sf,borderRadius:14,padding:12,border:"1px solid "+C.bd}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6,marginBottom:8}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,color:C.tx,minWidth:0}}>{I?<I size={12} weight="bold" color={st.c} style={{flexShrink:0}}/>:null}<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span></span>
+          <span style={{flexShrink:0,minWidth:22,height:22,padding:"0 6px",borderRadius:11,background:C.bg,border:"1px solid "+C.bd,color:C.tx,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</span>
+        </div>
+        {so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}
+      </div>})}
+    {final}
+  </DualScroll>;
+}
+function Pipeline({orders,role,onAction,leido=true}) {
+  const [verQuietas,setVerQuietas]=useState(false);
   const iSt=INT_FLOW.filter(s=>s.id!=="delivered");const mSt=MAQ_FLOW.filter(s=>s.id!=="maq_delivered");
   const intO=orders.filter(o=>o.order_type!=="maquila"&&o.stage!=="delivered"&&o.stage!=="cancelled"&&o.stage!=="web_pending"&&o.stage!=="web_rejected");const maqO=orders.filter(o=>o.order_type==="maquila"&&o.stage!=="maq_delivered"&&o.stage!=="maq_cancelled");
-  const delC=orders.filter(o=>o.stage.includes("delivered")).length;const staleC=orders.filter(o=>getStale(o)).length;
+  const delC=orders.filter(o=>o.stage.includes("delivered")).length;const quietas=orders.filter(o=>getStale(o));
+  if(!leido)return <div role="status" style={{display:"flex",alignItems:"center",gap:8,padding:"14px 16px",borderRadius:12,background:C.sf,border:"1px solid "+C.bd,fontSize:12,color:C.t2,marginBottom:16}}><ClockIcon size={14} weight="bold" style={{flexShrink:0}}/>Sin cifras mientras no se lea de la base.</div>;
   return <div>
-    {staleC>0&&<div style={{display:"flex",alignItems:"center",gap:8,background:C.wn+"08",border:"1px solid "+C.wn+"20",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12,color:C.wn,fontWeight:600}}><WarningIcon size={15} weight="fill" style={{flexShrink:0}}/>{staleC} orden{staleC>1?"es":""} sin avance en más de 24h</div>}
-    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.ac,textTransform:"uppercase",marginBottom:8}}><FactoryIcon size={13} weight="bold"/>Internas ({intO.length})</div>
-    <DualScroll style={{display:"flex",gap:6,paddingBottom:10,marginBottom:16}}>
-      {iSt.map(st=>{const so=intO.filter(o=>o.stage===st.id).sort(prioSort);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,border:"1.5px solid "+st.c+"66"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c,display:"inline-flex",alignItems:"center"}}><StageLbl stage={st.id} size={10}/></div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>Sin órdenes</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}
-      <div style={{minWidth:90,flex:"0 0 auto",background:C.ok+"08",borderRadius:14,padding:12,border:"1.5px solid "+C.ok+"66",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:22,fontWeight:800,color:C.ok}}>{delC}</div><div style={{fontSize:9,color:C.t2}}>Entregadas</div></div>
-    </DualScroll>
-    {maqO.length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.maq,textTransform:"uppercase",marginBottom:8}}><TruckIcon size={13} weight="bold"/>Maquila ({maqO.length})</div><DualScroll style={{display:"flex",gap:6,paddingBottom:10}}>{mSt.map(st=>{const so=maqO.filter(o=>o.stage===st.id);return <div key={st.id} style={{minWidth:190,maxWidth:230,flex:"0 0 auto",background:C.sf,borderRadius:14,padding:12,border:"1.5px solid "+st.c+"66"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{fontSize:10,fontWeight:700,color:st.c,display:"inline-flex",alignItems:"center"}}><StageLbl stage={st.id} size={10}/></div><div style={{background:st.c+"15",color:st.c,width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700}}>{so.length}</div></div>{so.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.ph,fontSize:10}}>—</div>:so.map(o=><OCard key={o.id} o={o} role={role} onAction={onAction} compact/>)}</div>})}</DualScroll></>}
+    {quietas.length>0&&<div style={{marginBottom:12}}>
+      <button onClick={()=>setVerQuietas(v=>!v)} aria-expanded={verQuietas} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:C.bg,border:"1px solid "+C.wn+"66",borderRadius:10,padding:"8px 14px",fontSize:12,color:C.wnInk,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+        <WarningIcon size={15} weight="fill" color={C.wn} style={{flexShrink:0}}/>
+        <span style={{flex:1}}>{quietas.length===1?"1 orden sin avance en más de 24 h":quietas.length+" órdenes sin avance en más de 24 h"}</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11}}>{verQuietas?"Ocultar":quietas.length===1?"Ver cuál":"Ver cuáles"}{verQuietas?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}</span>
+      </button>
+      {verQuietas&&<ul aria-label="Órdenes sin avance" style={{listStyle:"none",margin:"4px 0 0",padding:4,display:"flex",flexDirection:"column",gap:2,borderRadius:10,background:C.bg,border:"1px solid "+C.bd}}>
+        {quietas.map(o=>{const q=getStale(o);return <li key={o.id}><button onClick={()=>onAction(o.id,"detail")} style={{width:"100%",display:"flex",alignItems:"baseline",gap:10,textAlign:"left",border:"none",background:"transparent",padding:"6px 8px",borderRadius:8,cursor:"pointer",fontFamily:"inherit",fontSize:12,color:C.tx}}>
+          <span style={{fontWeight:700,flexShrink:0}}>{o.production_number||"—"}</span>
+          <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(o.client||"—").trim()}</span>
+          <span style={{color:C.t2,flexShrink:0,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
+          <span style={{color:q?.lv==="critical"?C.dnInk:C.wnInk,fontWeight:700,flexShrink:0}}>{q?.lb}</span>
+        </button></li>})}
+      </ul>}
+    </div>}
+    {intO.length===0&&maqO.length===0&&<div style={{fontSize:12,color:C.t2,marginBottom:10}}>No hay órdenes activas.</div>}
+    <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.ac,textTransform:"uppercase",marginBottom:8}}><FactoryIcon size={13} weight="bold"/>Internas ({intO.length})</div>
+    <EtapasDelFlujo etapas={iSt} ordenes={intO} onAction={onAction} role={role} final={<div style={{flex:"0 0 auto",minWidth:90,minHeight:150,background:C.sf,borderRadius:14,padding:12,border:"1px solid "+C.ok+"55",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:20,fontWeight:800,color:C.okInk}}>{delC}</div><div style={{fontSize:11,color:C.t2}}>entregadas</div></div>}/>
+    {maqO.length>0&&<><div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.wnTx,textTransform:"uppercase",marginBottom:8}}><TruckIcon size={13} weight="bold" color={C.maq}/>Maquila ({maqO.length})</div><EtapasDelFlujo etapas={mSt} ordenes={maqO} onAction={onAction} role={role}/></>}
   </div>;
 }
 
@@ -23522,7 +23564,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             lo dice él mismo («Leyendo el tablero…») */}
         {!lectura.ok&&!lectura.fallo&&!(view==="board"&&(user==="produccion"||user==="admin"))&&<div role="status" style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 14px",borderRadius:10,background:C.sf,border:"1px solid "+C.bd,fontSize:F.body,color:C.t2}}>
           <ClockIcon size={14} weight="bold" style={{flexShrink:0}}/>Leyendo de la base…</div>}
-        {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{/* v10.72.44 — hint de orientación: producción aterriza aquí (vista general) pero su trabajo se mueve en el Tablero. Las otras vistas ya tenían hint; esta no. */}{user==="produccion"&&<FirstTimeHint role={user} hintKey="pipeline-prod" text="Vista general del flujo. Tu trabajo se mueve en el Tablero: arrastra las órdenes Listas a las máquinas." color={C.ac}/>}{(user==="admin"||isSec(user))&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
+        {view==="pipeline"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Dashboard</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{/* v10.84.124 — sin una lectura buena, sin cifras (la regla 12; decía «0 órdenes · 0 activas») */}{!lectura.ok?(lectura.fallo?"Sin cifras mientras no se lea de la base":"Leyendo de la base…"):<>{viewOrders.length} órdenes · {viewOrders.filter(o=>!o.stage.includes("delivered")&&!o.stage.includes("cancelled")&&o.stage!=="web_pending"&&o.stage!=="web_rejected").length} activas</>}{hasFilter&&orderFilter==="mine"?" (mis órdenes)":""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}</p>{/* v10.72.44 — hint de orientación: producción aterriza aquí (vista general) pero su trabajo se mueve en el Tablero. Las otras vistas ya tenían hint; esta no. */}{user==="produccion"&&<FirstTimeHint role={user} hintKey="pipeline-prod" text="Vista general del flujo. Tu trabajo se mueve en el Tablero: arrastra las órdenes Listas a las máquinas." color={C.ac}/>}{(user==="admin"||isSec(user))&&!!lectura.ok&&<WeeklyReport orders={viewOrders} role={user} chemicals={chemicals} plates={plates} maintenance={maintenance} userLogin={userLogin}/>}{/* v10.37.0 — Pipeline (producción interna + etapas) primero, MaquilaTracker al final */}<Pipeline orders={filteredOrders} role={user} onAction={handleAction} leido={!!lectura.ok}/><MaquilaTracker orders={filteredOrders} onAction={handleAction} role={user} userLogin={userLogin}/></div>}
         {view==="tasks"&&<div><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 4px"}}>Mis Pendientes</h2><p style={{fontSize:11,color:C.t2,margin:"0 0 14px"}}>{/* v10.84.95 (vuelta 3) — sin una lectura buena, sin cifras: decía «0 te tocan» (antes «0 pendientes»; la regla 12) */}{!lectura.ok?(lectura.fallo?"Sin cifras mientras no se lea de la base":"Leyendo de la base…"):(()=>{const eff=(user==="admin"&&adminRoleFilter)?adminRoleFilter:user;const vivas=filteredMyTasks.filter(o=>!snoozeActive(o));const n=k=>vivas.filter(o=>queTeToca(o,eff,userLogin)===k).length;const pk=myTasks.filter(o=>snoozeActive(o)).length;const nt=n("toca"),nb=n("tablero"),ne=n("espera");return [nt+(nt===1?" te toca":" te tocan"),nb?nb+" en el Tablero":"",ne?ne+(ne===1?" espera a otro":" esperan a otro"):"",pk?pk+" en pausa":""].filter(Boolean).join(" · ")})()}{/* v10.41.1 #6 — verificar predicates aplicables al rol actual, no solo Set.size */}{taskFilterConfigs.some(f=>taskFilters.has(f.key))?" · filtrado de "+myTasks.length:""}{search?<> · <MagnifyingGlassIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>"{search}"</>:""}{user==="admin"&&adminRoleFilter?<> · <UserIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:1}}/>vista de {rL[adminRoleFilter]}</>:""}</p>
           {user==="produccion"&&<FirstTimeHint role={user} hintKey="tasks-prod" text="Aquí aparecen las órdenes que necesitan tu atención. Valida specs en las nuevas, recoge placas, y usa el Tablero para mover órdenes entre máquinas." color={C.ios}/>}
           {user==="preprensa"&&<FirstTimeHint role={user} hintKey="tasks-prep" text="Aquí verás órdenes para validar, diseñar y aprobar pruebas. Prepara archivos en Diseño, súbelos y envía a Prueba de Color para Germán." color={C.dsn}/>}

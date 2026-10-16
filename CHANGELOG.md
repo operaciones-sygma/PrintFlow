@@ -12,6 +12,39 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.124 — El «Dashboard» enseña dónde está el trabajo: las etapas vacías son rieles y el resumen dice lo que cuenta — 16-oct-2026
+
+**Qué pasaba.** La cuarta pasada de /impeccable critique de la noche en PrintFlow: el «Dashboard», la vista con la que abren casi todos (Lupita, Karla,
+Noemí, Germán, Gerardo, los vendedores). **20/40** (snapshot `.impeccable/critique/2026-10-16T11-42-47Z__src-app-jsx-dashboard.md`). A 1366 su primera
+pantalla eran cinco columnas VACÍAS (Validar, Diseño, Prueba, Aprobación, CTP: en producción, en 0) estiradas a la altura de la más larga; las 37 activas,
+a la derecha, fuera de la vista. «Resumen semanal» eran cuatro tarjetas de número grande y decía «Facturado» a lo ENTREGADO en los últimos 7 días a precio
+de venta (el «Ingreso» de Analytics: no lo facturado); «Con retraso» era de hoy. Sin una lectura buena, «Sin órdenes» en las 12 columnas y «0 activas».
+El aviso de las que no avanzan no decía cuáles. En la ficha compacta, el nombre del cliente (lo más grande, con cursor de mano) se tragaba el clic y no
+abría nada. Y casi todo lo de color sin AA (el nombre de cada etapa en su color, de 2.0 a 4.1:1; el resumen; el ámbar del aviso; el naranja de maquila).
+
+**Qué se cambió:**
+- `Pipeline` (con `EtapasDelFlujo`, nueva): una etapa vacía es un riel de 36 px en su lugar del flujo (su ícono, el 0 y su nombre de lado); las que tienen
+  órdenes ocupan el ancho (de 180 a 280 px) y no se estiran. El nombre de la etapa en la letra del texto; su color, en el ícono. Sin lectura buena,
+  «Sin cifras mientras no se lea de la base» (`leido`); sin activas, «No hay órdenes activas.» una vez. El aviso de las que no avanzan es un botón que
+  abre la lista (orden, cliente, etapa, cuánto lleva) y cada una abre su detalle.
+- `WeeklyReport`: un renglón de cifras chicas, «Últimos 7 días» («Tus últimos 7 días» al vendedor), «Ingreso (lo entregado)» y «Con retraso hoy», en tinta.
+  El encabezado de la vista, sin cifras mientras no se lea de la base.
+- 🔑 **Compartido:** `OCard` (la ficha) — el nombre del cliente sólo detiene el clic cuando abre el historial (antes era zona muerta en la compacta y, en la
+  normal, para quien no es el vendedor dueño); la compacta (sólo la usa el Dashboard) sin la etiqueta de su etapa (la columna ya lo dice, como en «En
+  espera»); la fecha vencida, en su tinta en todas las fichas. `FirstTimeHint` (las pistas): «Entendido» sobre el fondo y en su tinta (daba 4.4:1).
+  `MaquilaTracker`: sus letras en tinta.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-dashboard.mjs` (la vista con la línea de App que la monta, las fichas compactas, el reloj fijo en el
+miércoles 14-oct) y tanda `dashboard` (20). **Vuelta 1** (15, escritas antes del arreglo) contra v10.84.123: fallaban 13; dos eran supuestos míos de la
+prueba (la ficha compacta dice su folio dos veces; la ficha misma es un botón con el folio) y al corregirlos la vuelta 1 destapó un bug real: el nombre
+que no abría nada (db-13). **Vuelta 2** (5, por donde no se diseñó: la etapa que se vacía o se llena con la vista abierta, la lista de las quietas que se
+vacía abierta, el vendedor, Karla): contra lo de antes fallaban 3. Con el arreglo, la primera corrida dejó 3: un supuesto (el riel de «Enviada a Maquila
+(parcial)» mide 201 px por su nombre; el límite pasó a 300) y el AA de lo que no había visto (la etiqueta de etapa dentro de la ficha, 3.0:1, la fecha
+vencida, 4.3, el aviso sobre su tinte, 4.3); la segunda, el seguimiento de maquila y el «Entendido» de la pista; luego 20 de 20. El detector de la skill en
+el navegador: de 49-51 hallazgos por estado a 5 (la letra de 10-11 px de la app, Geist y el falso «gradient-text»).
+
+**En producción:** (pendiente)
+
 ## v10.84.123 — «Datos Pendientes»: Lupita y Karla ven primero lo que pueden completar, y sin lectura no dice que todo está bien — 16-oct-2026
 
 **Qué pasaba.** La tercera pasada de /impeccable critique de la noche en PrintFlow: «Datos Pendientes», la vista de Lupita y Karla (para Dirección es
