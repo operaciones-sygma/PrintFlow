@@ -43,7 +43,13 @@ vacía abierta, el vendedor, Karla): contra lo de antes fallaban 3. Con el arreg
 vencida, 4.3, el aviso sobre su tinte, 4.3); la segunda, el seguimiento de maquila y el «Entendido» de la pista; luego 20 de 20. El detector de la skill en
 el navegador: de 49-51 hallazgos por estado a 5 (la letra de 10-11 px de la app, Geist y el falso «gradient-text»).
 
-**En producción:** (pendiente)
+**En producción:** 16-oct ~06:01; READY `dpl_4sTqCaJTnzWsJq5P22ZpMT7Ca9SX` (commit `c8a9b57`, en `produccion.sygma.mx`). Vuelta atrás: promover
+`dpl_BXpWxSZYYhLFsCqqU1TAhDG4biY4` (el código de v10.84.123) o `git revert c8a9b57`; la base no cambió. Candado 2005 de 2005 a la primera, de a 4 tandas
+en 14.5 min (20 nuevas), sin inestables (las tandas de las fichas —tablero, detalle, sesión— no se quejaron del cambio a `OCard`). Revisado en producción
+sin escribir: lo servido trae lo nuevo y `npm run recorrido`: 8 roles, 95 pasos, nada truena; en su captura como Lupita, la primera pantalla enseña
+Máquina (19), Empaque (5) y Salidas (13) con las vacías como rieles, y arriba «Últimos 7 días · … · Ingreso (lo entregado) $316,744.46 · Con retraso hoy 8».
+🔑 Lo que cambió al abrir: como las fichas ya se ven, sus miniaturas se cargan (antes quedaban fuera de la pantalla): el recorrido marca «entrar» de Lupita
+y de Germán en 5.4 y 5.0 s con 39 firmas de fotos (antes no salían como lentas). Si estorba, la ficha compacta puede ir sin miniatura.
 
 ## v10.84.123 — «Datos Pendientes»: Lupita y Karla ven primero lo que pueden completar, y sin lectura no dice que todo está bien — 16-oct-2026
 

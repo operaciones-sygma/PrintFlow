@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1985 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2005 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.123 (16-oct, ~04:45; READY `dpl_JE8bsZnjQXvzHuLJe2xgUox71L9R`, commit `359227b`; vuelta atrás: promover
+- **LIVE:** v10.84.124 (16-oct, ~06:01; READY `dpl_4sTqCaJTnzWsJq5P22ZpMT7Ca9SX`, commit `c8a9b57`; vuelta atrás: promover
+  `dpl_BXpWxSZYYhLFsCqqU1TAhDG4biY4` (el código de v10.84.123) o `git revert c8a9b57`; la base no cambió; candado 2005 de 2005, de a 4). La cuarta
+  pasada de `/impeccable critique` de la noche: **el «Dashboard»** (con el que abren casi todos; 20/40, snapshot
+  `.impeccable/critique/2026-10-16T11-42-47Z__src-app-jsx-dashboard.md`): 🔑 las etapas vacías son rieles de 36 px y las que tienen órdenes ocupan el ancho
+  (a 1366 la primera pantalla eran cinco columnas vacías; `EtapasDelFlujo`); el resumen dice «Últimos 7 días · Ingreso (lo entregado) · Con retraso hoy»
+  (decía «Facturado» a lo entregado); sin lectura, sin cifras; el aviso de las quietas dice cuáles. Compartido: en `OCard` el nombre del cliente ya no se
+  traga el clic (era zona muerta en la compacta), la compacta sin su etiqueta de etapa y la fecha vencida en tinta; `FirstTimeHint` con AA. Banco
+  `gen-dashboard.mjs` y tanda `dashboard`.
+  v10.84.123 (16-oct, ~04:45; READY `dpl_JE8bsZnjQXvzHuLJe2xgUox71L9R`, commit `359227b`; vuelta atrás: promover
   `dpl_6kQMnCSqhA5tG3rTvuXAHxiKx4ht` (el código de v10.84.122) o `git revert 359227b`; la base no cambió; candado 1985 de 1985, de a 4). La tercera
   pasada de `/impeccable critique` de la noche: **«Datos Pendientes»** (Lupita y Karla; «Salud Operativa» para Dirección, la misma vista,
   `OperationalHealthView`; 20/40, snapshot `.impeccable/critique/2026-10-16T10-29-04Z__src-app-jsx-datos-pendientes.md`): 🔑 para Lupita y Karla, primero
