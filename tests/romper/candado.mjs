@@ -106,6 +106,46 @@ try {
   ok("can-g08 el canal de recarga de Vite y un recurso de fuera no son errores de la app; lo que no carga del banco, un error de la app y un websocket que no es local, sí",
     mal.length === 0, mal.length ? "mal: " + mal.join(" · ") : "");
 } catch (e) { ok("can-g08 el filtro de consola se pudo probar", false, e?.message || String(e)); }
+// (los candados tardan menos, 15-oct) los bancos se sirven ARMADOS de antemano (scripts/servir-banco.mjs): cada página pedía 19 archivos y dejaba
+//   6 conexiones en TIME_WAIT (lo que satura la red de Windows: ERR_NO_BUFFER_SPACE); armado, 5 y menos de 1. Sin el canal de recarga de Vite, con
+//   React de desarrollo (sus avisos siguen contando como errores de consola), el banco de la forma contesta /__storage, y PROBAR_BANCO=dev regresa al de antes.
+{
+  const tmpB = fs.mkdtempSync(path.join(os.tmpdir(), "pf-banco-armado-"));
+  const cerrar = [];
+  try {
+    const { servirBanco } = await import("../../scripts/servir-banco.mjs");
+    const armar = (gen, dir) => spawnSync(process.execPath, [path.join(RAIZ, "tests", "banco", gen), path.join(RAIZ, "src", "App.jsx"), dir], { encoding: "utf8" });
+    // (el banco vive junto a la raíz: sus importaciones de src/lib son «../src/lib/…»)
+    const dirP = path.join(RAIZ, ".banco-candado-planta"), dirO = path.join(RAIZ, ".banco-candado-orden");
+    for (const d of [dirP, dirO]) fs.rmSync(d, { recursive: true, force: true });
+    if (armar("gen-planta.mjs", dirP).status !== 0 || armar("gen-orden.mjs", dirO).status !== 0) throw new Error("no se armaron los bancos");
+    const s1 = await servirBanco({ dir: dirP, puerto: 5481, raiz: RAIZ, nombre: "candado-planta" }); cerrar.push(s1.cerrar);
+    const html = await (await fetch("http://127.0.0.1:5481/?caso=maquila")).text();
+    const js = (html.match(/src="(\/assets\/[^"]+\.js)"/) || [])[1];
+    const cuerpo = js ? await (await fetch("http://127.0.0.1:5481" + js)).text() : "";
+    const s2 = await servirBanco({ dir: dirO, puerto: 5482, raiz: RAIZ, nombre: "candado-orden" }); cerrar.push(s2.cerrar);
+    const st = await fetch("http://127.0.0.1:5482/__storage/order-files/x.pdf", { method: "POST", body: "x" });
+    const s3 = await servirBanco({ dir: dirP, puerto: 5483, raiz: RAIZ, nombre: "candado-planta-dev", dev: true }); cerrar.push(s3.cerrar);
+    const htmlDev = await (await fetch("http://127.0.0.1:5483/")).text();
+    await (await fetch("http://127.0.0.1:5483/banco.jsx")).text();   // (que vite termine de preparar sus dependencias: cerrarlo a media preparación la cancela y el cierre no regresa)
+    // (y sus letras: ninguna página sale a Google Fonts; los generadores ligan las del propio banco)
+    const gens = fs.readdirSync(path.join(RAIZ, "tests", "banco")).filter(f => /^gen-.*\.mjs$/.test(f));
+    const conGoogle = gens.filter(f => /fonts\.googleapis\.com/.test(fs.readFileSync(path.join(RAIZ, "tests", "banco", f), "utf8")));
+    const css = await (await fetch("http://127.0.0.1:5481" + ((html.match(/href="(\/assets\/[^"]+\.css)"/) || [])[1] || "/no-hay-css"))).text();
+    const bien = { armado: s1.modo === "armado", sinCanal: !/@vite\/client/.test(html), conJs: !!js, reactDesarrollo: /checkPropTypes|Each child in a list should have a unique/.test(cuerpo),
+      storage: st.status === 200, devComoAntes: s3.modo === "dev" && /@vite\/client/.test(htmlDev),
+      sinGoogleFonts: !/fonts\.googleapis\.com/.test(html) && !conGoogle.length, letrasPropias: /font-family:\s*['"]?Geist/.test(css) && /\.woff2/.test(css) };
+    ok("can-g09 los bancos se sirven armados: sin el canal de recarga de Vite, con su JS armado y React de desarrollo y sus propias letras (ninguno sale a Google Fonts); la forma contesta /__storage; PROBAR_BANCO=dev, como antes",
+      Object.values(bien).every(Boolean), JSON.stringify(bien) + (conGoogle.length ? " · con Google Fonts: " + conGoogle.join(", ") : ""));
+  } catch (e) {
+    ok("can-g09 los bancos se sirven armados (se pudo probar)", false, e?.message || String(e));
+  } finally {
+    // primero los servidores (con tope: un cierre que no regresa no cuelga la tanda), luego sus carpetas
+    for (const f of cerrar) await Promise.race([f().catch(() => {}), new Promise(r => setTimeout(r, 5000))]);
+    for (const d of [".banco-candado-planta", ".banco-candado-orden"]) fs.rmSync(path.join(RAIZ, d), { recursive: true, force: true });
+    fs.rmSync(tmpB, { recursive: true, force: true });
+  }
+}
 for (const x of res) console.log(x);
 const fallan = res.filter(x => x.startsWith("FALLA")).length;
 console.log(`\ncandado: ${res.length - fallan} pasan, ${fallan} fallan`);

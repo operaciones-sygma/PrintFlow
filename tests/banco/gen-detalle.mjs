@@ -10,6 +10,7 @@
 //   archivo: la base contesta con error) · falla=alias (la base rechaza agregar un nombre interno) · flujos=1 (los botones de flujo de todas las etapas y roles, como en el tablero) · login=… (otro usuario, p. ej. un vendedor que no es dueño) · abrir=1 (abre el detalle al cargar, para el detector)
 import fs from "node:fs";
 import path from "node:path";
+import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";   // (15-oct) las letras, del propio banco: ninguna página sale a Google Fonts
 import { importacionesDeLib } from "./extraer.mjs";
 const [, , srcPath, outDir] = process.argv;
 const L = fs.readFileSync(srcPath, "utf8").replace(/\r\n/g, "\n").split("\n");
@@ -229,9 +230,10 @@ createRoot(document.getElementById("root")).render(<Banco />);`,
 ];
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "banco.jsx"), partes.join("\n\n"), "utf8");
+copiarFuentes(outDir);
 fs.writeFileSync(path.join(outDir, "index.html"), `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco detalle de la orden</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+${LIGA_FUENTES}
 <style>body{margin:0;font-family:'Geist',sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module" src="./banco.jsx"></script></body></html>`, "utf8");
 fs.writeFileSync(path.join(outDir, "vite.config.mjs"), `import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";

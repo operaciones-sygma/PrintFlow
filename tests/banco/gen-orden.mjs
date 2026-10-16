@@ -20,6 +20,7 @@
 // window.__editar(id, {…}) abre «Editar» de esa orden como la tenga la base (con `{_specsOnly:true}`, «Editar Specs»).
 import fs from "node:fs";
 import path from "node:path";
+import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";   // (15-oct) las letras, del propio banco: ninguna página sale a Google Fonts
 import { createRequire } from "node:module";
 import { extraer, importacionesDeLib } from "./extraer.mjs";
 const require = createRequire(import.meta.url);
@@ -364,9 +365,10 @@ createRoot(document.getElementById("root")).render(<Banco />);`,
 ];
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "banco.jsx"), partes.join("\n\n"), "utf8");
+copiarFuentes(outDir);
 fs.writeFileSync(path.join(outDir, "index.html"), `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco orden</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+${LIGA_FUENTES}
 <style>body{margin:0;font-family:'Geist',sans-serif}*{box-sizing:border-box}@keyframes toastIn{from{opacity:0}to{opacity:1}}</style></head><body><div id="root"></div><script type="module" src="./banco.jsx"></script></body></html>`, "utf8");
 // el archivo de producción sube por XHR a VITE_SUPABASE_URL: aquí es el propio banco («/__storage», contesta 200), nunca Supabase
 fs.writeFileSync(path.join(outDir, ".env"), "VITE_SUPABASE_URL=/__storage\nVITE_SUPABASE_ANON_KEY=falsa\n", "utf8");
@@ -375,8 +377,9 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 const raiz = path.dirname(fileURLToPath(import.meta.url));
-const storageFalso = { name: "storage-falso", configureServer(s) { s.middlewares.use("/__storage", (req, res) => {
-  req.on("data", () => {}); req.on("end", () => { res.statusCode = 200; res.setHeader("content-type", "application/json"); res.end('{"Key":"order-files/simulado"}'); }); }); } };
+// (15-oct) también con el banco ARMADO (vite preview, scripts/servir-banco.mjs): configurePreviewServer contesta lo mismo
+const responder = (req, res) => { req.on("data", () => {}); req.on("end", () => { res.statusCode = 200; res.setHeader("content-type", "application/json"); res.end('{"Key":"order-files/simulado"}'); }); };
+const storageFalso = { name: "storage-falso", configureServer(s) { s.middlewares.use("/__storage", responder); }, configurePreviewServer(s) { s.middlewares.use("/__storage", responder); } };
 export default defineConfig({ root: raiz, envDir: raiz, plugins: [react(), storageFalso], server: { port: Number(process.env.BANCO_PORT || 5188), strictPort: true } });
 `, "utf8");
 console.log("banco de la orden listo en " + outDir + " (" + simuladosUsados.length + " simulados; de módulo para lo copiado: " + delModulo.join(", ") + ")");

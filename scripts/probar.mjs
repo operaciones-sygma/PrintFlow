@@ -12,13 +12,14 @@
 //   arreglada  fallaba en la base y ahora pasa
 //   nueva      no estaba en la base y pasa
 //
-// Cada tanda arma su banco (los modales EXTRAÍDOS de src/App.jsx con la base simulada: tests/banco/*), lo sirve con vite en
-// su propio puerto y lo recorre con Playwright; las tandas corren en paralelo.
+// Cada tanda arma su banco (los modales EXTRAÍDOS de src/App.jsx con la base simulada: tests/banco/*), lo sirve en su propio puerto
+// (desde el 15-oct, ARMADO de antemano: scripts/servir-banco.mjs; PROBAR_BANCO=dev, con el servidor de desarrollo de Vite como antes) y lo recorre
+// con Playwright; las tandas corren en paralelo.
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createServer } from "vite";
+import { servirBanco } from "./servir-banco.mjs";   // 15-oct: el banco ARMADO de antemano (7 veces menos conexiones por página)
 import { leer, aRepetir, combinar, hacerSinSegunda, candados } from "./reintento.mjs";
 import { rutaDelEstado, cargar, anotar, textoDePendientes } from "./inestables.mjs";
 
@@ -166,22 +167,16 @@ async function tanda(t, { solo = null, intento = 1 } = {}) {
   if (g.codigo !== 0) return { t, error: "el generador del banco falló:\n" + g.salida };
   let server;
   try {
-    // Las dependencias se preparan TODAS al arrancar: si vite descubre una a media carga, reoptimiza y la página recibe
-    // 504 «Outdated Optimize Dep» (la primera prueba de cada tanda caía por eso, no por la app).
-    // Cada banco con SU caché de vite: con tres en paralelo compartían node_modules/.vite/deps y en Windows uno la borraba
-    //   mientras otro la usaba (EPERM rmdir; la tanda «partes» no corrió el 5-oct). Queda entre corridas: arranca rápido.
-    server = await createServer({ configFile: path.join(dir, "vite.config.mjs"), logLevel: "error", clearScreen: false,
-      cacheDir: path.join(RAIZ, "node_modules", ".vite-banco-" + t.nombre),
-      server: { host: "127.0.0.1", port: t.puerto, strictPort: true },
-      optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-dev-runtime", "@phosphor-icons/react"] } });
-    await server.listen();
+    // (15-oct) armado de antemano y servido estático: ver scripts/servir-banco.mjs (lo de las dependencias y la caché de cada banco vive ahí, para
+    //   PROBAR_BANCO=dev). La primera carga ya no tarda: calentar sólo confirma que el banco pinta.
+    server = await servirBanco({ dir, puerto: t.puerto, raiz: RAIZ, nombre: t.nombre });
     await calentar(t.puerto);
     const r = await correrNode(path.join(RAIZ, t.romper), [capturas, String(t.puerto)], env);
     return { t, salida: r.salida, codigo: r.codigo };
   } catch (e) {
     return { t, error: "no se pudo servir el banco: " + (e?.message || e) };
   } finally {
-    if (server) await server.close().catch(() => {});
+    if (server) await server.cerrar().catch(() => {});
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

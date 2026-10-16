@@ -12,6 +12,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## Pruebas: los candados tardan la mitad (los bancos armados de antemano y con sus letras) — 15-oct-2026
+
+**Qué pasaba.** Marcelo (15-oct): «sí, hagamos que los candados tarden menos». El candado tardaba ~27 min (1842 pruebas, las 13 tandas con banco de
+a 2) y en la PC de casa no se podía correr más a la vez: la red de Windows se saturaba (`net::ERR_NO_BUFFER_SPACE`) y frenaba candados por pruebas
+que no habían fallado (el 12, 13, 14 y 15-oct). Medido con la tanda «planta»: casi todo el tiempo de una prueba es espera, no trabajo de la PC; lo
+que satura es cuántas conexiones abre cada página. Con el servidor de desarrollo de Vite cada página pedía 19 archivos y dejaba 6 conexiones en
+TIME_WAIT (180 en 30 páginas), más las de Google Fonts: cada prueba abre un navegador limpio y salía a internet por las letras (~3,700 conexiones
+por candado, y fallaban cuando la red parpadeaba, el 14-oct). Una hipótesis que NO se sostuvo: que los navegadores dejaran memoria no paginada del
+kernel (20 navegadores, con y sin la gráfica: ±2 MB).
+
+**Qué se cambió** (sólo pruebas; la app no cambia):
+- `scripts/servir-banco.mjs`: cada banco se ARMA de antemano (`vite build`, React de desarrollo con sus avisos —fijado con `define`: `mode` no
+  basta y salía React de producción, lo cazó can-g09—, sin minificar) y se sirve estático (`vite preview`): 5 archivos por página y menos de 1
+  conexión (25 en 30 páginas). Se van el canal de recarga de Vite (el error de consola que frenó el candado de v10.84.117) y la primera carga de
+  hasta 30 s. Armar cuesta ~3 s por banco. `PROBAR_BANCO=dev` lo sirve como antes. El banco de la forma contesta `/__storage` también armado.
+- `tests/banco/fuentes.mjs` y `tests/banco/fuentes/`: las letras (Geist y Geist Mono, SIL OFL 1.1, los mismos archivos que servía Google, 143 KB)
+  las sirve el propio banco: ninguna página sale a internet.
+- En la PC de casa, `PROBAR_PARALELO=4` (era 2).
+
+**Cómo se probó.** can-g09 (tanda `candado`) falló antes de cada parte (sin `servir-banco.mjs`; luego React de producción; luego las letras de
+Google) y pasa: sin el canal de Vite, React de desarrollo, sus propias letras, `/__storage` y `PROBAR_BANCO=dev` como antes. Todas las tandas,
+armadas y de a 4: la primera corrida (todavía con Google Fonts) 1842 de 1843 en 15 min (sig-06 no cargó su página: `ERR_NO_BUFFER_SPACE`); la
+segunda, con las letras propias, **1843 de 1843 en 14.4 min**, con la PC igual de cargada (la memoria no paginada del kernel en ~807 MB). Antes:
+1842 en 26.5 min de a 2.
+
 ## v10.84.118 — «Corregir precio» también de lo ya foliado sin timbrar, por la puerta de la base (la entrega 2 de CobranzaFlow) — 15-oct-2026
 
 **Qué pasaba.** «Corregir precio» (v10.84.112) sólo servía antes de facturar. Lo ya foliado y sin timbrar no tenía salida: el 15-oct, por P-0600,

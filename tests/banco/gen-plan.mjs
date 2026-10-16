@@ -14,6 +14,7 @@
 //   conceptos=vacio|falla|falla1|tasa0|lento (v10.84.102: los conceptos timbrados de la factura que se liga) · producto=1 (v10.84.109) · hotsson=1 (v10.84.110: OC-0966 de producción) · redondeo=nuevas|ligadas|sinholgura|mixta (v10.84.111; mixta: sólo 5 sin orden)
 import fs from "node:fs";
 import path from "node:path";
+import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";   // (15-oct) las letras, del propio banco: ninguna página sale a Google Fonts
 import { extraer, importacionesDeLib } from "./extraer.mjs";
 const [, , srcPath, outDir] = process.argv;
 const fuente = fs.readFileSync(srcPath, "utf8");
@@ -171,9 +172,10 @@ createRoot(document.getElementById("root")).render(<Banco />);`,
 ];
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "banco.jsx"), partes.join("\n\n"), "utf8");
+copiarFuentes(outDir);
 fs.writeFileSync(path.join(outDir, "index.html"), `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco plan matriz</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+${LIGA_FUENTES}
 <style>body{margin:0;font-family:'Geist',sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module" src="./banco.jsx"></script></body></html>`, "utf8");
 fs.writeFileSync(path.join(outDir, "vite.config.mjs"), `import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";

@@ -6,6 +6,7 @@
 //   incompleto=1 (a la orden le falta el tipo de producto) · lenta=1 (el cliente tarda 10 s, más que el tope de 8) · falla=1 (la base rechaza) · guarda=lento (asignar tarda 3 s)
 import fs from "node:fs";
 import path from "node:path";
+import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";   // (15-oct) las letras, del propio banco: ninguna página sale a Google Fonts
 const [, , srcPath, outDir] = process.argv;
 const L = fs.readFileSync(srcPath, "utf8").replace(/\r\n/g, "\n").split("\n");
 const find = (pred, desc) => { const i = L.findIndex(pred); if (i < 0) throw new Error("no encuentro " + desc); return i; };
@@ -169,9 +170,10 @@ createRoot(document.getElementById("root")).render(<Banco />);`,
 ];
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, "banco.jsx"), partes.join("\n\n"), "utf8");
+copiarFuentes(outDir);
 fs.writeFileSync(path.join(outDir, "index.html"), `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>banco folio</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+${LIGA_FUENTES}
 <style>body{margin:0;font-family:'Geist',sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script type="module" src="./banco.jsx"></script></body></html>`, "utf8");
 fs.writeFileSync(path.join(outDir, "vite.config.mjs"), `import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
