@@ -211,6 +211,32 @@ export function problemas(piezas, obstaculos = []) {
   return r;
 }
 
+// ── cuánto queda libre ──
+// v10.84.121 (la critique de «Planta», P1): lo que se decide con el plano son los pasillos. A cada lado de la pieza (por su caja), lo más cercano
+//   que tiene ENFRENTE (un muro, columna, escalera o baño, u otra pieza): la distancia en cm y la línea de la cota. Lo que pasa de `max`, nada.
+//   { der|izq|arr|aba: { cm, linea: [[x, y], [x, y]] } | null }
+export function holguras(p, piezas, obstaculos, max = 1500) {
+  const c = cajaDe(p);
+  const cajas = [...obstaculos.map(o => o.cj), ...piezas.filter(q => q.id !== p.id).map(cajaDe)];
+  const medio = (a0, a1, b0, b1) => (Math.max(a0, b0) + Math.min(a1, b1)) / 2;   // el centro de lo que se tienen enfrente
+  const enY = k => k.y0 < c.y1 - TOQUE && k.y1 > c.y0 + TOQUE, enX = k => k.x0 < c.x1 - TOQUE && k.x1 > c.x0 + TOQUE;
+  const lados = {
+    der: { frente: k => enY(k) && k.x0 >= c.x1 - TOQUE, dist: k => k.x0 - c.x1, linea: (k, d) => { const y = medio(c.y0, c.y1, k.y0, k.y1); return [[c.x1, y], [c.x1 + d, y]]; } },
+    izq: { frente: k => enY(k) && k.x1 <= c.x0 + TOQUE, dist: k => c.x0 - k.x1, linea: (k, d) => { const y = medio(c.y0, c.y1, k.y0, k.y1); return [[c.x0, y], [c.x0 - d, y]]; } },
+    aba: { frente: k => enX(k) && k.y0 >= c.y1 - TOQUE, dist: k => k.y0 - c.y1, linea: (k, d) => { const x = medio(c.x0, c.x1, k.x0, k.x1); return [[x, c.y1], [x, c.y1 + d]]; } },
+    arr: { frente: k => enX(k) && k.y1 <= c.y0 + TOQUE, dist: k => c.y0 - k.y1, linea: (k, d) => { const x = medio(c.x0, c.x1, k.x0, k.x1); return [[x, c.y0], [x, c.y0 - d]]; } },
+  };
+  const res = {};
+  for (const [lado, L] of Object.entries(lados)) {
+    let mejor = null;
+    for (const k of cajas) { if (!L.frente(k)) continue; const d = Math.max(0, L.dist(k)); if (!mejor || d < mejor.d) mejor = { d, k }; }
+    res[lado] = mejor && mejor.d <= max ? { cm: redondear(mejor.d, 0), linea: L.linea(mejor.k, mejor.d) } : null;
+  }
+  return res;
+}
+// «85 cm», «1.20 m»
+export const distancia = cm => cm < 100 ? `${Math.round(cm)} cm` : `${(cm / 100).toFixed(2)} m`;
+
 // ── lo que se captura ──
 // Una medida en cm: «120», «120.5», «120,5» o «120 cm». Abajo de 10 cm se acepta, con aviso (¿eran metros?)
 export function leerMedida(texto) {

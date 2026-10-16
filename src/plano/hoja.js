@@ -30,13 +30,16 @@ export function hojaParaImprimir({ piezas, problemas = {}, version = null, sinGu
   const trazos = (lista, color, grueso, extra = "") => `<g fill="none" stroke="${color}" stroke-width="${delDibujo(grueso)}" stroke-linecap="round" stroke-linejoin="round"${extra}>${lista.map(d => `<path d="${d}"/>`).join("")}</g>`;
   const nombrePorId = Object.fromEntries(piezas.map(p => [p.id, p.nombre]));
   const conProblema = p => { const r = problemas[p.id]; return !!r && (r.con.length > 0 || r.choca.length > 0); };
-  const piezaSvg = p => {
+  const poligonoSvg = p => {
     const mal = conProblema(p);
     const pts = esquinas(p).map(([x, y]) => redondear(x, 1) + "," + redondear(y, 1)).join(" ");
+    return `<polygon points="${pts}" fill="${mal ? "#fde2e2" : p.numero ? "#e8edf2" : "#fdf3e1"}" stroke="${mal ? "#b91c1c" : "#1f2933"}" stroke-width="${delDibujo(mal ? 0.45 : 0.3)}"/>`;
+  };
+  // (v10.84.121) los letreros van después de TODAS las piezas: dentro de cada una, el de la pieza de abajo lo tapaba la de arriba
+  const letreroSvg = p => {
     const [lx, ly] = puntoDelNombre(p);
-    return `<g><polygon points="${pts}" fill="${mal ? "#fde2e2" : p.numero ? "#e8edf2" : "#fdf3e1"}" stroke="${mal ? "#b91c1c" : "#1f2933"}" stroke-width="${delDibujo(mal ? 0.45 : 0.3)}"/>`
-      + `<text x="${redondear(lx, 1)}" y="${redondear(ly - delDibujo(letraChica) * 0.35, 1)}" font-size="${redondear(delDibujo(letra), 1)}" font-weight="700" text-anchor="middle" fill="#111">${esc(p.nombre)}</text>`
-      + `<text x="${redondear(lx, 1)}" y="${redondear(ly + delDibujo(letraChica) * 1.05, 1)}" font-size="${redondear(delDibujo(letraChica), 1)}" text-anchor="middle" fill="#333">${esc(medidas(p))}</text></g>`;
+    return `<text x="${redondear(lx, 1)}" y="${redondear(ly - delDibujo(letraChica) * 0.35, 1)}" font-size="${redondear(delDibujo(letra), 1)}" font-weight="700" text-anchor="middle" fill="#111">${esc(p.nombre)}</text>`
+      + `<text x="${redondear(lx, 1)}" y="${redondear(ly + delDibujo(letraChica) * 1.05, 1)}" font-size="${redondear(delDibujo(letraChica), 1)}" text-anchor="middle" fill="#333">${esc(medidas(p))}</text>`;
   };
   const plano = `<svg class="plano" xmlns="http://www.w3.org/2000/svg" width="${redondear(enHoja(cj.ancho), 2)}mm" height="${redondear(enHoja(cj.alto), 2)}mm" viewBox="${cj.x0} ${cj.y0} ${cj.ancho} ${cj.alto}" font-family="Arial, Helvetica, sans-serif">
 ${trazos(PROYECCION, "#9aa5b1", 0.15, ` stroke-dasharray="${delDibujo(1.2)} ${delDibujo(0.8)}"`)}
@@ -47,7 +50,8 @@ ${trazos(VIDRIOS, "#3e6d9c", 0.2)}
 ${trazos(MUROS, "#111", 0.35)}
 ${trazos(DIVISIONES, "#111", 0.3)}
 ${areasLibres(AREAS, piezas, delDibujo(letra * 1.15), piezas.map(p => { const [lx, ly] = puntoDelNombre(p), L = delDibujo(letra), Lc = delDibujo(letraChica), w = Math.max(p.nombre.length * 0.6 * L, medidas(p).length * 0.55 * Lc) / 2; return [lx - w, ly - 1.2 * L, lx + w, ly + 1.4 * Lc]; })).map(a => `<text x="${a.x}" y="${a.y}" font-size="${redondear(delDibujo(letra * 1.15), 1)}" fill="#7b8794" font-style="italic">${esc(a.t)}</text>`).join("")}
-${piezas.map(piezaSvg).join("\n")}
+${piezas.map(poligonoSvg).join("\n")}
+${piezas.map(letreroSvg).join("\n")}
 </svg>`;
   // la escala gráfica: tramos de 1 m (de 2 m si el metro mide menos de 4 mm), hasta ~40 mm
   const metro = enHoja(100), tramo = metro >= 4 ? 1 : 2, nTramos = Math.max(2, Math.min(8, Math.floor(40 / (metro * tramo))));
@@ -82,7 +86,7 @@ h1{font-size:12pt;margin:1mm 0 1.5mm;line-height:1.15}
 .aviso{margin:2mm 0;padding:1.5mm 2mm;border:0.3mm solid #b91c1c;color:#7f1d1d;border-radius:1mm}
 .aviso ul{margin:1mm 0 0;padding-left:3.5mm}
 .sin-guardar{margin:2mm 0;padding:1.5mm 2mm;border:0.3mm solid #b45309;color:#78350f;border-radius:1mm}
-table{border-collapse:collapse;width:100%;margin-top:1mm}
+table{border-collapse:collapse;width:100%;margin-top:1mm;font-size:inherit}
 th{text-align:left;font-size:6.5pt;color:#52606d;font-weight:700;border-bottom:0.3mm solid #111;padding:0.6mm 0.8mm}
 td{padding:0.6mm 0.8mm;border-bottom:0.15mm solid #cbd2d9;vertical-align:top}
 td.num{width:5mm;color:#52606d}

@@ -40,7 +40,7 @@ export function enPalabras(e, que) {
   if (/failed to fetch|networkerror|network|timeout|load failed/i.test(m)) return "No hubo conexión con la base. Revisa el internet y vuelve a intentar.";
   return "La base contestó: " + (m || "un error sin descripción") + ".";
 }
-const hora = iso => { try { return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+const hora = iso => { try { return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }); } catch { return ""; } };   // (en 24 h: con «a.m.» la frase acababa en «a.m..»)
 const fechaCorta = iso => { try { const d = new Date(iso); const hoy = new Date(); return d.toDateString() === hoy.toDateString() ? "hoy " + hora(iso) : d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }) + " " + hora(iso); } catch { return ""; } };
 const haceCuanto = ms => { const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "hace un momento" : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} días`; };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -102,7 +102,7 @@ function Ventana({ titulo, children, botones, alCerrar, tema, sucia = false, anc
 }
 
 export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema, avisar, registrarSalida, imprimir = imprimirEnMarco }) {
-  const { C, bt, bs } = tema;
+  const { C, bt, bs, tintaAA } = tema;
   // ── el acomodo, lo guardado y la historia ──
   // (vuelta 1, pln-44: la historia vivía en tres estados que se movían DENTRO de las funciones de actualizar de React, que corren después y
   //   leían el acomodo ya cambiado: con dos Ctrl+Z seguidos, «rehacer» se quedaba sin nada. Ahora es UNA cosa y se cambia de un golpe.)
@@ -533,18 +533,27 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
   const estado = ocupado === "guardando" ? { t: "Guardando…", c: C.t2 } : ocupado === "borrando" ? { t: "Borrando…", c: C.t2 }
     : sucio ? { t: "Cambios sin guardar", c: C.wnTx, punto: C.wn } : guardadoA ? { t: "Guardado a las " + hora(guardadoA), c: C.okTx, punto: C.ok } : { t: "Sin cambios", c: C.t2 };
   const opciones = lista.filas.some(f => f.id === version?.id) || !version ? lista.filas : [versionDe(version), ...lista.filas];
+  // v10.84.121 (la critique, P1) — cuánto queda libre a cada lado de la elegida, hasta lo que tiene enfrente: las cotas del plano y el panel
+  const libre = useMemo(() => pieza ? G.holguras(pieza, visibles, OBSTACULOS) : null, [pieza, visibles]);
+  const LADOS = [["izq", "←"], ["der", "→"], ["arr", "↑"], ["aba", "↓"]];
+  // la barra de la pieza: arriba, abajo, a la derecha o a la izquierda, la primera que quepa y no tape una cota
   const barraSel = pieza && !arrastre && vista && (() => {
-    const cj = G.cajaDe(pieza), W = 4 * 40 + 3 * 4 + 10, Hh = 50;
-    const cx = (cj.x0 + cj.x1) / 2 * s + vista.dx, arriba = cj.y0 * s + vista.dy, abajo = cj.y1 * s + vista.dy;
-    let y = arriba - Hh; if (y < 6) y = abajo + 8; if (y > tam.h - Hh) y = clamp(arriba + 6, 6, tam.h - Hh);
-    return { left: clamp(cx - W / 2, 6, Math.max(6, tam.w - W - 6)), top: y };
+    const cj = G.cajaDe(pieza), W = 4 * 40 + 3 * 4 + 10, Hh = 50, Hb = 46;
+    const px = (x, y) => [x * s + vista.dx, y * s + vista.dy];
+    const tapadas = libre ? Object.values(libre).filter(Boolean).map(v => { const [mx, my] = px((v.linea[0][0] + v.linea[1][0]) / 2, (v.linea[0][1] + v.linea[1][1]) / 2); return [mx - 44, my - 16, mx + 44, my + 16]; }) : [];
+    const [x0, y0] = px(cj.x0, cj.y0), [x1, y1] = px(cj.x1, cj.y1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const opciones = [[cx - W / 2, y0 - Hh], [cx - W / 2, y1 + 8], [x1 + 10, cy - Hb / 2], [x0 - W - 10, cy - Hb / 2]];
+    const cabe = ([l, t]) => l >= 6 && t >= 6 && l + W <= tam.w - 6 && t + Hb <= tam.h - 6;
+    const tapa = ([l, t]) => tapadas.some(([a, b, c, d]) => l < c && a < l + W && t < d && b < t + Hb);
+    const o = opciones.find(q => cabe(q) && !tapa(q)) || opciones.find(cabe) || opciones[0];
+    return { left: clamp(o[0], 6, Math.max(6, tam.w - W - 6)), top: clamp(o[1], 6, Math.max(6, tam.h - Hh)) };
   })();
   const etiquetaDe = p => p.nombre + (p.numero ? " (n.º " + p.numero + ")" : "") + ", " + medidas(p) + " cm" + (p.giro ? ", girada " + cm(p.giro) + "°" : "");
 
   return <section aria-label="Plano de la planta" data-plano style={{ fontFamily: "'Geist',sans-serif", color: C.tx }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", margin: "0 0 10px" }}>
       <h2 style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em", margin: 0 }}>Planta</h2>
-      <p style={{ fontSize: 11.5, color: C.t2, margin: 0 }}>Planta baja · medidas en centímetros · arrastra una máquina para moverla; tócala para girarla o cambiar sus medidas</p>
+      <p style={{ fontSize: 12, color: C.t2, margin: 0 }}>Planta baja · todo en centímetros</p>
     </div>
 
     {/* la versión y guardar */}
@@ -588,7 +597,7 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
 
     {/* las herramientas */}
     <div role="toolbar" aria-label="Herramientas del plano" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-      <button type="button" data-plano-agregar onClick={empezarAgregar} style={{ ...bs(C.ac, "#fff") }}><PlusIcon size={14} weight="bold" />Agregar objeto</button>
+      <button type="button" data-plano-agregar onClick={empezarAgregar} style={{ ...btnSec, color: tintaAA(C.ac, 5) }}><PlusIcon size={14} weight="bold" />Agregar objeto</button>
       <span aria-hidden style={{ width: 1, height: 24, background: C.bd, margin: "0 4px" }} />
       <button type="button" data-plano-deshacer onClick={deshacer} disabled={!pasado.length} aria-label="Deshacer" title="Deshacer (Ctrl+Z)" style={btnIcono(!!pasado.length)}><ArrowUUpLeftIcon size={16} weight="bold" /></button>
       <button type="button" data-plano-rehacer onClick={rehacer} disabled={!futuro.length} aria-label="Rehacer" title="Rehacer (Ctrl+Y)" style={btnIcono(!!futuro.length)}><ArrowUUpRightIcon size={16} weight="bold" /></button>
@@ -633,6 +642,8 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
                 stroke={mal ? C.dnInk : elegida ? C.ios : p.numero ? "#334e5c" : "#b45309"} strokeWidth={elegida ? 2.5 : mal ? 2 : 1.2} vectorEffect="non-scaling-stroke"
                 style={{ cursor: "move" }} onPointerDown={e => { e.stopPropagation(); alBajar(e, p.id); }} aria-label={etiquetaDe(p)}><title>{etiquetaDe(p)}</title></polygon>;
             })}
+            {/* v10.84.121 (la critique) — la elegida se ve aunque esté encimada (en rojo): su contorno azul, encima de todo */}
+            {pieza && <polygon data-plano-elegida points={G.esquinas(pieza).map(q => G.redondear(q[0], 2) + "," + G.redondear(q[1], 2)).join(" ")} fill="none" stroke={C.ios} strokeWidth={3} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
             <g pointerEvents="none" fontFamily="'Geist',sans-serif" textAnchor="middle">{visibles.map(p => {
               const l = letreros[p.id], f = l.f;
               return <g key={p.id}>
@@ -640,6 +651,15 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
                 {l.conMedidas && <text x={l.lx} y={l.ly + 12 / s} fontSize={10.5 / s} fill="#4b5563" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{l.med}</text>}
               </g>;
             })}</g>
+            {/* las cotas: hasta lo que tiene enfrente, con la distancia */}
+            {libre && <g data-plano-cotas pointerEvents="none" fontFamily="'Geist',sans-serif">{Object.entries(libre).filter(([, v]) => v).map(([lado, v]) => {
+              const [[x1, y1], [x2, y2]] = v.linea, acostada = y1 === y2, t = 5 / s, mx = (x1 + x2) / 2, my = (y1 + y2) / 2, tinta = tintaAA(C.ios, 5);
+              return <g key={lado}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={C.ios} strokeWidth={1.3} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" />
+                {acostada ? <line x1={x2} y1={y2 - t} x2={x2} y2={y2 + t} stroke={C.ios} strokeWidth={1.3} vectorEffect="non-scaling-stroke" /> : <line x1={x2 - t} y1={y2} x2={x2 + t} y2={y2} stroke={C.ios} strokeWidth={1.3} vectorEffect="non-scaling-stroke" />}
+                <text data-plano-cota={lado} data-cm={v.cm} x={acostada ? mx : mx + 6 / s} y={acostada ? my - 5 / s : my + 4 / s} textAnchor={acostada ? "middle" : "start"} fontSize={11.5 / s} fontWeight={700} fill={tinta} stroke="#fbfcfd" strokeWidth={4 / s} paintOrder="stroke">{G.distancia(v.cm)}</text>
+              </g>;
+            })}</g>}
           </g>}
         </svg>
         {barraSel && <div role="toolbar" aria-label={"Acciones de " + pieza.nombre} data-plano-barra style={{ position: "absolute", left: barraSel.left, top: barraSel.top, display: "flex", gap: 4, padding: 4, background: C.bg, borderRadius: 12, boxShadow: C.sh3, border: "1px solid " + C.bd }}>
@@ -691,10 +711,19 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
             <button type="button" onClick={duplicarSel} style={{ ...btnSec, flex: 1, justifyContent: "center" }}><CopyIcon size={14} weight="bold" />Duplicar</button>
             <button type="button" onClick={borrarSel} style={{ ...bs("transparent", C.dnInk), border: "1px solid " + C.bd, flex: 1, justifyContent: "center" }}><TrashIcon size={14} weight="bold" />Quitar</button>
           </div>
-          <div style={{ fontSize: 11.5, color: C.t2, lineHeight: 1.5 }}>Flechas: mueven 5 cm (con Shift, 50) · R: gira 90° · Supr: quita · Ctrl+Z: deshace</div>
+          {libre && <div data-plano-libre style={{ fontSize: 12.5, color: C.tx, lineHeight: 1.5 }}><b>Libre alrededor:</b> {LADOS.map(([k, f]) => f + " " + (libre[k] ? G.distancia(libre[k].cm) : "más de 15 m")).join(" · ")}</div>}
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.5 }}>Flechas: mueven 5 cm (con Shift, 50) · R: gira 90° · Supr: quita · Ctrl+Z: deshace</div>
         </div>
         : <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ fontSize: 12.5, color: C.t2, lineHeight: 1.5 }}>Toca una máquina para moverla, girarla o cambiar sus medidas. Arrastra el fondo para recorrer el plano; la rueda del mouse acerca y aleja.</div>
+          <div data-plano-ayuda style={{ fontSize: 12.5, color: C.tx, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: C.t2, textTransform: "uppercase", letterSpacing: .3, marginBottom: 6 }}>Cómo se usa</div>
+            <ul style={{ margin: 0, paddingLeft: 16, display: "flex", flexDirection: "column", gap: 4 }}>
+              <li><b>Arrastra</b> una máquina para moverla (de 5 en 5 cm).</li>
+              <li><b>Tócala</b> para girarla, cambiar sus medidas y ver cuánto le queda libre a cada lado.</li>
+              <li>Arrastra el fondo para recorrer el plano; la rueda del mouse acerca y aleja.</li>
+              <li style={{ color: C.t2 }}>Atajos: R gira 90° · flechas mueven · Supr quita · Ctrl+Z deshace · Ctrl+D duplica</li>
+            </ul>
+          </div>
           {conProblema.length > 0 && <div role="status" data-plano-problemas style={{ fontSize: 12.5, lineHeight: 1.45, color: C.dnInk, background: C.dn + "10", border: "1px solid " + C.dn + "40", borderRadius: 10, padding: "8px 10px" }}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}><WarningIcon size={13} weight="bold" style={{ verticalAlign: "-2px", marginRight: 4 }} />{conProblema.length === 1 ? "1 pieza con problema" : conProblema.length + " piezas con problema"}</div>
             {conProblema.slice(0, 6).map(p => <button key={p.id} type="button" onClick={() => { setSel(p.id); verPieza(p); }} style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "2px 0", cursor: "pointer", color: "inherit", fontFamily: "inherit", fontSize: 12.5 }}>

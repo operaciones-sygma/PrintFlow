@@ -790,6 +790,67 @@ await caso("pln-86-el-nombre-del-area-tapado-no-se-asoma", "", async p => {
     `con el Duplo y la CTP: «Diseño» ${cuenta(antes, "Diseño")} vez (la otra, tapada), «Almacén» ${cuenta(antes, "Almacén")} (el de adentro lo tapa el letrero de la Guillotina 78); sin ellas: «Diseño» ${cuenta(despues, "Diseño")}`);
 });
 
+// ══════════ v10.84.121: lo de la critique de «Planta» (16-oct, 30/40; snapshot .impeccable/critique/…__src-plano-planoplanta-jsx.md) ══════════
+// escritas ANTES del arreglo (vuelta 1 de la 121): deben fallar contra v10.84.120
+const cotas = p => p.$$eval("[data-plano-cota]", es => es.map(e => ({ lado: e.getAttribute("data-plano-cota"), cm: Number(e.getAttribute("data-cm")), texto: e.textContent })));
+await caso("pln-87-las-cotas-dicen-cuanto-queda", "", async p => {
+  await clicEn(p, "m-1");   // la GTO-1, sola arriba a la derecha
+  const a = await cotas(p), panelA = await panel(p);
+  const q = de("m-1"), cj = G.cajaDe(q);
+  // lo esperado a la derecha: el muro más cercano que la GTO-1 tiene enfrente (de los mismos trazos)
+  const muroDer = Math.min(...OBST.filter(s => s.cj.x0 >= cj.x1 - 0.5 && s.cj.y0 < cj.y1 && s.cj.y1 > cj.y0).map(s => s.cj.x0)) - cj.x1;
+  const der0 = a.find(c => c.lado === "der");
+  for (let i = 0; i < 10; i++) await p.keyboard.press("ArrowRight");
+  await espera(p);
+  const der1 = (await cotas(p)).find(c => c.lado === "der");
+  ok("pln-87-las-cotas-dicen-cuanto-queda", a.length === 4 && der0 && Math.abs(der0.cm - muroDer) <= 1 && der1 && Math.abs(der0.cm - der1.cm - 50) <= 1 && /Libre alrededor/.test(panelA) && panelA.includes(der0.texto),
+    `elegida la GTO-1: ${a.length} cotas (${a.map(c => c.lado + " " + c.texto).join(", ")}); a la derecha ${der0?.cm} cm (los trazos dicen ${G.redondear(muroDer)}); 50 cm a la derecha: ${der1?.cm}; el panel ${/Libre alrededor/.test(panelA) ? "lo dice" : "NO lo dice"}`);
+});
+await caso("pln-88-las-cotas-en-vivo-al-arrastrar", "", async p => {
+  await clicEn(p, "m-2");
+  const izq0 = (await cotas(p)).find(c => c.lado === "izq");
+  await arrastrar(p, "m-2", 100, 0, { soltar: false });
+  const izqEnMedio = (await cotas(p)).find(c => c.lado === "izq");
+  await p.mouse.up(); await espera(p);
+  const izq1 = (await cotas(p)).find(c => c.lado === "izq");
+  ok("pln-88-las-cotas-en-vivo-al-arrastrar", izq0 && izqEnMedio && Math.abs(izqEnMedio.cm - izq0.cm - 100) <= 1 && izq1 && Math.abs(izq1.cm - izqEnMedio.cm) <= 1,
+    `a la izquierda de la PM-74: ${izq0?.cm} cm; a medio arrastre (1 m a la derecha) ${izqEnMedio?.cm}; al soltar ${izq1?.cm}`);
+});
+await caso("pln-89-la-elegida-se-ve-aunque-este-en-rojo", "", async p => {
+  const g5 = await pieza(p, "m-5"), g6 = await pieza(p, "m-6");
+  await arrastrar(p, "m-5", g6.cx - g5.cx, g6.cy - g5.cy - 100);
+  const trazos = await p.$$eval('[data-pieza="m-5"],[data-pieza="m-6"]', es => es.map(e => ({ id: e.getAttribute("data-pieza"), stroke: e.getAttribute("stroke"), ancho: Number(e.getAttribute("stroke-width")), mal: e.getAttribute("data-mal") })));
+  const marco = await p.locator("[data-plano-elegida]").count();
+  const e5 = trazos.find(t => t.id === "m-5"), e6 = trazos.find(t => t.id === "m-6");
+  ok("pln-89-la-elegida-se-ve-aunque-este-en-rojo", e5.mal === "1" && e6.mal === "1" && (marco === 1 || (e5.stroke !== e6.stroke && e5.ancho > e6.ancho)),
+    `las dos encimadas: la elegida (78) ${JSON.stringify(e5)}, la otra ${JSON.stringify(e6)}; marco de la elegida: ${marco}`);
+});
+await caso("pln-90-un-solo-primario", "", async p => {
+  await arrastrar(p, "m-2", 100, 0);
+  const rellenos = await p.$$eval("[data-plano] button", (bs, ac) => bs.filter(b => b.offsetParent && getComputedStyle(b).backgroundColor === ac).map(b => b.textContent.trim()), await p.$eval("[data-plano-guardar]", b => getComputedStyle(b).backgroundColor));
+  ok("pln-90-un-solo-primario", rellenos.length === 1 && /Guardar/.test(rellenos[0]), `con cambios, botones rellenos del color principal: ${JSON.stringify(rellenos)} (debe ser sólo «Guardar…»)`);
+});
+await caso("pln-91-como-se-usa", "", async p => {
+  const sub = (await p.locator("[data-plano] h2 + p").innerText().catch(() => "")).trim();
+  const ayuda = (await p.locator("[data-plano-ayuda]").innerText().catch(() => "")).replace(/\s+/g, " ");
+  ok("pln-91-como-se-usa", sub.length <= 70 && /arrastra/i.test(ayuda) && /\bR\b/.test(ayuda) && /Supr/.test(ayuda) && /Ctrl\+Z/.test(ayuda),
+    `subtítulo de ${sub.length} letras («${sub}»); «Cómo se usa» sin elegir nada: «${ayuda.slice(0, 160)}»`);
+});
+await caso("pln-92-la-hoja-letreros-encima-y-la-hora", "versiones=2&ultima=v-1", async p => {
+  await p.waitForFunction(() => /Acomodo A/.test(document.querySelector("[data-plano-version]").selectedOptions[0].text));
+  const g5 = await pieza(p, "m-5"), g6 = await pieza(p, "m-6");
+  await arrastrar(p, "m-5", g6.cx - g5.cx, g6.cy - g5.cy - 100);
+  await p.click("[data-plano-imprimir]"); await p.click("[data-plano-hoja=doble]"); await espera(p, 900);
+  const hoja = await p.evaluate(() => window.__hoja || "");
+  const svg = (/<svg class="plano"[\s\S]*?<\/svg>/.exec(hoja) || [""])[0];
+  const ultimoPoligono = svg.lastIndexOf("<polygon"), primerNombre = svg.indexOf('font-weight="700"');
+  await p.evaluate(() => window.__otroGuarda("v-1"));
+  await p.click("[data-plano-guardar]"); await espera(p, 600);
+  const v = await textoDialogo(p);
+  ok("pln-92-la-hoja-letreros-encima-y-la-hora", ultimoPoligono > 0 && primerNombre > ultimoPoligono && /table\{[^}]*font-size:inherit/.test(hoja) && !/\.\.(\s|$)/.test(v) && /a las \d{1,2}:\d{2}/.test(v),
+    `en la hoja los nombres van ${primerNombre > ultimoPoligono ? "después de" : "ANTES de"} las piezas; la tabla ${/font-size:inherit/.test(hoja) ? "hereda" : "NO hereda"} la letra; la ventana: «${v.slice(0, 110)}»`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;
