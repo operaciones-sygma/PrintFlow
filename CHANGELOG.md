@@ -12,6 +12,130 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.122 — «Entregas», lo de su critique: las fichas son botones y cambiar la fecha es una ventana de la app — 16-oct-2026
+
+**Qué pasaba.** La segunda pasada de /impeccable critique de la noche en PrintFlow (el encargo de Marcelo del 16-oct 02:35): «Entregas», el calendario
+que ven todos los roles todos los días y que nunca se había criticado. **24/40** (snapshot `.impeccable/critique/…__src-app-jsx-entregas.md`): las
+fichas eran `div` con `onClick` (con el teclado no se llegaba a ninguna), la ventana de cambiar la fecha usaba `alert()` nativo si faltaba el motivo
+(la regla de la app: nunca), el motivo salía en rojo desde que se abría, Esc no hacía nada con el foco en un campo y el clic fuera no cerraba, el Tab
+se salía, «guardar» la misma fecha no hacía nada sin decirlo, la letra iba de 7 a 10 px (la entregada al 60 % de opacidad) y el rojo decía dos cosas
+(retrasada y urgente).
+
+**Qué se cambió** (sólo `Calendar` en `src/App.jsx`, y `CambiarFechaVentana` nueva):
+- Cada ficha es un `<button>` con lo que dice para el lector de pantalla (la orden, su etapa, si va retrasada o es urgente y si se puede cambiar); la
+  de otro vendedor, `aria-disabled` y su porqué en el título.
+- Se lee: el cliente a 12 px en dos renglones (completo en su título), producto 11, etapa 10.5; la entregada sin transparencia y en su tinta.
+- Retrasada («Retrasada 2 d») y urgente («Urgente», en ámbar) con su palabra. El encabezado dice la semana («Semana del 12 al 18 de octubre») y hoy va
+  marcado (`aria-current="date"`). «Toca una entrega para cambiar su fecha».
+- `CambiarFechaVentana`: `role="dialog"`, el foco en la nueva fecha, el error adentro y sólo después de intentar, «Es la misma fecha que ya tiene»,
+  Esc y el fondo cierran si no hay motivo escrito (y no lo tiran si lo hay), `atraparTab`, `useDevolverFoco`, Enter guarda y un doble clic guarda una
+  vez; la orden es la viva (si la mueven con la ventana abierta, «Ahora se entrega» dice la de ahora).
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-entregas.mjs` (Calendar extraído con su montaje en App, el reloj del navegador fijo en el 14-oct) y
+tanda `entregas` (19). **Vuelta 1** (12, escritas antes del arreglo) contra v10.84.121: fallaban las 12 (5 se caían porque la ventana de antes ni siquiera era `role="dialog"`); con el arreglo, pasan. **Vuelta 2** (7, por donde no se diseñó: la mueven con la ventana abierta, el mes, Enter guarda, otra semana y entre meses, 1920, sin fecha, el vendedor con el teclado): pasan; dos eran supuestos de la prueba (Playwright no le da clic a un `aria-disabled`, una persona sí; la app escribe «17-oct»). El detector de la skill en el navegador, ya con el arreglo: el nombre a dos renglones con interlineado 1.25 y el «—» de los días sin entregas a 3.3:1, arreglados (1.3 y 4.6:1).
+
+**En producción:** 16-oct ~03:47, junto con v10.84.120 y v10.84.121; READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT` (commits `9014986`, `074d528`, `98e5cc4`
+y `47a996f`, en `produccion.sygma.mx`). Vuelta atrás: promover `dpl_oT8axpPAFH6arZzU3gxMWKYozZwJ` (el código de v10.84.119) o `git revert 47a996f
+98e5cc4 9014986`; la base no cambió con estas tres. Candado 1954 de 1954, de a 4 tandas en 14.5 min (28 nuevas); una pasó a la segunda y quedó
+revisada: pln-11b (`net::ERR_NO_BUFFER_SPACE` en la consola, la red de Windows sin espacio de sockets con TIME_WAIT en 799 a las 03:33; lo que mide
+pasó; sola, 3 de 3). Revisado en producción sin escribir: lo servido trae lo de «Entregas»; `.banco-revisor-orden/medir-119.mjs`, 15 de 15 (las
+versiones ya contestan 200: la tabla existe), y `npm run recorrido`: 8 roles, 95 pasos, nada truena.
+
+## v10.84.121 — «Planta», lo de su critique: las cotas dicen cuánto queda libre — 16-oct-2026
+
+**Qué pasaba.** Marcelo (16-oct 02:35, antes de dormir): «quiero que hagas pasadas de /impeccable critique a las ventanas, modales, UI de las apps
+que más lo necesiten» (lo coordiné con las otras sesiones: cada una critica lo suyo). En PrintFlow la primera fue «Planta», que Gerardo estrena hoy:
+**30/40** (snapshot `.impeccable/critique/2026-10-16T08-42-02Z__src-plano-planoplanta-jsx.md`; evaluación de diseño y la del detector de la skill,
+en ese orden y sin subagentes). Lo mejor: recuperarse de errores (4/4). Lo peor: la ayuda (2/4) y, lo que más importa, **no decía cuánto espacio
+queda**: el acomodo se decide por los pasillos y había que contar cuadros de 1 m. El detector: Arial en la hoja y Geist, la letra de la app
+(falsos positivos), el «degradado» de la barra de desplazamiento de App (falso positivo) y letra de 10-11.5 px (la convención de la app).
+
+**Qué se cambió.**
+- [P1] **Cotas**: al elegir o arrastrar una pieza, a cada lado la distancia a lo más cercano que tiene enfrente (muro, columna, escalera, baños u otra
+  pieza), «85 cm» o «1.20 m», y «Libre alrededor: ← · → · ↑ · ↓» en el panel (`holguras`/`distancia` en `src/lib/plano.js`, por la caja de la pieza).
+  La barra junto a la pieza se acomoda arriba, abajo o a un lado donde no tape una cota.
+- [P2] La elegida se ve aunque esté encimada: su contorno azul va encima del rojo.
+- [P2] Un solo primario: «Agregar objeto» es secundario; el relleno es de «Guardar» cuando hay algo que guardar.
+- [P2] «Cómo se usa» en el panel (arrastrar, tocar, el fondo y la rueda, los atajos) y el subtítulo corto («Planta baja · todo en centímetros»).
+- [P3] En la hoja, los letreros después de todas las piezas (el de una pieza tapada quedaba debajo) y la tabla hereda su letra; la hora en 24 h (con
+  «a.m.» la frase del conflicto acababa en «a.m..»).
+
+**Cómo se probó.** pln-87 a pln-92, escritas antes del arreglo: fallaban las 6 contra v10.84.120. La tanda `plano`, 85 de 85. Quedó para otra
+pasada (P3): en una zona apretada (la Cilíndrica), la etiqueta de una cota corta se encima un poco con el nombre de la pieza.
+
+**En producción:** 16-oct ~03:47, junto con v10.84.122: READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT` (la vuelta atrás, el candado y la revisión, en esa
+entrada).
+
+## v10.84.120 — «Planta»: los letreros se leen — 16-oct-2026
+
+**Qué pasaba.** La revisión en producción de v10.84.119 (la captura del recorrido como Producción, 02:18): el arreglo de los letreros encimados
+(vuelta 3) achicaba a 8.5 px todo nombre más ancho que su pieza y escondía casi todas las medidas; en la vista completa a 1366 «Dobladora»,
+«Guillotina 115» o «Cilíndrica» no se leían. Y el nombre de un área que queda debajo de una máquina se asomaba a medias («Duplo e», «Almace…»).
+
+**Qué se cambió.** Los letreros como en un mapa: el nombre a 12 px con sus medidas aunque rebase su pieza, y SÓLO donde dos letreros chocan se
+quitan las medidas y luego se achica el nombre. El nombre de un área tapado por una máquina o su letrero no se dibuja (`areasLibres`), en la pantalla
+y en la hoja.
+
+**Cómo se probó.** pln-85 (1366 y 1920: los nombres se leen y salen las medidas; fallaba contra v10.84.119) y pln-86 (el nombre del área tapado no se
+asoma; al escribirla, la prueba tenía mal un supuesto: quitar sólo el Duplo no destapa «Diseño», la CTP también lo tapa); pln-82 (los letreros no se
+pisan) sigue pasando. Una corrida cayó por `net::ERR_NO_BUFFER_SPACE` (pln-33; sola pasa): Windows registró a esa hora «todos los puertos efímeros
+en uso» (Tcpip 4231), con TIME_WAIT en 150-290 (ver la auditoría del candado).
+
+**En producción:** 16-oct ~03:47, junto con v10.84.121 y v10.84.122: READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT` (la vuelta atrás, el candado y la
+revisión, en la entrada de v10.84.122).
+
+## v10.84.119 — «Planta»: el plano de la planta baja para acomodar las máquinas — 16-oct-2026
+
+**Qué se pidió.** Marcelo (16-oct, ~00:00): «tengo los planos de levantamiento de la imprenta, todo, área de trabajo, oficinas, también mediciones
+de máquinas. Necesito hacer un plan interactivo para que Gerardo pueda hacer un acomodo de máquinas como él lo desee en el área de trabajo, pueda
+rotar, trasladar máquinas a su gusto, también la opción de crear máquinas/objetos adicionales y ponerles medidas y acomodarlos en el plano. Debe ser
+fácil de usarse y entenderlo. Que pueda guardar versiones de acomodos e imprimirlos en PDF». Decidió: una vista de PrintFlow («Planta», para Gerardo
+y Dirección), las versiones en la base (tabla nueva), sólo la planta baja, para el 16-oct a las 9:00.
+
+**Qué se hizo.**
+- **El plano, del levantamiento de AutoCAD** («zigma imprenta-Layout con maquinaria.pdf», 1:100, 29 capas; no vive en el repo): `scripts/plano/` lo
+  saca a vectores por capa (pypdf) y `armar-modulo.py` escribe `src/plano/plantaBaja.js`: muros y columnas, ventanas, puertas, escaleras, baños,
+  la cisterna y las divisiones de Diseño, en cm desde la esquina de los muros (35.4 × 25.1 m), y las 14 máquinas con su número del plano, su medida
+  en cm enteros (los decimales eran del trazo del CAD) y su giro; la dobladora y el tren son una «L». Lo punteado de la capa «0» (la cisterna y una
+  raya bajo la pegadora) y la orilla del tapanco no estorban; las escaleras sí (venían en la capa de proyección: se separan por su lugar).
+- **La vista «Planta»** (`src/plano/PlanoPlanta.jsx`, DIFERIDA: se baja sólo al abrirla; en el menú de produccion y admin; `CargaDelPlano` dice
+  «No se pudo abrir el plano · Recargar» si su archivo no baja): arrastrar (imán de 5 cm), girar 90° (los botones junto a la pieza, R y Shift+R) y
+  fino (el campo «Giro»), flechas (5 cm; con Shift, 50), agregar un objeto con nombre y largo × ancho (aparece en medio de lo que se ve), duplicar
+  (Ctrl+D; la copia es una pieza nueva: «GTO-1 (2)», sin el número del plano), quitar (Supr, con el «Deshacer» de ESA pieza), cambiar nombre y
+  medidas en el panel (una «L» se estira), deshacer y rehacer (Ctrl+Z / Ctrl+Y; las flechas seguidas son un paso), zoom con la rueda y «Ver todo»,
+  recorrer arrastrando el fondo, cuadros de 1 m. Lo que se encima con otra pieza o choca con un muro, columna, escalera o los baños sale en ROJO y
+  el panel dice con qué (`src/lib/plano.js`, la geometría probada con Node: tocarse lado con lado no es encimarse).
+- **Versiones con nombre** en `public.plano_versiones` (`docs/migrations/v10.84.119_plano_versiones.sql`): guardar, guardar como nueva, abrir y
+  borrar (se marca, con «Deshacer»). La base pone quién y cuándo y sube `revision`: si otro guardó o borró mientras tanto, no se pisa (dice quién y a
+  qué hora, y ofrece guardar la tuya como nueva); nombre único entre las vivas. **Sin la tabla, el plano igual se acomoda e imprime** y lo dice.
+  Lo que no se ha guardado se queda en esta computadora y se ofrece al volver; salir de la vista o abrir otra versión con cambios pregunta (por el
+  mismo camino que la forma: `FORMA_ABIERTA.preguntar`; `navClick` ahora pregunta si el destino no es la vista de ahora —con la forma abierta es
+  lo mismo que antes—, así que el plano también pregunta al ir a «Nueva»).
+- **Imprimir o PDF** (`src/plano/hoja.js`, en un marco oculto como el vale de caja): doble carta a 1:100 (la escala del levantamiento: se mide con
+  regla) o carta a 1:200, con escala gráfica, la versión, quién la guardó, quién imprimió y cuándo, lo encimado y la lista de máquinas con sus
+  medidas; con cambios sin guardar, lo dice. El PDF: «Guardar como PDF» en la ventana de imprimir.
+
+**Cómo se probó.** Tanda nueva `plano` (76: 8 de geometría con Node y 68 de pantalla, banco `tests/banco/gen-plano.mjs` que copia de App el
+contenedor, el montaje de la vista, `navClick`, los atajos y el Toast, con la tabla de versiones en memoria). **Vuelta 1** (50 casos, escritos antes
+de correrlos): fallaban 5 de la app —Esc en un campo del panel aplicaba lo escrito; «rehacer» no rehacía después de dos «deshacer» seguidos (la
+historia se movía dentro de funciones de actualizar de React que corren después: ahora es una sola cosa); la planta salía a 1:125 en doble carta;
+la escalera no estorbaba— y 3 eran supuestos de la prueba (dos botones se llaman «Deshacer»). **Vuelta 2** (21, por donde no se diseñó: límites,
+doble clic en guardar y en borrar, la lista que cambia con la ventana abierta, 54 piezas, una pieza fuera de la planta, la sesión vencida, Tab en
+la ventana, 1920 → 1366): 0 fallas. **Vuelta 3**, lo visto a ojo en las capturas: el aviso «sin tabla» empujaba el plano 45 px fuera de la
+pantalla, los letreros de las piezas chicas (las dos Aspas) se pisaban, los decimales del CAD («130 × 130.4») y la copia con el mismo nombre:
+pln-81 a pln-84, cada una cae con su arreglo saboteado. Con la app real (`sesion`): ses-91 (Gerardo ve «Planta», el plano pinta las 14, lee sus
+versiones, salir con cambios pregunta) y ses-92 (sólo Producción y Dirección la ven). `hooks` y `probar-alcance.sh` también revisan `src/plano/`.
+
+**La base.** `public.plano_versiones` aplicada el 16-oct ~02:45 por Marcelo en el editor SQL de Supabase (el conector no aplica migraciones: ver la memoria «migraciones por el editor»), con el archivo ensayado en PGlite (45 de 45: permisos por rol —Gerardo y Dirección sí; Karla, el visor, los vendedores, uno inactivo y uno sólo de CobranzaFlow no—, los sellos del disparador, `revision`, el nombre único, el borrado suave y los CHECK; 7 sabotajes cazados; pegado completo dos veces sin error). Su `select` final dio lo esperado (la tabla, sus 3 reglas, el disparador, authenticated lee/crea/cambia y no borra, anon nada) y se revisó de sólo lectura (RLS prendida, sus 3 índices y 2 CHECK, nadie de fuera ejecuta el disparador). Ensayada además EN PRODUCCIÓN como Gerardo dentro de un bloque que termina en RAISE (se deshizo; 0 filas después): crea, la base le pone su autor y revisión 1 aunque la pantalla mande otros, guarda encima con su revisión (pasa a 2) y la ve.
+
+**En producción:** 16-oct ~02:15; READY `dpl_oT8axpPAFH6arZzU3gxMWKYozZwJ` (commit `37f01e6`, en `produccion.sygma.mx`). Vuelta atrás: promover
+`dpl_DaGvSb4ssFZDN459JGAfm4tA4joA` (el código de v10.84.118) o `git revert 37f01e6`; la base no cambió. Candado 1926 de 1926 a la primera, de a 4
+tandas en 14.3 min (83 nuevas). Revisado en producción sin escribir (`.banco-revisor-orden/medir-119.mjs`, la cuenta visor con el rol de Gerardo y
+luego el de Karla): 15 de 15 —«Planta» en el menú de Gerardo, el plano pinta las 14, sin la tabla lo dice (su lectura contesta 404, lo esperado), mover
+deja «Cambios sin guardar», la hoja a 1:100 con las 14, salir pregunta y «Salir sin guardar» sale; Karla no la ve; nada intentó escribir—; y
+`npm run recorrido` contra producción: 8 roles, 95 pasos, nada truena (ahora conoce «Planta» y su 404 mientras no exista la tabla). En la captura
+del recorrido se vio que los nombres de las máquinas habían quedado diminutos: v10.84.120.
+
 ## Pruebas: los candados tardan la mitad (los bancos armados de antemano y con sus letras) — 15-oct-2026
 
 **Qué pasaba.** Marcelo (15-oct): «sí, hagamos que los candados tarden menos». El candado tardaba ~27 min (1842 pruebas, las 13 tandas con banco de

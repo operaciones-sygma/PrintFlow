@@ -26,7 +26,10 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 - **Frontend:** React 18 + Vite, **un solo archivo** `src/App.jsx` (~20,000 líneas). Estilos inline con
   el objeto `C`; sin CSS externo ni Tailwind. Módulos aparte sólo cuando hay que probarlos con Node
   (`src/lib/cuadrarPartes.js`; desde v10.84.91 `src/lib/categorias.js`: la lista de categorías y sus reglas, una sola vez para la
-  forma y para la base, que las recibe por `scripts/categorias-sql.mjs`).
+  forma y para la base, que las recibe por `scripts/categorias-sql.mjs`). 🔑 **Una pantalla grande que sólo usan uno o dos roles va en su
+  módulo DIFERIDO** (desde v10.84.119, `src/plano/`: «Planta», `React.lazy` con su guarda de carga `CargaDelPlano` en App; su geometría en
+  `src/lib/plano.js`; `hooks.mjs` y `probar-alcance.sh` también revisan `src/plano/`). Lo fijo de la planta (`src/plano/plantaBaja.js`) lo
+  generan `scripts/plano/*.py` desde el PDF del levantamiento: no se edita a mano.
 - **Hosting:** Vercel auto-deploy desde `main` → `print-flow-eosin.vercel.app`.
 - **Auth:** Supabase Auth (identidades **separadas** de CobranzaFlow; `public.users.user_id` = uid de
   Auth, `public.users.id` NO). Rol en `public.users.role`; en base `pf_uid_role()`,
@@ -38,7 +41,8 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
   abría como anónima); una falla al comprobar (red, 503) **no saca a nadie**: «Reintentar». Tanda `tests/romper/sesion.mjs`.
 - **Marcelo** es dueño y único desarrollador; **Karla** factura (y desde v10.84.112 corrige el precio de lo que todavía no se factura; desde v10.84.118 también de lo ya foliado sin timbrar, por la puerta de la base de
   CobranzaFlow v3.7.1010: `corregir_precio_revisar`/`_orden`, que también avisan; el precio de lo facturado, POR FUERA, sólo lo cambia Dirección); **Lupita** captura; **Gerardo/Noemí/
-  Germán** producción/pre-prensa/CTP; **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
+  Germán** producción/pre-prensa/CTP (desde v10.84.119 **Gerardo acomoda la planta en «Planta»**: el plano de la planta baja con las máquinas,
+  versiones en `public.plano_versiones` y la hoja a 1:100; también Dirección); **Genaro** vende (ve sólo lo suyo); rol `visor` sólo lectura.
   Desde v10.84.67 **Karla también pasa a Salidas** lo que ya está listo y Gerardo no ha pasado, **sólo desde Empaque o una
   máquina** (su «Pendientes» → «En la planta», la OC y el detalle; `jalar_a_salidas` en `ACTION_ROLES`, por `doAdv` con aviso a Gerardo).
   Desde v10.84.116 también **recibe la maquila completa que ya llegó** (enviada o con el proveedor, y desde v10.84.117 también la que no se
@@ -116,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1843 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1954 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -193,7 +197,21 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.118 (15-oct, ~20:16; READY `dpl_AegbgGoZJFC644qgesucgTJBSgF2`, commit `f1c96ea`; vuelta atrás: promover
+- **LIVE:** v10.84.122 (16-oct, ~03:47; READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT`, commits `9014986` (v10.84.120), `98e5cc4` (v10.84.121) y
+  `47a996f` (v10.84.122), subidas juntas; vuelta atrás: promover `dpl_oT8axpPAFH6arZzU3gxMWKYozZwJ` (el código de v10.84.119) o
+  `git revert 47a996f 98e5cc4 9014986`; la base no cambió con estas tres; candado 1954 de 1954, de a 4). Las dos pasadas de `/impeccable critique`
+  de la noche del 16-oct (encargo de Marcelo antes de dormir). v10.84.122: **«Entregas»** (24/40, snapshot
+  `.impeccable/critique/2026-10-16T09-29-58Z__src-app-jsx-entregas.md`): las fichas son botones (se llega con el teclado), cambiar la fecha es una
+  ventana de la app (`CambiarFechaVentana`: sin `alert()`, Esc y el fondo no tiran el motivo escrito, la misma fecha lo dice, sobre la orden viva), se
+  lee (12 px) y retrasada y urgente van con su palabra; banco `gen-entregas.mjs` y tanda `entregas`. v10.84.121: **«Planta»** (30/40, snapshot
+  `.impeccable/critique/2026-10-16T08-42-02Z__src-plano-planoplanta-jsx.md`): las cotas (cuánto queda libre a cada lado de la pieza elegida,
+  `holguras` en `src/lib/plano.js`), la elegida encima, un solo primario y «Cómo se usa». v10.84.120: los letreros del plano se leen (como en un
+  mapa; el nombre de un área tapado no se dibuja).
+  v10.84.119 (16-oct, ~02:15; READY `dpl_oT8axpPAFH6arZzU3gxMWKYozZwJ`, commit `37f01e6`; vuelta atrás: promover
+  `dpl_DaGvSb4ssFZDN459JGAfm4tA4joA` (el código de v10.84.118) o `git revert 37f01e6`; candado 1926 de 1926). v10.84.119: 🔑 **«Planta»**, el plano
+  de la planta baja para que Gerardo acomode las máquinas (mover, girar, agregar con medidas, versiones en `public.plano_versiones` —aplicada el 16-oct
+  ~02:45 por Marcelo en el editor SQL—, la hoja a 1:100); módulo diferido en `src/plano/`, tanda `plano`.
+  v10.84.118 (15-oct, ~20:16; READY `dpl_AegbgGoZJFC644qgesucgTJBSgF2`, commit `f1c96ea`; vuelta atrás: promover
   `dpl_2vfdJjkfGcuq8yfdUarzku2hJE9k` (el código de v10.84.117) o `git revert f1c96ea`; la base, de CobranzaFlow, se queda; candado 1842 de 1842).
   v10.84.118: 🔑 **«Corregir precio» también de lo ya foliado sin timbrar, por la puerta de la base** (la entrega 2 de CobranzaFlow, v3.7.1010:
   `corregir_precio_revisar` al abrir y con cada precio, `corregir_precio_orden` al guardar, con lo que se vio; en ese camino la app no anota ni
