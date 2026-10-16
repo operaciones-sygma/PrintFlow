@@ -197,7 +197,10 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.131 (16-oct, ~15:21; READY `dpl_3KEURpCVd7j5SnJLuhBum8F2PpNp`, commit `d3550f9`; vuelta atrás: promover
+- **LIVE:** v10.84.132 (16-oct, ~16:55; READY `dpl_DBaaQWCCTjH67p3QTyXJvm3CSFTP`, commit `31db72a`; vuelta atrás: promover
+  `dpl_ARh2xzQvA6XdwqVDz8ocWyBJjaru` (el código de v10.84.131) o `git revert 31db72a`; la base no cambió; candado 2141 de 2141, de a 4). «En espera» sin una
+  lectura buena (`lectura.ok`) ya no dice «Nada en espera» con su palomita (la regla 12); probado con la app real en `tests/recorrido/lectura-falla.mjs` (B).
+  v10.84.131 (16-oct, ~15:21; READY `dpl_3KEURpCVd7j5SnJLuhBum8F2PpNp`, commit `d3550f9`; vuelta atrás: promover
   `dpl_HunvwAhy2NtmwFKPEqvqeFjgH35o` (el código de v10.84.130) o `git revert d3550f9`; la base no cambió; candado 2141 de 2141, de a 4). La undécima pasada
   de `/impeccable critique`: **el Apartado Corona** (`CoronaModal`, 21/40): 🔑 una lectura fallida de los saldos o del historial ya no dice «nadie tiene
   saldo» (`lecturaClientes`, `lecturaLedger`, `FallaDeCorona`; es dinero de los clientes); el historial por un camino (`leerLedger`: leyendo no es vacío, la

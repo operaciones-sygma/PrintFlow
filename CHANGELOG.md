@@ -25,7 +25,9 @@ mientras no se lean, no se sabe cuáles hay» («Reintentar» está en el aviso 
 `tests/recorrido/lectura-falla.mjs`, caso B, una revisión nueva («En espera sin leer no dice «Nada en espera»»), como la de «Mis Pendientes» (v10.84.87).
 **Vuelta 1** contra v10.84.131: «MAL · dice «Nada en espera»; NO dice que no se pudieron leer» (las otras tres del caso B, bien). Con el arreglo: los cuatro escenarios de lectura caída (A-D), 14 de 14, con la nueva. El candado (las tandas de los bancos) en verde.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~16:55; READY `dpl_DBaaQWCCTjH67p3QTyXJvm3CSFTP`, commit `31db72a`; vuelta atrás: promover `dpl_ARh2xzQvA6XdwqVDz8ocWyBJjaru`
+(el código de v10.84.131) o `git revert 31db72a`; la base no cambió. Candado 2141 de 2141, de a 4, a la primera y sin inestables. Revisado en
+producción: el código servido (`index-DUM9BW7Y.js`) trae el texto nuevo, y el recorrido de los 8 roles no truena.
 
 ## v10.84.131 — El Apartado Corona no dice «nadie tiene saldo» cuando no pudo leer, y habla en palabras — 16-oct-2026
 
