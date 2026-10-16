@@ -43,8 +43,10 @@ try {
     fin(); process.exit(0);
   }
 }
-const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", port: 5190, strictPort: false } });
-const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5190/").replace(/\/$/, "");
+// (16-oct, la auditoría del candado: era el 5190, el del banco de «plan»; de a 6 tandas corrieron juntas y «plan» no pudo servir su banco. Ahora un
+//   puerto fuera de los de los bancos, 5183-5199; can-g10 lo vigila)
+const servidor = await preview({ root: RAIZ, logLevel: "error", build: { outDir: DIST }, preview: { host: "127.0.0.1", port: 5470, strictPort: false } });
+const BASE = String(servidor.resolvedUrls?.local?.[0] || "http://127.0.0.1:5470/").replace(/\/$/, "");
 const ORIGEN = new URL(BASE).origin;
 
 // ── Auth y la base, simulados ──

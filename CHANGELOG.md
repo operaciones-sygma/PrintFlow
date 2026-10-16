@@ -12,6 +12,31 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## La auditoría del candado: de a 4 es estable; de a 6 destapó dos tandas en el mismo puerto — 16-oct-2026 (sin versión de la app)
+
+**Qué se pidió.** Marcelo (15-oct): «¿podemos auditar que funcione bien?»; (16-oct, al volver del reinicio) «si quieres hacer el test del candado». Con un
+registrador de la red por segundo toda la noche (TCP, TIME_WAIT, UDP y los procesos con más conexiones) y los eventos de Windows de puertos agotados.
+
+**Lo que salió.**
+- **De a 4 (`PROBAR_PARALELO=4`), tres candados reales de esta noche:** 1954/1954 (03:31, una inestable: pln-11b por `ERR_NO_BUFFER_SPACE`, sola 3 de
+  3), 1985/1985 y 2005/2005 (04:30 y 05:46, sin inestables); 14.5 min cada uno; TIME_WAIT máximo 785-799, TCP 941-960, UDP 53-55. Estable.
+- **De a 6** (corrida suelta, sin `--base`): 10.3 min (29 % menos), TIME_WAIT máximo 1074 y TCP 1223; las 1870 que corrieron pasaron, pero la tanda
+  `plan` no corrió: «Port 5190 is already in use». 🔑 **No era la PC: `sesion` levantaba su servidor en el 5190, el del banco de `plan`** (con
+  `strictPort: false` él se acomodaba; `plan` exige su puerto). De a 4 no había tocado por el orden de arranque.
+- **`PROBAR_BANCO=dev`** (`--solo planta,plano`, de a 2): 140/140 en 134 s; el regreso al servidor de desarrollo sigue funcionando.
+- **Eventos de Windows de puertos agotados (Tcpip 4231/4266): ninguno desde las 03:00**, con seis corridas completas en la PC (tres candados de PrintFlow,
+  la suite del Cotizador, la de CobranzaFlow —TIME_WAIT 1038— y la de a 6). Los dos de la noche (02:04 y 02:25) fueron antes de los candados. El
+  `ERR_NO_BUFFER_SPACE` de las 03:4x salió con TIME_WAIT ≤ 800: no es sólo TIME_WAIT (como dice la memoria de la máquina compartida).
+
+**Qué se cambió.** `tests/romper/sesion.mjs`: su servidor, en el 5470 (fuera de los puertos de los bancos, 5183-5199). `tests/romper/candado.mjs`:
+**can-g10**, ningún puerto de banco se repite y ningún servidor que una tanda levante por su cuenta usa el de un banco (contra lo de antes falla:
+«tests/romper/sesion.mjs 5190»; con el arreglo, pasa).
+
+**Recomendación.** Seguir de a 4 (14.5 min, sin sustos). De a 6 ahorra 4 min pero sube el TIME_WAIT a ~1070, cerca de donde el 14-oct salió una inestable
+(~1140): sólo con la PC recién prendida y sin otra sesión corriendo.
+
+**En producción:** (no aplica: son las pruebas; se estrenan con su propia subida)
+
 ## v10.84.124 — El «Dashboard» enseña dónde está el trabajo: las etapas vacías son rieles y el resumen dice lo que cuenta — 16-oct-2026
 
 **Qué pasaba.** La cuarta pasada de /impeccable critique de la noche en PrintFlow: el «Dashboard», la vista con la que abren casi todos (Lupita, Karla,

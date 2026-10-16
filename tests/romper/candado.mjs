@@ -146,6 +146,23 @@ try {
     fs.rmSync(tmpB, { recursive: true, force: true });
   }
 }
+// can-g10 (16-oct, la auditoría del candado de a 6): dos tandas con el mismo puerto chocan cuando corren a la vez. «sesion» levantaba su servidor en el
+//   5190, el del banco de «plan», y de a 6 «plan» no corrió («Port 5190 is already in use»; de a 4 no había tocado por el orden de arranque). Ningún
+//   puerto de banco se repite, y ningún servidor que una tanda levante por su cuenta usa el de un banco.
+try {
+  const probar = fs.readFileSync(path.join(RAIZ, "scripts", "probar.mjs"), "utf8");
+  const bancos = [...probar.matchAll(/nombre: "([^"]+)"[^}]*?puerto: (\d+)/g)].map(m => ({ tanda: m[1], puerto: Number(m[2]) }));
+  const repetidos = bancos.filter((b, i) => bancos.findIndex(x => x.puerto === b.puerto) !== i);
+  const propios = [];
+  for (const dir of ["tests/romper", "tests/recorrido"]) for (const f of fs.readdirSync(path.join(RAIZ, dir)).filter(f => f.endsWith(".mjs"))) {
+    const t = fs.readFileSync(path.join(RAIZ, dir, f), "utf8");
+    for (const m of t.matchAll(/\bport:\s*(\d{4,5})/g)) propios.push({ archivo: dir + "/" + f, puerto: Number(m[1]) });
+  }
+  const chocan = propios.filter(p => bancos.some(b => b.puerto === p.puerto));
+  ok("can-g10 ningún puerto de banco se repite y ningún servidor propio de una tanda usa el de un banco", bancos.length >= 15 && !repetidos.length && !chocan.length,
+    `${bancos.length} bancos; repetidos: ${repetidos.map(b => b.tanda + " " + b.puerto).join(", ") || "ninguno"}; servidores propios en puerto de banco: ${chocan.map(c => c.archivo + " " + c.puerto).join(", ") || "ninguno"} (de ${propios.length} propios)`);
+} catch (e) { ok("can-g10 los puertos se pudieron revisar", false, e?.message || String(e)); }
+
 for (const x of res) console.log(x);
 const fallan = res.filter(x => x.startsWith("FALLA")).length;
 console.log(`\ncandado: ${res.length - fallan} pasan, ${fallan} fallan`);
