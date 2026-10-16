@@ -171,7 +171,8 @@ lectura que tarda 7 s). Cuatro escenarios, cada uno en su propia sesión (`SOLO=
 - **A**: mientras se hace la primera lectura, el Dashboard dice «Leyendo de la base…» y el tablero no dice «vacío», «libres» ni
   «trabajando»; ya leído, con la lectura caída, lo que se veía se queda, el aviso dice de qué hora es, el punto de conexión no
   dice «En tiempo real», y «Reintentar» (ya sin la falla) quita el aviso;
-- **B**: la PRIMERA lectura falla: el tablero dice que no se pudo leer y «Reintentar» lo lee;
+- **B**: la PRIMERA lectura falla: el tablero dice que no se pudo leer y «Reintentar» lo lee; «Mis Pendientes» no dice «Sin pendientes»
+  (v10.84.87) y «En espera» no dice «Nada en espera» (v10.84.132: con la app de v10.84.131 lo decía, con su palomita);
 - **C**: falla sólo la bitácora: tampoco se presenta a medias;
 - **D**: falla «Cargar Archivo Completo»: «Pendientes» y el tablero se quedan, lo dice, y el segundo intento lo carga.
 

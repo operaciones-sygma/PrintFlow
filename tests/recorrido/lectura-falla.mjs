@@ -118,6 +118,12 @@ try {
     await p.screenshot({ path: path.join(OUT, "B2-pendientes.png") });
     ok("B · Pendientes sin leer no dice «Sin pendientes» ni cuenta 0", !/Sin pendientes/.test(tp) && /No se pudieron leer tus pendientes/.test(tp) && !/\(0\)/.test(titulo),
       (/Sin pendientes/.test(tp) ? "dice «Sin pendientes»" : "no dice «Sin pendientes»") + "; " + (/No se pudieron leer tus pendientes/.test(tp) ? "dice que no se pudieron leer" : "NO dice que no se pudieron leer") + "; el menú dice «" + titulo + "»");
+    // v10.84.132 — «En espera» con la primera lectura caída: ni «Nada en espera» con su palomita (la regla 12; 17 pausadas el 16-oct)
+    await ir(p, "En espera"); await p.waitForTimeout(800);
+    const te = await texto(p);
+    await p.screenshot({ path: path.join(OUT, "B3-en-espera.png") });
+    ok("B · En espera sin leer no dice «Nada en espera»", !/Nada en espera/.test(te) && /No se pudieron leer las órdenes en espera/.test(te),
+      (/Nada en espera/.test(te) ? "dice «Nada en espera»" : "no dice «Nada en espera»") + "; " + (/No se pudieron leer las órdenes en espera/.test(te) ? "dice que no se pudieron leer" : "NO dice que no se pudieron leer"));
     await ir(p, "Tablero");
     estado.rompe = null;
     const re = p.getByRole("button", { name: "Reintentar" }).first();

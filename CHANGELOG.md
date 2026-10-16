@@ -12,6 +12,21 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.132 — «En espera» sin lectura ya no dice «Nada en espera» — 16-oct-2026
+
+**Qué pasaba.** Al buscar las vistas que todavía dicen «vacío» sin una lectura buena (la regla 12; la misma falla que tenían el Inventario y Corona, hoy
+en la 130 y la 131): «En espera» (17 órdenes pausadas ese día) decía **«Nada en espera»** con su palomita verde cuando la primera lectura de la base
+fallaba. Quien la abría creía que no había nada pausado.
+
+**Qué se cambió** (sólo la vista «En espera» en App): sin una lectura buena (`lectura.ok`) dice «No se pudieron leer las órdenes en espera de la base:
+mientras no se lean, no se sabe cuáles hay» («Reintentar» está en el aviso de arriba de la app). Con la lectura buena, igual que antes.
+
+**Cómo se probó.** Con la app REAL (compilada, contra la base, sin escribir, con la primera lectura de las órdenes caída sólo en ese navegador):
+`tests/recorrido/lectura-falla.mjs`, caso B, una revisión nueva («En espera sin leer no dice «Nada en espera»»), como la de «Mis Pendientes» (v10.84.87).
+**Vuelta 1** contra v10.84.131: «MAL · dice «Nada en espera»; NO dice que no se pudieron leer» (las otras tres del caso B, bien). Con el arreglo: los cuatro escenarios de lectura caída (A-D), 14 de 14, con la nueva. El candado (las tandas de los bancos) en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.131 — El Apartado Corona no dice «nadie tiene saldo» cuando no pudo leer, y habla en palabras — 16-oct-2026
 
 **Qué pasaba.** La undécima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): el Apartado Corona (`CoronaModal`, los saldos a favor de
