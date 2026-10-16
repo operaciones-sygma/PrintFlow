@@ -197,7 +197,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.124 (16-oct, ~06:01; READY `dpl_4sTqCaJTnzWsJq5P22ZpMT7Ca9SX`, commit `c8a9b57`; vuelta atrás: promover
+- **LIVE:** v10.84.125 (16-oct, ~09:58; READY `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR`, commit `cf3fc8a`; vuelta atrás: promover
+  `dpl_4Hp8e88VBWFBsd1wbdQbNQdx2mAA` (el código de v10.84.124) o `git revert cf3fc8a`; la base no cambió; candado 2021 de 2021, de a 4). La quinta pasada
+  de `/impeccable critique` (Marcelo, 16-oct por la mañana: «sigamos con más»): **«Todas»** (22/40): 🔑 `VistaTodas` pinta de 40 en 40 (antes las 1002 de
+  golpe: 1.1 s y 137,000 px), las activas primero (`ordenDeTodas`; antes las urgentes de hace meses arriba), el filtro por estado con su cuenta y sin
+  lectura, sin cifras. Compartido: en la ficha (`OCard`, `ProgressBar`, `StageFlowButtons`) la etapa, el teléfono, el avance y «Prod · Pre-p» en tinta.
+  Banco `gen-todas.mjs` (1002 órdenes) y tanda `todas`. En la cola: v10.84.126, la Torre de Control (lo detenido es trabajo parado; los datos, aparte).
+  v10.84.124 (16-oct, ~06:01; READY `dpl_4sTqCaJTnzWsJq5P22ZpMT7Ca9SX`, commit `c8a9b57`; vuelta atrás: promover
   `dpl_BXpWxSZYYhLFsCqqU1TAhDG4biY4` (el código de v10.84.123) o `git revert c8a9b57`; la base no cambió; candado 2005 de 2005, de a 4). La cuarta
   pasada de `/impeccable critique` de la noche: **el «Dashboard»** (con el que abren casi todos; 20/40, snapshot
   `.impeccable/critique/2026-10-16T11-42-47Z__src-app-jsx-dashboard.md`): 🔑 las etapas vacías son rieles de 36 px y las que tienen órdenes ocupan el ancho

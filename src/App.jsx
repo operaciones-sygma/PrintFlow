@@ -20129,13 +20129,20 @@ function CreateOCModal({onCreate, onClose, showToast}){
 // acciones de 1 click. Agrupada POR PERSONA (decisión de Marcelo: "ir con ella
 // directamente"), crónicas arriba, sanas visibles por persona, y 🔕 En espera
 // para falsos positivos (ej. esperando autorización del cliente).
-function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth,dayTick,maintKey}){
+function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBatch,onOpenHealth,dayTick,maintKey,leido=true}){
   const [openHealthy,setOpenHealthy]=useState({});
   const [showSnoozed,setShowSnoozed]=useState(true);
   const isActive=o=>{const s=String(o.stage||"");return !o.cancelled_at&&!s.includes("cancelled")&&!s.includes("delivered")&&s!=="stocked"&&!["web_pending","web_rejected"].includes(s)};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const rows=useMemo(()=>orders.filter(isActive).map(o=>({o,diag:diagnoseOrder(o)})),[orders,dayTick,maintKey]);// v10.73.84 (memos-invisible) — maintKey en deps: la Torre recomputa al caer/reparar una máquina
-  const blocked=rows.filter(r=>r.diag&&!r.diag.snoozed);
+  // v10.84.126 — la Torre, su /impeccable critique (16-oct, 23/40). «Detenidas» contaba también lo que sólo es un DATO por capturar (sin fecha de
+  //   entrega, sin precio: «no bloqueantes de flujo», dice diagnoseOrder): en producción 14 de las 19, con su dinero «atorado», y en las crónicas
+  //   en rojo. Ahora van aparte, con sus mismas acciones; lo detenido, las crónicas, el semáforo y lo atorado son trabajo parado.
+  const esDato=r=>["no_date","no_price"].includes(r.diag?.key);
+  const [verDatos,setVerDatos]=useState(false);
+  const blocked=rows.filter(r=>r.diag&&!r.diag.snoozed&&!esDato(r));
+  const datos=rows.filter(r=>r.diag&&!r.diag.snoozed&&esDato(r));
+  const datosBy={};datos.forEach(r=>{const k=r.diag.respName||"Otros";(datosBy[k]=datosBy[k]||[]).push(r)});
   const snoozedRows=rows.filter(r=>snoozeActive(r.o));
   const healthy=rows.filter(r=>!r.diag&&!snoozeActive(r.o));
   const money=blocked.reduce((s,r)=>s+(parseFloat(r.o.price)||parseFloat(r.o.maq_price)||0),0);
@@ -20156,29 +20163,29 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
   // v10.58.65: incluir a los vendedores con usuario (Genaro) — sus maquilas ahora se
   // les atribuyen, así que deben aparecer en el semáforo (derivado del Set, sin duplicar).
   const allPeople=["Lupita","Gerardo","Noemí","Germán","Karla",...[...VENDEDORES_CON_USUARIO].map(v=>v.charAt(0).toUpperCase()+v.slice(1))];
-  const today=new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"});
+  const today=(x=>x.charAt(0).toUpperCase()+x.slice(1))(new Date().toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}));
 
-  const Row=({r,inCron})=>{
+  const Row=({r,inCron,dato})=>{
     const {o,diag}=r;
     const m=precioVenta(o);
-    return <div style={{border:"1.5px solid "+sevColor[diag.sev]+"66",borderRadius:10,padding:"10px 14px",background:diag.sev==="red"?C.dn+"05":C.bg,marginBottom:6}}>
+    return <div style={{border:dato?"1px solid "+C.bd:"1.5px solid "+sevColor[diag.sev]+"66",borderRadius:10,padding:"10px 14px",background:C.bg,marginBottom:6}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
+        <button onClick={()=>onAction(o.id,"detail")} style={{fontSize:13,fontWeight:800,color:C.tx,cursor:"pointer",background:"none",border:"none",padding:0,fontFamily:"inherit"}}>{o.production_number||o.id}</button>
         <span style={{fontSize:12,fontWeight:600,color:C.t2}}>{o.client}</span>
-        <span style={{fontSize:10,color:C.t3}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
+        <span style={{fontSize:10,color:C.t2}}>{(o.product_type||o.product||"").trim().slice(0,40)}</span>
         {o.invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.fac,background:C.fac+"12",padding:"1px 6px",borderRadius:5,fontFamily:"'Geist Mono',monospace"}}>{o.invoice_folio}</span>}
-        <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
+        <span style={{fontSize:10,color:C.t2,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
         {m>0&&<span style={{fontSize:11,fontWeight:700,color:C.okInk,marginLeft:"auto"}}>{fmt(m)}</span>}
       </div>
-      <div style={{fontSize:12,fontWeight:700,color:diag.sev==="red"?C.dn:"#b45309",marginTop:4}}>{diag.text}</div>
+      <div style={{fontSize:12,fontWeight:700,color:dato?C.t2:diag.sev==="red"?C.dnInk:C.wnInk,marginTop:4}}>{diag.text}</div>
       {inCron&&!diag.external&&<div style={{fontSize:10,color:C.t2,marginTop:1}}>→ le toca a <b>{diag.respName}</b></div>}
       <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:diag.days>=3?C.dn:C.t2}}><ClockIcon size={11} weight="bold"/>{diag.days===0?"hoy":diag.days+" día"+(diag.days===1?"":"s")}</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,color:!dato&&diag.days>=3?C.dnInk:C.t2}}><ClockIcon size={11} weight="bold"/>{diag.days===0?"hoy":diag.days+" día"+(diag.days===1?"":"s")}</span>
         <div style={{marginLeft:"auto",display:"flex",gap:4}}>
-          <button onClick={()=>onNudge({o,diag})} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"3px 9px",border:"1px solid #f59e0b40"}} title={"Recordar por notificación + Telegram"+(diag.external?" (a Lupita, que da seguimiento)":"")}><MegaphoneIcon size={11} weight="bold"/>Recordar</button>
-          <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ver detalle"><EyeIcon size={13}/></button>
+          <button onClick={()=>onNudge({o,diag})} style={{...bs(C.bg,C.wnInk),fontSize:10,padding:"3px 9px",border:"1px solid #f59e0b66"}} title={"Recordar por notificación + Telegram"+(diag.external?" (a Lupita, que da seguimiento)":"")}><MegaphoneIcon size={11} weight="bold"/>Recordar</button>
+          <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ver detalle" aria-label={"Ver el detalle de "+(o.production_number||"la orden")}><EyeIcon size={13}/></button>
           {diag.action==="edit"&&<button onClick={()=>onAction(o.id,"edit")} style={{...bs(C.fac+"15",C.fac),fontSize:10,padding:"3px 9px",border:"1px solid "+C.fac+"40"}} title="Capturar el dato faltante yo mismo"><NotePencilIcon size={11} weight="bold"/>Resolver</button>}
-          <button onClick={()=>onSnooze(o)} style={{...bs(C.sf,C.t3),fontSize:10,padding:"3px 9px"}} title="Ignorar / poner en espera con razón (ej. esperando al cliente)"><BellSlashIcon size={13}/></button>
+          <button onClick={()=>onSnooze(o)} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} title="Ignorar / poner en espera con razón (ej. esperando al cliente)" aria-label={"Poner en espera "+(o.production_number||"la orden")}><BellSlashIcon size={13}/></button>
         </div>
       </div>
     </div>;
@@ -20187,13 +20194,15 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
       <h2 style={{display:"flex",alignItems:"center",gap:8,fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:0}}><BroadcastIcon size={20} weight="bold"/>Torre de Control</h2>
-      <span style={{fontSize:11,color:C.t2,textTransform:"capitalize"}}>{today}</span>
+      <span style={{fontSize:11,color:C.t2}}>{today}</span>
       <button onClick={onOpenHealth} style={{...bs(C.sf,C.t2),fontSize:10,padding:"4px 10px",marginLeft:"auto"}}><HeartbeatIcon size={12} weight="bold"/>Salud Operativa completa</button>
     </div>
+    {!leido?<div role="status" style={{display:"flex",alignItems:"center",gap:8,margin:"8px 0 0",padding:"14px 16px",borderRadius:12,background:C.sf,border:"1px solid "+C.bd,fontSize:12,color:C.t2}}><ClockIcon size={14} weight="bold" style={{flexShrink:0}}/>Sin cifras mientras no se lea de la base.</div>:<>
     <p style={{fontSize:12,color:C.t2,margin:"4px 0 12px"}}>
       {blocked.length===0
-        ? "✅ Nada detenido — todo el flujo avanza normal."
-        : <><b style={{color:C.dn}}>{blocked.length} orden{blocked.length===1?"":"es"} detenida{blocked.length===1?"":"s"}</b> · {fmt(money)} atorados · la más vieja: <b>{oldest} día{oldest===1?"":"s"}</b></>}
+        ? <span style={{display:"inline-flex",alignItems:"center",gap:5}}><CheckCircleIcon size={13} weight="fill" color={C.ok}/>Nada detenido: todo el flujo avanza normal.</span>
+        : <><b style={{color:C.dnInk}}>{blocked.length===1?"1 orden detenida":blocked.length+" órdenes detenidas"}</b> · {fmt(money)} atorados · la más vieja: <b>{oldest} día{oldest===1?"":"s"}</b></>}
+      {datos.length>0&&<> · {datos.length} con datos por capturar</>}
     </p>
 
     {/* Semáforo de personas */}
@@ -20203,21 +20212,21 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         const g=blocked.filter(r=>!r.diag.external&&String(r.diag.respName).split(" y ").map(x=>x.trim()).includes(name));
         const reds=g.filter(r=>r.diag.sev==="red").length;
         const ok=g.length===0;
-        return <div key={name} style={{display:"flex",alignItems:"center",gap:5,background:ok?C.ok+"0c":(reds?C.dn+"0e":"#f59e0b12"),border:"1px solid "+(ok?C.ok+"30":(reds?C.dn+"35":"#f59e0b35")),borderRadius:10,padding:"6px 12px"}}>
+        return <div key={name} style={{display:"flex",alignItems:"center",gap:5,background:C.bg,border:"1px solid "+(ok?C.ok+"55":(reds?C.dn+"66":"#f59e0b66")),borderRadius:10,padding:"6px 12px"}}>
           <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx}}><UserIcon size={12} weight="bold"/>{name}</span>
           {ok?<CheckCircleIcon size={14} weight="fill" color={C.ok}/>
-            :<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,color:reds?C.dn:"#b45309"}}><CircleIcon size={9} weight="fill" color={reds?C.dn:"#f59e0b"}/>{g.length}</span>}
+            :<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:800,color:reds?C.dnInk:C.wnInk}}><CircleIcon size={9} weight="fill" color={reds?C.dn:"#f59e0b"}/>{g.length}</span>}
         </div>;
       })}
-      {groups["🌐 Cliente / Proveedor"]&&<div style={{display:"flex",alignItems:"center",gap:5,background:C.ctp+"10",border:"1px solid "+C.ctp+"35",borderRadius:10,padding:"6px 12px"}}>
+      {groups["🌐 Cliente / Proveedor"]&&<div style={{display:"flex",alignItems:"center",gap:5,background:C.bg,border:"1px solid "+C.ctp+"55",borderRadius:10,padding:"6px 12px"}}>
         <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx}}><GlobeIcon size={12} weight="bold"/>Externos</span>
-        <span style={{fontSize:11,fontWeight:800,color:C.ctp}}>{groups["🌐 Cliente / Proveedor"].length}</span>
+        <span style={{fontSize:11,fontWeight:800,color:tintaAA(C.ctp)}}>{groups["🌐 Cliente / Proveedor"].length}</span>
       </div>}
     </div>
 
     {/* Crónicas */}
-    {cron.length>0&&<div style={{background:C.dn+"06",border:"1px solid "+C.dn+"25",borderRadius:14,padding:12,marginBottom:14}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:C.dn,marginBottom:8}}><FireIcon size={14} weight="fill"/>CRÓNICAS — ve directo con ellos</div>
+    {cron.length>0&&<div style={{background:C.bg,border:"1px solid "+C.dn+"40",borderRadius:14,padding:12,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:C.dnInk,marginBottom:8}}><FireIcon size={14} weight="fill" color={C.dn}/>CRÓNICAS: ve directo con ellos</div>
       {cron.slice(0,5).map(r=><Row key={r.o.id} r={r} inCron/>)}
       {cron.length>5&&<div style={{fontSize:10,color:C.t2}}>…y {cron.length-5} más abajo, en su persona</div>}
     </div>}
@@ -20228,13 +20237,24 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
       const isExt=name==="🌐 Cliente / Proveedor";
       return <div key={name} style={{marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:C.tx}}>{isExt?<GlobeIcon size={14} weight="bold"/>:<UserIcon size={14} weight="bold"/>}<span>{isExt?"Cliente / Proveedor":name} — {g.length} bloqueo{g.length===1?"":"s"}</span></span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:800,color:C.tx}}>{isExt?<GlobeIcon size={14} weight="bold"/>:<UserIcon size={14} weight="bold"/>}<span>{isExt?"Cliente / Proveedor":name} · {g.length} bloqueo{g.length===1?"":"s"}</span></span>
           {isExt&&<span style={{fontSize:10,color:C.t2}}>(Lupita da seguimiento)</span>}
-          {!isExt&&g.length>1&&g[0].diag.respRole!=="both"&&<button onClick={()=>onNudgeBatch(g[0].diag.respRole,name,g)} style={{...bs("#f59e0b15","#b45309"),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b40",marginLeft:"auto"}}><MegaphoneIcon size={11} weight="bold"/>Recordarle los {g.length}</button>}
+          {!isExt&&g.length>1&&g[0].diag.respRole!=="both"&&<button onClick={()=>onNudgeBatch(g[0].diag.respRole,name,g)} style={{...bs(C.bg,C.wnInk),fontSize:10,padding:"4px 10px",border:"1px solid #f59e0b66",marginLeft:"auto"}}><MegaphoneIcon size={11} weight="bold"/>Recordarle los {g.length}</button>}
         </div>
         {g.map(r=><Row key={r.o.id} r={r}/>)}
       </div>;
     })}
+
+    {/* v10.84.126 — los datos por capturar (sin fecha de entrega, sin precio): aparte y sin alarma, con sus mismas acciones */}
+    {datos.length>0&&<div style={{marginBottom:14}}>
+      <button onClick={()=>setVerDatos(v=>!v)} aria-expanded={verDatos} style={{...bs(C.sf,C.tx),fontSize:11,padding:"6px 12px",marginBottom:6,border:"1px solid "+C.bd}}>
+        <NotePencilIcon size={12} weight="bold"/>{datos.length} con datos por capturar (sin fecha de entrega o sin precio) {verDatos?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}
+      </button>
+      {verDatos&&Object.keys(datosBy).sort((a,b)=>datosBy[b].length-datosBy[a].length).map(name=><div key={name} style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,margin:"6px 2px 5px",fontSize:11,fontWeight:700,color:C.t2}}><UserIcon size={12} weight="bold"/>{name}<span style={{fontSize:10,color:C.t2,background:C.sf,padding:"1px 8px",borderRadius:8,fontWeight:700}}>{datosBy[name].length}</span></div>
+        {datosBy[name].map(r=><Row key={r.o.id} r={r} dato/>)}
+      </div>)}
+    </div>}
 
     {/* Sanas por persona (decisión de Marcelo: bloqueos Y sano) */}
     <div style={{marginTop:6,borderTop:"1px solid "+C.bd,paddingTop:10}}>
@@ -20243,23 +20263,23 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         {Object.keys(healthyBy).sort().map(name=>{
           const open=!!openHealthy[name];
           return <div key={name} style={{minWidth:200,flex:"1 1 240px"}}>
-            <button onClick={()=>setOpenHealthy(p=>({...p,[name]:!p[name]}))} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",background:C.ok+"08",border:"1px solid "+C.ok+"25",borderRadius:10,cursor:"pointer"}}>
+            <button onClick={()=>setOpenHealthy(p=>({...p,[name]:!p[name]}))} aria-expanded={open} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",background:C.bg,border:"1px solid "+C.ok+"55",borderRadius:10,cursor:"pointer",fontFamily:"inherit"}}>
             <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}><UserIcon size={12} weight="bold" style={{flexShrink:0}}/>{name}</span>
-            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:C.ok,fontWeight:800}}>{healthyBy[name].length}<CheckIcon size={12} weight="bold"/></span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,color:C.okInk,fontWeight:800}}>{healthyBy[name].length}<CheckIcon size={12} weight="bold"/></span>
             {open?<CaretUpIcon size={11} color={C.t3}/>:<CaretDownIcon size={11} color={C.t3}/>}
           </button>
           {open&&<div style={{marginTop:4}}>
-            {healthyBy[name].slice(0,15).map(r=><div key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",borderBottom:"1px solid "+C.bd,cursor:"pointer",transition:"background .12s"}} onMouseEnter={e=>e.currentTarget.style.background=C.acL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            {healthyBy[name].slice(0,15).map(r=><button key={r.o.id} onClick={()=>onAction(r.o.id,"detail")} style={{width:"100%",display:"flex",gap:6,alignItems:"center",fontSize:11,padding:"5px 10px",border:"none",borderBottom:"1px solid "+C.bd,background:"transparent",cursor:"pointer",transition:"background .12s",textAlign:"left",fontFamily:"inherit",color:C.tx}} onMouseEnter={e=>e.currentTarget.style.background=C.acL} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <b>{r.o.production_number||r.o.id}</b>
               <span style={{color:C.t2,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.o.client}</span>
-              <span style={{color:C.t3,fontSize:10,display:"inline-flex",alignItems:"center"}}><StageLbl stage={r.o.stage} size={10}/></span>
-              {r.o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:3,color:C.t3,fontSize:10}}><CalendarDotsIcon size={11}/>{fD(r.o.due_date)}</span>}
-            </div>)}
-            {healthyBy[name].length>15&&<div style={{fontSize:10,color:C.t3,padding:"4px 10px"}}>…y {healthyBy[name].length-15} más</div>}
+              <span style={{color:C.t2,fontSize:10,display:"inline-flex",alignItems:"center"}}><StageLbl stage={r.o.stage} size={10}/></span>
+              {r.o.due_date&&<span style={{display:"inline-flex",alignItems:"center",gap:3,color:C.t2,fontSize:10}}><CalendarDotsIcon size={11}/>{fD(r.o.due_date)}</span>}
+            </button>)}
+            {healthyBy[name].length>15&&<div style={{fontSize:10,color:C.t2,padding:"4px 10px"}}>…y {healthyBy[name].length-15} más</div>}
           </div>}
           </div>;
         })}
-        {healthy.length===0&&<span style={{fontSize:11,color:C.t3}}>—</span>}
+        {healthy.length===0&&<span style={{fontSize:11,color:C.t2}}>—</span>}
       </div>
     </div>
 
@@ -20269,23 +20289,24 @@ function ControlTowerView({orders,onAction,onSnooze,onUnsnooze,onNudge,onNudgeBa
         <BellSlashIcon size={12} weight="bold"/>En espera ({snoozedRows.length}) {showSnoozed?<CaretUpIcon size={11}/>:<CaretDownIcon size={11}/>}
       </button>
       {showSnoozed&&snoozedPersonOrder.map(person=><div key={person} style={{marginBottom:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,margin:"6px 2px 5px",fontSize:11,fontWeight:700,color:C.t2}}><UserIcon size={12} weight="bold"/>{person}<span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:8,fontWeight:700}}>{snoozedBy[person].length}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:6,margin:"6px 2px 5px",fontSize:11,fontWeight:700,color:C.t2}}><UserIcon size={12} weight="bold"/>{person}<span style={{fontSize:10,color:C.t2,background:C.sf,padding:"1px 8px",borderRadius:8,fontWeight:700}}>{snoozedBy[person].length}</span></div>
         {snoozedBy[person].map(({o})=>(
-          <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6,opacity:0.85}}>
+          <div key={o.id} style={{border:"1px dashed "+C.bd,borderRadius:10,padding:"8px 14px",marginBottom:6}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <span style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer"}} onClick={()=>onAction(o.id,"detail")}>{o.production_number||o.id}</span>
+              <button onClick={()=>onAction(o.id,"detail")} style={{fontSize:12,fontWeight:800,color:C.tx,cursor:"pointer",background:"none",border:"none",padding:0,fontFamily:"inherit"}}>{o.production_number||o.id}</button>
               <span style={{fontSize:11,color:C.t2}}>{o.client}</span>
-              <span style={{fontSize:10,color:C.t3,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
+              <span style={{fontSize:10,color:C.t2,background:C.sf,padding:"1px 8px",borderRadius:5,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={10}/></span>
               <div style={{marginLeft:"auto",display:"flex",gap:4}}>
-                <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}}><EyeIcon size={13}/></button>
-                <button onClick={()=>onUnsnooze(o)} style={{...bs(C.ok+"12",C.ok),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"40"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
+                <button onClick={()=>onAction(o.id,"detail")} style={{...bs(C.sf,C.t2),fontSize:10,padding:"3px 9px"}} aria-label={"Ver el detalle de "+(o.production_number||"la orden")}><EyeIcon size={13}/></button>
+                <button onClick={()=>onUnsnooze(o)} style={{...bs(C.bg,C.okInk),fontSize:10,padding:"3px 9px",border:"1px solid "+C.ok+"55"}}><BellRingingIcon size={11} weight="bold"/>Reactivar</button>
               </div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:11,color:C.t2,marginTop:3}}><BellSlashIcon size={12} weight="bold" style={{flexShrink:0}}/>{o.snooze_reason} <span style={{color:C.t3}}>— {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",fontSize:11,color:C.t2,marginTop:3}}><BellSlashIcon size={12} weight="bold" style={{flexShrink:0}}/>{o.snooze_reason} <span style={{color:C.t2}}>· {AUTHOR_NAME[o.snoozed_by]||o.snoozed_by}{o.snooze_until?" · hasta "+fD(o.snooze_until):" · hasta que cambie de etapa"}</span></div>
           </div>
         ))}
       </div>)}
     </div>}
+    </>}
   </div>;
 }
 
@@ -23708,7 +23729,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         {view==="wip"&&user==="admin"&&<WIPDashboard orders={orders} role={user} onAction={handleAction}/>}
         {view==="health"&&(user==="admin"||user==="secretaria"||user==="karla")&&<OperationalHealthView orders={orders} role={user} userLogin={userLogin} notifications={notifications} maintenance={maintenance} maintKey={maintKey} purchaseOrders={purchaseOrders} onAction={handleAction} setConfirmModal={setConfirmModal} showToast={showToast} reload={reload} reloadNotifications={()=>db.loadNotifications(notifKey).then(setNotifications)} leido={!!lectura.ok}/>}
         {/* 🗼 v10.58.52 — Torre de Control (admin) */}
-        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey}/>}
+        {view==="torre"&&user==="admin"&&<ControlTowerView orders={orders} onAction={handleAction} onSnooze={snoozeOrder} onUnsnooze={unsnoozeOrder} onNudge={nudgeDiag} onNudgeBatch={nudgeBatch} onOpenHealth={()=>setView("health")} dayTick={dayTick} maintKey={maintKey} leido={!!lectura.ok}/>}
         {view==="audit"&&(user==="admin"||user==="karla")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ClipboardTextIcon size={18} weight="bold"/>Auditoría de Folios</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo histórico para auditoría</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Para ver folios anteriores a 30 días debes cargar el archivo completo</p></div>:<AuditoriaView orders={orders} purchaseOrders={purchaseOrders} onNavigateToOC={(ocId)=>{setPendingOCNavId(ocId);setView("oc")}} onNavigateToOrder={(id)=>{setDetailModalId(id);setView("pipeline")}}/>}</div>}
         {/* 🔁 v10.72.83 — Devoluciones (re-trabajo) y Cancelaciones */}
         {view==="devoluciones"&&(user==="admin"||user==="secretaria"||user==="karla"||user==="preprensa")&&<div>{!archiveLoaded?<div style={{textAlign:"center",padding:"20px"}}><h2 style={{fontSize:18,fontWeight:800,letterSpacing:"-0.01em",margin:"0 0 14px",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ArrowUUpLeftIcon size={18} weight="bold"/>Devoluciones</h2><button onClick={loadArchive} style={{...bt(C.ac),fontSize:13,padding:"12px 24px"}}><FolderOpenIcon size={14} weight="bold"/>Cargar archivo para registrar devoluciones</button><p style={{fontSize:11,color:C.t2,marginTop:8}}>Carga el historial completo para buscar la orden entregada a devolver y ver el historial</p></div>:<DevolucionesView orders={orders} role={user} userLogin={userLogin} onCreateReturn={doCreateReturn} onDetail={(id)=>setDetailModalId(id)}/>}</div>}

@@ -12,6 +12,37 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.126 — La Torre de Control: «detenidas» es trabajo parado; los datos por capturar, aparte — 16-oct-2026
+
+**Qué pasaba.** La sexta pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la Torre de Control, con la que abre Dirección. **23/40**
+(snapshot `.impeccable/critique/2026-10-16T16-09-44Z__src-app-jsx-torre.md`). «19 órdenes detenidas · $140,881.50 atorados» contaba también lo que
+`diagnoseOrder` mismo llama «datos faltantes (no bloqueantes de flujo)»: en producción, 14 de las 19 eran «Sin fecha de entrega comprometida», con su
+dinero sumado como «atorado», el semáforo de Lupita en 14 y varias en las CRÓNICAS en rojo (las de 3+ días en su etapa). Sin una lectura buena decía
+«✅ Nada detenido». El rojo y el ámbar como letra sin AA (3.9:1) y todo teñido de rojo; el folio y las sanas no se alcanzaban con el teclado; «13
+ordenes detenidas» sin acento («orden»+«es»), «Miércoles, 14 De Octubre» y rayas largas.
+
+**Qué se cambió** (sólo `ControlTowerView` y su montaje en App; `diagnoseOrder` no se tocó: el Despertador y los recordatorios siguen igual):
+- Lo detenido, las crónicas, el semáforo, «la más vieja» y lo atorado son trabajo parado. Los datos por capturar (`no_date`, `no_price`) van aparte: «· N
+  con datos por capturar» arriba y su sección plegada, por persona, con sus mismas acciones (Recordar, Resolver, poner en espera) y sin alarma.
+- `leido` (de App): sin lectura buena, «Sin cifras mientras no se lea de la base.»
+- Las tintas de la app; fondo sólido y el color en el borde (crónicas, renglones, semáforo, «Avanzando normal», «Reactivar»); el gris secundario.
+- El folio, las sanas y lo de abrir los datos son botones; los de sólo ícono con su nombre (`aria-label`).
+- «1 orden detenida» / «N órdenes detenidas»; «Miércoles, 14 de octubre»; sin rayas largas.
+
+**Cómo se probó.** Banco nuevo `tests/banco/gen-torre.mjs` (la Torre con `diagnoseOrder` y la línea de App; 6 paradas que suman $21,000 y 7 datos por
+capturar que suman $34,500) y tanda `torre` (17). **Vuelta 1** (12, escritas antes del arreglo) contra v10.84.125: fallaban 9 (pasaban la fecha —la
+prueba leía una copia sin CSS: corregida, ver abajo— y 1366/1920). **Vuelta 2** (5, por donde no se diseñó: le capturan la fecha con la vista abierta,
+sólo datos, todo sano, recordar un dato, los datos con el teclado): contra lo de antes fallaban 4. Con el arreglo, la primera corrida dejó 3: «13 ordenes»
+sin acento (un bug que la prueba encontró), los textos dentro de las crónicas (4.0-4.4:1, dos capas de tinte rojo sobre el gris) y un supuesto de la
+prueba (la fecha se leía en una copia suelta, que no aplica el `text-transform`: ahora el texto vivo); después, el gris claro y los verdes sobre su
+tinte; luego 17 de 17. El detector de la skill: de 20 hallazgos a 6 (de 10 a 2 con sólo datos): sólo la letra chica de la app, la escala, un renglón
+largo y los falsos positivos.
+
+**Para Marcelo:** ¿una orden sin fecha de entrega debería recordársele a quien vendió desde el primer día (hoy el Despertador y «Recordar» lo hacen), o
+sólo cuando ya corre en la planta?
+
+**En producción:** (pendiente)
+
 ## v10.84.125 — «Todas» abre en un instante: de 40 en 40, lo activo primero y el filtro por estado — 16-oct-2026
 
 **Qué pasaba.** Marcelo (16-oct, por la mañana): «sigamos con más /impeccable critique en general y mejoras». La quinta pasada: «Todas», la lista de
@@ -39,7 +70,9 @@ supuesto de la prueba (COSQUIM sí tiene una cancelada en el banco: se buscó CE
 **Para Marcelo:** aun de 40 en 40, son fichas grandes (dos por renglón). Para REVISAR (no para buscar), una lista compacta —folio, cliente, producto,
 etapa, entrega, monto— que abra el detalle serviría más. ¿La hago?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct ~09:58; READY `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR` (commit `cf3fc8a`). Vuelta atrás: promover `dpl_4Hp8e88VBWFBsd1wbdQbNQdx2mAA`
+(el código de v10.84.124) o `git revert cf3fc8a`; la base no cambió. Candado 2021 de 2021 a la primera, de a 4 en 14.4 min (15 nuevas), sin inestables.
+Revisado en producción sin escribir: lo servido trae lo nuevo («Qué órdenes ver») y `npm run recorrido`: 8 roles, 95 pasos, nada truena.
 
 ## La auditoría del candado: de a 4 es estable; de a 6 destapó dos tandas en el mismo puerto — 16-oct-2026 (sin versión de la app)
 
