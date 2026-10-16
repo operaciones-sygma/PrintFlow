@@ -43,7 +43,7 @@ const LECTURAS = new Set(["client_credit_balance", "get_app_config", "get_client
 // Las vistas del menú (title del botón sin el conteo). Una vista nueva que no esté aquí sale en el reporte como «sin recorrer».
 const VISTAS = ["Torre", "Dashboard", "Pendientes", "En espera", "Datos Pendientes", "Nueva", "Órdenes de Compra", "Pedidos Web",
   "Tablero", "Folios", "Entregas", "Todas", "Archivo", "Analytics", "Dinero en Proceso", "Salud Operativa", "Auditoría",
-  "Devoluciones", "Cancelaciones", "Archivos", "Químicos"];
+  "Devoluciones", "Cancelaciones", "Archivos", "Químicos", "Planta"];   // v10.84.119: «Planta» (Producción y Dirección)
 const sinConteo = t => t.replace(/\s*\(\d+\)\s*$/, "").trim();
 const NO_VISTAS = ["Notificaciones", "Exportar CSV", "Ver detalle"];   // botones con título que no son vistas del menú
 // Escrituras de fondo que la app hace A PROPÓSITO (se cortan igual; salen como «conocidas», no como hallazgo):
@@ -63,6 +63,10 @@ const CONOCIDOS = [
   { vista: "Archivos", rx: /^HTTP 403 POST \/rest\/v1\/rpc\/pf_archivos_del_bucket$/ },
   { vista: "Archivos", rx: /^consola: Failed to load resource: the server responded with a status of 403/ },
   { vista: "Archivos", rx: /^consola: \[StorageTab list\]/ },
+  // v10.84.119 — «Planta» MIENTRAS NO SE APLIQUE su tabla (docs/migrations/v10.84.119_plano_versiones.sql, por el editor SQL): leer sus versiones
+  //   contesta 404 y la pantalla dice «Guardar versiones todavía no está disponible», que es lo correcto. Con la tabla, se quitan estos dos.
+  { vista: "Planta", rx: /^HTTP 404 GET \/rest\/v1\/plano_versiones$/ },
+  { vista: "Planta", rx: /^consola: Failed to load resource: the server responded with a status of 404/ },
 ];
 
 function candado(ctx, rol, reg) {

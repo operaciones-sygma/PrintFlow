@@ -83,6 +83,17 @@ export function puntoDelNombre(p) {
   return [p.x + mejor[0] * cg - mejor[1] * sg, p.y + mejor[0] * sg + mejor[1] * cg];
 }
 
+// Los nombres de las áreas que NO tapa una pieza (vuelta 4: el que quedaba debajo de una máquina se asomaba a medias, «Duplo e» de «Diseño»).
+//   `alto`: el de la letra, en cm del dibujo (en la pantalla cambia con el zoom; en la hoja, con la escala). `letreros`: las cajas [x0, y0, x1, y1]
+//   en cm de los letreros de las máquinas, que también tapan (el «Almacén» de adentro lo cortaba el letrero de la Guillotina 78)
+export function areasLibres(areas, piezas, alto, letreros = []) {
+  const cajas = [...piezas.map(cajaDe), ...letreros.map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }))];
+  return areas.filter(a => {
+    const c = { x0: a.x, y0: a.y - alto, x1: a.x + String(a.t).length * 0.55 * alto, y1: a.y + 0.25 * alto };
+    return !cajas.some(k => k.x0 < c.x1 && c.x0 < k.x1 && k.y0 < c.y1 && c.y0 < k.y1);
+  });
+}
+
 // ── encimadas y choques ──
 const area2 = pts => { let a = 0; for (let i = 0; i < pts.length; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; a += x1 * y2 - x2 * y1; } return a; };
 const cruz = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);

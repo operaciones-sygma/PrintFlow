@@ -763,6 +763,33 @@ await caso("pln-84-la-copia-tiene-su-nombre", "", async p => {
     `copia: «${n1}» (${insignia.trim()}); la copia de la copia: «${n2}»; ${copias.length} copias, color de agregado: ${copias.every(c => c.fill !== "#e3e9ef")}`);
 });
 
+// ══════════ vuelta 4: lo visto en producción después de subir (la captura del recorrido como Producción, 16-oct 02:18) ══════════
+// el arreglo de pln-82 achicaba a 8.5 px todo nombre más ancho que su pieza («Dobladora», «Guillotina 115», «Cilíndrica») y escondía casi todas las
+// medidas: en la vista completa a 1366 no se leía. Lo que DEBE pasar: donde no hay con quién chocar, el nombre a su tamaño (12 px) y sus medidas.
+for (const [vp, nombre] of [[V1366, "pln-85-los-nombres-se-leen-1366"], [V1920, "pln-85b-los-nombres-se-leen-1920"]]) {
+  await caso(nombre, "", async p => {
+    const letreros = await p.$$eval("[data-plano-lienzo] svg g[pointer-events=none] > g", gs => gs.map(g => { const ts = [...g.querySelectorAll("text")]; return { nombre: ts[0]?.textContent, px: ts[0] ? ts[0].getBoundingClientRect().height : 0, medidas: ts[1]?.textContent || "" }; }));
+    const de = n => letreros.find(l => l.nombre === n) || {};
+    const sueltas = ["PM-74", "Dobladora", "Guillotina 115", "GTO-4", "Cilíndrica", "Pegadora"];
+    const chicos = sueltas.filter(n => !(de(n).px >= 13));   // 12 px de letra: su caja mide ~15 px de alto
+    const sinMedidas = ["PM-74", "Dobladora", "Guillotina 115", "GTO-4"].filter(n => !de(n).medidas);
+    ok(nombre, chicos.length === 0 && sinMedidas.length === 0, `nombres achicados sin necesidad: ${chicos.map(n => n + " (" + Math.round(de(n).px) + " px)").join(", ") || "ninguno"}; sin medidas: ${sinMedidas.join(", ") || "ninguna"}`);
+  }, { viewport: vp });
+}
+
+// (vuelta 4, en la misma captura) el nombre de un área que queda debajo de una máquina se asomaba a medias («Duplo e», de «Diseño»; «Almace…»):
+//   el que tapa una máquina no se dibuja, y regresa si la máquina se quita de encima
+await caso("pln-86-el-nombre-del-area-tapado-no-se-asoma", "", async p => {
+  const areas = () => p.$$eval("[data-plano-areas] text", ts => ts.map(t => t.textContent));
+  const antes = await areas();
+  // (al escribirla: quitar sólo el Duplo no basta, la CTP también tapa ese «Diseño»)
+  for (const id of ["m-12", "m-13"]) { await clicEn(p, id); await p.keyboard.press("Delete"); await espera(p); }
+  const despues = await areas();
+  const cuenta = (xs, t) => xs.filter(x => x === t).length;
+  ok("pln-86-el-nombre-del-area-tapado-no-se-asoma", cuenta(antes, "Diseño") === 1 && cuenta(antes, "Almacén") === 1 && cuenta(despues, "Diseño") === 2,
+    `con el Duplo y la CTP: «Diseño» ${cuenta(antes, "Diseño")} vez (la otra, tapada), «Almacén» ${cuenta(antes, "Almacén")} (el de adentro lo tapa el letrero de la Guillotina 78); sin ellas: «Diseño» ${cuenta(despues, "Diseño")}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

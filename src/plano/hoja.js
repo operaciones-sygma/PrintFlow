@@ -1,7 +1,7 @@
 // v10.84.119 — La hoja impresa del plano (y el PDF: «Guardar como PDF» en la ventana de imprimir del navegador): el acomodo A ESCALA (1:100
 //   en doble carta, 1:200 en carta; la más grande que quepa), con su escala gráfica, qué versión es, quién y cuándo, lo que se encima y la
 //   lista de máquinas con sus medidas. Es un HTML completo para un marco oculto, el mismo camino que el vale de caja de App.
-import { esquinas, puntoDelNombre, cajaDe, juntarCajas, escalaParaHoja, HOJAS, LADO_DE_LA_HOJA, MARGEN_DE_LA_HOJA, HUECO_DE_LA_HOJA, redondear } from "../lib/plano.js";
+import { esquinas, puntoDelNombre, cajaDe, juntarCajas, escalaParaHoja, areasLibres, HOJAS, LADO_DE_LA_HOJA, MARGEN_DE_LA_HOJA, HUECO_DE_LA_HOJA, redondear } from "../lib/plano.js";
 import { CAJA, MUROS, VIDRIOS, PUERTAS, FIJOS, ESCALERAS, PUNTEADO, PROYECCION, DIVISIONES, AREAS } from "./plantaBaja.js";
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -46,7 +46,7 @@ ${trazos(PUERTAS, "#7b8794", 0.15)}
 ${trazos(VIDRIOS, "#3e6d9c", 0.2)}
 ${trazos(MUROS, "#111", 0.35)}
 ${trazos(DIVISIONES, "#111", 0.3)}
-${AREAS.map(a => `<text x="${a.x}" y="${a.y}" font-size="${redondear(delDibujo(letra * 1.15), 1)}" fill="#7b8794" font-style="italic">${esc(a.t)}</text>`).join("")}
+${areasLibres(AREAS, piezas, delDibujo(letra * 1.15), piezas.map(p => { const [lx, ly] = puntoDelNombre(p), L = delDibujo(letra), Lc = delDibujo(letraChica), w = Math.max(p.nombre.length * 0.6 * L, medidas(p).length * 0.55 * Lc) / 2; return [lx - w, ly - 1.2 * L, lx + w, ly + 1.4 * Lc]; })).map(a => `<text x="${a.x}" y="${a.y}" font-size="${redondear(delDibujo(letra * 1.15), 1)}" fill="#7b8794" font-style="italic">${esc(a.t)}</text>`).join("")}
 ${piezas.map(piezaSvg).join("\n")}
 </svg>`;
   // la escala gráfica: tramos de 1 m (de 2 m si el metro mide menos de 4 mm), hasta ~40 mm

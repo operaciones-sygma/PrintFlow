@@ -145,6 +145,31 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
   const prob = useMemo(() => G.problemas(visibles, OBSTACULOS), [visibles]);
   const conProblema = useMemo(() => visibles.filter(p => prob[p.id] && (prob[p.id].con.length || prob[p.id].choca.length)), [visibles, prob]);
   const pieza = visibles.find(p => p.id === sel) || null;
+  // Los letreros, como en un mapa: a su tamaño (el nombre a 12 px, con sus medidas abajo) aunque rebasen su pieza, y SÓLO donde chocan con otro
+  //   letrero se quitan las medidas y después se achica el nombre, hasta 8.5 px (vuelta 1: en las dos Aspas se pisaban; vuelta 4, en producción:
+  //   achicar todo nombre más ancho que su pieza dejaba ilegible la vista completa a 1366). Las cajas, en px de la pantalla.
+  const sLetreros = vista?.s || 0.2;
+  const letreros = useMemo(() => {
+    const L = visibles.map(p => { const [lx, ly] = G.puntoDelNombre(p), med = medidas(p);
+      return { id: p.id, lx, ly, med, n: p.nombre.length, f: 12, conMedidas: G.cajaDe(p).alto * sLetreros >= 30 }; });
+    const caja = l => {
+      const x = l.lx * sLetreros, y = l.ly * sLetreros, w = Math.max(l.n * 0.64 * l.f, l.conMedidas ? l.med.length * 0.58 * 10.5 : 0) / 2 + 2;
+      return l.conMedidas ? [x - w, y - 2 - 0.9 * l.f, x + w, y + 15] : [x - w, y - 0.6 * l.f, x + w, y + 0.65 * l.f];
+    };
+    for (let vuelta = 0; vuelta < 12; vuelta++) {
+      const cajas = L.map(caja);
+      let cambio = false;
+      for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+        const a = cajas[i], b = cajas[j];
+        if (!(a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3])) continue;
+        for (const l of [L[i], L[j]]) { if (l.conMedidas) { l.conMedidas = false; cambio = true; } else if (l.f > 8.5) { l.f = Math.max(8.5, l.f - 1.5); cambio = true; } }
+      }
+      if (!cambio) break;
+    }
+    const porId = Object.fromEntries(L.map(l => [l.id, l]));
+    porId.cajasCm = L.map(l => caja(l).map(v => v / sLetreros));   // (para los nombres de las áreas: los que tapa un letrero no se dibujan)
+    return porId;
+  }, [visibles, sLetreros]);
   const nombreDe = useMemo(() => Object.fromEntries(visibles.map(p => [p.id, p.nombre])), [visibles]);
   const sinTablaYa = lista.estado === "sintabla";
 
@@ -600,7 +625,7 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
               <g data-plano-muros stroke="#1f2933" strokeWidth={1.5}>{MUROS.map((d, i) => <path key={i} d={d} vectorEffect="non-scaling-stroke" />)}</g>
               <g stroke="#1f2933" strokeWidth={1.3}>{DIVISIONES.map((d, i) => <path key={i} d={d} vectorEffect="non-scaling-stroke" />)}</g>
             </g>
-            <g pointerEvents="none" fill="#9aa5b1" fontStyle="italic" fontSize={13 / s} fontFamily="'Geist',sans-serif">{AREAS.map((a, i) => <text key={i} x={a.x} y={a.y}>{a.t}</text>)}</g>
+            <g data-plano-areas pointerEvents="none" fill="#9aa5b1" fontStyle="italic" fontSize={13 / s} fontFamily="'Geist',sans-serif">{G.areasLibres(AREAS, visibles, 13 / s, letreros.cajasCm).map(a => <text key={a.t + a.x} x={a.x} y={a.y}>{a.t}</text>)}</g>
             {visibles.map(p => {
               const r = prob[p.id], mal = !!r && (r.con.length > 0 || r.choca.length > 0), elegida = p.id === sel;
               return <polygon key={p.id} data-pieza={p.id} data-mal={mal ? "1" : undefined} points={G.esquinas(p).map(q => G.redondear(q[0], 2) + "," + G.redondear(q[1], 2)).join(" ")}
@@ -608,15 +633,11 @@ export default function PlanoPlanta({ supabase, usuario = "", nombre = "", tema,
                 stroke={mal ? C.dnInk : elegida ? C.ios : p.numero ? "#334e5c" : "#b45309"} strokeWidth={elegida ? 2.5 : mal ? 2 : 1.2} vectorEffect="non-scaling-stroke"
                 style={{ cursor: "move" }} onPointerDown={e => { e.stopPropagation(); alBajar(e, p.id); }} aria-label={etiquetaDe(p)}><title>{etiquetaDe(p)}</title></polygon>;
             })}
-            {/* (vuelta 1, a ojo: en las piezas chicas —las dos Aspas— los letreros se pisaban) el nombre se achica hasta 8.5 px para caber en
-                lo ancho de su pieza, y las medidas salen sólo si caben; al acercar, salen */}
             <g pointerEvents="none" fontFamily="'Geist',sans-serif" textAnchor="middle">{visibles.map(p => {
-              const [lx, ly] = G.puntoDelNombre(p), cj = G.cajaDe(p), ancho = cj.ancho * s - 6, med = medidas(p);
-              const f = Math.min(12, Math.max(8.5, ancho / (p.nombre.length * 0.62)));
-              const conMedidas = med.length * 10.5 * 0.56 <= ancho && cj.alto * s >= 34;
+              const l = letreros[p.id], f = l.f;
               return <g key={p.id}>
-                <text x={lx} y={ly + (conMedidas ? -2 : f * 0.35) / s} fontSize={f / s} fontWeight={700} fill="#1a1a1f" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{p.nombre}</text>
-                {conMedidas && <text x={lx} y={ly + 12 / s} fontSize={10.5 / s} fill="#4b5563" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{med}</text>}
+                <text x={l.lx} y={l.ly + (l.conMedidas ? -2 : f * 0.35) / s} fontSize={f / s} fontWeight={700} fill="#1a1a1f" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{p.nombre}</text>
+                {l.conMedidas && <text x={l.lx} y={l.ly + 12 / s} fontSize={10.5 / s} fill="#4b5563" stroke="#fbfcfd" strokeWidth={3 / s} paintOrder="stroke">{l.med}</text>}
               </g>;
             })}</g>
           </g>}
