@@ -29,7 +29,14 @@ contrario (que P-0753, sin marcar como enviada, NO se recibiera): cambió por la
 donde no se diseñó: sin proveedor capturado (pla-89: sin «null» ni «()») y la de Genaro (det-202: «Genaro no la marcó como enviada» y el aviso
 para él): 2 de 2 a la primera. Quedan planta 55 y detalle 211.
 
-**En producción:** (se llena al subir)
+**En producción:** 15-oct ~19:06; READY `dpl_AziX4VJjjW7USVsT9stuDnGs9DfN` (commits `bb242f8` y `99af6ad`). Vuelta atrás: promover
+`dpl_HbuMvovfykKPDvW4yoYUNsazLXDm` (el código de v10.84.116) o `git revert 99af6ad bb242f8`; la base no cambió. 🔥 **El primer candado (18:20) frenó
+por la PC, no por la app** (`ERR_NO_BUFFER_SPACE`, con la memoria no paginada del kernel en 717 MB a 2.5 h del reinicio): tab-25 no cargó su página
+(pasó a la segunda; revisada) y can-13, que SÍ pasó, cayó por un error de consola del canal de recarga en caliente de Vite (el servidor de pruebas,
+no la app) en una tanda sin segunda oportunidad. Solas, 3 de 3 cada una. Arreglo de la prueba en `99af6ad`: `tests/consola.mjs` (`deVite`) y can-g08
+(falla con el filtro de antes). El segundo candado pasó 1813 de 1813 a la primera, de a 2 tandas en 26 min (con Almacén, el Cotizador y CobranzaFlow
+en fila, sin correr a la vez). Revisado en producción sin escribir: lo servido trae «no la marcó como enviada» y medir-116 da 5 de 5 (P-0625, P-0636
+y P-0650 siguen con «Recibir de maquila»); no había ninguna en «Maquila por enviar» para verla en producción (la cubren pla-88, det-201 y K).
 
 ## v10.84.116 — Karla recibe también la maquila completa que ya llegó — 15-oct-2026
 

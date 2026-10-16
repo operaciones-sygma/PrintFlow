@@ -115,7 +115,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1808 pruebas, ~26 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1813 pruebas, ~26 min de a 2 tandas en la PC de casa (`PROBAR_PARALELO=2`; de a 1, ~48); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -190,7 +190,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.116 (15-oct, ~17:36; READY `dpl_8MVqWgXSAvfQaHcLPXkLV31RoNgy`, commit `9990d27`; vuelta atrás: promover
+- **LIVE:** v10.84.117 (15-oct, ~19:06; READY `dpl_AziX4VJjjW7USVsT9stuDnGs9DfN`, commits `bb242f8` y `99af6ad`; vuelta atrás: promover
+  `dpl_HbuMvovfykKPDvW4yoYUNsazLXDm` (el código de v10.84.116) o `git revert 99af6ad bb242f8`; la base no cambió; candado 1813 de 1813, de a 2).
+  v10.84.117: **Karla recibe también la maquila que Lupita no marcó como enviada** (Marcelo, «punto 4, sí»). 🔑 `tests/consola.mjs` (`deVite`): el
+  canal de recarga en caliente de Vite no es un error de la app (frenó el primer candado de la 117 por can-13, que sí pasaba).
+  v10.84.116 (15-oct, ~17:36; READY `dpl_8MVqWgXSAvfQaHcLPXkLV31RoNgy`, commit `9990d27`; vuelta atrás: promover
   `dpl_D4PcRr8hrVZfqmee7FVQfWbyMcBW` (el código de v10.84.115) o `git revert 9990d27`; la base no cambió; candado 1808 de 1808, de a 2).
   v10.84.116: **Karla recibe la maquila completa que ya llegó** («En la planta» → «Con el maquilador» → «Recibir de maquila», «Más» del detalle y
   la OC; con su precio al cliente y su costo; aviso a Lupita o al vendedor que la lleva). 🔥 El recorrido `karla-planta` estaba roto desde v10.84.93
