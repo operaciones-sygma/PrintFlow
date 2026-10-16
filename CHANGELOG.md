@@ -48,7 +48,11 @@ revisión a ojo de las capturas (Lupita y Dirección), sin hallazgos.
 número grande, y su «Sin movimiento» cuenta también lo que espera su fecha (Estancadas no): ¿contar sus estancadas en vez de horas? ¿«Datos incompletos»
 por orden (qué le falta a cada una)? ¿«Datos Pendientes (N)» en el menú, como «Pendientes»?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct ~04:45; READY `dpl_JE8bsZnjQXvzHuLJe2xgUox71L9R` (commit `359227b`, en `produccion.sygma.mx`). Vuelta atrás: promover
+`dpl_6kQMnCSqhA5tG3rTvuXAHxiKx4ht` (el código de v10.84.122, con los documentos de esa noche) o `git revert 359227b`; la base no cambió. Candado 1985 de
+1985 a la primera, de a 4 tandas en 14.5 min (31 nuevas), sin inestables. Revisado en producción sin escribir: lo servido trae lo nuevo («Sin cifras
+mientras no se lea de la base», «Capturar el precio de…») y `npm run recorrido`: 8 roles, 95 pasos, nada truena; en su captura como Lupita, lo primero es
+«Órdenes sin precio capturado» (P-0643, «la capturó Lupita hace 1 día») y luego «Datos incompletos» (8 vencidas, 25 sin fecha de entrega).
 
 ## v10.84.122 — «Entregas», lo de su critique: las fichas son botones y cambiar la fecha es una ventana de la app — 16-oct-2026
 

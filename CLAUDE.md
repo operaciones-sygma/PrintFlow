@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1954 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 1985 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.122 (16-oct, ~03:47; READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT`, commits `9014986` (v10.84.120), `98e5cc4` (v10.84.121) y
+- **LIVE:** v10.84.123 (16-oct, ~04:45; READY `dpl_JE8bsZnjQXvzHuLJe2xgUox71L9R`, commit `359227b`; vuelta atrás: promover
+  `dpl_6kQMnCSqhA5tG3rTvuXAHxiKx4ht` (el código de v10.84.122) o `git revert 359227b`; la base no cambió; candado 1985 de 1985, de a 4). La tercera
+  pasada de `/impeccable critique` de la noche: **«Datos Pendientes»** (Lupita y Karla; «Salud Operativa» para Dirección, la misma vista,
+  `OperationalHealthView`; 20/40, snapshot `.impeccable/critique/2026-10-16T10-29-04Z__src-app-jsx-datos-pendientes.md`): 🔑 para Lupita y Karla, primero
+  lo que pueden completar (sin precio, datos incompletos) y luego «Cómo va la planta»; Dirección conserva su orden; la prioridad del día sólo entre
+  vencidas, urgentes o estancadas; **sin una lectura buena no dice que todo está bien** (App le pasa `leido`; antes, sin órdenes leídas, también le
+  ofrecía a Dirección cancelar como huérfanas todas las OC); teclado, AA, «Ver las N». Banco `gen-salud.mjs` y tanda `salud`. Las decisiones de fondo
+  (si ven la planta, el pulso, «Datos incompletos» por orden), en su entrada del CHANGELOG.
+  v10.84.122 (16-oct, ~03:47; READY `dpl_3h5YP5eAnR7UKabuMrF4VDrLEpuT`, commits `9014986` (v10.84.120), `98e5cc4` (v10.84.121) y
   `47a996f` (v10.84.122), subidas juntas; vuelta atrás: promover `dpl_oT8axpPAFH6arZzU3gxMWKYozZwJ` (el código de v10.84.119) o
   `git revert 47a996f 98e5cc4 9014986`; la base no cambió con estas tres; candado 1954 de 1954, de a 4). Las dos pasadas de `/impeccable critique`
   de la noche del 16-oct (encargo de Marcelo antes de dormir). v10.84.122: **«Entregas»** (24/40, snapshot
