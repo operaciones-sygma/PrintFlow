@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2053 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2080 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.127 (16-oct, ~10:59; READY `dpl_E88PBu4bW5MkwcqpRWERKNaj82Cu`, commits `2b2e585` (v10.84.126) y `89a9ff9` (v10.84.127), subidas juntas;
+- **LIVE:** v10.84.128 (16-oct, ~12:10; READY `dpl_5JPGWF76ebTQnhSnmEEmZb2gzvrT`, commit `769517b`; vuelta atrás: promover
+  `dpl_87DHmFiSNUbUS3dmjZdHGwW2WKU2` (el código de v10.84.127) o `git revert 769517b`; la base no cambió; candado 2080 de 2080, de a 4). La octava pasada de
+  `/impeccable critique` de la mañana: **el Despertador** (17/40): 🔑 cada pendiente es un botón y el que se toca se abre al escribir SI ENTIENDO (la regla de
+  Marcelo se queda: sólo se cierra escribiendo la frase y queda el registro); la frase sin signos, acentos ni espacios, y si se desvía lo dice; App lo arma
+  con una lectura BUENA (`lectura.ok`: si la primera fallaba, ese día no salía); `role=dialog`, el Tab no se sale; Dirección por persona («Con Gerardo · 3»);
+  `log_wakeup_ack` revisa su error. Banco `gen-despertador.mjs` (con las líneas de App que lo arman) y tanda `despertador`.
+  v10.84.127 (16-oct, ~10:59; READY `dpl_E88PBu4bW5MkwcqpRWERKNaj82Cu`, commits `2b2e585` (v10.84.126) y `89a9ff9` (v10.84.127), subidas juntas;
   vuelta atrás: promover `dpl_JA4QxAWrv6Ej2A1yU3rcB5fjnbKR` (el código de v10.84.125) o `git revert 89a9ff9 2b2e585`; la base no cambió; candado 2053 de 2053,
   de a 4). La sexta y la séptima pasadas de `/impeccable critique` de la mañana: v10.84.127 **los avisos** (19/40): tocar un aviso abre su orden, «Borrar
   todas» pregunta, la base de los avisos revisa su `error` y App sabe si los leyó (`avisosLeidos`; sin lectura, «No se pudieron leer los avisos ·

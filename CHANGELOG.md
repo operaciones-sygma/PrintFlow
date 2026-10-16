@@ -48,7 +48,10 @@ Dirección se le quitó el «Ve con X:» de la acción.
 **Para Marcelo:** ¿el Despertador se puede volver a abrir en el día (sin pedir SI ENTIENDO) desde la barra de arriba, para ver lo que sigue pendiente? Y
 cuando no hay nada pendiente no sale: ¿que diga «Nada pendiente hoy», o así está bien?
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~12:10; READY `dpl_5JPGWF76ebTQnhSnmEEmZb2gzvrT`, commit `769517b`; vuelta atrás: promover `dpl_87DHmFiSNUbUS3dmjZdHGwW2WKU2`
+(el código de v10.84.127) o `git revert 769517b`; la base no cambió. Candado 2080 de 2080 (27 nuevas), de a 4, 14.5 min, a la primera y sin inestables.
+Revisado en producción: el código servido (`index-DBQrIMlq.js`) trae el Despertador nuevo, y el recorrido de los 8 roles con la cuenta visor (95 pasos)
+no truena: el Despertador salió y se contestó en cada rol (su registro, cortado: el recorrido no escribe).
 
 ## v10.84.127 — Los avisos llevan a su orden, «Borrar todas» pregunta y si la base falla se dice — 16-oct-2026
 
