@@ -12265,17 +12265,80 @@ function ChemicalPanel({user}) {
 }
 
 // ─── CALENDAR ──────────────────────────────────────
+// v10.84.122 — «Entregas», su /impeccable critique (16-oct, el encargo de Marcelo de pasar critique por las apps; 24/40, snapshot
+//   .impeccable/critique/…__src-app-jsx-entregas.md). Las fichas son BOTONES (con Tab y Enter, y el lector de pantalla dice cuál es y cómo va),
+//   se leen (el cliente a 12 px, en dos renglones y completo en su título; la entregada sin transparencia y en su tinta), retrasada y urgente
+//   dicen su palabra (antes, las dos sólo en rojo), el encabezado dice la semana («Semana del 12 al 18 de octubre») y hoy va marcado para el
+//   lector de pantalla. Cambiar la fecha es una ventana de la app (CambiarFechaVentana): sin alert(), el motivo no sale en rojo antes de tiempo,
+//   la misma fecha lo dice, Esc y el fondo no tiran el motivo escrito, el Tab no se sale y un doble clic guarda una vez.
+function CambiarFechaVentana({orden,onCerrar,onGuardar}){
+  useDevolverFoco();
+  const [fecha,setFecha]=useState(orden.due_date||"");
+  const [motivo,setMotivo]=useState("");
+  const [intento,setIntento]=useState(false);   // el rojo, sólo después de intentar guardar
+  const [guardando,setGuardando]=useState(false);
+  const ocupado=useRef(false);
+  const fechaRef=useRef(null);
+  useLayoutEffect(()=>{fechaRef.current?.focus({preventScroll:true})},[]);
+  const misma=!!fecha&&fecha===orden.due_date, faltaFecha=!fecha, faltaMotivo=!motivo.trim();
+  const error=intento?(faltaFecha?"Elige la nueva fecha.":faltaMotivo?"Escribe el motivo del cambio: queda en el historial de la orden y se les avisa a Lupita, Noemí y Gerardo.":""):"";
+  const guardar=async()=>{
+    if(ocupado.current)return;   // un doble clic no guarda dos veces
+    setIntento(true);
+    if(misma||faltaFecha||faltaMotivo)return;
+    ocupado.current=true;setGuardando(true);
+    try{await onGuardar(orden.id,fecha,motivo.trim())}finally{ocupado.current=false;setGuardando(false)}
+    onCerrar();
+  };
+  const sucia=!!motivo.trim();
+  const tecla=e=>{
+    if(e.key==="Escape"){e.preventDefault();e.stopPropagation();if(!sucia)onCerrar();return}   // con el motivo escrito, Esc no lo tira: «Cancelar»
+    if(e.key==="Enter"&&e.target?.tagName==="INPUT"){e.preventDefault();guardar();return}
+    atraparTab(e);
+  };
+  return <div onMouseDown={e=>{if(e.target===e.currentTarget&&!sucia)onCerrar()}} style={{position:"fixed",inset:0,background:"rgba(26,26,31,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
+    <div role="dialog" aria-modal="true" aria-labelledby="cambiar-fecha-titulo" onKeyDown={tecla} style={{background:C.bg,borderRadius:20,padding:24,maxWidth:440,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:C.sh3,fontFamily:"'Geist',sans-serif",color:C.tx}}>
+      <h3 id="cambiar-fecha-titulo" style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:800,margin:"0 0 12px"}}><CalendarDotsIcon size={17} weight="bold"/>Cambiar la fecha de entrega</h3>
+      <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700,wordBreak:"break-word"}}>{orden.client}</div>
+          <div style={{fontSize:12,color:C.t2,marginTop:2}}>{orden.product_type}{orden.quantity?" · "+Number(orden.quantity).toLocaleString("es-MX")+" pzas":""}</div>
+          {orden.product&&<div style={{fontSize:11.5,color:C.t2,marginTop:1}}>{orden.product}</div>}
+        </div>
+        <div style={{textAlign:"right",flexShrink:0}}>
+          {orden.production_number&&<div style={{fontSize:12,color:tintaAA(C.ac,5),fontWeight:700}}>{orden.production_number}</div>}
+          <div style={{marginTop:4,display:"inline-flex",alignItems:"center"}}><StageLbl stage={orden.stage} size={11}/></div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+        <div><span style={lbl}>Ahora se entrega</span><div style={{fontSize:14,fontWeight:700,color:C.tx,padding:"8px 0"}}>{orden.due_date?fD(orden.due_date):"sin fecha"}</div></div>
+        <label style={{display:"block"}}><span style={lbl}>Nueva fecha</span><input ref={fechaRef} style={inp} type="date" value={fecha} onChange={e=>setFecha(e.target.value)} aria-invalid={(intento&&faltaFecha)||undefined}/></label>
+      </div>
+      {misma&&<div role="status" style={{fontSize:12.5,color:C.wnTx,margin:"0 0 12px"}}>Es la misma fecha que ya tiene: elige otra.</div>}
+      <label style={{display:"block"}}><span style={lbl}>¿Por qué se cambia? (obligatorio)</span>
+        <input style={{...inp,boxShadow:"0 0 0 1px "+(intento&&faltaMotivo?C.dnInk:C.bd)}} value={motivo} onChange={e=>setMotivo(e.target.value)} placeholder="Ej.: el cliente pidió moverla" aria-invalid={(intento&&faltaMotivo)||undefined}/>
+      </label>
+      {error&&<div role="alert" style={{fontSize:12.5,color:C.dnInk,marginTop:8,lineHeight:1.45}}>{error}</div>}
+      <div style={{display:"flex",gap:8,marginTop:18}}>
+        <button type="button" onClick={onCerrar} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
+        <button type="button" onClick={guardar} disabled={guardando||misma} style={{...bt(C.ac),flex:1,justifyContent:"center",opacity:guardando||misma?.55:1,cursor:guardando||misma?"default":"pointer"}}><FloppyDiskIcon size={15} weight="bold"/>{guardando?"Guardando…":"Guardar la nueva fecha"}</button>
+      </div>
+    </div>
+  </div>;
+}
 function Calendar({orders,onChangeDate,role,userLogin}) {
-  const [wo,setWo]=useState(0);const [editOrder,setEditOrder]=useState(null);const [newDate,setNewDate]=useState("");const [reason,setReason]=useState("");
+  const [wo,setWo]=useState(0);const [editOrder,setEditOrder]=useState(null);
   const [calView,setCalView]=useState("week"); // "week" or "month"
   const canEditDate=o=>role!=="vendedor"||!o.created_by||o.created_by===userLogin;
-  useEffect(()=>{if(!editOrder)return;const h=e=>{if(e.key==="Escape"&&e.target?.tagName!=="INPUT"&&e.target?.tagName!=="TEXTAREA"){setEditOrder(null);setNewDate("");setReason("")}};document.addEventListener("keydown",h);return ()=>document.removeEventListener("keydown",h)},[editOrder]);
   const today=new Date();const dow=today.getDay()||7;const sow=new Date(today);sow.setDate(today.getDate()-dow+1+wo*7);
   // v10.34.4 fix #1 — midnight de hoy para comparar isLate (sin contaminar la celda actual)
   const todayMid=new Date(today.getFullYear(),today.getMonth(),today.getDate());
   const dn=["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
   const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const saveDate=()=>{if(editOrder&&newDate&&reason.trim()){onChangeDate(editOrder.id,newDate,reason.trim());setEditOrder(null);setNewDate("");setReason("")}else if(!reason.trim()){alert("Escribe el motivo del cambio de fecha")}};
+  // v10.84.122 — el encabezado dice la semana: «Semana del 12 al 18 de octubre» (o «del 28 de septiembre al 4 de octubre»)
+  const eow=new Date(sow);eow.setDate(sow.getDate()+6);
+  const mesDe=d=>months[d.getMonth()].toLowerCase();
+  const semana=sow.getMonth()===eow.getMonth()?"Semana del "+sow.getDate()+" al "+eow.getDate()+" de "+mesDe(eow):"Semana del "+sow.getDate()+" de "+mesDe(sow)+" al "+eow.getDate()+" de "+mesDe(eow);
 
   // Month view helpers
   const [mo,setMo]=useState(0); // month offset from current
@@ -12292,23 +12355,29 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
     const pend=orders.filter(o=>o.due_date===ds&&!o.stage.includes("delivered")&&!o.stage.includes("cancelled"));
     const done=orders.filter(o=>o.due_date===ds&&o.stage.includes("delivered"));
     const isLate=day<todayMid; // v10.34.4 fix #1
-    return <div style={{background:isT?C.ac+"08":C.bg,border:"0.5px solid "+(isT?C.ac+"30":C.bd),borderRadius:isWeekView?10:8,padding:isWeekView?8:5,minHeight:isWeekView?100:70}}>
+    const diasTarde=isLate?Math.round((todayMid-new Date(day.getFullYear(),day.getMonth(),day.getDate()))/86400000):0;
+    return <div style={{background:isT?C.ac+"08":C.bg,border:"0.5px solid "+(isT?C.ac+"30":C.bd),borderRadius:isWeekView?10:8,padding:isWeekView?8:5,minHeight:isWeekView?100:70,minWidth:0}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isWeekView?6:3}}>
-        {isWeekView&&<span style={{fontSize:9,color:C.t2,fontWeight:600}}>{dn[day.getDay()===0?6:day.getDay()-1]}</span>}
-        <span style={{fontSize:isWeekView?12:11,fontWeight:700,color:isT?"#fff":C.tx,background:isT?C.ac:"transparent",width:isWeekView?24:22,height:isWeekView?24:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:isWeekView?0:"auto"}}>{day.getDate()}</span>
+        {isWeekView&&<span style={{fontSize:11,color:C.t2,fontWeight:600}}>{dn[day.getDay()===0?6:day.getDay()-1]}</span>}
+        <span aria-current={isT?"date":undefined} title={isT?"Hoy":undefined} style={{fontSize:isWeekView?13:12,fontWeight:700,color:isT?"#fff":C.tx,background:isT?C.ac:"transparent",width:isWeekView?26:22,height:isWeekView?26:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",marginLeft:isWeekView?0:"auto"}}>{day.getDate()}</span>
       </div>
-      {pend.map(o=>{const st=SM[o.stage];const canEdit=canEditDate(o);return <div key={o.id} onClick={()=>{if(canEdit){setEditOrder(o);setNewDate(o.due_date)}}} style={{background:isLate?C.dn+"10":C.ac+"08",borderRadius:6,padding:isWeekView?"5px 7px":"3px 5px",marginBottom:3,border:"1.5px solid "+(o.priority==="urgente"?C.dn:isLate?C.dn:C.ac)+"66",cursor:canEdit?"pointer":"default",transition:"all .15s",opacity:canEdit?1:0.7}} onMouseEnter={e=>{if(canEdit)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.1)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-        <div style={{fontSize:isWeekView?10:9,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{o.client}</div>
-        {isWeekView&&<div style={{fontSize:9,color:C.t2,marginTop:1}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:1}}>
-          <span style={{fontSize:isWeekView?8:7,color:st?.c,fontWeight:600,display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={isWeekView?8:7}/></span>
-          {o.priority==="urgente"&&<span style={{fontSize:7,color:C.dn,fontWeight:800,display:"inline-flex",alignItems:"center"}}><CircleIcon size={7} weight="fill"/></span>}
-        </div>
-      </div>})}
-      {done.map(o=><div key={o.id} style={{background:C.ok+"08",borderRadius:6,padding:isWeekView?"4px 7px":"2px 5px",marginBottom:3,border:"1.5px solid "+C.ok+"66",opacity:.6}}>
-        <div style={{fontSize:isWeekView?9:8,color:C.ok,fontWeight:600}}><CheckIcon size={9} weight="bold" style={{verticalAlign:"-1px",marginRight:2}}/>{o.client}</div>
+      {pend.map(o=>{const canEdit=canEditDate(o);const urg=o.priority==="urgente";const nombre=o.client||"(sin cliente)";
+        const dice="Entrega de "+nombre+(o.production_number?" ("+o.production_number+")":"")+(o.product_type?", "+o.product_type:"")+(o.quantity?", "+Number(o.quantity).toLocaleString("es-MX")+" piezas":"")+(SM[o.stage]?", "+(SM[o.stage].lt||SM[o.stage].l):"")+(isLate?", retrasada "+diasTarde+" día"+(diasTarde===1?"":"s"):"")+(urg?", urgente":"")+(canEdit?". Cambiar su fecha":". Sólo quien la capturó puede cambiar su fecha");
+        return <button key={o.id} type="button" data-entrega={o.id} aria-label={dice} aria-disabled={!canEdit||undefined} title={canEdit?nombre:nombre+" · sólo quien la capturó puede cambiar su fecha"} onClick={()=>{if(canEdit)setEditOrder(o)}}
+          style={{display:"block",width:"100%",textAlign:"left",fontFamily:"inherit",color:C.tx,background:isLate?C.dn+"10":C.bg,borderRadius:8,padding:isWeekView?"6px 8px":"3px 5px",marginBottom:4,border:"1.5px solid "+(isLate?C.dn+"66":urg?C.wn+"aa":C.bd),cursor:canEdit?"pointer":"default",transition:"box-shadow .15s"}}
+          onMouseEnter={e=>{if(canEdit)e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,.1)"}} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+          <div data-entrega-cliente style={{fontSize:isWeekView?12:11,fontWeight:700,lineHeight:1.3,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",wordBreak:"break-word"}}>{nombre}</div>
+          {isWeekView&&<div style={{fontSize:11,color:C.t2,marginTop:2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString("es-MX")+" pzas":""}</div>}
+          <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"2px 8px",marginTop:3}}>
+            <span style={{display:"inline-flex",alignItems:"center"}}><StageLbl stage={o.stage} size={isWeekView?10.5:10}/></span>
+            {isLate&&<span style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.dnInk}}>Retrasada{diasTarde?" "+diasTarde+" d":""}</span>}
+            {urg&&<span style={{fontSize:isWeekView?10.5:10,fontWeight:700,color:C.wnInk,display:"inline-flex",alignItems:"center",gap:3}}><CircleIcon size={7} weight="fill"/>Urgente</span>}
+          </div>
+        </button>})}
+      {done.map(o=><div key={o.id} data-entrega={o.id} data-entregada title={(o.client||"")+" · entregada"} style={{background:C.ok+"10",borderRadius:8,padding:isWeekView?"5px 8px":"2px 5px",marginBottom:4,border:"1px solid "+C.ok+"55"}}>
+        <div data-entrega-cliente style={{fontSize:isWeekView?11.5:10.5,color:C.okInk,fontWeight:600,lineHeight:1.3,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden",wordBreak:"break-word"}}><CheckIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>{o.client}</div>
       </div>)}
-      {!pend.length&&!done.length&&<div style={{color:C.ph,fontSize:9,textAlign:"center",marginTop:isWeekView?20:10}}>—</div>}
+      {!pend.length&&!done.length&&<div aria-label="Sin entregas" style={{color:C.t3,fontSize:11,textAlign:"center",marginTop:isWeekView?20:10}}>—</div>}
     </div>;
   };
 
@@ -12317,67 +12386,42 @@ function Calendar({orders,onChangeDate,role,userLogin}) {
 
   return <div style={{background:C.sf,borderRadius:16,padding:16}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:6}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:C.t2,textTransform:"uppercase"}}><CalendarDotsIcon size={13} weight="bold"/>{calView==="week"?"Semana del "+fD(sow):months[monthIdx]+" "+monthYear}</span>
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,fontWeight:700,color:C.tx}}><CalendarDotsIcon size={15} weight="bold"/>{calView==="week"?semana:months[monthIdx]+" "+monthYear}</span>
       <div style={{display:"flex",gap:4,alignItems:"center"}}>
-        <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,marginRight:6}}>
-          <button onClick={()=>setCalView("week")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:calView==="week"?C.ac:"transparent",color:calView==="week"?"#fff":C.t2}}>Semana</button>
-          <button onClick={()=>setCalView("month")} style={{padding:"4px 10px",fontSize:10,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:calView==="month"?C.ac:"transparent",color:calView==="month"?"#fff":C.t2}}>Mes</button>
+        <div role="group" aria-label="Ver por" style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid "+C.bd,marginRight:6}}>
+          <button type="button" aria-pressed={calView==="week"} onClick={()=>setCalView("week")} style={{padding:"6px 12px",fontSize:12,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",cursor:"pointer",background:calView==="week"?C.ac:"transparent",color:calView==="week"?"#fff":C.t2}}>Semana</button>
+          <button type="button" aria-pressed={calView==="month"} onClick={()=>setCalView("month")} style={{padding:"6px 12px",fontSize:12,fontWeight:600,fontFamily:"'Geist',sans-serif",border:"none",borderLeft:"1px solid "+C.bd,cursor:"pointer",background:calView==="month"?C.ac:"transparent",color:calView==="month"?"#fff":C.t2}}>Mes</button>
         </div>
-        {calView==="week"&&<><button onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
-        {calView==="month"&&<><button onClick={()=>setMo(m=>m-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button onClick={()=>setMo(0)} style={bs(mo===0?C.ac:C.bg,mo===0?"#fff":C.t2)}>Hoy</button><button onClick={()=>setMo(m=>m+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
+        {calView==="week"&&<><button type="button" aria-label="Semana anterior" onClick={()=>setWo(w=>w-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button type="button" onClick={()=>setWo(0)} style={bs(wo===0?C.ac:C.bg,wo===0?"#fff":C.t2)}>Hoy</button><button type="button" aria-label="Semana siguiente" onClick={()=>setWo(w=>w+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
+        {calView==="month"&&<><button type="button" aria-label="Mes anterior" onClick={()=>setMo(m=>m-1)} style={bs(C.bg,C.t2)}><CaretLeftIcon size={13} weight="bold"/></button><button type="button" onClick={()=>setMo(0)} style={bs(mo===0?C.ac:C.bg,mo===0?"#fff":C.t2)}>Hoy</button><button type="button" aria-label="Mes siguiente" onClick={()=>setMo(m=>m+1)} style={bs(C.bg,C.t2)}><CaretRightIcon size={13} weight="bold"/></button></>}
       </div>
     </div>
-    <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,padding:"6px 10px",background:C.ac+"06",borderRadius:8,border:"1px dashed "+C.ac+"25"}}>
-      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10,color:C.ac,fontWeight:600}}><HandPointingIcon size={12} weight="bold" style={{flexShrink:0}}/>Haz click en cualquier orden para cambiar su fecha de entrega</span>
-      <span style={{display:"flex",gap:8,marginLeft:"auto",fontSize:9,color:C.t2}}>
-        <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:C.dn+"30"}}/> Retrasada</span>
-        <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:C.ac+"30"}}/> Pendiente</span>
-        <span style={{display:"flex",alignItems:"center",gap:3}}><span style={{width:8,height:8,borderRadius:2,background:C.ok+"30"}}/> Entregada</span>
+    <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:"6px 12px",marginBottom:10,padding:"6px 10px",background:C.ac+"06",borderRadius:8,border:"1px dashed "+C.ac+"25"}}>
+      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:tintaAA(C.ac,5),fontWeight:600}}><HandPointingIcon size={13} weight="bold" style={{flexShrink:0}}/>Toca una entrega para cambiar su fecha</span>
+      <span style={{display:"flex",gap:10,marginLeft:"auto",fontSize:11,color:C.t2}}>
+        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.dn+"30",border:"1px solid "+C.dn+"66"}}/> Retrasada</span>
+        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.bg,border:"1.5px solid "+C.wn+"aa"}}/> Urgente</span>
+        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.ok+"30",border:"1px solid "+C.ok+"55"}}/> Entregada</span>
       </span>
     </div>
 
     {/* WEEK VIEW */}
-    {calView==="week"&&<div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+    {calView==="week"&&<div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:6}}>
       {weekDays.map((day,i)=><DayCard key={i} day={day} isWeekView/>)}
     </div>}
 
     {/* MONTH VIEW */}
     {calView==="month"&&<div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
-        {dn.map(d=><div key={d} style={{textAlign:"center",fontSize:9,fontWeight:700,color:C.t2,padding:4}}>{d}</div>)}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4,marginBottom:4}}>
+        {dn.map(d=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:700,color:C.t2,padding:4}}>{d}</div>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:4}}>
         {monthCells.map((d,i)=>{if(!d)return <div key={"e"+i}/>;const day=new Date(monthYear,monthIdx,d);return <DayCard key={i} day={day} isWeekView={false}/>})}
       </div>
     </div>}
 
-    {editOrder&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999}}>
-      <div style={{background:C.bg,borderRadius:20,padding:24,maxWidth:420,width:"90%",maxHeight:"90vh",overflowY:"auto"}}>
-        <h3 style={{display:"flex",alignItems:"center",gap:8,fontSize:16,fontWeight:700,margin:"0 0 12px"}}><CalendarDotsIcon size={17} weight="bold"/>Cambiar Fecha de Entrega</h3>
-        <div style={{background:C.sf,borderRadius:12,padding:14,marginBottom:16}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:700}}>{editOrder.client}</div>
-              <div style={{fontSize:11,color:C.t2,marginTop:2}}>{editOrder.product_type}{editOrder.quantity?" · "+Number(editOrder.quantity).toLocaleString()+" pzas":""}</div>
-              {editOrder.product&&<div style={{fontSize:10,color:C.t3,marginTop:1}}>{editOrder.product}</div>}
-            </div>
-            <div style={{textAlign:"right"}}>
-              {editOrder.production_number&&<div style={{fontSize:10,color:C.ac,fontWeight:600}}>{editOrder.production_number}</div>}
-              <div style={{background:(SM[editOrder.stage]?.c||C.t3)+"15",color:SM[editOrder.stage]?.c,padding:"2px 8px",borderRadius:6,fontSize:9,fontWeight:600,marginTop:2,display:"inline-flex",alignItems:"center"}}><StageLbl stage={editOrder.stage} size={9}/></div>
-            </div>
-          </div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-          <div><label style={lbl}>Fecha actual</label><div style={{fontSize:14,fontWeight:700,color:C.tx,padding:"8px 0"}}>{fD(editOrder.due_date)}</div></div>
-          <div><label style={lbl}>Nueva fecha de entrega</label><input style={inp} type="date" value={newDate} onChange={e=>setNewDate(e.target.value)}/></div>
-        </div>
-        <div style={{marginBottom:16}}><label style={{...lbl,color:C.dn}}>¿Por qué se cambia la fecha? *</label><input style={{...inp,border:!reason.trim()?"1.5px solid "+C.dn+"40":"none"}} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Motivo del cambio (obligatorio)"/></div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{setEditOrder(null);setNewDate("");setReason("")}} style={{...bt(C.sf,C.t2),flex:1,justifyContent:"center",border:"0.5px solid "+C.bd}}>Cancelar</button>
-          <button onClick={saveDate} style={{...bt(C.ac),flex:1,justifyContent:"center"}}><FloppyDiskIcon size={15} weight="bold"/>Guardar Nueva Fecha</button>
-        </div>
-      </div>
-    </div>}
+    {/* la orden VIVA (si la mueven con la ventana abierta, «Ahora se entrega» dice la de ahora); si ya no está en la lista, la que se abrió */}
+    {editOrder&&<CambiarFechaVentana key={editOrder.id} orden={orders.find(o=>o.id===editOrder.id)||editOrder} onCerrar={()=>setEditOrder(null)} onGuardar={onChangeDate}/>}
   </div>;
 }
 
