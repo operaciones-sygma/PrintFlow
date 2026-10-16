@@ -47,7 +47,9 @@ un seguro que se había puesto por eso se quitó. El detector de la skill: de 17
 **Para Marcelo:** ¿las casillas de acabados que NO se eligieron deben seguir saliendo (la forma que la planta conoce) o sólo lo elegido? Y una orden más
 larga que la de prueba: ¿una hoja aunque la letra se encoja, o dos hojas legibles? (v10.71.5 eligió una hoja.)
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~13:17; READY `dpl_7SQWYZ5j7RpEjv95iko3qvQRooaa`, commit `2c43a07`; vuelta atrás: promover `dpl_4DXgvwAVWVw6j5dKV5CuHZ8pJMnE`
+(el código de v10.84.128) o `git revert 2c43a07`; la base no cambió. Candado 2104 de 2104 (24 nuevas), de a 4, 14.5 min, a la primera y sin inestables.
+Revisado en producción: el código servido (`index-BW8eP8XO.js`) trae la hoja nueva, y el recorrido de los 8 roles (95 pasos) no truena.
 
 ## v10.84.128 — El Despertador se puede usar: lo que se toca se abre al confirmar, «Sí, entiendo» cierra y la lectura fallida ya no lo apaga — 16-oct-2026
 

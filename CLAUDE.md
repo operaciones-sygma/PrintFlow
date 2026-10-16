@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2080 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2104 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,13 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.128 (16-oct, ~12:10; READY `dpl_5JPGWF76ebTQnhSnmEEmZb2gzvrT`, commit `769517b`; vuelta atrás: promover
+- **LIVE:** v10.84.129 (16-oct, ~13:17; READY `dpl_7SQWYZ5j7RpEjv95iko3qvQRooaa`, commit `2c43a07`; vuelta atrás: promover
+  `dpl_4DXgvwAVWVw6j5dKV5CuHZ8pJMnE` (el código de v10.84.128) o `git revert 2c43a07`; la base no cambió; candado 2104 de 2104, de a 4). La novena pasada de
+  `/impeccable critique`: **la hoja impresa de la orden** (`PrintOrder`, 25/40): 🔑 se mide COMO SE IMPRIME (tanda `hoja`: el CSS de impresión, el ajuste a
+  una hoja y el PDF Carta; letra efectiva = tamaño × zoom): nada de menos de 10 px, grises de `#444` para arriba (aguanta la fotocopia), lo elegido en
+  negritas (`.opt`), la entrega de 15 px; compacta (Pantones en un renglón, la distribución de dos en dos, el vendedor con el cliente) y el ajuste a una
+  hoja (`pfFit`) primero achica las fotos y sólo después la letra; la ventana para elegir la copia es un diálogo. Banco `gen-hoja.mjs`.
+  v10.84.128 (16-oct, ~12:10; READY `dpl_5JPGWF76ebTQnhSnmEEmZb2gzvrT`, commit `769517b`; vuelta atrás: promover
   `dpl_87DHmFiSNUbUS3dmjZdHGwW2WKU2` (el código de v10.84.127) o `git revert 769517b`; la base no cambió; candado 2080 de 2080, de a 4). La octava pasada de
   `/impeccable critique` de la mañana: **el Despertador** (17/40): 🔑 cada pendiente es un botón y el que se toca se abre al escribir SI ENTIENDO (la regla de
   Marcelo se queda: sólo se cierra escribiendo la frase y queda el registro); la frase sin signos, acentos ni espacios, y si se desvía lo dice; App lo arma
