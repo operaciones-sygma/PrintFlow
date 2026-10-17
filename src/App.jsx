@@ -3527,8 +3527,12 @@ function getWakeupItems(role, userLogin, orders){
 //   dice; el saludo va con la hora y la fecha sin «De Octubre»; es una ventana (role=dialog con su nombre, el Tab no se sale a la app de
 //   atrás, Esc recuerda cómo se cierra); Dirección lo ve por persona («Con Gerardo · 3»); las tintas de la app y nada de menos de 11 px. La
 //   regla de Marcelo (v10.58.51) se queda: sólo se cierra escribiendo SI ENTIENDO y queda el registro (log_wakeup_ack).
-function WakeupModal({user, userLogin, items, onAck}){
+// v10.84.134 — `repaso`: la misma lista para volverla a ver en el día («Tus pendientes de hoy», decisión de Marcelo del 16-oct): sin SI ENTIENDO, cada
+//   pendiente abre su orden, Esc y «Cerrar» la cierran; no se registra como confirmación.
+function WakeupModal({user, userLogin, items, onAck, repaso=false, onCerrar}){
   const [text,setText]=useState("");
+  const listaRef=useRef(null);
+  useEffect(()=>{if(repaso)try{listaRef.current?.querySelector("button")?.focus({preventScroll:true})}catch(e){}},[repaso]);
   const [elegida,setElegida]=useState(null);     // la orden que se abre al confirmar (su id)
   const [recordar,setRecordar]=useState(false);  // con Esc se recuerda cómo se cierra
   const campoRef=useRef(null), yaRef=useRef(false);
@@ -3552,18 +3556,18 @@ function WakeupModal({user, userLogin, items, onAck}){
   const pnElegida=elegida?(items.find(x=>x.o.id===elegida)?.o.production_number||elegida):null;
   return <div style={{position:"fixed",inset:0,background:"rgba(10,10,20,0.78)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:16}}>
     <div role="dialog" aria-modal="true" aria-labelledby="pf-despertador-titulo" aria-describedby="pf-despertador-como"
-      onKeyDown={e=>{atraparTab(e);if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setRecordar(true);campoRef.current?.focus({preventScroll:true})}}}
+      onKeyDown={e=>{atraparTab(e);if(e.key==="Escape"){e.preventDefault();e.stopPropagation();if(repaso){onCerrar&&onCerrar();return}setRecordar(true);campoRef.current?.focus({preventScroll:true})}}}
       style={{background:C.bg,borderRadius:20,padding:"24px 28px",maxWidth:680,width:"100%",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:C.sh3}}>
-      <h2 id="pf-despertador-titulo" style={{margin:0,fontSize:28,fontWeight:900,color:C.tx,lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}><SunIcon size={26} weight="fill" color="#f59e0b" aria-hidden="true"/>{saludo}, {userDisplayName(user)}</h2>
+      <h2 id="pf-despertador-titulo" style={{margin:0,fontSize:28,fontWeight:900,color:C.tx,lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}><SunIcon size={26} weight="fill" color="#f59e0b" aria-hidden="true"/>{repaso?"Tus pendientes de hoy":saludo+", "+userDisplayName(user)}</h2>
       <div style={{fontSize:12,color:C.t2,marginTop:4}}>{fecha}</div>
       <div style={{fontSize:14,fontWeight:700,color:C.wnInk,background:C.bg,border:"1px solid "+C.wn,borderRadius:12,padding:"10px 14px",marginTop:14}}>
-        {items.length===1?"1 pendiente espera tu acción.":items.length+" pendientes esperan tu acción."}{" "}<span style={{fontWeight:500,color:C.t2}}>Toca el que quieras abrir primero.</span>
+        {items.length===0?"Ya no tienes pendientes del Despertador.":items.length===1?"1 pendiente espera tu acción.":items.length+" pendientes esperan tu acción."}{items.length>0&&<>{" "}<span style={{fontWeight:500,color:C.t2}}>{repaso?"Toca el que quieras abrir.":"Toca el que quieras abrir primero."}</span></>}
       </div>
-      <div style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
+      <div ref={listaRef} style={{overflowY:"auto",marginTop:10,flex:1,minHeight:0,display:"flex",flexDirection:"column",gap:8,paddingRight:4}}>
         {grupos.map(g=><div key={g.quien||"todos"} role={g.quien?"group":undefined} aria-label={g.quien?"Con "+g.quien:undefined} style={{display:"flex",flexDirection:"column",gap:8}}>
           {g.quien&&<h3 style={{margin:"6px 0 0",fontSize:12,fontWeight:800,color:C.t2,letterSpacing:.3}}>Con {g.quien} · {g.items.length}</h3>}
           {g.items.map(({o,why,action,late})=>{const sel=elegida===o.id,rojo=late>3,vencida=isOverdue(o.due_date);return(
-            <button key={o.id} type="button" aria-pressed={sel} onClick={()=>{setElegida(x=>x===o.id?null:o.id);campoRef.current?.focus({preventScroll:true})}}
+            <button key={o.id} type="button" aria-pressed={repaso?undefined:sel} onClick={()=>{if(repaso){onAck(o.id);return}setElegida(x=>x===o.id?null:o.id);campoRef.current?.focus({preventScroll:true})}}
               style={{textAlign:"left",font:"inherit",color:C.tx,cursor:"pointer",width:"100%",background:C.bg,border:sel?"2px solid "+C.ac:"1.5px solid "+(rojo?C.dn:C.wn),borderRadius:10,padding:sel?"9.5px 13.5px":"10px 14px"}}>
               <span style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:13,fontWeight:800,color:C.tx}}>{o.production_number||o.id}</span>
@@ -3574,16 +3578,18 @@ function WakeupModal({user, userLogin, items, onAck}){
               <span style={{display:"block",fontSize:11,color:C.t2,marginTop:2}}>{(o.product_type||o.product||"").trim()}{o.maq_provider?<> · <TruckIcon size={11} weight="bold" style={{verticalAlign:"-1px"}} aria-hidden="true"/> {o.maq_provider.trim()}</>:""}</span>
               <span style={{display:"block",fontSize:12,fontWeight:700,color:rojo?C.dnInk:C.wnInk,marginTop:4}}>{why}</span>
               {action&&<span style={{display:"block",fontSize:12,color:C.tx,marginTop:4}}><b style={{color:C.okInk}}>{esDir?"Qué falta:":"Qué hacer:"}</b> {action}</span>}
-              {sel&&<span style={{display:"block",fontSize:12,fontWeight:700,color:C.ac,marginTop:6}}>Se abre al escribir SI ENTIENDO</span>}
+              {sel&&!repaso&&<span style={{display:"block",fontSize:12,fontWeight:700,color:C.ac,marginTop:6}}>Se abre al escribir SI ENTIENDO</span>}
             </button>)})}
         </div>)}
       </div>
-      <div style={{marginTop:16,borderTop:"1px solid "+C.bd,paddingTop:14}}>
+      {repaso?<div style={{marginTop:16,borderTop:"1px solid "+C.bd,paddingTop:14,display:"flex",justifyContent:"flex-end"}}>
+        <button type="button" onClick={()=>onCerrar&&onCerrar()} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"8px 16px",fontSize:13}}>Cerrar</button>
+      </div>:<div style={{marginTop:16,borderTop:"1px solid "+C.bd,paddingTop:14}}>
         <label id="pf-despertador-como" htmlFor="pf-despertador-campo" style={{display:"block",fontSize:12,color:C.t2,marginBottom:8}}>Para continuar escribe <b style={{color:C.tx,letterSpacing:1}}>SI ENTIENDO</b>: la ventana se cierra sola y queda registrado que lo viste{pnElegida?<>; se abre <b style={{color:C.tx}}>{pnElegida}</b></>:null}.</label>
         <input id="pf-despertador-campo" ref={campoRef} autoFocus autoComplete="off" value={text} onChange={e=>setText(e.target.value)} placeholder="Escribe aquí..." aria-invalid={desvio||undefined} aria-describedby="pf-despertador-pista"
           style={{...inp,fontSize:16,fontWeight:700,letterSpacing:1,textAlign:"center",padding:"12px 16px",border:"2px solid "+(matched?C.ok:desvio?C.dn:C.bd)}}/>
         <div id="pf-despertador-pista" aria-live="polite" style={{minHeight:18,marginTop:6,fontSize:12,fontWeight:600,color:desvio?C.dnInk:C.t2}}>{desvio?"Así no se cierra: escribe SI ENTIENDO, sin otras palabras.":recordar?"Esta ventana se cierra escribiendo SI ENTIENDO.":""}</div>
-      </div>
+      </div>}
     </div>
   </div>;
 }
@@ -20513,6 +20519,10 @@ export default function PrintFlow() {
     supabase.rpc("log_wakeup_ack",{p_user:userLogin||user,p_items_count:compact.length,p_items:compact}).then(({error})=>{if(error)console.warn("[wakeup] no se guardó el registro:",error.message)},e=>console.warn("[wakeup]",e?.message));   // v10.84.128 — supabase-js no lanza (la regla 2): el error se ve; la ventana se cierra igual
     setWakeupItems([]);
   },[user,userLogin,wakeupItems]);
+  // v10.84.134 — el Despertador se puede volver a abrir en el día (Marcelo, 16-oct): «Tus pendientes de hoy» es lo que sigue pendiente AHORA (se recalcula
+  //   con cada lectura buena), sin pedir SI ENTIENDO; cada pendiente abre su orden. El botón vive en la barra mientras el Despertador no está abierto.
+  const [repasoDespertador,setRepasoDespertador]=useState(false);
+  const pendientesDeHoy=useMemo(()=>{try{return (loaded&&user&&lectura.ok)?getWakeupItems(user,userLogin,orders):[]}catch(e){return []}},[loaded,user,userLogin,orders,lectura.ok]);
   const [notifications,setNotifications]=useState([]);const [showNotifs,setShowNotifs]=useState(false);
   // v10.84.127 — si los avisos se leyeron (null = todavía; true = sí; false = la última lectura falló): sin eso la bandeja decía «Sin notificaciones»
   const [avisosLeidos,setAvisosLeidos]=useState(null);
@@ -23733,6 +23743,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div style={{width:1,height:24,background:C.bdSt,flexShrink:0}}/>
         {/* Cluster 2 — Acciones (alertas + lanzadores + export) */}
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          {wakeupItems&&wakeupItems.length===0&&pendientesDeHoy.length>0&&<button {...hoverLift} onClick={()=>setRepasoDespertador(true)} aria-label={"Tus pendientes de hoy: "+pendientesDeHoy.length} title="Tus pendientes de hoy (el Despertador)" style={{background:"transparent",border:"none",cursor:"pointer",minHeight:40,padding:"0 9px",borderRadius:10,display:"inline-flex",alignItems:"center",gap:4,color:C.tx,flexShrink:0,fontSize:12,fontWeight:700,fontFamily:"'Geist',sans-serif"}}><SunIcon size={18} weight="fill" color="#b45309" aria-hidden="true"/>{pendientesDeHoy.length}</button>}
           <NotificationBell count={notifications.filter(n=>!n.read).length} onClick={()=>setShowNotifs(!showNotifs)}/>
           {(user==="admin"||user==="secretaria"||user==="produccion"||user==="karla")&&<button {...hoverLift} onClick={()=>setInventoryOpen(true)} aria-label="Inventario Cuadra (producción a stock y venta)" title="Inventario Cuadra (producción a stock + venta)" style={{...bs(C.emr),padding:"6px 9px",flexShrink:0}}><PackageIcon size={16} weight="bold"/></button>}
           {(user==="admin"||user==="secretaria"||user==="karla")&&<button {...hoverLift} onClick={()=>setCoronaOpen(true)} aria-label="Apartado Corona (facturado por adelantado)" title="Apartado Corona (facturado por adelantado)" style={{...bs(C.ctp),padding:"6px 9px",flexShrink:0}}><WalletIcon size={16} weight="bold"/></button>}
@@ -24601,6 +24612,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
       {/* ☀️ v10.58.51 — Despertador (encima de todo; solo se cierra con SI ENTIENDO) */}
       {/* v10.84.128 — al confirmar se abre la orden que se tocó en el Despertador */}
       {wakeupItems&&wakeupItems.length>0&&<WakeupModal user={user} userLogin={userLogin} items={wakeupItems} onAck={elegida=>{ackWakeup();if(elegida)handleAction(elegida,"detail")}}/>}
+      {repasoDespertador&&!(wakeupItems&&wakeupItems.length>0)&&<WakeupModal repaso user={user} userLogin={userLogin} items={pendientesDeHoy} onAck={elegida=>{setRepasoDespertador(false);if(elegida)handleAction(elegida,"detail")}} onCerrar={()=>setRepasoDespertador(false)}/>}
       {/* 🆕 v10.13.0 — Modal de confirmación de cliente similar */}
       {clientConfirmModal&&<ClientConfirmModal open typed={clientConfirmModal.typed} matches={clientConfirmModal.matches} rfc={clientConfirmModal.rfc} contact={clientConfirmModal.contact} dadosDeBaja={clientConfirmModal.dadosDeBaja} onResolve={clientConfirmModal.onResolve}/>}
       {/* 🔒 v10.75.11 — bajar el precio de una orden ya facturada y cobrada */}

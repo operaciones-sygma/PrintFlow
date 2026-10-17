@@ -205,6 +205,38 @@ await caso("dsp-26-esc-no-borra", "", async p => {
   ok("dsp-26-esc-no-borra", (await abierto(p)) && v === "SI ENT", `Esc a media frase: la ventana ${(await abierto(p)) ? "sigue" : "se cerró"}; lo escrito: «${v}»`);
 });
 
+// ── v10.84.134 — «Tus pendientes de hoy»: el Despertador se vuelve a abrir en el día (decisión de Marcelo, 16-oct); escritas antes del arreglo ──
+const botonDelDia = p => p.getByRole("button", { name: /Tus pendientes de hoy/ });
+await caso("dsp-27-reabrir-del-dia", "", async p => {
+  await escribir(p, "SI ENTIENDO");
+  const hay = await botonDelDia(p).count();
+  if (hay) { await botonDelDia(p).first().click(); await espera(p, 400); }
+  const t = hay ? (await p.getByRole("dialog").first().innerText().catch(() => "")).replace(/\s+/g, " ") : "";   // sólo la ventana (detrás está la lista de órdenes)
+  const sinFrase = !(await p.locator("input:not(#atras-buscar)").count());
+  ok("dsp-27-reabrir-del-dia", hay >= 1 && /P-0616/.test(t) && /P-0613/.test(t) && sinFrase, `ya confirmado: el botón ${hay ? "sí" : "NO"}; ${hay ? (/P-0616/.test(t) ? "la lista sale" : "la lista no sale") + (sinFrase ? ", sin pedir SI ENTIENDO" : ", PIDE SI ENTIENDO") : ""}`);
+});
+await caso("dsp-28-reabrir-abre-la-orden", "", async p => {
+  await escribir(p, "SI ENTIENDO");
+  if (await botonDelDia(p).count()) { await botonDelDia(p).first().click(); await espera(p, 400); await p.getByText("P-0616", { exact: true }).first().click(); await espera(p, 400); }
+  const abre = (await lineas(p, "accion OP-P-0616 detail")).length, reg = await registros(p);
+  ok("dsp-28-reabrir-abre-la-orden", abre === 1 && reg === 1, `en «Tus pendientes de hoy», tocar P-0616: ${abre ? "la abre" : "NO la abre"}; registros de confirmación ${reg} (debe 1: el repaso no confirma)`);
+});
+await caso("dsp-29-reabrir-esc-cierra", "", async p => {
+  await escribir(p, "SI ENTIENDO");
+  let abierto2 = false, cerrado = false;
+  if (await botonDelDia(p).count()) { await botonDelDia(p).first().click(); await espera(p, 400); abierto2 = await p.getByRole("dialog").count() > 0; await p.keyboard.press("Escape"); await espera(p); cerrado = !(await p.getByRole("dialog").count()); }
+  ok("dsp-29-reabrir-esc-cierra", abierto2 && cerrado, `el repaso: ${abierto2 ? "se abre" : "no se abre"}; Esc ${cerrado ? "lo cierra" : "no lo cierra"}`);
+});
+await caso("dsp-30-sin-pendientes-sin-boton", "caso=sana", async p => {
+  await espera(p, 1500);
+  ok("dsp-30-sin-pendientes-sin-boton", !(await botonDelDia(p).count()), (await botonDelDia(p).count()) ? "sin pendientes, sale el botón" : "sin pendientes, no hay botón");
+}, { esperar: false });
+await caso("dsp-31-confirmado-hoy-boton", "caso=confirmado", async p => {
+  await espera(p, 1500);
+  const hay = await botonDelDia(p).count(), nombre = hay ? await botonDelDia(p).first().getAttribute("aria-label") : "";
+  ok("dsp-31-confirmado-hoy-boton", hay >= 1 && /\b2\b/.test(nombre || ""), `ya confirmó hoy (otra vez entra): el botón ${hay ? "sí, «" + nombre + "»" : "NO"} (Lupita tiene 2: P-0613 y P-0616)`);
+}, { esperar: false });
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -12,6 +12,24 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.134 — El Despertador se vuelve a abrir en el día: «Tus pendientes de hoy» — 16-oct-2026
+
+**Qué pasaba.** Decisión de Marcelo (16-oct, ~17:45, la 6 de las preguntas de la 128): el Despertador, una vez confirmado, no se podía volver a ver en todo
+el día; quien olvidaba los P- tenía que buscarlos.
+
+**Qué se cambió:**
+- En la barra de arriba, junto a la campana, el botón del sol con su número («Tus pendientes de hoy: N»), mientras el Despertador no está abierto y hay
+  pendientes. Abre la misma lista en modo repaso (`WakeupModal` con `repaso`): lo que sigue pendiente AHORA (`pendientesDeHoy`, recalculado con cada lectura
+  buena), sin pedir SI ENTIENDO; cada pendiente abre su orden; Esc y «Cerrar» la cierran; no se registra como confirmación (`log_wakeup_ack` sólo con la
+  frase).
+- Si ya no hay pendientes, el botón no sale; si se resuelven todos con la lista abierta, dice «Ya no tienes pendientes del Despertador».
+
+**Cómo se probó.** La tanda `despertador` (32): el banco copia de App el botón y el montaje del repaso (con las versiones de antes no existen). **Vuelta 1**
+(5, escritas antes del arreglo) contra v10.84.133: fallaban 4 (pasaba «sin pendientes, sin botón»). Con el arreglo, las 32; una prueba se corrigió antes de
+contar (leía todo el texto de la página, también la lista de órdenes de atrás: ahora sólo la ventana).
+
+**En producción:** (pendiente)
+
 ## v10.84.133 — La lista de Órdenes de Compra no dice «no hay» sin lectura y se abre con el teclado — 16-oct-2026
 
 **Qué pasaba.** La duodécima pasada de /impeccable critique (Marcelo, 16-oct: «sigamos con más…»): la lista de Órdenes de Compra (`OrdenesCompraView`, Activas e

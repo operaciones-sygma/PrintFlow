@@ -15,7 +15,7 @@ const fuente = fs.readFileSync(srcPath, "utf8");
 const L = fuente.replace(/\r\n/g, "\n").split("\n");
 const iconos = L.find(l => /^import \{ Broadcast as BroadcastIcon/.test(l));
 if (!iconos) throw new Error("no encuentro la importación de los íconos");
-const { codigo } = extraer(fuente, ["WakeupModal", "getWakeupItems", "localDayStr"], { simulados: ["supabase", "db"] });
+const { codigo } = extraer(fuente, ["WakeupModal", "getWakeupItems", "localDayStr", "hoverLift"], { simulados: ["supabase", "db"] });
 // las líneas de App que arman y confirman el Despertador: del efecto que lo calcula (el que hace setWakeupItems(null)) hasta antes de los avisos
 const iNull = L.findIndex(x => x.includes("setWakeupItems(null);return}"));
 if (iNull < 0) throw new Error("no encuentro el efecto que arma el Despertador en App");
@@ -24,7 +24,10 @@ const iFin = L.findIndex((x, i) => i > iNull && /^\s*const \[notifications,setNo
 if (iIni <= 0 || iFin < 0) throw new Error("no encuentro el principio o el fin del Despertador en App");
 const deApp = L.slice(iIni, iFin).join("\n");
 if (!deApp.includes("const ackWakeup=")) throw new Error("las líneas de App no traen ackWakeup");
-const montaje = (L.find(x => x.includes("<WakeupModal ")) || "").trim();
+const montaje = (L.find(x => x.includes("<WakeupModal ") && !x.includes("<WakeupModal repaso")) || "").trim();
+// v10.84.134 — «Tus pendientes de hoy»: el botón de la barra y la ventana en modo repaso (con las versiones de antes no existen: quedan vacíos)
+const botonRepaso = (L.find(x => x.includes("setRepasoDespertador(true)")) || "").trim();
+const montajeRepaso = (L.find(x => x.includes("<WakeupModal repaso")) || "").trim();
 if (!montaje) throw new Error("no encuentro el montaje del Despertador en App");
 const LOGIN = { secretaria: "lupita", admin: "marcelo", produccion: "gerardo", karla: "karla", preprensa: "noemi", vendedor: "genaro" };
 const partes = [
@@ -90,9 +93,11 @@ ${deApp}
       <input id="atras-buscar" placeholder="Buscar orden..." style={{ padding: "6px 10px" }} />
       <button id="atras-campana" onClick={() => anota("atrás: campana")}>Notificaciones</button>
       <button id="atras-salir" onClick={() => anota("atrás: salir")}>Salir</button>
+      ${botonRepaso}
     </div>
     <div id="lista" style={{ padding: 16 }}>{orders.map(x => <div key={x.id}>{x.production_number} · {x.client}</div>)}</div>
     ${montaje}
+    ${montajeRepaso}
     <pre id="log" style={{ fontSize: 10, color: "#666", marginTop: 40 }}></pre>
   </div>;
 }
