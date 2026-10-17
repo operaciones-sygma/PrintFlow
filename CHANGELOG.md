@@ -29,7 +29,7 @@ se llevó lo del apartado; con la lectura caída, nada). Vuelta 2: «Reintentar�
 Inventario Cuadra y su apartado (sólo lee). **Las siete se probaron juntas:** los 31 bancos se generan con el App.jsx de la 156; build y `probar-alcance` en
 verde; las tandas tocadas completas (sesion 112, auditoria 32, archivo 19, cancelaciones-vista 29, salud 51, inventario 24, detalle 213, espera 25).
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, las siete juntas (v10.84.150 a 156; commits adaf229 da6d7a2 bac2dba fb7d2b3 4492caa 6cf8fda fb3f7e9); READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`; vuelta atrás: promover `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W` (el código de v10.84.149) o `git revert fb3f7e9 6cf8fda 4492caa fb7d2b3 bac2dba da6d7a2 adaf229`; la base no cambió. Candado: 2440 de 2440 (33 nuevas), de a 4, 15.9 min, a la primera y sin inestables. Revisado en producción: el código servido (`index-9oE4VTmM.js`) trae lo de las siete; el recorrido de los 8 roles, ahora con el Inventario Cuadra y su apartado: 99 pasos, nada truena (el Inventario Cuadra se abre en los 4 roles que lo tienen).
 
 ## v10.84.155 — «Datos incompletos»: cada orden dice lo demás que le falta — 17-oct-2026
 
@@ -43,7 +43,7 @@ todo al editarla una vez. «Vencida» no es un dato: no entra.
 **Cómo se probó.** Tanda `salud`: dp-46. Vuelta 1 contra v10.84.149: ningún renglón decía lo demás que le falta (P-0650, maquila sin proveedor ni costo, salía en
 dos listas sin decirlo).
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.154 — «Datos Pendientes»: el pulso, un renglón por persona con sus estancadas — 17-oct-2026
 
@@ -57,7 +57,7 @@ cuenta se rehace al caer o reparar una máquina, `maintKey`), «al día» si no 
 **Cómo se probó.** Tanda `salud` (con la 155): 3 nuevas. Vuelta 1 contra v10.84.149: fallaban las 2 (cinco tarjetas de 160 a 178 px con su número grande;
 «Sin movimiento: hasta …» y ninguna estancada). Vuelta 2: el doble clic en «Ver las N» abría y volvía a plegar (dp-45): arreglado con la guarda del doble clic.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.153 — «Cancelaciones» empieza por las activas — 17-oct-2026
 
@@ -73,7 +73,7 @@ ofrecer). Vuelta 2: el doble clic en «Ver también las entregadas» pasaba de s
 la app. `elegir` de la tanda trae las entregadas cuando la que se quiere no está en la lista; cnv-25 buscaba «(1)» en el botón del lote, que sólo dice el
 número con dos o más: corregido (la elegida se ve en su etiqueta, «P-0802 · F-120»).
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.152 — El «Archivo» del vendedor enseña sólo lo suyo — 17-oct-2026
 
@@ -87,7 +87,7 @@ del cliente, v10.84.148), aunque arriba esté «Todas», y lo dice («Sólo tus 
 **Cómo se probó.** Tanda `archivo`: 3 nuevas. Vuelta 1 contra v10.84.149: fallaban las 2 (Genaro veía «Entregadas: 5» con las de Manuel y la cancelada; nada
 decía que eran sólo las suyas). Vuelta 2: Lupita sigue viendo todo. arc-16 (Genaro veía la de Manuel sin su importe) se fue con la decisión: ya no la ve.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.151 — «Auditoría» audita las series de hoy; las de Alpha, aparte — 17-oct-2026
 
@@ -105,7 +105,7 @@ clave dice dónde se busca lo faltante (CobranzaFlow para las de hoy, Alpha para
 Alpha). Vuelta 2: Alpha se queda al cambiar a remisiones, de Alpha a lo de hoy, el doble clic en «verlas» no abre una orden, los compartidos de su conjunto:
 sin fallas. aud-27 tenía un supuesto mío equivocado (un `\b` entre cifras que el texto de la página junta, «folios1 hueco»): corregido.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.150 — «Ya pidió factura» le abre a Karla «Asignar folio y entregar» — 17-oct-2026
 
@@ -127,7 +127,7 @@ antes). Vuelta 2, por donde no se diseñó: sin precio pide primero el precio, E
 también: sin fallas. La base simulada aprendió `escrituraFalla` (una tabla cuyas escrituras contestan 503). det-122 (el detalle dice lo mismo que la ficha)
 esperaba «· Reactivar» para Karla: cambia con la decisión. El banco del detalle copia a mano: ahora también `seFoliaConAsignar` y `etiquetaYaPidio`.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, ~11:58, junto con v10.84.150 a 156 (ver v10.84.156: READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, vuelta atrás `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W`).
 
 ## v10.84.149 — «A tiempo» es haber quedado lista a tiempo, con o sin la pausa (y lo de hoy dice lo mismo) — 17-oct-2026
 

@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2408 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2440 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,15 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.149 (17-oct, READY `dpl_8grLbR2htd6RaTb7n97fikvuW8Af`, commit `c862bbc`; vuelta atrás: promover `dpl_GfuaE3A4KaAkRo3qozFYNWY6MiK1` (el código de
+- **LIVE:** v10.84.156 (17-oct, ~11:58, READY `dpl_89b1jFb8nRAS1zLrqRKdm2Z4u51K`, commits adaf229 da6d7a2 bac2dba fb7d2b3 4492caa 6cf8fda fb3f7e9; vuelta atrás: promover `dpl_86uHod2eQLEWYLj8Y1ogQuEWQ68W` (el código
+  de v10.84.149) o `git revert fb3f7e9 6cf8fda 4492caa fb7d2b3 bac2dba da6d7a2 adaf229`; la base no cambió; candado 2440 de 2440 (33 nuevas), de a 4, 15.9 min, a la primera y sin inestables). Las respuestas de Marcelo del 17-oct («escojo tus
+  recomendaciones», «si hazlo»), una versión cada una: 150 «Ya pidió factura · Asignar folio» de Karla abre «Asignar folio y entregar» (`seFoliaConAsignar`,
+  `etiquetaYaPidio`; las cinco puertas por la misma acción; `unsnoozeOrder` devuelve la orden y no reactiva dos veces); 151 «Auditoría» con las series de hoy
+  (`SERIES_DE_HOY`: F-, RS-) y Alpha aparte; 152 el Archivo del vendedor, sólo lo suyo (`esDelVendedor`); 153 Cancelaciones, primero las activas; 154 el
+  pulso de «Datos Pendientes» en renglones con sus estancadas; 155 «También le falta» en «Datos incompletos»; 156 lo que se llevó cada cliente del apartado
+  compartido (`db.loadSalidasDelApartado`, sólo lee) y el recorrido abre el Inventario Cuadra. 🔑 Marcelo, 17-oct ~11:00: **ya no más pasadas de
+  /impeccable**; terminar lo pendiente.
+  v10.84.149 (17-oct, READY `dpl_8grLbR2htd6RaTb7n97fikvuW8Af`, commit `c862bbc`; vuelta atrás: promover `dpl_GfuaE3A4KaAkRo3qozFYNWY6MiK1` (el código de
   v10.84.148) o `git revert c862bbc`; la base no cambió; candado 2408 de 2408 (24 nuevas), de a 4, 15.8 min, a la primera y sin inestables). 🔑 **«A tiempo» es
   haber quedado LISTA a tiempo, con o sin la pausa** (Marcelo, 17-oct, sobre las 45 entregas sin la pausa: «sí, cuentan como a tiempo»): `entregadaATiempo`
   sin la pausa, y lo de hoy dice lo mismo (`listaATiempo` en `vencidaAhora` y en `diagnoseOrder`: calendario «Lista a tiempo», Torre, Despertador, Datos
