@@ -41,9 +41,11 @@ primer clic, el AA, el buscador, el historial). Vuelta 2, por donde no se diseñ
 podía confirmar una que recibió folio, y se podía confirmar sin haber visto el saldo). Vuelta 3: la lectura del saldo colgada trababa la confirmación. Vuelta
 4: lo que llega pasado el tope se dice; sin fallas nuevas. Ahora 25 de 25; contra v10.84.143 fallan 19. El detector de la skill en el navegador: antes, el botón
 apagado (1.4:1), el ámbar (2.0:1), el rojo (4.3:1) y los renglones de ~127 caracteres; después, sólo la letra de la app. Los 27 bancos se generan con el
-App.jsx nuevo; build y `probar-alcance` en verde.
+App.jsx nuevo; build y `probar-alcance` en verde. Candado: 2318 de 2318 (25 nuevas), de a 4, 15.7 min; una inestable (ses-47, net::ERR_NO_BUFFER_SPACE de Windows al abrir la app: sola 3 de 3, revisada).
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_7RKf9QXdjgGEgUqJ6mK2Rbas9hmp`, commit `0d859ae`; vuelta atrás: promover `dpl_FPnNs2rmC66xzqgVGHQfN8W6xfQ8` (el código de v10.84.143) o
+`git revert 0d859ae`; la base no cambió. Revisado en producción: el código servido (`index-BPlXeCh8.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). La vista sólo se abre con el archivo completo cargado: el recorrido llega a su botón de cargar; la pantalla nueva la prueba el banco.
 
 ## v10.84.143 — «En espera»: sin lote para lo que espera al cliente, la más vieja primero y cómo contactarlo — 17-oct-2026
 
