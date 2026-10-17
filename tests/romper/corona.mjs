@@ -1,7 +1,8 @@
 // Tratar de ROMPER el «APARTADO CORONA» (los clientes con saldo a favor: su saldo y su historial; Dirección, Karla y Lupita), su /impeccable critique del
 // 16-oct. Cada caso afirma lo que DEBERÍA pasarle a quien lo abre: una FALLA es un bug. Vuelta 1: escritas antes del arreglo.
-// En el banco: CORONA LEÓN ($48,250.50, pool con dos sub-cuentas; 4 movimientos: depósito, consumo, ajuste, anticipo) y DISTRIBUIDORA DEL CENTRO (−$1,200,
-// sin movimientos). Detrás, una «app» con su buscador (#atras-*).
+// En el banco: CORONA LEÓN ($48,250.50, pool con dos sub-cuentas; 5 movimientos: depósito con F-82 por cobrar, cargo de F-188 de P-0640, ajuste de
+// P-0641, anticipo, y el cargo de RS-7 cancelada de una orden que no está entre las cargadas) y DISTRIBUIDORA DEL CENTRO (−$1,200, sin movimientos).
+// Montada con la línea de App (v10.84.138). Detrás, una «app» con su buscador (#atras-*).
 // Uso: node corona.mjs <dir-capturas> [puerto=5176]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
 import { deFuera } from "../consola.mjs";
@@ -136,6 +137,38 @@ await caso("cor-16-saldo-negativo-en-rojo", "", async p => {
   const c = await p.getByText(/[−-]\$1,200\.00/).first().evaluate(el => getComputedStyle(el).color).catch(() => "");
   const n = (c.match(/\d+/g) || []).map(Number);
   ok("cor-16-saldo-negativo-en-rojo", !malo && n.length >= 3 && n[0] > 140 && n[1] < 90, malo ? "el saldo negativo se escribe «$-1,200.00»" : `el saldo de −$1,200: ${c || "no está"}`);
+});
+
+// ── vuelta 3 (v10.84.138): la decisión de Marcelo del 16-oct: el historial liga cada movimiento con su factura y su orden ──
+await caso("cor-17-el-cargo-dice-su-factura-y-su-orden", "", async p => {
+  const t = await texto(p);
+  const b = p.getByRole("button", { name: /Abrir la orden P-0640/ }); const hay = await b.count();
+  if (hay) { await b.first().click(); await espera(p, 400); }
+  const abrio = (await lineas(p, "accion OP-P-0640 detail")).length === 1, cerro = (await lineas(p, "cerrar")).length === 1;
+  ok("cor-17-el-cargo-dice-su-factura-y-su-orden", /Factura F-188 · pagada/.test(t) && hay === 1 && abrio && cerro,
+    `el cargo de F-188: ${/Factura F-188 · pagada/.test(t) ? "«Factura F-188 · pagada»" : "NO dice su factura y cómo va"}; «Orden P-0640» ${hay ? (abrio ? "abre la orden" : "NO la abre") + (cerro ? " y cierra Corona" : " (Corona sigue abierta encima)") : "NO es un botón"}`);
+});
+await caso("cor-18-el-deposito-dice-si-su-factura-se-cobro", "", async p => {
+  const t = await texto(p);
+  ok("cor-18-el-deposito-dice-si-su-factura-se-cobro", /Factura F-82 · por cobrar/.test(t), `el depósito: ${/Factura F-82 · por cobrar/.test(t) ? "«Factura F-82 · por cobrar»" : "NO dice su factura ni si ya se cobró"}`);
+});
+await caso("cor-19-el-ajuste-de-una-orden-la-dice", "", async p => {
+  const n = await p.getByRole("button", { name: /Abrir la orden P-0641/ }).count();
+  ok("cor-19-el-ajuste-de-una-orden-la-dice", n === 1, `el ajuste de P-0641 (su referencia sólo dice «Redondeo»): ${n ? "dice «Orden P-0641» y se abre" : "NO dice de qué orden es"}`);
+});
+await caso("cor-20-la-orden-que-no-esta-y-la-factura-cancelada", "", async p => {
+  const t = await texto(p);
+  const raro = /OP-VIEJA|undefined|\bnull\b/.test(t);
+  const c = await p.getByText(/· cancelada/).first().evaluate(el => getComputedStyle(el).color).catch(() => "");
+  const n = (c.match(/\d+/g) || []).map(Number);
+  ok("cor-20-la-orden-que-no-esta-y-la-factura-cancelada", !raro && /Factura RS-7/.test(t) && n.length >= 3 && n[0] > 140 && n[1] < 90,
+    `la orden que no está entre las cargadas: ${raro ? "enseña su id o «undefined»" : "no se inventa"}; RS-7: ${/Factura RS-7/.test(t) ? "sale" : "NO sale"}, «cancelada» ${c ? "en " + c : "no lo dice"}`);
+});
+await caso("cor-21-la-orden-con-el-teclado", "", async p => {
+  let llego = false;
+  for (let i = 0; i < 30 && !llego; i++) { await p.keyboard.press("Tab"); llego = await p.evaluate(() => /Abrir la orden P-0640/.test(document.activeElement?.getAttribute("aria-label") || "")); }
+  if (llego) { await p.keyboard.press("Enter"); await espera(p, 400); }
+  ok("cor-21-la-orden-con-el-teclado", llego && (await lineas(p, "accion OP-P-0640 detail")).length === 1, `con Tab ${llego ? "se llega a «Orden P-0640»" : "NO se llega a la orden"}; Enter ${(await lineas(p, "accion OP-P-0640 detail")).length ? "la abre" : "no la abre"}`);
 });
 
 await browser.close();

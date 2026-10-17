@@ -6628,6 +6628,8 @@ function ReplicateFromOrderModal({clientId, clientName, onReplicate, onClose}) {
 const TIPO_CORONA={DEPOSITO:"Depósito",CONSUMO:"Cargo por factura",REVERSO:"Reverso",AJUSTE:"Ajuste",ANTICIPO:"Anticipo aplicado"};
 const MODO_DE_COBRO={anticipo:"con saldo a favor (anticipo)",normal:"normal",stock:"de stock"};
 const CIAN_TINTA="#0e7490";   // el cian de Corona (C.ctp) en tinta: 4.7:1 sobre el gris de las tarjetas
+// v10.84.138 — cómo va la factura de cada movimiento (cobranza.invoices.status), en palabras
+const ESTADO_FACTURA_CORONA={pendiente:"por cobrar",parcial:"pagada en parte",pagada:"pagada",cancelada:"cancelada"};
 const pesosCorona=(n,conSigno)=>{const v=Number(n||0);return (v<0?"−":(conSigno&&v>0?"+":""))+"$"+Math.abs(v).toLocaleString("es-MX",{minimumFractionDigits:2,maximumFractionDigits:2})};   // «−$1,200.00» (decía «$-1,200.00»)
 function FallaDeCorona({que,onReintentar}){
   return <div role="alert" style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",borderRadius:10,background:C.bg,border:"1px solid "+C.dn,fontSize:12,color:C.dnInk,fontWeight:600}}>
@@ -6635,7 +6637,10 @@ function FallaDeCorona({que,onReintentar}){
     <button type="button" onClick={onReintentar} style={{...bt(C.sf,C.tx),border:"0.5px solid "+C.bd,padding:"4px 12px",fontSize:12,minHeight:32}}>Reintentar</button>
   </div>;
 }
-function CoronaModal({onClose, user, userLogin, showToast}) {
+// v10.84.138 — cada movimiento del historial dice su factura (con cómo va: por cobrar, pagada, cancelada) y su orden, que se abre (decisión de Marcelo del
+//   16-oct: «el historial liga cada cargo con su factura y su orden»; la base ya los mandaba: folio_fiscal, folio_status, source_order_id). Antes sólo la
+//   referencia, que casi siempre los nombra pero no se abre, y los ajustes de una orden decían «AJUSTE». `pnDeOrden`: el P- de una orden de las cargadas.
+function CoronaModal({onClose, user, userLogin, showToast, pnDeOrden, onAbrirOrden}) {
   useEscClose(onClose);
   const [clients,setClients]=useState([]);
   const [selectedId,setSelectedId]=useState(null);
@@ -6765,6 +6770,14 @@ function CoronaModal({onClose, user, userLogin, showToast}) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:700,color}}>{(()=>{const TI=TipoIcon(m.tipo);return <TI size={12} weight="bold" aria-hidden="true"/>})()}{TIPO_CORONA[m.tipo]||m.tipo}</div>
                       {m.referencia&&<div style={{fontSize:11,marginTop:2}}>{m.referencia}</div>}
+                      {(()=>{const pn=m.source_order_id&&pnDeOrden?pnDeOrden(m.source_order_id):null,est=ESTADO_FACTURA_CORONA[m.folio_status];
+                        if(!m.folio_fiscal&&!pn)return null;
+                        return <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:"2px 12px",fontSize:11,marginTop:3,color:C.tx}}>
+                          {m.folio_fiscal&&<span>Factura <b>{m.folio_fiscal}</b>{est&&<span style={{color:m.folio_status==="cancelada"?C.dnInk:C.t2,fontWeight:m.folio_status==="cancelada"?700:400}}> · {est}</span>}</span>}
+                          {pn&&(onAbrirOrden
+                            ?<button type="button" onClick={()=>onAbrirOrden(m.source_order_id)} aria-label={"Abrir la orden "+pn} style={{background:"none",border:"none",padding:"2px 0",minHeight:24,cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,color:C.ac,textDecoration:"underline",textUnderlineOffset:2}}>Orden {pn}</button>
+                            :<span>Orden <b>{pn}</b></span>)}
+                        </div>})()}
                       {m.notas&&<div style={{fontSize:10,color:C.t2,marginTop:2,fontStyle:"italic"}}>{m.notas}</div>}
                       <div style={{fontSize:10,color:C.t2,marginTop:2}}>{new Date(m.created_at).toLocaleString()}{m.created_by?" · "+m.created_by:""}{m.periodo?" · "+m.periodo:""}</div>
                     </div>
@@ -23997,7 +24010,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         // ya se ejecutó (React batchea ambos setters en el mismo tick).
         Promise.resolve().then(()=>setInvoiceModal(merged));
       }} onClose={()=>{setInventoryOpen(false);reload()}}/>}
-      {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)}/>}
+      {coronaOpen&&<CoronaModal user={user} userLogin={userLogin} showToast={showToast} onClose={()=>setCoronaOpen(false)} pnDeOrden={id=>(orders.find(x=>x.id===id)||{}).production_number||null} onAbrirOrden={id=>{setCoronaOpen(false);handleAction(id,"detail")}}/>}
       {devolverModal&&<DevolverModal onConfirm={async(reason)=>{try{const o=orders.find(x=>x.id===devolverModal);await doAdv(devolverModal,"design");await db.addComment(devolverModal,"↩️ Devuelto a Diseño: "+reason,user);await db.notify("preprensa",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);if(user==="admin")await db.addNotification("produccion",devolverModal,"order_edit","↩️ Orden devuelta a Diseño — "+(o?.client||"")+" · "+(o?.product_type||"")+": "+reason,null,user);setDevolverModal(null)}catch(e){console.error("[DevolverModal] Error:",e);showToast("❌ No se pudo devolver: "+(e?.message||"error desconocido"),"error");reload()}}} onClose={()=>setDevolverModal(null)}/>}
       {/* v10.38.0 — Modal regresar orden a CTP (legacy, conservado por compat — sin botón en UI) */}
       {returnToCtpModal&&<ReturnToCtpModal order={returnToCtpModal} onConfirm={async(reason)=>{await returnToCtp(returnToCtpModal.id,reason);setReturnToCtpModal(null)}} onClose={()=>setReturnToCtpModal(null)}/>}
