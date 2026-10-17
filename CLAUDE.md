@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2151 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2161 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,12 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.133 (16-oct, ~17:44; READY `dpl_yxVxYtzVYXcD9ymDguw7qmtE2grV`, commit `33cf302`; vuelta atrás: promover
+- **LIVE:** v10.84.135 (16-oct, ~18:30; READY `dpl_Gh8azoGrkECu1Z2YbhG769eygKKk`, commits `e178ca4` (v10.84.134) y `47b0f16` (v10.84.135), subidas
+  juntas; vuelta atrás: promover `dpl_3cmfMaXxW515Zm77roTB6JMxHhnq` (el código de v10.84.133) o `git revert 47b0f16 e178ca4`; la base no cambió; candado 2161
+  de 2161, de a 4). Dos de las decisiones de Marcelo del 16-oct: el Despertador se vuelve a abrir en el día («Tus pendientes de hoy», el sol junto a la
+  campana: `WakeupModal` con `repaso`, sin SI ENTIENDO ni registro) y los avisos de una misma orden van juntos (`NotificationTray`, `grupos`). Siguen, en ese
+  orden: Datos Pendientes, Torre, hoja en dos hojas, negativos, Corona, «Planta» con fichas de máquina.
+  v10.84.133 (16-oct, ~17:44; READY `dpl_yxVxYtzVYXcD9ymDguw7qmtE2grV`, commit `33cf302`; vuelta atrás: promover
   `dpl_cbHFNwGP7HBTy1LCozYjCwaPQrMH` (el código de v10.84.132) o `git revert 33cf302`; la base no cambió; candado 2151 de 2151, de a 4). La lista de Órdenes
   de Compra (`OrdenesCompraView`, 24/40): sin lectura no dice «no hay» (`leido`), cada OC se abre con el teclado, pestañas, tintas; banco `gen-oc-lista.mjs`
   (la tanda `oc` es otra: el folio de la OC). 🔑 **Decisiones de Marcelo del 16-oct** (las «Para Marcelo» de la 123 a la 131): en el CHANGELOG, entrada de

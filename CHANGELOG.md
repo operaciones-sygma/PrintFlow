@@ -24,7 +24,10 @@ de P-0611»). Los avisos que no son de una orden van sueltos. El número de la c
 **Cómo se probó.** La tanda `avisos` (20) con un caso nuevo en su banco (`caso=porOrden`: tres de P-0611, uno de P-0612 y uno sin orden). **Vuelta 1**
 (5, escritas antes del arreglo) contra v10.84.134: fallaban 4 (pasaba «los avisos sin orden van sueltos»). Con el arreglo, las 20 a la primera.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~18:30, junto con v10.84.134; READY `dpl_Gh8azoGrkECu1Z2YbhG769eygKKk`, commits `e178ca4` (v10.84.134) y `47b0f16`;
+vuelta atrás: promover `dpl_3cmfMaXxW515Zm77roTB6JMxHhnq` (el código de v10.84.133) o `git revert 47b0f16 e178ca4`; la base no cambió. Candado 2161 de 2161
+(10 nuevas), de a 4, 14.6 min, a la primera y sin inestables. Revisado en producción: el código servido (`index-C_eVQXev.js`) trae los dos («Tus pendientes
+de hoy», «avisos más de esta orden»), y el recorrido de los 8 roles no truena.
 
 ## v10.84.134 — El Despertador se vuelve a abrir en el día: «Tus pendientes de hoy» — 16-oct-2026
 
@@ -42,7 +45,7 @@ el día; quien olvidaba los P- tenía que buscarlos.
 (5, escritas antes del arreglo) contra v10.84.133: fallaban 4 (pasaba «sin pendientes, sin botón»). Con el arreglo, las 32; una prueba se corrigió antes de
 contar (leía todo el texto de la página, también la lista de órdenes de atrás: ahora sólo la ventana).
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~18:30, junto con v10.84.135 (ver su entrada).
 
 ## v10.84.133 — La lista de Órdenes de Compra no dice «no hay» sin lectura y se abre con el teclado — 16-oct-2026
 
