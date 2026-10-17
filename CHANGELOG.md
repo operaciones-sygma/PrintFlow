@@ -33,7 +33,11 @@ primero que piden es el modelo y el número exactos.
 **Para Marcelo:** aplicar `docs/migrations/v10.84.139_maquinas_fichas.sql` en el editor SQL de Supabase (todo el archivo; trae su `begin` y su `commit`).
 Hasta entonces, «Planta» dice «Las fichas de las máquinas todavía no están en la base» y nada más cambia.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~19:51, junto con v10.84.136 a 138; READY `dpl_Gqc4jUaXVsSsoz8ARuBYEUk1hFY7`, commits `1a5da83` (136), `48d5ad3` (137),
+`3b5ef93` (138) y `1c04b4e` (139); vuelta atrás: promover `dpl_7VmAzMK28kCahmAvT9q4iv7YgGzo` (el código de v10.84.135) o `git revert 1c04b4e 3b5ef93 48d5ad3
+1a5da83`; la base no cambió (la tabla de las fichas espera a Marcelo). Candado 2203 de 2203 (42 nuevas), de a 4, 14.7 min, a la primera y sin inestables.
+Revisado en producción: el código servido (`index-BFcVX2eq.js` y `PlanoPlanta-JkdVxsiz.js`) trae las cuatro; el recorrido de los 8 roles sólo marca el
+404 de `maquinas_fichas` al abrir «Planta» (admin y produccion): es la tabla que falta aplicar, y la pantalla lo dice («todavía no están en la base»).
 
 ## v10.84.138 — Corona: cada movimiento del historial dice su factura (y cómo va) y su orden, que se abre — 16-oct-2026
 
@@ -50,7 +54,7 @@ ventana). Medido a las 18:57: nunca ha habido un saldo de Corona en negativo; Mo
 
 **Cómo se probó.** La tanda `corona` (21), montada ahora con la línea de App, con la factura, su estado y la orden en cada movimiento de su banco (y una orden que no está entre las cargadas, con su factura cancelada). Vuelta 1 contra v10.84.137: fallaban las 5 nuevas. Con el arreglo, 21 de 21.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~19:51, junto con v10.84.139 (ver su entrada).
 
 ## v10.84.137 — La hoja impresa sale en dos hojas legibles cuando en una la letra quedaría de menos de 7 pt — 16-oct-2026
 
@@ -64,7 +68,7 @@ v3»; Chrome repite lo fijo en cada hoja) y la barra de la ventana avisa «Sale 
 
 **Cómo se probó.** La tanda `hoja` (31) con un caso nuevo en su banco: «enorme» (P-0658: dos fotos, 14 renglones de notas, 10 lugares, 10 acabados); hoy salía en una hoja a zoom 0.722, la letra más chica de 7.2 px (5.4 pt). Vuelta 1 contra v10.84.136: fallaban 5 de las 7 nuevas (pasaban «la que cabe no avisa» y «la larga sigue en una»). Con el arreglo, 31 de 31: la enorme en 2 hojas a 10 px, la administrativa también, las fotos de 180 px, ajustar varias veces no repite el folio de la esquina, y sin registro de la versión la esquina dice las dos cosas.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~19:51, junto con v10.84.139 (ver su entrada).
 
 ## v10.84.136 — «Datos Pendientes (N)» cuenta lo urgente, la planta sin dinero para Lupita y Karla, y la Torre recuerda la fecha sólo en la planta — 16-oct-2026
 
@@ -94,7 +98,7 @@ desde una orden y ajuste pasa por `record_stock_movement`, que con un candado po
 
 **Cómo se probó.** Vuelta 1 (escritas antes del arreglo) contra v10.84.135: en la tanda `salud` fallaban 10 (el dinero en «Cómo va la planta», cuántas son urgentes, lo urgente primero y lo demás plegado, y la vuelta 2: la maquila recibida sin fecha, la que Dirección dejó en espera, la que llega a Salidas con la vista abierta); en `torre`, 4 (lo de antes de la planta en su banco: P-0708 en diseño y P-0709 por enviar a maquila); en `sesion`, con la app entera, 3 (el menú de Lupita y Karla, y sin lectura sin número). Con el arreglo: `salud` 43 de 43, `torre` 18 de 18, las 14 del menú en `sesion`, y sin cambios `despertador` (32), `corregir` (52) y `hooks`. Dos pruebas se ajustaron: dp-08 (el teclado en los datos incompletos) apuntaba a P-0661, que con la decisión va en la lista plegada (ahora a P-0448); tr-10 subía tres niveles desde «Lupita» y leía toda la Torre (con las de antes de la planta en «Avanzando», su «Lupita 1» la confundía): ahora lee el semáforo nada más. El banco de la Torre: P-0704 a P-0706 pasan de diseño a Listas.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, ~19:51, junto con v10.84.139 (ver su entrada).
 
 ## v10.84.135 — Los avisos van juntos por orden — 16-oct-2026
 

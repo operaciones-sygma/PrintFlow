@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2161 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2203 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,14 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.135 (16-oct, ~18:30; READY `dpl_Gh8azoGrkECu1Z2YbhG769eygKKk`, commits `e178ca4` (v10.84.134) y `47b0f16` (v10.84.135), subidas
+- **LIVE:** v10.84.139 (16-oct, ~19:51; READY `dpl_Gqc4jUaXVsSsoz8ARuBYEUk1hFY7`, commits `1a5da83` (136), `48d5ad3` (137), `3b5ef93` (138) y `1c04b4e`
+  (139), subidas juntas; vuelta atrás: promover `dpl_7VmAzMK28kCahmAvT9q4iv7YgGzo` (el código de v10.84.135) o `git revert 1c04b4e 3b5ef93 48d5ad3 1a5da83`;
+  candado 2203 de 2203, de a 4). Decisiones de Marcelo del 16-oct: «Datos Pendientes (N)» con lo urgente (`datosUrgentes`) y sin dinero en «Cómo va la
+  planta» para Lupita y Karla; la Torre pide la fecha sólo de lo que ya corre en la planta (`YA_EN_LA_PLANTA`); la hoja impresa en dos hojas legibles
+  cuando en una la letra bajaría de 7 pt; Corona dice la factura y la orden de cada movimiento; y 🔑 «Planta» con la ficha de cada máquina, que lee
+  `public.maquinas_fichas`: **falta que Marcelo aplique `docs/migrations/v10.84.139_maquinas_fichas.sql` en el editor** (sin ella, «Planta» lo dice y
+  el recorrido marca su 404).
+  v10.84.135 (16-oct, ~18:30; READY `dpl_Gh8azoGrkECu1Z2YbhG769eygKKk`, commits `e178ca4` (v10.84.134) y `47b0f16` (v10.84.135), subidas
   juntas; vuelta atrás: promover `dpl_3cmfMaXxW515Zm77roTB6JMxHhnq` (el código de v10.84.133) o `git revert 47b0f16 e178ca4`; la base no cambió; candado 2161
   de 2161, de a 4). Dos de las decisiones de Marcelo del 16-oct: el Despertador se vuelve a abrir en el día («Tus pendientes de hoy», el sol junto a la
   campana: `WakeupModal` con `repaso`, sin SI ENTIENDO ni registro) y los avisos de una misma orden van juntos (`NotificationTray`, `grupos`). Siguen, en ese
