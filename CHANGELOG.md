@@ -12,6 +12,32 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.145 — «Archivo»: el ingreso se llama como es, el vendedor cuenta lo que lleva y la cancelada va por su fecha — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre el «Archivo» (`Archive`: lo entregado y lo cancelado por año → mes →
+semana; 22/40, snapshot `.impeccable/critique/2026-10-17T07-08-46Z__src-app-jsx-archivo.md`). Decía **«Facturado total»** a la suma de lo entregado sin IVA (el mismo nombre equivocado
+que el Dashboard corrigió en la 124; además hay remisiones). Para el vendedor contaba sólo lo que él capturó, no lo que lleva como vendedor (la ficha del
+tablero sí, `isVendedorOwnerByAgent`): a Genaro le faltaban las que le captura Lupita, $34,660 de $338,765 en 120 días. Una orden capturada en septiembre y
+cancelada en octubre salía en septiembre y decía «Cancelada: 20-sep» (su captura). El resumen decía «Total: 6» revolviendo entregadas y canceladas. Las
+fichas no se abrían con el teclado, las insignias eran de 9 px en ámbar y rojo, el dinero en verde sobre las carpetas abiertas no llegaba a 4.5:1, se veía
+el id interno «OP-…» junto al folio, «Semana 3» no decía qué días y decía «ordenes» sin acento.
+
+**Qué se cambió** (sólo `Archive`):
+- «Ingreso, lo entregado sin IVA»; para el vendedor, lo que lleva como vendedor (la misma regla de la ficha).
+- La cancelada va por la fecha en que se canceló (y eso dice); el resumen: «Entregadas · Canceladas».
+- Las semanas dicen sus días («Del 11 al 17», «El 31»); «órdenes» con acento y la cuenta del mes con su palabra.
+- Las fichas se abren con el teclado; sin el id interno (sólo si no tiene folio P-); insignias de 10 px en su tinta («nota de crédito pendiente», «Editada
+  después de facturar», la prioridad y «Maquila»); el dinero sobre las carpetas en la tinta para fondos con tinte.
+
+**Cómo se probó.** Tanda nueva `archivo` (17; banco `gen-archivo.mjs`, montado con la línea de App y el archivo ya cargado; no confundir con `archivos`, la
+lista del bucket). Vuelta 1 contra v10.84.144: fallaban 8 de 14; una prueba era mía (arc-04 buscaba «Entregadas: 5» con `\b` y los avisos del resumen quedan
+pegados en el texto); en el arreglo, la cuenta del año sobre la carpeta abierta y el folio morado sobre la ficha cancelada no llegaban a 4.5:1 (ajustados).
+Vuelta 2, por donde no se diseñó: la entregada a las 23:30 del último día del mes (en UTC ya es el siguiente), la semana de un solo día («El 31» de mayo) y
+el vendedor con una orden ajena (sin su importe): sin fallas del arreglo (una prueba mía no reconocía «El 31»). Ahora 17 de 17; contra v10.84.144 fallan
+10. El detector de la skill: sólo la letra de la app, antes y después. Los 28 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.144 — «Cancelaciones»: el lote pregunta antes de cancelar y dice qué cae con cada orden — 17-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la madrugada del 17-oct sobre la vista «Cancelaciones» (`CancelacionesView`, cancelar en lote; 22/40,

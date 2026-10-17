@@ -121,6 +121,8 @@ const TANDAS = [
   { nombre: "espera", gen: "tests/banco/gen-espera.mjs", romper: "tests/romper/espera.mjs", puerto: 5484 },
   // v10.84.144 — la vista «Cancelaciones» (la tanda `cancelaciones` es la parte de la base, con Node): el lote pregunta y dice qué cae con cada orden
   { nombre: "cancelaciones-vista", gen: "tests/banco/gen-cancelaciones-vista.mjs", romper: "tests/romper/cancelaciones-vista.mjs", puerto: 5485 },
+  // v10.84.145 — el «Archivo» (lo entregado y lo cancelado por año, mes y semana): el ingreso con su nombre, el vendedor, la cancelada por su fecha
+  { nombre: "archivo", gen: "tests/banco/gen-archivo.mjs", romper: "tests/romper/archivo.mjs", puerto: 5486 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar

@@ -17102,15 +17102,18 @@ function Archive({orders,role,onAction,userLogin}) {
 
   // Delivered + cancelled orders
   const isFinalStage=o=>o.stage.includes("delivered")||o.stage.includes("cancelled");
-  const archiveDate=o=>o.delivered_at||o.deliveredAt||o.created_at;
+  // v10.84.145 — /impeccable critique del Archivo (17-oct; ~21/40): la cancelada va por la fecha en que se canceló (iba por la de su captura), el ingreso
+  //   se llama como es (decía «Facturado» a lo entregado sin IVA, como el Dashboard antes de v10.84.124), el vendedor cuenta lo que lleva como vendedor
+  //   (la ficha ya lo hacía: isVendedorOwnerByAgent; a Genaro le faltaban las que captura Lupita, $34,660 en 120 días), y el resumen separa lo entregado.
+  const archiveDate=o=>o.stage.includes("cancelled")?(o.cancelled_at||o.created_at):(o.delivered_at||o.deliveredAt||o.created_at);
   const delivered=orders.filter(o=>isFinalStage(o)&&archiveDate(o));
 
   // Group by year → month → week
   const tree=useMemo(()=>{
-    const fin=orders.filter(o=>(o.stage.includes("delivered")||o.stage.includes("cancelled"))&&(o.delivered_at||o.deliveredAt||o.created_at));
+    const fin=orders.filter(o=>(o.stage.includes("delivered")||o.stage.includes("cancelled"))&&archiveDate(o));
     const t={};
     fin.forEach(o=>{
-      const d=new Date(o.delivered_at||o.deliveredAt||o.created_at);
+      const d=new Date(archiveDate(o));
       const y=d.getFullYear();
       const m=d.getMonth();
       // Week of month (1-based)
@@ -17134,7 +17137,7 @@ function Archive({orders,role,onAction,userLogin}) {
 
   const totalDel=delivered.length;
   const cancelledCount=delivered.filter(o=>o.stage.includes("cancelled")).length;
-  const owns=o=>role!=="vendedor"||!o.created_by||o.created_by===userLogin;
+  const owns=o=>role!=="vendedor"||!o.created_by||o.created_by===userLogin||isVendedorOwnerByAgent(role,userLogin,o);
   const myDel=role==="vendedor"?delivered.filter(o=>owns(o)&&!o.stage.includes("cancelled")):delivered.filter(o=>!o.stage.includes("cancelled"));
   const totalRev=myDel.reduce((s,o)=>s+(precioVenta(o)),0);
 
@@ -17143,16 +17146,16 @@ function Archive({orders,role,onAction,userLogin}) {
   return <div>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
       <div style={{background:C.sf,borderRadius:10,padding:"8px 14px",fontSize:12}}>
-        <span style={{color:C.t2,fontWeight:600}}>Total: </span>
-        <span style={{fontWeight:800}}>{totalDel}</span>
+        <span style={{color:C.t2,fontWeight:600}}>Entregadas: </span>
+        <span style={{fontWeight:800}}>{totalDel-cancelledCount}</span>
       </div>
       {cancelledCount>0&&<div style={{background:C.dn+"08",borderRadius:10,padding:"8px 14px",fontSize:12}}>
-        <span style={{display:"inline-flex",alignItems:"center",gap:4,color:C.dn,fontWeight:600}}><XIcon size={11} weight="bold"/>Canceladas: </span>
-        <span style={{fontWeight:800,color:C.dn}}>{cancelledCount}</span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:4,color:C.dnInk,fontWeight:600}}><XIcon size={11} weight="bold"/>Canceladas: </span>
+        <span style={{fontWeight:800,color:C.dnInk}}>{cancelledCount}</span>
       </div>}
       {!hp&&<div style={{background:C.sf,borderRadius:10,padding:"8px 14px",fontSize:12}}>
-        <span style={{color:C.t2,fontWeight:600}}>Facturado total: </span>
-        <span style={{fontWeight:800,color:C.okInk}}>{fmt(totalRev)}</span>
+        <span style={{color:C.t2,fontWeight:600}}>Ingreso, lo entregado sin IVA: </span>
+        <span style={{fontWeight:800,color:C.okTx}}>{fmt(totalRev)}</span>
       </div>}
     </div>
 
@@ -17173,8 +17176,8 @@ function Archive({orders,role,onAction,userLogin}) {
         <button onClick={()=>setOpenYear(yOpen?null:yi)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"12px 16px",background:yOpen?C.ac+"10":C.sf,border:"0.5px solid "+(yOpen?C.ac+"30":C.bd),borderRadius:12,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
           <span style={{display:"inline-flex",alignItems:"center"}}>{yOpen?<FolderOpenIcon size={17} weight="bold" color={C.ac}/>:<FolderIcon size={17} weight="bold" color={C.t3}/>}</span>
           <span style={{fontSize:15,fontWeight:800,color:C.tx,flex:1,textAlign:"left"}}>{y}</span>
-          <span style={{fontSize:11,color:C.t2,fontWeight:600}}>{yCount} orden{yCount!==1?"es":""}</span>
-          {!hp&&<span style={{fontSize:11,color:C.okInk,fontWeight:700}}>{fmt(yRev)}</span>}
+          <span style={{fontSize:11,color:C.tx,fontWeight:600}}>{yCount===1?"1 orden":yCount+" órdenes"}</span>
+          {!hp&&<span style={{fontSize:11,color:C.okTx,fontWeight:700}}>{fmt(yRev)}</span>}
           <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{yOpen?<CaretUpIcon size={12} weight="bold"/>:<CaretDownIcon size={12} weight="bold"/>}</span>
         </button>
 
@@ -17191,8 +17194,8 @@ function Archive({orders,role,onAction,userLogin}) {
               <button onClick={()=>setOpenMonth(mOpen?null:mKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:mOpen?C.dsn+"08":C.bg,border:"0.5px solid "+(mOpen?C.dsn+"20":C.bd),borderRadius:10,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                 <span style={{display:"inline-flex",alignItems:"center"}}>{mOpen?<FolderOpenIcon size={15} weight="bold" color={C.dsn}/>:<FolderIcon size={15} weight="bold" color={C.t3}/>}</span>
                 <span style={{fontSize:13,fontWeight:700,color:C.tx,flex:1,textAlign:"left"}}>{MONTHS[mi]} {y}</span>
-                <span style={{fontSize:10,color:C.t2,fontWeight:600}}>{mCount}</span>
-                {!hp&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(mRev)}</span>}
+                <span style={{fontSize:11,color:C.tx,fontWeight:600}}>{mCount===1?"1 orden":mCount+" órdenes"}</span>
+                {!hp&&<span style={{fontSize:11,color:C.okTx,fontWeight:600}}>{fmt(mRev)}</span>}
                 <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{mOpen?<CaretUpIcon size={11} weight="bold"/>:<CaretDownIcon size={11} weight="bold"/>}</span>
               </button>
 
@@ -17200,41 +17203,43 @@ function Archive({orders,role,onAction,userLogin}) {
                 {weeks.map(w=>{
                   const wKey=mKey*10+parseInt(w);
                   const wOpen=openWeek===wKey;
-                  const wOrders=tree[y][m][w].slice().sort((a,b)=>new Date(b.delivered_at||b.deliveredAt)-new Date(a.delivered_at||a.deliveredAt));
+                  const wOrders=tree[y][m][w].slice().sort((a,b)=>new Date(archiveDate(b))-new Date(archiveDate(a)));
+                  // v10.84.145 — la semana dice sus días (la misma cuenta con la que se agrupa: semanas de domingo a sábado dentro del mes)
+                  const pd=new Date(yi,mi,1).getDay(),ini=Math.max(1,(parseInt(w)-1)*7-pd+1),finD=Math.min(new Date(yi,mi+1,0).getDate(),parseInt(w)*7-pd);
                   const wRev=wOrders.filter(o=>owns(o)&&!o.stage.includes("cancelled")).reduce((s,o)=>s+(precioVenta(o)),0);
 
                   return <div key={w} style={{marginBottom:4}}>
                     <button onClick={()=>setOpenWeek(wOpen?null:wKey)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:wOpen?C.ios+"06":C.bg,border:"0.5px solid "+(wOpen?C.ios+"20":C.bd),borderRadius:8,cursor:"pointer",fontFamily:"'Geist',sans-serif"}}>
                       <span style={{display:"inline-flex",alignItems:"center"}}>{wOpen?<FolderOpenIcon size={13} weight="bold" color={C.ios}/>:<FolderIcon size={13} weight="bold" color={C.t3}/>}</span>
-                      <span style={{fontSize:12,fontWeight:600,color:C.tx,flex:1,textAlign:"left"}}>Semana {w}</span>
-                      <span style={{fontSize:10,color:C.t2}}>{wOrders.length} orden{wOrders.length!==1?"es":""}</span>
-                      {!hp&&<span style={{fontSize:10,color:C.okInk,fontWeight:600}}>{fmt(wRev)}</span>}
+                      <span style={{fontSize:12,fontWeight:600,color:C.tx,flex:1,textAlign:"left"}}>{ini===finD?"El "+ini:"Del "+ini+" al "+finD}</span>
+                      <span style={{fontSize:11,color:C.tx}}>{wOrders.length===1?"1 orden":wOrders.length+" órdenes"}</span>
+                      {!hp&&<span style={{fontSize:11,color:C.okTx,fontWeight:600}}>{fmt(wRev)}</span>}
                       <span style={{display:"inline-flex",alignItems:"center",color:C.t3}}>{wOpen?<CaretUpIcon size={10} weight="bold"/>:<CaretDownIcon size={10} weight="bold"/>}</span>
                     </button>
 
                     {wOpen&&<div style={{paddingLeft:8,marginTop:4,display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:6}}>
                       {wOrders.map(o=>{
                         const st=SM[o.stage];const isMaq=o.order_type==="maquila";const isCancelled=o.stage.includes("cancelled");
-                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",border:"1.5px solid "+(st?.c||C.ok)+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
+                        return <div key={o.id} onClick={()=>onAction(o.id,"detail")} role="button" tabIndex={0} aria-label={"Orden "+(o.production_number||o.id)+(o.client?", "+o.client:"")+(isCancelled?", cancelada":", entregada")+". Enter para abrir el detalle."} onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&e.target===e.currentTarget){e.preventDefault();onAction(o.id,"detail");}}} style={{background:isCancelled?C.dn+"04":C.bg,borderRadius:10,padding:10,cursor:"pointer",border:"1.5px solid "+(st?.c||C.ok)+"66",boxShadow:C.sh2,transition:C.tCard}} onMouseEnter={e=>{e.currentTarget.style.boxShadow=C.sh3;e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow=C.sh2;e.currentTarget.style.transform="none"}}>
                           {o.cart_folio&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:13,fontWeight:800,color:C.cart,letterSpacing:0.3,lineHeight:1,marginBottom:o.web_folio?1:3}}><ShoppingCartIcon size={13} weight="bold"/>{o.cart_folio}</div>}
                           {o.web_folio&&<div style={{fontSize:10,fontWeight:600,color:C.t2,marginBottom:3}}>{o.web_folio}</div>}
                           {/* 🆕 v10.9.0 — Mostrar P-XXXX e invoice_folio en cards del Archive */}
                           <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
                             {o.production_number&&<span style={{fontSize:11,fontWeight:700,color:C.ac,background:C.acL,padding:"2px 6px",borderRadius:4}}>{o.production_number}</span>}
-                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?C.fac:C.live,background:(o.invoice_type==="factura"?C.fac:C.live)+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?<LightningIcon size={10} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:1}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</span>}{!o.invoice_folio&&o.grouped_invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.t2,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}} title={"Facturada agrupada en "+o.grouped_invoice_folio}><LinkIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Agrupada {o.grouped_invoice_folio}</span>}
+                            {o.invoice_folio&&<span style={{fontSize:11,fontWeight:700,color:o.invoice_type==="factura"?tintaAA(C.fac,6.5):C.okInk,background:(o.invoice_type==="factura"?C.fac:C.live)+"15",padding:"2px 6px",borderRadius:4}}>{o.invoice_pre_assigned?<LightningIcon size={10} weight="fill" color={C.amb} style={{verticalAlign:"-1px",marginRight:1}}/>:null}{o.invoice_type==="factura"?<FileTextIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>:<ReceiptIcon size={11} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>}{o.invoice_folio}</span>}{!o.invoice_folio&&o.grouped_invoice_folio&&<span style={{fontSize:10,fontWeight:700,color:C.t2,background:C.sf,border:"1px solid "+C.bd,padding:"2px 6px",borderRadius:4}} title={"Facturada agrupada en "+o.grouped_invoice_folio}><LinkIcon size={10} weight="bold" style={{verticalAlign:"-1px",marginRight:3}}/>Agrupada {o.grouped_invoice_folio}</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
-                            <span style={{fontSize:9,color:C.t3}}>{o.id}</span>
-                            {isCancelled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.dn+"15",color:C.dn,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><XIcon size={9} weight="bold"/>Cancelada</span>}
-                            {isCancelled&&o.invoice_folio&&!o.nc_emitted&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.amb+"15",color:C.amb,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}} title="Nota de crédito pendiente de emitir"><HourglassIcon size={9} weight="bold"/>NC pendiente</span>}
-                            {o.has_post_invoice_edits&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.amb+"15",color:C.amb,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700}}><WarningIcon size={9} weight="fill"/>Editada post-factura</span>}
-                            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:PM[o.priority].c,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority} size={9}/></span>}
-                            {isMaq&&<span style={{background:C.maq+"15",color:C.maq,padding:"1px 6px",borderRadius:5,fontSize:9,fontWeight:600}}>Maquila</span>}
+                            {!o.production_number&&<span style={{fontSize:10,color:C.t2}}>{o.id}</span>}
+                            {isCancelled&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.dn+"15",color:C.dnInk,padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><XIcon size={10} weight="bold"/>Cancelada</span>}
+                            {isCancelled&&o.invoice_folio&&!o.nc_emitted&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.amb+"15",color:C.wnTx,padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><HourglassIcon size={10} weight="bold"/>nota de crédito pendiente</span>}
+                            {o.has_post_invoice_edits&&<span style={{display:"inline-flex",alignItems:"center",gap:3,background:C.amb+"15",color:C.wnTx,padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700}}><WarningIcon size={10} weight="fill"/>Editada después de facturar</span>}
+                            {o.priority!=="normal"&&PM[o.priority]&&<span style={{background:PM[o.priority].c+"15",color:tintaAA(PM[o.priority].c),padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center"}}><PrioLbl priority={o.priority} size={10}/></span>}
+                            {isMaq&&<span style={{background:C.maq+"15",color:tintaAA(C.maq),padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:600}}>Maquila</span>}
                           </div>
-                          <div style={{fontSize:12,fontWeight:700,textDecoration:isCancelled?"line-through":"none",color:isCancelled?C.t3:C.tx}}>{o.client}</div>
+                          <div style={{fontSize:12,fontWeight:700,textDecoration:isCancelled?"line-through":"none",color:isCancelled?C.t2:C.tx}}>{o.client}</div>
                           <div style={{fontSize:10,color:C.t2}}>{o.product_type}{o.quantity?" · "+Number(o.quantity).toLocaleString()+" pzas":""}</div>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
-                            <span style={{fontSize:9,color:isCancelled?C.dn:C.t3}}>{isCancelled?"Cancelada":"Entregada"}: {fD(o.delivered_at||o.deliveredAt||o.created_at)}</span>
+                            <span style={{fontSize:10,color:isCancelled?C.dnInk:C.t2}}>{isCancelled?"Cancelada":"Entregada"}: {fD(archiveDate(o))}</span>
                             {!hp&&owns(o)&&!isCancelled&&(precioVenta(o)>0)&&<span style={{fontSize:12,fontWeight:800,color:C.okInk}}>{fmt(precioVenta(o))}</span>}
                           </div>
                         </div>;
