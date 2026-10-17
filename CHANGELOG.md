@@ -29,9 +29,11 @@ las canceladas»; la cancelada tachada; «órdenes».
 **Cómo se probó.** Tanda nueva `historial` (12; banco `gen-historial.mjs`: `ClientHistory` montado con la línea de App, y la puerta de App con
 `veHistorialDelCliente` si App.jsx la trae, o con la regla de antes tal cual). Vuelta 1 contra v10.84.147: fallaban 7 de 10 (Genaro no abría a PAOLA, en la
 Feria le faltaba la de Lupita, no era diálogo, AA y 9 px, el id interno, el total, «ordenes»). Vuelta 2: el vendedor escrito «GENARO » (mayúsculas y espacio)
-y el clic fuera: sin fallas. Ahora 12 de 12; contra v10.84.147 fallan 8. Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde.
+y el clic fuera: sin fallas. Ahora 12 de 12; contra v10.84.147 fallan 8. Los 31 bancos se generan con el App.jsx nuevo; build y `probar-alcance` en verde. Candado: 2388 de 2388 (12 nuevas), de a 4, 15.8 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 17-oct, READY `dpl_2VXpTmUZiEChyigKSh4ZgUJvus9E`, commit `d8f4bde`; vuelta atrás: promover `dpl_7gAwrH1VEjLWheU4cLxBmMzQhyfo` (el código de v10.84.147) o
+`git revert d8f4bde`; la base no cambió. Revisado en producción: el código servido (`index-Byc8KdWc.js`) trae lo nuevo; el recorrido de los 8 roles:
+nada truena (contra la app publicada). El recorrido no toca el nombre del cliente; la puerta y la ventana nuevas las prueba el banco.
 
 ## v10.84.147 — «Poner en espera»: el fondo ya no tira lo escrito, los días se validan y dice cuándo vuelve sola — 17-oct-2026
 

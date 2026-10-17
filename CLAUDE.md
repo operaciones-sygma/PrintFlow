@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2376 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2388 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.147 (17-oct, READY `dpl_CxXSht7pLhZvrNnpywGfnBf412hR`, commit `66a4337`; vuelta atrás: promover `dpl_2Viv9drb6BxzwZmwCjzhJ6S4ZyKN` (el código de
+- **LIVE:** v10.84.148 (17-oct, READY `dpl_2VXpTmUZiEChyigKSh4ZgUJvus9E`, commit `d8f4bde`; vuelta atrás: promover `dpl_7gAwrH1VEjLWheU4cLxBmMzQhyfo` (el código de
+  v10.84.147) o `git revert d8f4bde`; la base no cambió; candado 2388 de 2388 (12 nuevas), de a 4, 15.8 min, a la primera y sin inestables). El historial del cliente (22/40): 🔑 para el vendedor, lo suyo es lo que
+  capturó o lo que lleva como vendedor (`esDelVendedor`, la regla de la ficha), también en la puerta (`veHistorialDelCliente`); un diálogo con foco. Banco
+  `gen-historial.mjs`, tanda `historial`.
+  v10.84.147 (17-oct, READY `dpl_CxXSht7pLhZvrNnpywGfnBf412hR`, commit `66a4337`; vuelta atrás: promover `dpl_2Viv9drb6BxzwZmwCjzhJ6S4ZyKN` (el código de
   v10.84.146) o `git revert 66a4337`; la base no cambió; candado 2376 de 2376 (19 nuevas), de a 4, 15.7 min, a la primera y sin inestables). «Poner en espera» (21/40): Esc y el fondo con algo escrito preguntan, los
   días enteros de 1 a 365 o vacío, dice cuándo vuelve sola, un diálogo que se lleva el foco. Banco `gen-poner-espera.mjs`, tanda `poner-espera`.
   v10.84.146 (17-oct, READY `dpl_3yLSEbQhUqxJ8A7gJhoY57tMtyag`, commit `f85bc5b`; vuelta atrás: promover `dpl_9ZNiNgiiUZDsK4AoAf38x43v7DvL` (el código de
