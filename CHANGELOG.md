@@ -12,6 +12,43 @@ Registro cronológico de cambios. Los 3 archivos base (Contexto, Roadmap, Docume
 
 ---
 
+## v10.84.143 — «En espera»: sin lote para lo que espera al cliente, la más vieja primero y cómo contactarlo — 17-oct-2026
+
+**Qué pasaba.** La pasada de `/impeccable critique` de la noche del 16-oct sobre «En espera» (la vista de App y la ficha en su modo `inEsperaView`; 20/40,
+snapshot `.impeccable/critique/2026-10-17T05-51-24Z__src-app-jsx-en-espera.md`). Medido en producción: las 21 pausadas son «En espera: el cliente no ha
+pedido factura» (14 en Salidas y 7 recibidas de maquila), todas de Karla y sin fecha, 7 con la entrega vencida; P-0070 (Castores) lleva 82 días lista. Lo
+que sigue con cada una es preguntarle al cliente si ya quiere su factura. Y la vista: ofrecía **«Reactivar las 14»** en el encabezado de Salidas (y «las 7»
+en la maquila recibida): un clic, confirmar, y quedaba dicho que los 14 clientes pidieron su factura a la vez, con las vencidas de regreso en «atrasadas»
+(v10.84.140); el botón iba DENTRO del `<summary>` (un botón dentro de otro: el lector de pantalla no lo anuncia). El subtítulo mandaba a «Volver a
+producción», que no existe para ninguna (su botón dice «Ya pidió factura · Reactivar»), y decía que «se reactivan solas al vencer» (éstas no tienen fecha).
+Dentro de cada etapa, el orden era alfabético: la de 82 días quedaba donde cayera su nombre. Justo aquí la ficha escondía el teléfono, el agente de compras
+y el importe. Y sin AA: la antigüedad en ámbar (1.8:1) y en rojo (3.5:1), «1 atrasada de producción» (3.6:1), «Motivo:» y «Le toca a…» (4.2:1), la cuenta de
+los chips con opacidad (3.3:1).
+
+**Qué se cambió:**
+- El lote ya no incluye las que esperan la factura del cliente (cada una, con su «Ya pidió factura»); para los demás motivos (material, autorización,
+  corrección) se queda, abajo del encabezado del grupo y no dentro (con el grupo plegado no se ve: hay que abrirlo).
+- El subtítulo dice qué es cada cosa: las listas que esperan al cliente («Ya pidió factura» la regresa a Salidas para foliarla) y las del taller (vuelven
+  solas si tienen fecha).
+- Dentro de cada etapa: lo que vuelve solo con fecha, primero (como antes); y luego, la que más lleva esperando.
+- En la ficha de la que espera al cliente (sólo en esta vista): su agente de compras, su WhatsApp y el importe, con los permisos de siempre (Producción no ve
+  dinero; el vendedor, sólo lo suyo).
+- Tintas con AA en la franja de la pausa (es la misma en las fichas pausadas de todas las vistas: «82 días en espera», «Se reactiva sola hoy», «Le toca a…»,
+  y «· Karla» en lugar de «— karla»), en los avisos de riesgo, «Motivo:», los chips y la vista previa del grupo plegado («con entrega en 3 días o menos» en
+  lugar de «≤3d»).
+
+**Cómo se probó.** Tanda nueva `espera` (25; banco `gen-espera.mjs`: la vista vive dentro de App, así que el generador copia su bloque tal cual a una
+función de prueba con los nombres de App que usa y `extraer.mjs` junta lo de módulo; lo de App —las órdenes en espera, reactivar una o en lote— se simula).
+Vuelta 1 contra v10.84.142: fallaban 11 de 19; dos pruebas eran mías (buscaban el lote de Listas como Karla, que no lo ve: lo pausó Gerardo; el «Reactivar
+las 2» que encontró era el de la maquila recibida, que también espera al cliente: el mismo defecto); corregidas para verlo como Dirección. Vuelta 2, por
+donde no se diseñó: el grupo revuelto (6 que esperan al cliente y 4 que corrige el cliente: «Reactivar las 4» pide confirmar y lleva sólo esas 4), el lote
+con el teclado, la que se entrega con la vista abierta, el vendedor con una orden de otro (no ve su contacto ni su importe), la maquila con su precio al
+cliente (no el costo) y buscar: ninguna falla nueva. Ahora 25 de 25; contra v10.84.142 fallan 14. El detector de la skill en el navegador: los renglones
+del subtítulo (~202 → ~80 caracteres) y el interlineado del motivo; no vio el contraste (lo midió la tanda componiendo los tintes). Build y
+`probar-alcance` en verde.
+
+**En producción:** (pendiente)
+
 ## v10.84.142 — «Dinero en Proceso»: lo listo que espera al cliente va aparte, y sin lectura no dice «$0» — 16-oct-2026
 
 **Qué pasaba.** La pasada de `/impeccable critique` de la noche del 16-oct sobre «Dinero en Proceso» (Dirección, `WIPDashboard`; 17/40, snapshot

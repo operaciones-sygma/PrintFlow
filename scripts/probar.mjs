@@ -117,6 +117,8 @@ const TANDAS = [
   { nombre: "oc-lista", gen: "tests/banco/gen-oc-lista.mjs", romper: "tests/romper/oc-lista.mjs", puerto: 5175 },
   // v10.84.142 — «Dinero en Proceso» (Dirección), montada con la línea de App: lo listo que espera al cliente va aparte, con el reloj fijo
   { nombre: "wip", gen: "tests/banco/gen-wip.mjs", romper: "tests/romper/wip.mjs", puerto: 5174 },
+  // v10.84.143 — «En espera» (la vista de App, su bloque copiado tal cual): sin lote para lo que espera al cliente, la más vieja primero, su contacto e importe
+  { nombre: "espera", gen: "tests/banco/gen-espera.mjs", romper: "tests/romper/espera.mjs", puerto: 5484 },
 ];
 // 🔑 LA SEGUNDA OPORTUNIDAD (8-oct-2026, Marcelo: «sí es una mejora, aplica la misma metodología para todos los proyectos»; la misma de
 // CobranzaFlow desde el 7-oct, con sus candados: scripts/reintento.mjs). Lo que falla se repite UNA vez, y sólo eso: lo que vuelve a fallar
