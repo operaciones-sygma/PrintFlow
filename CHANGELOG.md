@@ -45,9 +45,11 @@ arreglos: con el teclado «Ver las 7» perdía el foco hasta el principio de la 
 clic en una zona la volvía a cerrar (wip-27). Vuelta 4 (la última): el doble clic en «Editar precio» pedía dos veces la forma (wip-30; venía de antes).
 Ahora 32 de 32; contra v10.84.141 fallan 29. El detector de la skill en el navegador, sobre el banco: antes, el ámbar a 2.0:1, el blanco sobre ámbar a
 2.2:1, gris a 4.2:1, 10 px y renglones de ~177 caracteres; después, sólo lo de toda la app (la letra única, la jerarquía de 12 a 20 px). Los 25 bancos se
-generan con el App.jsx nuevo sin usar nada que no traigan; build y `probar-alcance` en verde.
+generan con el App.jsx nuevo sin usar nada que no traigan; build y `probar-alcance` en verde. Candado: 2268 de 2268 (32 nuevas), de a 4, 14.8 min, a la primera y sin inestables.
 
-**En producción:** (pendiente)
+**En producción:** 16-oct, READY `dpl_3NsBE5PgVM8bEsnjnNa8zEpg8mqF`, commit `efa2a44`; vuelta atrás: promover `dpl_91tDTAaLRo9vZVyLx9hUbuKgERLS` (el código de v10.84.141) o
+`git revert efa2a44`; la base no cambió. Revisado en producción: el código servido (`index-Dwsyn_5o.js`) trae lo nuevo y ya no «Total $$$» ni «capital
+atorado»; el recorrido de los 8 roles: nada truena (y Dirección contra la app publicada, también). Con los datos reales: en proceso $363,775.49 en 37 órdenes y listo que espera al cliente $296,286.54 en 21; las zonas suman exacto lo de arriba. La lista enseña lo que antes no se veía: P-0070 (Castores) lleva 82 días lista esperando la factura del cliente, y varias de PRB de 19 a 33 días.
 
 ## v10.84.141 — «Aplicar saldo» (Corona) ya no promete un descubierto que la base no deja — 16-oct-2026
 

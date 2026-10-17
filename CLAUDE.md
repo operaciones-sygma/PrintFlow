@@ -120,7 +120,7 @@ a las dos apps**: `grep` en los dos repos antes de tocar una RPC compartida.
 21. Antes de dar algo por listo: `npx vite build` + `bash scripts/probar-alcance.sh` (+
     `node scripts/probar-cuadrar-partes.mjs` si tocaste el reparto). Y las **invariantes**
     (`cobranzaflow/supabase/invariantes.sql`, 34, corren en segundos) si tocaste la base.
-    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2236 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
+    🔒 **Y `npm run probar`: TODAS las tandas «tratando de romperlo»** (`tests/romper/`, hoy 2268 pruebas, ~15 min de a 4 tandas en la PC de casa (`PROBAR_PARALELO=4`; de a 2, ~27); ver
     `tests/LEEME.md`). Compara cada prueba con la última corrida en verde y marca **REGRESIÓN** lo que pasaba y ahora falla.
     El **candado de git** (`.githooks/pre-push`) corre build + `probar` antes de cada subida y **no deja subir** si algo
     falla; un push de puros documentos pasa directo. Las tandas con banco van de a 7 a la vez (`PROBAR_PARALELO`; con 11 juntas,
@@ -197,7 +197,11 @@ knowledge del chat web**, no en el repo: no cuentes con ellos desde aquí.
 
 ## 🎯 Estado (5-oct-2026)
 
-- **LIVE:** v10.84.141 (16-oct, ~21:42; READY `dpl_GkN7WBuX8PwaUZZQPFMAzP82yDrd`, commits `fe3ed20` (140), `ca13734` (141) y `3435867`; vuelta atrás: promover
+- **LIVE:** v10.84.142 (16-oct, READY `dpl_3NsBE5PgVM8bEsnjnNa8zEpg8mqF`, commit `efa2a44`; vuelta atrás: promover `dpl_91tDTAaLRo9vZVyLx9hUbuKgERLS` (el código de
+  v10.84.141) o `git revert efa2a44`; la base no cambió; candado 2268 de 2268 (32 nuevas), de a 4, 14.8 min, a la primera y sin inestables). «Dinero en Proceso» (`WIPDashboard`, 17/40): lo listo que espera al
+  cliente va aparte de lo que está en proceso (`esperaAlCliente`), sin lectura no dice «$0», días en la etapa, teclado, AA; «En Stock» y lo cancelado ya no
+  suman. Banco `gen-wip.mjs`, tanda `wip`.
+  v10.84.141 (16-oct, ~21:42; READY `dpl_GkN7WBuX8PwaUZZQPFMAzP82yDrd`, commits `fe3ed20` (140), `ca13734` (141) y `3435867`; vuelta atrás: promover
   `dpl_ECBRhjRons3AWv25hxdHnhmtCx1Q` (el código de v10.84.139) o `git revert 3435867 ca13734 fe3ed20`; la base no cambió; candado 2236 de 2236, de a 4).
   🔑 **Lo atrasado** (v10.84.140, Marcelo 16-oct): la orden LISTA (Salidas o recibida de maquila) «En espera: el cliente no ha pedido factura» no está
   vencida: `vencidaAhora` (lo de hoy: calendario «Espera al cliente», «Con retraso hoy», «Vencidas», fichas, filtro «Retrasos») y `entregadaATiempo`
