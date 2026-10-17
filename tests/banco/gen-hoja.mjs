@@ -3,7 +3,8 @@
 // La base va simulada: `peekPrint` contesta la versión 3 (o falla con falla=version); las imágenes son archivos del banco (no se firman).
 // Se anota en #log: «error <texto>» (lo que App mostraría con showToast), «cerrar».
 // Uso: node gen-hoja.mjs <App.jsx> <dirSalida>
-// Variantes por URL: caso=normal|larga|cancelada|maquila|sinlogo|minima|tres|unlugar · rol=secretaria|admin|karla|produccion|preprensa · falla=version
+// Variantes por URL: caso=normal|larga|enorme|cancelada|maquila|sinlogo|minima|tres|unlugar · rol=secretaria|admin|karla|produccion|preprensa · falla=version
+// (v10.84.137: «enorme», P-0658, más larga que «larga»: a una hoja la letra quedaría de menos de 7 pt)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -46,6 +47,15 @@ const ORDENES = {
     finishes: "Barniz Mate, Doblez, Perforado, Plastificado mate, Blocks de 50, Folio rojo, Grapado, Engomado superior, Suaje especial de corazón",
     notes: "Cuidar el registro del logotipo en la vuelta.\\nEl doblez es a la mitad, en cruz.\\nPerforado a 2 cm del borde izquierdo.\\nFolio en rojo del 0001 al 5000.\\nEmpacar en cajas de 500 con etiqueta del cliente.\\nLlamar a Eva antes de entregar (le cambian el andén).",
     distribution: ["Bodega León, Blvd. Aeropuerto 1200", "Sucursal Silao, Av. Juárez 45", "Sucursal Irapuato, Calle Hidalgo 300", "Oficina Celaya, Av. Tecnológico 12"],
+    maquila_provider: "Encuadernaciones Ruiz", maquila_phone: "477 555 0101", maquila_email: "ruiz@encuadernaciones.mx" },
+  enorme: { ...BASE, id: "OP-P-0658", production_number: "P-0658", priority: "urgente", image_url: ORIGEN + "/img-frente.png", image_url_2: ORIGEN + "/img-vuelta.png",
+    product: "Volante tamaño carta a 4x1 tintas, con suaje especial de corazón en la esquina superior derecha.\\nLleva folio rojo consecutivo y perforado para desprender el talón.\\nEl talón lleva los datos del cliente impresos a una tinta.",
+    pantone_front: ["Pantone 286 C", "Pantone 1235 C", "Pantone 485 C"], pantone_back: ["Pantone Black 6 C"],
+    finishes: "Barniz Mate, Doblez, Perforado, Plastificado mate, Blocks de 50, Folio rojo, Grapado, Engomado superior, Intercalado, Suaje especial de corazón",
+    notes: "Cuidar el registro del logotipo en la vuelta.\\nEl doblez es a la mitad, en cruz.\\nPerforado a 2 cm del borde izquierdo.\\nFolio en rojo del 0001 al 5000.\\nEmpacar en cajas de 500 con etiqueta del cliente.\\nLlamar a Eva antes de entregar (le cambian el andén).\\nEl suaje es el mismo de la orden P-0601: está en el anaquel 3.\\nLa prueba de color la firmó el cliente: va en el sobre.\\nNo mezclar con el pedido de la sucursal Celaya.\\nLos blocks llevan cartón de respaldo de 1 mm.\\nEl engomado es sólo en la parte de arriba.\\nSi falta papel, avisar a Lupita antes de cambiarlo.\\nEntregar primero lo de León; lo demás puede ir el viernes.\\nFacturar al entregar lo de León.",
+    distribution: ["Bodega León, Blvd. Aeropuerto 1200", "Sucursal Silao, Av. Juárez 45", "Sucursal Irapuato, Calle Hidalgo 300", "Oficina Celaya, Av. Tecnológico 12",
+      "Sucursal Salamanca, Av. Faja de Oro 88", "Sucursal Guanajuato, Paseo de la Presa 5", "Bodega San Francisco, Carretera a Lagos km 3", "Oficina Querétaro, Av. Constituyentes 101",
+      "Sucursal San Miguel, Calle Canal 20", "Sucursal Dolores, Av. Hidalgo 7"],
     maquila_provider: "Encuadernaciones Ruiz", maquila_phone: "477 555 0101", maquila_email: "ruiz@encuadernaciones.mx" },
   cancelada: { ...BASE, id: "OP-P-0653", production_number: "P-0653", stage: "cancelled", cancelled_at: "2026-10-15T09:00:00-06:00", cancellation_reason: "El cliente ya no lo quiere", cancelled_by: "lupita" },
   maquila: { ...BASE, id: "OP-P-0654", production_number: "P-0654", order_type: "maquila", product_type: "Cajas plegadizas", maq_provider: "Suajes del Centro", maq_cost: 3000, maq_price: 5200, price: 0 },

@@ -3,7 +3,7 @@
 // Se mide la hoja COMO SE IMPRIME: la ventana que abre la app, con el CSS de impresión (emulateMedia print), su ajuste a una hoja (pfFit) y el PDF
 // Carta que saca Chrome. «Letra efectiva» = el tamaño de la letra por el zoom con que la hoja se encoge para caber (1 pt = 1.333 px).
 // Casos del banco: normal (P-0650), larga (P-0652: dos fotos, pantones, 9 acabados, notas de 6 renglones, 4 lugares, maquila externa), cancelada,
-// maquila, sinlogo, minima. Detrás, una «app» con su buscador (#atras-*).
+// maquila, sinlogo, minima, enorme (P-0658, v10.84.137: a una hoja la letra quedaría de menos de 7 pt). Detrás, una «app» con su buscador (#atras-*).
 // Uso: node hoja.mjs <dir-capturas> [puerto=5178]   ·   SOLO=<regex> corre sólo los casos que coinciden
 import { chromium } from "playwright";
 import { deFuera } from "../consola.mjs";
@@ -205,6 +205,49 @@ await caso("hj-24-telefono", "", async p => {
   const r = await p.getByRole("button", { name: PROD }).first().boundingBox();
   ok("hj-24-telefono", !ancha && !!r && r.x >= 0 && r.x + r.width <= 390, `a 390 px: ${ancha ? "la página se sale a lo ancho" : "cabe"}; el botón ${r ? Math.round(r.x) + "-" + Math.round(r.x + r.width) : "no está"}`);
 }, { viewport: { width: 390, height: 844 } });
+
+// ── vuelta 3 (v10.84.137): la decisión de Marcelo del 16-oct: si para caber en una hoja la letra quedaría de menos de 7 pt, DOS hojas legibles ──
+const esquinaYAviso = pop => pop.evaluate(() => { const c = document.querySelector(".print-version-corner"), s = c && getComputedStyle(c), nota = document.getElementById("pf-dos");
+  return { esquina: c ? c.textContent : "", fija: s ? s.position : "", visible: !!s && s.display !== "none", nota: nota && getComputedStyle(nota).display !== "none" ? nota.textContent : "" }; });
+await caso("hj-25-enorme-dos-hojas-legibles", "caso=enorme", async (p, ctx) => {
+  const pop = await hoja(p, ctx, PROD, "hj-25");
+  const n = await paginas(pop); const { textos, zoom } = await medir(pop);
+  const min = Math.min(...textos.map(x => x.tam)), r = await esquinaYAviso(pop);
+  ok("hj-25-enorme-dos-hojas-legibles", n === 2 && min >= PT7 && /P-0658/.test(r.esquina) && r.fija === "fixed" && r.visible && /más de una hoja/.test(r.nota),
+    `P-0658 (más larga que la larga): ${n} hoja(s), zoom ${zoom}, la letra más chica ${min}px; la esquina de cada hoja «${r.esquina}» (${r.fija}); la barra: «${r.nota || "no avisa"}»`);
+});
+await caso("hj-26-enorme-administrativa", "caso=enorme", async (p, ctx) => {
+  const pop = await hoja(p, ctx, ADMIN, "hj-26");
+  const n = await paginas(pop); const { textos, zoom } = await medir(pop);
+  const min = Math.min(...textos.map(x => x.tam)), r = await esquinaYAviso(pop);
+  ok("hj-26-enorme-administrativa", n >= 2 && min >= PT7 && /P-0658/.test(r.esquina), `la administrativa de P-0658: ${n} hoja(s), zoom ${zoom}, la letra más chica ${min}px; la esquina «${r.esquina}»`);
+});
+await caso("hj-27-una-hoja-sin-aviso", "", async (p, ctx) => {
+  const r = await esquinaYAviso(await hoja(p, ctx, PROD));
+  ok("hj-27-una-hoja-sin-aviso", !/P-0650/.test(r.esquina) && !r.nota, `P-0650 (cabe en una): la esquina «${r.esquina}»; ${r.nota ? "AVISA que sale en más de una" : "sin aviso"}`);
+});
+await caso("hj-28-enorme-con-las-fotos-a-su-tamano", "caso=enorme", async (p, ctx) => {
+  const pop = await hoja(p, ctx, PROD);
+  const altos = await pop.evaluate(() => [...document.querySelectorAll(".product-images img")].map(i => getComputedStyle(i).maxHeight));
+  ok("hj-28-enorme-con-las-fotos-a-su-tamano", altos.length === 2 && altos.every(a => a === "180px"), `en dos hojas, las fotos: ${altos.join(", ") || "no hay"} (a su tamaño: 180px)`);
+});
+await caso("hj-29-larga-sigue-en-una", "caso=larga", async (p, ctx) => {
+  const pop = await hoja(p, ctx, PROD);
+  const n = await paginas(pop), r = await esquinaYAviso(pop);
+  ok("hj-29-larga-sigue-en-una", n === 1 && !r.nota && !/P-0652/.test(r.esquina), `P-0652 (cabe en una a 9.5 px): ${n} hoja(s); ${r.nota ? "AVISA que sale en más de una" : "sin aviso"}; la esquina «${r.esquina}»`);
+});
+// vuelta 2: por donde no se diseñó (el ajuste que corre varias veces, sin registro de la versión, la cancelada en dos hojas)
+await caso("hj-30-ajustar-tres-veces-no-repite-el-folio", "caso=enorme", async (p, ctx) => {
+  const pop = await hoja(p, ctx, PROD);
+  await pop.evaluate(() => { window.pfFit(); window.pfFit(); window.pfFit(); }); await pop.waitForTimeout(150);
+  const r = await esquinaYAviso(pop), veces = (r.esquina.match(/P-0658/g) || []).length;
+  ok("hj-30-ajustar-tres-veces-no-repite-el-folio", veces === 1 && /\bv3\b/.test(r.esquina), `después de ajustar 3 veces más (como al imprimir): la esquina «${r.esquina}»`);
+});
+await caso("hj-31-dos-hojas-sin-registro", "caso=enorme&falla=version", async (p, ctx) => {
+  const pop = await hoja(p, ctx, PROD);
+  const n = await paginas(pop), r = await esquinaYAviso(pop);
+  ok("hj-31-dos-hojas-sin-registro", n === 2 && /P-0658/.test(r.esquina) && /SIN REGISTRO/.test(r.esquina), `sin la versión de la base: ${n} hoja(s); la esquina «${r.esquina}» (de qué orden es y que salió sin registro)`);
+});
 
 await browser.close();
 for (const r of res) console.log(r);

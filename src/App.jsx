@@ -4299,6 +4299,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   <button class="pf-close" onclick="window.close()">Cerrar</button>
   <span class="pf-ver">${pvVersionLabel}${isReprint?" · REIMPRESO":""}</span>
   <span class="pf-note">${pvFailed?"⚠️ No se pudo registrar — saldrá SIN REGISTRO":"Se registra al imprimir"}</span>
+  <span class="pf-note" id="pf-dos" style="display:none;color:#fbbf24;font-weight:700">Sale en más de una hoja: engrápalas</span>
 </div>
 <script>
   var __pfCommitted=false, __pfAcked=false, __pfAckTimer=null;
@@ -4317,17 +4318,37 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
   // v10.71.5 — "fit to one page": si el contenido excede una hoja Carta, se reduce (zoom)
   // proporcionalmente para que NO se parta en 2 páginas. #pf-pageref mide 1 hoja imprimible en mm
   // (ratio independiente del DPI). Solo encoge cuando hace falta; las órdenes de 1 hoja no se tocan.
+  // v10.84.137 — y si para caber en una hoja la letra más chica quedaría de menos de 7 pt (9.33 px), van DOS hojas legibles (decisión de Marcelo del
+  //   16-oct; v10.71.5 eligió una hoja aunque la letra se encogiera): sin encoger y con las fotos a su tamaño; la esquina de cada hoja dice de qué orden es
+  //   (Chrome repite lo fijo en cada hoja) y la barra avisa que sale en más de una.
   function pfFit(){
     try{
       var s=document.getElementById('pf-sheet'); if(!s) return;
       s.style.zoom='';
       var fotos=[].slice.call(s.querySelectorAll('.product-images img')); fotos.forEach(function(i){ i.style.maxHeight=''; });
+      pfHojas(false);
       var ref=document.getElementById('pf-pageref'); if(!ref) return;
       var pageH=ref.offsetHeight, h=s.offsetHeight;
+      if(!(pageH>0) || h<=pageH) return;
       // v10.84.129 — antes de encoger la letra (que en una orden larga quedaba de 5 pt), ceden las fotos: de 180 px hasta 70
-      if(pageH>0 && h>pageH && fotos.length){ var alto=Math.max(70, 180-(h-pageH)-6); fotos.forEach(function(i){ i.style.maxHeight=alto+'px'; }); h=s.offsetHeight; }
-      if(pageH>0 && h>pageH){ s.style.zoom=(pageH/h*0.97).toFixed(4); }
+      if(fotos.length){ var alto=Math.max(70, 180-(h-pageH)-6); fotos.forEach(function(i){ i.style.maxHeight=alto+'px'; }); h=s.offsetHeight; }
+      if(h<=pageH) return;
+      var z=pageH/h*0.97;
+      if(pfLetraMin(s)*z>=9.33){ s.style.zoom=z.toFixed(4); return; }
+      fotos.forEach(function(i){ i.style.maxHeight=''; });
+      pfHojas(true);
     }catch(e){}
+  }
+  // la letra más chica de la hoja, en px (10 desde v10.84.129)
+  function pfLetraMin(s){
+    var m=99, els=s.querySelectorAll('*');
+    for(var i=0;i<els.length;i++){ var e=els[i]; for(var k=0;k<e.childNodes.length;k++){ var n=e.childNodes[k]; if(n.nodeType===3&&n.textContent.trim()){ var f=parseFloat(getComputedStyle(e).fontSize); if(f&&f<m) m=f; break; } } }
+    return m;
+  }
+  function pfHojas(dos){
+    var c=document.querySelector('.print-version-corner');
+    if(c){ if(c.getAttribute('data-v')===null) c.setAttribute('data-v', c.textContent); c.textContent=(dos?c.getAttribute('data-folio')+' · ':'')+c.getAttribute('data-v'); }
+    var n=document.getElementById('pf-dos'); if(n) n.style.display=dos?'':'none';
   }
   window.addEventListener('load', pfFit);
   function pfPrint(){
@@ -4348,7 +4369,7 @@ td,th{border:1px solid #444;padding:5px 7px;vertical-align:top}
     window.print();
   }
 </script>
-<div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>
+<div class="print-version-corner${pvFailed?" unregistered":(isReprint?" reprint":"")}" data-folio="${esc(o.production_number||o.id)}">${pvVersionLabel}${isReprint?" — REIMPRESO":""}${pvFailed?" ⚠️":""}</div>
 ${isCancelledOrder?'<div class="vcancel-wm"><span>CANCELADA</span></div>':(isVoidStockSale?'<div class="vcancel-wm"><span>CANCELADO</span></div>':'')}
 <div id="pf-pageref" style="position:absolute;top:0;left:0;width:1px;height:257mm;visibility:hidden;pointer-events:none"></div>
 <div id="pf-sheet">`;
