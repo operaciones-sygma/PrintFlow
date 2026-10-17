@@ -1560,6 +1560,36 @@ await caso("ses-95-datos-pendientes-sin-lectura-sin-numero", async ({ p, s }) =>
     `con la lectura caída el menú decía ${JSON.stringify(antes)}; ${hay ? "con «Reintentar»" : "SIN «Reintentar»"} dice ${JSON.stringify(despues)}`);
 });
 
+// ════════════════════════ lo atrasado (v10.84.140) ════════════════════════
+// Marcelo, 16-oct: la orden lista que espera a que el cliente pida su factura «aparece roja»: en «Pendientes de Folio» de Karla (su sección «En espera»)
+// y en la vista «En espera». Aquí, porque las dos las arma App. Vuelta 1: escritas antes del cambio.
+const haceDias = d => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+const ORDENES_ESPERA = () => [
+  ordenK("P-0930", { stage: "salidas", due_date: haceDias(3), snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice",
+    snooze_stage: "salidas", snoozed_by: "karla", snoozed_at: haceH(30) }),
+  ordenK("P-0931", { stage: "salidas", due_date: haceDias(3) }),   // sin la espera: falta foliar y entregar (sí va en rojo)
+];
+// (la ficha es la caja MÁS CHICA con su folio y su «Entrega:»: la primera que aparece puede ser la que envuelve también a las otras fichas)
+const colorDeLaEntrega = (p, pn) => p.evaluate(pn => { const card = [...document.querySelectorAll("div")].filter(d => d.innerText && d.innerText.includes(pn) && /Entrega:/.test(d.innerText)).sort((a, b) => a.innerText.length - b.innerText.length)[0];
+  const linea = card && [...card.querySelectorAll("div")].find(d => /^Entrega:/.test((d.innerText || "").trim())); return linea ? getComputedStyle(linea).color : ""; }, pn);
+await caso("ses-96-karla-la-que-espera-al-cliente-no-va-en-rojo", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_ESPERA() };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^Pendientes/); await despertar(p); await p.waitForTimeout(800);
+  const espera = await colorDeLaEntrega(p, "P-0930"), sinEspera = await colorDeLaEntrega(p, "P-0931");
+  ok("ses-96-karla-la-que-espera-al-cliente-no-va-en-rojo", !!espera && espera !== "rgb(185, 28, 28)" && sinEspera === "rgb(185, 28, 28)",
+    `«Pendientes de Folio»: la fecha de P-0930 (en espera de la factura, vencida hace 3 días) en ${espera || "no sale"}; la de P-0931 (sin la espera) en ${sinEspera || "no sale"} (ésa sí, rojo)`);
+});
+await caso("ses-97-en-espera-no-dice-vencida", async ({ p, s }) => {
+  s.filas = { orders: ORDENES_ESPERA() };
+  await abrirYEntrar(p, s, "karla");
+  await esperarMenu(p, /^En espera/); await despertar(p);
+  await p.locator('button[title^="En espera"]').first().click(); await p.waitForTimeout(900);
+  const t = await texto(p), dice = (t.match(/\d+ vencida/) || [""])[0];
+  // (en «En espera» la ficha es la compacta, sin «Entrega:»: su «RETRASO» va junto al folio; P-0930 es la única en espera)
+  ok("ses-97-en-espera-no-dice-vencida", /P-0930/.test(t) && !dice && !/RETRASO/.test(t), `la vista «En espera» con P-0930 (espera la factura del cliente): ${dice ? "DICE «" + dice + "»" : "no dice «vencida»"}; ${/RETRASO/.test(t) ? "su ficha DICE «RETRASO»" : /P-0930/.test(t) ? "su ficha sin «RETRASO»" : "P-0930 NO SALE"}`);
+});
+
 await browser.close();
 await servidor.close();
 fin();

@@ -208,6 +208,27 @@ await caso("ent-19-el-vendedor-con-el-teclado", "rol=vendedor", async p => {
     `Genaro con el teclado: Enter en la de Manuel ${abrioAjena ? "ABRE" : "no abre"} (aria-disabled ${await ajena.getAttribute("aria-disabled")}); en la suya ${await dialogo(p).count() ? "abre" : "NO abre"}`);
 });
 
+// ── vuelta 3 (v10.84.140): la orden LISTA que espera a que el cliente pida su factura no es «Retrasada» (Marcelo, 16-oct: «aparece roja en el
+//   calendario»); la de Salidas sin esa espera sí ──
+const fichaTexto = async (p, cliente) => ((await (await ficha(p, cliente)).innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+const fichaAria = async (p, cliente) => (await (await ficha(p, cliente)).getAttribute("aria-label").catch(() => "")) || "";
+const fichaBorde = async (p, cliente) => (await ficha(p, cliente)).evaluate(e => getComputedStyle(e).borderTopStyle + " " + getComputedStyle(e).borderTopColor).catch(() => "");
+for (const [n, cliente, que] of [["ent-20", "KFC ESPERA FACTURA", "en Salidas, lista a tiempo"], ["ent-21", "MAQUILA ESPERA FACTURA", "recibida de maquila, lista un día tarde"]]) {
+  await caso(`${n}-la-que-espera-al-cliente-no-es-retrasada`, "espera=1", async p => {
+    const t = await fichaTexto(p, cliente), aria = await fichaAria(p, cliente), borde = await fichaBorde(p, cliente);
+    ok(`${n}-la-que-espera-al-cliente-no-es-retrasada`, !!t && !/Retrasada/.test(t) && /Espera al cliente/.test(t) && !/retrasada/i.test(aria) && /no ha pedido su factura/.test(aria) && !/185, 28, 28|255, 59, 48|224, 59, 48/.test(borde),
+      `${cliente} (${que}, vencía el lunes 12, «En espera: el cliente no ha pedido factura»): «${t.slice(0, 90)}»; para el lector de pantalla «${aria.slice(0, 120)}»; borde ${borde}`);
+  });
+}
+await caso("ent-22-la-de-salidas-sin-la-espera-sigue-retrasada", "espera=1", async p => {
+  const t = await fichaTexto(p, "PREMIUM RESTAURANT BRANDS");
+  ok("ent-22-la-de-salidas-sin-la-espera-sigue-retrasada", /Retrasada 2 d/.test(t) && !/Espera al cliente/.test(t), `en Salidas sin la espera (falta foliar y entregar): «${t.slice(0, 90)}»`);
+});
+await caso("ent-23-la-leyenda-dice-la-espera", "espera=1", async p => {
+  const t = (await p.locator("body").innerText()).replace(/\s+/g, " ");
+  ok("ent-23-la-leyenda-dice-la-espera", /Retrasada/.test(t) && /Espera al cliente/.test(t) && /Entregada/.test(t), `la leyenda: ${/Espera al cliente/.test(t) ? "explica «Espera al cliente»" : "NO dice qué es «Espera al cliente»"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

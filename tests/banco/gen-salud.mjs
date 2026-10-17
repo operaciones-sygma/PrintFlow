@@ -6,7 +6,8 @@
 // Uso: node gen-salud.mjs <App.jsx> <dirSalida>
 // Variantes por URL: rol=secretaria|karla|admin · lectura=no (todavía no se ha leído nada de la base: sin órdenes) · caso=calma (nada vencido,
 //   urgente ni estancado) | vacio (se leyó y no hay órdenes activas) | muchos (13 sin teléfono del cliente) | mantenimiento (una prensa caída) |
-//   estancada (una estancada sin fecha contra una sana de $500,000)
+//   estancada (una estancada sin fecha contra una sana de $500,000) | espera (v10.84.140: más P-0663, lista en Salidas, vencida el 9, que espera a que el
+//   cliente pida su factura)
 // Gancho: window.__cambiar(id, campos) cambia una orden con la vista abierta (el tiempo real).
 import fs from "node:fs";
 import path from "node:path";
@@ -74,7 +75,9 @@ const CALMA = [
 const SIN_TEL = Array.from({ length: 13 }, (_, i) => o("op-8" + String(i).padStart(2, "0"), "P-08" + String(i).padStart(2, "0"), { client: "SIN TELEFONO " + (i + 1), client_phone: "" }));
 // una estancada sin fecha (P-0448) contra una sana muy cara (P-0702, $500,000): ¿cuál es la prioridad del día?
 const ESTANCADA = [BASE.find(x => x.id === "op-448"), o("op-702", "P-0702", { client: "LA MUY CARA", stage: "ready", price: 500000, due_date: "2026-10-30" }), ...CALMA];
-const ORDENES = SIN_LECTURA || CASO === "vacio" ? [] : CASO === "calma" ? CALMA : CASO === "muchos" ? [...BASE, ...SIN_TEL] : CASO === "estancada" ? ESTANCADA : BASE;
+const ESPERA_FACTURA = o("op-663", "P-0663", { client: "KFC ESPERA FACTURA", stage: "salidas", price: 2000, due_date: "2026-10-09", snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snooze_until: null, snooze_stage: "salidas",
+  timeline: [{ to: "salidas", date: T("2026-10-08T12:00:00-06:00"), action: "→ salidas" }, { action: "🧾 En espera: el cliente no ha pedido factura", date: T("2026-10-09T10:00:00-06:00") }] });
+const ORDENES = SIN_LECTURA || CASO === "vacio" ? [] : CASO === "espera" ? [...BASE, ESPERA_FACTURA] : CASO === "calma" ? CALMA : CASO === "muchos" ? [...BASE, ...SIN_TEL] : CASO === "estancada" ? ESTANCADA : BASE;
 const MANTENIMIENTO = CASO === "mantenimiento" ? [{ id: "mt1", machine_id: "off_pm52", started_at: T("2026-10-13T08:00:00-06:00"), started_by: "gerardo", notes: "Rodillo dañado" }] : [];
 const OCS = ROL === "admin" ? [{ id: "OC-0900", client: "HUERFANA SA", status: "open" }] : [];`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,

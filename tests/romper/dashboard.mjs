@@ -190,6 +190,16 @@ await caso("db-19-karla-no-tiene-resumen", "rol=karla", async p => {
   ok("db-19-karla-no-tiene-resumen", !/últimos 7 días|Resumen Semanal/i.test(t) && /Internas/.test(t), `Karla: ${/últimos 7 días|Resumen Semanal/i.test(t) ? "VE el resumen" : "sin el resumen (como antes)"}; el flujo ${/Internas/.test(t) ? "sí" : "NO"}`);
 });
 
+// ── vuelta 3 (v10.84.140): «Con retraso hoy» no cuenta la lista que espera a que el cliente pida su factura ──
+await caso("db-20-con-retraso-hoy-sin-la-que-espera-al-cliente", "rol=secretaria&caso=espera", async p => {
+  // (el número de su casilla: en el texto corrido se pega con lo que sigue —«3» y «1…» daban «31»—)
+  const retrasoHoy = () => p.locator("span", { hasText: /^Con retraso hoy$/ }).first().locator("xpath=following-sibling::span[1]").innerText().then(Number).catch(() => NaN);
+  const conEspera = await retrasoHoy();
+  await p.goto(p.url().replace("caso=espera", "caso=")); await p.getByRole("heading", { name: "Dashboard" }).waitFor({ timeout: 30000 }); await espera(p, 300);
+  const sin = await retrasoHoy();
+  ok("db-20-con-retraso-hoy-sin-la-que-espera-al-cliente", Number.isFinite(conEspera) && conEspera === sin, `«Con retraso hoy»: ${conEspera} con P-0645 (en Salidas, «el cliente no ha pedido factura», vencida el 8) y ${sin} sin ella (deben ser iguales)`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

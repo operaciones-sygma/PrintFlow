@@ -58,6 +58,9 @@ const TANDAS = [
   { nombre: "candado", romper: "tests/romper/candado.mjs" },
   // sin banco: qué factura por adelantado se pregunta antes de asignar folio (v10.84.68: Karla, F-135 de Castores; las funciones vivas)
   { nombre: "anticipos", romper: "tests/romper/anticipos.mjs" },
+  // sin banco: lo ATRASADO (v10.84.140): la orden lista que espera a que el cliente pida su factura no está vencida, y en los reportes cuenta el día que
+  //   quedó lista (vencidaAhora, entregadaATiempo y getIncompleteData, sacados vivos de App.jsx; el reloj fijo)
+  { nombre: "atrasos", romper: "tests/romper/atrasos.mjs" },
   // sin banco: la categoría del trabajo (v10.84.91): las reglas de src/lib/categorias.js con ejemplos de verdad y, contra la base (sólo
   // lectura, necesita SUPABASE_ACCESS_TOKEN), que la función generada diga lo mismo para todos los nombres, el CHECK, la historia y el
   // permiso de la app para escribirla

@@ -376,6 +376,20 @@ await caso("an-33-la-barra-mas-larga-cabe", "modo=inventariogrande", async p => 
     `con ${$(103000)} de inventario (al final): barras ${JSON.stringify(barras)} (ninguna pasa del 100 %; la de inventario llena, la de etiquetas al 15 %)`);
 });
 
+// ── vuelta 3 (v10.84.140): a tiempo también la que quedó lista a tiempo y esperó a que el cliente pidiera su factura (aquí «entregada» se marca al foliar) ──
+await caso("an-35-a-tiempo-si-estaba-lista-y-espero-la-factura", "modo=espera", async p => {
+  await pestaña(p, "Eficiencia");
+  const t = await cifra(p, "atiempo");
+  const nota = ((await p.locator("[data-a-tiempo-por-espera]").first().innerText().catch(() => "")) || "").replace(/\s+/g, " ");
+  ok("an-35-a-tiempo-si-estaba-lista-y-espero-la-factura", /57\s?%/.test(t) && /4 de 7/.test(t) && /^2 de las a tiempo se marcaron entregadas después de su fecha/.test(nota) && /pidiera su factura/.test(nota),
+    `a tiempo «${t}» (debe: 57 %, 4 de 7: las 2 de antes, P-0120 y P-0123, que estaban listas a tiempo y esperaron la factura; P-0121 lista tarde y P-0122 sin la espera, tarde); la nota: «${nota || "no sale"}»`);
+});
+await caso("an-36-sin-esas-no-sale-la-nota", "", async p => {
+  await pestaña(p, "Eficiencia");
+  const nota = await p.locator("[data-a-tiempo-por-espera]").count();
+  ok("an-36-sin-esas-no-sale-la-nota", nota === 0, `sin entregas que esperaran la factura: ${nota ? "SALE la nota" : "sin nota"}`);
+});
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

@@ -5,7 +5,8 @@
 // Lo que la vista pide a App se anota en #log: «accion <id> <acción>».
 // Uso: node gen-dashboard.mjs <App.jsx> <dirSalida>
 // Variantes por URL: rol=secretaria|produccion|karla|admin|vendedor · lectura=no (todavía no se ha leído nada de la base) · caso=temprano (también hay
-//   órdenes en Validar, Diseño y Aprobación) | vacio (se leyó y no hay activas) | muchas (las 12 etapas con órdenes)
+//   órdenes en Validar, Diseño y Aprobación) | vacio (se leyó y no hay activas) | muchas (las 12 etapas con órdenes) | espera (v10.84.140: más una lista
+//   en Salidas que espera a que el cliente pida su factura, vencida el 8)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -74,7 +75,9 @@ const TODAS_LAS_ETAPAS = ["draft", "design", "proof_printing", "proof_client", "
 // lo entregado: cinco en los últimos 7 días ($50,000) y una hace 20 días (no cuenta)
 const ENTREGADAS = [entregada("P-0500", "10"), entregada("P-0501", "11"), entregada("P-0502", "12"), entregada("P-0503", "13"), entregada("P-0504", "13"),
   o("P-0490", { stage: "delivered", delivered_at: T("2026-09-24T13:00:00-06:00"), price: 99000 })];
-const ORDENES = SIN_LECTURA ? [] : CASO === "vacio" ? ENTREGADAS : CASO === "temprano" ? [...TEMPRANAS, ...ACTIVAS, ...ENTREGADAS]
+const ESPERA_FACTURA = o("P-0645", { stage: "salidas", client: "KFC ESPERA FACTURA", due_date: "2026-10-08", snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snooze_until: null, snooze_stage: "salidas",
+  timeline: [{ to: "salidas", date: T("2026-10-07T12:00:00-06:00") }, { action: "🧾 En espera: el cliente no ha pedido factura", date: T("2026-10-09T10:00:00-06:00") }] });
+const ORDENES = SIN_LECTURA ? [] : CASO === "espera" ? [...ACTIVAS, ESPERA_FACTURA, ...ENTREGADAS] : CASO === "vacio" ? ENTREGADAS : CASO === "temprano" ? [...TEMPRANAS, ...ACTIVAS, ...ENTREGADAS]
   : CASO === "muchas" ? [...TODAS_LAS_ETAPAS, ...ACTIVAS, ...ENTREGADAS] : [...ACTIVAS, ...ENTREGADAS];`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `function Banco() {

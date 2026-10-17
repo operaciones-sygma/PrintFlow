@@ -87,6 +87,21 @@ if (M.has("stocksinfolio")) TODAS.push(ORDEN("fcad0f48-a7d2-484a-9b3d-a7766df980
 if (M.has("inventariogrande")) TODAS.push(ORDEN("oI", "P-0107", { client: "CUADRA", product_type: "stock", price: 100000, created_at: "2026-10-05T09:00:00-06:00",
   delivered_at: "2026-10-07T12:00:00-06:00" }));
 if (M.has("sintipo")) TODAS.push(ORDEN("oN", "P-0106", { client: "SIN NOMBRE", product_type: "", price: 1500, created_at: "2026-10-05T09:00:00-06:00", delivered_at: "2026-10-06T12:00:00-06:00" }));
+// v10.84.140 — espera: cuatro entregadas después de su fecha (el 6): lista a tiempo y esperó la factura (a tiempo), lista tarde y esperó (tarde), lista a
+//   tiempo sin la espera (tarde), y la maquila recibida a tiempo con la espera escrita a mano en la Torre (a tiempo)
+if (M.has("espera")) {
+  const tl = (lista, etapa, pausa) => [{ to: etapa, date: new Date(lista).toISOString(), action: "→ " + etapa }, ...(pausa ? [{ action: pausa[1], date: new Date(pausa[0]).toISOString() }] : [])];
+  const PAUSA = "🧾 En espera: el cliente no ha pedido factura";
+  TODAS.push(
+    ORDEN("oW1", "P-0120", { client: "KFC", product_type: "Bolsas", price: 3000, created_at: "2026-10-01T09:00:00-06:00", due_date: "2026-10-06", delivered_at: "2026-10-11T12:00:00-06:00",
+      timeline: tl("2026-10-05T17:00:00-06:00", "salidas", ["2026-10-06T10:00:00-06:00", PAUSA]) }),
+    ORDEN("oW2", "P-0121", { client: "KFC", product_type: "Bolsas", price: 3000, created_at: "2026-10-01T09:00:00-06:00", due_date: "2026-10-06", delivered_at: "2026-10-11T12:00:00-06:00",
+      timeline: tl("2026-10-07T17:00:00-06:00", "salidas", ["2026-10-07T18:00:00-06:00", PAUSA]) }),
+    ORDEN("oW3", "P-0122", { client: "PRB", product_type: "Cuponera", price: 3000, created_at: "2026-10-01T09:00:00-06:00", due_date: "2026-10-06", delivered_at: "2026-10-09T12:00:00-06:00",
+      timeline: tl("2026-10-05T17:00:00-06:00", "salidas") }),
+    ORDEN("oW4", "P-0123", { client: "ACABADOS", product_type: "Libros", order_type: "maquila", stage: "maq_delivered", maq_price: 3000, maq_cost: 1000, created_at: "2026-10-01T09:00:00-06:00",
+      due_date: "2026-10-06", delivered_at: "2026-10-12T12:00:00-06:00", timeline: tl("2026-10-06T09:00:00-06:00", "maq_received", ["2026-10-06T10:00:00-06:00", "🔕 En espera (Torre): todavia no pide factura el cliente · hasta que cambie de etapa"]) }));
+}
 const ORDERS = M.has("vacio") ? [] : TODAS;`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
   `function Banco() {

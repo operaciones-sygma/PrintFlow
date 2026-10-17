@@ -307,6 +307,14 @@ await caso("dp-40-llega-a-salidas-sin-fecha", "rol=karla", async p => {
     `P-0661 (sin fecha) pasa de diseño a Salidas con la vista abierta: «${sub || "no dice"}»; «todavía en proceso» ${/todavía en proceso/.test(t) ? "SIGUE" : "se va (ya no queda ninguna)"}`);
 });
 
+// ── vuelta 4 (v10.84.140): la lista que espera a que el cliente pida su factura no es «Vencida» ──
+for (const rol of ["secretaria", "admin"]) {
+  await caso(`dp-41-la-que-espera-al-cliente-no-es-vencida-${rol}`, "rol=" + rol + "&caso=espera", async p => {
+    const t = await texto(p), venc = (t.match(/Vencidas \((\d+)\)/) || [])[1];
+    ok(`dp-41-la-que-espera-al-cliente-no-es-vencida-${rol}`, venc === "1" && !/P-0663/.test(t), `con P-0663 (lista en Salidas, «el cliente no ha pedido factura», vencida el 9): «Vencidas (${venc ?? "no sale"})» (debe ser 1: P-0611); P-0663 ${/P-0663/.test(t) ? "SALE en la vista" : "no sale"}`);
+  });
+}
+
 await browser.close();
 for (const r of res) console.log(r);
 const fallan = res.filter(r => r.startsWith("FALLA")).length;

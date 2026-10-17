@@ -4,7 +4,8 @@
 // Cada cambio de fecha se anota en #log: «cambio <id> <fecha> · <motivo>»; un alert()/confirm() nativo también («alert: …»): la app no los usa.
 // Uso: node gen-entregas.mjs <App.jsx> <dirSalida>
 // Variantes por URL: rol=secretaria|vendedor|karla|produccion|admin (vendedor: genaro) · cambio=ok|falla|lento (lo que hace App al guardar) ·
-//   lleno=1 (el jueves con 9 órdenes)
+//   lleno=1 (el jueves con 9 órdenes) · espera=1 (v10.84.140: dos listas que esperan la factura del cliente: o40 en Salidas, lista a tiempo, y o41
+//   recibida de maquila, lista un día tarde)
 import fs from "node:fs";
 import path from "node:path";
 import { LIGA_FUENTES, copiarFuentes } from "./fuentes.mjs";
@@ -45,6 +46,12 @@ const ORDENES = [
   o("o7", "2026-10-16", { client: "DE MANUEL", created_by: "manuel" }),
   o("o8", "2026-10-19", { client: "LA DE LA OTRA SEMANA" }),
   o("o9", "2026-10-15", { client: "URGENTE A TIEMPO", priority: "urgente", stage: "packaging" }),   // (al escribirla vencía el martes: también era retrasada)
+  ...(Q.get("espera") === "1" ? [
+    o("o40", "2026-10-12", { client: "KFC ESPERA FACTURA", product_type: "Bolsas", stage: "salidas", snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snooze_until: null, snooze_stage: "salidas",
+      timeline: [{ to: "salidas", date: "2026-10-11T16:00:00.000Z", action: "→ salidas" }] }),
+    o("o41", "2026-10-12", { client: "MAQUILA ESPERA FACTURA", order_type: "maquila", stage: "maq_received", snooze_reason: "El cliente aún no ha pedido factura/remisión", snooze_kind: "awaiting_client_invoice", snoozed_by: "karla", snooze_until: null, snooze_stage: "maq_received",
+      timeline: [{ to: "maq_received", date: "2026-10-13T16:00:00.000Z", action: "→ maq_received" }] }),
+  ] : []),
   ...(Q.get("lleno") === "1" ? Array.from({ length: 8 }, (_, i) => o("o" + (20 + i), "2026-10-15", { client: "MUCHAS " + (i + 1) })) : []),
 ];`,
   `// ── extraído de App.jsx por extraer.mjs ──\n` + codigo,
